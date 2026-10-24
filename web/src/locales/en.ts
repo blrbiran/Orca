@@ -312,6 +312,16 @@ export const en = {
     listUnavailable: "The project list is unavailable; groups are not shown until it is read.",
     chooseTarget: "Choose a repository",
   },
+  // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
+  transcript: {
+    disclosure: "Transcript", region: "Transcript of {{runId}}", refused: "transcript refused · {{code}}",
+    unsupported: "no transcript recorded by this ccloop", none: "no agent call listed yet", attempt: "attempt {{attempt}}",
+    callLine: "{{phase}} · call {{seq}} · {{runtime}} · {{size}}", notRecorded: "not recorded", live: "live", final: "finished",
+    truncatedAt: "recording stopped at {{bytes}} bytes", lineDropped: "a line of {{bytes}} bytes was not recorded",
+    oversized: "oversized line · {{bytes}} bytes · {{type}}", archived: "read from the run's archive",
+    earlier: "Earlier", later: "Later", more: "Load more of {{name}}", toolDone: "done:", toolError: "error:",
+    kind: { message: "message", tool_call: "tool", tool_result: "tool result", file_change: "file", thinking: "thinking", result: "result", notice: "notice", unknown: "line" },
+  },
   common: { none: "none", na: "n/a", unknown: "unknown", dispatchBlocked: "dispatch blocked", dispatchLive: "dispatch live" },
   decisions: {
     origin: "From {{group}} / {{task}} / {{run}}",

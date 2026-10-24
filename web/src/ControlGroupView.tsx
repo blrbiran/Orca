@@ -32,6 +32,7 @@ import type {
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
+import { RunTranscript } from "./AgentTranscript.js";
 import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
 import { Tokens, formatTokens, shortTokens } from "./TokenInput.js";
@@ -657,6 +658,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
               <td>
                 <EvidenceLink runId={run.runId} />
+                <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} />
                 {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
               </td>
             </tr>
@@ -717,7 +719,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
 </>,
       }} />
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
+      {openItem !== undefined && <TaskDetail key={openItem.taskId} active={props.active !== false} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
     </section>
   );
 }

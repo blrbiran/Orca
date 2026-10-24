@@ -16,6 +16,7 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
+import { RunTranscript } from "./AgentTranscript.js";
 import { FolderImagePicker } from "./FolderImagePicker.js";
 import type { TFunction } from "i18next";
 import type { PanelRefusal } from "./api.js";
@@ -159,6 +160,11 @@ function ExecutionFacts(props: { execution: FlowExecutionViewV1; active: boolean
       {e.needsYou?.reason !== undefined && <p data-tone="warn">{t("flow.parked", { reason: e.needsYou.reason })}</p>}
       {e.toolRules !== null && <ToolRules report={e.toolRules} />}
       <SpendLine spend={e.spend} />
+      {/* Live transcript spec §10.4.4: the execution's Orca runs (its calls, then its child group's runs), each with its
+          transcript; a legacy entry names no run. */}
+      {e.spend.runs.filter((run) => !run.runId.startsWith("legacy:")).map((run) => (
+        <div key={run.runId} className="flow-run-transcript"><span>{run.purpose}</span> <RunTranscript runId={run.runId} active /></div>
+      ))}
     </div>
   );
 }

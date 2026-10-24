@@ -25,6 +25,7 @@ import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, ta
 import i18n, { enumText } from "./i18n.js";
 import { shortTokens } from "./TokenInput.js";
 import { UsageSettlement } from "./UsageSettlement.js";
+import { RunTranscript } from "./AgentTranscript.js";
 import type { Role } from "./auth.js";
 
 export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
@@ -185,6 +186,8 @@ export function RunActivity(props: { runId: string; changeSeq: number }): JSX.El
 }
 
 export interface TaskDetailProps {
+  /** Live transcript spec §12.3: false while the group's pane is hidden -- the run transcripts then ask nothing and stop polling. */
+  active?: boolean;
   resultsActive?: boolean;
   resultsScope?: string;
   view: GroupViewV1;
@@ -285,6 +288,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
+              <RunTranscript runId={run.runId} active={props.active !== false} />
               {/* Flow engine spec §13.3 (W-COR): a finished run may be corrected as a whole, in one sentence. */}
               {run.phase === "work" && run.outcome === "succeeded" && <CorrectRunButton repoId={view.summary.repoId} runId={run.runId} />}
               {retryRunOpen(view, run) && !archived && (

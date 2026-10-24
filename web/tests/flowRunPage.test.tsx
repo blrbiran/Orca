@@ -863,3 +863,22 @@ describe("run page details from the Task 11 acceptance", () => {
     }
   });
 });
+
+/**
+ * Live transcript spec §10.4.4: each execution lists its Orca runs (its single calls, then its child group's runs) with a
+ * collapsed transcript each; nothing is asked until one is opened, and a legacy entry (no run id) lists nothing.
+ */
+describe("the execution's transcripts (live transcript §10.4.4)", () => {
+  it("shows one collapsed transcript per run of the execution, and asks for a run's listing only when it is opened", async () => {
+    const runs = [{ runId: "run-call-1", purpose: "flow-draft", tokens: 10 }, { runId: "run-child-1", purpose: "work", tokens: 20 }, { runId: "legacy:voice#1", purpose: "work", tokens: null }];
+    const view = runView({ steps: [step("voice", "work", [exec(1, { spend: { ...spent(30), runs } })])] });
+    await mount(owner, view);
+    const execution = within(stepBox("voice")).getByTestId("flow-execution-1");
+    const buttons = within(execution).getAllByRole("button", { name: "Transcript" });
+    expect(buttons).toHaveLength(2);
+    expect(reads.filter((url) => url.includes("/transcripts"))).toEqual([]);
+    fireEvent.click(buttons[1]!);
+    await waitFor(() => expect(reads).toContain("/api/control/runs/run-child-1/transcripts"));
+    expect(reads.filter((url) => url.includes("/transcripts"))).toEqual(["/api/control/runs/run-child-1/transcripts"]);
+  });
+});

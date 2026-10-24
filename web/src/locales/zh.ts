@@ -181,6 +181,16 @@ export const zh: Translation<typeof en> = {
     listUnavailable: "项目列表不可用；读到它之前不显示任何组。",
     chooseTarget: "选择一个仓库",
   },
+  // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
+  transcript: {
+    disclosure: "转录", region: "{{runId}} 的转录", refused: "转录读取被拒绝 · {{code}}",
+    unsupported: "这个 ccloop 没有记录转录", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
+    callLine: "{{phase}} · 第 {{seq}} 次调用 · {{runtime}} · {{size}}", notRecorded: "未记录", live: "进行中", final: "已结束",
+    truncatedAt: "记录在 {{bytes}} 字节处停止", lineDropped: "有一行 {{bytes}} 字节未被记录",
+    oversized: "超长行 · {{bytes}} 字节 · {{type}}", archived: "从运行的归档读取",
+    earlier: "更早", later: "更晚", more: "加载更多 {{name}}", toolDone: "完成：", toolError: "出错：",
+    kind: { message: "消息", tool_call: "工具", tool_result: "工具结果", file_change: "文件", thinking: "思考", result: "结果", notice: "提示", unknown: "行" },
+  },
   common: { none: "无", na: "不适用", unknown: "未知", dispatchBlocked: "调度已阻断", dispatchLive: "调度正常" },
   decisions: {
     origin: "来自 {{group}} / {{task}} / {{run}}",

@@ -61,6 +61,9 @@ import type {
   SetTaskLabelsPayloadV1,
   SetTaskLoopPayloadV1,
   UsageViewV1,
+  RunTranscriptsV1,
+  TranscriptPageV1,
+  TranscriptWindowV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 
@@ -150,6 +153,20 @@ export const fetchControlRecovery = (): Promise<RecoveryViewV1> => controlGet<Re
 /** GET /api/control/runs/:runId/evidence -- the manifest of raw evidence retained for one run. */
 export const fetchRunEvidence = (runId: string): Promise<EvidenceManifestV1> =>
   controlGet<EvidenceManifestV1>(`/api/control/runs/${segment(runId)}/evidence`);
+
+/**
+ * Live transcript spec §12.3: the transcript reads, keyed by Orca run. The flow run page, the task detail and the group's
+ * runs table all call these same helpers. `include=thinking` is never sent in v1 (spec §10.3, ruling 2).
+ */
+export const fetchRunTranscripts = (runId: string): Promise<RunTranscriptsV1> =>
+  controlGet<RunTranscriptsV1>(`/api/control/runs/${segment(runId)}/transcripts`);
+export type TranscriptWindowAsk = { tail: true } | { before: number } | { after: number };
+const callPath = (runId: string, call: { attempt: number; phase: string; seq: number }): string =>
+  `/api/control/runs/${segment(runId)}/transcripts/${call.attempt}/${segment(call.phase)}/${call.seq}`;
+export const fetchTranscriptWindow = (runId: string, call: { attempt: number; phase: string; seq: number }, ask: TranscriptWindowAsk): Promise<TranscriptWindowV1> =>
+  controlGet<TranscriptWindowV1>(`${callPath(runId, call)}?${"tail" in ask ? "tail=1" : "before" in ask ? `before=${ask.before}` : `after=${ask.after}`}`);
+export const fetchTranscriptPage = (runId: string, call: { attempt: number; phase: string; seq: number }, at: number, page: number, field?: { i: number; name: string }): Promise<TranscriptPageV1> =>
+  controlGet<TranscriptPageV1>(`${callPath(runId, call)}/expand?at=${at}&page=${page}${field === undefined ? "" : `&i=${field.i}&field=${segment(field.name)}`}`);
 
 export const fetchSavedResultEligibility=(runId:string):Promise<SavedResultEligibilityV1>=>controlGet(`/api/control/runs/${segment(runId)}/saved-result-eligibility`);
 

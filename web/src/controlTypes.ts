@@ -1143,3 +1143,23 @@ export type FlowMessageV1 = {
   by: string; via: string; state: "accepted" | "applied" | "rejected" | "excluded"; reason: string | null; at: number;
 };
 export type FlowJournalV1 = { schema: "orca-flow-journal-v1"; flowRunId: string; messages: FlowMessageV1[] };
+
+/** Live transcript spec §12.3: one call of a run's transcripts listing (src/agentTranscript/listing.ts). No path, ever. */
+export interface TranscriptCallV1 { attempt: number; phase: string; seq: number; runtime: "claude" | "codex" | "omp" | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null }
+/** GET /api/control/runs/:runId/transcripts. `available: false` -- the ccloop records no transcripts (`reason`). */
+export interface RunTranscriptsV1 { schema: "orca-run-transcripts-v1"; runId: string; available: boolean; reason?: string; calls: TranscriptCallV1[] }
+/** A served field: its redacted head, its full length in code units, and whether expanding shows more. */
+export interface TranscriptFieldV1 { text: string; length: number; more: boolean }
+/** One normalized event (spec §5.1, §10.3); `at`/`i` address it for expanding. */
+export interface TranscriptEventV1 {
+  at: number; i: number;
+  kind: "message" | "tool_call" | "tool_result" | "file_change" | "thinking" | "result" | "notice" | "unknown";
+  meta?: Record<string, string>; num?: Record<string, number>; flag?: Record<string, boolean>; fields?: Record<string, TranscriptFieldV1>;
+}
+/** GET …/transcripts/:attempt/:phase/:seq -- a window (≤ 200 events, ≤ 4 MiB read); `start`/`end` continue it. */
+export interface TranscriptWindowV1 {
+  schema: "orca-transcript-window-v1"; runId: string; attempt: number; phase: string; seq: number; runtime: string;
+  source: "run" | "archive"; final: boolean; truncatedAt: number | null; events: TranscriptEventV1[]; start: number; end: number; indexedEnd: number; counted: number;
+}
+/** GET …/expand -- one page (65 536 code units) of an event's field, or of an oversized line's decoded text. */
+export interface TranscriptPageV1 { schema: "orca-transcript-page-v1"; at: number; text: string; page: number; pages: number; length: number }
