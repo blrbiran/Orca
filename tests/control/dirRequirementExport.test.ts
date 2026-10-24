@@ -79,8 +79,8 @@ describe("exporting a dir group's requirement document into the vault (D4)", () 
       expect(exported).toEqual({ state: "done", path: exported.path, commit: tip, parent: base, detail: null });
       expect(v("diff-tree", "--no-commit-id", "--name-only", "-r", tip)).toBe(exported.path);
       expect(v("show", `${tip}:${exported.path}`)).toBe(text.trimEnd());
-      expect(placementOf(x)).toEqual({ state: "idle", tip: base, landedTip: tip, pending: null, changed: [], changedTotal: 0, unwritable: [], withheld: [],
-        watch: null, detail: null, resolution: null, at: expect.any(Number) });
+      expect(placementOf(x)).toEqual({ state: "idle", tip: base, landedTip: tip, pending: null, changed: [], changedTotal: 0, unwritable: [], unwritableTotal: 0, stopRecord: null,
+        withheld: [], watch: null, detail: null, resolution: null, at: expect.any(Number) });
       // The person's folder, its .git included, is untouched: no ref, no object, no file.
       expect(digestTree(x.folder)).toBe(before);
       expect(existsSync(join(x.folder, ".orca"))).toBe(false);

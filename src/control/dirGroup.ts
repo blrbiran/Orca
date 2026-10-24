@@ -55,6 +55,9 @@ export function groupRepoId(store: ControlStore, groupId: string): string {
 }
 
 const sha = z.string().regex(/^[0-9a-f]{40,64}$/);
+const sibling = z.object({ path: z.string(), name: z.string() }).strict();
+/** The body keeps this many stopping paths of each list (plan, builder's decision "full stop list"). */
+export const STOP_KEPT = 200;
 /**
  * §8.2: a dir group's placement record. Read and written as a plain record (never through the group body here), so the
  * multi-dir spec (H7) can keep one per folder elsewhere. The export makes the first one (§6.4 step 3); placement (§8)
@@ -64,9 +67,15 @@ export const placementSchema = z.object({
   state: z.enum(["idle", "folder-changed", "folder-unwritable", "folder-missing", "failed"]),
   tip: sha.nullable(),
   landedTip: sha.nullable(),
-  pending: z.object({ from: sha, to: sha, tip: sha, tmp: z.array(z.string()), aside: z.array(z.string()), dirs: z.array(z.string()) }).strict().nullable(),
+  // §8.4: each journaled sibling name (`.orca-<8 hex>`, folder-relative) with the landing path it belongs to, so the redo
+  // can settle it against that path's `from` side (§8.5 step 3). `dirs`: the directories an add created.
+  pending: z.object({ from: sha, to: sha, tip: sha, tmp: z.array(sibling), aside: z.array(sibling), dirs: z.array(z.string()) }).strict().nullable(),
+  // §9.1, plan builder's decision "full stop list": the first STOP_KEPT of each list, the exact totals, and the vault blob
+  // (`refs/orca/group/<g>/stop`) holding the full canonical lists.
   changed: z.array(z.string()), changedTotal: z.number().int().nonnegative(),
-  unwritable: z.array(z.object({ path: z.string(), reason: z.string() }).strict()),
+  unwritable: z.array(z.object({ path: z.string(), reason: z.string() }).strict()), unwritableTotal: z.number().int().nonnegative(),
+  stopRecord: sha.nullable(),
+  // §8.5 step 5, §9.2: `toEntry` is the withheld `to` entry, "<mode> <blob>", or "absent".
   withheld: z.array(z.object({ path: z.string(), reason: z.string(), toEntry: z.string() }).strict()),
   watch: z.string().nullable(),
   detail: z.string().nullable(),
@@ -85,8 +94,8 @@ export function readPlacement(value: unknown): PlacementRecord | null {
 
 /** §6.4 step 3: the record the export writes: nothing placed beyond the base, the document commit landed. */
 export function initialPlacement(input: { base: string; landedTip: string; at: number }): PlacementRecord {
-  return placementSchema.parse({ state: "idle", tip: input.base, landedTip: input.landedTip, pending: null, changed: [], changedTotal: 0, unwritable: [], withheld: [],
-    watch: null, detail: null, resolution: null, at: input.at });
+  return placementSchema.parse({ state: "idle", tip: input.base, landedTip: input.landedTip, pending: null, changed: [], changedTotal: 0, unwritable: [], unwritableTotal: 0, stopRecord: null,
+    withheld: [], watch: null, detail: null, resolution: null, at: input.at });
 }
 
 /**

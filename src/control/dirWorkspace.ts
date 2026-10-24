@@ -5,9 +5,11 @@
  * Every function takes the frozen workspace and explicit refs and commits as arguments and never reads a group body, so
  * a group with several folders (the multi-dir spec, H7) calls it once per folder.
  */
-import { realpath, stat } from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
-import { snapshotDrift, treeWith } from "../flow/vault/drift.js";
+import { snapshotDrift } from "../flow/vault/drift.js";
 import { vaultKeyOf } from "../flow/vault/paths.js";
 import { DEFAULT_CAPS, importSnapshot } from "../flow/vault/snapshot.js";
 import { openVault, vaultGit, type Vault } from "../flow/vault/vault.js";
@@ -79,10 +81,30 @@ const lsNames = async (vault: Vault, commit: string, path: string): Promise<stri
  * path in `keepFromPlaced` (the requirement document, the withheld paths) taken from `placed` (removed where `placed`
  * has none); parent `placed`, message `orca: place <groupId>`, Orca's identity. `differs`: the paths whose entry differs
  * between `tip` and the folder commit, in git's (byte) order.
+ *
+ * A kept path is matched exactly (a file at `docs` in `placed` is not the directory `docs/` in `tip`), and every removal
+ * is applied before any entry is put back, so a withheld file/directory swap (§8.3 `type-change`, all its paths kept
+ * together) never asks the index to hold a file and a directory of one name.
  */
 export async function nextFolderCommit(ws: DirWorkspace, input: { groupId: string; tip: string; placed: string; keepFromPlaced: readonly string[] }): Promise<{ commit: string; differs: string[] }> {
   const own = new Set([...await lsNames(ws.vault, input.tip, DECISIONS), ...await lsNames(ws.vault, input.placed, DECISIONS), ...input.keepFromPlaced]);
-  const tree = await treeWith(ws.vault, input.tip, input.placed, [...own]);
+  const placedEntries = new Map<string, string>();
+  for (const line of (await vaultGit(ws.vault, ["ls-tree", "-r", "-z", "--full-tree", input.placed])).split("\0")) {
+    const tab = line.indexOf("\t");
+    if (tab > 0) placedEntries.set(line.slice(tab + 1), line);
+  }
+  const removals = [...own].filter((path) => !placedEntries.has(path)).map((path) => `0 ${"0".repeat(40)}\t${path}`);
+  const puts = [...own].filter((path) => placedEntries.has(path)).map((path) => placedEntries.get(path)!);
+  const scratch = await mkdtemp(join(tmpdir(), "orca-vault-index-"));
+  let tree: string;
+  try {
+    const env = { GIT_INDEX_FILE: join(scratch, "index") };
+    await vaultGit(ws.vault, ["read-tree", input.tip], { env });
+    if (removals.length + puts.length > 0) await vaultGit(ws.vault, ["update-index", "-z", "--index-info"], { env, input: [...removals, ...puts].map((line) => `${line}\0`).join("") });
+    tree = (await vaultGit(ws.vault, ["write-tree"], { env })).trim();
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
   const commit = (await vaultGit(ws.vault, [...ORCA_IDENTITY, "commit-tree", tree, "-p", input.placed, "-m", `orca: place ${input.groupId}`])).trim();
   const differs = (await vaultGit(ws.vault, ["diff-tree", "-r", "-z", "--no-renames", "--name-only", input.tip, commit])).split("\0").filter((p) => p.length > 0);
   return { commit, differs };

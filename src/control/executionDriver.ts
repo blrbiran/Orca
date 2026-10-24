@@ -35,6 +35,7 @@ import {artifactSchema,type RunProgress} from "./schema.js";
 import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
+import { placeDirGroups, type DirPlacementCrashPoint } from "./dirPlacement.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
@@ -74,7 +75,9 @@ export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-term
   // Handoff delivery spec §9.2 R-H, §11 I5, §13.2 I-1.
   | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle"
   // Integration spec §6.1: the integration pass's outward actions (integrationPass.ts).
-  | IntegrationCrashPoint;
+  | IntegrationCrashPoint
+  // Dir-requirements spec §8.5 (D7): the placement pass's journal, folder writes and swap (dirPlacement.ts).
+  | DirPlacementCrashPoint;
 
 /** Test-only fault injection (spec §7.2 R1): thrown from `crash`, it ends the driver as a process death would. */
 export class DriverCrash extends Error {
@@ -1249,6 +1252,10 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Dir-requirements spec §8.5: placement of each dir group's landed work into its folder, right after integration.
+    try {
+      if (await placeDirGroups({ store: deps.store, admissionGate: deps.admissionGate, env: deps.env, stopped: () => context.stopped, ...(deps.crash === undefined ? {} : { crash: deps.crash }) })) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     return progressed;
   };
 

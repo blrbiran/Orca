@@ -1,5 +1,5 @@
 /**
- * Dir-requirements spec §6.5, §7, §10, criterion D5 without its placement assertions (plan Task 4; Task 5 adds them):
+ * Dir-requirements spec §6.5, §7, §8, §10, criterion D5 (plan Task 4; its placement assertions Task 5b):
  * a requirement opened on a registered `dir` project runs end to end through the assembled panel -- its pump, the real
  * execution driver and the pinned ccloop build (ORCA_CCLOOP_BIN) with ccloop's CLI-level fakes (fake claude answers the
  * single calls from a queue; fake codex in mode `reported` writes answer.txt and reports one decision) -- with the
@@ -7,6 +7,8 @@
  * - open → two clarify rounds → consensus → split → accept → export → estimate → confirm → the automatic start;
  * - both tasks land on the vault's `orca/<g>`, and every landing records its new tip as `placement.landedTip` in the
  *   write that records it (observed at each landing's crash point: the value before is the previous landing's tip);
+ * - the placement pass then writes the landed work into the folder: answer.txt, and none of Orca's own paths (no
+ *   `.decisions/` file of the group's, no `.orca/requirements/` document);
  * - the decisions view (the panel's route) lists the landed decision with `where: "group-branch"`, reads the group
  *   branch only, and never a folder's own `.decisions/` file, which stays byte-equal;
  * - the group has no integration record although its project's repo id has a non-keep default, and the integration
@@ -20,7 +22,7 @@
  * ORCA_PROJECTS_FILE point under temporary roots, in the runtime's env and in process.env.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -114,10 +116,10 @@ async function serveReadRoutes(runtime: ControlRuntime) {
   };
 }
 
-describe.skipIf(!realBinary)("a requirement on a dir project, end to end against real ccloop (D5 without placement)", { timeout: 420_000 }, () => {
+describe.skipIf(!realBinary)("a requirement on a dir project, end to end against real ccloop (D5)", { timeout: 420_000 }, () => {
   relocateHome("orca-dir-requirement-e2e-home-");
 
-  it("lands both tasks on the vault's orca/<g>, records each landed tip, lists the landed decision from the group branch, and never integrates", async () => {
+  it("lands both tasks on the vault's orca/<g>, records each landed tip, places them into the folder, lists the landed decision from the group branch, and never integrates", async () => {
     const own = await realpath(await mkdtemp(join(tmpdir(), "orca-dir-requirement-e2e-own-")));
     ownRoots.push(own);
     const folder = join(own, "notes"), vaults = join(own, "vaults"), projectsFile = join(own, "projects.json");
@@ -234,8 +236,15 @@ describe.skipIf(!realBinary)("a requirement on a dir project, end to end against
       // The folder's own ledger file is untouched, and no landing commit in the vault carries it.
       expect(readFileSync(join(folder, ".decisions", "own.jsonl")).equals(ownBefore)).toBe(true);
       expect(g(vault, "ls-tree", "-r", "--name-only", tip, "--", ".decisions/").split("\n")).not.toContain(".decisions/own.jsonl");
-      // TODO-Task5 (placement, D5's remaining asserts): after placement the folder holds both tasks' files (answer.txt) and
-      // holds no `.decisions/` of Orca's and no `.orca/requirements/`; Task 4 has no placement pass, so nothing is asserted here.
+      // §8: the driver's placement pass writes the landed work into the folder: both tasks' file (answer.txt), and none of
+      // Orca's own paths -- no `.decisions/` file of the group's (the folder's own ledger file is all that is there) and no
+      // `.orca/requirements/` document.
+      await until(() => readPlacement(bodyOf(runtime.store).placement)?.tip === tip, 60_000, "the placement of both landings", 100);
+      expect(readPlacement(bodyOf(runtime.store).placement)).toMatchObject({ state: "idle", tip, landedTip: tip, pending: null, changed: [], unwritable: [] });
+      expect(readFileSync(join(folder, "answer.txt"), "utf8").trim()).toBe("42");
+      expect(readdirSync(join(folder, ".decisions"))).toEqual(["own.jsonl"]);
+      expect(existsSync(join(folder, ".orca"))).toBe(false);
+      expect(g(vault, "for-each-ref", "refs/orca/group/g/pending")).toBe("");
 
       expect(await runtime.shutdown()).toBe(true);
       // §7: no integration record, and the integration pass runs no git child for the group.
