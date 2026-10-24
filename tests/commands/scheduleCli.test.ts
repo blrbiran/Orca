@@ -150,6 +150,41 @@ describe("a group pin shows its provenance and confirm mode (§13.1, §9.3)", ()
     expect(out.stderr).toContain(line);
   });
 
+  it("add group of an older version prints that version's provenance, not the newest", async () => {
+    const w = await world({}, { ...repinned, [`POST schedules/${NEW_ID}`]: accept(() => 0) });
+    const out = await run(["schedule", "add", "group", ENTRY, "--version", H.plan, "--cron", "0 9 * * 1", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect((w.posts()[0]!.payload as { start: { sha256: string } }).start.sha256).toBe(H.plan);
+    expect(out.stderr).toContain(`version ${H.plan} — saved by ana via web at ${new Date(AT).toISOString()} from group`);
+    expect(out.stderr).not.toContain(`version ${NEXT}`);
+    expect(out.stderr).not.toContain("saved by bo");
+  });
+
+  it("add group --quiet keeps stdout the JSON envelope and prints neither the provenance nor the mode", async () => {
+    const w = await world({}, { ...repinned, [`POST schedules/${NEW_ID}`]: accept(() => 0) });
+    const out = await run(["schedule", "add", "group", ENTRY, "--version", H.plan, "--cron", "0 9 * * 1", "--quiet", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(out.json()).toMatchObject({ schema: "orca-cli-response-v1", status: 200 });
+    expect(out.stderr).not.toContain("confirm mode:");
+    expect(out.stderr).not.toContain("saved by");
+  });
+
+  it("edit --token-limit without --repin keeps the pinned version, sends the whole start and prints the new mode", async () => {
+    const w = await world({}, {
+      ...pinned,
+      "GET schedules/sch-weekly": { status: 200, body: { schema: "orca-schedule-v1", id: "sch-weekly", kind: "group", revision: 3,
+        start: { kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit: null, integration: null } } },
+      "POST schedules/sch-weekly": accept(() => 3),
+    });
+    const out = await run(["schedule", "edit", "sch-weekly", "--token-limit", "500000", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.posts().map((p) => ({ path: p.path, expectedRevision: p.expectedRevision, payload: p.payload }))).toEqual([{
+      path: "schedules/sch-weekly", expectedRevision: 3,
+      payload: { set: { start: { kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit: 500000, integration: null } } },
+    }]);
+    expect(out.stderr).toContain("confirm mode: waits for your click (token limit 500000)");
+  });
+
   it("add group without --version is refused here, with nothing sent", async () => {
     const w = await world({}, pinned);
     const out = await run(["schedule", "add", "group", ENTRY, "--cron", "0 9 * * 1", "--json"], w.dir);
@@ -226,6 +261,16 @@ describe("the schedule reads: list, --all, fires and show (§13.1)", () => {
     expect(out.code, out.stdout + out.stderr).toBe(0);
     expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects", "GET schedules?repoId=repo-1", "GET schedules?repoId=repo-2"]);
     expect(out.json().body).toEqual({ schema: "orca-schedules-v1", all: true, schedules: [{ id: "sch-a" }, { id: "sch-b" }] });
+  });
+
+  it("list --all with no control repositories reads projects once and never falls back to resolving a project", async () => {
+    const w = await world({}, {
+      "GET projects": { status: 200, body: { source: "command-line", projects: [{ projectKey: "none", name: "none", path: "/repos/none", controlRepoId: null }] } },
+    });
+    const out = await run(["schedule", "list", "--all", "--json"], w.dir, w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects"]);
+    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", all: true, schedules: [] });
   });
 
   const FIRES: Array<[string[], string]> = [
