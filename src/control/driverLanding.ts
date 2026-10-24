@@ -566,20 +566,16 @@ async function finishReconcile(
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "R", "repository-path"); return true; }
   let tree = (await git(record.copyPath, [...QUIET_GIT, "rev-parse", `${attemptSha}^{tree}`])).trim();
-  // Control run decisions plan Task 6: the merge holds the run's own ledger and the reconciliation's, written onto the
-  // reconciled tree's `.decisions/` through a temporary index (ledgerTree.ts); the refused entries of both are staged.
-  const ledgerDir = await mkdtemp(join(record.runsDir, "ledger-"));
   // Kanban spec 2026-10-20 §3.5: the reconciliation's own decision (what each side changed, how they were merged) is
   // flagged for the person when the landing is recorded -- the conflict was resolved without them, they learn of it.
   let reconcileFlag: { decisionId: string; reason: string; evidence: string[] } | null = null;
   let criteria: Awaited<ReturnType<typeof criteriaFlagOf>> = null;
+  let ledgerDir: string | null = null;
   try {
-    await exportLedgerDir(record.copyPath, tree, ledgerDir);
     const { reported, evidence, at } = await runLedgerInputs(deps, runId);
     // Protect-acceptance-criteria spec §7: what lands here is the tip..reconciled change (the run's own work and how the
     // conflict was resolved), so it goes through the same detection as a plain landing.
     criteria = await criteriaFlagOf(deps, run, record.copyPath, at, { base: record.old, attempt: attemptSha });
-    const own = await writeRunLedger(ledgerDir, { ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence });
     const reconcileEvidence = runEvidence(record.reconcileRunId, attemptSha, await ccloopEvidenceString(deps.ccloopBin));
     const otherTaskIds = record.otherTaskIds ?? [record.otherTaskId];
     const blocks = record.conflictBlocks;
@@ -598,22 +594,38 @@ async function finishReconcile(
         evidence: [`reconcile ${record.reconcileRunId}`, `attempt ${attemptSha}`, ...record.conflictedPaths.slice(0, 30)],
       };
     }
-    const reconciler = await writeRunLedger(ledgerDir, {
-      ledgerRun: record.reconcileRunId, reported: reportedDecisionsOf(readLoopStateRaw(loopDirOf(workdir, record.reconcileRunId))),
-      codeAuthored, at, evidence: reconcileEvidence,
-    });
-    // Debug task plan Task 9: a debug run's closing rows join the same tree (its integration target is read in targetRepo).
-    const closing = await debugClosingOf(deps, run, targetRepo, ledgerDir, record.old);
-    const names = [
-      ...(own.writtenIds.length > 0 ? [`${runId}.jsonl`] : []),
-      ...(reconciler.writtenIds.length > 0 ? [`${record.reconcileRunId}.jsonl`] : []),
-      ...(closing?.written != null ? [closing.written] : []),
-    ];
-    if (names.length > 0) tree = await treeWithLedgerFiles(record.copyPath, tree, ledgerDir, names);
+    const reconcilerReported = reportedDecisionsOf(readLoopStateRaw(loopDirOf(workdir, record.reconcileRunId)));
+    let pending: PendingEntry[];
+    let flowDecisions: DecisionEvent[] | undefined;
+    let closing: Awaited<ReturnType<typeof debugClosingOf>> = null;
+    if (isDirFlowGroup(store, run.groupId)) {
+      // Dir-requirements spec §10.1: a dir flow group commits no `.decisions/` -- the reconciled tree is what copy-back
+      // puts into the folder. Its rows go to `flow_decisions` in the landing's write, like D and E.
+      const own = runLedgerEvents({ ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence });
+      const reconciler = runLedgerEvents({ ledgerRun: record.reconcileRunId, reported: reconcilerReported, codeAuthored, at, evidence: reconcileEvidence });
+      pending = [...own.pending, ...reconciler.pending];
+      flowDecisions = flowDecisionsWritten(store, run.groupId, runId) ? [] : [...own.events, ...reconciler.events];
+    } else {
+      // Control run decisions plan Task 6: the merge holds the run's own ledger and the reconciliation's, written onto
+      // the reconciled tree's `.decisions/` through a temporary index (ledgerTree.ts); the refused entries of both are staged.
+      ledgerDir = await mkdtemp(join(record.runsDir, "ledger-"));
+      await exportLedgerDir(record.copyPath, tree, ledgerDir);
+      const own = await writeRunLedger(ledgerDir, { ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence });
+      const reconciler = await writeRunLedger(ledgerDir, { ledgerRun: record.reconcileRunId, reported: reconcilerReported, codeAuthored, at, evidence: reconcileEvidence });
+      // Debug task plan Task 9: a debug run's closing rows join the same tree (its integration target is read in targetRepo).
+      closing = await debugClosingOf(deps, run, targetRepo, ledgerDir, record.old);
+      const names = [
+        ...(own.writtenIds.length > 0 ? [`${runId}.jsonl`] : []),
+        ...(reconciler.writtenIds.length > 0 ? [`${record.reconcileRunId}.jsonl`] : []),
+        ...(closing?.written != null ? [closing.written] : []),
+      ];
+      if (names.length > 0) tree = await treeWithLedgerFiles(record.copyPath, tree, ledgerDir, names);
+      pending = [...own.pending, ...reconciler.pending];
+    }
     // By replacement, before the swap: a D attempt that staged items and then conflicted left them stale on the run.
-    stagePending(deps, runId, [...own.pending, ...reconciler.pending], closing?.record ?? null, criteria?.flag ?? null);
+    stagePending(deps, runId, pending, closing?.record ?? null, criteria?.flag ?? null, flowDecisions);
   } finally {
-    await rm(ledgerDir, { recursive: true, force: true });
+    if (ledgerDir !== null) await rm(ledgerDir, { recursive: true, force: true });
   }
   const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `orca: land ${runId} (reconciled with ${(record.otherTaskIds ?? [record.otherTaskId]).join(", ")})`);
   await git(record.copyPath, [...QUIET_GIT, "update-ref", `refs/orca/merged/${runId}`, merged]);
