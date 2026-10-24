@@ -75,12 +75,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - **repin ccloop → `f4de340`**（实时转录的 ccloop 部分 + `work.operatorNote`）：Orca 先接受 features `transcripts:"v1"`、collect `transcripts`、envelope `operatorNote`，再钉；主仓已 `npm ci`。Orca 侧还**没有**消费者（读取器/UI 在飞，见下）。
   - `known-load-flakes.md` 新增会话 `ffec7b28` 一节（startForm 等；全量跑时真面板写 `~/.orca/panel/logs` 会触发 ~/.orca 写入护栏）。
   - **实时转录（Orca 侧）已合入并装上**（计划 `docs/superpowers/plans/2026-10-24-live-transcript-orca.md`，主题行 `fix(agentTranscript): the decoder splits like one whole-buffer decode…`）：11 笔 rebase 后 ff 合入。独立审阅的两个 should-fix 已修（torn UTF-8 下 `split` 与整缓冲解码不等价、`feedCount` 少算低代理单元），另有全量测试发现的真回归（面板严格的 `persistedRunSchema` 不认 D1 写在 run body 上的 `transcripts`，组视图 `run-invalid`）已修并加断言。`npm test` 根级 5885 过／3 红（`schedulerBridge`、`driverReconcileN`、`startForm`，全是已登记负载形状；各自单跑绿，负载 12–15），web 1388 全过；T11 `npm run perf:transcript` 峰值 51.9／48.3 MiB（门 64），0／359、0／527 泄漏；已 build＋web build＋`panel restart`，schema 仍 19。审阅 minor 4–8 的延后理由写在计划文末。
+  - **目录项目需求（dir-requirements）已合入并装上**（计划 `docs/superpowers/plans/2026-10-24-dir-requirements.md`，spec `2026-10-24-dir-project-requirements-design.md`；15 笔 rebase 后 ff 合入，tip 主题行 `fix(review): the four route enumerations learn resolve-folder-change…`）：Task 1–8 完成，D5–D15 判据测试与命名变异全绿（D15 2 条、D8 4 条、D12 1 条；另 9 条变异红后恢复 diff=0）。独立审阅 0 blocker、1 should-fix 已修（D8 锁探针新增 `after-classify`，证明分类也在整趟一把锁内，变异 `classify-outside-lock` 红）、6 条 minor 延后（take-folder 丢弃 withhold 的归因边界、resolution 晚一轮清理、CI `skipIf(!realBinary)`、D12 只扫 TMPDIR、临时文件 chmod 早于 link 的字面、`dir-base-missing` 判定过宽）。全量 `npm test` 根级 4926 过／1 红（`criteriaBaseRun`：`index.lock File exists`，已登记文件的新形态；同 env 单跑 3/3、未改动 main 1/1 绿，负载 11–12），web 154 文件全过；已 build＋web build＋`panel restart`，schema 仍 19（本分支无 schema 改动，未动控制库）。
 - **已装**：先 `sqlite3 .backup` 到 `~/.orca/backups/pre-schema19-20261024-062118/control.sqlite`（integrity ok，v18），再 build（tsc＋web）＋`panel restart`；`meta.schemaVersion=19`；修复迁移改了 0 个组。
 - **付费实测（工具给的数）**：真 codex（gpt-6-luna）验收 ccloop strict wire schema（`debug.located`＋`flow`）**通过**；claude／codex／omp 都能读工作区外绝对路径（选择 (a) 前提成立）；三家都**不**遮蔽密钥（O2）；三家都能在 `--add-dir` 目录里写（H7 前提成立），claude 精确 `Bash(cd <dir> && <cmd>)` 规则放行复合命令。证据在 `/private/tmp/orca-ffec7b28/{evidence,o2,o3,adddir-probe}/`。⚠️ 已知副作用：真 codex 每跑一次会往人的 `~/.codex/config.toml` 追加一条 `[projects."<路径>"] trust_level="trusted"`（历次会话都有），登记未修。
 - **在飞（分支上，已保存；接手者从各自计划文件继续，先读台账「Handoff state」）**：
-  1. `feat/dir-requirements`（工作树 `/private/tmp/orca-ffec7b28/dirreq`）：Task 1–4 已提交；**Task 5（放置）未提交、未验证**（`src/control/dirPlacement.ts` 等）；Task 6–8 未做。brief `/private/tmp/orca-ffec7b28/dirreq-brief.md`。
-  2. `feat/scheduled`（`/private/tmp/orca-ffec7b28/sched`）：P1（schema 19→20、计划库）已提交、树干净；P2–P4 未做。
-  3. ccloop `feat/multi-repo`（`/private/tmp/orca-ffec7b28/ccloop-mr`，tip `17b9541`）：完成＋一轮代码审阅已修、门 RC 0；**等人确认 P1–P7、M9 才合**；Orca 的 H7 部分未开始。
+  1. `feat/scheduled`（`/private/tmp/orca-ffec7b28/sched`）：P1（schema 19→20、计划库）已提交、树干净；P2–P4 未做。
+  2. ccloop `feat/multi-repo`（`/private/tmp/orca-ffec7b28/ccloop-mr`，tip `17b9541`）：完成＋一轮代码审阅已修、门 RC 0；**等人确认 P1–P7、M9 才合**；Orca 的 H7 部分未开始。
 - **测这些分支用的 ccloop**：`ORCA_CCLOOP_BIN=/private/tmp/orca-ffec7b28/ccloop-f4de340/dist/cli.js`，`CCLOOP_CACHE_DIR=/private/tmp/orca-ffec7b28/ccloop-cache`（scratch，别删）。
 
 ### 3.00000000 会话 `0e13a9b7`（2026-10-23）—— 已合、已推；它的待人项人已在会话 `ffec7b28` 全部回复（见那里）
@@ -266,7 +266,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.2 agent 的活（会话 `ffec7b28` 收尾时的建议顺序）
 
-1. **接着做在飞的两条 Orca 分支，一次只合一条**（每条：读计划 → 补完剩余 Task → 命名变异看见红 → `npm test` 重定向到文件读回、红的单跑并与未改动 main 对照 → **独立代码审阅** → rebase 到 main → ff 合 → build＋web build＋panel restart；schema 动之前先备份控制库）。顺序：dir-requirements（先核 Task 5 未提交的改动能否过它自己的判据）→ scheduled（schema 20）。实时转录已合（见 §3.000000000）。
+1. **接着做在飞的 Orca 分支，一次只合一条**（每条：读计划 → 补完剩余 Task → 命名变异看见红 → `npm test` 重定向到文件读回、红的单跑并与未改动 main 对照 → **独立代码审阅** → rebase 到 main → ff 合 → build＋web build＋panel restart；schema 动之前先备份控制库）。dir-requirements 已合（见 §3.000000000）；下一条 `feat/scheduled`（schema 20；安装前先 `sqlite3 .backup` 控制库）。
 2. **H7**：等人确认 ccloop P1–P7、M9 与 As-built 偏差后，合 ccloop `feat/multi-repo`（人推）→ Orca 接受 `context.additionalRepos`／envelope `additionalRepos`／collect `dirs`（含 `attemptSha`）→ repin → 实施 Orca H7 部分（spec §5–§10、M1–M19；依赖 dir-requirements 已合）。
 3. 实时转录 Orca 侧的 `operatorNote` 生产方（人给下一次 attempt 留话）若 spec 没定 Orca 界面，补一行 spec 再做。
 4. 登记未修（仍成立）：诊断性检查没传给 ccloop；saved-result 恢复不填 skill 目录；`omp-phase-continuation`（ccloop）；`orca status` 判的是调用者 shell 的环境；ccloop perf:stream L7 在负载 47–55 下增长 26–35 MiB 偶超 32 MiB 界（按需检查，不在 npm test）；runViewGrant 缺 handoff-run 用例（需 handoff profile 夹具）；决定路由会读两次决定。

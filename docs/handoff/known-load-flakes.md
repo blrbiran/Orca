@@ -159,5 +159,6 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 |---|---|
 | Orca › `tests/flow/startForm.test.ts` › 「answers the templates and a folder's images…」 | `fetch failed`／ECONNRESET 或约 14 s 超时；全量负载 28–80 时红（R2 server、R2 web、repin 三条分支都见过）；分支单跑 3/3（负载 8–16），未改动 main 单跑绿 |
 | Orca › `driverReconcileN`、`handoffE2E`、`schedulerBridge`、`taskResultPaired`、`criteriaBaseRun`、`driverReconcileDecisions` | 22–113 s 超时，全量负载约 50–80 时红；R2 web 分支单跑全绿，未改动 main 同 6 文件单跑 48/48（负载 10–17） |
+| Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while the re-run is in flight restores the workspace and runs it again」 | 断言形状（不是超时）：`index.lock File exists`（上一驱动仍在写）；dir-requirements 全量（负载约 60–66）红一次，同 env 单跑 3/3（负载 11–12）、未改动 main 单跑 1/1 绿 |
 | Orca › 全量里一批文件级失败「~/.orca write guard」 | 测试期间**真面板**往 `~/.orca/panel/logs/panel.err.log` 追加（9453 → 10764 B），不是测试写的；那 13 个文件单跑全绿。全量跑时面板在线就会撞上 |
 | ccloop › `tests/runtime/taskResults` 「pages at most 64…」、`ompUpdates`、`savedResultRecovery.native`、`skillsController` 等 | 负载 49–102 时红；单跑绿或未改动 `f4de340` 同形；明细在 `/private/tmp/orca-ffec7b28/lt/flake-table.txt` 与 ccloop 分支报告 |
