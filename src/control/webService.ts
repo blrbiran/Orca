@@ -22,7 +22,7 @@ import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, r
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { isDirGroup, type DirProjectOf } from "./dirGroup.js";
-import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults } from "./planImport.js";
+import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults, type ImportOrigin } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
@@ -482,8 +482,9 @@ export class WebControlService {
     void tail.then(() => { if (this.decisionChains.get(groupId) === tail) this.decisionChains.delete(groupId); });
     return next;
   }
-  async importPlan(command: ImportCommand): Promise<WebCommandResult> {
-    const release = this.deps.admissionGate?.enter(); try { return await importControlPlanAsync(this.deps, command); } finally { release?.(); }
+  async importPlan(command: ImportCommand, origin?: ImportOrigin): Promise<WebCommandResult> {
+    const release = this.deps.admissionGate?.enter();
+    try { return await importControlPlanAsync(this.deps, command, origin === undefined ? {} : { origin }); } finally { release?.(); }
   }
   editProposal(command: ProposalEditCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {
@@ -1155,7 +1156,8 @@ export class WebControlService {
    * fails `control-target-not-allowed` as any other unnamed target would.
    */
   async schedulesPass(starters: Omit<SchedulePassDeps, "store" | "now"> = {}): Promise<{ crashes: string[] }> {
-    return schedulesPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), ...starters });
+    // §9.2 rule 6: step 9 reads the control config's defaults, never a caller's copy of them.
+    return schedulesPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), ...starters, defaults: () => this.deps.defaults() });
   }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**

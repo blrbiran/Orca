@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { libraryEntryId } from "../../src/control/planLibrary/commands.js";
-import { appendVersion, insertEntry } from "../../src/control/planLibrary/store.js";
+import { appendVersion, insertEntry, readVersion } from "../../src/control/planLibrary/store.js";
+import { readArchivedPlan } from "../../src/control/queries.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
 import { FIRED_GROUP_ID, SCHEDULE_ID, firedGroupId, scheduleIdFor } from "../../src/control/schedules/model.js";
 import { latestFire, readSchedule } from "../../src/control/schedules/store.js";
@@ -15,7 +16,10 @@ import { scheduleDetailView, scheduleFiresView, scheduleListView } from "../../s
 import { idSchema } from "../../src/control/schema.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
+import type { IntegrationScheme } from "../../src/control/integrationScheme.js";
+import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { loadBuiltin } from "../../src/flow/template/load.js";
+import { webFixture } from "./fixtures/web.js";
 
 const REPO = "repo";
 const FOLDER = "/repos/proj";
@@ -311,5 +315,45 @@ describe("C10: every schedule write stamps the routed person, never the actor", 
       body = readSchedule(s, "sch-p")!.body;
       expect([body.state.paused, body.updatedBy, body.updatedVia, body.updatedAt]).toEqual([false, "ana", "web", NOW + 3_000]);
     } finally { s.close(); }
+  });
+});
+
+describe("C1: schedule-from-group pins the source scheme and the saved version (§6.1, §11.1)", () => {
+  const LOCAL: IntegrationScheme = { delivery: "local", trigger: "group", method: "merge", target: "main" };
+  const PUSH: IntegrationScheme = { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" };
+
+  it.each([
+    ["local", LOCAL, PUSH, LOCAL],
+    ["keep", undefined, LOCAL, null],
+  ])("the source's %s scheme is pinned, never the project default set after the import", async (_name, imported, later, expected) => {
+    const h = await webFixture(undefined, [{ taskId: "a" }], {
+      tokenPolicy: "optional-v1", ...(imported === undefined ? {} : { integration: imported }),
+    });
+    try {
+      // The repository default changes after the source group was imported.
+      writeRepositorySettingsBody(h.store, REPO, { workspaceMode: "worktree", revision: 2, integration: later });
+      const commandId = "from-g-1";
+      const groupRevision = Number(h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
+      const fromGroup = {
+        schema: "orca-raw-command-v1", commandId, actorId: "human", expectedRevision: groupRevision, verb: "schedule-from-group",
+        target: { kind: "group", groupId: "g" },
+        payload: { scheduleId: "sch-from", name: "weekly", cron: "0 9 * * *", enabled: false, tokenLimit: 2_000_000 },
+      } as ScheduleCommand;
+      const answer = withCommandContext(commandId, ANA, () => applyScheduleCommand({
+        store: h.store, knownRepository: (repoId: string) => repoId === REPO,
+        resolveRepository: () => join(h.root, "repo"), now: () => new Date(NOW),
+      }, fromGroup)) as Answer;
+      expect(answer.error).toBeUndefined();
+      const start = readSchedule(h.store, "sch-from")!.body.start;
+      expect(start).toMatchObject({ kind: "group", entryId: libraryEntryId(commandId), tokenLimit: 2_000_000, integration: expected });
+      if (start.kind !== "group") throw new Error("the schedule's start is not a group");
+      // The source group's recorded scheme is what the schedule pins (keep is no field/ null, not a scheme).
+      const source = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      expect(start.integration).toEqual(source.integration?.scheme ?? null);
+      // §11.1: the start pins the version this command just appended, not the group's head by name.
+      const version = readVersion(h.store, libraryEntryId(commandId), start.sha256)!;
+      expect(version).not.toBeNull();
+      expect(version.origin).toEqual({ kind: "group", groupId: "g", planHash: readArchivedPlan(h.store, "g").planHash });
+    } finally { await h.dispose(); }
   });
 });

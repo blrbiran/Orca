@@ -15,6 +15,18 @@ const PRIORITY: Record<OverviewStepV1["kind"], number> = {
   "requirement-answer": 1, "requirement-review": 1, "budget-review": 2, "start-review": 3,
 };
 
+/**
+ * §9.2 (M-3): the reason a fired group waits, from the fire row the group's own `origin` names, or null when this group
+ * was not fired by a schedule or its fire is not waiting. Synchronous and read-only, like every overview fact.
+ */
+function scheduledWaitingReason(store: ControlStore, groupId: string, body: Record<string, unknown>): string | null {
+  const origin = body.origin as { kind?: unknown; scheduleId?: unknown; slot?: unknown } | undefined;
+  if (origin?.kind !== "schedule" || typeof origin.scheduleId !== "string" || typeof origin.slot !== "number") return null;
+  const row = store.db.prepare("SELECT reason FROM schedule_fires WHERE schedule_id=? AND slot=? AND group_id=? AND outcome='waiting' AND reason IS NOT NULL")
+    .get(origin.scheduleId, origin.slot, groupId);
+  return row === undefined ? null : `scheduled-waiting:${String(row.reason)}`;
+}
+
 /** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. */
 export function readControlOverview(store: ControlStore, epoch: string): OverviewV1 {
   const changeSeq = readProjectionState(store).changeSeq;
@@ -98,7 +110,11 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     }
     const estimateLaunching = estimates.some(row => ["running", "start-unknown"].includes(String(row.state)));
     const estimateInFlight = estimates.some(row => ["queued", "running", "start-unknown"].includes(String(row.state)));
-    if (proposal?.state === "editable" && !estimateInFlight) add("budget-review", groupId, repoId, "proposal-editable", groupDestination("preparation"), `proposal:${proposal.proposalVersion}`, null, null, integration !== null);
+    if (proposal?.state === "editable" && !estimateInFlight) {
+      // §9.2 (M-3): a fired group's waiting fire names why it waits; the step stays the budget review at the budget region.
+      const scheduled = scheduledWaitingReason(store, groupId, body);
+      add("budget-review", groupId, repoId, scheduled ?? "proposal-editable", groupDestination("preparation"), `proposal:${proposal.proposalVersion}`, null, null, integration !== null);
+    }
     const pendingWake = store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(groupId)
       .some(row => ["start", "no-start", "resume", "continuation"].includes(String(row.kind)));
     const claimable = workItems.some(work => work.status === "ready" && work.dependsOn.every(id => workById.get(id)?.status === "done"));

@@ -161,4 +161,23 @@ describe("overview human work rules", () => {
     expect(body.steps.some(s=>s.taskId==="a" && s.reason==="auxiliary-failed")).toBe(false);
   });
 
+  it("M-3: names the fire's waiting reason on a scheduled group's budget review, read-only and still in preparation", async () => {
+    const { panel } = await panelFixture(); await finishEstimate(panel);
+    expect((await overview(panel)).steps.find(s => s.kind === "budget-review")).toMatchObject({ reason: "proposal-editable" });
+    const slot = 1_700_000_000_000;
+    panel.store.db.prepare("INSERT INTO schedules(id,project_id,kind,revision,body) VALUES ('sch-overview','repo','group',1,'{}')").run();
+    panel.store.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+      VALUES ('sch-overview',1,?,?,'waiting','delivery-needs-person:local',NULL,?,'orca-auto','schedule:sch-overview','{}')`).run(slot, slot, GROUP);
+    panel.store.db.prepare("UPDATE groups SET body=json_set(body,'$.origin',json(?)) WHERE id=?")
+      .run(JSON.stringify({ kind: "schedule", scheduleId: "sch-overview", slot }), GROUP);
+    const body = await overview(panel);
+    const step = body.steps.find(s => s.kind === "budget-review" && s.groupId === GROUP);
+    expect(step).toMatchObject({
+      reason: "scheduled-waiting:delivery-needs-person:local",
+      destination: { kind: "group", groupId: GROUP, region: "preparation" },
+      ownerRequired: false,
+    });
+    // The read is synchronous and writes nothing: a second overview is identical.
+    expect((await overview(panel)).steps).toEqual(body.steps);
+  });
 });

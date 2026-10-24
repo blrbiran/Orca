@@ -96,6 +96,18 @@ export function listStartingFires(store: ControlStore): ScheduleFire[] {
   return store.db.prepare(`SELECT ${FIRE_COLUMNS} FROM schedule_fires WHERE outcome='starting' ORDER BY at, schedule_id, seq`).all().map(fireOf);
 }
 
+/** Both tables carry `body`, so the joined read qualifies every column of the fire. */
+const GROUP_FIRE_COLUMNS = "f.schedule_id,f.seq,f.slot,f.at,f.outcome,f.reason,f.flow_run_id,f.group_id,f.\"by\",f.via,f.body";
+
+/** §9.2 step 9: the group fires still open -- a condition-8 `waiting`, or a `started` row with no confirm recorded yet. */
+export function listOpenGroupFires(store: ControlStore): ScheduleFire[] {
+  // A corrupt body is no decision for this pass; the CASE keeps json_extract away from it (SQLite may test the OR first).
+  return store.db.prepare(`SELECT ${GROUP_FIRE_COLUMNS} FROM schedule_fires f JOIN schedules s ON s.id=f.schedule_id
+    WHERE s.kind='group' AND json_valid(f.body) AND ((f.outcome='waiting' AND f.reason='auto-confirm-ineligible:8')
+      OR (f.outcome='started' AND (CASE WHEN json_valid(f.body) THEN json_extract(f.body,'$.confirm') END) IS NULL))
+    ORDER BY f.at, f.schedule_id, f.seq`).all().map(fireOf);
+}
+
 export function readFire(store: ControlStore, scheduleId: string, seq: number): ScheduleFire | null {
   const row = store.db.prepare(`SELECT ${FIRE_COLUMNS} FROM schedule_fires WHERE schedule_id=? AND seq=?`).get(scheduleId, seq);
   return row === undefined ? null : fireOf(row);

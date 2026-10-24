@@ -1,9 +1,11 @@
-// Scheduled flows and groups spec 2026-10-24 §7.5, criterion C5 (a, b, c, e) and §7.2 step 0: a crash between T1 and T2,
-// or between the start and T2, is healed by the next pass from stored facts -- one run, never two. Temp stores only.
+// Scheduled flows and groups spec 2026-10-24 §7.5, criterion C5 (a, b, c, d, e) and §7.2 step 0: a crash between T1 and
+// T2, between the start and T2, or between R2's confirm and step 9's copy is healed by the next pass from stored facts --
+// one run, never two. Temp stores only.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { autoConfirmCommandId } from "../../src/control/autoConfirm.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { libraryEntryId } from "../../src/control/planLibrary/commands.js";
 import { appendVersion, insertEntry } from "../../src/control/planLibrary/store.js";
@@ -322,6 +324,45 @@ describe("C5 crash resume", () => {
       expect(fires).toHaveLength(1);
       expect(fires[0]!.outcome).toBe("started");
       expect(count(s, "flow_runs")).toBe(1);
+    } finally { s.close(); }
+  });
+
+  it("(d) R2's confirm booked, a throw before step 9 records it: the next pass copies auto-confirmed", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createGroup(s, clock);
+      const slot = at(1, 9);
+      const scheduleId = "sch-g";
+      const groupId = firedGroupId(scheduleId, slot);
+      const bodyOf = () => JSON.parse(String(s.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;
+      // The import of a fired group writes an origin and an unlimited limit, which is what step 9 reads.
+      const starter = async (fire: ScheduleFire): Promise<{ groupId: string }> => {
+        writeBookedImport(s, fire);
+        const body = { groupId, status: "draft", origin: { kind: "schedule", scheduleId, slot }, limit: { tokens: null } };
+        s.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), groupId);
+        return { groupId };
+      };
+      await passAt(s, clock, at(1, 9), { startGroup: starter });
+      expect(fireRows(s, scheduleId)[0]!.outcome).toBe("started");
+      // R2's pass booked its success after the fire pass (the pump runs it after `schedulesPass`).
+      s.db.prepare("INSERT INTO commands(group_id,id,payload_hash,result,original_status,body_json) VALUES (?,?,?,?,?,?)")
+        .run(groupId, autoConfirmCommandId(1), "hash", JSON.stringify({ schema: "orca-command-success-v1" }), 201, "{}");
+      const stored = bodyOf();
+      // A throw before step 9 records it: this pass cannot read the group, so the fire keeps no confirm.
+      s.db.prepare("UPDATE groups SET body='not json' WHERE id=?").run(groupId);
+      const thrown = await passAt(s, clock, at(1, 10), { startGroup: starter });
+      expect(thrown.crashes).toHaveLength(1);
+      expect(thrown.crashes[0]).toContain(scheduleId);
+      expect(JSON.parse(String(fireRows(s, scheduleId)[0]!.body)).confirm).toBeUndefined();
+      // Healed from the booked row, not from pass state.
+      s.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(stored), groupId);
+      await passAt(s, clock, at(1, 11), { startGroup: starter });
+      const confirm = { state: "auto-confirmed", commandId: autoConfirmCommandId(1), code: null, at: at(1, 11) };
+      expect(JSON.parse(String(fireRows(s, scheduleId)[0]!.body)).confirm).toEqual(confirm);
+      // A later pass does not rewrite an existing confirm.
+      await passAt(s, clock, at(1, 12), { startGroup: starter });
+      expect(JSON.parse(String(fireRows(s, scheduleId)[0]!.body)).confirm).toEqual(confirm);
+      expect(fireRows(s, scheduleId)[0]!.outcome).toBe("started");
     } finally { s.close(); }
   });
 });

@@ -6,7 +6,7 @@ import { createPanelFlow, type PanelFlow } from "./flowAssembly.js";
 import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { createAdmissionGate, type AdmissionGate } from "../control/admissionGate.js";
-import { ControlError } from "../control/errors.js";
+import { ControlError, type KnownControlErrorCode } from "../control/errors.js";
 import { createCcloopExecutionPort } from "../control/ccloopPort.js";
 import { createUnconfiguredControlPort } from "../control/unconfiguredPort.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -18,7 +18,10 @@ import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { resolveAstGrepBin } from "../control/requirementOverview.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
-import { WebControlService } from "../control/webService.js";
+import { WebControlService, type WebCommandResult } from "../control/webService.js";
+import { firedGroupId } from "../control/schedules/model.js";
+import type { ImportCommand, ImportOrigin } from "../control/planImport.js";
+import { ORCHESTRATION_ACTOR } from "../control/orchestration.js";
 import { syncskillOptionsFromEnv } from "../skills/syncskill.js";
 import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
@@ -307,7 +310,11 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     const autoStart = driver === null || flow === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass())
       // Scheduled flows and groups spec §7.1: fires are decided after the checks and before the flow pass, so a flow run a
       // fire just started advances in this same pump. Its own catch keeps a bad schedule from skipping the flow pass.
-      .then(() => schedulesStep(service, { startFlow: flowScheduleStarter(flow!, flowProjects, admissionGate) }))
+      .then(() => schedulesStep(service, {
+        startFlow: flowScheduleStarter(flow!, flowProjects, admissionGate),
+        // §9.1: a group fire is one booked import through the service's own import path, as orca-auto.
+        startGroup: groupScheduleStarter((command, origin) => service.importPlan(command, origin)),
+      }))
       // A flow error never skips the auto-start pass of every other group (advanceFlowRuns records a run's own error on it).
       .then(() => flow!.refreshAgents().then(() => advanceFlowRuns(flow!.deps)).catch((error: unknown) => {
         process.stderr.write(`orca-control: flow pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -444,6 +451,44 @@ export function flowScheduleStarter(
       throw error;
     }
     return { flowRunId: started.flowRunId };
+  };
+}
+
+/**
+ * Scheduled flows and groups spec §9.1: a group fire's starter. Exactly one `import-plan` command goes through the
+ * service's import path (booked, replayable, every check of a person's import applies) as `orca-auto`, with the fire's
+ * command id, the pinned library version and the values the owner authorised on the schedule. The imported group's id is
+ * the fire's deterministic `sgrp-` id. A refusal is a `ControlError`; a draining panel is not a refusal, so the fire
+ * stays `starting` for the next process. The import is the only command a schedule's group path sends (no confirm, C7).
+ */
+export function groupScheduleStarter(
+  importScheduledPlan: (command: ImportCommand, origin: ImportOrigin) => Promise<WebCommandResult>,
+): NonNullable<SchedulePassDeps["startGroup"]> {
+  return async (fire, schedule) => {
+    const start = schedule.start;
+    const commandId = fire.body.commandId;
+    if (schedule.kind !== "group" || start.kind !== "group" || commandId === undefined) throw new ControlError("control-target-not-allowed");
+    const groupId = firedGroupId(schedule.id, fire.slot);
+    const command: ImportCommand = {
+      schema: "orca-raw-command-v1", commandId, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0, verb: "import-plan",
+      target: { kind: "group", groupId },
+      payload: {
+        groupId, repoId: schedule.projectId, libraryEntry: { entryId: start.entryId, sha256: start.sha256 },
+        tokenLimit: start.tokenLimit, integration: start.integration,
+      },
+    };
+    let result: WebCommandResult;
+    try { result = await importScheduledPlan(command, { kind: "schedule", scheduleId: schedule.id, slot: fire.slot }); }
+    catch (error) {
+      // The gate refuses by throwing `panel-draining`; rethrown as a plain error it is a crash, never a booked refusal.
+      if (error instanceof ControlError && error.code === "panel-draining") throw new Error("panel-draining: the fire stays starting");
+      throw error;
+    }
+    if ("error" in result) {
+      if (result.error.code === "panel-draining") throw new Error("panel-draining: the fire stays starting");
+      throw new ControlError(result.error.code as KnownControlErrorCode, result.error.message);
+    }
+    return { groupId };
   };
 }
 
