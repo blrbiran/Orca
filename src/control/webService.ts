@@ -1154,8 +1154,8 @@ export class WebControlService {
    * before the flow pass. The starters are the caller's -- a panel with no execution driver passes none, so a flow fire
    * fails `control-target-not-allowed` as any other unnamed target would.
    */
-  async schedulesPass(starters: Omit<SchedulePassDeps, "store" | "now"> = {}): Promise<void> {
-    await schedulesPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), ...starters });
+  async schedulesPass(starters: Omit<SchedulePassDeps, "store" | "now"> = {}): Promise<{ crashes: string[] }> {
+    return schedulesPass({ store: this.store, now: () => (this.deps.now?.() ?? new Date()).getTime(), ...starters });
   }
   private readonly checkJobs = new Map<string, Promise<void>>();
   /**

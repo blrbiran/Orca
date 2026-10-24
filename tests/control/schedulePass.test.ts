@@ -27,7 +27,10 @@ afterEach(async () => { while (roots.length) await rm(roots.pop()!, { recursive:
 async function openStore(): Promise<{ s: ControlStore; clock: Clock }> {
   const root = await mkdtemp(join(tmpdir(), "schedule-pass-"));
   roots.push(root);
-  return { s: await openControlStore({ stateDir: join(root, "s") }), clock: { at: at(0, 10, 30) } };
+  const s = await openControlStore({ stateDir: join(root, "s") });
+  // The zone is explicit here: a test never inherits the host's zone through the calendar's default.
+  s.db.prepare("INSERT INTO usage_calendar(singleton,time_zone,week_start) VALUES (1,'UTC',1)").run();
+  return { s, clock: { at: at(0, 10, 30) } };
 }
 
 const setZone = (s: ControlStore, zone: string): void => {
@@ -107,7 +110,7 @@ function groupStarter(s: ControlStore, calls: string[] = [], status = "draft") {
   };
 }
 
-const passAt = (s: ControlStore, clock: Clock, when: number, starters: Omit<SchedulePassDeps, "store" | "now"> = {}): Promise<void> => {
+const passAt = (s: ControlStore, clock: Clock, when: number, starters: Omit<SchedulePassDeps, "store" | "now"> = {}): Promise<{ crashes: string[] }> => {
   clock.at = when;
   return schedulesPass({ store: s, now: () => clock.at, ...starters }, when);
 };
@@ -123,7 +126,6 @@ describe("C2 slots", () => {
   it("created at 10:30 with 0 9 * * * fires nothing until the next 09:00", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       const calls: string[] = [];
       await passAt(s, clock, at(0, 10, 30), { startFlow: flowStarter(s, calls) });
@@ -144,7 +146,6 @@ describe("C2 slots", () => {
   it("disabled for 3 days then enabled: no catch-up; state.tz is stored with lastSlot", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, { enabled: false }, "sch-a");
       expect(readSchedule(s, "sch-a")!.body.state.tz).toBe("UTC");
       clock.at = at(3, 10, 0);
@@ -164,7 +165,6 @@ describe("C2 slots", () => {
   it("three missed daily slots collapse into one late fire, missed = 2", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       clock.at = at(0, 9, 0);
       createFlow(s, clock, {}, "sch-a");
       const when = at(3, 12, 0);
@@ -181,7 +181,6 @@ describe("C2 slots", () => {
   it("a cron edit re-initialises lastSlot and stores state.tz", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       clock.at = at(1, 8, 0);
       mustRun(s, clock, command("e1", "schedule-set", { set: { cron: "0 10 * * *" } }, "sch-a", readSchedule(s, "sch-a")!.revision));
@@ -240,7 +239,6 @@ describe("C2u one fire per slot", () => {
   it("a direct second T1 insert for the same slot is refused and the pass records nothing new", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       clock.at = at(0, 8, 0);
       createFlow(s, clock, {}, "sch-a");
       const slot = at(0, 9, 0);
@@ -256,9 +254,71 @@ describe("C2u one fire per slot", () => {
       expect(fireRows(s, "sch-a")).toHaveLength(1);
       expect(readSchedule(s, "sch-a")!.body.state.lastSlot).toBe(before);
       expect(() => insertFire(s, {
-        scheduleId: "sch-a", slot, at: slot, lastSlot: slot, outcome: "starting",
-        commandId: `orca-auto-schedule-sch-a-${slot}`, lateMs: 0, missed: 0, creditedTo: "ana",
+        scheduleId: "sch-a", slot, at: slot, expectedLastSlot: readSchedule(s, "sch-a")!.body.state.lastSlot!, lastSlot: slot,
+        outcome: "starting", commandId: `orca-auto-schedule-sch-a-${slot}`, lateMs: 0, missed: 0, creditedTo: "ana",
       })).toThrowError(ControlError);
+    } finally { s.close(); }
+  });
+});
+
+describe("C2 enable race", () => {
+  it("a concurrent enable re-initialising lastSlot stops a pre-enable slot and other schedules still fire", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock, {}, "sch-a");
+      createFlow(s, clock, {}, "sch-b");
+      createFlow(s, clock, {}, "sch-c");
+      const calls: string[] = [];
+      const started = flowStarter(s, calls);
+      // sch-a's start runs after the pass snapshotted every schedule: sch-b is disabled and re-enabled meanwhile,
+      // already past the next day's slot, so its lastSlot moves ahead of the slot the pass computed from its snapshot.
+      const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
+        if (fire.scheduleId === "sch-a") {
+          clock.at = at(6, 10, 0);
+          mustRun(s, clock, command("dis-b", "schedule-enable", { enabled: false }, "sch-b", readSchedule(s, "sch-b")!.revision));
+          mustRun(s, clock, command("en-b", "schedule-enable", { enabled: true }, "sch-b", readSchedule(s, "sch-b")!.revision));
+        }
+        return started(fire);
+      };
+      const { crashes } = await passAt(s, clock, at(5, 9, 0), { startFlow: starter });
+      expect(crashes).toEqual([]);
+      expect(fireRows(s, "sch-a")[0]!.outcome).toBe("started");
+      // The day-5 slot from before the enable never fires; the enable's own lastSlot (day 6) stands.
+      expect(fireRows(s, "sch-b")).toHaveLength(0);
+      expect(readSchedule(s, "sch-b")!.body.state.lastSlot).toBe(at(6, 9, 0));
+      expect(fireRows(s, "sch-c")[0]!.outcome).toBe("started");
+    } finally { s.close(); }
+  });
+});
+
+describe("group fires without a starter (Task 9 not yet wired)", () => {
+  it("a due group schedule writes no fire and is not paused", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createGroup(s, clock);
+      const before = readSchedule(s, "sch-g")!.body.state;
+      const { crashes } = await passAt(s, clock, at(1, 9, 0));
+      expect(crashes).toEqual([]);
+      expect(fireRows(s, "sch-g")).toHaveLength(0);
+      expect(readSchedule(s, "sch-g")!.body.state).toEqual(before);
+      expect(readSchedule(s, "sch-g")!.body.state.paused).toBe(false);
+    } finally { s.close(); }
+  });
+
+  it("step 0 leaves a starting group fire starting instead of failing it again", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createGroup(s, clock);
+      const slot = at(0, 9, 0);
+      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+        VALUES ('sch-g',1,?,?,'starting',NULL,NULL,NULL,'orca-auto','schedule:sch-g',?)`)
+        .run(slot, slot, JSON.stringify({ commandId: `orca-auto-schedule-sch-g-${slot}` }));
+      const { crashes } = await passAt(s, clock, at(1, 9, 0));
+      expect(crashes).toEqual([]);
+      const fires = fireRows(s, "sch-g");
+      expect(fires).toHaveLength(1);
+      expect(fires[0]!.outcome).toBe("starting");
+      expect(readSchedule(s, "sch-g")!.body.state.failureStreak).toBe(0);
     } finally { s.close(); }
   });
 });
@@ -268,7 +328,6 @@ describe("C3 overlap", () => {
     for (const state of ["running", "paused", "done", "stopped"] as const) {
       const { s, clock } = await openStore();
       try {
-        setZone(s, "UTC");
         createFlow(s, clock, {}, "sch-a");
         const calls: string[] = [];
         await passAt(s, clock, at(1, 9, 0), { startFlow: flowStarter(s, calls) });
@@ -300,7 +359,6 @@ describe("C3 overlap", () => {
     for (const [status, skips] of statuses) {
       const { s, clock } = await openStore();
       try {
-        setZone(s, "UTC");
         createGroup(s, clock);
         await passAt(s, clock, at(1, 9, 0), { startGroup: groupStarter(s) });
         const groupId = String(fireRows(s, "sch-g")[0]!.group_id);
@@ -311,7 +369,6 @@ describe("C3 overlap", () => {
     }
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createGroup(s, clock);
       await passAt(s, clock, at(1, 9, 0), { startGroup: groupStarter(s) });
       const groupId = String(fireRows(s, "sch-g")[0]!.group_id);
@@ -324,7 +381,6 @@ describe("C3 overlap", () => {
   it("a fire row left starting counts as active for step 4", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       clock.at = at(0, 8, 0);
       createFlow(s, clock, {}, "sch-a");
       const slot = at(0, 9, 0);
@@ -345,7 +401,6 @@ describe("C3 overlap", () => {
   it("a hand-started run of the same template does not block", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       s.transaction(() => {
         s.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,1,1,0,?)")
@@ -362,7 +417,6 @@ describe("C3 overlap", () => {
   it("a skip leaves the failure streak unchanged", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       await passAt(s, clock, at(1, 9, 0), { startFlow: flowStarter(s) });
       s.transaction(() => writeScheduleState(s, "sch-a", (state) => ({ ...state, failureStreak: 2 })));
@@ -379,7 +433,6 @@ describe("C4 failure streak", () => {
   it("three failed starts pause the schedule; no fire while paused; resume does not catch up", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       for (const day of [1, 2, 3]) await passAt(s, clock, at(day, 9, 0), { startFlow: failing() });
       const paused = readSchedule(s, "sch-a")!.body.state;
@@ -404,7 +457,6 @@ describe("C4 failure streak", () => {
   it("a started fire resets the streak", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       await passAt(s, clock, at(1, 9, 0), { startFlow: failing() });
       await passAt(s, clock, at(2, 9, 0), { startFlow: failing() });
@@ -418,7 +470,6 @@ describe("C4 failure streak", () => {
   it("a waiting fire neither counts nor resets", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       await passAt(s, clock, at(1, 9, 0), { startFlow: flowStarter(s) });
       const fire = fireRows(s, "sch-a")[0]!;
@@ -434,7 +485,6 @@ describe("C4 failure streak", () => {
   it("a FlowRefusal is a failed fire that counts, and the pass still starts the next schedule", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       createFlow(s, clock, {}, "sch-b");
       const calls: string[] = [];
@@ -465,7 +515,6 @@ describe("C10 fire rows", () => {
   it("every row is by orca-auto, via schedule:<id>, credited to enabledBy; illegal moves are refused", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       await passAt(s, clock, at(1, 9, 0), { startFlow: flowStarter(s) });
       flowRunState(s, String(fireRows(s, "sch-a")[0]!.flow_run_id), "done");
@@ -498,7 +547,6 @@ describe("C10 fire rows", () => {
   it("waiting → started is accepted only for auto-confirm-ineligible:8", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       await passAt(s, clock, at(1, 9, 0), { startFlow: flowStarter(s) });
       const first = fireRows(s, "sch-a")[0]!;
@@ -519,14 +567,13 @@ describe("C10 fire rows", () => {
   it("insertFire refuses a creditedTo that is not the schedule's enabler and writes no fire", async () => {
     const { s, clock } = await openStore();
     try {
-      setZone(s, "UTC");
       createFlow(s, clock, {}, "sch-a");
       const slot = at(1, 9, 0);
       let error: unknown;
       try {
         insertFire(s, {
-          scheduleId: "sch-a", slot, at: slot, lastSlot: slot, outcome: "starting",
-          commandId: `orca-auto-schedule-sch-a-${slot}`, lateMs: 0, missed: 0, creditedTo: "bo",
+          scheduleId: "sch-a", slot, at: slot, expectedLastSlot: readSchedule(s, "sch-a")!.body.state.lastSlot!, lastSlot: slot,
+          outcome: "starting", commandId: `orca-auto-schedule-sch-a-${slot}`, lateMs: 0, missed: 0, creditedTo: "bo",
         });
       } catch (thrown) { error = thrown; }
       expect(error).toBeInstanceOf(ControlError);

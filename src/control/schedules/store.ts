@@ -81,7 +81,11 @@ export function listFires(store: ControlStore, scheduleId: string, limit: number
   return store.db.prepare(`SELECT ${FIRE_COLUMNS} FROM schedule_fires WHERE schedule_id=? ORDER BY seq DESC LIMIT ?`).all(scheduleId, limit).map(fireOf);
 }
 
-/** §7.2 step 4: this schedule's fires that may still be active -- a `starting` row always counts. */
+/**
+ * §7.2 step 4: this schedule's fires that may still be active -- a `starting` row always counts. The `schedule_id`
+ * prefix of the primary key seeks this schedule's rows and the outcome predicate is applied before any body is parsed,
+ * so a long history is scanned but never decoded; `(schedule_id, outcome)` needs no second index for that.
+ */
 export function listActiveFires(store: ControlStore, scheduleId: string): ScheduleFire[] {
   return store.db.prepare(`SELECT ${FIRE_COLUMNS} FROM schedule_fires WHERE schedule_id=? AND outcome IN ('starting','started','waiting') ORDER BY seq`)
     .all(scheduleId).map(fireOf);
@@ -108,7 +112,11 @@ export function writeScheduleState(store: ControlStore, scheduleId: string, chan
 }
 
 export interface FireInsertInput {
-  scheduleId: string; slot: number; at: number; lastSlot: number;
+  scheduleId: string; slot: number; at: number;
+  /** The `state.lastSlot` the pass read before deciding; a fresh row that no longer has it has moved on (enable, edit). */
+  expectedLastSlot: number;
+  /** The slot this fire consumes, written as the row's new `state.lastSlot`. */
+  lastSlot: number;
   outcome: "starting" | "skipped"; reason?: string | null;
   commandId?: string; lateMs: number; missed: number; creditedTo: string;
 }
@@ -127,6 +135,9 @@ export function insertFire(store: ControlStore, input: FireInsertInput): Schedul
     if (row === null) throw new ControlError("recovery-blocked", "schedule-missing");
     // §10: the attribution is the schedule's enabler; a different name never writes a fire.
     if (input.creditedTo !== row.body.enabledBy) throw new ControlError("recovery-blocked", "fire-credited-to");
+    // §7.2 step 2: a write from a pass that read an older row must not resurrect a slot an enable (or a cron edit) has
+    // already re-initialised away; the pass stops this schedule for the pass and decides again from fresh state.
+    if (row.body.state.lastSlot !== input.expectedLastSlot) throw new ControlError("recovery-blocked", "schedule-state-changed");
     if (store.db.prepare("SELECT 1 FROM schedule_fires WHERE schedule_id=? AND slot=?").get(input.scheduleId, input.slot) !== undefined) {
       throw new ControlError("recovery-blocked", "schedule-slot-taken");
     }
@@ -139,7 +150,11 @@ export function insertFire(store: ControlStore, input: FireInsertInput): Schedul
       store.db.prepare(`INSERT INTO schedule_fires(${FIRE_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
         .run(input.scheduleId, seq, input.slot, input.at, input.outcome, input.reason ?? null, null, null, FIRE_BY, fireVia(input.scheduleId), JSON.stringify(body));
     } catch (error) {
-      if (String((error as Error).message).includes("UNIQUE")) throw new ControlError("recovery-blocked", "schedule-slot-taken");
+      // Only the (schedule_id, slot) UNIQUE is "another pass took the slot"; the (schedule_id, seq) PK race is a crash.
+      const message = (error as Error).message;
+      if (message.includes("schedule_fires.schedule_id") && message.includes("schedule_fires.slot")) {
+        throw new ControlError("recovery-blocked", "schedule-slot-taken");
+      }
       throw error;
     }
     const next = structuredClone(row.body);

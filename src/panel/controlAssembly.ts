@@ -307,7 +307,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     const autoStart = driver === null || flow === null ? Promise.resolve() : service.systemDebugPass().then(() => service.checksPass())
       // Scheduled flows and groups spec §7.1: fires are decided after the checks and before the flow pass, so a flow run a
       // fire just started advances in this same pump. Its own catch keeps a bad schedule from skipping the flow pass.
-      .then(() => schedulesStep(service, { startFlow: flowScheduleStarter(flow!, flowProjects) }))
+      .then(() => schedulesStep(service, { startFlow: flowScheduleStarter(flow!, flowProjects, admissionGate) }))
       // A flow error never skips the auto-start pass of every other group (advanceFlowRuns records a run's own error on it).
       .then(() => flow!.refreshAgents().then(() => advanceFlowRuns(flow!.deps)).catch((error: unknown) => {
         process.stderr.write(`orca-control: flow pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -414,10 +414,12 @@ export function autoConfirmStep(
 /**
  * Scheduled flows and groups spec §7, §8 step 7: a flow fire's starter. The project's folder is resolved through the
  * registry at fire time; the run is started by `orca-auto` through `schedule:<id>`, its id derived from the fire's
- * commandId so a re-run after a crash finds the same run. The template-version check and the effect clamp are Task 7's.
+ * commandId so a re-run after a crash finds the same run. The start enters the admission gate like every other write;
+ * a draining panel is not a refusal of the start, so the fire stays `starting` for the next process. The template-version
+ * check and the effect clamp are Task 7's.
  */
 export function flowScheduleStarter(
-  flow: PanelFlow, projects: () => ReadonlyArray<{ repoId: string; path: string }>,
+  flow: PanelFlow, projects: () => ReadonlyArray<{ repoId: string; path: string }>, admissionGate: AdmissionGate,
 ): NonNullable<SchedulePassDeps["startFlow"]> {
   return async (fire, schedule) => {
     const start = schedule.start;
@@ -426,27 +428,37 @@ export function flowScheduleStarter(
     const project = projects().find((entry) => entry.repoId === schedule.projectId);
     if (project === undefined) throw new ControlError("flow-dir-unregistered", schedule.projectId);
     const projectId = await registeredDirProject(projects(), project.path, schedule.projectId);
-    const started = await startFlowRun(flow.deps, {
-      templateRef: start.template, dir: project.path, projectId, params: start.params,
-      ...(start.clarify === undefined ? {} : { clarify: start.clarify }),
-      ...(start.unattended === undefined ? {} : { unattended: start.unattended }),
-      ...(start.pool === undefined ? {} : { pool: start.pool }),
-      by: "orca-auto", via: `schedule:${schedule.id}`, operatorId: schedule.enabledBy, idempotencyKey: commandId,
-    });
+    let started: { flowRunId: string; groupId: string };
+    try {
+      started = await withAdmission({ admissionGate }, () => startFlowRun(flow.deps, {
+        templateRef: start.template, dir: project.path, projectId, params: start.params,
+        ...(start.clarify === undefined ? {} : { clarify: start.clarify }),
+        ...(start.unattended === undefined ? {} : { unattended: start.unattended }),
+        ...(start.pool === undefined ? {} : { pool: start.pool }),
+        by: "orca-auto", via: `schedule:${schedule.id}`, operatorId: schedule.enabledBy, idempotencyKey: commandId,
+      }));
+    } catch (error) {
+      // The gate refuses by throwing `panel-draining`; rethrown as a plain error it is a crash, never a booked refusal.
+      if (error instanceof ControlError && error.code === "panel-draining") throw new Error("panel-draining: the fire stays starting");
+      throw error;
+    }
     return { flowRunId: started.flowRunId };
   };
 }
 
 /**
  * Scheduled flows and groups spec §7.1: the pump's scheduler step, with the same swallow-and-write shape as
- * `autoConfirmStep`, so the flow pass chained after it still runs when one schedule is unreadable.
+ * `autoConfirmStep`, so the flow pass chained after it still runs when one schedule is unreadable. A crash the pass
+ * isolated is written one line each.
  */
 export function schedulesStep(
-  service: { schedulesPass(starters?: Omit<SchedulePassDeps, "store" | "now">): Promise<void> },
+  service: { schedulesPass(starters?: Omit<SchedulePassDeps, "store" | "now">): Promise<{ crashes: string[] }> },
   starters: Omit<SchedulePassDeps, "store" | "now">,
   write: (line: string) => void = (line) => { process.stderr.write(line); },
 ): Promise<void> {
-  return service.schedulesPass(starters).catch((error: unknown) => {
+  return service.schedulesPass(starters).then(({ crashes }) => {
+    for (const crash of crashes) write(`orca-control: schedule ${crash}\n`);
+  }, (error: unknown) => {
     write(`orca-control: schedules pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
   });
 }

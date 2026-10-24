@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { libraryEntryId } from "../../src/control/planLibrary/commands.js";
 import { appendVersion, insertEntry } from "../../src/control/planLibrary/store.js";
-import { firedGroupId } from "../../src/control/schedules/model.js";
+import { FIRED_GROUP_ID, firedGroupId } from "../../src/control/schedules/model.js";
 import { schedulesPass, type SchedulePassDeps } from "../../src/control/schedules/pass.js";
 import { readSchedule } from "../../src/control/schedules/store.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
@@ -101,9 +101,17 @@ function writeBookedImport(s: ControlStore, fire: ScheduleFire): { groupId: stri
   return { groupId };
 }
 
-const passAt = (s: ControlStore, clock: Clock, when: number, starters: Omit<SchedulePassDeps, "store" | "now">): Promise<void> => {
+const passAt = (s: ControlStore, clock: Clock, when: number, starters: Omit<SchedulePassDeps, "store" | "now">): Promise<{ crashes: string[] }> => {
   clock.at = when;
   return schedulesPass({ store: s, now: () => clock.at, ...starters }, when);
+};
+
+/** A crash no longer rejects the pass: it is reported, one line naming the schedule, and the fire stays `starting`. */
+const crashed = async (pass: Promise<{ crashes: string[] }>, scheduleId: string, message: string): Promise<void> => {
+  const { crashes } = await pass;
+  expect(crashes).toHaveLength(1);
+  expect(crashes[0], scheduleId).toContain(scheduleId);
+  expect(crashes[0], scheduleId).toContain(message);
 };
 
 describe("C5 crash resume", () => {
@@ -111,22 +119,25 @@ describe("C5 crash resume", () => {
     const { s, clock } = await openStore();
     try {
       createFlow(s, clock);
+      createFlow(s, clock, "sch-b");
       let calls = 0;
       const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
         calls += 1;
-        if (calls === 1) throw new Error("crash after T1");
+        if (fire.scheduleId === "sch-a" && calls === 1) throw new Error("crash after T1");
         return writeFlowRun(s, fire);
       };
-      await expect(passAt(s, clock, at(1, 9), { startFlow: starter })).rejects.toThrow("crash after T1");
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: starter }), "sch-a", "crash after T1");
       expect(fireRows(s, "sch-a")[0]!.outcome).toBe("starting");
+      // The crash starved nothing: the next schedule still started in the same pass.
+      expect(fireRows(s, "sch-b")[0]!.outcome).toBe("started");
       await passAt(s, clock, at(1, 9), { startFlow: starter });
       const fires = fireRows(s, "sch-a");
       expect(fires).toHaveLength(1);
       expect(fires[0]!.outcome).toBe("started");
-      expect(count(s, "flow_runs")).toBe(1);
+      expect(count(s, "flow_runs")).toBe(2);
       const commandId = JSON.parse(String(fires[0]!.body)).commandId as string;
       expect(String(fires[0]!.flow_run_id)).toBe(`fr-${uuidOf(commandId)}`);
-      expect(calls).toBe(2);
+      expect(calls).toBe(3);
     } finally { s.close(); }
   });
 
@@ -142,14 +153,14 @@ describe("C5 crash resume", () => {
         if (calls === 1) throw new Error("crash after T1");
         return writeBookedImport(s, fire);
       };
-      await expect(passAt(s, clock, at(1, 9), { startGroup: starter })).rejects.toThrow("crash after T1");
+      await crashed(passAt(s, clock, at(1, 9), { startGroup: starter }), "sch-g", "crash after T1");
       expect(fireRows(s, "sch-g")[0]!.outcome).toBe("starting");
       await passAt(s, clock, at(1, 9), { startGroup: starter });
       const fires = fireRows(s, "sch-g");
       expect(fires).toHaveLength(1);
       expect(fires[0]!.outcome).toBe("started");
       const groupId = firedGroupId("sch-g", at(1, 9));
-      expect(groupId.startsWith("sgrp-")).toBe(true);
+      expect(FIRED_GROUP_ID.test(groupId)).toBe(true);
       expect(String(fires[0]!.group_id)).toBe(groupId);
       // The re-run is T1's own command: the same commandId and the same sgrp- group.
       expect(commandIds).toHaveLength(2);
@@ -165,8 +176,11 @@ describe("C5 crash resume", () => {
     try {
       createFlow(s, clock);
       createFlow(s, clock, "sch-b");
-      const crash = async (): Promise<{ flowRunId: string }> => { throw new Error("crash after T1"); };
-      await expect(passAt(s, clock, at(1, 9), { startFlow: crash })).rejects.toThrow("crash after T1");
+      const crash = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
+        if (fire.scheduleId === "sch-a") throw new Error("crash after T1");
+        return writeFlowRun(s, fire);
+      };
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: crash }), "sch-a", "crash after T1");
       expect(fireRows(s, "sch-a")[0]!.outcome).toBe("starting");
       const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
         if (fire.scheduleId === "sch-a") throw new FlowRefusal("flow-param-invalid:idea", "the idea");
@@ -193,7 +207,7 @@ describe("C5 crash resume", () => {
         writeFlowRun(s, fire);
         throw new Error("crash before T2");
       };
-      await expect(passAt(s, clock, at(1, 9), { startFlow: starter })).rejects.toThrow("crash before T2");
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: starter }), "sch-a", "crash before T2");
       expect(fireRows(s, "sch-a")[0]!.outcome).toBe("starting");
       await passAt(s, clock, at(1, 9), { startFlow: starter });
       const fires = fireRows(s, "sch-a");
@@ -212,10 +226,36 @@ describe("C5 crash resume", () => {
         writeBookedImport(s, fire);
         throw new Error("crash before T2");
       };
-      await expect(passAt(s, clock, at(1, 9), { startGroup: starter })).rejects.toThrow("crash before T2");
+      await crashed(passAt(s, clock, at(1, 9), { startGroup: starter }), "sch-g", "crash before T2");
       await passAt(s, clock, at(1, 9), { startGroup: starter });
       expect(fireRows(s, "sch-g")[0]!.outcome).toBe("started");
       expect(bookedCount(s, "sch-g", at(1, 9))).toBe(1);
+    } finally { s.close(); }
+  });
+
+  it("a corrupt historical body is ignored; a corrupt active body crashes only its schedule", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock);
+      createFlow(s, clock, "sch-b");
+      const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => writeFlowRun(s, fire);
+      // A settled row from long ago whose body no longer parses: history, not a decision for this pass.
+      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+        VALUES ('sch-a',1,?,?,'failed','x',NULL,NULL,'orca-auto','schedule:sch-a','not json')`)
+        .run(at(0, 9), at(0, 9));
+      await passAt(s, clock, at(1, 9), { startFlow: starter });
+      expect(fireRows(s, "sch-a")[1]!.outcome).toBe("started");
+      for (const scheduleId of ["sch-a", "sch-b"]) {
+        s.db.prepare("UPDATE flow_runs SET state='done' WHERE id=?").run(String(fireRows(s, scheduleId).at(-1)!.flow_run_id));
+      }
+      // An active row whose body does not parse: that schedule is the crash, the pass still starts the other one.
+      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+        VALUES ('sch-b',2,?,?,'started',NULL,NULL,NULL,'orca-auto','schedule:sch-b','not json')`)
+        .run(at(2, 9), at(2, 9));
+      const { crashes } = await passAt(s, clock, at(3, 9), { startFlow: starter });
+      expect(crashes).toHaveLength(1);
+      expect(crashes[0]).toContain("sch-b");
+      expect(fireRows(s, "sch-a")[2]!.outcome).toBe("started");
     } finally { s.close(); }
   });
 
@@ -229,7 +269,7 @@ describe("C5 crash resume", () => {
         if (calls === 1) throw new Error("crash after T1");
         return writeFlowRun(s, fire);
       };
-      await expect(passAt(s, clock, at(1, 9), { startFlow: starter })).rejects.toThrow("crash after T1");
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: starter }), "sch-a", "crash after T1");
       await passAt(s, clock, at(2, 9), { startFlow: starter });
       const fires = fireRows(s, "sch-a");
       expect(fires).toHaveLength(2);
@@ -254,7 +294,7 @@ describe("C5 crash resume", () => {
       };
       // A crash before any run was written: the starter never gets its row in.
       const noRun = async (): Promise<{ flowRunId: string }> => { calls += 1; throw new Error("crash after T1"); };
-      await expect(passAt(s, clock, at(1, 9), { startFlow: noRun })).rejects.toThrow("crash after T1");
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: noRun }), "sch-a", "crash after T1");
       disable(s, clock, "sch-a");
       await passAt(s, clock, at(1, 10), { startFlow: starter });
       const fires = fireRows(s, "sch-a");
@@ -275,7 +315,7 @@ describe("C5 crash resume", () => {
         writeFlowRun(s, fire);
         throw new Error("crash before T2");
       };
-      await expect(passAt(s, clock, at(1, 9), { startFlow: starter })).rejects.toThrow("crash before T2");
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: starter }), "sch-a", "crash before T2");
       disable(s, clock, "sch-a");
       await passAt(s, clock, at(1, 10), { startFlow: starter });
       const fires = fireRows(s, "sch-a");

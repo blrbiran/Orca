@@ -123,32 +123,47 @@ function settleFailed(store: ControlStore, fire: ScheduleFire, code: string): vo
   });
 }
 
+/** A crash's one short line for the pump: the schedule it belongs to and the error (§7.1). */
+function crashOf(scheduleId: string, error: unknown): string {
+  return `${scheduleId}: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+async function resumeFire(deps: SchedulePassDeps, fire: ScheduleFire): Promise<void> {
+  const row = readSchedule(deps.store, fire.scheduleId);
+  const signalled = alreadyStarted(deps.store, fire, row?.body ?? null);
+  if (signalled !== null) {
+    if (signalled.ok) settleStarted(deps.store, fire, signalled);
+    else settleFailed(deps.store, fire, signalled.code);
+    return;
+  }
+  // §9 is Task 9's: until `startGroup` is wired, a group fire is neither re-run nor failed -- it stays `starting`.
+  if (row !== null && row.body.kind === "group" && deps.startGroup === undefined) return;
+  if (row === null || row.removed || !row.body.enabled || row.body.state.paused) {
+    settleFailed(deps.store, fire, "schedule-disabled");
+    return;
+  }
+  try {
+    settleStarted(deps.store, fire, await startOf(deps, fire, row.body));
+  } catch (error) {
+    const code = refusalCode(error);
+    if (code === null) throw error;
+    settleFailed(deps.store, fire, code);
+  }
+}
+
 /**
  * §7.2 step 0: settle every `starting` fire of any schedule, oldest first. A start that happened is recorded from what
  * exists; a schedule removed, disabled or paused since T1 fails `schedule-disabled` (the person's stop wins, streak
- * unchanged); anything else re-runs its own starter and settles the outcome.
+ * unchanged); anything else re-runs its own starter and settles the outcome. A crash is isolated to its fire (C5): the
+ * row stays `starting` and every other fire and schedule still runs.
  */
-export async function resumeStartingFires(deps: SchedulePassDeps, _now: number): Promise<void> {
+export async function resumeStartingFires(deps: SchedulePassDeps): Promise<{ crashes: string[] }> {
+  const crashes: string[] = [];
   for (const fire of listStartingFires(deps.store)) {
-    const row = readSchedule(deps.store, fire.scheduleId);
-    const signalled = alreadyStarted(deps.store, fire, row?.body ?? null);
-    if (signalled !== null) {
-      if (signalled.ok) settleStarted(deps.store, fire, signalled);
-      else settleFailed(deps.store, fire, signalled.code);
-      continue;
-    }
-    if (row === null || row.removed || !row.body.enabled || row.body.state.paused) {
-      settleFailed(deps.store, fire, "schedule-disabled");
-      continue;
-    }
-    try {
-      settleStarted(deps.store, fire, await startOf(deps, fire, row.body));
-    } catch (error) {
-      const code = refusalCode(error);
-      if (code === null) throw error;
-      settleFailed(deps.store, fire, code);
-    }
+    try { await resumeFire(deps, fire); }
+    catch (error) { crashes.push(crashOf(fire.scheduleId, error)); }
   }
+  return { crashes };
 }
 
 /**
@@ -160,34 +175,43 @@ export async function evaluateSchedule(deps: SchedulePassDeps, row: ScheduleRow,
   const body = row.body;
   const store = deps.store;
   if (row.removed || !body.enabled || body.state.paused) return;
-  // §7.2 step 2: a zone change re-initialises lastSlot in the new zone and fires nothing this pass (M-2).
+  // §9 is Task 9's: a group schedule with no wired starter consumes nothing and writes nothing.
+  if (body.kind === "group" && deps.startGroup === undefined) return;
+  // §7.2 step 2: a zone change (or a never-initialised `lastSlot`) re-initialises in the new zone and fires nothing
+  // this pass (M-2).
   const tz = canonicalTimeZone(readUsageCalendar(store).timeZone);
   const spec = parseCron(body.cron);
-  if (tz !== body.state.tz) {
+  if (tz !== body.state.tz || body.state.lastSlot === null) {
     const lastSlot = latestSlot(spec, tz, Number.NEGATIVE_INFINITY, now) ?? now;
     store.transaction(() => writeScheduleState(store, row.id, (state) => ({ ...state, tz, lastSlot })));
     return;
   }
-  const from = body.state.lastSlot ?? now;
+  const from = body.state.lastSlot;
   const slot = latestSlot(spec, tz, from, now);
   if (slot === null) return;
   // §7.2 step 3: for the record only -- older missed slots collapse into this one (§7.3).
   const missed = Math.max(0, cronSlotsBetween(spec, tz, from, slot).length - 1);
   const lateMs = now - slot;
   const creditedTo = body.enabledBy;
-  // §7.2 step 4: a `starting` row or a still-running/paused run or a live group consumes the slot as a skip.
-  const active = listActiveFires(store, row.id).map((fire) => activeFireId(store, fire)).find((id) => id !== null);
+  // §7.2 step 4: a `starting` row or a still-running/paused run or a live group consumes the slot as a skip. The first
+  // active id is enough, so a long history is not walked (and its bodies are not parsed) past that point.
+  let active: string | null = null;
+  for (const fire of listActiveFires(store, row.id)) {
+    active = activeFireId(store, fire);
+    if (active !== null) break;
+  }
   try {
-    if (active !== undefined) {
+    if (active !== null) {
       insertFire(store, {
-        scheduleId: row.id, slot, at: now, lastSlot: slot, outcome: "skipped",
+        scheduleId: row.id, slot, at: now, expectedLastSlot: from, lastSlot: slot, outcome: "skipped",
         reason: `previous-active:${active}`, lateMs, missed, creditedTo,
       });
       return;
     }
-    // §7.2 steps 5-6: T1; a UNIQUE(schedule, slot) hit means another pass took the slot -- nothing more to record.
+    // §7.2 steps 5-6: T1; a UNIQUE(schedule, slot) hit means another pass took the slot, and a moved `lastSlot` means
+    // an enable re-initialised it -- either way nothing more to record this pass.
     const fire = insertFire(store, {
-      scheduleId: row.id, slot, at: now, lastSlot: slot, outcome: "starting",
+      scheduleId: row.id, slot, at: now, expectedLastSlot: from, lastSlot: slot, outcome: "starting",
       commandId: `orca-auto-schedule-${row.id}-${slot}`, lateMs, missed, creditedTo,
     });
     // §7.2 steps 7-8: the start is idempotent; a refusal settles `failed`, any other throw stays a crash.
@@ -199,13 +223,20 @@ export async function evaluateSchedule(deps: SchedulePassDeps, row: ScheduleRow,
       settleFailed(store, fire, code);
     }
   } catch (error) {
-    if (error instanceof ControlError && error.detail === "schedule-slot-taken") return;
+    if (error instanceof ControlError && (error.detail === "schedule-slot-taken" || error.detail === "schedule-state-changed")) return;
     throw error;
   }
 }
 
-/** §7.2: one pass -- every `starting` fire first, then every live schedule. */
-export async function schedulesPass(deps: SchedulePassDeps, now: number = (deps.now ?? Date.now)()): Promise<void> {
-  await resumeStartingFires(deps, now);
-  for (const row of listSchedules(deps.store, null)) await evaluateSchedule(deps, row, now);
+/**
+ * §7.2: one pass -- every `starting` fire first, then every live schedule. A crash is isolated to its fire or schedule
+ * (C5): the rest of the pass still runs, and the caller writes one line per crash.
+ */
+export async function schedulesPass(deps: SchedulePassDeps, now: number = (deps.now ?? Date.now)()): Promise<{ crashes: string[] }> {
+  const { crashes } = await resumeStartingFires(deps);
+  for (const row of listSchedules(deps.store, null)) {
+    try { await evaluateSchedule(deps, row, now); }
+    catch (error) { crashes.push(crashOf(row.id, error)); }
+  }
+  return { crashes };
 }
