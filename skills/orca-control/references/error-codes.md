@@ -245,6 +245,8 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `saved-result-source-stale` | 409 |
 | `saved-result-unavailable` | 409 |
 | `saved-result-usage-unsettled` | 409 |
+| `schedule-limit` | 409 |
+| `schedule-param-absolute` | 400 |
 | `skills-profile-empty` | 422 |
 | `skills-shape` | 422 |
 | `skills-unsupported-agent` | 422 |

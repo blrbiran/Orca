@@ -10,7 +10,7 @@ import { ControlError } from "../errors.js";
 import { checkParamValue } from "../../flow/params.js";
 import { asFlowControlError } from "../../flow/flowCommands.js";
 import { loadBuiltin } from "../../flow/template/load.js";
-import { latestSlot, validateSchedule } from "../checks/cron.js";
+import { latestSlot, parseCron, validateSchedule } from "../checks/cron.js";
 import type { ControlStore } from "../store.js";
 import { canonicalTimeZone, readUsageCalendar } from "../usageCalendar.js";
 import { readEntry, readVersion } from "../planLibrary/store.js";
@@ -65,7 +65,8 @@ function validateFlowStart(deps: ScheduleValidationDeps, projectId: string, star
   try { loaded = loadBuiltin(templateId); }
   catch (error) { throw new ControlError("flow-template-invalid", (error as Error).message); }
   for (const [id, value] of Object.entries(start.params)) {
-    const param = loaded.template.params?.[id];
+    // Own keys only: `toString`/`constructor` from the prototype chain is not a parameter of the template.
+    const param = loaded.template.params !== undefined && Object.hasOwn(loaded.template.params, id) ? loaded.template.params[id] : undefined;
     if (param === undefined) throw new ControlError("flow-param-invalid", `${id}: not a parameter of the template`);
     // §6.1: an image is read inside the folder at every fire, so a preset-style absolute path is not a scheduled value.
     if (param.type === "image" && typeof value === "string" && isAbsolute(value)) throw new ControlError("schedule-param-absolute", id);
@@ -106,5 +107,8 @@ export function parseScheduleBody(row: { id: unknown; project_id: unknown; kind:
     || body.start.kind !== body.kind || body.state === null || typeof body.state !== "object") {
     throw new ControlError("recovery-blocked", "schedule-body-invalid");
   }
+  try { parseCron(String(body.cron)); }
+  catch { throw new ControlError("recovery-blocked", "schedule-body-invalid"); }
+  if (body.state.tz !== null && typeof body.state.tz !== "string") throw new ControlError("recovery-blocked", "schedule-body-invalid");
   return body;
 }

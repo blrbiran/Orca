@@ -44,6 +44,12 @@ export function listVersions(store: ControlStore, entryId: string): LibraryVersi
   return store.db.prepare('SELECT entry_id,version,sha256,doc,origin,"by",via,at FROM plan_library_versions WHERE entry_id=? ORDER BY version').all(entryId).map(versionOf);
 }
 
+/** The newest version's sha256, without reading its (possibly large) document; null when the entry has none. */
+export function newestVersionSha(store: ControlStore, entryId: string): string | null {
+  const row = store.db.prepare("SELECT sha256 FROM plan_library_versions WHERE entry_id=? ORDER BY version DESC LIMIT 1").get(entryId);
+  return row === undefined ? null : String(row.sha256);
+}
+
 /** One version by its sha256, its bytes re-hashed; null when the entry has no such version. */
 export function readVersion(store: ControlStore, entryId: string, sha256: string): LibraryVersion | null {
   const row = store.db.prepare('SELECT entry_id,version,sha256,doc,origin,"by",via,at FROM plan_library_versions WHERE entry_id=? AND sha256=?').get(entryId, sha256);

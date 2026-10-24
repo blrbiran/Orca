@@ -9,8 +9,9 @@ import { withCommandContext } from "../../src/control/commandClient.js";
 import { libraryEntryId } from "../../src/control/planLibrary/commands.js";
 import { appendVersion, insertEntry } from "../../src/control/planLibrary/store.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
-import { firedGroupId, scheduleIdFor } from "../../src/control/schedules/model.js";
-import { readSchedule } from "../../src/control/schedules/store.js";
+import { FIRED_GROUP_ID, SCHEDULE_ID, firedGroupId, scheduleIdFor } from "../../src/control/schedules/model.js";
+import { latestFire, readSchedule } from "../../src/control/schedules/store.js";
+import { scheduleDetailView, scheduleFiresView, scheduleListView } from "../../src/control/schedules/views.js";
 import { idSchema } from "../../src/control/schema.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
@@ -39,10 +40,11 @@ const depsFor = (s: ControlStore, clock: { at: number }) => ({
 });
 
 /** One raw schedule command; the target names the schedule (a create and an edit share it). */
-const command = (commandId: string, verb: ScheduleCommand["verb"], payload: unknown,
+const command = <V extends ScheduleCommand["verb"]>(commandId: string, verb: V,
+  payload: Extract<ScheduleCommand, { verb: V }>["payload"],
   options: { scheduleId?: string; expectedRevision?: number; actorId?: string } = {}): ScheduleCommand =>
   ({ schema: "orca-raw-command-v1", commandId, actorId: options.actorId ?? "human", expectedRevision: options.expectedRevision ?? 0, verb,
-    target: { kind: "schedule", scheduleId: options.scheduleId ?? "sch-a" }, payload }) as unknown as ScheduleCommand;
+    target: { kind: "schedule", scheduleId: options.scheduleId ?? "sch-a" }, payload }) as ScheduleCommand;
 
 const run = (s: ControlStore, cmd: ScheduleCommand, who: Who = ANA, clock: { at: number } = { at: NOW }): Answer =>
   withCommandContext(cmd.commandId, who, () => applyScheduleCommand(depsFor(s, clock), cmd)) as Answer;
@@ -54,11 +56,15 @@ const refused = (s: ControlStore, cmd: ScheduleCommand, who?: Who, clock?: { at:
   return answer.error;
 };
 
-const flowCreate = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+/** A create: the project-named arm of `schedule-set`'s payload, and its two start arms. */
+type CreatePayload = Extract<Extract<ScheduleCommand, { verb: "schedule-set" }>["payload"], { projectId: string }>;
+type GroupStart = Extract<CreatePayload["start"], { kind: "group" }>;
+
+const flowCreate = (overrides: Partial<CreatePayload> = {}): CreatePayload => ({
   projectId: REPO, name: "weekly", cron: "0 9 * * *", enabled: false,
   start: { kind: "flow", template: "wechat-article", params: { idea: "a topic" } }, ...overrides,
 });
-const groupCreate = (start: Record<string, unknown>, overrides: Record<string, unknown> = {}): Record<string, unknown> => flowCreate({ start, ...overrides });
+const groupCreate = (start: GroupStart, overrides: Partial<CreatePayload> = {}): CreatePayload => flowCreate({ start, ...overrides });
 
 const VERSION_ORIGIN = { kind: "import" as const, fileName: "p.json", fileSha256: "f".repeat(64), format: "orca-plan-v1" as const };
 const version = (s: ControlStore, entryId: string, projectId: string, doc = `{"entry":"${entryId}"}`): string =>
@@ -129,6 +135,26 @@ describe("the schedule model's write checks (§6, C1)", () => {
     } finally { s.close(); }
   });
 
+  it("refuses a param that is only the prototype chain (toString is not a template parameter)", async () => {
+    const s = await store();
+    try {
+      const answer = refused(s, command("c1", "schedule-set",
+        flowCreate({ start: { kind: "flow", template: "wechat-article", params: { toString: "x" } } })));
+      expect(answer.code).toBe("flow-param-invalid");
+      expect(answer.message).toContain("toString");
+      expect(readSchedule(s, "sch-a")).toBeNull();
+    } finally { s.close(); }
+  });
+
+  it("refuses a write whose schedule id is not sch- (control-argument-invalid)", async () => {
+    const s = await store();
+    try {
+      const answer = refused(s, command("c1", "schedule-set", flowCreate(), { scheduleId: "weekly" }));
+      expect(answer.code).toBe("control-argument-invalid");
+      expect(readSchedule(s, "weekly")).toBeNull();
+    } finally { s.close(); }
+  });
+
   it("stores a template named without a version at the version the build ships", async () => {
     const s = await store();
     try {
@@ -144,7 +170,7 @@ describe("the schedule model's write checks (§6, C1)", () => {
       const entryId = "pl-0123456789abcdef";
       const sha256 = version(s, entryId, REPO);
       // §6.1: a group start always names the version's sha256; the raw command schema refuses one without it.
-      const noSha = command("g0", "schedule-set", groupCreate({ kind: "group", entryId, tokenLimit: null, integration: null }));
+      const noSha = command("g0", "schedule-set", groupCreate({ kind: "group", entryId, tokenLimit: null, integration: null } as unknown as GroupStart));
       expect(rawAuthorityCommandSchema.safeParse(noSha).success).toBe(false);
       const complete = groupCreate({ kind: "group", entryId, sha256, tokenLimit: null, integration: null });
       expect(rawAuthorityCommandSchema.safeParse(command("g0b", "schedule-set", complete)).success).toBe(true);
@@ -174,10 +200,54 @@ describe("the schedule model's write checks (§6, C1)", () => {
     const scheduleId = scheduleIdFor("Weekly Article");
     const fired = firedGroupId(scheduleId, NOW);
     const entry = libraryEntryId("cmd-1");
-    expect(scheduleId).toMatch(/^sch-/);
-    expect(fired).toMatch(/^sgrp-/);
+    expect(scheduleId).toMatch(SCHEDULE_ID);
+    expect(fired).toMatch(FIRED_GROUP_ID);
     expect(entry).toMatch(/^pl-/);
     for (const id of [scheduleId, fired, entry]) expect(idSchema.safeParse(id).success, id).toBe(true);
+  });
+
+  it("slugs a name: empty is sch-schedule, edges trimmed, the slug capped at 59", () => {
+    expect(scheduleIdFor("  ")).toBe("sch-schedule");
+    expect(scheduleIdFor("  Weekly  ")).toBe("sch-weekly");
+    const capped = scheduleIdFor("x".repeat(100));
+    expect(capped).toBe(`sch-${"x".repeat(59)}`);
+    expect(capped).toMatch(SCHEDULE_ID);
+  });
+});
+
+describe("the schedule reads (§13.1, B2): revision, guarded bodies", () => {
+  it("exposes the row's revision: 1 after a create, 2 after an edit, in the detail and the list", async () => {
+    const s = await store();
+    try {
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      expect(scheduleDetailView(s, "sch-a", NOW).revision).toBe(1);
+      expect(scheduleListView(s, REPO, NOW).schedules.map((row) => row.revision)).toEqual([1]);
+      expect(run(s, command("e1", "schedule-set", { set: { name: "renamed" } }, { expectedRevision: 1 })).error).toBeUndefined();
+      expect(scheduleDetailView(s, "sch-a", NOW).revision).toBe(2);
+      expect(scheduleListView(s, REPO, NOW).schedules.map((row) => row.revision)).toEqual([2]);
+    } finally { s.close(); }
+  });
+
+  it("refuses a corrupt fire body as schedule-fire-body-invalid, never a SyntaxError", async () => {
+    const s = await store();
+    try {
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run("sch-a", 1, NOW, NOW, "skipped", null, null, null, "orca-auto", "schedule:sch-a", "not json");
+      expect(() => scheduleFiresView(s, "sch-a", 10)).toThrow("recovery-blocked:schedule-fire-body-invalid");
+      expect(() => latestFire(s, "sch-a")).toThrow("recovery-blocked:schedule-fire-body-invalid");
+    } finally { s.close(); }
+  });
+
+  it("refuses a hand-edited body whose cron no longer parses, as schedule-body-invalid", async () => {
+    const s = await store();
+    try {
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      const row = readSchedule(s, "sch-a")!;
+      s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(JSON.stringify({ ...row.body, cron: "nope" }), "sch-a");
+      expect(() => readSchedule(s, "sch-a")).toThrow("recovery-blocked:schedule-body-invalid");
+      expect(() => scheduleListView(s, REPO, NOW)).toThrow("recovery-blocked:schedule-body-invalid");
+    } finally { s.close(); }
   });
 });
 

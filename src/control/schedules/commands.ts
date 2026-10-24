@@ -199,5 +199,3 @@ export function applyScheduleCommand(deps: ScheduleDeps, command: ScheduleComman
     apply: (context) => act(deps, context, command),
   }).body;
 }
-
-export { scheduleIdFor };

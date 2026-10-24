@@ -63,6 +63,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group folder-change <group> [--take-folder] [--recheck] [--withhold]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
 - `orca group depend <group> --on <on>` — make the group wait until --on <group> has landed
 - `orca group undepend <group> --on <on>` — remove that wait
+- `orca group schedule <group> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]` — schedule this group from its archived plan: one library version pins the fires; needs a person token (person token)
 
 ### `orca requirement`
 
@@ -207,6 +208,18 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca plan export <entry> [--version <version>] --out <out>` — write a library version's orca-plan-v1 bytes to a new file (mode 0600; an existing path is refused)
 - `orca plan archive <entry>` — hide a library entry from lists (refused while a schedule uses it)
 - `orca plan preview <path>` — print the plan's write sets, conflicts and layering, and the runtime preflight; execute nothing (--verbose: more)
+
+### `orca schedule`
+
+- `orca schedule list` — this project's schedules: kind, cron, next three slots, last fire and newer-version information
+- `orca schedule show <schedule>` — one schedule's body and revision, its next three slots, last fire and newer-version information
+- `orca schedule add flow <template> --cron <cron> [--param <param>] [--clarify <clarify>] [--unattended] [--pool <pool>] [--name <name>] [--disabled] [--id <id>]` — a builtin flow template on a cron (at most hourly), at the version the build ships; needs a person token (person token)
+- `orca schedule add group <entry> --version <version> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]` — a plan library entry at one explicit version on a cron; --version is required (orca plan show lists an entry's versions); needs a person token (person token)
+- `orca schedule edit <schedule> [--cron <cron>] [--param <param>] [--name <name>] [--repin <repin>] [--pool <pool>] [--token-limit <token-limit>] [--unlimited]` — change a schedule's cron or name, a flow's params and pool, or a group's pinned version and token limit; needs a person token (person token)
+- `orca schedule enable <schedule>` — turn a schedule's fires on; needs a person token (person token)
+- `orca schedule disable <schedule>` — turn a schedule's fires off (its row and fires stay)
+- `orca schedule remove <schedule>` — mark a schedule removed: it never fires again and frees its place in the limit
+- `orca schedule resume <schedule>` — resume a schedule paused after repeated failed starts
 
 ### `orca dev`
 

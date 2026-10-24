@@ -70,7 +70,7 @@ const SCHEDULE_ROWS: ReadonlyArray<{ name: string; verb: "schedule-set" | "sched
 
 describe("schedule access (§11.1, C9 schedule rows)", () => {
   it("classifies all five schedule verbs human-only, with the table's socket tiers", () => {
-    expect(SCHEDULE_ROWS.map(({ verb }) => VERB_ACCESS[verb])).toEqual(Array(6).fill("human-only"));
+    expect(SCHEDULE_ROWS.map(({ verb }) => VERB_ACCESS[verb])).toEqual(Array(SCHEDULE_ROWS.length).fill("human-only"));
     const tier = (verb: string, payload: Record<string, unknown>): unknown => {
       const rule = SOCKET_TIER[verb];
       return typeof rule === "function" ? rule(payload) : rule;

@@ -297,7 +297,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
   app.get("/api/control/schedules/:scheduleId/fires", (req, res) => {
     try {
-      const limit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+      const raw = req.query.limit;
+      // A strict decimal positive integer: `Number("0x10")` and `Number("+3")` are not the query the caller meant.
+      const limit = raw === undefined ? 50 : typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new ControlError("control-argument-invalid", "limit");
       res.json(scheduleFiresView(deps.store, String(req.params.scheduleId), limit));
     } catch (error) { sendMappedControlError(res, error); }

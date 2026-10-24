@@ -272,6 +272,11 @@ stdout is exactly one JSON line:
 | `POST plan-library/save` | plan-library-save | `{"source":{"kind":"group","groupId":"g1"},"name":"weekly report"}` |
 | `POST plan-library/import` | plan-library-import | `{"projectId":"r1","name":"weekly.json","doc":{"schema":"orca-plan-v1","goal":"g","successConditions":["s"],"tasks":[]},"provenance":{"fileName":"weekly.json","fileSha256":"0000000000000000000000000000000000000000000000000000000000000000","format":"orca-plan-v1"}}` |
 | `POST plan-library/archive` | plan-library-archive | `{"entryId":"pl-0123456789abcdef"}` |
+| `POST schedules/<scheduleId>` | schedule-set | `{"projectId":"r1","name":"weekly","cron":"0 9 * * 1","enabled":false,"start":{"kind":"flow","template":"wechat-article","params":{"idea":"a topic"}}}` |
+| `POST schedules/<scheduleId>/enable` | schedule-enable | `{"enabled":true}` |
+| `POST schedules/<scheduleId>/remove` | schedule-remove | `{}` |
+| `POST schedules/<scheduleId>/resume` | schedule-resume | `{}` |
+| `POST groups/<groupId>/schedule` | schedule-from-group | `{"scheduleId":"sch-weekly","name":"weekly","cron":"0 9 * * 1","enabled":false}` |
 
 Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-stop` takes an optional `handoffDeadlineAt` (UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`). A spend cap's `scope` is `all` or `repo:<repoId>` and its `period` is `total`, `week` or `month` (weeks and months in the usage calendar's time zone). Examples are checked against the raw payload schemas only; the panel also judges live state, so versions, hashes and ids must be real (for example a `set-task-loop` plan must exist, and a `proposal-edit` operation with provenance `model` needs an `estimateId`). `retry-task` starts again a task whose current run ccloop ended failed (in `get groups/<groupId>`, the current run has a non-succeeded `outcome` and is either terminally `blocked`, an eligible held `settled-recoverable` failure after handoff, or an eligible released `settled-failed` failure with a valid usage settlement): the run becomes `settled-failed` and a new run starts from the group branch's current head; any other task is refused with `task-not-retryable` (409). `recovery-retry` refuses such a run with `run-terminal-failed` (409) and still resumes a run blocked for any other reason. An archived group keeps every record and refuses every command but `unarchive-group` with `group-archived` (409); reads are unchanged and it is never claimed or integrated. `archive-group` is refused while the group still has work in motion: `archive-run-active`, `archive-stop-pending` (a handoff or shutdown stop still `handoff-pending` or `handoff-unresolved`; `handoff-complete` and `handoff-partial` allow archive; a pause never blocks), `archive-integration-resolving`, `archive-call-in-flight` (an estimate or requirement call).
 
@@ -294,6 +299,8 @@ Notes: `recovery-retry` also takes `{"scope":"group","groupId":"g1"}`. `handoff-
 | `operator/set-orchestration-settings` | `.revision` of `get orchestration` (`orca-orchestration-v1`; `0` before the first change) |
 | `operator/checks/settings`, `operator/checks/scheduled`, `operator/checks/locks` | the same `.revision` of `get orchestration` (the global check settings share it) |
 | `operator/flows/settings`, `operator/flows/locks` | the same `.revision` of `get orchestration` (the global flow settings share it) |
+| `schedules/<scheduleId>`, `…/enable`, `…/remove`, `…/resume` | `.revision` of `get schedules/<scheduleId>` (`orca-schedule-v1`; `0` for an id no schedule has yet, so a create and an edit share the route) |
+| `groups/<groupId>/schedule` | the source group's `.commandRevision` as above (the verb saves a library version in the group's transaction) |
 
 Where the ids come from:
 
@@ -301,5 +308,7 @@ Where the ids come from:
 - `planId`: `get config` `.plans[].planId` (each entry also names its `repoId`).
 - `operatorId` (for `groups/@operator:<operatorId>/commands/<commandId>`): `get operator/agent-preferences` `.operatorId`.
 - `groupId`: `get summary` `.groups[].groupId`; for `requirements` and `groups/import-plan` you choose a new one.
+- `scheduleId`: you choose a `sch-…` id (the CLI derives one from the name), or `get schedules?repoId=<repoId>` `.schedules[].id` names the existing ones.
+- `entryId` (a plan library entry): `get plan-library?repoId=<repoId>` `.entries[].entryId`.
 
 D9 (2026-10-09, Codex implement_settlement, base 2c14e73): `settle-unknown-usage` is owner-only in an authenticated Web session. Member and socket/MCP agent calls receive 403 `control-verb-human-only`. The acknowledgement is not authentication. It conservatively charges both remaining grants and cannot be undone; use the Web read preview to see the amount.

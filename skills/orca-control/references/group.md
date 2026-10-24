@@ -185,3 +185,20 @@ remove that wait
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `--on <on>` (required): the group that must land first
+
+## `orca group schedule <group> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]`
+
+schedule this group from its archived plan: one library version pins the fires; needs a person token
+
+- What it does: sends control verb `schedule-from-group`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--cron <cron>` (required): 5-field cron (minute hour day month weekday), at most hourly
+- `--token-limit <n>`: the group's token limit; default: unlimited
+- `--name <name>`: the schedule's name; default: the template, entry or group
+- `--disabled`: create it switched off
+- `--id <id>`: the schedule's id; default: sch-<slug of the name>
+
+```
+orca group schedule g-1a2b --cron '0 9 * * 1' --name weekly
+```

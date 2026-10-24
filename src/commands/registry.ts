@@ -11,11 +11,12 @@ import { META_ROWS } from "./domains/meta.js";
 import { PLAN_ROWS } from "./domains/plan.js";
 import { READ_ROWS } from "./domains/reads.js";
 import { PROPOSAL_ROWS } from "./domains/proposal.js";
+import { SCHEDULE_ROWS } from "./domains/schedule.js";
 import { SETTINGS_ROWS } from "./domains/settings.js";
 import { WORK_ROWS } from "./domains/work.js";
 import type { CommandDef, FindResult } from "./types.js";
 
-export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...CHECK_ROWS, ...FLOW_ROWS, ...PLAN_ROWS, ...COMMAND_ROWS, ...TOOL_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
+export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...WORK_ROWS, ...PROPOSAL_ROWS, ...SETTINGS_ROWS, ...CHECK_ROWS, ...FLOW_ROWS, ...PLAN_ROWS, ...SCHEDULE_ROWS, ...COMMAND_ROWS, ...TOOL_ROWS, ...DEV_ROWS, ...CONTROL_ROWS];
 
 /**
  * Spec §11: the control verbs with no command, reachable only through `orca control send` (references/escape-hatch.md).

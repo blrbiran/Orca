@@ -4,6 +4,7 @@
  * body stay readable (Rule 13). The fire writer lands with the pass (plan Task 6); this module reads its rows.
  */
 import type { ControlStore } from "../store.js";
+import { ControlError } from "../errors.js";
 import { parseScheduleBody, type ScheduleBody } from "./model.js";
 
 export interface ScheduleRow { id: string; projectId: string; kind: "flow" | "group"; revision: number; removed: boolean; body: ScheduleBody }
@@ -23,8 +24,14 @@ const fireOf = (row: Record<string, unknown>): ScheduleFire => ({
   scheduleId: String(row.schedule_id), seq: Number(row.seq), slot: Number(row.slot), at: Number(row.at),
   outcome: String(row.outcome) as ScheduleFire["outcome"], reason: row.reason === null ? null : String(row.reason),
   flowRunId: row.flow_run_id === null ? null : String(row.flow_run_id), groupId: row.group_id === null ? null : String(row.group_id),
-  by: String(row.by), via: String(row.via), body: JSON.parse(String(row.body)) as ScheduleFire["body"],
+  by: String(row.by), via: String(row.via), body: parseFireBody(row.body),
 });
+
+/** A fire's stored body; a corrupt row is a named refusal, never a raw SyntaxError out of a route. */
+function parseFireBody(body: unknown): ScheduleFire["body"] {
+  try { return JSON.parse(String(body)) as ScheduleFire["body"]; }
+  catch { throw new ControlError("recovery-blocked", "schedule-fire-body-invalid"); }
+}
 
 const COLUMNS = "id,project_id,kind,revision,removed,body";
 

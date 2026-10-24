@@ -6,7 +6,7 @@ import { ControlError } from "../errors.js";
 import { parseCron, nextSlots } from "../checks/cron.js";
 import type { ControlStore } from "../store.js";
 import { readUsageCalendar } from "../usageCalendar.js";
-import { listVersions } from "../planLibrary/store.js";
+import { newestVersionSha } from "../planLibrary/store.js";
 import { listSchedules, listFires, latestFire, readSchedule, type ScheduleFire, type ScheduleRow } from "./store.js";
 
 const fireView = (fire: ScheduleFire | null) => fire === null ? null : {
@@ -24,14 +24,13 @@ function slotsOf(store: ControlStore, row: ScheduleRow, now: number): number[] {
 function newerVersion(store: ControlStore, row: ScheduleRow): string | null {
   const start = row.body.start;
   if (start.kind !== "group") return null;
-  const versions = listVersions(store, start.entryId);
-  const newest = versions[versions.length - 1];
-  return newest !== undefined && newest.sha256 !== start.sha256 ? newest.sha256 : null;
+  const newest = newestVersionSha(store, start.entryId);
+  return newest !== null && newest !== start.sha256 ? newest : null;
 }
 
 const scheduleView = (store: ControlStore, row: ScheduleRow, now: number) => ({
   id: row.id, projectId: row.projectId, name: row.body.name, kind: row.kind, cron: row.body.cron, enabled: row.body.enabled,
-  start: row.body.start, removed: row.removed,
+  start: row.body.start, removed: row.removed, revision: row.revision,
   createdBy: row.body.createdBy, createdVia: row.body.createdVia, createdAt: row.body.createdAt,
   updatedBy: row.body.updatedBy, updatedVia: row.body.updatedVia, updatedAt: row.body.updatedAt,
   enabledBy: row.body.enabledBy, enabledVia: row.body.enabledVia, enabledAt: row.body.enabledAt,

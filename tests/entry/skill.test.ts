@@ -13,6 +13,7 @@ import {
   verifySavedResultPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
+  scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
 } from "../../src/control/webProtocol.js";
 
 // CLI v2 plan Task 13 (spec §10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): SKILL.md is
@@ -66,6 +67,9 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "correction-record": correctionRecordPayloadSchema, "correction-close": correctionClosePayloadSchema, "correction-withdraw": correctionWithdrawPayloadSchema,
   // Ruling: 这次批准改写所有必要的判据 (ffec7b28): scheduled flows and groups spec §11.1's library verbs.
   "plan-library-save": planLibrarySavePayloadSchema, "plan-library-import": planLibraryImportPayloadSchema, "plan-library-archive": planLibraryArchivePayloadSchema,
+  // Scheduled flows and groups spec 2026-10-24 §6, §11.1: a schedule's own verbs and the one made from a group.
+  "schedule-set": scheduleSetPayloadSchema, "schedule-enable": scheduleEnablePayloadSchema, "schedule-remove": scheduleRemovePayloadSchema,
+  "schedule-resume": scheduleResumePayloadSchema, "schedule-from-group": scheduleFromGroupPayloadSchema,
 };
 
 describe("the orca-control skill (spec §7, C18)", () => {
