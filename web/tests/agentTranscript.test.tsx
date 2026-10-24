@@ -84,6 +84,9 @@ describe("T8: the transcript list", () => {
     await openCall();
     expect(container.textContent).toContain("visible answer");
     expect(container.textContent).not.toContain("pondering secretly");
+    // Not even a collapsed row (whose first line would hide the text) is mounted for it.
+    expect(screen.getAllByTestId("transcript-event")).toHaveLength(1);
+    expect(container.querySelector(".transcript-thinking")).toBeNull();
     expect(urls.length).toBeGreaterThan(1);
     for (const url of urls) expect(url).not.toContain("include=thinking");
   });
