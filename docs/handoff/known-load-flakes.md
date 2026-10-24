@@ -162,3 +162,5 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while the re-run is in flight restores the workspace and runs it again」 | 断言形状（不是超时）：`index.lock File exists`（上一驱动仍在写）；dir-requirements 全量（负载约 60–66）红一次，同 env 单跑 3/3（负载 11–12）、未改动 main 单跑 1/1 绿 |
 | Orca › 全量里一批文件级失败「~/.orca write guard」 | 测试期间**真面板**往 `~/.orca/panel/logs/panel.err.log` 追加（9453 → 10764 B），不是测试写的；那 13 个文件单跑全绿。全量跑时面板在线就会撞上 |
 | ccloop › `tests/runtime/taskResults` 「pages at most 64…」、`ompUpdates`、`savedResultRecovery.native`、`skillsController` 等 | 负载 49–102 时红；单跑绿或未改动 `f4de340` 同形；明细在 `/private/tmp/orca-ffec7b28/lt/flake-table.txt` 与 ccloop 分支报告 |
+| Orca › `tests/control/schedulerBridge.test.ts` › 「runs a real conflicting graph through durable control: success」 | 30 s 超时；`feat/scheduled` rebase 前全量（负载 44.9）红一次，同 env 单跑 9/9（该用例 8.8 s）；形状与上表 `schedulerBridge` 行相同 |
+| Orca › `web/tests/reviewApp.test.tsx` › 「records an Agree with 'a', moves with 'j', and ignores both outside Decisions」 | `posts("/api/reviews")` 为 0（期望 1）；本会话第一轮全量红一次（负载高），分支与未改动 main 单跑均绿（分支 3/3、main 2/2）；`ControlPanel.tsx` 的本分支 diff 不涉及 Decisions 键盘逻辑 |
