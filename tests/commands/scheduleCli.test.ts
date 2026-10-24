@@ -90,7 +90,7 @@ describe("the plan rows map to their verb or read (§13.1)", () => {
     const w = await world({}, LIBRARY_READS);
     for (const argv of [["group", "import", "plan-a", "--library", ENTRY], ["group", "import"], ["plan", "save", "--group", "g-alpha", "--draft", "1"], ["plan", "save"]]) {
       const out = await run([...argv, "--json"], w.dir);
-      expect([out.code, out.json().body.error.code], argv.join(" ")).toEqual([1, "control-cli-argument-invalid"]);
+      expect([out.code, out.json().body.error?.code], argv.join(" ")).toEqual([1, "control-cli-argument-invalid"]);
     }
     expect(w.posts()).toEqual([]);
   });
@@ -152,7 +152,7 @@ describe("plan import reads the file here and sends a document, never a path (§
     const { planPath } = r.plan({ targetRepo: join(r.root, "elsewhere") });
     const w = await world({}, r.routes);
     const out = await run(["plan", "import", planPath, "--json"], w.dir, r.repo);
-    expect([out.code, out.json().body.error.code]).toEqual([1, "plan-library-target-mismatch"]);
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "plan-library-target-mismatch"]);
     expect(w.posts()).toEqual([]);
   });
 
@@ -163,8 +163,8 @@ describe("plan import reads the file here and sends a document, never a path (§
     const { planPath } = r.plan({}, outside);
     const w = await world({}, r.routes);
     const out = await run(["plan", "import", planPath, "--json"], w.dir, r.repo);
-    expect([out.code, out.json().body.error.code]).toEqual([1, "plan-library-contract-path-refused"]);
-    expect(out.json().body.error.message).toContain("plan-library-contract-path-refused:a");
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "plan-library-contract-path-refused"]);
+    expect(out.json().body.error?.message).toContain("plan-library-contract-path-refused:a");
     expect(w.posts()).toEqual([]);
   });
 
@@ -174,7 +174,7 @@ describe("plan import reads the file here and sends a document, never a path (§
     const { planPath } = r.plan({}, join(r.repo, "linked", "a.json"));
     const w = await world({}, r.routes);
     const out = await run(["plan", "import", planPath, "--json"], w.dir, r.repo);
-    expect([out.code, out.json().body.error.code]).toEqual([1, "plan-library-contract-path-refused"]);
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "plan-library-contract-path-refused"]);
     expect(w.posts()).toEqual([]);
   });
 });
@@ -191,7 +191,7 @@ describe("plan export --out (§16, C12)", () => {
     expect(out.json().body).toMatchObject({ entryId: ENTRY, sha256: SHA, out: target });
     writeFileSync(target, "mine");
     const again = await run(["plan", "export", ENTRY, "--out", target, "--json"], w.dir);
-    expect([again.code, again.json().body.error.code, again.json().body.error.message]).toEqual([1, "control-cli-argument-invalid", "--out exists"]);
+    expect([again.code, again.json().body.error?.code, again.json().body.error?.message]).toEqual([1, "control-cli-argument-invalid", "--out exists"]);
     expect(readFileSync(target, "utf8")).toBe("mine");
     expect(readdirSync(dir)).toEqual(["weekly.orca-plan.json"]);
   });
@@ -200,17 +200,17 @@ describe("plan export --out (§16, C12)", () => {
     const dir = temp("sched-cli-out-");
     const w = await world({}, { ...LIBRARY_READS, [`GET plan-library/${ENTRY}/versions/${SHA}`]: { status: 200, body: { ...DOC, goal: "altered" } } });
     const missing = await run(["plan", "export", ENTRY, "--out", join(dir, "no", "x.json"), "--json"], w.dir);
-    expect([missing.code, missing.json().body.error.code]).toEqual([1, "control-cli-argument-invalid"]);
+    expect([missing.code, missing.json().body.error?.code]).toEqual([1, "control-cli-argument-invalid"]);
     const forced = await run(["plan", "export", ENTRY, "--out", join(dir, "x.json"), "--json"], w.dir);
-    expect([forced.code, forced.json().body.error.code]).toEqual([1, "plan-library-hash-mismatch"]);
+    expect([forced.code, forced.json().body.error?.code]).toEqual([1, "plan-library-hash-mismatch"]);
     expect(readdirSync(dir)).toEqual([]);
   });
 
   it("wants --out: nothing is written anywhere without it, and nothing ever appears under HOME", async () => {
     const w = await world({}, LIBRARY_READS);
     const out = await run(["plan", "export", ENTRY, "--json"], w.dir);
-    expect([out.code, out.json().body.error.code]).toEqual([1, "control-cli-argument-invalid"]);
     for (const argv of [["plan", "list"], ["plan", "show", ENTRY], ["plan", "save", "--group", "g-alpha"], ["plan", "archive", ENTRY]]) await run(argv, w.dir);
     expect(readdirSync(HOME)).toEqual([]);
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "control-cli-argument-invalid"]);
   });
 });
