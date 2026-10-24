@@ -211,8 +211,9 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca schedule`
 
-- `orca schedule list` — this project's schedules: kind, cron, next three slots, last fire and newer-version information
+- `orca schedule list [--all]` — this project's schedules: kind, cron, next three slots, last fire and newer-version information
 - `orca schedule show <schedule>` — one schedule's body and revision, its next three slots, last fire and newer-version information
+- `orca schedule fires <schedule> [--limit <limit>]` — one schedule's fires, newest first: slot, outcome, reason and what it started
 - `orca schedule add flow <template> --cron <cron> [--param <param>] [--clarify <clarify>] [--unattended] [--pool <pool>] [--name <name>] [--disabled] [--id <id>]` — a builtin flow template on a cron (at most hourly), at the version the build ships; needs a person token (person token)
 - `orca schedule add group <entry> --version <version> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]` — a plan library entry at one explicit version on a cron; --version is required (orca plan show lists an entry's versions); needs a person token (person token)
 - `orca schedule edit <schedule> [--cron <cron>] [--param <param>] [--name <name>] [--repin <repin>] [--pool <pool>] [--token-limit <token-limit>] [--unlimited]` — change a schedule's cron or name, a flow's params and pool, or a group's pinned version and token limit; needs a person token (person token)

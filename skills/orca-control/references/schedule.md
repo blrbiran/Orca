@@ -4,15 +4,17 @@
 
 Every `orca schedule` command. Ids: a full id, a unique prefix, or (projects) a name or path.
 
-## `orca schedule list`
+## `orca schedule list [--all]`
 
 this project's schedules: kind, cron, next three slots, last fire and newer-version information
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
+- `--all`: every project's schedules, not just this one
 
 ```
 orca schedule list
+orca schedule list --all
 ```
 
 ## `orca schedule show <schedule>`
@@ -25,6 +27,19 @@ one schedule's body and revision, its next three slots, last fire and newer-vers
 
 ```
 orca schedule show sch-weekly
+```
+
+## `orca schedule fires <schedule> [--limit <limit>]`
+
+one schedule's fires, newest first: slot, outcome, reason and what it started
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<schedule>`: a schedule id (orca schedule list)
+- `--limit <n>`: how many fires, newest first (default 50, at most 200)
+
+```
+orca schedule fires sch-weekly --limit 10
 ```
 
 ## `orca schedule add flow <template> --cron <cron> [--param <param>] [--clarify <clarify>] [--unattended] [--pool <pool>] [--name <name>] [--disabled] [--id <id>]`

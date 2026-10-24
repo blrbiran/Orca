@@ -23,6 +23,27 @@ const scheduleOf = (c: WriteContext): string => String(c.args.positionals.schedu
 const int = (c: WriteContext, flag: string): number | undefined => (typeof c.args.flags[flag] === "number" ? c.args.flags[flag] as number : undefined);
 const enabled = (c: WriteContext): boolean => c.args.flags.disabled !== true;
 
+interface VersionView { version: number; sha256: string; by: string; via: string; at: number; origin: string }
+
+/** §13.1, §14 `schedules.versionProvenance`: the pinned version's provenance, then the confirm mode its start gives (§9.3). Stderr only, informational. */
+async function announcePin(c: WriteContext, entryId: string, sha256: string): Promise<void> {
+  if (c.args.global.quiet) return;
+  try {
+    const entry = await c.read(`plan-library/${enc(entryId)}`) as { versions?: VersionView[] };
+    const pinned = (entry.versions ?? []).find((v) => v.sha256 === sha256);
+    if (pinned === undefined) return;
+    c.io.stderr(`version ${pinned.sha256} — saved by ${pinned.by} via ${pinned.via} at ${new Date(pinned.at).toISOString()} from ${pinned.origin}\n`);
+  } catch { /* best effort: the pin is what matters, not the note about it */ }
+}
+
+function announceMode(c: WriteContext, tokenLimit: number | null, integration: { delivery?: unknown } | null): void {
+  if (c.args.global.quiet) return;
+  const reasons: string[] = [];
+  if (tokenLimit !== null) reasons.push(`token limit ${tokenLimit}`);
+  if (integration !== null) reasons.push(`delivery ${String(integration.delivery)}`);
+  c.io.stderr(reasons.length === 0 ? "confirm mode: runs on its own\n" : `confirm mode: waits for your click (${reasons.join(", ")})\n`);
+}
+
 /** One client-computed id per invocation: the payload and the revision lookup must name the same new schedule. */
 const generated = new WeakMap<WriteContext, string>();
 function newScheduleId(c: WriteContext, fallbackName: string): string {
@@ -82,9 +103,12 @@ const addGroup = verb({
   route: (c) => `schedules/${enc(newScheduleId(c, String(c.args.positionals.entry)))}`,
   payload: async (c) => {
     const entryId = String(c.args.positionals.entry);
+    const tokenLimit = int(c, "token-limit") ?? null;
+    await announcePin(c, entryId, String(c.args.flags.version));
+    announceMode(c, tokenLimit, null);
     return {
       projectId: (await c.project()).repoId, name: str(c, "name") ?? entryId, cron: String(c.args.flags.cron), enabled: enabled(c),
-      start: { kind: "group", entryId, sha256: String(c.args.flags.version), tokenLimit: int(c, "token-limit") ?? null, integration: null },
+      start: { kind: "group", entryId, sha256: String(c.args.flags.version), tokenLimit, integration: null },
     };
   },
 });
@@ -125,6 +149,8 @@ const edit = verb({
         if (unlimited) start.tokenLimit = null;
         else if (tokenLimit !== undefined) start.tokenLimit = tokenLimit;
         set.start = start;
+        if (repin !== undefined) await announcePin(c, String(start.entryId), repin);
+        announceMode(c, typeof start.tokenLimit === "number" ? start.tokenLimit : null, (start.integration ?? null) as { delivery?: unknown } | null);
       }
     }
     if (Object.keys(set).length === 0) throw invalid("nothing to set: give --cron, --name, --param, --repin, --pool, --token-limit or --unlimited");
@@ -134,9 +160,37 @@ const edit = verb({
 
 const scheduleList: CommandDef = {
   domain: "schedule", action: "list", summary: "this project's schedules: kind, cron, next three slots, last fire and newer-version information",
-  positionals: [], flags: [], access: "open",
-  mapsTo: { kind: "read", paths: async (c) => [`schedules?repoId=${enc((await c.project()).repoId)}`] },
-  examples: ["orca schedule list"], format: (body) => text(body),
+  positionals: [], flags: [{ name: "all", type: "boolean", summary: "every project's schedules, not just this one" }], access: "open",
+  mapsTo: {
+    kind: "read",
+    paths: async (c) => {
+      if (c.args.flags.all !== true) return [`schedules?repoId=${enc((await c.project()).repoId)}`];
+      // §13.1 `--all`: one read per project with a control repository, in the order the panel lists them (no project resolution).
+      const listed = await c.read("projects") as { projects: Array<{ controlRepoId: string | null }> };
+      const repoIds = [...new Set(listed.projects.flatMap((p) => (typeof p.controlRepoId === "string" && p.controlRepoId.length > 0 ? [p.controlRepoId] : [])))];
+      return repoIds.map((repoId) => `schedules?repoId=${enc(repoId)}`);
+    },
+    compose: (bodies, c) => c.args.flags.all === true
+      ? { schema: "orca-schedules-v1", all: true, schedules: bodies.flatMap((body) => (body as { schedules: unknown[] }).schedules) }
+      : bodies[0],
+  },
+  examples: ["orca schedule list", "orca schedule list --all"], format: (body) => text(body),
+};
+
+const scheduleFires: CommandDef = {
+  domain: "schedule", action: "fires", summary: "one schedule's fires, newest first: slot, outcome, reason and what it started",
+  positionals: [SCHEDULE],
+  flags: [{ name: "limit", type: "integer", summary: "how many fires, newest first (default 50, at most 200)" }], access: "open",
+  mapsTo: {
+    kind: "read",
+    paths: (c) => {
+      const limit = c.args.flags.limit;
+      if (limit === undefined) return [`schedules/${enc(scheduleOf(c))}/fires`];
+      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw invalid("--limit wants an integer 1..200");
+      return [`schedules/${enc(scheduleOf(c))}/fires?limit=${limit}`];
+    },
+  },
+  examples: ["orca schedule fires sch-weekly --limit 10"], format: (body) => text(body),
 };
 
 const scheduleShow: CommandDef = {
@@ -149,6 +203,7 @@ const scheduleShow: CommandDef = {
 export const SCHEDULE_ROWS: CommandDef[] = [
   scheduleList,
   scheduleShow,
+  scheduleFires,
   addFlow,
   addGroup,
   edit,

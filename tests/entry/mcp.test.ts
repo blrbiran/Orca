@@ -65,6 +65,21 @@ describe("orca mcp serve (CLI v2 spec §10)", () => {
     }
   }, 60_000);
 
+  it("runs schedule list as the same client (§13.2)", async () => {
+    const body = { schema: "orca-schedules-v1", repoId: "repo-1", schedules: [] };
+    const panel = await world({}, { "GET schedules?repoId=repo-1": { status: 200, body } });
+    const client = await connect({ root: panel.dir, state: panel.dir, env: {} });
+    try {
+      const listed = await call(client, ["schedule", "list"]);
+      expect(listed.isError ?? false).toBe(false);
+      expect(envelope(listed as never)).toMatchObject({ schema: "orca-cli-response-v1", status: 200, body });
+      const read = panel.requests.find((request) => request.method === "GET" && request.path === "schedules?repoId=repo-1");
+      expect(read?.headers["x-orca-client"]).toBe("mcp:orca-test");
+    } finally {
+      await client.close();
+    }
+  }, 60_000);
+
   it("refuses the panel, user and dev domains without running them, and malformed arguments", async () => {
     const panel = await world();
     const client = await connect({ root: panel.dir, state: panel.dir, env: {} });

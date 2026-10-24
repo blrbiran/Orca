@@ -114,6 +114,166 @@ describe("the schedule rows map to their verb (§13.1)", () => {
   });
 });
 
+describe("a group pin shows its provenance and confirm mode (§13.1, §9.3)", () => {
+  const AT = 1760000000000;
+  const NEXT = "b".repeat(64);
+  const NEW_ID = `sch-${ENTRY}`;
+  const version = (over: { sha256: string; version: number; by: string; via: string; at: number; origin: string }) => ({ ...over });
+  const pinned = {
+    ...LIBRARY_READS,
+    [`GET plan-library/${ENTRY}`]: { status: 200, body: { schema: "orca-plan-library-entry-v1", entryId: ENTRY, versions: [version({ version: 1, sha256: H.plan, by: "ana", via: "web", at: AT, origin: "group" })] } },
+  };
+  const repinned = {
+    ...LIBRARY_READS,
+    [`GET plan-library/${ENTRY}`]: { status: 200, body: { schema: "orca-plan-library-entry-v1", entryId: ENTRY, versions: [
+      version({ version: 1, sha256: H.plan, by: "ana", via: "web", at: AT, origin: "group" }),
+      version({ version: 2, sha256: NEXT, by: "bo", via: "cli", at: AT + 1000, origin: "requirement" }),
+    ] } },
+  };
+
+  const ADD_GROUP_MODES: Array<[string[], number | null, string]> = [
+    [[], null, "confirm mode: runs on its own"],
+    [["--token-limit", "500000"], 500000, "confirm mode: waits for your click (token limit 500000)"],
+  ];
+  it.each(ADD_GROUP_MODES)("add group prints the pinned version and its mode (%j), and sends at revision 0", async (extra, tokenLimit, line) => {
+    const w = await world({}, { ...pinned, [`POST schedules/${NEW_ID}`]: accept(() => 0) });
+    const out = await run(["schedule", "add", "group", ENTRY, "--version", H.plan, "--cron", "0 9 * * 1", ...extra, "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    // stdout stays the JSON envelope; the informative lines are stderr only.
+    expect(out.json()).toMatchObject({ schema: "orca-cli-response-v1", status: 200 });
+    expect(w.posts()).toEqual([{
+      path: `schedules/${NEW_ID}`, commandId: expect.any(String), expectedRevision: 0,
+      payload: { projectId: "repo-1", name: ENTRY, cron: "0 9 * * 1", enabled: true,
+        start: { kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit, integration: null } },
+    }]);
+    expect(out.stderr).toContain(`version ${H.plan} — saved by ana via web at ${new Date(AT).toISOString()} from group`);
+    expect(out.stderr).toContain(line);
+  });
+
+  it("add group without --version is refused here, with nothing sent", async () => {
+    const w = await world({}, pinned);
+    const out = await run(["schedule", "add", "group", ENTRY, "--cron", "0 9 * * 1", "--json"], w.dir);
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "control-cli-argument-invalid"]);
+    expect(w.posts()).toEqual([]);
+  });
+
+  it("edit --repin sends the whole start with the new sha256 at the schedule's revision, and prints its provenance and mode", async () => {
+    const integration = { delivery: "push-branch", trigger: "group", target: "main", remote: "origin" };
+    const w = await world({}, {
+      ...repinned,
+      "GET schedules/sch-weekly": { status: 200, body: { schema: "orca-schedule-v1", id: "sch-weekly", kind: "group", revision: 3,
+        start: { kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit: 500000, integration } } },
+      "POST schedules/sch-weekly": accept(() => 3),
+    });
+    const out = await run(["schedule", "edit", "sch-weekly", "--repin", NEXT, "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(out.json()).toMatchObject({ schema: "orca-cli-response-v1", status: 200 });
+    expect(w.posts().map((p) => ({ path: p.path, expectedRevision: p.expectedRevision, payload: p.payload }))).toEqual([{
+      path: "schedules/sch-weekly", expectedRevision: 3,
+      payload: { set: { start: { kind: "group", entryId: ENTRY, sha256: NEXT, tokenLimit: 500000, integration } } },
+    }]);
+    expect(out.stderr).toContain(`version ${NEXT} — saved by bo via cli at ${new Date(AT + 1000).toISOString()} from requirement`);
+    expect(out.stderr).toContain("confirm mode: waits for your click (token limit 500000, delivery push-branch)");
+  });
+
+  it("edit --unlimited sets tokenLimit null and prints that it runs on its own", async () => {
+    const w = await world({}, {
+      ...pinned,
+      "GET schedules/sch-weekly": { status: 200, body: { schema: "orca-schedule-v1", id: "sch-weekly", kind: "group", revision: 3,
+        start: { kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit: 500000, integration: null } } },
+      "POST schedules/sch-weekly": accept(() => 3),
+    });
+    const out = await run(["schedule", "edit", "sch-weekly", "--unlimited", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.posts()[0]!.payload).toEqual({ set: { start: { kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit: null, integration: null } } });
+    expect(out.stderr).toContain("confirm mode: runs on its own");
+  });
+
+  it("edit --repin of a flow schedule is refused here, with nothing sent", async () => {
+    const w = await world({}, {
+      ...repinned,
+      "GET schedules/sch-weekly": { status: 200, body: { schema: "orca-schedule-v1", id: "sch-weekly", kind: "flow", revision: 3,
+        start: { kind: "flow", template: "wechat-article", params: {} } } },
+      "POST schedules/sch-weekly": accept(() => 3),
+    });
+    const out = await run(["schedule", "edit", "sch-weekly", "--repin", NEXT, "--json"], w.dir);
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "control-cli-argument-invalid"]);
+    expect(w.posts()).toEqual([]);
+  });
+});
+
+describe("the schedule reads: list, --all, fires and show (§13.1)", () => {
+  it("list reads only this project's schedules", async () => {
+    const w = await world({}, { "GET schedules?repoId=repo-1": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-1", schedules: [] } } });
+    const out = await run(["schedule", "list", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects", "GET schedules?repoId=repo-1"]);
+    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", repoId: "repo-1", schedules: [] });
+  });
+
+  it("list --all reads projects once, then one schedules read per controlRepoId, and merges them", async () => {
+    const w = await world({}, {
+      "GET projects": { status: 200, body: { source: "command-line", projects: [
+        { projectKey: "proj", name: "proj", path: "/repos/proj", controlRepoId: "repo-1" },
+        { projectKey: "two", name: "two", path: "/repos/two", controlRepoId: "repo-2" },
+        { projectKey: "again", name: "again", path: "/repos/again", controlRepoId: "repo-1" },
+        { projectKey: "none", name: "none", path: "/repos/none", controlRepoId: null },
+      ] } },
+      "GET schedules?repoId=repo-1": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-1", schedules: [{ id: "sch-a" }] } },
+      "GET schedules?repoId=repo-2": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-2", schedules: [{ id: "sch-b" }] } },
+    });
+    const out = await run(["schedule", "list", "--all", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects", "GET schedules?repoId=repo-1", "GET schedules?repoId=repo-2"]);
+    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", all: true, schedules: [{ id: "sch-a" }, { id: "sch-b" }] });
+  });
+
+  const FIRES: Array<[string[], string]> = [
+    [[], "schedules/sch-weekly/fires"],
+    [["--limit", "7"], "schedules/sch-weekly/fires?limit=7"],
+  ];
+  it.each(FIRES)("fires %j reads %s", async (extra, path) => {
+    const body = { schema: "orca-schedule-fires-v1", scheduleId: "sch-weekly", fires: [] };
+    const w = await world({}, { [`GET ${path}`]: { status: 200, body } });
+    const out = await run(["schedule", "fires", "sch-weekly", ...extra, "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.requests.filter((r) => r.method === "GET").map((r) => r.path)).toEqual([path]);
+    expect(out.json().body).toEqual(body);
+  });
+
+  it("fires --limit 0 is refused here, with nothing sent", async () => {
+    const w = await world();
+    const out = await run(["schedule", "fires", "sch-weekly", "--limit", "0", "--json"], w.dir);
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "control-cli-argument-invalid"]);
+    expect(w.requests).toEqual([]);
+  });
+
+  it("show reads the one schedule", async () => {
+    const body = { schema: "orca-schedule-v1", id: "sch-weekly", revision: 3, nextSlots: [1, 2, 3] };
+    const w = await world({}, { "GET schedules/sch-weekly": { status: 200, body } });
+    const out = await run(["schedule", "show", "sch-weekly", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET schedules/sch-weekly"]);
+    expect(out.json().body).toEqual(body);
+  });
+
+  const SWITCHES: Array<[string[], string, unknown]> = [
+    [["schedule", "enable", "sch-weekly"], "schedules/sch-weekly/enable", { enabled: true }],
+    [["schedule", "disable", "sch-weekly"], "schedules/sch-weekly/enable", { enabled: false }],
+    [["schedule", "remove", "sch-weekly"], "schedules/sch-weekly/remove", {}],
+    [["schedule", "resume", "sch-weekly"], "schedules/sch-weekly/resume", {}],
+  ];
+  it.each(SWITCHES)("orca %j sends one POST at the schedule's revision", async (argv, path, payload) => {
+    const w = await world({}, {
+      "GET schedules/sch-weekly": { status: 200, body: { schema: "orca-schedule-v1", id: "sch-weekly", revision: 3 } },
+      [`POST ${path}`]: accept(() => 3),
+    });
+    const out = await run([...argv, "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.posts().map((p) => ({ path: p.path, expectedRevision: p.expectedRevision, payload: p.payload }))).toEqual([{ path, expectedRevision: 3, payload }]);
+  });
+});
+
 describe("plan import reads the file here and sends a document, never a path (§5.3 (c), C12)", () => {
   /** A registered repository at a real path, its plan file and contracts; the fake panel lists it as the project. */
   function repoWorld() {
