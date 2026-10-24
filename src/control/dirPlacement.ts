@@ -43,6 +43,8 @@ import type { ControlStore } from "./store.js";
  * (the lossless criteria write into the folder there). `path` is the landing path being written.
  */
 export type DirPlacementCrashPoint =
+  /** §8.5 step 6: after classification, before any stop or write. */
+  | "after-classify"
   /** §8.5 step 7: after the `pending` ref and the journal, before any folder write. */
   | "after-journal"
   /** After one `at-from` path is written. */
@@ -714,6 +716,7 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
   if (placedTree === nextTree) return idle({ tip, withheld });
   // Step 6: classify; anything unwritable or changed stops before any write.
   const classified = await classifyLandingPaths(ws, placed, next.commit);
+  io.hook?.("after-classify");
   if (classified.changed.length > 0 || classified.unwritable.length > 0) {
     await stop(ws, target, io, { changed: classified.changed, unwritable: classified.unwritable, to: next.commit, tip, consumed, detail: null, patch: { withheld } });
     return { kind: "done" };
