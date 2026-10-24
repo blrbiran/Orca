@@ -63,7 +63,27 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00000000 会话 `0e13a9b7`（2026-10-23）—— **先读这一节**
+### 3.000000000 会话 `ffec7b28`（2026-10-24）—— **先读这一节**
+
+> 唯一进度源：会话台账 `.superpowers/sdd/2026-10-24-session-ffec7b28/progress.md`（人裁原话两批、每个 spec 的审阅轮、控制器裁定、实施进度、文末「Handoff state」）。各实施计划在 `docs/superpowers/plans/2026-10-24-*.md`（在飞的三份只在各自分支上）。
+> 人裁（本会话）：「这个session中，尽量将这些要做的task都完整做完…这次批准改写所有必要的判据。这一轮允许必要的付费真跑。这一轮如果要做 repin ccloop 的工作的话，临时允许你 push ccloop 仓库到 origin main。…先按你的建议执行。执行完在最后阶段报给我审核。」⚠️ ccloop push 被 Orca 的 Tier 0 闸门拦下（人的临时授权在 agent 会话里做不成，Rule 15），由人手推。会话结束原因：所有在飞 subagent 撞每周 API 限额（10-27 09:00 Asia/Shanghai 重置）。
+
+- **已在 Orca main（人已推；以 `ls-remote` 现测）**：
+  - Task 11 验收缺陷（`fix(web): Task 11 acceptance — cards, goal summary and run page details`＋`fix(web): a clarifying card keeps its row text…`）：`.sr-only` 规则缺失（测试者 #2/#11/#18 同因）、clarifying 卡显示目标、长目标摘要填满 120 字并带省略号、运行页花费行不重复、已完成的 run 不给 skip/defer、无默认值的图片参数「选一张图片」、可见 label。
+  - 五份 spec（各两轮独立审阅）：`2026-10-24-tester-round2-design.md`（H1–H5、H11、H12；§19/§19.1/§20/§21 优先）、`2026-10-24-dir-project-requirements-design.md`（§20 优先）、`2026-10-24-scheduled-flows-and-groups-design.md`（§21、§22 优先；`autoConfirmBlocker` 以 R2 的三参签名为准）、`2026-10-24-multi-dir-projects-design.md`（H7，§21 优先）、`2026-10-23-live-transcript-design.md` §12（Revision 3：O2/O3/O4 关，C1–C8）。
+  - **测试者第二轮（R2）server＋web 已合并并装上**：估算超限只警告、永不改组状态；schema 18→19 一次性修复迁移（只修唯一阻塞原因是估算超限的组，每组 SAVEPOINT，永不抛）；估算额度 min(1M, 剩余, 足够大的 cap 余量)、输入上限按模型窗口；需求的 agent 成为组 worker 默认；不限 token 且由人创建的组自动确认（单一确认者 `autoConfirmUnlimitedPass`，`createdByPerson` 戳）；确认清单（含 deficit 阻塞）；任务目标摘要；hash 路由（跨项目只给切换按钮）；`?` 快捷键列表对话框（无新单键绑定）。
+  - **repin ccloop → `f4de340`**（实时转录的 ccloop 部分 + `work.operatorNote`）：Orca 先接受 features `transcripts:"v1"`、collect `transcripts`、envelope `operatorNote`，再钉；主仓已 `npm ci`。Orca 侧还**没有**消费者（读取器/UI 在飞，见下）。
+  - `known-load-flakes.md` 新增会话 `ffec7b28` 一节（startForm 等；全量跑时真面板写 `~/.orca/panel/logs` 会触发 ~/.orca 写入护栏）。
+- **已装**：先 `sqlite3 .backup` 到 `~/.orca/backups/pre-schema19-20261024-062118/control.sqlite`（integrity ok，v18），再 build（tsc＋web）＋`panel restart`；`meta.schemaVersion=19`；修复迁移改了 0 个组。
+- **付费实测（工具给的数）**：真 codex（gpt-6-luna）验收 ccloop strict wire schema（`debug.located`＋`flow`）**通过**；claude／codex／omp 都能读工作区外绝对路径（选择 (a) 前提成立）；三家都**不**遮蔽密钥（O2）；三家都能在 `--add-dir` 目录里写（H7 前提成立），claude 精确 `Bash(cd <dir> && <cmd>)` 规则放行复合命令。证据在 `/private/tmp/orca-ffec7b28/{evidence,o2,o3,adddir-probe}/`。⚠️ 已知副作用：真 codex 每跑一次会往人的 `~/.codex/config.toml` 追加一条 `[projects."<路径>"] trust_level="trusted"`（历次会话都有），登记未修。
+- **在飞（分支上，已保存；接手者从各自计划文件继续，先读台账「Handoff state」）**：
+  1. `feat/dir-requirements`（工作树 `/private/tmp/orca-ffec7b28/dirreq`）：Task 1–4 已提交；**Task 5（放置）未提交、未验证**（`src/control/dirPlacement.ts` 等）；Task 6–8 未做。brief `/private/tmp/orca-ffec7b28/dirreq-brief.md`。
+  2. `feat/live-transcript-orca`（`/private/tmp/orca-ffec7b28/lto`）：T1–T8、T12、T13 已提交；未提交 `package.json`、`scripts/perf-transcript*`；没跑最终 npm test、没代码审阅。
+  3. `feat/scheduled`（`/private/tmp/orca-ffec7b28/sched`）：P1（schema 19→20、计划库）已提交、树干净；P2–P4 未做。
+  4. ccloop `feat/multi-repo`（`/private/tmp/orca-ffec7b28/ccloop-mr`，tip `17b9541`）：完成＋一轮代码审阅已修、门 RC 0；**等人确认 P1–P7、M9 才合**；Orca 的 H7 部分未开始。
+- **测这些分支用的 ccloop**：`ORCA_CCLOOP_BIN=/private/tmp/orca-ffec7b28/ccloop-f4de340/dist/cli.js`，`CCLOOP_CACHE_DIR=/private/tmp/orca-ffec7b28/ccloop-cache`（scratch，别删）。
+
+### 3.00000000 会话 `0e13a9b7`（2026-10-23）—— 已合、已推；它的待人项人已在会话 `ffec7b28` 全部回复（见那里）
 
 > 唯一进度源：会话台账 `.superpowers/sdd/2026-10-23-session-0e13a9b7/progress.md`（人裁原话、反馈修复、分诊、转录 spec 讨论）＋计划台账 `.superpowers/sdd/2026-10-23-flow-phase1-gaps/progress.md`（每个 Task、裁定、修复轮、判据改写、测试数）。
 > 人裁（本会话）：「这个session中，尽量将这些要做的task都完整做完，这个session暂时不要考虑context大小。这次批准改写所有必要的判据。这一轮允许必要的付费真跑。这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」「这一轮如果遇到卡住必须等人的事情，请继续做不必等人的部分……记录到 handoff.md 中。」附件「附件选 (a)」（存储区绝对路径，在工作区外）。越过 T1 已写检查点。
@@ -239,30 +259,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
-- **push**：Orca main（本会话合了反馈修复与流程缺口）——以 `ls-remote` 现测。
-- **审与裁**：见 §八 第一条（会话 `0e13a9b7` 的清单，含 `dir` 项目上的需求怎么办）。
-- **删**：`~/.orca/control/flow-attachments` 里 5 个测试残留文件；`/private/tmp/orca-0e13a9b7/`（scratch；`accept/` 是 Task 11 验收证据、`measure-read/` 是读路径实测证据，台账引用——先看再删）；`/private/tmp/orca-b37f7ce9/` 剩下的（`ccloop-fbd3512/` 是当前 pin 的 build、测试的 `ORCA_CCLOOP_BIN`，下一位重建前别删）；ccloop prunable 工作树（`worktree prune` 归人）。
-- `~/.syncskill/config.json` 的 `runskills`、`aifusion` 本地源仍指已搬走的路径（人的文件未动）。
-- ccmem embedding 账号无额度。
-- 想开「纠正写回 ccmem」：同前（面板 flag `--ccmem-corrections`）。
-- 想让公众号流程真出封面：配一个图片生成 key，或用已合的图片参数（开始对话框里选图）。
+- **push**：Orca main、ccloop main（以 `ls-remote` 现测；会话 `ffec7b28` 收尾时两边都已与远端一致）。
+- **审与裁**：见 §八 第一条（会话 `ffec7b28` 的清单，含 ccloop P1–P7、M9）。
+- 已办（会话 `ffec7b28`，人授权）：`~/.orca/control/flow-attachments` 的 5 个测试残留已删；`~/.cache/ccloop/agent-catalog` 只删了能归到 0e13a9b7 沙箱时段的两条缓存行（`codex-home/` 与其余行保留）。
+- `~/.syncskill/config.json` 的 `runskills`、`aifusion` 本地源仍指已搬走的路径（人的文件未动）；ccmem embedding 账号无额度；想开「纠正写回 ccmem」用面板 flag `--ccmem-corrections`。
 
-### 4.2 agent 的活（会话 `0e13a9b7` 收尾时的建议顺序；人再定）
+### 4.2 agent 的活（会话 `ffec7b28` 收尾时的建议顺序）
 
-1. **先做：Task 11 验收留下的卡片与运行页缺陷**（报告 `.superpowers/sdd/2026-10-23-flow-phase1-gaps/task-11-acceptance-report.md`，截图 `/private/tmp/orca-0e13a9b7/accept/shots/`）：1,175 字的长目标只显示第一句（Task 10a 的设计：长首行截到第一句末、无省略号）；Tasks 卡不显示目标，布局坏（约 130 px，标题被 ⋯ 压住）；运行页步骤花费行出现两次；已完成的步骤还给 skip／defer；没有默认值的必填图片参数还给「不选（用默认值）」；有些输入没有 label。
-2. **测试者第二轮**（新分支；分诊 `.superpowers/sdd/2026-10-23-session-0e13a9b7/tester-triage-20261023.md`）：
-   - P0 #8/#9：估算超限让组永远卡住 ⇒ 永不改组状态、只警告、提高 grant、一次性修复迁移（只修唯一阻塞原因是估算超限的组；安装先备份库）（H1、H2）；
-   - P1 #3/#6/#12：agent 继承——需求上选的 agent 成为组的 worker 默认（H3），逐任务覆盖折掉；
-   - P1 #10/#14/#19：算出来的确认清单；不限 token 模式下预算自动确认（H4）；
-   - `.sr-only` CSS 规则（#2/#18/#11）；H5 显示任务目标摘要（不改 plan hash）；
-   - hash 路由 H11（45/46/47/51/52；链到别的项目的组给一行＋切换按钮、不自动切）；`?` 浮层 H12（不加全局单字母快捷键）。
-3. **流程第一个跟进**：childPort 的 `spentTokens ?? 0` 会把用量未知的子组的配额还给池。先补一行 spec（提议：未知算已花）。
-4. 终审修复带下来的小项：`withoutIntake` 留下只因 `upstream-changed:<被丢的步>` 入选的下游候选；`markStep` 让池里停着的效果步的 `confirmed` 记录一直开着；Task 10-A 文案／显示小项（「This one」钉选不在运行页；`flow.plan.depends` 只点名第一步）。
-5. **实时转录**：按 spec §2＋§10＋§11 写 plan，先写 ccloop 那部分（ccloop 的 plan 守 ccloop 的规则；O5 的测试按 §11.2 改）。落地顺序见 §3 最新一节。
-6. **codex 额度恢复（2026-10-27 14:49）后**：真 codex 验收 ccloop 新 wire schema（拒收就修或 pin 回）；顺带量 codex、omp 能不能读工作区外的绝对路径（选择 (a) 依赖它）。付费先问人。
-7. 登记未修（台账有原文）：诊断性检查没传给 ccloop；saved-result 恢复不填 skill 目录；reconcile 路径对 dir 组仍可能写 `.decisions/`；`omp-phase-continuation`（ccloop）；定时跑任意工作（#82 余项，需补 spec）；`orca status` 判的是调用者 shell 的环境、不是它报告的服务（会话 `0e13a9b7` 台账 A1）；公众号流程余项（验收 run 存的模板 v1 的 `refused` 标红、技能 `VAR=$(…)` 捕获与 claude 前缀规则的匹配仍待真跑确认——人对公众号草稿说「后续的问题你就不要管了」）。
-8. 欠着的付费验收（每次先问人）：同前（debug 计划端到端、阶梯／集成检查／模型审阅真 agent 端到端、ccmem Codex Stop 钩子、OMP skills 真 provider、GitHub 私有库合入）。
-9. 收尾清理：工作树 `/private/tmp/orca-0e13a9b7/orca-gaps`（分支 `feat/flow-gaps`，已合）可 `git worktree remove`（不带 force）＋`git branch -d`。
+1. **接着做在飞的三条 Orca 分支，一次只合一条**（每条：读计划 → 补完剩余 Task → 命名变异看见红 → `npm test` 重定向到文件读回、红的单跑并与未改动 main 对照 → **独立代码审阅** → rebase 到 main → ff 合 → build＋web build＋panel restart；schema 动之前先备份控制库）。建议顺序：live-transcript-orca（最接近完成）→ dir-requirements（先核 Task 5 未提交的改动能否过它自己的判据）→ scheduled（schema 20）。
+2. **H7**：等人确认 ccloop P1–P7、M9 与 As-built 偏差后，合 ccloop `feat/multi-repo`（人推）→ Orca 接受 `context.additionalRepos`／envelope `additionalRepos`／collect `dirs`（含 `attemptSha`）→ repin → 实施 Orca H7 部分（spec §5–§10、M1–M19；依赖 dir-requirements 已合）。
+3. 实时转录 Orca 侧的 `operatorNote` 生产方（人给下一次 attempt 留话）若 spec 没定 Orca 界面，补一行 spec 再做。
+4. 登记未修（仍成立）：诊断性检查没传给 ccloop；saved-result 恢复不填 skill 目录；`omp-phase-continuation`（ccloop）；`orca status` 判的是调用者 shell 的环境；ccloop perf:stream L7 在负载 47–55 下增长 26–35 MiB 偶超 32 MiB 界（按需检查，不在 npm test）；runViewGrant 缺 handoff-run 用例（需 handoff profile 夹具）；决定路由会读两次决定。
+5. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 合并后用真 agent 跑一次多仓端到端。
 
 ## 五、已经拍板过的事（**不要重开**）
 
@@ -439,14 +447,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `0e13a9b7` 待人**（人说「执行完在最后阶段报给我审核」；原委在两份台账）：
-  1. 删 `~/.orca/control/flow-attachments` 里 5 个测试残留文件（12–20 B，§3 最新一节①）。
-  2. 审：人的权限释放规则（缺口 spec §13 的例外，§21）；约 60 条新中英文案（task-9、task-10-A、task-10-B 与终审修复报告里的「Copy for human review」）；提示词 `triage.ts`、`host.ts`；wechat-article v3 模板 diff；澄清标题提示词那一行；`to-draft-box.md` 约 19–20 行「absolute paths into this workspace」的措辞（现在读起来像也管工作区外的封面图）。
-  3. **裁**：`dir` 项目（不是 git 仓）上的需求一开就以 `repository-path` 阻塞——是让需求支持 `dir` 项目，还是明确告诉人不支持？
-  4. 2026-10-27 14:49 额度恢复后的 codex strict schema 验收（付费，先问）；同时量 codex、omp 读工作区外绝对路径（选择 (a) 依赖它）。
-  5. 测试者第二轮 H6–H10 未裁：导航／设置布局、一个项目多个工作目录、视觉方向、定时模板、多端点 agent（H1–H5、H11、H12 已裁，原话在会话台账）。
-  6. Rule 17：沙箱 ccloop 写了真 `~/.cache/ccloop/agent-catalog`（只是缓存、未删，删不删归人）；**以后的沙箱必须 export `CCLOOP_CACHE_DIR`**。其它会话 1–3 天以上的 ccloop worker 还在跑，杀非己进程归人。
-  7. 重启 Orca 树里开着的 Claude Code 会话：本次**不需要**（没有钩子改动）。
+- **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
+  1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。
+  2. **确认 ccloop P1–P7、M9（`extra-repo-head-moved` 保持人闸）与 `feat/multi-repo` As-built 偏差 1–9**——之后才合 ccloop H7、动 Orca H7。
+  3. 人做：`git -C /Users/biran/code/skills/orca/Orca branch -D feat/tester-round2-server`（内容已经以 rebase 后的提交在 main，`-d` 拒）；ccloop 合 H7 后的 push；`/private/tmp/orca-ffec7b28/`（在飞分支合完前别删：`ccloop-f4de340` 是测试用 bin）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/` 的清理。
+  4. `~/.codex/config.toml` 里 agent 跑出来的 trust 条目要不要清（人的文件，未动）。
 - **会话 `9ec98639` 的控制器裁定待人审**（人说「执行完在最后阶段报给我审核」）：台账 `.superpowers/sdd/2026-10-21-session-9ec98639/progress.md` 每条线的「Criteria changed」与决定；偏离已有裁定的三处——L2 是叠栈的 debug 组而非组内任务、系统 debug 不经估算、自动审阅员是完整 run 而非单次调用；ccmem 那笔超出人裁的 SIGTERM 修复（ccmem handoff §1.000）。人审后删本条。
 - **付费**（每一次先问）：§4.2 第 6、8 条。
 - **ccmem embedding 账号无额度**。
