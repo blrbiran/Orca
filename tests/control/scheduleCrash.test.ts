@@ -261,6 +261,21 @@ describe("C5 crash resume", () => {
     } finally { s.close(); }
   });
 
+  it("a corrupt schedule body is one crash line for its row; the other schedule still fires", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock);
+      createFlow(s, clock, "sch-b");
+      s.db.prepare("UPDATE schedules SET body='not json' WHERE id=?").run("sch-b");
+      const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => writeFlowRun(s, fire);
+      // The pass does not throw: the corrupt row is reported, the healthy schedule still runs.
+      await crashed(passAt(s, clock, at(1, 9), { startFlow: starter }), "sch-b", "recovery-blocked:schedule-body-invalid");
+      const fires = fireRows(s, "sch-a");
+      expect(fires).toHaveLength(1);
+      expect(fires[0]!.outcome).toBe("started");
+    } finally { s.close(); }
+  });
+
   it("(c) a crash then the next slot: the old fire completes first, the new slot is skipped, never two runs", async () => {
     const { s, clock } = await openStore();
     try {

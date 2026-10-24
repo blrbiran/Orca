@@ -180,7 +180,11 @@ const NOT_GROUP = ["shutdown", "set-workspace-mode", "set-integration-scheme", "
   // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §14.2's run verbs target the `@flows` scope, never a group.
   "flow-start", "flow-message", "flow-plan", "flow-rerun", "flow-answer", "flow-effect", "flow-pool",
   // Ruling: 这次批准改写所有必要的判据 (0e13a9b7): gaps spec §13's plan-step verb targets the `@flows` scope too.
-  "flow-plan-step"];
+  "flow-plan-step",
+  // Scheduled flows and groups spec §5.6, §11.1: the plan library's writes target the library, not a group.
+  "plan-library-save", "plan-library-import", "plan-library-archive",
+  // Scheduled flows and groups spec §6: the schedule's own verbs target the `@schedule:<id>` scope.
+  "schedule-set", "schedule-enable", "schedule-remove", "schedule-resume"];
 const LOOP_PAYLOAD = { baseLoopVersion: 0, plan: "standard", inputs: { goal: "g", successCondition: "s", targetPaths: ["a.txt"], checks: ["true"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null }, work: { tokens: 1, activeMs: 1, attempts: 1 } };
 const CONFIRM_PAYLOAD = { planHash: "a".repeat(64), proposalVersion: 1, budgetMode: "soft", profileIds: { estimator: "all", worker: "all", handoff: "all", goalReview: "all" }, profileHashes: { estimator: "b".repeat(64), worker: "b".repeat(64), handoff: "b".repeat(64), goalReview: "b".repeat(64) }, contextPolicy: { handoffAtContextTokens: null }, selectionsHash: "c".repeat(64) };
 type Call = (s: WebControlService, command: never) => unknown;
@@ -224,6 +228,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "remove-group-dependency": { call: (s, c) => s.removeGroupDependency(c), target: "group", payload: { dependsOn: "other" } },
   "correction-debug-open": { call: (s, c) => s.openCorrectionDebugGroup(c), target: "group", payload: { correctionId: "c_0123456789abcdef" } },
   "system-debug-open": { call: (s, c) => s.openSystemDebugGroup(c), target: "group", payload: { source: { kind: "ladder", groupId: "g", taskId: "a", runId: "run-a" }, stackOn: "g", repoId: "repo", facts: ["failed"], checks: ["true"] } },
+  "schedule-from-group": { call: (s, c) => s.scheduleCommand(c), target: "group", payload: { scheduleId: "sch-1", name: "Nightly", cron: "0 3 * * *", enabled: true } },
 };
 
 describe("an archived group refuses every group-targeted command but unarchive-group (spec §6.3)", () => {

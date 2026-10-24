@@ -30,7 +30,7 @@ type Send = (path: string, expectedRevision: number, payload: unknown) => void;
 
 const short7 = (sha: string): string => sha.slice(0, 7);
 const slotText = (at: number): string => new Date(at).toLocaleString();
-const durationText = (ms: number): string => (ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} s`);
+const durationText = (ms: number, t: TFunction): string => (ms >= 60_000 ? t("schedules.duration.minutes", { count: Math.round(ms / 60_000) }) : t("schedules.duration.seconds", { count: Math.round(ms / 1000) }));
 const positiveInt = (text: string): number | null | "invalid" => {
   const raw = text.trim();
   if (raw === "") return null;
@@ -73,7 +73,7 @@ function LastFire(props: { scheduleId: string; fire: ScheduleFireViewV1 }): JSX.
       {href !== null && (
         <p><a data-testid={`schedule-last-fire-link-${props.scheduleId}`} href={href}>{t("settings.schedules.openTarget", { id: target })}</a></p>
       )}
-      {fire.lateMs !== null && fire.lateMs > 0 && <p>{t("schedules.lastFire.late", { duration: durationText(fire.lateMs), missed: fire.missed })}</p>}
+      {fire.lateMs !== null && fire.lateMs > 0 && <p>{t("schedules.lastFire.late", { duration: durationText(fire.lateMs, t), missed: fire.missed })}</p>}
       <p data-testid={`schedule-fire-by-${props.scheduleId}`}>
         {fire.by === "orca-auto" ? t("schedules.creditedTo", { id: props.scheduleId, person: fire.creditedTo ?? fire.by }) : `${fire.by} ${fire.via}`}
       </p>

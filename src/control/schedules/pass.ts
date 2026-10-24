@@ -17,7 +17,7 @@ import { canonicalTimeZone, readUsageCalendar } from "../usageCalendar.js";
 import { FlowRefusal, uuidOf } from "../../flow/kernel.js";
 import { firedGroupId, type ScheduleBody, type ScheduleState } from "./model.js";
 import {
-  insertFire, listActiveFires, listOpenGroupFires, listSchedules, listStartingFires, readSchedule, settleFire, writeScheduleState,
+  insertFire, listActiveFires, listLiveSchedules, listOpenGroupFires, listStartingFires, readSchedule, settleFire, writeScheduleState,
   type ScheduleFire, type ScheduleRow,
 } from "./store.js";
 
@@ -349,11 +349,13 @@ export async function evaluateSchedule(deps: SchedulePassDeps, row: ScheduleRow,
 /**
  * §7.2: one pass -- every `starting` fire first, then every live schedule, then step 9's record of each group fire. A
  * crash is isolated to its fire or schedule (C5): the rest of the pass still runs, and the caller writes one line per
- * crash.
+ * crash. A corrupt schedule body is one crash line for that row; the other schedules still run.
  */
 export async function schedulesPass(deps: SchedulePassDeps, now: number = (deps.now ?? Date.now)()): Promise<{ crashes: string[] }> {
   const { crashes } = await resumeStartingFires(deps);
-  for (const row of listSchedules(deps.store, null)) {
+  const listed = listLiveSchedules(deps.store, null);
+  for (const { id, error } of listed.corrupt) crashes.push(crashOf(id, error));
+  for (const row of listed.rows) {
     try { await evaluateSchedule(deps, row, now); }
     catch (error) { crashes.push(crashOf(row.id, error)); }
   }

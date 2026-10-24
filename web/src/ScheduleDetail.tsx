@@ -6,12 +6,13 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { fetchScheduleFires } from "./controlApi.js";
 import type { ScheduleFiresViewV1, ScheduleFireViewV1 } from "./controlTypes.js";
 import { formatRoute } from "./sections.js";
 
 const slotText = (at: number): string => new Date(at).toLocaleString();
-const durationText = (ms: number): string => (ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} s`);
+const durationText = (ms: number, t: TFunction): string => (ms >= 60_000 ? t("schedules.duration.minutes", { count: Math.round(ms / 60_000) }) : t("schedules.duration.seconds", { count: Math.round(ms / 1000) }));
 /** §13.3: the hash route to this fire's run (the board) or its group (the tasks list); null when neither. */
 const fireHref = (fire: ScheduleFireViewV1): string | null =>
   fire.flowRunId !== null
@@ -28,7 +29,7 @@ function FireRow(props: { fire: ScheduleFireViewV1; scheduleId: string }): JSX.E
   return (
     <li data-testid={`schedule-fire-${fire.seq}`}>
       <p>{t("settings.schedules.fire.line", { slot: slotText(fire.slot), at: slotText(fire.at), outcome: t(`settings.schedules.fire.outcome.${fire.outcome}`) })}</p>
-      {fire.lateMs !== null && fire.lateMs > 0 && <p>{t("schedules.lastFire.late", { duration: durationText(fire.lateMs), missed: fire.missed })}</p>}
+      {fire.lateMs !== null && fire.lateMs > 0 && <p>{t("schedules.lastFire.late", { duration: durationText(fire.lateMs, t), missed: fire.missed })}</p>}
       {fire.missed > 0 && <p>{t("settings.schedules.fire.missed", { count: fire.missed })}</p>}
       {fire.reason !== null && <p>{t("settings.schedules.fire.reason", { reason: fire.reason })}</p>}
       {target !== null && <p>{t("settings.schedules.fire.target", { id: target })}</p>}

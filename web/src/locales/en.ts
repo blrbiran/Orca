@@ -1873,6 +1873,10 @@ export const en = {
       delivery: "Each fired group waits for your click: it delivers by {{delivery}}.",
     },
     versionProvenance: "Version {{sha}} — saved by {{by}} via {{via}} at {{at}} from {{origin}}",
+    duration: {
+      minutes: "{{count}} min",
+      seconds: "{{count}} s",
+    },
   },
   enums: {
     theme, decisionKind, decisionScope, decisionVerdict, correctionKind, chainStopCategory,

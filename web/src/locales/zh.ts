@@ -1756,6 +1756,10 @@ export const zh: Translation<typeof en> = {
       delivery: "每次触发的任务组会等你点击确认：它的交付方式是 {{delivery}}。",
     },
     versionProvenance: "版本 {{sha}} —— 由 {{by}} 通过 {{via}} 于 {{at}} 从 {{origin}} 保存",
+    duration: {
+      minutes: "{{count}} 分钟",
+      seconds: "{{count}} 秒",
+    },
   },
   enums: {
     theme: { system: "跟随系统", light: "浅色", dark: "深色" },

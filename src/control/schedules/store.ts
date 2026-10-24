@@ -52,6 +52,23 @@ export function listSchedules(store: ControlStore, projectId: string | null, inc
     .all(...(projectId === null ? [] : [projectId])).map(rowOf);
 }
 
+export type ScheduleListing = { rows: ScheduleRow[]; corrupt: Array<{ id: string; error: ControlError }> };
+
+/** The same live listing as listSchedules, but a corrupt body is a per-row fact, not a throw that ends the read. */
+export function listLiveSchedules(store: ControlStore, projectId: string | null): ScheduleListing {
+  const where = [projectId === null ? null : "project_id=?", "removed=0"].filter((clause) => clause !== null).join(" AND ");
+  const rows: ScheduleRow[] = [];
+  const corrupt: ScheduleListing["corrupt"] = [];
+  for (const row of store.db.prepare(`SELECT ${COLUMNS} FROM schedules${where === "" ? "" : ` WHERE ${where}`} ORDER BY rowid`)
+    .all(...(projectId === null ? [] : [projectId]))) {
+    try { rows.push(rowOf(row)); }
+    catch (error) {
+      corrupt.push({ id: String(row.id), error: error instanceof ControlError ? error : new ControlError("recovery-blocked", "schedule-body-invalid") });
+    }
+  }
+  return { rows, corrupt };
+}
+
 export function liveScheduleCount(store: ControlStore, projectId: string): number {
   return Number(store.db.prepare("SELECT COUNT(*) AS n FROM schedules WHERE project_id=? AND removed=0").get(projectId)!.n);
 }

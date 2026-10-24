@@ -21,6 +21,7 @@ function amountFields(): string[] {
     if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) return walk(schema.unwrap(), verb, path);
     if (schema instanceof z.ZodDefault) return walk(schema._def.innerType, verb, path);
     if (schema instanceof z.ZodEffects) return walk(schema.innerType(), verb, path);
+    if (schema instanceof z.ZodLazy) return walk((schema as z.ZodLazy<z.ZodTypeAny>).schema, verb, path);
     if (schema instanceof z.ZodArray) return walk(schema.element, verb, [...path, "[]"]);
     if (schema instanceof z.ZodRecord) return walk(schema.valueSchema, verb, [...path, "{}"]);
     if (schema instanceof z.ZodObject) { for (const [key, child] of Object.entries(schema.shape)) walk(child as z.ZodTypeAny, verb, [...path, key]); return; }
