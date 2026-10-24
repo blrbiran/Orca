@@ -637,6 +637,25 @@ export const zh: Translation<typeof en> = {
         "reconcile-agent-unfrozen": "这个组没有已确认的 agent 来解决冲突",
       },
     },
+    // Dir-requirements spec §9.3: a dir group's integration region shows its folder placement.
+    placement: {
+      region: "文件夹写入",
+      state: {
+        idle: "任务组完成的工作会写进文件夹。",
+        "folder-changed": "已停下：任务组完成的工作要写的文件，在 Orca 上次写入后被改动过。文件夹里的内容一处都没有被覆盖。",
+        "folder-unwritable": "已停下：有些文件不能按原样写进文件夹。这次改动一处都没有写。",
+        "folder-missing": "已停下：任务组的文件夹不见了或被移走了。",
+        failed: "把任务组的工作写进文件夹时失败；Orca 会在下一轮再试。",
+      },
+      changed: "文件夹里被改动的文件",
+      unwritable: "不能写进去的文件",
+      withheld: "保存在 Orca 内部，不写入文件夹",
+      more: "另有 {{n}} 个",
+      reason: { symlink: "符号链接", "type-change": "文件与文件夹互换", "case-clash": "名字只差大小写" },
+      take: "保留我的改动并继续",
+      recheck: "重新检查",
+      withhold: "这些不写",
+    },
     graph: {
       region: "依赖关系图",
       caption: "依赖从左到右：箭头表示左边的任务先完成",
@@ -948,6 +967,8 @@ export const zh: Translation<typeof en> = {
     document: "需求文档",
     export: "导出：{{state}}",
     exportCommit: "提交 {{commit}}",
+    // Dir-requirements spec §9.3: a dir group's document stays in Orca's vault.
+    exportKept: "保存在 Orca 内部（不写入文件夹）",
     retry: "重试",
     stopped: "已停止；点“重试”解除停止之前不会发起调用。",
     stopUnresolved: "已停止；被停下的调用结果还不知道。“重试”会再次查询，结果明确后才能解除停止。",
@@ -1877,9 +1898,13 @@ export const zhErrors: Record<string, string> = {
   "flow-child-managed": "这个任务组是某次流程运行里的一步，由流程自己收尾：请在流程运行页重试这一步，而不是重试这个任务组。",
   "flow-group-delivery-fixed": "这个流程任务组作用于一个文件夹：交付方式固定为保留，文件夹只通过回写更新。",
   // Dir-requirements spec §9.3.
+  "dir-folder-changed": "这个任务组完成的工作要写的文件，在 Orca 上次写入后被改动过，所以这次没有写进文件夹；文件夹里的内容一处都没有被覆盖。选「保留我的改动并继续」把你的改动并入任务组的工作，或者撤销改动后选「重新检查」。",
+  "dir-folder-unwritable": "这个任务组完成的工作里，有些文件不能按原样写进文件夹（{{detail}}：符号链接、文件要替换文件夹或反过来、或两个名字只差大小写）。这次改动一处都没有写。选「这些不写」把其余部分写进去、这些留在 Orca 内部，或者改好文件夹后选「重新检查」。",
   "dir-folder-missing": "这个任务组的文件夹不见了或被移走了（{{detail}}）。把它放回原路径，然后选「重新检查」。",
+  "dir-placement-failed": "把任务组的工作写进文件夹时失败：{{detail}}。Orca 会在下一轮再试。",
   "dir-project-plan-import-unsupported": "这个项目是文件夹，不是 git 仓库。请在它上面开需求，而不是导入计划。",
   "dir-group-delivery-fixed": "这个任务组作用于一个文件夹：完成的工作会写回文件夹，交付方式不能更改。",
+  "folder-change-not-pending": "这个任务组没有等待答复的文件夹改动。",
   "revision-unchanged": "修改后的回答与原来完全一样；请至少改一个回答或决定。",
   "numeric-overflow": "数值溢出：{{message}}",
   "panel-draining": "面板正在关闭，请稍后重试。",

@@ -760,6 +760,25 @@ export const en = {
         "reconcile-agent-unfrozen": "the group has no confirmed agent to resolve the conflict",
       },
     },
+    // Dir-requirements spec §9.3: a dir group's integration region shows its folder placement.
+    placement: {
+      region: "Folder placement",
+      state: {
+        idle: "The group's finished work is written into the folder.",
+        "folder-changed": "Stopped: files this group's finished work would write were changed in the folder. Nothing in the folder was overwritten.",
+        "folder-unwritable": "Stopped: some files cannot be written into the folder as they are. Nothing was written for this change.",
+        "folder-missing": "Stopped: the group's folder is gone or has moved.",
+        failed: "Writing the group's work into the folder failed; Orca tries again on its next round.",
+      },
+      changed: "Changed in the folder",
+      unwritable: "Cannot be written",
+      withheld: "Kept in Orca's store, not written to the folder",
+      more: "and {{n}} more",
+      reason: { symlink: "symbolic link", "type-change": "file and folder swap", "case-clash": "names differ only in case" },
+      take: "Keep my changes and continue",
+      recheck: "Check again",
+      withhold: "Leave these out",
+    },
     graph: {
       region: "Dependency graph",
       caption: "Dependencies, left to right: an arrow means the task on the left finishes first",
@@ -1076,6 +1095,8 @@ export const en = {
     document: "Requirement document",
     export: "Export: {{state}}",
     exportCommit: "Commit {{commit}}",
+    // Dir-requirements spec §9.3: a dir group's document stays in Orca's vault.
+    exportKept: "Kept in Orca's store (not written to the folder)",
     retry: "Retry",
     stopped: "Stopped; no call is made until Retry lifts the stop.",
     stopUnresolved: "Stopped; a stopped call's outcome is not known yet. Retry asks for it again; the stop lifts once it is known.",
@@ -1954,9 +1975,13 @@ export const enErrors: Record<string, string> = {
   "flow-child-managed": "This group is a step of a flow run, settled by the run itself: retry the step from the run's page, not the group.",
   "flow-group-delivery-fixed": "This flow group works on a folder: its delivery is fixed to keep, and the folder is updated by copy-back.",
   // Dir-requirements spec §9.3.
+  "dir-folder-changed": "Files this group's finished work would write were changed in the folder since Orca last wrote to it, so the work was not written there. Nothing in the folder was overwritten. Choose \"Keep my changes and continue\" to add your changes to the group's work, or undo them and choose \"Check again\".",
+  "dir-folder-unwritable": "Some files of this group's finished work cannot be written into the folder as they are ({{detail}}: a symbolic link, a file that would replace a folder or the reverse, or two names that differ only in letter case). Nothing was written for this change. Choose \"Leave these out\" to write the rest and keep these in Orca's store, or change the folder and choose \"Check again\".",
   "dir-folder-missing": "The group's folder is gone or has moved ({{detail}}). Put it back at that path, then choose \"Check again\".",
+  "dir-placement-failed": "Writing the group's work into the folder failed: {{detail}}. Orca tries again on its next round.",
   "dir-project-plan-import-unsupported": "This project is a folder, not a git repository. Open a requirement on it instead of importing a plan.",
   "dir-group-delivery-fixed": "This group works on a folder: its finished work is written into the folder, and its delivery cannot be changed.",
+  "folder-change-not-pending": "There is no folder change waiting for an answer on this group.",
   "revision-unchanged": "The revision answers the round exactly as before; change at least one answer or decision.",
   "numeric-overflow": "A number is too large: {{detail}}",
   "panel-draining": "The panel is shutting down and accepts no commands. Start it again, then retry.",

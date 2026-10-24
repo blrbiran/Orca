@@ -406,6 +406,8 @@ export type ControlAction =
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
   | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
+  // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
+  | { verb: "resolve-folder-change"; groupId: string; expectedRevision: number; payload: { action: "take-folder" | "recheck" | "withhold" } }
   | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 }
   | { verb: "set-task-loop"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLoopPayloadV1 }
   // N1 spec §11.1: the requirement commands (accept's server route is Task 10's).
@@ -482,6 +484,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/integration/retry`;
     case "resolve-integration-conflict":
       return `${group}/integration/resolve`;
+    case "resolve-folder-change":
+      return `${group}/folder-change`;
     case "archive-group":
       return `${group}/archive`;
     case "unarchive-group":

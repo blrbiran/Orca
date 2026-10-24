@@ -584,7 +584,10 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       <section aria-label={t("requirements.document")}>
         <h4>{t("requirements.document")}</h4>
         <DocumentText text={view.document} />
-        {exportState !== "not-due" && <p>{t("requirements.export", { state: enumText("exportState", exportState) })}{view.requirement.export.commit !== null ? ` · ${t("requirements.exportCommit", { commit: view.requirement.export.commit })}` : ""}</p>}
+        {/* Dir-requirements spec §9.3: a dir group's document stays in Orca's store, never in the folder. */}
+        {view.summary.placement !== undefined
+          ? <p>{t("requirements.exportKept")}</p>
+          : exportState !== "not-due" && <p>{t("requirements.export", { state: enumText("exportState", exportState) })}{view.requirement.export.commit !== null ? ` · ${t("requirements.exportCommit", { commit: view.requirement.export.commit })}` : ""}</p>}
         {/* Spec §9.3: start is refused until the export is done; this says why before anyone presses Start. */}
         {exportState === "pending" && <p role="status">{EXPORT_PENDING} · {t(`requirements.reason.${EXPORT_PENDING}`, { groupId })}</p>}
       </section>

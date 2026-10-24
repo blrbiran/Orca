@@ -111,9 +111,31 @@ export type GroupSummaryV1 = {
   orchestration?: GroupOrchestrationV1;
   /** System debug task spec 2026-10-21 §3.5: present only on a debug group Orca opened itself. */
   systemDebug?: GroupSystemDebugV1;
+  /** Dir-requirements spec §9.4: present only on a dir group -- its folder placement record (§8.2 without the journal's from/to). */
+  placement?: GroupPlacementV1;
   /** §3.5: tasks of this group the escalation ladder took over; `exhausted` is level 3 (needs you). */
   escalation?: GroupEscalationV1[];
 };
+/** Dir-requirements spec §8.2, §9.4: a dir group's placement record as the summary sends it (the journal's from/to stay on the server). */
+export type GroupPlacementV1 = {
+  workspaceKind: "dir";
+  state: "idle" | "folder-changed" | "folder-unwritable" | "folder-missing" | "failed";
+  tip: string | null;
+  landedTip: string | null;
+  pending: null | {
+    tip: string; tmp: Array<{ path: string; name: string }>; aside: Array<{ path: string; name: string }>; dirs: string[];
+  };
+  changed: string[];
+  changedTotal: number;
+  unwritable: Array<{ path: string; reason: string }>;
+  unwritableTotal: number;
+  withheld: Array<{ path: string; reason: string; toEntry: string; by?: string; at?: number }>;
+  watch: string | null;
+  detail: string | null;
+  resolution: null | { id: string; action: "take-folder" | "recheck" | "withhold"; by: string; at: number };
+  at: number;
+};
+
 export type GroupSystemDebugV1 = {
   // Checks spec 2026-10-22 §6.1: a model review and a finding's fix have no single source group.
   source: { kind: "ladder" | "integration-check" | "criteria-review"; groupId: string; taskId: string | null; runId: string | null }
@@ -649,6 +671,7 @@ export type CommandSuccessV1 = {
     | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
     | { kind: "integration-retried"; groupId: string }
     | { kind: "integration-resolution-started"; groupId: string }
+    | { kind: "folder-change-resolved"; groupId: string; action: "take-folder" | "recheck" | "withhold" }
     | { kind: "archived"; groupId: string; at: number }
     | { kind: "unarchived"; groupId: string }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }

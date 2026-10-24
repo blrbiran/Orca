@@ -16,6 +16,7 @@ import { BudgetEditor } from "./BudgetEditor.js";
 import { goalSummary } from "./CardGoal.js";
 import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
+import { FolderPlacementBlock } from "./FolderPlacement.js";
 import { GitScheme } from "./GitScheme.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { RefusalNotice } from "./RefusalNotice.js";
@@ -620,10 +621,17 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <p>{t("detail.resultsEvidence")}</p>
       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
-      <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
-      {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
-      {view.proposal.state === "confirmed" && (
-        <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} archived={archived} />
+      {/* Dir-requirements spec §9.3: a dir group's region is its folder placement, not the scheme picker (§7: its delivery is fixed). */}
+      {view.summary.placement !== undefined ? (
+        <FolderPlacementBlock view={view} onCommand={onCommand} archived={archived} />
+      ) : (
+        <>
+          <GitScheme view={view} workspace={workspace} onCommand={onCommand} archived={archived} />
+          {/* Fix round 1 F1: a started group's scheme stays an owner's to change, outside the (button-free for keep) Git section. */}
+          {view.proposal.state === "confirmed" && (
+            <GroupIntegrationConfirm view={view} suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null} onCommand={onCommand} archived={archived} />
+          )}
+        </>
       )}
 
       </div>
