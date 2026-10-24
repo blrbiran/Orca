@@ -17,7 +17,7 @@
  * ORCA_CORRECTIONS_DIR point there.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -260,6 +260,35 @@ describe("a dir group's delivery is fixed (D10 delivery rows, §7)", () => {
       expect(moved).toBe(false);
       expect(asked).toEqual([]);
       expect(x.body().integration).toEqual(record);
+    } finally { await x.dispose(); }
+  });
+});
+
+/** Runs `body` with a `git` first on PATH that logs each invocation (one line per call) and then runs the real git. */
+async function countingGit<T>(dir: string, body: () => Promise<T>): Promise<{ value: T; calls: number }> {
+  const real = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  const log = join(dir, "calls");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(log, "");
+  writeFileSync(join(dir, "git"), `#!/bin/sh\necho "$*" >> "${log}"\nexec "${real}" "$@"\n`);
+  chmodSync(join(dir, "git"), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${dir}:${saved ?? ""}`;
+  try { const value = await body(); return { value, calls: readFileSync(log, "utf8").split("\n").filter((line) => line.length > 0).length }; }
+  finally { process.env.PATH = saved; }
+}
+
+describe("the integration setters run no scheme check on a dir target (§7)", () => {
+  it("set-integration-scheme on a dir project and set-group-integration on a dir group spawn no git child, though the path resolves", async () => {
+    const x = await acceptedUnderLocalDefault(true); try {
+      // A service whose resolver answers the folder, so a check, if it ran, would run git there.
+      const service = new WebControlService({ ...x.service.deps, resolveRepository: () => x.folder });
+      const scheme = { schema: "orca-raw-command-v1", commandId: "scheme-counted", actorId: "human", expectedRevision: 1, verb: "set-integration-scheme",
+        target: { kind: "repository", repoId: "repo" }, payload: { integration: { ...LOCAL, target: "other" } } } as never;
+      const first = await countingGit(join(x.root, "count-scheme"), () => service.setIntegrationScheme(scheme));
+      expect([errorCode(first.value), first.calls]).toEqual([FIXED, 0]);
+      const second = await countingGit(join(x.root, "count-group"), () => service.setGroupIntegration(x.command("set-group-integration", { integration: { ...LOCAL, target: "other" } })));
+      expect([errorCode(second.value), second.calls]).toEqual([FIXED, 0]);
     } finally { await x.dispose(); }
   });
 });
