@@ -6,6 +6,15 @@
  * In-process only: one panel drives every flow run (§8.2); the key is the folder's real path, NFC.
  */
 const tails = new Map<string, Promise<void>>();
+const holders = new Map<string, number>();
+
+/** One lock event, for the criteria's ordered-event assertions (D8, D15). */
+export interface DirLockEvent { readonly phase: "enter" | "exit"; readonly key: string; readonly held: number; readonly active: number }
+/** Tests only: observes every enter and exit; unset in production, so recording costs nothing. */
+export const dirLockProbe: { observe?: (event: DirLockEvent) => void } = {};
+
+/** Tests only: how many callers hold `realDir` right now (0 when free). */
+export const dirLockHeld = (realDir: string): number => holders.get(realDir.normalize("NFC")) ?? 0;
 
 export async function withDirLock<T>(realDir: string, act: () => Promise<T>): Promise<T> {
   const key = realDir.normalize("NFC");
@@ -15,8 +24,15 @@ export async function withDirLock<T>(realDir: string, act: () => Promise<T>): Pr
   const tail = before.then(() => mine);
   tails.set(key, tail);
   await before;
+  const held = (holders.get(key) ?? 0) + 1;
+  holders.set(key, held);
+  const active = [...holders.values()].reduce((a, b) => a + b, 0);
+  dirLockProbe.observe?.({ phase: "enter", key, held, active });
   try { return await act(); }
   finally {
+    const left = held - 1;
+    if (left === 0) holders.delete(key); else holders.set(key, left);
+    dirLockProbe.observe?.({ phase: "exit", key, held: left, active: [...holders.values()].reduce((a, b) => a + b, 0) });
     release();
     if (tails.get(key) === tail) tails.delete(key);
   }

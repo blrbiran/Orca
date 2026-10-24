@@ -582,11 +582,14 @@ function flagExecution(deps: FlowDeps, key: ExecutionKey, flag: string, extra: R
  */
 export async function absorbDrift(deps: FlowDeps, run: LoadedRun, vault: Vault): Promise<boolean> {
   if (run.body.dir === null || run.body.importCommit === null) return false;
+  const dir = run.body.dir;
   // I2: while a copy-back is owed the folder is behind the head; what differs is not the person's.
   if (!(await redoPendingCopyBack(deps, run.row.id, vault))) return false;
   const head = await readHead(vault, run.row.id);
   if (head === null) return false;
-  const drift = await snapshotDrift(vault, run.body.dir, head, DEFAULT_CAPS, run.template.workspace.excludes ?? []);
+  // §11.2 (review I8): the snapshot reads the folder under its own lock, released before any copy-back above or below
+  // takes it (the lock is not re-entrant) -- a dir group's placement on the same folder never shows it a half-done write.
+  const drift = await withDirLock(dir, () => snapshotDrift(vault, dir, head, DEFAULT_CAPS, run.template.workspace.excludes ?? []));
   if (drift === null) return false;
   const executions = listExecutions(deps.store, run.row.id);
   const heads = listHeads(deps.store, run.row.id);

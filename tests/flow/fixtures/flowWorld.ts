@@ -21,6 +21,8 @@ export async function flowWorld(templates: Record<string, WorldTemplate>, opts: 
   harness?: { root: string; store: ControlStore; dispose(): Promise<void> };
   /** The production call port over this world's store, instead of the recording one. */
   callPort?: (store: ControlStore, now: () => number) => FlowDeps["calls"];
+  /** A folder another fixture made (a placement world's), instead of `<root>/articles` (§11.2: one folder, one lock). */
+  folder?: string;
 } = {}) {
   const h = opts.harness ?? await openTestStore();
   const builtinRoot = join(h.root, "builtin");
@@ -29,8 +31,8 @@ export async function flowWorld(templates: Record<string, WorldTemplate>, opts: 
     write("template.yaml", tpl.yaml);
     for (const [rel, text] of Object.entries(tpl.assets ?? {})) write(rel, text);
   }
-  const folder = join(h.root, "articles");
-  mkdirSync(folder);
+  const folder = opts.folder ?? join(h.root, "articles");
+  mkdirSync(folder, { recursive: true });
   for (const [rel, text] of Object.entries(opts.files ?? {})) { mkdirSync(dirname(join(folder, rel)), { recursive: true }); writeFileSync(join(folder, rel), text); }
   // Rule 17 (gaps Task 9 fix round, I2): the flow env is its own object, so the global relocation of process.env never
   // reaches it -- a world without ORCA_CONTROL_DIR would store attachments and images under the real ~/.orca. Default it
