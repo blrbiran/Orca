@@ -623,7 +623,8 @@ export type CommandSuccessV1 = {
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
     | "set-flow-settings" | "set-flow-locks"
-    | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool" | "flow-plan-step";
+    | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool" | "flow-plan-step"
+    | "resolve-folder-change";
   target: CommandTargetV1;
   commandRevision: number | null;
   projectionSeq: number | null;
