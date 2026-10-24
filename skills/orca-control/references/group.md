@@ -194,7 +194,7 @@ schedule this group from its archived plan: one library version pins the fires; 
 - Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `--cron <cron>` (required): 5-field cron (minute hour day month weekday), at most hourly
-- `--token-limit <n>`: the group's token limit; default: unlimited
+- `--token-limit <n>`: the fired groups' token limit; default: unlimited
 - `--name <name>`: the schedule's name; default: the template, entry or group
 - `--disabled`: create it switched off
 - `--id <id>`: the schedule's id; default: sch-<slug of the name>

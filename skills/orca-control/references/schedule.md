@@ -56,7 +56,7 @@ a plan library entry at one explicit version on a cron; --version is required (o
 - `<entry>`: a plan library entry (pl-…; orca plan list names them)
 - `--version <version>` (required): the version's sha256 (orca plan show lists them)
 - `--cron <cron>` (required): 5-field cron (minute hour day month weekday), at most hourly
-- `--token-limit <n>`: the group's token limit; default: unlimited
+- `--token-limit <n>`: the fired groups' token limit; default: unlimited
 - `--name <name>`: the schedule's name; default: the template, entry or group
 - `--disabled`: create it switched off
 - `--id <id>`: the schedule's id; default: sch-<slug of the name>
@@ -77,7 +77,7 @@ change a schedule's cron or name, a flow's params and pool, or a group's pinned 
 - `--name <name>`: the schedule's name; default: the template, entry or group
 - `--repin <repin>`: a group schedule's new version sha256 (orca plan show lists them)
 - `--pool <n>`: how much flow-run capacity one fire may take
-- `--token-limit <n>`: the group's token limit; default: unlimited
+- `--token-limit <n>`: the fired groups' token limit; default: unlimited
 - `--unlimited`: the group's token limit back to unlimited
 
 ```

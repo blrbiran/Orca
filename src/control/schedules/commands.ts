@@ -17,7 +17,7 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 import { libraryEntryId } from "../planLibrary/commands.js";
 import { canonicalPlanDoc, docFromArchivedPlan } from "../planLibrary/codec.js";
 import { appendVersion, insertEntry } from "../planLibrary/store.js";
-import { initialiseState, scheduleIdFor, SCHEDULE_ID, SCHEDULE_LIMIT, validateStart, type ScheduleBody, type ScheduleStart } from "./model.js";
+import { initialiseState, SCHEDULE_ID, SCHEDULE_LIMIT, validateStart, type ScheduleBody, type ScheduleStart } from "./model.js";
 import { insertSchedule, liveScheduleCount, markRemoved, readSchedule, writeSchedule } from "./store.js";
 
 export const SCHEDULE_VERBS = ["schedule-set", "schedule-enable", "schedule-remove", "schedule-resume", "schedule-from-group"] as const;

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { cli, useFakePanels } from "./fixtures/fakePanel.js";
-import { H, world } from "./fixtures/world.js";
+import { accept, H, world } from "./fixtures/world.js";
 
 useFakePanels();
 
@@ -93,6 +93,24 @@ describe("the plan rows map to their verb or read (§13.1)", () => {
       expect([out.code, out.json().body.error?.code], argv.join(" ")).toEqual([1, "control-cli-argument-invalid"]);
     }
     expect(w.posts()).toEqual([]);
+  });
+});
+
+describe("the schedule rows map to their verb (§13.1)", () => {
+  it("sends --param values as their scalar types, and keeps __proto__ an own key", async () => {
+    const w = await world({}, { ...LIBRARY_READS, "POST schedules/sch-weekly": accept(() => 0) });
+    const out = await run(["schedule", "add", "flow", "wechat-article", "--cron", "0 9 * * 1", "--name", "weekly",
+      "--param", "illustrations=true", "--param", "n=3", "--param", "__proto__=x", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    const [post] = w.posts();
+    expect(post!.path).toBe("schedules/sch-weekly");
+    // Coerced as `flow`'s scalar: true/false and safe integers as such, anything else as text.
+    const params = (post!.payload as { start: { params: Record<string, unknown> } }).start.params;
+    expect(params.illustrations).toBe(true);
+    expect(params.n).toBe(3);
+    // An own key, so the panel's own-key check refuses it as "not a parameter"; the CLI never silently drops it.
+    expect(Object.hasOwn(params, "__proto__")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(params, "__proto__")!.value).toBe("x");
   });
 });
 

@@ -10,7 +10,7 @@ import { ControlError } from "../errors.js";
 import { checkParamValue } from "../../flow/params.js";
 import { asFlowControlError } from "../../flow/flowCommands.js";
 import { loadBuiltin } from "../../flow/template/load.js";
-import { latestSlot, parseCron, validateSchedule } from "../checks/cron.js";
+import { cronTooFrequent, latestSlot, parseCron, validateSchedule } from "../checks/cron.js";
 import type { ControlStore } from "../store.js";
 import { canonicalTimeZone, readUsageCalendar } from "../usageCalendar.js";
 import { readEntry, readVersion } from "../planLibrary/store.js";
@@ -35,7 +35,7 @@ export interface ScheduleBody {
 
 /** B3: `sch-` + the name's slug (lower-cased, runs of non-alphanumerics as `-`), for a client that names a new one. */
 export function scheduleIdFor(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 59);
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 59).replace(/-+$/, "");
   return `sch-${slug === "" ? "schedule" : slug}`;
 }
 
@@ -107,8 +107,11 @@ export function parseScheduleBody(row: { id: unknown; project_id: unknown; kind:
     || body.start.kind !== body.kind || body.state === null || typeof body.state !== "object") {
     throw new ControlError("recovery-blocked", "schedule-body-invalid");
   }
-  try { parseCron(String(body.cron)); }
+  let tooFrequent: boolean;
+  try { tooFrequent = cronTooFrequent(parseCron(String(body.cron))); }
   catch { throw new ControlError("recovery-blocked", "schedule-body-invalid"); }
+  // §6's at-most-hourly rule is part of the body's validity, not only of the write that stored it.
+  if (tooFrequent) throw new ControlError("recovery-blocked", "schedule-body-invalid");
   if (body.state.tz !== null && typeof body.state.tz !== "string") throw new ControlError("recovery-blocked", "schedule-body-invalid");
   return body;
 }

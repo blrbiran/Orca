@@ -29,8 +29,12 @@ const fireOf = (row: Record<string, unknown>): ScheduleFire => ({
 
 /** A fire's stored body; a corrupt row is a named refusal, never a raw SyntaxError out of a route. */
 function parseFireBody(body: unknown): ScheduleFire["body"] {
-  try { return JSON.parse(String(body)) as ScheduleFire["body"]; }
+  let parsed: unknown;
+  try { parsed = JSON.parse(String(body)); }
   catch { throw new ControlError("recovery-blocked", "schedule-fire-body-invalid"); }
+  // A parsed `null` or array would leave the views dereferencing nothing: the body is a plain object or nothing.
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new ControlError("recovery-blocked", "schedule-fire-body-invalid");
+  return parsed as ScheduleFire["body"];
 }
 
 const COLUMNS = "id,project_id,kind,revision,removed,body";

@@ -213,6 +213,13 @@ describe("the schedule model's write checks (§6, C1)", () => {
     expect(capped).toBe(`sch-${"x".repeat(59)}`);
     expect(capped).toMatch(SCHEDULE_ID);
   });
+
+  it("never ends a capped slug in a dash (the cut lands inside a separator)", () => {
+    const id = scheduleIdFor(`${"a".repeat(58)} b`);
+    expect(id.endsWith("-")).toBe(false);
+    expect(id).toBe(`sch-${"a".repeat(58)}`);
+    expect(id).toMatch(SCHEDULE_ID);
+  });
 });
 
 describe("the schedule reads (§13.1, B2): revision, guarded bodies", () => {
@@ -232,10 +239,14 @@ describe("the schedule reads (§13.1, B2): revision, guarded bodies", () => {
     const s = await store();
     try {
       expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
-      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .run("sch-a", 1, NOW, NOW, "skipped", null, null, null, "orca-auto", "schedule:sch-a", "not json");
-      expect(() => scheduleFiresView(s, "sch-a", 10)).toThrow("recovery-blocked:schedule-fire-body-invalid");
-      expect(() => latestFire(s, "sch-a")).toThrow("recovery-blocked:schedule-fire-body-invalid");
+      // Not JSON, and JSON that parses to something the views cannot dereference (`null`, an array).
+      for (const body of ["not json", "null", "[]"]) {
+        s.db.prepare("DELETE FROM schedule_fires WHERE schedule_id=?").run("sch-a");
+        s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+          .run("sch-a", 1, NOW, NOW, "skipped", null, null, null, "orca-auto", "schedule:sch-a", body);
+        expect(() => scheduleFiresView(s, "sch-a", 10), body).toThrow("recovery-blocked:schedule-fire-body-invalid");
+        expect(() => latestFire(s, "sch-a"), body).toThrow("recovery-blocked:schedule-fire-body-invalid");
+      }
     } finally { s.close(); }
   });
 
@@ -245,6 +256,10 @@ describe("the schedule reads (§13.1, B2): revision, guarded bodies", () => {
       expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
       const row = readSchedule(s, "sch-a")!;
       s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(JSON.stringify({ ...row.body, cron: "nope" }), "sch-a");
+      expect(() => readSchedule(s, "sch-a")).toThrow("recovery-blocked:schedule-body-invalid");
+      expect(() => scheduleListView(s, REPO, NOW)).toThrow("recovery-blocked:schedule-body-invalid");
+      // §6's at-most-hourly rule holds of the stored body too: every minute is not a valid stored cron.
+      s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(JSON.stringify({ ...row.body, cron: "* * * * *" }), "sch-a");
       expect(() => readSchedule(s, "sch-a")).toThrow("recovery-blocked:schedule-body-invalid");
       expect(() => scheduleListView(s, REPO, NOW)).toThrow("recovery-blocked:schedule-body-invalid");
     } finally { s.close(); }

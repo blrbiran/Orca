@@ -16,7 +16,7 @@ const NAME = { name: "name", type: "string" as const, summary: "the schedule's n
 const DISABLED = { name: "disabled", type: "boolean" as const, summary: "create it switched off" };
 const ID = { name: "id", type: "string" as const, summary: "the schedule's id; default: sch-<slug of the name>" };
 const PARAM = { name: "param", type: "string" as const, repeatable: true, summary: "a template param, k=v (repeatable)" };
-const TOKEN_LIMIT = { name: "token-limit", type: "integer" as const, summary: "the group's token limit; default: unlimited" };
+const TOKEN_LIMIT = { name: "token-limit", type: "integer" as const, summary: "the fired groups' token limit; default: unlimited" };
 const POOL = { name: "pool", type: "integer" as const, summary: "how much flow-run capacity one fire may take" };
 const enc = encodeURIComponent;
 const scheduleOf = (c: WriteContext): string => String(c.args.positionals.schedule);
@@ -31,12 +31,16 @@ function newScheduleId(c: WriteContext, fallbackName: string): string {
   return id;
 }
 
-function paramsOf(c: WriteContext): Record<string, string> {
-  const params: Record<string, string> = {};
+const scalar = (raw: string): string | number | boolean =>
+  raw === "true" ? true : raw === "false" ? false : /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
+
+function paramsOf(c: WriteContext): Record<string, string | number | boolean> {
+  // Own keys only: `--param __proto__=x` stays a key the panel refuses as not a parameter, never a silent drop.
+  const params = Object.create(null) as Record<string, string | number | boolean>;
   for (const given of list(c, "param")) {
     const at = given.indexOf("=");
     if (at <= 0) throw invalid(`--param wants k=v, got ${JSON.stringify(given)}`);
-    params[given.slice(0, at)] = given.slice(at + 1);
+    params[given.slice(0, at)] = scalar(given.slice(at + 1));
   }
   return params;
 }
@@ -78,11 +82,9 @@ const addGroup = verb({
   route: (c) => `schedules/${enc(newScheduleId(c, String(c.args.positionals.entry)))}`,
   payload: async (c) => {
     const entryId = String(c.args.positionals.entry);
-    const version = str(c, "version");
-    if (version === undefined) throw invalid("schedule add group wants --version <sha256> (orca plan show lists the entry's versions)");
     return {
       projectId: (await c.project()).repoId, name: str(c, "name") ?? entryId, cron: String(c.args.flags.cron), enabled: enabled(c),
-      start: { kind: "group", entryId, sha256: version, tokenLimit: int(c, "token-limit") ?? null, integration: null },
+      start: { kind: "group", entryId, sha256: String(c.args.flags.version), tokenLimit: int(c, "token-limit") ?? null, integration: null },
     };
   },
 });
@@ -125,7 +127,7 @@ const edit = verb({
         set.start = start;
       }
     }
-    if (Object.keys(set).length === 0) throw invalid("nothing to set: give --cron, --name, --param, --repin, --pool or --token-limit");
+    if (Object.keys(set).length === 0) throw invalid("nothing to set: give --cron, --name, --param, --repin, --pool, --token-limit or --unlimited");
     return { set };
   },
 });
