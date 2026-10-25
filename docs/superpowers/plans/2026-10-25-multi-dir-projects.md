@@ -216,10 +216,14 @@ Test: `tests/control/multiDirSplit.test.ts` (new), `tests/control/fixtures/multi
 
 ## Task O6 — dispatch and collect (§7.1–§7.4) — M7, M8
 
-Files: `src/control/schema.ts`, `src/control/startEnvelope.ts` (if the work shape is built there),
+Files: `src/control/schema.ts` (the contract/envelope agreement both ways), `src/control/startEnvelope.ts`,
 `src/control/executionDriver.ts` (A2, C, cleanup), `src/control/workspace.ts`,
-`src/control/ccloopPort.ts`, `src/control/driveRecord.ts`. Tests: `tests/control/multiDirDispatch.test.ts`,
-`tests/control/multiDirCollect.test.ts` (both new).
+`src/control/ccloopPort.ts`, `src/control/executionPort.ts`, `src/control/driveRecord.ts`,
+`src/control/driverLanding.ts` (the per-directory criteria flag), `src/control/driverHandoff.ts` (a restart's
+cleanup), `src/scheduler/harvest.ts` (a reconciliation's claims). Tests: `tests/control/multiDirDispatch.test.ts`,
+`tests/control/multiDirCollect.test.ts` (both new), `tests/control/startEnvelope.test.ts`,
+`tests/control/workspace.test.ts`, `tests/control/fixtures/ccloopWorld.ts`,
+`tests/control/fixtures/driverHarness.ts`, `tests/control/fixtures/web.ts`.
 
 - [ ] A2 recomputes the ccloop primary's mode for a multi run; A1's project-primary setting is a placeholder for a
   single call / task run.
