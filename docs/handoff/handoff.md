@@ -80,7 +80,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **scheduled 装库**：先 `.backup` 到 `~/.orca/backups/pre-schema20-20261025-023827/control.sqlite`（目录 0700／文件 0600，integrity ok，v19），再 build（tsc＋web）＋`panel restart`；`meta.schemaVersion=20`，`schedules`／`schedule_fires`／`plan_library`／`plan_library_versions` 四表齐全（迁移自己在库旁留了 `control.sqlite.pre-v19-*`）；面板 7777 应答 200。
 - **付费实测（工具给的数）**：真 codex（gpt-6-luna）验收 ccloop strict wire schema（`debug.located`＋`flow`）**通过**；claude／codex／omp 都能读工作区外绝对路径（选择 (a) 前提成立）；三家都**不**遮蔽密钥（O2）；三家都能在 `--add-dir` 目录里写（H7 前提成立），claude 精确 `Bash(cd <dir> && <cmd>)` 规则放行复合命令。证据在 `/private/tmp/orca-ffec7b28/{evidence,o2,o3,adddir-probe}/`。⚠️ 已知副作用：真 codex 每跑一次会往人的 `~/.codex/config.toml` 追加一条 `[projects."<路径>"] trust_level="trusted"`（历次会话都有），登记未修。
 - **定时流程与计划库（scheduled）已合入并装上**（计划 `docs/superpowers/plans/2026-10-24-scheduled.md`，spec `2026-10-24-scheduled-flows-and-groups-design.md`；T1–T11，21 笔 rebase 后 ff 合入，tip 主题行 `fix(schedule): isolate a corrupt schedule row, cover the new verbs, and translate the durations`）：rebase 到 main 解了 7 处双方新增冲突（`errors.ts`、`planImport.ts`、`webProtocol.ts`、`controlAssembly.ts`、`webService.ts`、`controlViews.ts`、`controlTypes.ts`）；typecheck 顺带抓到 main 上已存在的缺陷（dir-requirements 漏改 web 的 `CommandSuccessV1.verb` 联合），已在 main 单独修（主题行 `fix(web): the command-success verb union learns resolve-folder-change`）。独立审阅 quality 在「损坏 schedule body 逐行隔离」修复后 PASS；本轮变异 M-C0（未选中路径 ⇒ exit 1）与 M-T11a（`pass.ts` 退回 `listSchedules` ⇒ scheduleCrash 红）均见红并恢复。门：`npm test` 726 文件（569 root、157 web）全绿、35 skipped；C0 的 12 路径 `assert-selected` rc 0。git 上仍留一条 minor follow-up：`scheduleListView`／`schedule-remove` 遇到损坏行仍会整读/整删失败（quality Minor 4，out of scope）。
-- **ccloop `feat/multi-repo` 已合入并已推**（人已确认 P1–P7、M9 与 As-built 1–10；rebase 后 typecheck/build 绿、19 个多仓测试文件 55/55、C12 全 `A`；分支与 worktree 已清理）。Orca 侧 H7 仍未开始，Orca pin 仍 `f4de340`（等真正消费多仓字段时再 repin）。
+- **ccloop `feat/multi-repo` 已合入并已推**（人已确认 P1–P7、M9 与 As-built 1–10；rebase 后 typecheck/build 绿、19 个多仓测试文件 55/55、C12 全 `A`；分支与 worktree 已清理）。Orca 侧 H7 随后在本会话完成：O1 把 pin 改到 `c205d55`，O2–O9 合入并装上（见下一条）。
+- **多目录项目（H7）已合入并装上**（计划 `docs/superpowers/plans/2026-10-25-multi-dir-projects.md`，spec `2026-10-24-multi-dir-projects-design.md`；O1–O9 共 16 笔，ff 合入 main，tip 主题行 `docs(plan): O9's measured sites, refusals and accepted gaps`）：项目文件/注册与 API、打开与设置拒绝、跨目录概览与提示、拆分/写入集/契约/导出、派发与收集（`additionalRepos`）、D 每目录落地与台账、多目录落地趟（journal、folder 停止、两个回答），以及 O9 的命名拒绝（`multi-dir-plan-import-unsupported`／`flow-project-multi-dir-unsupported`／`debug-multi-dir-unsupported`）、访问表、`groupSummarySchema.multiDir` 与 Web「目录与落地」区域（§13 全码 en/zh）。门：根 `npm run test:all` 669 文件 6308 过／37 跳（含真 ccloop 的 M19 清理）、web 173 文件 1576 过、root typecheck、`npm run build`、web build、`verify:ccloop-pin` 3/3。在 main 树重新 build 后 `panel restart`；schema 仍 20（本分支无 schema 改动，未动控制库），面板 7777 应答 200，`web/dist/index.js` 含新文案。剩：O9 真 agent 多仓端到端（§4.2 第 5 条）；push 由人。接受的偏差记在计划文末（带后缀的成员列表错误码按服务端原句显示、overview 的 needs-you 复用 §13 拒绝句、伪语言扫描未覆盖该区域、集成趟的 multi skip 无测试、`landedUnrecorded` 对阻塞的 multi run 走「无法证明未落地」的保守分支）。
 - **测这些分支用的 ccloop**：`ORCA_CCLOOP_BIN=/private/tmp/orca-ffec7b28/ccloop-f4de340/dist/cli.js`，`CCLOOP_CACHE_DIR=/private/tmp/orca-ffec7b28/ccloop-cache`（scratch，清理需人授权）。
 
 ### 3.00000000 会话 `0e13a9b7`（2026-10-23）—— 已合、已推；它的待人项人已在会话 `ffec7b28` 全部回复（见那里）
@@ -259,7 +260,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
-- **push**：Orca main（scheduled 合并＋docs 更新两项待推）、ccloop main（已在远端，含 handoff 更新）——一律以 `ls-remote` 现测。
+- **push**：Orca main（H7 合并＋handoff 更新待推）、ccloop main（已在远端，含 handoff 更新）——一律以 `ls-remote` 现测。
 - **审与裁**：见 §八 第一条（会话 `ffec7b28` 的清单；ccloop P1–P7、M9 已由人确认）。
 - 已办（会话 `ffec7b28`，人授权）：`~/.orca/control/flow-attachments` 的 5 个测试残留已删；`~/.cache/ccloop/agent-catalog` 只删了能归到 0e13a9b7 沙箱时段的两条缓存行（`codex-home/` 与其余行保留）。
 - `~/.syncskill/config.json` 的 `runskills`、`aifusion` 本地源仍指已搬走的路径（人的文件未动）；ccmem embedding 账号无额度；想开「纠正写回 ccmem」用面板 flag `--ccmem-corrections`。
@@ -267,10 +268,10 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.2 agent 的活（会话 `ffec7b28` 收尾时的建议顺序）
 
 1. ~~接着做在飞的 Orca 分支~~ **已全部合入**：live-transcript、dir-requirements、scheduled 三条都在 main 并已装（scheduled = schema 20）。后续分支仍按同一流程：计划 → 变异 → 全量门禁 → 独立审阅 → rebase → ff → build＋web build＋panel restart；schema 动之前先备份。
-2. **H7（多目录项目）**：前置已齐——ccloop `feat/multi-repo` 已合入并已推、人已确认 P1–P7／M9／As-built 1–10、dir-requirements 已在 main。下一步 Orca 接受 `context.additionalRepos`／envelope `additionalRepos`／collect `dirs`（含 `attemptSha`）→ 实施 spec §5–§10、M1–M19 → 真正消费多仓字段时再 repin ccloop。
+2. ~~H7（多目录项目）~~ **已合并并装上**（O1–O9，见 §3；schema 仍 20）。剩付费验收见第 5 条。
 3. 实时转录 Orca 侧的 `operatorNote` 生产方（人给下一次 attempt 留话）若 spec 没定 Orca 界面，补一行 spec 再做。
 4. 登记未修（仍成立）：诊断性检查没传给 ccloop；saved-result 恢复不填 skill 目录；`omp-phase-continuation`（ccloop）；`orca status` 判的是调用者 shell 的环境；ccloop perf:stream L7 在负载 47–55 下增长 26–35 MiB 偶超 32 MiB 界（按需检查，不在 npm test）；runViewGrant 缺 handoff-run 用例（需 handoff profile 夹具）；决定路由会读两次决定。
-5. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 合并后用真 agent 跑一次多仓端到端——人已允许 codex 跑、claude 暂无额度（真 codex 会往 `~/.codex/config.toml` 追加 trust 条目）。
+5. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 已合并，待真 agent 跑一次多仓端到端（repo+repo+folder，claude→codex→omp，一次强制 `partial`）——人已允许 codex 跑、claude 暂无额度（真 codex 会往 `~/.codex/config.toml` 追加 trust 条目）。
 
 ## 五、已经拍板过的事（**不要重开**）
 
