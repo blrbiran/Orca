@@ -5,7 +5,8 @@ import { WebControlService } from "../../src/control/webService.js";
 import { controlCommandRoutes, registerControlReadRoutes } from "../../src/panel/controlApi.js";
 import { controlErrorCatalog } from "../../src/panel/controlErrors.js";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
-import { may, mayDoHumanOnly, PERMISSIONS, permissionRefusal, principalLabel } from "../../src/panel/permissions.js";
+import { may, mayDoHumanOnly, PERMISSIONS, permissionRefusal, principalLabel, hasPauseAuthority, hasPersonAuthority, type Principal } from "../../src/panel/permissions.js";
+import { routedPauseAuthorityFor, withCommandContext } from "../../src/control/commandClient.js";
 import { webFixture } from "../control/fixtures/web.js";
 
 const owner = { kind: "user" as const, userId: "u1", name: "o", roles: ["owner" as const] };
@@ -49,6 +50,30 @@ describe("the permission table (spec §3.5)", () => {
     expect(Object.keys(PERMISSIONS).sort()).toEqual(["agent", "member", "owner"]);
     expect([owner, member, agent].map((p) => may(p, "accounts"))).toEqual([true, false, false]);
     expect(mayDoHumanOnly({ ...member, roles: ["member", "owner"] })).toBe(true);
+  });
+
+  // Live transcript spec §10.5.3 (T3): pause is a member's too -- any Web principal, or a socket with a verified person
+  // token (a member's suffices); resume and note keep hasPersonAuthority. Never a run Orca dispatched.
+  it("has pause authority: any Web principal or a socket with a person token, never a dispatched run", () => {
+    const memberToken = { kind: "agent" as const, client: "cli:claude", person: { userId: "u2", name: "m", roles: ["member" as const] } };
+    const ownerToken = { kind: "agent" as const, client: "cli:claude", person: { userId: "u1", name: "o", roles: ["owner" as const] } };
+    const rows: Array<{ who: string; p: Principal; pause: boolean; person: boolean }> = [
+      { who: "web member", p: member, pause: true, person: false },
+      { who: "web owner", p: owner, pause: true, person: true },
+      { who: "socket, no person", p: agent, pause: false, person: false },
+      { who: "socket, member token", p: memberToken, pause: true, person: false },
+      { who: "socket, owner token", p: ownerToken, pause: true, person: true },
+      { who: "socket, dispatched with token", p: { kind: "agent", client: "cli:claude", dispatchedRun: "run-1", person: ownerToken.person }, pause: false, person: false },
+    ];
+    expect(rows.map(({ who, p, pause }) => [who, hasPauseAuthority(p)])).toEqual(rows.map(({ who, pause }) => [who, pause]));
+    expect(rows.map(({ who, p, person }) => [who, hasPersonAuthority(p)])).toEqual(rows.map(({ who, person }) => [who, person]));
+  });
+
+  // T3: the fact rides beside the command (withCommandContext) and is read by the flow route's kernel work.
+  it("routes pause authority beside the command, absent meaning none", () => {
+    expect(withCommandContext("cmd-pause", { client: "web", principal: "web", pauseAuthority: true }, () => routedPauseAuthorityFor("cmd-pause"))).toBe(true);
+    expect(withCommandContext("cmd-quiet", { client: "web", principal: "web" }, () => routedPauseAuthorityFor("cmd-quiet"))).toBe(false);
+    expect(routedPauseAuthorityFor("cmd-pause")).toBe(false);
   });
 
   it("classifies every control verb and route: a GET reads, a POST is a command route whose verb has an entry", async () => {

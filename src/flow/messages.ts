@@ -62,7 +62,7 @@ export type MessageTarget =
  * authority sent it (commandClient.ts). Recorded on a skip/defer/fill -- over anything the body says -- and required when
  * applying one that releases a held effect. Absent: no such authority.
  */
-export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string; personAuthority?: boolean }
+export interface FlowMessageInput { kind: "feedback" | "edit" | "command"; target: MessageTarget; body: Record<string, unknown>; by: string; via: string; requestId: string; personAuthority?: boolean; /** Live transcript spec §10.5.3: the routed principal may pause. */ pauseAuthority?: boolean }
 /** Gaps spec §6.3: the reason a mark that would release a held external/irreversible effect without a person is rejected with. */
 export const EFFECT_NEEDS_PERSON = "flow-effect-needs-person";
 export interface AcceptResult { state: MessageRow["state"]; reason: string | null; seq: number; deduped: boolean }

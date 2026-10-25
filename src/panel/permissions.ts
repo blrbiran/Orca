@@ -53,6 +53,13 @@ export const hasPersonAuthority = (p: Principal): boolean =>
   p.kind === "user" ? mayDoHumanOnly(p) : p.dispatchedRun === undefined && p.person !== undefined && mayDoHumanOnly({ kind: "user", ...p.person });
 
 /**
+ * Live transcript spec §10.5.3: pause's authority -- any Web principal, or a socket principal with a verified person
+ * token; never a run Orca dispatched. Members may pause; they may not resume or note.
+ */
+export const hasPauseAuthority = (p: Principal): boolean =>
+  p.kind === "user" ? true : p.dispatchedRun === undefined && p.person !== undefined;
+
+/**
  * The refusal a control command gets from this principal, or null. A member: today's human-only codes (I3). The socket
  * agent (CLI v2 spec §15.1): an `open` entry passes; a `token` entry wants a verified person token,
  * `control-person-token-required` without one; a run Orca dispatched is refused every entry (§15.4), token or not.

@@ -142,7 +142,8 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
  *
  * Gaps spec §6.3, §13: a row may also be a predicate on an `any` verb (`flow-message`, the first): what it calls `token`
  * wants a person token on the socket and is refused to a run Orca dispatched, exactly as a human-only entry; what it calls
- * `open` is the verb as before. Web members are not tiered: an `any` verb stays theirs.
+ * `open` is the verb as before. Web members are not tiered: an `any` verb stays theirs. Its token entries: a defer releasing
+ * a held effect, and pause, resume and note (live transcript spec §10.5.3).
  */
 export type SocketTier = "open" | "token";
 type Payload = Readonly<Record<string, unknown>>;
@@ -189,10 +190,15 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // timeout would do.
   "flow-plan-step": (p) => (p.choice === "accept-unchanged" ? "open" : "token"),
   // Gaps spec §6.3: a `defer` whose `effects` says `proceed` for any step releases a held external effect (as flow-effect);
-  // any other message is open. Effects it cannot read are token.
+  // any other message is open. Effects it cannot read are token. Live transcript spec §10.5.3: pause, resume and note want
+  // a person on the socket (a dispatched run is refused); a Web member is not tiered.
   "flow-message": (p) => {
     const body = typeof p.body === "object" && p.body !== null ? p.body as Payload : null;
-    if (p.kind !== "command" || body?.command !== "defer" || body.effects === undefined) return "open";
+    if (p.kind !== "command") return "open";
+    if (body === null) return "open";
+    const command = body.command;
+    if (command === "pause" || command === "resume" || command === "note") return "token";
+    if (command !== "defer" || body.effects === undefined) return "open";
     const effects = body.effects;
     if (typeof effects !== "object" || effects === null || Array.isArray(effects)) return "token";
     return Object.values(effects).some((choice) => choice !== "wait") ? "token" : "open";

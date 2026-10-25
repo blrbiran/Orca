@@ -20,7 +20,7 @@ import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
 import { withCommandContext } from "../control/commandClient.js";
-import { attributionOf, hasPersonAuthority, may, permissionRefusal, principalLabel, type Principal } from "./permissions.js";
+import { attributionOf, hasPauseAuthority, hasPersonAuthority, may, permissionRefusal, principalLabel, type Principal } from "./permissions.js";
 import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { agentUpdateStateSchema } from "../control/agentInstallationProtocol.js";
@@ -849,7 +849,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
       // CLI v2 spec §16: the owner is the panel's --by (what corrections are recorded by); the operator id when unconfigured.
       const attribution = attributionOf(principal, service.deps.correctionsBy ?? actorId);
-      await withCommandContext(command.commandId, { client, principal: principalLabel(principal), attribution, personAuthority: hasPersonAuthority(principal) }, async () => {
+      await withCommandContext(command.commandId, { client, principal: principalLabel(principal), attribution, personAuthority: hasPersonAuthority(principal), pauseAuthority: hasPauseAuthority(principal) }, async () => {
         switch (command.verb) {
           case "import-plan": await service.importPlan(command); break;
           case "proposal-edit": service.editProposal(command); break;

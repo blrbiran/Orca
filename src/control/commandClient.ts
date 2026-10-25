@@ -33,7 +33,7 @@ export interface Attribution { by: string; via: string }
  * person with the authority `flow-effect` needs sent it (an owner on the Web, or an owner's person token on the socket,
  * never a run Orca dispatched). Absent: no such authority.
  */
-type CommandContext = { client: string; principal: string; attribution?: Attribution; personAuthority?: boolean };
+type CommandContext = { client: string; principal: string; attribution?: Attribution; personAuthority?: boolean; pauseAuthority?: boolean };
 const current = new AsyncLocalStorage<{ commandId: string } & CommandContext>();
 
 /** Accounts spec §3.5, D3: client (spec §6) and principal ride beside the command, outside the raw command, so in neither hash. */
@@ -64,5 +64,7 @@ export function commandAttributionFor(commandId: string, fallbackBy: string): At
 export function routedAttributionFor(commandId: string): Attribution | null { return forCommand(commandId)?.attribution ?? null; }
 /** Gaps spec §6.3: whether the routed principal of this command has person authority; false when none was routed. */
 export function routedPersonAuthorityFor(commandId: string): boolean { return forCommand(commandId)?.personAuthority === true; }
+/** Live transcript spec §10.5.3: whether the routed principal of this command may pause; false when none was routed. */
+export function routedPauseAuthorityFor(commandId: string): boolean { return forCommand(commandId)?.pauseAuthority === true; }
 /** CLI v2 spec §16: the attribution where a store holds one line of text. */
 export const attributionText = (a: Attribution): string => `by ${a.by} via ${a.via}`;

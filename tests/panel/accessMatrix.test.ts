@@ -114,8 +114,10 @@ const RUN_ID = "fr-00000000-0000-4000-8000-000000000001";
 const defer = (effects?: unknown) => ({ runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "defer", ...(effects === undefined ? {} : { effects }) } });
 /**
  * Gaps spec §6.3, §13 (G10): `flow-message` stays `any` (no HUMAN_ONLY_FIELDS entry); a `defer` whose `effects` holds any
- * `proceed` releases a held external effect, so it is token on the socket and refused to a dispatched run. Everything
- * else is open. Web members and owners are not tiered (an `any` verb: accepted).
+ * `proceed` releases a held external effect, so it is token on the socket and refused to a dispatched run. Live transcript
+ * spec §10.5.3 (T3): `pause`, `resume` and `note` narrow too -- any Web principal may send them, a socket needs a verified
+ * person token (a member's answers a resume's member refusal in the kernel), and a run Orca dispatched is refused each.
+ * Everything else is open. Web members and owners are not tiered (an `any` verb: accepted).
  */
 const ANY_ROWS: ReadonlyArray<{ name: string; payload: Record<string, unknown>; tier: "open" | "token" }> = [
   { name: "defer, proceed", payload: defer({ "to-draft-box": "proceed" }), tier: "token" },
@@ -124,6 +126,9 @@ const ANY_ROWS: ReadonlyArray<{ name: string; payload: Record<string, unknown>; 
   { name: "defer, no effects", payload: defer(), tier: "open" },
   // What the predicate cannot read is the stricter tier (the kernel refuses the shape anyway).
   { name: "defer, effects not an object", payload: defer("proceed"), tier: "token" },
+  { name: "pause", payload: { runId: RUN_ID, kind: "command", target: { kind: "run" }, body: { command: "pause" } }, tier: "token" },
+  { name: "resume", payload: { runId: RUN_ID, kind: "command", target: { kind: "run" }, body: { command: "resume" } }, tier: "token" },
+  { name: "note", payload: { runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "note", text: "x", scope: "next-attempt" } }, tier: "token" },
   { name: "skip", payload: { runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "skip" } }, tier: "open" },
   { name: "fill", payload: { runId: RUN_ID, kind: "command", target: { kind: "step", stepKey: "visuals" }, body: { command: "fill" } }, tier: "open" },
   { name: "feedback", payload: { runId: RUN_ID, kind: "feedback", target: { kind: "run" }, body: { text: "warmer" } }, tier: "open" },
