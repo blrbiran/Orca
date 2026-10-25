@@ -164,6 +164,8 @@ Test: `tests/control/multiDirOverview.test.ts` (new).
   `dir` member from its import commit (`importFolder(…, reuseUnchanged: true)`); each cached under its own dir target
   id. Compose `{ schema: "orca-project-overview-v1", dirs: [{ key, name, kind, primary, overview }] }`; the call
   record keeps `commits: { <key>: <sha> }`.
+- [ ] A divided build's cache lives under `<repoId>/<commit>/limits-<digest>/overview.json`, so it cannot reuse a
+  default build's entry (nor the other way round).
 - [ ] Count limits: each directory's `OVERVIEW_LIMITS` count limits divided by the member count (floor, at least 1);
   byte limits unchanged.
 - [ ] Clarify: `CLARIFY_INSTRUCTION_MULTI_V1` + `MULTI_DIR_FRAME`, fenced context named `project-overview`. V3 and
@@ -181,8 +183,12 @@ Test: `tests/control/multiDirOverview.test.ts` (new).
 
 Files: `src/control/requirementSplit.ts`, `src/scheduler/writeSet.ts`, `src/scheduler/graph.ts`,
 `src/control/loopPlans.ts`, `src/control/requirementExport.ts`, `src/control/requirementRecords.ts` (task record
-keeps `writes`), `src/control/planImport.ts` (accept path only). Test: `tests/control/multiDirSplit.test.ts` (new).
+keeps `writes`), `src/control/planImport.ts` (accept path only), `src/control/requirementCalls.ts` (a multi group's
+split is parsed with `multiSplitOutputSchema` in `evaluateSplit`). Test: `tests/control/multiDirSplit.test.ts` (new).
 
+- [ ] Carry-over from O4 (the prompt and wire schema landed there; validation is here): `evaluateSplit` selects
+  `multiSplitOutputSchema` for a multi group before the checks below. O4's commit leaves a multi split answer judged
+  with the single schema until this lands; the branch does not merge before O5.
 - [ ] `writes` validation: unknown directory `dir:<task>:<key>`; each path checked at **that directory's** overview
   commit (`path:<task>:<key>:<p>`); the ccloop primary (first written dir in registered order) must have non-empty
   `checks` (`checks-primary:<task>`); a `.decisions/` path outside the primary is `ledger-path:<task>:<key>`.
@@ -212,6 +218,8 @@ Files: `src/control/schema.ts`, `src/control/startEnvelope.ts` (if the work shap
 `src/control/ccloopPort.ts`, `src/control/driveRecord.ts`. Tests: `tests/control/multiDirDispatch.test.ts`,
 `tests/control/multiDirCollect.test.ts` (both new).
 
+- [ ] A2 recomputes the ccloop primary's mode for a multi run; A1's project-primary setting is a placeholder for a
+  single call / task run.
 - [ ] `loopWorkSchema` gains optional `additionalRepos: [{key, targetRepo, base}]` (strict, same keys/order as the
   contract; absent for every single-repository envelope).
 - [ ] A2 for a multi run: written dirs only, registered order — resolve dir target, `ensureWorkBranch` (a `dir`
