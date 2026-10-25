@@ -276,50 +276,80 @@ Files: `src/control/driverLanding.ts`, `src/control/driveRecord.ts` (journal fie
 
 ## Task O8 — multi landing pass (§9) — M10, M11, M12, M13, M17, M18
 
-Files: `src/control/multiLanding.ts` (new), `src/control/executionDriver.ts` (pass insertion after `:1257`),
+Files: `src/control/multiLanding.ts`, `src/control/multiLandingRecord.ts` (both new),
+`src/control/executionDriver.ts` (pass insertion after the integration pass),
 `src/control/integrationCheck.ts` (optional `rev`), `src/control/integrationPass.ts` (reuse delivery primitives),
-`src/control/dirPlacement.ts` (reuse `prepareFolderPlacement`/`writeFolderPlacement`),
+`src/control/dirPlacement.ts` (`folderStopMoved`; reuse `prepareFolderPlacement`/`writeFolderPlacement`),
 `src/control/groupEdges.ts`, `src/control/webService.ts`, `src/control/webProtocol.ts`, `src/panel/humanOnly.ts`,
-`src/commands/domains/work.ts`, `src/control/dirGroup.ts` (`resolve-folder-change` `dir`). Tests:
-`tests/control/multiDirLanding.test.ts`, `multiDirDue.test.ts`, `multiDirPartial.test.ts`,
-`multiDirLandingJournal.test.ts`, `multiDirPrecheckChecks.test.ts`, `multiDirFolderResolve.test.ts` (all new).
+`src/panel/controlApi.ts`, `src/panel/controlOverview.ts`, `src/control/folderChangeCommands.ts`,
+`src/control/integrationCommands.ts`, `src/control/requirementCommands.ts`, `src/commands/domains/work.ts`,
+`src/control/errors.ts`, generated `docs/cli.md` + `skills/orca-control/references/*`, `web/src/controlTypes.ts` and
+both locales. Tests: `tests/control/multiDirLanding.test.ts`, `multiDirDue.test.ts`, `multiDirPartial.test.ts`,
+`multiDirLandingJournal.test.ts`, `multiDirPrecheckChecks.test.ts`, `multiDirFolderResolve.test.ts`,
+`fixtures/multiLandingWorld.ts` (all new); `multiDirSplit.test.ts`, `groupEdges.test.ts`, `archiveGroup.test.ts`,
+`tests/panel/accessMatrix.test.ts`, `tests/entry/skill.test.ts` (updated).
 
-- [ ] Due rule: a group is due when a **carried** directory's tip differs from `landing.lastLanded[key]` (`keep` never
+- [x] Due rule: a group is due when a **carried** directory's tip differs from `landing.lastLanded[key]` (`keep` never
   makes it due); trigger is whole-group done (archived/stopped/reconciling/not-complete skipped); one group at a time
-  in id order.
-- [ ] Accept freezes `multiDir.landing.delivery = [{key, scheme}]`: `dir` ⇒ `place`; `repo` ⇒ its repository default
+  in id order. A complete group that is never due still settles `idle → landed`, so §9.9 answers its dependents
+  instead of waiting for a tip that will never move.
+- [x] Accept freezes `multiDir.landing.delivery = [{key, scheme}]`: `dir` ⇒ `place`; `repo` ⇒ its repository default
   (`keep`/`local`/`push-target`); `push-branch`/`github-pr` ⇒ refuse `multi-dir-delivery-unsupported:<key>`;
   `set-group-integration` on a multi group ⇒ `multi-dir-delivery-fixed`.
-- [ ] Pre-check (writes nothing): `keep` nothing; `local`/`push-target` reuse `readBase`/`computeNew` (per-directory
+- [x] Pre-check (writes nothing): `keep` nothing; `local`/`push-target` reuse `readBase`/`computeNew` (per-directory
   stand-in built from `lastLanded[key]`), with `multi-dir-target-missing:<key>`, `multi-dir-precheck-conflict:<key>:<paths>`,
   `integration-worktree-dirty:<key>`, `integration-not-fast-forward:<key>`, `integration-remote-missing:<key>`;
   `place` runs DIR §8.5 steps 1–6 under `withDirLock` and stops only on `changed`/`unwritable` (state
   `folder-changed`/`folder-unwritable`, before anything lands). Opt-in integration checks run through
   `runIntegrationCheck(..., next)` under state `prechecking`; failure ⇒ `multi-dir-precheck-check-failed:<key>`.
   A directory with nothing to carry records `lastLanded[key] = tip` and is not put in the plan; an empty plan ends
-  `landed` with no publish.
-- [ ] Ordered landing: journal `pending = {plan, landed: []}`; publish each in order (`local`/`push-target`/`place`);
+  `landed` with no publish. A stop mid-walk aborts the walk and journals nothing: a truncated plan must never look
+  like a complete pre-check on replay.
+- [x] Ordered landing: journal `pending = {plan, landed, startedAt}`; publish each in order (`local`/`push-target`/`place`);
   append to `pending.landed` and set `lastLanded[key]` on success; a midway failure is `partial` (never reverted) or
-  `blocked`/`idle+movedBeforeAny=1` per §9.5; completion is `landed`.
-- [ ] Crash replay (§9.6): `landing` + `pending` replays per plan, skipping landed keys and recognising a target that
+  `blocked`/`idle+movedBeforeAny=1` per §9.5; completion is `landed`. A folder's classify/journal/write pair is one
+  `withDirLock` critical section. Every landing and placement write records the group's projection change in its own
+  transaction (these writes happen outside any run's `saveRun`, so the panel's change feed would otherwise miss them).
+- [x] Crash replay (§9.6): `landing` + `pending` replays per plan, skipping landed keys and recognising a target that
   already holds `next`; no pre-check redone. Crash hooks `multi-land-after-journal`, `multi-land-after-publish:<key>`,
-  `multi-land-after-record:<key>`.
-- [ ] Verbs: `multi-dir-landing {action: retry-rest|mark-resolved}` (human-only; accepted in `partial`, `blocked`,
+  `multi-land-after-record:<key>`; the landed set at each point is asserted explicitly.
+- [x] Verbs: `multi-dir-landing {action: retry-rest|mark-resolved}` (human-only; accepted in `partial`, `blocked`,
   `folder-changed`, `folder-unwritable`); `retry-rest` pre-checks only unlanded dirs against fresh bases;
   `mark-resolved` sets `lastLanded` to current tips and records `resolution.unlanded`. `resolve-folder-change` gains
   `dir` (required for multi, refused otherwise `folder-change-dir-mismatch`); after it, the next round pre-checks by
-  itself.
-- [ ] Prerequisites: a multi group is never a stack base; `prerequisiteDone` waits on `local`/`place` dirs only, with
+  itself. Its registration surfaces (access map, escape hatch, CLI rows, generated docs, en/zh copy) landed with the
+  verb here; O9 keeps the needs-you copy and the other §13 codes.
+- [x] §9.8 re-entry without a command: a stopped folder whose watch signature moved re-runs the pre-check; an answered
+  stop is honoured once; a stopped folder that vanished — including when its stop list is truncated and reading it
+  must open the folder — is recorded as `folder-missing:<key>`, not a crash.
+- [x] Prerequisites: a multi group is never a stack base; `prerequisiteDone` waits on `local`/`place` dirs only, with
   no `pending`.
-- [ ] M17 (due/never-written): after accept `lastLanded[key]` = every export base; a group that wrote only dir 1
-  carries only dir 1; a `keep` dir never makes it due; a due group with nothing to carry ends `landed` and is not due
-  again.
-- [ ] M10 (three deliveries + folder classification), M11 (partial + verbs), M12 (journal). Mutations as listed in
-  the spec rows, each seen red.
-- [ ] M13: checks off for a disabled member; on for an enabled one, at `next`, with `dispatchedEnv`; failure blocks
+- [x] M17 (due/never-written): after accept `lastLanded[key]` = every export base (asserted at accept); a group that
+  wrote only dir 1 carries only dir 1; a `keep` dir never makes it due; a due group with nothing to carry ends
+  `landed` and is not due again.
+- [x] M10 (three deliveries + folder classification), M11 (partial + verbs), M12 (journal). Mutations as listed in
+  the spec rows, each seen red (the two observably-equivalent ones and the unchanged-watch short-circuit are recorded
+  below).
+- [x] M13: checks off for a disabled member; on for an enabled one, at `next`, with `dispatchedEnv`; failure blocks
   with the command; today's caller passes no `rev` and stays green.
-- [ ] M18: in `folder-changed`, `multi-dir-landing` is accepted; after `resolve-folder-change {dir, recheck}` the next
-  round pre-checks and lands with no further command.
+- [x] M18: in `folder-changed`, `multi-dir-landing` is accepted; after `resolve-folder-change {dir, recheck}` the next
+  round pre-checks and lands with no further command; so does undoing the edit (the watch moved).
+
+Accepted gaps and observations (recorded honestly at review):
+
+- `multi-dir-landing-failed:<kind>` and `multi-dir-landing-transient:<key>` are internal landing reasons, not command
+  refusals; they intentionally have no §13 copy entry and surface in `detail`.
+- `integration-not-fast-forward:<key>` at pre-check is race-only (base and HEAD are read from the same ref); the
+  dirty-worktree pre-check test exercises the publish precondition below it.
+- The unchanged-watch guard inside `prepareFolderPlacement` is a pure short-circuit: forcing `folderStopMoved` true
+  (mutation A6) re-runs the same comparison and saves nothing, so it is GREEN and logged as such. The guard stays as
+  the cheap path.
+- Removing the pre-check's dirty guard (mutation PC3) falls through to the publish-time guard with the same code and
+  state, so it is GREEN; PC3b renames the code and is RED.
+- The `folderAnswer` guard honours only an answer that sits on a stopped placement (a successful `take-folder` keeps
+  its resolution on an idle record); this is defensive and has no observable test.
+- Driver wiring (pass order, stop propagation, one shared checks map) is exercised through `landMultiDirGroups`; the
+  end-to-end driver path is O9's real run.
 
 ---
 
