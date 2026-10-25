@@ -14,7 +14,7 @@ import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
-import { controlRoot, resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
+import { controlRoot, controlRepoKey, resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { withDefaultCcloopBin } from "../control/ccloopBin.js";
 import { createProjectRegistry } from "./projectRegistry.js";
 import { projectsFilePath, readProjectsFile, type ProjectsFileRead } from "./projectsFile.js";
@@ -272,6 +272,10 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
     catch (error) { auth.close(); throw error; }
   }
+  // Multi-directory projects spec §4.2: a multi id's control repoId comes from the assembly's multi map, never from
+  // opts.repos (a multi has no path). Until O3 fills that map, every answer here is null.
+  const multiControlRepoId = control === null ? undefined
+    : (projectKey: string): string | null => (control!.multiDirProjectOf(controlRepoKey(projectKey)) === null ? null : controlRepoKey(projectKey));
   // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.
   const projects = opts.projectsFile === undefined ? null : createProjectRegistry({
     file: opts.projectsFile.file,
@@ -287,6 +291,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   });
   buildApi(app, {
     opts, reviews, statics, projects, auth,
+    ...(multiControlRepoId === undefined ? {} : { multiControlRepoId }),
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
     // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
     ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service, port: control.port } }),
@@ -324,7 +329,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   let socket: ControlSocketHandle | null = null;
   if (control !== null) {
     const bound = await bindControlSocket(
-      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true), auth),
+      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true, multiControlRepoId), auth),
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {

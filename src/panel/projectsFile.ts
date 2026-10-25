@@ -20,8 +20,15 @@ export interface ProjectPlanV1 { id: string; path: string; sha256: string }
  */
 export type ProjectKind = "repo" | "dir";
 export interface ProjectEntryV1 { id: string; name: string; path: string; kind?: ProjectKind; plans?: ProjectPlanV1[] }
+/**
+ * Multi-directory projects spec §4.1: a name and an ordered list of member project ids; `dirs[0]` is the primary.
+ * The list is optional and stays absent when the file never had it (a keyless file re-saves byte-equal).
+ */
+export interface MultiDirProjectEntryV1 { id: string; name: string; dirs: string[] }
+/** Multi-directory projects spec §4.3: a member as the control plane names it. */
+export interface MultiDirMember { key: string; repoId: string; kind: ProjectKind; path: string }
 export const projectKindOf = (entry: Pick<ProjectEntryV1, "kind">): ProjectKind => entry.kind ?? "repo";
-export interface ProjectsFileV1 { version: 1; controlStateDir?: string; projects: ProjectEntryV1[] }
+export interface ProjectsFileV1 { version: 1; controlStateDir?: string; projects: ProjectEntryV1[]; multiDirProjects?: MultiDirProjectEntryV1[] }
 export interface FileSignature { mtimeNs: bigint; size: bigint; ino: bigint; ctimeNs: bigint }
 export type ProjectsFileRead =
   | { kind: "missing"; signature: null; hash: null }
@@ -64,13 +71,36 @@ const projectSchema = z.object({
   kind: z.enum(["repo", "dir"]).optional(),
   plans: z.array(planSchema).optional(),
 }).strict();
-const fileSchema = z.object({ version: z.literal(1), controlStateDir: absolute.optional(), projects: z.array(projectSchema) }).strict()
+// Spec §4.1: shape only -- member references (unknown, not single, nested) are the loader's, never the schema's.
+const multiDirProjectSchema = z.object({
+  id: z.string().regex(PROJECT_ID_PATTERN, "id must match [a-z0-9._-] and start and end with [a-z0-9_]"),
+  name: z.string().refine((value) => value.trim().length > 0, "name must not be blank"),
+  dirs: z.array(z.string().regex(PROJECT_ID_PATTERN, "member id must match [a-z0-9._-] and start and end with [a-z0-9_]")).min(2).max(8),
+}).strict();
+const fileSchema = z.object({
+  version: z.literal(1),
+  controlStateDir: absolute.optional(),
+  projects: z.array(projectSchema),
+  multiDirProjects: z.array(multiDirProjectSchema).optional(),
+}).strict()
   .superRefine((value, ctx) => {
     for (const field of ["id", "name", "path"] as const) {
       const seen = new Set<string>();
       for (const project of value.projects) {
         if (seen.has(project[field])) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate ${field} ${JSON.stringify(project[field])}` });
         seen.add(project[field]);
+      }
+    }
+    const ids = new Set(value.projects.map((project) => project.id));
+    const names = new Set(value.projects.map((project) => project.name));
+    for (const multi of value.multiDirProjects ?? []) {
+      if (ids.has(multi.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate id ${JSON.stringify(multi.id)}` });
+      if (names.has(multi.name)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate name ${JSON.stringify(multi.name)}` });
+      ids.add(multi.id); names.add(multi.name);
+      const members = new Set<string>();
+      for (const dir of multi.dirs) {
+        if (members.has(dir)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `duplicate member ${JSON.stringify(dir)} in ${multi.id}` });
+        members.add(dir);
       }
     }
     const planIds = new Set<string>();

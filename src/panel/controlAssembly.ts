@@ -27,6 +27,7 @@ import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
 import { applyPanelShutdown, withAdmission } from "./controlLifecycle.js";
 import { controlRepoKey } from "./controlOptions.js";
+import type { MultiDirMember } from "./projectsFile.js";
 import { readCorrectionList } from "../control/correctionState.js";
 import { createCorrectionExporter } from "../memory/correctionExport.js";
 import type { ControlOptions } from "./server.js";
@@ -95,6 +96,11 @@ export interface ControlRuntime {
   driver: ExecutionDriver | null;
   /** Flow engine spec §8.2: the flow kernel's production ports; present only with a driver (nothing else runs a flow). */
   flow: PanelFlow | null;
+  /**
+   * Multi-directory projects spec §4.3: the members of a multi-dir project by control repo id, or null. O2 leaves the
+   * map empty (every answer is null); O3 fills it from the registry. It never resolves a repo id accepted as a path.
+   */
+  multiDirProjectOf(repoId: string): { dirs: MultiDirMember[] } | null;
   /** spec §6: runs to completion before the server accepts anything. */
   recover(): Promise<void>;
   /** One delivery pass. Re-entrant calls while one is in flight are no-ops, not queued. */
@@ -368,6 +374,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
 
   return Object.freeze({
     store, config, service, router, admissionGate, port, epoch, driver, flow,
+    multiDirProjectOf: () => null,
     recover: async () => {
       await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
       await service.recoverAgentUpdates();

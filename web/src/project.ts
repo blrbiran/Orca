@@ -13,14 +13,21 @@ export interface ProjectV1 {
   path?: string;
   /** The control plane's repoId for this project, or null when the control plane does not hold it. */
   controlRepoId: string | null;
-  /** Flow engine spec §5.1: present only on a plain folder worked on through a vault; absent is a repository. */
-  kind?: "dir";
+  /** Flow engine spec §5.1: `dir` is a plain folder; multi-directory projects §4.2: `multi` groups several projects. */
+  kind?: "dir" | "multi";
+  /** Multi-directory projects spec §4.2: the ordered members of a `multi` row. */
+  dirs?: Array<{ projectKey: string; kind: "repo" | "dir" }>;
 }
+
+/** Multi-directory projects spec §4.1: a multi-directory project as the projects file holds it. */
+export interface MultiDirProjectV1 { id: string; name: string; dirs: string[] }
 
 export interface ProjectsAnswerV1 {
   source?: "file" | "command-line";
   editable?: boolean;
   projects: ProjectV1[];
+  /** Spec §4.1: present only when one is registered; absent in answers from an older panel. */
+  multiDirProjects?: MultiDirProjectV1[];
   pendingRestart?: string[];
   fileError?: string | null;
 }

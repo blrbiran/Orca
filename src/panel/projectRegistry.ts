@@ -14,19 +14,27 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, join as joinPath, posix, relative, sep } from "node:path";
+import { dirname, isAbsolute, join as joinPath, posix, relative, sep } from "node:path";
 import { compareText } from "../control/webProtocol.js";
 import type { TrustedPlanConfig, TrustedRepositoryConfig } from "./controlConfig.js";
 import { controlRepoKey } from "./controlOptions.js";
 import {
-  deriveProjectId, isFiledPlanPath, readProjectsFile, sameSignature, writeProjectsFile,
-  type FileSignature, type ProjectEntryV1, type ProjectPlanV1, type ProjectsFileRead, type ProjectsFileV1,
+  deriveProjectId, isFiledPlanPath, projectKindOf, readProjectsFile, sameSignature, writeProjectsFile,
+  type FileSignature, type MultiDirMember, type MultiDirProjectEntryV1, type ProjectEntryV1, type ProjectPlanV1,
+  type ProjectsFileRead, type ProjectsFileV1,
 } from "./projectsFile.js";
 
 export interface RegistryControl {
   check(entry: TrustedRepositoryConfig): void;
   add(entry: TrustedRepositoryConfig): void;
   rename(repoId: string, displayName: string): void;
+  /** Multi-directory projects spec §4.3: the runtime's multi map, when the control plane has one. */
+  addMulti?(entry: { repoId: string; displayName: string; dirs: MultiDirMember[] }): void;
+  setMultiDirs?(repoId: string, dirs: MultiDirMember[]): void;
+  /** Spec §4.3: rename a multi entry in the runtime's multi map (it is never a single repository). */
+  renameMulti?(repoId: string, displayName: string): void;
+  /** Spec §4.3: forget a multi entry the loader dropped, so a later assembly map does not keep a stale id. */
+  removeMulti?(repoId: string): void;
   /** In-repo plan path spec 2026-10-21: absent on a control plane that cannot hold runtime plans (criteria fakes). */
   checkPlan?(entry: TrustedPlanConfig): void;
   addPlan?(entry: TrustedPlanConfig): void;
@@ -36,6 +44,8 @@ export interface ProjectsListV1 {
   source: "file";
   editable: true;
   projects: ProjectEntryV1[];
+  /** Multi-directory projects spec §4.1: present only when one is registered, like `kind` on a single row. */
+  multiDirProjects?: MultiDirProjectEntryV1[];
   pendingRestart: string[];
   fileError: string | null;
 }
@@ -50,7 +60,11 @@ export class ProjectRegistryError extends Error {
 export interface ProjectRegistry {
   list(): ProjectsListV1;
   add(name: string, path: string): ProjectEntryV1;
-  rename(id: string, name: string): ProjectEntryV1;
+  rename(id: string, name: string): ProjectEntryV1 | MultiDirProjectEntryV1;
+  /** Multi-directory projects spec §4.2: create one, under the same member checks as an edit. */
+  addMulti(name: string, dirs: string[]): MultiDirProjectEntryV1;
+  /** Spec §4.2: replace a multi project's ordered member list. */
+  setDirs(id: string, dirs: string[]): MultiDirProjectEntryV1;
   /** In-repo plan path spec 2026-10-21 §2.2: register (or re-trust) a plan file of a project. */
   addPlan(projectId: string, path: string): ProjectPlanV1;
 }
@@ -92,6 +106,9 @@ export function createProjectRegistry(input: {
   const bootConfig = input.boot.kind === "valid" ? input.boot.config : empty();
   const bootStateDir = bootConfig.controlStateDir ?? null;
   const running: ProjectEntryV1[] = bootConfig.projects.map((p) => ({ ...p }));
+  const runningMulti: MultiDirProjectEntryV1[] = [];
+  /** Each running multi's members by real path, so a hand edit is compared rather than silently re-resolved. */
+  const multiPaths = new Map<string, string[]>();
   let lastGood: ProjectsFileV1 = bootConfig;
   let lastHash: string | null = input.boot.hash;
   let seen: FileSignature | null = input.boot.signature;
@@ -121,6 +138,68 @@ export function createProjectRegistry(input: {
   /** The project already running or filed under this directory, by canonical path, or undefined. */
   const holderOf = (real: string): string | undefined =>
     [...running, ...lastGood.projects].find((p) => realOf(p.path) === real)?.id;
+
+  /** Two names of one directory: the same spelling, or the same inode (a case-insensitive filesystem). */
+  const sameDir = (a: string, b: string): boolean => {
+    if (a === b) return true;
+    try { const left = statSync(a); const right = statSync(b); return left.dev === right.dev && left.ino === right.ino; }
+    catch { return false; }
+  };
+
+  /**
+   * Whether `child` is `parent` or below it. Walked by inode at every step: two spellings of one tree (a
+   * case-insensitive filesystem) share no path string but every ancestor of the child still matches the parent.
+   * A sibling is never an ancestor, so a name like `..cache` stays a plain component.
+   */
+  const inside = (child: string, parent: string): boolean => {
+    let at = child;
+    for (;;) {
+      if (sameDir(at, parent)) return true;
+      const up = dirname(at);
+      if (up === at) return false;
+      at = up;
+    }
+  };
+  /**
+   * Multi-directory projects spec §4.1/§4.2: the ordered members, checked by name. Two writers on one tree are
+   * refused: equal real paths, or one inside the other in either direction.
+   */
+  const checkedDirs = (dirs: readonly string[], projects: readonly ProjectEntryV1[], multis: readonly MultiDirProjectEntryV1[]): MultiDirMember[] => {
+    if (dirs.length < 2) fail("multi-dir-too-few", 422, "a multi-directory project needs between 2 and 8 projects");
+    if (dirs.length > 8) fail("multi-dir-too-many", 422, "a multi-directory project needs between 2 and 8 projects");
+    const seen = new Set<string>();
+    for (const id of dirs) {
+      if (seen.has(id)) fail(`multi-dir-member-duplicate:${id}`, 422, `${id} is listed twice`);
+      seen.add(id);
+    }
+    for (const id of dirs) {
+      if (multis.some((m) => m.id === id)) fail(`multi-dir-member-not-single:${id}`, 422, `${id} is itself a multi-directory project`);
+      if (!projects.some((p) => p.id === id)) fail(`multi-dir-member-unknown:${id}`, 422, `${id} is not a registered single project`);
+    }
+    const members = dirs.map((id): MultiDirMember => {
+      const p = projects.find((entry) => entry.id === id)!;
+      return { key: id, repoId: controlRepoKey(id), kind: projectKindOf(p), path: p.path };
+    });
+    for (let i = 0; i < members.length; i += 1) {
+      for (let j = i + 1; j < members.length; j += 1) {
+        const a = realOf(members[i]!.path);
+        const b = realOf(members[j]!.path);
+        if (sameDir(a, b) || inside(a, b) || inside(b, a)) fail(`multi-dir-member-nested:${dirs[i]}:${dirs[j]}`, 422, `${dirs[i]} and ${dirs[j]} are the same directory or one is inside the other`);
+      }
+    }
+    return members;
+  };
+  /** The loader's form of the same checks: one named message for an entry, or null. */
+  const multiIssue = (entry: MultiDirProjectEntryV1, projects: readonly ProjectEntryV1[], multis: readonly MultiDirProjectEntryV1[]): string | null => {
+    try { checkedDirs(entry.dirs, projects, multis); return null; }
+    catch (error) { return error instanceof ProjectRegistryError ? error.code : (error as Error).message; }
+  };
+  const multiRuntime = (entry: MultiDirProjectEntryV1, projects: readonly ProjectEntryV1[]): { repoId: string; displayName: string; dirs: MultiDirMember[] } => ({
+    repoId: controlRepoKey(entry.id), displayName: entry.name,
+    dirs: entry.dirs.map((id) => { const p = projects.find((x) => x.id === id)!; return { key: id, repoId: controlRepoKey(id), kind: projectKindOf(p), path: p.path }; }),
+  });
+  const realPathsOf = (entry: MultiDirProjectEntryV1, projects: readonly ProjectEntryV1[]): string[] =>
+    entry.dirs.map((id) => realOf(projects.find((p) => p.id === id)!.path));
 
   const controlEntry = (p: ProjectEntryV1): TrustedRepositoryConfig => ({ repoId: controlRepoKey(p.id), displayName: p.name, path: p.path });
 
@@ -201,6 +280,57 @@ export function createProjectRegistry(input: {
         errors.push(`project ${f.id}: ${(error as Error).message}`);
       }
     }
+    // Multi-directory projects spec §4.1: a bad member reference skips that entry alone, and is named; the entry stays
+    // in lastGood, so an edit cannot silently drop it. A removal or member move of a running one waits for a restart.
+    const multis = config.multiDirProjects ?? [];
+    const skipped = new Set<string>();
+    for (const r of [...runningMulti]) {
+      const f = multis.find((m) => m.id === r.id);
+      if (f === undefined) { pending.push(`removed:${r.id}`); continue; }
+      if (f.name !== r.name) {
+        try { control?.renameMulti?.(controlRepoKey(r.id), f.name); r.name = f.name; }
+        catch (error) { errors.push(`multi ${f.id}: ${(error as Error).message}`); }
+      }
+      const sameDirs = f.dirs.length === r.dirs.length && f.dirs.every((id, i) => id === r.dirs[i]);
+      if (!sameDirs) {
+        const issue = multiIssue(f, config.projects, multis);
+        if (issue !== null) {
+          errors.push(`multi ${f.id}: ${issue}`);
+          const index = runningMulti.indexOf(r);
+          if (index !== -1) runningMulti.splice(index, 1);
+          multiPaths.delete(r.id);
+          try { control?.removeMulti?.(controlRepoKey(r.id)); }
+          catch (error) { errors.push(`multi ${f.id}: ${(error as Error).message}`); }
+          skipped.add(r.id);
+          continue;
+        }
+        try {
+          control?.setMultiDirs?.(controlRepoKey(r.id), multiRuntime(f, config.projects).dirs);
+          r.dirs = [...f.dirs];
+          multiPaths.set(r.id, realPathsOf(f, config.projects));
+        } catch (error) { errors.push(`multi ${f.id}: ${(error as Error).message}`); }
+      } else {
+        const recorded = multiPaths.get(r.id) ?? [];
+        const missing = r.dirs.find((id) => !config.projects.some((p) => p.id === id));
+        if (missing !== undefined) {
+          // The member's removal reaches the runtime at the next start, as a single project's does: the multi keeps
+          // its last-known members and stays named in pendingRestart.
+          errors.push(`multi ${f.id}: multi-dir-member-unknown:${missing}`);
+          pending.push(`multi:${f.id}`);
+          continue;
+        }
+        if (r.dirs.some((id, i) => realOf(config.projects.find((p) => p.id === id)!.path) !== recorded[i])) pending.push(`multi:${f.id}`);
+      }
+    }
+    for (const f of multis) {
+      if (runningMulti.some((r) => r.id === f.id) || skipped.has(f.id)) continue;
+      const issue = multiIssue(f, config.projects, multis);
+      if (issue !== null) { errors.push(`multi ${f.id}: ${issue}`); continue; }
+      try { control?.addMulti?.(multiRuntime(f, config.projects)); }
+      catch (error) { errors.push(`multi ${f.id}: ${(error as Error).message}`); continue; }
+      runningMulti.push({ id: f.id, name: f.name, dirs: [...f.dirs] });
+      multiPaths.set(f.id, realPathsOf(f, config.projects));
+    }
     pendingRestart = pending.sort(compareText);
     fileError = errors.length > 0 ? errors.join("; ") : null;
   };
@@ -235,14 +365,31 @@ export function createProjectRegistry(input: {
   for (const p of running) if (p.name !== p.id) control?.rename(controlRepoKey(p.id), p.name);
   // In-repo plan path spec 2026-10-21 §2.4: the filed plans join at boot; one that no longer checks out is named.
   const bootPlanErrors = running.flatMap(joinPlans);
-  if (bootPlanErrors.length > 0) fileError = bootPlanErrors.join("; ");
+  // Multi-directory projects spec §4.1: boot validates member references the same way a hand edit does.
+  const bootMultiErrors: string[] = [];
+  for (const entry of bootConfig.multiDirProjects ?? []) {
+    const issue = multiIssue(entry, bootConfig.projects, bootConfig.multiDirProjects ?? []);
+    if (issue !== null) { bootMultiErrors.push(`multi ${entry.id}: ${issue}`); continue; }
+    try { control?.addMulti?.(multiRuntime(entry, bootConfig.projects)); }
+    catch (error) { bootMultiErrors.push(`multi ${entry.id}: ${(error as Error).message}`); continue; }
+    runningMulti.push({ id: entry.id, name: entry.name, dirs: [...entry.dirs] });
+    multiPaths.set(entry.id, realPathsOf(entry, bootConfig.projects));
+  }
+  const bootErrors = [...bootPlanErrors, ...bootMultiErrors];
+  if (bootErrors.length > 0) fileError = bootErrors.join("; ");
 
   const view = (): ProjectsListV1 => ({
     source: "file", editable: true,
     projects: running.map((p) => ({ ...p })).sort((a, b) => compareText(a.id, b.id)),
+    ...(runningMulti.length === 0 ? {} : {
+      multiDirProjects: runningMulti.map((m) => ({ id: m.id, name: m.name, dirs: [...m.dirs] })).sort((a, b) => compareText(a.id, b.id)),
+    }),
     pendingRestart: [...pendingRestart],
     fileError,
   });
+
+  const containingName = (id: string | null, name: string): boolean =>
+    [...lastGood.projects, ...(lastGood.multiDirProjects ?? [])].some((p) => p.id !== id && p.name === name);
 
   return {
     list() { refresh(); return view(); },
@@ -251,24 +398,66 @@ export function createProjectRegistry(input: {
       writable();
       const trimmed = name.trim();
       if (trimmed.length === 0) fail("project-name-invalid", 422, "a project needs a name");
-      if (lastGood.projects.some((p) => p.name === trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
+      if (containingName(null, trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
       const real = checkedPath(path);
       if (holderOf(real) !== undefined) fail("project-path-taken", 409, `${real} is already a project`);
-      const entry: ProjectEntryV1 = { id: deriveProjectId(trimmed, real, new Set([...lastGood.projects, ...running].map((p) => p.id))), name: trimmed, path: real };
+      // A multi project's id is taken too, so a single derived from the same name suffixes rather than clashing.
+      const taken = new Set([...lastGood.projects, ...(lastGood.multiDirProjects ?? []), ...running, ...runningMulti].map((p) => p.id));
+      const entry: ProjectEntryV1 = { id: deriveProjectId(trimmed, real, taken), name: trimmed, path: real };
       precheck(entry);
       write({ ...lastGood, projects: [...lastGood.projects, entry] });
       join(entry);
       return { ...entry };
     },
+    addMulti(name: string, dirs: string[]) {
+      refresh();
+      writable();
+      const trimmed = name.trim();
+      if (trimmed.length === 0) fail("project-name-invalid", 422, "a project needs a name");
+      if (containingName(null, trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
+      const multis = lastGood.multiDirProjects ?? [];
+      const members = checkedDirs(dirs, lastGood.projects, multis);
+      const taken = new Set([...lastGood.projects, ...multis, ...running, ...runningMulti].map((p) => p.id));
+      const entry: MultiDirProjectEntryV1 = { id: deriveProjectId(trimmed, members[0]!.path, taken), name: trimmed, dirs: [...dirs] };
+      write({ ...lastGood, multiDirProjects: [...multis, entry] });
+      runningMulti.push({ ...entry, dirs: [...entry.dirs] });
+      multiPaths.set(entry.id, realPathsOf(entry, lastGood.projects));
+      control?.addMulti?.(multiRuntime(entry, lastGood.projects));
+      return { ...entry, dirs: [...entry.dirs] };
+    },
+    setDirs(id: string, dirs: string[]) {
+      refresh();
+      writable();
+      const r = runningMulti.find((m) => m.id === id);
+      const f = lastGood.multiDirProjects?.find((m) => m.id === id);
+      if (r === undefined || f === undefined) return fail("project-unknown", 404, `no multi-directory project ${JSON.stringify(id)}`);
+      const multis = lastGood.multiDirProjects ?? [];
+      const members = checkedDirs(dirs, lastGood.projects, multis);
+      const entry: MultiDirProjectEntryV1 = { ...f, dirs: [...dirs] };
+      write({ ...lastGood, multiDirProjects: multis.map((m) => (m.id === id ? entry : m)) });
+      r.dirs = [...dirs];
+      multiPaths.set(id, realPathsOf(entry, lastGood.projects));
+      control?.setMultiDirs?.(controlRepoKey(id), members);
+      return { ...entry, dirs: [...entry.dirs] };
+    },
     rename(id: string, name: string) {
       refresh();
       writable();
+      const trimmed = name.trim();
+      if (trimmed.length === 0) fail("project-name-invalid", 422, "a project needs a name");
+      const m = runningMulti.find((p) => p.id === id);
+      const fm = lastGood.multiDirProjects?.find((p) => p.id === id);
+      if (m !== undefined && fm !== undefined) {
+        if (containingName(id, trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
+        write({ ...lastGood, multiDirProjects: lastGood.multiDirProjects!.map((p) => (p.id === id ? { ...p, name: trimmed } : p)) });
+        m.name = trimmed;
+        control?.renameMulti?.(controlRepoKey(id), trimmed);
+        return { ...m, dirs: [...m.dirs] };
+      }
       const r = running.find((p) => p.id === id);
       const f = lastGood.projects.find((p) => p.id === id);
       if (r === undefined || f === undefined) return fail("project-unknown", 404, `no project ${JSON.stringify(id)}`);
-      const trimmed = name.trim();
-      if (trimmed.length === 0) fail("project-name-invalid", 422, "a project needs a name");
-      if (lastGood.projects.some((p) => p.id !== id && p.name === trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
+      if (containingName(id, trimmed)) fail("project-name-taken", 409, `a project is already called ${JSON.stringify(trimmed)}`);
       write({ ...lastGood, projects: lastGood.projects.map((p) => (p.id === id ? { ...p, name: trimmed } : p)) });
       r.name = trimmed;
       control?.rename(controlRepoKey(id), trimmed);

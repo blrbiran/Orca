@@ -34,6 +34,7 @@ import { useTranslation } from "react-i18next";
 import {
   correctionBody,
   addProject,
+  addMultiProject,
   failureFrom,
   fetchChains,
   fetchDecision,
@@ -45,6 +46,7 @@ import {
   recordReview,
   renameProject,
   registerPlan,
+  setProjectDirs,
   requestChainStart,
   requestChainStop,
   startChainBody,
@@ -1631,6 +1633,16 @@ export function App(): JSX.Element {
           }}
           onRename={async (id, name) => {
             const result = await renameProject(id, name);
+            if (result.ok) await rereadAfterProjectChange();
+            return result;
+          }}
+          onAddMulti={async (input) => {
+            const result = await addMultiProject(input);
+            if (result.ok) { await rereadAfterProjectChange(); chooseProject(result.body.project.projectKey); }
+            return result;
+          }}
+          onSetDirs={async (id, dirs) => {
+            const result = await setProjectDirs(id, dirs);
             if (result.ok) await rereadAfterProjectChange();
             return result;
           }}

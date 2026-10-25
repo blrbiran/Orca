@@ -25,7 +25,7 @@ const integration: RepositoryIntegrationV1 = { schema: "orca-repository-integrat
 
 describe("dir projects in the panel (flow spec §5.1)", () => {
   it("D1: the project select badges a dir project and leaves a repository's label as it was", () => {
-    render(<ProjectControl answer={answer} project="articles" onProject={vi.fn()} onAdd={vi.fn()} onRename={vi.fn()} />);
+    render(<ProjectControl answer={answer} project="articles" onProject={vi.fn()} onAdd={vi.fn()} onRename={vi.fn()} onAddMulti={vi.fn()} onSetDirs={vi.fn()} />);
     expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Articles (folder)", "Orca"]);
   });
 

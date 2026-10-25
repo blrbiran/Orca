@@ -217,12 +217,17 @@ export const fetchChains = (): Promise<{ repos: ChainRepoView[] }> => getJson<{ 
 export const fetchProjects = (): Promise<ProjectsAnswerV1> => getJson<ProjectsAnswerV1>("/api/projects");
 /** POST /api/projects -- project registry spec §6. */
 export const addProject = (input: { name: string; path: string }): Promise<PostResult<{ project: ProjectV1 }>> => postJson("/api/projects", input);
+/** POST /api/projects with dirs -- multi-directory projects spec §4.2. */
+export const addMultiProject = (input: { name: string; dirs: string[] }): Promise<PostResult<{ project: ProjectV1 }>> => postJson("/api/projects", input);
 /** POST /api/projects/:id/plans -- in-repo plan path spec 2026-10-21 (#65): register, or re-trust, a plan file. */
 export const registerPlan = (projectKey: string, path: string): Promise<PostResult<{ plan: { id: string; path: string; sha256: string } }>> =>
   postJson(`/api/projects/${encodeURIComponent(projectKey)}/plans`, { path });
 /** PATCH /api/projects/:id -- project registry spec §6. */
 export const renameProject = (id: string, name: string): Promise<PostResult<{ project: ProjectV1 }>> =>
   postJson(`/api/projects/${encodeURIComponent(id)}`, { name }, "PATCH");
+/** PATCH /api/projects/:id with dirs -- multi-directory projects spec §4.2: replace the order. */
+export const setProjectDirs = (id: string, dirs: string[]): Promise<PostResult<{ project: ProjectV1 }>> =>
+  postJson(`/api/projects/${encodeURIComponent(id)}`, { dirs }, "PATCH");
 
 export interface StartChainInput {
   repoKey: string;
