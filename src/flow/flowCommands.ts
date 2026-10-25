@@ -7,7 +7,7 @@
  *
  * `by`/`via` are CLI v2's attribution of the route (attributionOf): the person, never an agent, and the channel.
  */
-import { routedAttributionFor, routedPersonAuthorityFor } from "../control/commandClient.js";
+import { routedAttributionFor, routedPauseAuthorityFor, routedPersonAuthorityFor } from "../control/commandClient.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "../control/commandLedger.js";
 import { ControlError, type KnownControlErrorCode } from "../control/errors.js";
 import type { ControlStore } from "../control/store.js";
@@ -145,7 +145,7 @@ async function act(flow: FlowDeps, command: FlowCommand, projects: () => Readonl
       const p = command.payload;
       loadRun(flow.store, p.runId);
       const stored = await acceptMessage(flow, p.runId, { kind: p.kind, target: p.target, body: p.body, by: who.by, via: who.via, requestId: command.commandId,
-        personAuthority: routedPersonAuthorityFor(command.commandId) });
+        personAuthority: routedPersonAuthorityFor(command.commandId), pauseAuthority: routedPauseAuthorityFor(command.commandId) });
       return { kind: "flow-message-stored", flowRunId: p.runId, seq: stored.seq, state: stored.state, reason: stored.reason, deduped: stored.deduped, ...deferHolds(flow, p, stored.state) };
     }
     case "flow-plan": {

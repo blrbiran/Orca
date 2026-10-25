@@ -16,13 +16,15 @@
 import { recordProjectionChange } from "../control/projectionJournal.js";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
+import { ControlError } from "../control/errors.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "../control/snapshot.js";
 import { MAX_AUTO_RETRIES } from "../control/requirementSchemas.js";
 import type { FlowNeeds } from "../control/reportedDecisions.js";
 import type { ControlStore } from "../control/store.js";
+import type { FlowStopMarker } from "../control/stopIntent.js";
 import { definitionHash, outputHashOfCommit, outputHashOfRecord, type SkillLock } from "./journal/fingerprint.js";
 import { runShell } from "./kinds/check.js";
-import { builtinKinds, type ExecutionBody, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
+import { builtinKinds, type ExecutionBody, type FlowPauseStep, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
   appendExecution, appendFlowDecision, appendMessage, FEEDBACK_KEY, finishExecution, getEffect, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setEffectState, setFlowRunState, setHead,
@@ -50,7 +52,7 @@ import type { FlowCallResult } from "./calls.js";
 import { completePlanCall, finishPlan, isOpenQuestion, makePlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
-import { consumeAtBoundary } from "./messages.js";
+import { consumeAtBoundary, consumeInterventions } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
 import { advanceIntakes, completeIntakeCall, feedbackForWork, hasBusyIntake } from "./feedback/intake.js";
 import { expansionParams, paramsIdentity, resolveStartParams, storeImages } from "./params.js";
@@ -854,11 +856,52 @@ export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution:
   await advanceRun(deps, run.row.id);
 }
 
+/** The marker a pause placed on a step's child (live transcript spec §10.5.1, plan D4). */
+const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
+  ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "pause" });
+
+/**
+ * Live transcript spec §10.5.1 (plan D2): the stops a pause owes. For every step of the run's `pauseIntent`, a missing
+ * stop is issued; a partial or unresolved stop, or one the flow did not place, is recorded on the run and left for the
+ * person's recovery; a complete stop waits for the resume. Expected refusals never throw through the pass. True when a
+ * stop was issued.
+ */
+async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
+  const intent = run.body.pauseIntent;
+  const children = deps.children;
+  if (intent === undefined || children === undefined) return false;
+  let issued = false;
+  for (const step of intent.steps) {
+    const state = children.stopState(step.childGroupId, pauseMarker(run, step));
+    if (state.state === "none") {
+      try {
+        children.stop(step.childGroupId, { acceptedAt: step.acceptedAt, deadlineAt: step.deadlineAt, flowStop: pauseMarker(run, step) });
+        issued = true;
+      } catch (error) {
+        // A person's own stop, or a foreign intent, refuses the flow's: recorded; the next pass tries again.
+        if (!(error instanceof ControlError)) throw error;
+        recordRunError(deps, run.row.id, `flow-pause-stop-failed:${step.stepKey}:${error.code}`);
+      }
+      continue;
+    }
+    // A pending stop is the normal state while the turn drains; a complete one is the resume's to lift.
+    if (state.state === "not-complete" && state.stopState === "handoff-pending") continue;
+    if (state.state === "not-complete") recordRunError(deps, run.row.id, `flow-pause-stop-incomplete:${step.stepKey}:${state.stopState}`);
+    else if (state.state === "foreign") recordRunError(deps, run.row.id, `flow-pause-stop-incomplete:${step.stepKey}:foreign`);
+  }
+  return issued;
+}
+
 /** One pass over a run: start at most one execution; true when something moved (the caller passes again). */
 async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   // Gaps spec §4.2: the person's feedback intakes move first, on any run that is not stopped -- a `done` or `paused` one
   // too (single calls on the person's request); only the intake waits for the person, never the run.
   if (run.row.state !== "stopped" && await advanceIntakes(deps, run)) return true;
+  // Live transcript spec §10.5.1 (plan D2): a pause or resume is taken mid-run, before any boundary.
+  if (await consumeInterventions(deps, run.row.id)) return true;
+  // A running or paused run keeps issuing the stops its pause owes; a paused run starts no new work below.
+  const settling = loadRun(deps.store, run.row.id);
+  if ((settling.row.state === "running" || settling.row.state === "paused") && await settleStopIntents(deps, settling)) return true;
   // §8.2: the person's messages are taken at a boundary only, never in the middle of a running step.
   if (await consumeAtBoundary(deps, run.row.id)) return true;
   const fresh = loadRun(deps.store, run.row.id);

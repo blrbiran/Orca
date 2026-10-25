@@ -10,8 +10,9 @@
  *   record, or files committed onto the active workspace output; the edited step is not re-run, later steps are planned.
  *   Gaps spec §9: an `edit` at a `round {stepKey, roundNo}` of a clarify step revises that round (kinds/clarify.ts); it
  *   makes no plan itself -- the revised step's consensus does.
- * - `command`: `pause`, `resume`, `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`. A command
- *   that does not hold at its boundary is stored `rejected` with the reason; `budget` is the human-only `flow-pool` verb's.
+ * - `command`: `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`; `pause` and `resume` are
+ *   interventions taken mid-run (consumeInterventions, live transcript spec §10.5.1). A command that does not hold at its
+ *   boundary is stored `rejected` with the reason; `budget` is the human-only `flow-pool` verb's.
  * - Gaps spec §6: `skip`, `defer {effects?}` and `fill` on a step (marks.ts derives the marks from the applied ones). A
  *   skip/defer closes the step's open effect record (discarded by the person), follows its newest execution with a
  *   `skipped` one carrying `body.mark`, takes it out of a running plan that had not run it, and recomposes the flow head
@@ -27,12 +28,14 @@ import { join } from "node:path";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { writeCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
+import { ControlError } from "../control/errors.js";
+import { flowHandoffDeadline, type FlowStopMarker } from "../control/stopIntent.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
 import {
-  advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordOfExecution, stepOf, vaultOf, writeRecord, type FlowDeps,
+  advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
 } from "./kernel.js";
-import type { ExecutionBody, LoadedRun } from "./kinds/registry.js";
+import type { ExecutionBody, FlowPauseStep, LoadedRun } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
 import { holdableAfter, holdTargets, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
@@ -43,6 +46,7 @@ import { hasAttachment } from "./feedback/attachments.js";
 import { feedbackShapeRefusal, markPlanned, openIntake, takeReadyIntake, withdrawIntakes } from "./feedback/intake.js";
 import {
   appendExecution, appendMessage, finishExecution, getEffect, getHead, getIntake, listExecutions, listMessages, setFlowRunParams, setFlowRunState, setFlowRunTemplate, setHead, setMessageState,
+  updateFlowRunBody,
   type ExecutionRow, type MessageRow,
 } from "./store.js";
 import { applyParamsChange, paramsIdentity, resolveParamsChange, type ParamsChange } from "./params.js";
@@ -84,6 +88,8 @@ const revisionOf = (body: Record<string, unknown>, roundNo: number): RevisionPay
 };
 
 const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill", "params"] as const;
+/** Live transcript spec §10.5.1: the commands taken mid-run by consumeInterventions, never at a boundary. */
+const INTERVENTIONS: ReadonlySet<string> = new Set(["pause", "resume"]);
 const stepKeyOf = (target: MessageTarget): string | null => ("stepKey" in target ? target.stepKey : null);
 
 /** What can be told at once, before any boundary: the shape and that the target exists. */
@@ -180,10 +186,15 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
     catch (error) { if (!(error instanceof FlowRefusal)) throw error; refusal = error.code; }
   }
   const at = deps.now();
+  // Live transcript spec §10.5.3: the routed facts a pause or resume is judged by are recorded with it; other commands
+  // keep only a mark's `personAuthority`.
+  const command = input.kind === "command" ? input.body.command : undefined;
+  const authority = command === "pause" ? { pauseAuthority: input.pauseAuthority === true }
+    : command === "resume" ? { personAuthority: input.personAuthority === true } : {};
   const { row, deduped } = deps.store.transaction(() => {
     const appended = appendMessage(deps.store, {
       flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind,
-      body: { ...input.body, ...(resolved === null ? {} : { resolved }), ...(isMark(input) ? { personAuthority: input.personAuthority === true } : {}), target: input.target },
+      body: { ...input.body, ...(resolved === null ? {} : { resolved }), ...(isMark(input) ? { personAuthority: input.personAuthority === true } : {}), ...authority, target: input.target },
       by: input.by, via: input.via, state: refusal === null ? "accepted" : "rejected", reason: refusal, at,
     });
     // Gaps spec §4.2: run-level or anchored feedback opens its intake with the message (and withdraws what it replaces).
@@ -196,6 +207,99 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
   }
   const stored = listMessages(deps.store, flowRunId).find((m) => m.seq === row.seq)!;
   return { state: stored.state, reason: stored.reason, seq: stored.seq, deduped };
+}
+
+/**
+ * Live transcript spec §10.5.1: the mid-run lane. An accepted `pause` or `resume` is taken at any time, in seq order, even
+ * while a step runs; every other command still waits for a boundary. Nothing here plans or recomposes. True when anything
+ * was taken (applied or rejected).
+ */
+export async function consumeInterventions(deps: FlowDeps, flowRunId: string): Promise<boolean> {
+  if (loadRun(deps.store, flowRunId).row.state === "stopped") return false;
+  const pending = listMessages(deps.store, flowRunId).filter((m) =>
+    m.state === "accepted" && m.kind === "command" && INTERVENTIONS.has(String((m.body as { command?: unknown }).command)));
+  for (const message of pending) {
+    try {
+      await applyIntervention(deps, loadRun(deps.store, flowRunId), message);
+      deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied"));
+    } catch (error) {
+      if (!(error instanceof FlowRefusal)) throw error;
+      deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "rejected", error.code));
+    }
+  }
+  return pending.length > 0;
+}
+
+/** The stop marker a pause places on a step's child (§10.5.1, plan D4). */
+const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
+  ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "pause" });
+
+/**
+ * §10.5.1 pause: record the intent, stop every running work child through the port and move the run to `paused`; the
+ * execution stays `running`. With no running work child the run simply pauses. A failed stop is the run's error, not a
+ * refusal of the pause: `settleStopIntents` retries it.
+ *
+ * §10.5.1 resume: only from `paused`, only with every child's stop complete (`resumable`); the batch resumes or the
+ * message is rejected and the intent stays. Success clears the intent and moves the run back to `running`.
+ */
+async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: MessageRow): Promise<void> {
+  const body = message.body as { command?: unknown; pauseAuthority?: unknown; personAuthority?: unknown };
+  if (body.command === "pause") {
+    if (body.pauseAuthority !== true) throw new FlowRefusal("flow-command-needs-person", "pause");
+    if (run.row.state !== "running") throw new FlowRefusal("flow-run-not-running", run.row.state);
+    const running = listExecutions(deps.store, run.row.id).filter((e) => e.state === "running" && e.kind === "work" && e.childGroupId !== null);
+    if (running.length === 0) {
+      deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "paused"));
+      return;
+    }
+    const acceptedAt = new Date(deps.now()).toISOString();
+    const steps: FlowPauseStep[] = running.map((execution) => {
+      const timeoutMs = deps.children?.attemptTimeoutMs(execution.childGroupId!) ?? null;
+      if (timeoutMs === null || !(timeoutMs > 0)) throw new FlowRefusal("flow-pause-timeout-unknown", execution.stepKey);
+      return {
+        stepKey: execution.stepKey, seq: execution.seq, childGroupId: execution.childGroupId!, acceptedAt,
+        deadlineAt: flowHandoffDeadline(acceptedAt, timeoutMs),
+      };
+    });
+    deps.store.transaction(() => {
+      setFlowRunState(deps.store, run.row.id, "running", "paused");
+      updateFlowRunBody(deps.store, run.row.id, (current) => ({ ...current, pauseIntent: { messageSeq: message.seq, at: acceptedAt, steps } }));
+    });
+    // Idempotent per marker; outside the transaction because the port writes the child's own rows. `settleStopIntents`
+    // retries a stop that failed, so the pause is not rejected for it.
+    for (const step of steps) {
+      try {
+        deps.children!.stop(step.childGroupId, { acceptedAt, deadlineAt: step.deadlineAt, flowStop: pauseMarker(run, step) });
+      } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        recordRunError(deps, run.row.id, `flow-pause-stop-failed:${step.stepKey}:${error.code}`);
+      }
+    }
+    return;
+  }
+  if (body.command !== "resume") throw new FlowRefusal("flow-command-unknown", String(body.command));
+  if (body.personAuthority !== true) throw new FlowRefusal("flow-command-needs-person", "resume");
+  if (run.row.state !== "paused") throw new FlowRefusal("flow-run-not-paused", run.row.state);
+  const intent = run.body.pauseIntent;
+  if (intent === undefined) {
+    deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "paused", "running"));
+    return;
+  }
+  const children = deps.children;
+  if (children === undefined) throw new FlowRefusal("flow-pause-stop-incomplete", "work-port-unavailable");
+  for (const step of intent.steps) {
+    const state = children.stopState(step.childGroupId, pauseMarker(run, step));
+    if (state.state !== "resumable") throw new FlowRefusal("flow-pause-stop-incomplete", `${step.stepKey}:${state.state === "not-complete" ? state.stopState : state.state}`);
+  }
+  // One batch: a refusal leaves the run paused with the intent in place (D8).
+  children.resume(intent.steps.map((step) => ({ childGroupId: step.childGroupId, flowStop: pauseMarker(run, step) })));
+  deps.store.transaction(() => {
+    updateFlowRunBody(deps.store, run.row.id, (current) => {
+      const { pauseIntent: _done, ...rest } = current;
+      return rest;
+    });
+    setFlowRunState(deps.store, run.row.id, "paused", "running");
+  });
 }
 
 /**
@@ -219,6 +323,8 @@ export async function consumeAtBoundary(deps: FlowDeps, flowRunId: string): Prom
     // paused: it plans nothing until the resume); until then only the intake waits.
     const pending = listMessages(deps.store, flowRunId).filter((m) => {
       if (m.state !== "accepted" || (m.body as { reapply?: unknown }).reapply !== undefined) return false;
+      // Live transcript spec §10.5.1: a pause or resume is taken mid-run by consumeInterventions, exactly once.
+      if (m.kind === "command" && INTERVENTIONS.has(String((m.body as { command?: unknown }).command))) return false;
       const intake = m.kind === "feedback" ? getIntake(deps.store, flowRunId, m.seq) : null;
       return intake === null || (intake.state === "ready" && !paused && !taken.includes(m.seq));
     });
@@ -297,8 +403,6 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
     deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, state, to));
   };
   switch (body.command) {
-    case "pause": move(["running"], "paused"); return null;
-    case "resume": move(["paused"], "running"); return null;
     case "stop": move(["running", "paused", "done"], "stopped"); deps.store.transaction(() => withdrawIntakes(deps.store, run.row.id, `run stopped by message ${message.seq}`, deps.now())); return null;
     case "retry": {
       const stepKey = stepKeyOf(target)!;

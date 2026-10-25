@@ -59,6 +59,9 @@ export interface LoadedRun {
   body: FlowRunBody;
 }
 export interface RoleResolution { agent: string; model: string | null; source: "project" | "global" | "template" | "default" }
+/** Live transcript spec §10.5.1: the pause a flow run is waiting on, with one entry per running work child. */
+export interface FlowPauseStep { stepKey: string; seq: number; childGroupId: string; acceptedAt: string; deadlineAt: string }
+export interface FlowPauseIntent { messageSeq: number; at: string; steps: FlowPauseStep[] }
 export interface FlowRunBody {
   templateRef: string; params: Record<string, ParamValue>; roles: Record<string, RoleResolution>; clarify: "skip" | null; unattended: boolean;
   projectId: string | null; dir: string | null; vaultPath: string | null; importCommit: string | null; by: string; via: string; startedAt: number;
@@ -66,6 +69,8 @@ export interface FlowRunBody {
   images?: Record<string, { source: string; sha256: string; ext: "png" | "jpg" | "gif" | "webp" }>;
   /** §8 step 2: a scheduled fire's schedule and slot (absent: a hand start). */
   origin?: { kind: "schedule"; scheduleId: string; slot: number };
+  /** Live transcript spec §10.5.1: the stops a pause placed on the run's running work children (absent: no pause). */
+  pauseIntent?: FlowPauseIntent;
   /** The last error a pump pass met advancing this run (other runs went on); cleared by the next clean pass. */
   lastError?: { message: string; at: number };
 }

@@ -139,15 +139,15 @@ describe("message stream (§8)", () => {
     } finally { await w.dispose(); }
   });
 
-  it("pause holds the run at its boundary; resume lets it go on", async () => {
+  it("pause holds the run; resume lets it go on", async () => {
     const w = await flowWorld({ t: TPL }); try {
       const { flowRunId } = await w.start({ templateRef: "builtin/t" });
       await w.advance();
-      await acceptMessage(w.deps, flowRunId, msg({ kind: "command", target: { kind: "run" }, body: { command: "pause" } }));
+      await acceptMessage(w.deps, flowRunId, msg({ kind: "command", target: { kind: "run" }, body: { command: "pause" }, pauseAuthority: true }));
       await w.answer(0, { content: "A1" });
       expect(runState(w, flowRunId)).toBe("paused");
       expect(w.calls).toHaveLength(1);
-      await acceptMessage(w.deps, flowRunId, msg({ kind: "command", target: { kind: "run" }, body: { command: "resume" } }));
+      await acceptMessage(w.deps, flowRunId, msg({ kind: "command", target: { kind: "run" }, body: { command: "resume" }, personAuthority: true }));
       await w.advance();
       expect(w.calls.at(-1)!.key.stepKey).toBe("b");
     } finally { await w.dispose(); }
