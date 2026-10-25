@@ -182,9 +182,12 @@ Test: `tests/control/multiDirOverview.test.ts` (new).
 ## Task O5 — split validation, qualified write sets, expanded contracts, export (§6.1–§6.2, §6.4) — M6
 
 Files: `src/control/requirementSplit.ts`, `src/scheduler/writeSet.ts`, `src/scheduler/graph.ts`,
-`src/control/loopPlans.ts`, `src/control/requirementExport.ts`, `src/control/requirementRecords.ts` (task record
-keeps `writes`), `src/control/planImport.ts` (accept path only), `src/control/requirementCalls.ts` (a multi group's
-split is parsed with `multiSplitOutputSchema` in `evaluateSplit`). Test: `tests/control/multiDirSplit.test.ts` (new).
+`src/control/requirementExport.ts`, `src/control/requirementRecords.ts` (task record keeps `writes`),
+`src/control/requirementSchemas.ts` (the multi split shape), `src/control/planImport.ts` (accept path only),
+`src/control/requirementCalls.ts` (a multi group's split is parsed with `multiSplitOutputSchema` in `evaluateSplit`),
+`src/control/requirementCommands.ts` (accept re-expands the frozen contracts), `src/control/requirementDocument.ts`,
+`src/scheduler/planFile.ts` (the archived contract's optional `repoKey`/`additionalRepos`), and the web draft types.
+Test: `tests/control/multiDirSplit.test.ts` (new), `tests/control/fixtures/multiRequirement.ts` (extracted harness).
 
 - [ ] Carry-over from O4 (the prompt and wire schema landed there; validation is here): `evaluateSplit` selects
   `multiSplitOutputSchema` for a multi group before the checks below. O4's commit leaves a multi split answer judged
