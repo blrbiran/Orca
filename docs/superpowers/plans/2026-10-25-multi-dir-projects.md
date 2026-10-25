@@ -256,8 +256,8 @@ cleanup), `src/scheduler/harvest.ts` (a reconciliation's claims). Tests: `tests/
 
 ## Task O7 — run landing D and the ledger (§8) — M9
 
-Files: `src/control/driverLanding.ts`, `src/control/dirGroup.ts` (`multiPrimaryRepoId` wiring),
-`src/control/driveRecord.ts` (journal fields). Test: `tests/control/multiDirLandingD.test.ts` (new).
+Files: `src/control/driverLanding.ts`, `src/control/driveRecord.ts` (journal fields),
+`src/control/executionDriver.ts` (new-drive defaults). Test: `tests/control/multiDirLandingD.test.ts` (new).
 
 - [ ] `stepD` multi: (1) per written dir in order, `old_k = tip(orca/<g>)`, `findLanding` (skip already-landed);
   (2) produce each merge commit in that directory's landing worktree **without swapping**, ledger only in the
