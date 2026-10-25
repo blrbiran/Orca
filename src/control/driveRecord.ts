@@ -120,6 +120,12 @@ export const driveRecordSchema = z.object({
     key: z.string().min(1), targetRepo: z.string().min(1), base: commitSchema, workspacePath: z.string().min(1),
     attemptSha: commitSchema.nullable().optional(),
   }).strict()).min(1).optional(),
+  // Multi-directory projects spec §8.1: the journal of a multi run's landing -- every directory's produced commit, written
+  // in one transaction before the first compare-and-swap, so a death after one swap still names the rest. Null (or absent)
+  // for every single-repository run; defaulted so an older record still parses.
+  landingPlan: z.array(z.object({ key: z.string().min(1), old: commitSchema, next: commitSchema }).strict()).nullable().default(null),
+  // §8.1 step 6: what each directory landed at, beside the primary's `landedCommit`. Defaulted for the same reason.
+  landedDirs: z.record(z.string().min(1), commitSchema).nullable().default(null),
   envelopeHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   inspectUnknown: safeInteger,
   outcome: z.string().min(1).nullable(),

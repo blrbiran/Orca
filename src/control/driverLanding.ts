@@ -16,7 +16,7 @@ import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions
 import { ccloopEvidenceString, runEvidence, runLedgerEvents, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { flowGroupOf, isDirFlowGroup, isFlowChildGroup } from "../flow/groups.js";
 import { recordLandedTip } from "./dirGroup.js";
-import { isMultiGroup } from "./multiGroup.js";
+import { isMultiGroup, multiDirOf, multiPrimaryRepoId } from "./multiGroup.js";
 import { appendFlowDecision } from "../flow/store.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
@@ -29,7 +29,7 @@ import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loop
 import { netChangeSet } from "../scheduler/harvest.js";
 import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
 import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
-import { QUIET_GIT, compareAndSwap, conflictPathOf, incomingRefOf, landingPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
+import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
 import type { ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PlanFile, PlanTask } from "../scheduler/planFile.js";
@@ -55,15 +55,20 @@ export async function findLanding(targetRepo: string, base: string, tip: string,
   return hit[0]!;
 }
 
-export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommit: string): void {
+export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommit: string | null, landedDirs: Record<string, string> | null = null): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
     if (run.state !== "collected" && run.state !== "reconciling") return;
     run.state = "landed";
     landedWithPending(deps.store, run);
-    // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move.
-    recordLandedTip(deps.store, run.groupId, landedCommit);
-    run.drive = { ...run.drive!, landedCommit };
+    // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move. A multi run's primary is
+    // the only directory whose tip this records; the rest stay in `landedDirs`.
+    if (landedCommit !== null) recordLandedTip(deps.store, run.groupId, landedCommit);
+    run.drive = {
+      ...run.drive!, landedCommit,
+      ...(run.drive!.landingPlan === null ? {} : { landingPlan: null }),
+      ...(landedDirs === null ? {} : { landedDirs }),
+    };
     saveDriverRun(deps.store, run);
   });
 }
@@ -124,7 +129,8 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
   const { store } = deps;
   const run = readDriverRun(store, runId);
   let targetRepo: string;
-  try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
+  // Multi-directory projects spec §10: a multi group's ledger lives in the primary (registered first) member.
+  try { targetRepo = deps.resolveRepository(isMultiGroup(store, run.groupId) ? multiPrimaryRepoId(store, run.groupId) : groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "E", "repository-path"); return "blocked"; }
   // Flow engine spec §6.2: a `dir` flow group makes no ledger-only commit; its decisions are written to `flow_decisions` in
   // the write that records the result, and a replay that finds them there writes none again.
@@ -250,7 +256,10 @@ async function multiCriteriaFlag(deps: ExecutionDriverDeps, run: DriverRun, at: 
   if (drive === undefined || dirs === undefined || run.taskId === null || drive.base === null) return null;
   const { contract } = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId);
   const extras = (contract as unknown as { context?: { additionalRepos?: Array<{ key?: unknown; requiredChecks?: unknown }> } }).context?.additionalRepos;
-  const checksOf = (key: string, index: number): readonly string[] => {
+  // The task's own contract belongs to the first WRITTEN directory (`requirementSplit.ts` builds it from
+  // `orderWrites[0]`, and a one-directory write set keeps an ordinary contract rooted there) -- not to the group's
+  // registered primary, which need not be written at all. Extras are looked up by key.
+  const checksAt = (index: number, key: string): readonly string[] => {
     if (index === 0) return contract.verification.requiredChecks;
     const entry = Array.isArray(extras) ? extras.find((candidate) => candidate.key === key) : undefined;
     return Array.isArray(entry?.requiredChecks) ? entry.requiredChecks.filter((check): check is string => typeof check === "string") : [];
@@ -258,8 +267,9 @@ async function multiCriteriaFlag(deps: ExecutionDriverDeps, run: DriverRun, at: 
   const changes: CriteriaChange[] = [];
   for (const [index, dir] of dirs.entries()) {
     if (dir.attemptSha == null) continue;
+    // C names each attempt's result repository by written position, for the same reason.
     const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
-    const change = await classifyCriteriaChange(resultRepo, dir.base, dir.attemptSha, checksOf(dir.key, index));
+    const change = await classifyCriteriaChange(resultRepo, dir.base, dir.attemptSha, checksAt(index, dir.key));
     if (flagged(change)) changes.push(change);
   }
   if (changes.length === 0) return null;
@@ -318,6 +328,8 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
   // Handoff delivery spec §5.2 N2 (controller decision): at most one landing of a group is reconciling. A
   // sibling landing now would move the tip under it and make it land, and maybe pay, again.
   if (groupHasReconcilingRun(store, run.groupId)) return false;
+  // Multi-directory projects spec §8.1: every written directory lands, produced first and swapped in registered order.
+  if (isMultiGroup(store, run.groupId)) return stepDMulti(deps, runId, run);
   const drive = run.drive;
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
@@ -362,6 +374,140 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
   deps.crash?.("D-after-cas");
   markLanded(deps, runId, landed.commit);
   return true;
+}
+
+/**
+ * Multi-directory projects spec §8.1: produce every written directory's merge without swapping, journal the plan in one
+ * transaction, then compare-and-swap each in registered order. The run's ledger lives only in the group primary's commit;
+ * when the primary was not written, it is a ledger-only commit (E's algorithm) on the primary's tip. A conflict swaps
+ * nothing and blocks by directory name (spec §8.2 names the directories an earlier round already landed).
+ */
+async function stepDMulti(deps: ExecutionDriverDeps, runId: string, run: DriverRun): Promise<boolean> {
+  const { store } = deps, drive = run.drive!, groupId = run.groupId, dirs = drive.dirs;
+  if (dirs === undefined || dirs.length === 0) { blockRun(deps, runId, "D", "multi-dir-writes-missing"); return true; }
+  const multi = multiDirOf(readGroup(store, groupId));
+  if (multi === null) throw new ControlError("multi-dir-invalid", `not-multi:${groupId}`);
+  const primaryKey = multi.dirs[0]!.key;
+  const primary = dirs.find((dir) => dir.key === primaryKey);
+  let primaryRepo: string;
+  try { primaryRepo = primary?.targetRepo ?? deps.resolveRepository(multiPrimaryRepoId(store, groupId)); }
+  catch { blockRun(deps, runId, "D", "repository-path"); return true; }
+  const ref = workBranchRef(groupId);
+  const landedDirs: Record<string, string> = {};
+  const produced: Array<{ key: string; repo: string; old: string; next: string }> = [];
+  // The primary's ledger when it was not written: a ledger-only commit on its tip, produced before anything is swapped.
+  // Replay recognises it by `.decisions/<runId>.jsonl` at the tip (only this run writes that file).
+  if (primary === undefined) {
+    const old = await revParse(primaryRepo, ref);
+    const ledger = await produceMultiLedger(deps, run, primaryKey, primaryRepo, old);
+    if (ledger?.kind === "already") landedDirs[primaryKey] = ledger.commit;
+    else if (ledger?.kind === "produced") produced.push({ key: primaryKey, repo: primaryRepo, old, next: ledger.commit });
+  }
+  for (const [index, dir] of dirs.entries()) {
+    const attempt = dir.attemptSha ?? null;
+    if (attempt === null) continue;
+    const old = await revParse(dir.targetRepo, ref);
+    const found = await findLanding(dir.targetRepo, dir.base, old, attempt);
+    if (found !== null) { landedDirs[dir.key] = found; continue; }
+    const merged = await produceMultiMerge(deps, run, index, { key: dir.key, targetRepo: dir.targetRepo, attemptSha: attempt }, old, dir.key === primaryKey);
+    if ("conflict" in merged) {
+      const landed = Object.keys(landedDirs);
+      const reason = `multi-dir-landing-conflict:${dir.key}:${merged.conflict.slice(0, 20).join(", ")}${landed.length === 0 ? "" : `; landed in: ${landed.join(", ")}`}`;
+      blockRun(deps, runId, "D", reason.slice(0, 2048), { landingPlan: null, ...(landed.length === 0 ? {} : { landedDirs }) });
+      return true;
+    }
+    produced.push({ key: dir.key, repo: dir.targetRepo, old, next: merged.next });
+  }
+  if (produced.length > 0 && !write(deps, () => {
+    const current = readDriverRun(store, runId);
+    if (current.state !== "collected" || current.drive === undefined) return false;
+    current.drive = { ...current.drive, landingPlan: produced.map(({ key, old, next }) => ({ key, old, next })) };
+    saveDriverRun(store, current);
+    return true;
+  })) return false;
+  for (const [index, entry] of produced.entries()) {
+    await deps.beforeCas?.();
+    // A moved tip ends the round; the next round finds the dirs already swapped and produces only the rest.
+    if (!(await compareAndSwap(entry.repo, ref, entry.next, entry.old))) return false;
+    landedDirs[entry.key] = entry.next;
+    // The single-repository path's crash hook, after this run's first swap.
+    if (index === 0) deps.crash?.("D-after-cas");
+  }
+  markLanded(deps, runId, landedDirs[primaryKey] ?? null, landedDirs);
+  return true;
+}
+
+type MultiDirEntry = { key: string; targetRepo: string; attemptSha: string };
+
+/** §8.1 step 2: the primary's ledger when it was not written, as a ledger-only commit on its work branch tip. */
+async function produceMultiLedger(
+  deps: ExecutionDriverDeps, run: DriverRun, key: string, repo: string, old: string,
+): Promise<{ kind: "already"; commit: string } | { kind: "produced"; commit: string } | null> {
+  const name = `${run.runId}.jsonl`, subject = `orca: decisions ${run.runId}`;
+  if (await hasPath(repo, old, `.decisions/${name}`)) return { kind: "already", commit: await findLedgerCommit(repo, old, subject) };
+  const landing = extraLandingPathOf(deps.roots, run.runId, key);
+  await removeOwnPath(repo, deps.roots, landing);
+  await git(repo, [...QUIET_GIT, "worktree", "add", "--detach", landing, old]);
+  try {
+    const { reported, evidence, at } = await runLedgerInputs(deps, run.runId);
+    const criteria = await criteriaFlagOf(deps, run, repo, at);
+    const { writtenIds, pending } = await writeRunLedger(join(landing, ".decisions"), {
+      ledgerRun: run.runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence,
+    });
+    // Before the swap: a death after it still has these for the landing's write (markLanded).
+    stagePending(deps, run.runId, pending, null, criteria?.flag ?? null);
+    if (writtenIds.length === 0) return null;
+    await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", name)]);
+    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "-m", subject]);
+    return { kind: "produced", commit: await revParse(landing, "HEAD") };
+  } finally {
+    await removeOwnPath(repo, deps.roots, landing);
+  }
+}
+
+/**
+ * §8.1 step 2: one written directory's merge into the current tip of its work branch, in that directory's landing
+ * worktree. Nothing is swapped here; a conflict answers its paths and leaves the worktree clean. The ledger is written
+ * only into the primary's commit (spec §10).
+ */
+async function produceMultiMerge(
+  deps: ExecutionDriverDeps, run: DriverRun, index: number, dir: MultiDirEntry, old: string, primaryDir: boolean,
+): Promise<{ next: string } | { conflict: string[] }> {
+  const runId = run.runId, drive = run.drive!;
+  const attempt = dir.attemptSha;
+  const landing = index === 0 ? landingPathOf(deps.roots, runId) : extraLandingPathOf(deps.roots, runId, dir.key);
+  // C names each attempt's result repository by written position (`repo` for the first, `repos/<key>` for the rest) --
+  // not by the group's registered primary, which need not be written at all.
+  const source = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+  await removeOwnPath(dir.targetRepo, deps.roots, landing);
+  await git(dir.targetRepo, [...QUIET_GIT, "worktree", "add", "--detach", landing, old]);
+  try {
+    await git(landing, [...QUIET_GIT, "fetch", "--no-tags", source, `+${attempt}:${incomingRefOf(runId)}`]);
+    try {
+      await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "merge", "--no-ff", "--no-commit", incomingRefOf(runId)]);
+    } catch {
+      const conflicted = (await git(landing, [...QUIET_GIT, "diff", "--name-only", "--diff-filter=U"])).trim().split("\n").filter((path) => path.length > 0);
+      await git(landing, [...QUIET_GIT, "merge", "--abort"]).catch(() => undefined);
+      return { conflict: conflicted };
+    }
+    let pending: PendingEntry[] = [];
+    let criteria: { decision: DecisionEvent; flag: CriteriaFlag } | null = null;
+    if (primaryDir) {
+      const { reported, evidence, at } = await runLedgerInputs(deps, runId);
+      criteria = await criteriaFlagOf(deps, run, landing, at);
+      const ledger = await writeRunLedger(join(landing, ".decisions"), {
+        ledgerRun: runId, reported, codeAuthored: criteria === null ? [] : [criteria.decision], at, evidence,
+      });
+      pending = ledger.pending;
+      if (ledger.writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
+    }
+    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
+    // Before the swap: a death after it still has these for the landing's write.
+    if (primaryDir) stagePending(deps, runId, pending, null, criteria?.flag ?? null);
+    return { next: await revParse(landing, "HEAD") };
+  } finally {
+    await removeOwnPath(dir.targetRepo, deps.roots, landing);
+  }
 }
 
 /**
