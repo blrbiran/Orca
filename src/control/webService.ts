@@ -22,6 +22,7 @@ import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, r
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { isDirGroup, type DirProjectOf } from "./dirGroup.js";
+import type { MultiDirProjectOf } from "./multiGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults, type ImportOrigin } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
@@ -148,6 +149,12 @@ export interface WebServiceDeps extends AsyncImportDeps {
    * dir workspace), import-plan and the debug opens (refused), and the route's dispatched-run payload check.
    */
   dirProjectOf?: DirProjectOf;
+  /**
+   * Multi-directory projects spec §4.3, §5.2: a multi-dir repo id has no single path (the settings setters refuse it) and
+   * its members are what requirement-open freezes. Absent, no id is a multi id.
+   */
+  multiDirRepoId?: (repoId: string) => boolean;
+  multiDirProjectOf?: MultiDirProjectOf;
   /** Debug task plan Task 11: what correction-record/-withdraw need from the panel (correctionCommands.ts). Absent, both refuse corrections-store-unconfigured. */
   panelCorrections?: PanelCorrections;
   /**
@@ -1119,19 +1126,39 @@ export class WebControlService {
   }
   /** Protect-acceptance-criteria spec §5: an owner turns the repository's automatic reviewer on or off. */
   setCriteriaReview(command: SetCriteriaReviewCommand): WebCommandResult {
-    return this.mutate(() => applySetCriteriaReview({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId) => this.deps.knownRepository?.(repoId) ?? false }, command)) as WebCommandResult;
+    return this.mutate(() => applySetCriteriaReview({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.settingsKnownRepository() }, command)) as WebCommandResult;
   }
-  /** Checks spec 2026-10-22 §4.4: a person's check settings, schedules, locks, run-now and resume (checks/commands.ts). */
+  /**
+   * Checks spec 2026-10-22 §4.4: a person's check settings, schedules, locks, run-now and resume (checks/commands.ts).
+   * Multi-directory projects spec §4.3: set-check-settings refuses a multi id inside its transaction; the orchestration
+   * commands below are unchanged.
+   */
   private checkDeps() {
     return { store: this.store, admissionGate: this.deps.admissionGate, knownRepository: (repoId: string) => this.deps.knownRepository?.(repoId) ?? false };
   }
-  setCheckSettings(command: CheckCommand<"set-check-settings">): WebCommandResult { return this.mutate(() => applySetCheckSettings(this.checkDeps(), command)) as WebCommandResult; }
-  setScheduledCheck(command: CheckCommand<"set-scheduled-check">): WebCommandResult { return this.mutate(() => applySetScheduledCheck(this.checkDeps(), command)) as WebCommandResult; }
+  /**
+   * Multi-directory projects spec §4.3: the settings setters' known test. A multi id's settings live on its members, so
+   * it is refused by name -- thrown inside the transaction, which books it as the command's durable outcome.
+   */
+  private settingsKnownRepository(): (repoId: string) => boolean {
+    return (repoId: string) => {
+      if (this.deps.multiDirRepoId?.(repoId) ?? false) throw new ControlError("multi-dir-project-setting-unsupported");
+      return this.deps.knownRepository?.(repoId) ?? false;
+    };
+  }
+  setCheckSettings(command: CheckCommand<"set-check-settings">): WebCommandResult {
+    return this.mutate(() => applySetCheckSettings({ ...this.checkDeps(), knownRepository: this.settingsKnownRepository() }, command)) as WebCommandResult;
+  }
+  setScheduledCheck(command: CheckCommand<"set-scheduled-check">): WebCommandResult {
+    return this.mutate(() => applySetScheduledCheck({ ...this.checkDeps(), knownRepository: this.settingsKnownRepository() }, command)) as WebCommandResult;
+  }
   setCheckLocks(command: CheckCommand<"set-check-locks">): WebCommandResult { return this.mutate(() => applySetCheckLocks(this.checkDeps(), command)) as WebCommandResult; }
   runCheckNow(command: CheckCommand<"run-check-now">): WebCommandResult { return this.mutate(() => applyRunCheckNow(this.checkDeps(), command)) as WebCommandResult; }
   resumeCheck(command: CheckCommand<"resume-check">): WebCommandResult { return this.mutate(() => applyResumeCheck(this.checkDeps(), command)) as WebCommandResult; }
   /** Flow engine spec §11.2: a person's flow settings of a layer and the global locks (flow/settingsCommands.ts). */
-  setFlowSettings(command: FlowSettingsCommand<"set-flow-settings">): WebCommandResult { return this.mutate(() => applySetFlowSettings(this.checkDeps(), command)) as WebCommandResult; }
+  setFlowSettings(command: FlowSettingsCommand<"set-flow-settings">): WebCommandResult {
+    return this.mutate(() => applySetFlowSettings({ ...this.checkDeps(), knownRepository: this.settingsKnownRepository() }, command)) as WebCommandResult;
+  }
   setFlowLocks(command: FlowSettingsCommand<"set-flow-locks">): WebCommandResult { return this.mutate(() => applySetFlowLocks(this.checkDeps(), command)) as WebCommandResult; }
   /** Flow engine spec §14.2: every flow verb (flowCommands.ts); the kernel acts first, the ledger books the outcome. */
   async flowCommand(command: FlowCommand): Promise<WebCommandResult> {
@@ -1372,7 +1399,7 @@ export class WebControlService {
   acceptRequirementDraft(command: RequirementDraftAcceptCommand): Promise<WebCommandResult> { return applyRequirementDraftAccept(this.deps, command); }
   /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */
   async setWorkspaceMode(command: SetWorkspaceModeCommand): Promise<WebCommandResult> {
-    return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.deps.knownRepository ?? (() => false) }, command) as WebCommandResult;
+    return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.settingsKnownRepository() }, command) as WebCommandResult;
   }
   repositoryKnown(repoId: string): boolean { return this.deps.knownRepository?.(repoId) ?? false; }
   /**
@@ -1383,12 +1410,15 @@ export class WebControlService {
     const knownRepository = this.deps.knownRepository ?? (() => false);
     // The git checks run before the admission gate is entered: a drain never waits on a git child.
     // Dir-requirements spec §7: a `dir` project's folder is not checked (the transaction refuses it dir-group-delivery-fixed).
+    // Multi-directory projects spec §4.3: a multi id is refused inside the transaction, so its check is skipped here (an
+    // earlier throw would escape the durable booking).
+    const multiDir = this.deps.multiDirRepoId?.(command.target.repoId) ?? false;
     const dirProject = (this.deps.dirProjectOf?.(command.target.repoId) ?? null) !== null;
-    const failedCheck = knownRepository(command.target.repoId) && !dirProject ? await this.schemeCheck(command.target.repoId, command.payload.integration) : null;
+    const failedCheck = !multiDir && knownRepository(command.target.repoId) && !dirProject ? await this.schemeCheck(command.target.repoId, command.payload.integration) : null;
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      return applySetIntegrationScheme({ store: this.store, knownRepository, dirProjectOf: this.deps.dirProjectOf }, command, failedCheck) as WebCommandResult;
+      return applySetIntegrationScheme({ store: this.store, knownRepository: this.settingsKnownRepository(), dirProjectOf: this.deps.dirProjectOf }, command, failedCheck) as WebCommandResult;
     } finally { release?.(); }
   }
   /**

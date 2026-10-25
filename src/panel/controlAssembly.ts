@@ -27,10 +27,11 @@ import { executionProfileSnapshotSchema } from "../control/webProtocol.js";
 import { createTrustedControlConfig, type TrustedControlConfig } from "./controlConfig.js";
 import { applyPanelShutdown, withAdmission } from "./controlLifecycle.js";
 import { controlRepoKey } from "./controlOptions.js";
-import type { MultiDirMember } from "./projectsFile.js";
+import { createMultiDirProjects, type MultiDirProjects } from "../control/multiGroup.js";
 import { readCorrectionList } from "../control/correctionState.js";
 import { createCorrectionExporter } from "../memory/correctionExport.js";
 import type { ControlOptions } from "./server.js";
+import type { MultiDirMember } from "./projectsFile.js";
 import { DISPATCHED_PERSON_DIRNAME } from "../control/commandClient.js";
 import { vaultPathOfRepoId } from "../flow/groups.js";
 
@@ -97,8 +98,8 @@ export interface ControlRuntime {
   /** Flow engine spec §8.2: the flow kernel's production ports; present only with a driver (nothing else runs a flow). */
   flow: PanelFlow | null;
   /**
-   * Multi-directory projects spec §4.3: the members of a multi-dir project by control repo id, or null. O2 leaves the
-   * map empty (every answer is null); O3 fills it from the registry. It never resolves a repo id accepted as a path.
+   * Multi-directory projects spec §4.3: the members of a multi-dir project by control repo id, or null. Filled from the
+   * registry's map (`server.ts` hands it in and wires the hooks); it never resolves a repo id accepted as a path.
    */
   multiDirProjectOf(repoId: string): { dirs: MultiDirMember[] } | null;
   /** spec §6: runs to completion before the server accepts anything. */
@@ -125,6 +126,11 @@ export interface ControlAssemblyInput {
   repos: ReadonlyArray<{ projectKey: string; path: string; kind?: "dir" }>;
   epoch: string;
   env: NodeJS.ProcessEnv;
+  /**
+   * Multi-directory projects spec §4.3: the registry's multi map by control repo id. Absent, every answer is null (the
+   * panel's own `server.ts` creates one and fills it through the registry's control hooks).
+   */
+  multiDirProjects?: MultiDirProjects;
   /** Issue 92: why the boot left ORCA_CCLOOP_BIN unset (the installed ccloop could not be used); served in the config read. */
   executionPortReason?: string;
   /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
@@ -180,6 +186,7 @@ function loadProfiles(paths: ReadonlyArray<string>, port: ExecutionPort): Frozen
 export async function assembleControlRuntime(input: ControlAssemblyInput): Promise<ControlRuntime | null> {
   const { control, repos, env, epoch } = input;
   if (!control.enabled || control.stateDir === null) throw new ControlError("control-trusted-config-invalid", "assembly-called-while-disabled");
+  const multi = input.multiDirProjects ?? createMultiDirProjects();
 
   // CLI v2 spec §15.3-§15.4: known once the store has canonicalised its directory, below; no run is dispatched before.
   let dispatchedPersonDir: string | undefined;
@@ -237,7 +244,12 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
 
   // Flow engine spec §5.2: a `dir` flow group's repository id names its run's vault ($ORCA_VAULT_DIR, Rule 17); every
   // other id is a trusted repository of the config, as before.
-  const resolveRepository = (repoId: string): string => vaultPathOfRepoId(env, repoId) ?? config.resolveRepository(repoId);
+  // Multi-directory projects spec §4.3: a multi id has no single path, so it is refused by name before either lookup --
+  // never resolved to a member, which would act on one directory silently.
+  const resolveRepository = (repoId: string): string => {
+    if (multi.has(repoId)) throw new ControlError("multi-dir-no-single-path", repoId);
+    return vaultPathOfRepoId(env, repoId) ?? config.resolveRepository(repoId);
+  };
 
   const admissionGate = createAdmissionGate();
   // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
@@ -263,11 +275,19 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     },
     // Execution driver spec §2.1: a workspace mode means something only to a driver, so an unconfigured
     // panel knows no repository here and refuses set-workspace-mode as it did before this slice.
+    // Multi-directory projects spec §4.3: a multi id is known (a requirement may open on it), though it has no path.
     knownRepository: control.executionPort === "configured"
-      ? (repoId: string) => config.hasRepository(repoId)
+      ? (repoId: string) => config.hasRepository(repoId) || multi.has(repoId)
       : undefined,
     // Integration spec §3.3: the path the integration setters' git checks run in (only a known repository is checked).
     resolveRepository: (repoId: string) => resolveRepository(repoId),
+    // Multi-directory projects spec §4.3: the settings setters refuse a multi id by name, inside their transaction.
+    multiDirRepoId: (repoId: string) => multi.has(repoId),
+    // §5.2: requirement-open freezes the members of a multi-dir project (the registry's list, copied).
+    multiDirProjectOf: (repoId: string) => {
+      const found = multi.of(repoId);
+      return found === null ? null : { dirs: found.dirs };
+    },
     // Debug task plan Task 6: correction-debug-open finds the repository a correction's projectKey names among these.
     listRepositories: () => config.listRepositories(),
     // A correction recorded on the panel names the panel's project key; its repository's repoId is that key's.
@@ -374,7 +394,10 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
 
   return Object.freeze({
     store, config, service, router, admissionGate, port, epoch, driver, flow,
-    multiDirProjectOf: () => null,
+    multiDirProjectOf: (repoId: string) => {
+      const found = multi.of(repoId);
+      return found === null ? null : { dirs: found.dirs };
+    },
     recover: async () => {
       await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
       await service.recoverAgentUpdates();

@@ -12,6 +12,7 @@ import type { Amount } from "./types.js";
 import { frozenSlotSchema, profileBindingSchema } from "./webProtocol.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import type { FrozenDirWorkspace } from "./dirWorkspace.js";
+import type { FrozenMultiDir } from "./multiGroup.js";
 import {
   CLARIFY_CAPS, classPairSchema, clarifyTier, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema, SLUG_PATTERN,
   type ClarifyTier, type Classification, type ClassPair, type DraftBody, type RoundBody,
@@ -45,6 +46,8 @@ export interface ClarifyingGroupInput {
   maxOutputTokens: number;
   /** Dir-requirements spec §5.1: the folder a requirement on a `dir` project was opened on, frozen; absent on a repository project. */
   dirWorkspace?: FrozenDirWorkspace;
+  /** Multi-directory projects spec §5.3: the member list a requirement on a multi-dir project froze, in registered order. */
+  multiDir?: FrozenMultiDir;
 }
 type Ledger = { groupLimit: BudgetAmount; used: Amount; committedRemaining: Amount; explicitUnallocatedReserve: BudgetAmount; budgetDeficit: Amount; usageUnknown: boolean };
 /** The fields of a group body this module reads and writes; the rest passes through untouched. */
@@ -86,6 +89,8 @@ export function insertClarifyingGroup(store: ControlStore, input: ClarifyingGrou
     agentOverrides: input.agentOverrides, estimatorSlot: null, reconcileSlot: null, requirement,
     // Dir-requirements spec §5.1: top level, beside (never inside) the strict requirement block.
     ...(input.dirWorkspace === undefined ? {} : { dirWorkspace: input.dirWorkspace }),
+    // Multi-directory projects spec §5.3: likewise top level, and never beside the single-folder `dirWorkspace`.
+    ...(input.multiDir === undefined ? {} : { multiDir: input.multiDir }),
   };
   store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,?,?,0,?)").run(input.groupId, 0, 1, JSON.stringify(group));
   saveTokenPolicy(store,input.groupId,"",input.limit.tokens);

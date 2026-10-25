@@ -13,6 +13,7 @@ import { bindControlSocket, buildControlSocketApp, controlSocketPath, type Contr
 import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
+import { createMultiDirProjects } from "../control/multiGroup.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
 import { controlRoot, controlRepoKey, resolveControlOptions, type ControlOptionsResolution } from "./controlOptions.js";
 import { withDefaultCcloopBin } from "../control/ccloopBin.js";
@@ -265,15 +266,18 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   // plane never accepts a connection that would then meet a half-built one. The epoch is its own
   // per-process value and never a credential: it is served in every view.
   const epoch = randomUUID();
+  // Multi-directory projects spec §4.3: one map the control plane and the registry share; the registry's hooks below fill
+  // it, so a multi id is known (and has no path) without joining opts.repos.
+  const multiDirProjects = createMultiDirProjects();
   let control: ControlRuntime | null = null;
   if (opts.control.enabled) {
-    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env,
+    try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, multiDirProjects,
       ...(mode.executionPortReason === undefined ? {} : { executionPortReason: mode.executionPortReason }), corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) },
       ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
     catch (error) { auth.close(); throw error; }
   }
   // Multi-directory projects spec §4.2: a multi id's control repoId comes from the assembly's multi map, never from
-  // opts.repos (a multi has no path). Until O3 fills that map, every answer here is null.
+  // opts.repos (a multi has no path). The registry's hooks fill that map, so a registered multi answers its key.
   const multiControlRepoId = control === null ? undefined
     : (projectKey: string): string | null => (control!.multiDirProjectOf(controlRepoKey(projectKey)) === null ? null : controlRepoKey(projectKey));
   // Project registry spec §5: built after the control plane, which it tells about every project it adds or renames.
@@ -285,6 +289,9 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       check: (entry) => control!.config.checkRepository(entry),
       add: (entry) => control!.config.addRepository(entry),
       rename: (repoId, name) => control!.config.renameRepository(repoId, name),
+      addMulti: (entry) => multiDirProjects.add(entry),
+      setMultiDirs: (repoId, dirs) => multiDirProjects.setDirs(repoId, dirs),
+      removeMulti: (repoId) => multiDirProjects.remove(repoId),
       checkPlan: (entry) => control!.config.checkPlan(entry),
       addPlan: (entry) => control!.config.addPlan(entry),
     },

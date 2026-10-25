@@ -8,6 +8,7 @@ import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
 import type { DirProjectOf } from "./dirGroup.js";
 import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from "./dirWorkspace.js";
+import { freezeMultiDir, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
 import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
@@ -44,6 +45,8 @@ export interface RequirementCommandDeps {
   knownRepository?: (repoId: string) => boolean; now?: () => Date;
   /** Dir-requirements spec §5.1: the registered `dir` project a repo id names; absent, every project is a repository. */
   dirProjectOf?: DirProjectOf;
+  /** Multi-directory projects spec §5.2: the members of the multi-dir project a repo id names, or null. */
+  multiDirProjectOf?: MultiDirProjectOf;
 }
 type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; limit: BudgetAmount; agent: Record<string, unknown> | null; contentLanguage: "en" | "zh" };
 
@@ -77,12 +80,19 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
     if (replay) return replay.body;
     let profile: FrozenProfile, slot: PreparedEstimatorSlot, estimateMode: "strict" | "soft";
     let dirWorkspace: FrozenDirWorkspace | undefined;
+    let multiDir: FrozenMultiDir | undefined;
     try {
+      // Multi-directory projects spec §5.2: a multi-dir project's list is frozen now, from realpaths (a read, no vault yet).
+      // A multi group carries no single-folder `dirWorkspace`.
+      const multiProject = deps.multiDirProjectOf?.(command.payload.repoId) ?? null;
+      if (multiProject !== null) multiDir = freezeMultiDir(command.payload.repoId, multiProject.dirs);
       // Dir-requirements spec §5.1: on a `dir` project the folder is frozen now (a realpath: a read, no vault yet).
-      const dirProject = deps.dirProjectOf?.(command.payload.repoId) ?? null;
-      if (dirProject !== null) {
-        try { dirWorkspace = await freezeDirWorkspace(dirProject.path); }
-        catch (error) { throw error instanceof DirFolderMissing ? new ControlError("dir-folder-missing", error.message) : error; }
+      else {
+        const dirProject = deps.dirProjectOf?.(command.payload.repoId) ?? null;
+        if (dirProject !== null) {
+          try { dirWorkspace = await freezeDirWorkspace(dirProject.path); }
+          catch (error) { throw error instanceof DirFolderMissing ? new ControlError("dir-folder-missing", error.message) : error; }
+        }
       }
       const defaults = deps.defaults();
       if (!defaults?.estimatorProfileId || !defaults.estimatorProfileHash) throw new ControlError("control-estimator-unconfigured");
@@ -116,6 +126,7 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
           createdOn: now.toISOString().slice(0, 10), requirementId, profile: { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash },
           agentSlot: slot.outcome.slot, agentOverrides: payload.agent === null ? {} : { estimator: payload.agent }, maxOutputTokens: singleCallOutputBound(preflight.maxOutputTokens, slot.observation.resolution),
           ...(dirWorkspace === undefined ? {} : { dirWorkspace }),
+          ...(multiDir === undefined ? {} : { multiDir }),
         });
         writeRound(deps.store, payload.groupId, newRound(1));
         const wakeId = queueRequirementCall(deps.store, payload.groupId, `open-${context.nextCommandRevision}`);

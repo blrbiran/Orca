@@ -8,6 +8,7 @@ import { z } from "zod";
 import { flowGroupRepoId, flowVaultRepoId } from "../flow/groups.js";
 import type { FrozenDirWorkspace } from "./dirWorkspace.js";
 import { ControlError } from "./errors.js";
+import { multiDirOf } from "./multiGroup.js";
 import { readGroup } from "./queries.js";
 import type { ControlStore } from "./store.js";
 
@@ -46,6 +47,9 @@ export function dirGroupRepoId(store: ControlStore, groupId: string): string | n
  */
 export function groupRepoId(store: ControlStore, groupId: string): string {
   const group = readGroup(store, groupId) as unknown as { plan?: { repoId: string }; requirement?: { repoId: string } };
+  // Multi-directory projects spec §5.3: a multi group has no single target repository; its callers resolve a member on
+  // purpose (multiPrimaryRepoId, dirTargetRepoId) or branch. The detail names the group.
+  if (multiDirOf(group) !== null) throw new ControlError("multi-dir-group-no-single-repo", groupId);
   // Flow engine spec §6.2: a `dir` flow group (parent or child) targets its run's vault, whatever else it names.
   // Dir-requirements spec §6.1: a dir group (a requirement opened on a `dir` project) targets its folder's vault.
   // N1 plan F16: a clarifying group has no plan yet; its requirement names the repository.

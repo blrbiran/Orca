@@ -2114,6 +2114,11 @@ export const enErrors: Record<string, string> = {
   "dir-placement-failed": "Writing the group's work into the folder failed: {{detail}}. Orca tries again on its next round.",
   "dir-project-plan-import-unsupported": "This project is a folder, not a git repository. Open a requirement on it instead of importing a plan.",
   "dir-group-delivery-fixed": "This group works on a folder: its finished work is written into the folder, and its delivery cannot be changed.",
+  // Multi-directory projects spec §4.3, §5.2.
+  "multi-dir-invalid": "This group's list of directories is not valid.",
+  "multi-dir-no-single-path": "This project groups several directories, so it has no single path. Choose one of its directories instead.",
+  "multi-dir-group-no-single-repo": "This group works in several directories, so it has no single repository.",
+  "multi-dir-project-setting-unsupported": "This project groups several directories. Change this setting on the directory's own project.",
   "folder-change-not-pending": "There is no folder change waiting for an answer on this group.",
   "revision-unchanged": "The revision answers the round exactly as before; change at least one answer or decision.",
   "numeric-overflow": "A number is too large: {{detail}}",

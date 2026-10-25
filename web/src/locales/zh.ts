@@ -2037,6 +2037,11 @@ export const zhErrors: Record<string, string> = {
   "dir-placement-failed": "把任务组的工作写进文件夹时失败：{{detail}}。Orca 会在下一轮再试。",
   "dir-project-plan-import-unsupported": "这个项目是文件夹，不是 git 仓库。请在它上面开需求，而不是导入计划。",
   "dir-group-delivery-fixed": "这个任务组作用于一个文件夹：完成的工作会写回文件夹，交付方式不能更改。",
+  // Multi-directory projects spec §4.3, §5.2.
+  "multi-dir-invalid": "这个任务组的目录列表无效。",
+  "multi-dir-no-single-path": "这个项目由多个目录组成，没有单一的路径。请改为选择其中一个目录。",
+  "multi-dir-group-no-single-repo": "这个任务组在多个目录中工作，没有单一的仓库。",
+  "multi-dir-project-setting-unsupported": "这个项目由多个目录组成。请在对应目录自己的项目上修改此设置。",
   "folder-change-not-pending": "这个任务组没有等待答复的文件夹改动。",
   "revision-unchanged": "修改后的回答与原来完全一样；请至少改一个回答或决定。",
   "numeric-overflow": "数值溢出：{{message}}",

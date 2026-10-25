@@ -306,6 +306,12 @@ export const durableCommandErrorStatuses = {
   "dir-project-plan-import-unsupported": 422,
   // Dir-requirements spec §7, §9.3: a dir group's delivery is placement into its folder; no integration setter applies.
   "dir-group-delivery-fixed": 422,
+  // Multi-directory projects spec §4.3, §5.3: a multi-dir body/member list is invalid (open freezes the list); a multi id
+  // has no single path; a group on one has no single target repository; its settings live on the member projects.
+  "multi-dir-invalid": 422,
+  "multi-dir-no-single-path": 422,
+  "multi-dir-group-no-single-repo": 422,
+  "multi-dir-project-setting-unsupported": 422,
   // Dir-requirements spec §9.2, §9.3: no folder change waits for this answer on the group (or the answer is one this
   // state cannot take: take-folder outside folder-changed, withhold with nothing withheld-able).
   "folder-change-not-pending": 409,
