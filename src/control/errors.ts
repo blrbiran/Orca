@@ -109,6 +109,8 @@ export const durableCommandErrorStatuses = {
   // Gaps spec §4.7: an upload that is not a png/jpg/webp by its bytes, or larger than 5 MiB.
   "flow-attachment-invalid": 400,
   "flow-run-stopped": 409,
+  // Live transcript spec §10.5.1 (plan T1): the child's stop came from a flow pause or note, so only the flow resumes it.
+  "flow-pause-resume-via-flow": 409,
   "flow-refused": 409,
   "flow-unavailable": 409,
   "check-time-zone-invalid": 400,

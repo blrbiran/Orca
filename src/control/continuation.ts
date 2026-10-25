@@ -221,6 +221,8 @@ export function applyResumeFromHandoff(deps: ContinuationDeps, command: ResumeFr
         // N1 spec §4.1 (survey S11): a clarifying group has no task run to continue.
         refuseClarifying(store, groupId);
         const intent = readStopIntent(store, groupId);
+        // Live transcript spec §10.5.1 (plan D4): a flow-placed stop is lifted only by the flow's own resume.
+        if (intent?.flowStop !== undefined) throw new ControlError("flow-pause-resume-via-flow", groupId);
         if (intent?.mode === "pause") throw new ControlError("stop-mode-conflict");
         if (groupStopState(store, groupId) !== "handoff-complete") throw new ControlError("group-state-invalid");
         const group = readGroupBody(store, groupId);

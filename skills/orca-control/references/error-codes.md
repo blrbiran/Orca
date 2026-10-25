@@ -126,6 +126,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `flow-group-delivery-fixed` | 422 |
 | `flow-message-target-missing` | 404 |
 | `flow-param-invalid` | 400 |
+| `flow-pause-resume-via-flow` | 409 |
 | `flow-plan-stale` | 409 |
 | `flow-plan-step-not-candidate` | 409 |
 | `flow-profiles-unresolved` | 422 |

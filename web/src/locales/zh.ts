@@ -2016,6 +2016,7 @@ export const zhErrors: Record<string, string> = {
   "flow-effect-needs-person": "这样会放行一个被挂起的对外步骤，只有本人才能放行。请以本人（所有者）身份登录后再发一次：{{detail}}",
   "flow-attachment-invalid": "附件没有收下：{{detail}}",
   "flow-run-stopped": "流程运行已停止：{{detail}}",
+  "flow-pause-resume-via-flow": "这个任务组的停止来自一次流程暂停：请改为恢复那次流程运行。",
   "flow-refused": "流程拒绝了这条命令：{{detail}}",
   "flow-unavailable": "这个面板不运行流程（没有执行驱动）：{{detail}}",
   "check-time-zone-invalid": "定时检查用的时区本机不认识：{{detail}}",

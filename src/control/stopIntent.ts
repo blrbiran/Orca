@@ -7,7 +7,7 @@ import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { rearmParkedEstimates } from "./estimateParking.js";
-import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
+import { applyWebCommand, updateRevision, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
 import { add, budgetBalance, subtract } from "./budget.js";
@@ -34,12 +34,20 @@ export type StopMode = "pause" | "shutdown" | "handoff";
 export type StopState = "paused" | "handoff-pending" | "handoff-partial" | "handoff-unresolved" | "handoff-complete";
 export type GroupStopState = "none" | StopState;
 export type HandoffDisposition = "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "outcome-unknown";
+/** Live transcript spec §10.5.1-§10.5.2: the flow pause or note that placed this stop. */
+export interface FlowStopMarker {
+  flowRunId: string;
+  stepKey: string;
+  seq: number;
+  reason: "pause" | "note";
+}
 export interface StopIntentV1 {
   mode: StopMode;
   state: StopState;
   frozenRunIds: string[];
   acceptedAt: string | null;
   deadlineAt: string | null;
+  flowStop?: FlowStopMarker;
 }
 export interface StopDeps {
   store: ControlStore;
@@ -67,6 +75,15 @@ const OPEN_STATES = ["request-pending", "latched", "collecting"];
 export const ADOPTABLE_STATES = [...OPEN_STATES, "outcome-unknown"];
 const SETTLED_STATES = ["settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"];
 
+const flowStopMarkerSchema = z
+  .object({
+    flowRunId: idSchema,
+    stepKey: z.string().min(1),
+    seq: safeInteger,
+    reason: z.enum(["pause", "note"]),
+  })
+  .strict();
+
 const stopIntentBodySchema = z
   .object({
     mode: z.enum(["pause", "shutdown", "handoff"]),
@@ -74,6 +91,8 @@ const stopIntentBodySchema = z
     frozenRunIds: z.array(idSchema),
     acceptedAt: canonicalTimestampSchema.nullable(),
     deadlineAt: canonicalTimestampSchema.nullable(),
+    // Optional and never defaulted: an intent saved before this field keeps its exact canonical bytes.
+    flowStop: flowStopMarkerSchema.optional(),
   })
   .strict();
 
@@ -284,6 +303,15 @@ export function freezeHandoffDeadline(acceptedAt: string, requested: string | nu
   return candidate > Date.parse(MAX_STOP_INSTANT) ? MAX_STOP_INSTANT : new Date(candidate).toISOString();
 }
 
+/**
+ * Live transcript spec §10.5.1: a flow pause's deadline lets the running turn finish -- the contract's per-attempt
+ * timeout plus 60 s, capped at the maximum protocol instant. The 30-minute default would interrupt the turn.
+ */
+export function flowHandoffDeadline(acceptedAt: string, perAttemptTimeoutMs: number): string {
+  const candidate = Date.parse(acceptedAt) + perAttemptTimeoutMs + 60_000;
+  return candidate > Date.parse(MAX_STOP_INSTANT) ? MAX_STOP_INSTANT : new Date(candidate).toISOString();
+}
+
 /** Every run still open in the group, plus any estimate the ledger still treats as in flight. */
 export function frozenRunIds(store: ControlStore, groupId: string): string[] {
   const ids = new Set(store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").all(groupId).map(row => String(row.id)));
@@ -372,6 +400,37 @@ export function applyPauseDispatch(deps: StopDeps, command: PauseCommand): StopC
   } finally { release?.(); }
 }
 
+interface HandoffStopInput {
+  acceptedAt: string;
+  deadlineAt: string;
+  stopRevision: number;
+  flowStop?: FlowStopMarker;
+}
+
+/** The stop's write set, shared by the human command and the flow's own mid-turn stop. */
+function handoffStopInTransaction(
+  store: ControlStore,
+  groupId: string,
+  input: HandoffStopInput,
+): { requestIds: string[]; state: StopState; frozen: string[] } {
+  const existing = readStopIntent(store, groupId);
+  if (existing?.mode === "shutdown") throw new ControlError("stop-mode-conflict");
+  if (existing?.mode === "handoff") throw new ControlError("stop-already-active");
+  const group = readGroupBody(store, groupId);
+  const frozen = frozenRunIds(store, groupId);
+  const requestIds = frozen.map(runId => freezeRun(store, groupId, runId, "handoff", input.stopRevision, input.acceptedAt, input.deadlineAt)).sort();
+  const state = deriveStopState(store, groupId, frozen);
+  saveStopIntent(store, groupId, "handoff", input.stopRevision, {
+    mode: "handoff", state, frozenRunIds: frozen, acceptedAt: input.acceptedAt, deadlineAt: input.deadlineAt,
+    ...(input.flowStop === undefined ? {} : { flowStop: input.flowStop }),
+  });
+  // Issue-fixes spec §5.2: a group stop intent created (or a pause strengthened to a handoff-stop).
+  recordActivity(store, { groupId, kind: "stop", body: { mode: "handoff" } });
+  group.stopped = true;
+  saveGroupBody(store, group);
+  return { requestIds, state, frozen };
+}
+
 export function applyHandoffStop(deps: StopDeps, command: HandoffStopCommand): StopCommandResult {
   const { store } = deps;
   const acceptedAt = (deps.now ?? (() => new Date()))().toISOString();
@@ -383,27 +442,47 @@ export function applyHandoffStop(deps: StopDeps, command: HandoffStopCommand): S
       expand: () => ({ ...command, schema: "orca-authority-command-v1", payload: { handoffDeadlineAt: deadlineAt } }),
       apply: context => {
         const groupId = groupCommandTarget(command);
-        const existing = readStopIntent(store, groupId);
-        if (existing?.mode === "shutdown") throw new ControlError("stop-mode-conflict");
-        if (existing?.mode === "handoff") throw new ControlError("stop-already-active");
-        const group = readGroupBody(store, groupId);
-        const frozen = frozenRunIds(store, groupId);
-        const requestIds = frozen.map(runId => freezeRun(store, groupId, runId, "handoff", context.nextCommandRevision, acceptedAt, deadlineAt)).sort();
-        const state = deriveStopState(store, groupId, frozen);
-        saveStopIntent(store, groupId, "handoff", context.nextCommandRevision, {
-          mode: "handoff", state, frozenRunIds: frozen, acceptedAt, deadlineAt,
-        });
-        // Issue-fixes spec §5.2: a group stop intent created (or a pause strengthened to a handoff-stop).
-        recordActivity(store, { groupId, kind: "stop", body: { mode: "handoff" } });
-        group.stopped = true;
-        saveGroupBody(store, group);
+        const result = handoffStopInTransaction(store, groupId, { acceptedAt, deadlineAt, stopRevision: context.nextCommandRevision });
         deps.beforeCommit?.();
         return commandSuccess(context, {
-          kind: "handoff-stopped", stopRevision: context.nextCommandRevision, acceptedAt, handoffDeadlineAt: deadlineAt, frozenRunIds: frozen, requestIds,
+          kind: "handoff-stopped", stopRevision: context.nextCommandRevision, acceptedAt, handoffDeadlineAt: deadlineAt,
+          frozenRunIds: result.frozen, requestIds: result.requestIds,
         });
       },
     }).body;
   } finally { release?.(); }
+}
+
+/**
+ * Live transcript spec §10.5.1: the flow kernel stops a running work step's hidden child in its own transaction, writing
+ * `flowStop` into the intent. The marker is not a client payload (plan D3). A retry with the same marker is a no-op; any
+ * other existing intent is refused rather than strengthened, because the flow must not adopt a person's stop.
+ */
+export function applyFlowHandoffStop(
+  store: ControlStore,
+  groupId: string,
+  input: { acceptedAt: string; deadlineAt: string; flowStop: FlowStopMarker },
+): { requestIds: string[]; state: StopState } {
+  return store.transaction(() => {
+    const existing = readStopIntent(store, groupId);
+    if (existing !== null) {
+      if (existing.mode === "handoff" && existing.flowStop !== undefined && same(existing.flowStop, input.flowStop)) {
+        const requestIds = existing.frozenRunIds
+          .map(runId => latestRequestForRun(store, groupId, runId)?.requestId)
+          .filter((requestId): requestId is string => requestId !== undefined)
+          .sort();
+        return { requestIds, state: existing.state };
+      }
+      throw new ControlError("stop-mode-conflict", groupId);
+    }
+    const current = Number(store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
+    if (current === Number.MAX_SAFE_INTEGER) throw new ControlError("control-sequence-overflow");
+    const stopRevision = current + 1;
+    updateRevision(store, groupId, stopRevision);
+    const result = handoffStopInTransaction(store, groupId, { ...input, stopRevision });
+    recordProjectionChange(store, [groupId]);
+    return { requestIds: result.requestIds, state: result.state };
+  });
 }
 
 export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchCommand): StopCommandResult {
@@ -418,6 +497,8 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
         // N1 spec §4.1 (survey S10): nor any to resume.
         refuseClarifying(store, groupId);
         const existing = readStopIntent(store, groupId);
+        // Live transcript spec §10.5.1 (plan D4): a flow-placed stop is lifted only by the flow's own resume.
+        if (existing?.flowStop !== undefined) throw new ControlError("flow-pause-resume-via-flow", groupId);
         if (existing?.mode !== "pause") throw new ControlError("stop-mode-conflict");
         const group = readGroupBody(store, groupId);
         store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);

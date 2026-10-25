@@ -2093,6 +2093,7 @@ export const enErrors: Record<string, string> = {
   "flow-effect-needs-person": "This would let a held external step go ahead, which only the person can allow. Log in as the person (owner) and send it again: {{detail}}",
   "flow-attachment-invalid": "The attachment was not taken: {{detail}}",
   "flow-run-stopped": "The flow run is stopped: {{detail}}",
+  "flow-pause-resume-via-flow": "This group's stop came from a flow pause; resume the flow run instead.",
   "flow-refused": "The flow refused the command: {{detail}}",
   "flow-unavailable": "This panel runs no flows (it has no execution driver): {{detail}}",
   "check-time-zone-invalid": "The schedule's time zone is not one this host knows: {{detail}}",
