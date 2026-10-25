@@ -1,4 +1,5 @@
-import { CLARIFY_INSTRUCTION_V3, CLARIFY_PROMPT_HEAD, deepFreeze, CLARIFY_JSON_SCHEMA } from "./requirementClarify.js";
+import { CLARIFY_INSTRUCTION_MULTI_V1, CLARIFY_INSTRUCTION_V3, CLARIFY_PROMPT_HEAD, deepFreeze, CLARIFY_JSON_SCHEMA } from "./requirementClarify.js";
+import { multiDirOf } from "./multiGroup.js";
 import { newDraft, queueRequirementCall, saveRequirementGroup, writeDraft, type RequirementGroup } from "./requirementRecords.js";
 import { CLARIFY_CAPS, type ClarifyCaps } from "./requirementSchemas.js";
 import type { ControlStore } from "./store.js";
@@ -31,6 +32,8 @@ export interface ClarifyHost {
 }
 
 const REQUIREMENT_FRAME: ClarifyFrame = Object.freeze({ instruction: CLARIFY_INSTRUCTION_V3, contextName: "repository-overview" });
+/** Multi-directory projects spec §6.4: a multi group's clarify frame, its fenced context named `project-overview`. */
+const MULTI_DIR_FRAME: ClarifyFrame = Object.freeze({ instruction: CLARIFY_INSTRUCTION_MULTI_V1, contextName: "project-overview" });
 
 /**
  * The dev flow's host: always ('clarify', 1); consensus is recorded on the requirement block and queues draft 1's split
@@ -39,7 +42,7 @@ const REQUIREMENT_FRAME: ClarifyFrame = Object.freeze({ instruction: CLARIFY_INS
 export function requirementHost(store: ControlStore, group: RequirementGroup, context: () => Promise<{ canonicalJson: string; hash: string }> = () => Promise.reject(new Error("orca: the requirement host's overview is built at A2"))): ClarifyHost {
   return {
     groupId: group.groupId, stepKey: "clarify", execSeq: 1,
-    background: () => REQUIREMENT_FRAME,
+    background: () => (multiDirOf(group) === null ? REQUIREMENT_FRAME : MULTI_DIR_FRAME),
     context,
     sections: () => null,
     onConsensus(input) {

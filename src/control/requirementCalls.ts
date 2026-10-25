@@ -7,15 +7,17 @@ import { activeChain, chainRounds, supersededForPrompt } from "./clarifyChain.js
 import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
-import { buildRepositoryOverview } from "./requirementOverview.js";
+import { buildRepositoryOverview, dividedOverviewLimits, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
 import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
+import { flowVaultRepoId } from "../flow/groups.js";
+import { multiDirOf } from "./multiGroup.js";
 import { DirFolderMissing, importFolder, openDirWorkspace } from "./dirWorkspace.js";
 import {
   clarifyingLedger, clarifyLimits, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
 import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
-import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
+import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
@@ -35,7 +37,9 @@ export const PRE_SPAWN_REFUSALS: ReadonlySet<string> = new Set(["omp-single-call
  */
 
 export type RequirementTarget = { kind: "round" | "draft"; no: number; workItemId: string; purpose: "clarify" | "split" };
-export interface SettledRun extends StoppedSingleCallRun { overview?: { hash: string; commit: string } | null }
+/** A call's overview: a single-repository call names one commit; a multi-directory call one per member key. */
+export type RunOverview = { hash: string } & ({ commit: string } | { commits: Record<string, string> });
+export interface SettledRun extends StoppedSingleCallRun { overview?: RunOverview | null }
 
 /** DR4: `round-<n>` is a clarify call, `draft-<n>` a split call. */
 export function targetOf(workItemId: string): RequirementTarget {
@@ -135,6 +139,13 @@ export async function claimRequirementCall(deps: { store: ControlStore; admissio
 }
 
 /**
+ * Multi-directory projects spec §6.3: a multi group's overview is composed of one overview per member; a single group's
+ * is the one repository's. The discriminant lets the run record name either one commit or one per member key.
+ */
+type BuiltOverview = { canonicalJson: string; hash: string }
+  & ({ kind: "repository"; overview: RepositoryOverview } | { kind: "project"; project: ProjectOverview });
+
+/**
  * A2 (spec §6): the overview of HEAD's commit, built from the target repository. Only this half is caught by the
  * handler as `repository-path`: a resolveRepository refusal, or any failure of the build (git, export, cache).
  * Task 5: overview builds are safe only one at a time (the builder sweeps every tmp-* directory). This runs only from
@@ -143,8 +154,35 @@ export async function claimRequirementCall(deps: { store: ControlStore; admissio
  * Dir-requirements spec §6.1-§6.2: the target is the group's (groupRepoId); a dir group's is its folder's vault, and its
  * overview is of an import of the folder (the newest one while the folder is unchanged, so the cache hits) -- HEAD is
  * never read, and the folder's own `.decisions/` is left out (importFolder).
+ * Multi-directory projects spec §6.3: a multi group builds one overview per member in registered order -- a `repo`
+ * member from HEAD, a `dir` member from its import commit -- each cached under its own dir target id, and composes them.
  */
-async function buildOverviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunRow, group: RequirementGroup) {
+async function buildOverviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunRow, group: RequirementGroup): Promise<BuiltOverview> {
+  const multi = multiDirOf(group);
+  if (multi !== null) {
+    const limits = dividedOverviewLimits(multi.dirs.length);
+    const registry = deps.multiDirProjectOf?.(multi.project) ?? null;
+    const dirs: ProjectOverview["dirs"] = [];
+    for (const member of multi.dirs) {
+      let repoId: string;
+      let commit: string | undefined;
+      if (member.kind === "dir") {
+        const dirWorkspace = member.dirWorkspace;
+        if (dirWorkspace === undefined || deps.env === undefined) throw new Error("orca: a dir member's call needs the driver's env ($ORCA_VAULT_DIR)");
+        repoId = flowVaultRepoId(dirWorkspace.vaultId);
+        ({ commit } = await importFolder(await openDirWorkspace(deps.env, dirWorkspace), { reuseUnchanged: true, baseRef: null }));
+      } else {
+        repoId = member.repoId;
+      }
+      const repo = deps.resolveRepository(repoId);
+      const built = await buildRepositoryOverview({ repo, repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null, limits, ...(commit === undefined ? {} : { commit }) });
+      // The registry names a member; a group whose multi project is no longer registered names it by its key.
+      const name = registry?.dirs.find((dir) => dir.key === member.key)?.name ?? member.key;
+      dirs.push({ key: member.key, name, kind: member.kind, primary: dirs.length === 0, overview: built.overview });
+    }
+    const project: ProjectOverview = { schema: "orca-project-overview-v1", dirs };
+    return { kind: "project", canonicalJson: canonicalBytes(project).toString("utf8"), hash: sha256Canonical(project), project };
+  }
   const repoId = groupRepoId(deps.store, run.groupId);
   const repo = deps.resolveRepository(repoId);
   const frozen = dirWorkspaceOf(group);
@@ -153,7 +191,8 @@ async function buildOverviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunR
     if (deps.env === undefined) throw new Error("orca: a dir group's call needs the driver's env ($ORCA_VAULT_DIR)");
     ({ commit } = await importFolder(await openDirWorkspace(deps.env, frozen), { reuseUnchanged: true, baseRef: null }));
   }
-  return buildRepositoryOverview({ repo, repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null, ...(commit === undefined ? {} : { commit }) });
+  const built = await buildRepositoryOverview({ repo, repoId, stateDir: deps.store.stateDir, runId: run.runId, astGrepBin: deps.astGrepBin ?? null, ...(commit === undefined ? {} : { commit }) });
+  return { kind: "repository", ...built };
 }
 
 /** The overview stored with the group and named on the run, before the prompt is built. A store fault here is not the repository's. */
@@ -165,7 +204,9 @@ function storeOverview(deps: SingleCallPrepareDeps, run: SingleCallRunRow, built
       const row = deps.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.runId);
       if (!row) throw new ControlError("run-not-found");
       const body = JSON.parse(String(row.body)) as Record<string, unknown>;
-      body.overview = { hash: built.hash, commit: built.overview.commit };
+      body.overview = built.kind === "project"
+        ? { hash: built.hash, commits: Object.fromEntries(built.project.dirs.map((dir) => [dir.key, dir.overview.commit])) }
+        : { hash: built.hash, commit: built.overview.commit };
       deps.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), run.runId);
     });
   } finally { release?.(); }
@@ -201,7 +242,9 @@ export function settleRequirementCall(
 }
 
 export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null): CallRecord => ({
-  runId: run.runId, overviewHash: run.overview?.hash ?? null, commit: run.overview?.commit ?? null, usage: run.cumulative.work, outcome, reason,
+  runId: run.runId, overviewHash: run.overview?.hash ?? null,
+  commit: run.overview !== undefined && run.overview !== null && "commit" in run.overview ? run.overview.commit : null,
+  usage: run.cumulative.work, outcome, reason,
 });
 
 /** Spec §7.3 and H7: a valid round awaits answers; an invalid one is retried at most twice, then fails. */
@@ -299,14 +342,19 @@ interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "autoRet
  * what `complete` records. A call that failed with no output is schema-invalid (Task 6 ruling: it uses a retry).
  */
 async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<SplitEvaluation> {
+  const group = readRequirementGroup(deps.store, run.groupId);
+  // O5 replaces this refusal with multiSplitOutputSchema and writes validation; until then a multi answer is handed
+  // back schema-invalid (and retried) rather than resolved against a multi id, which no repository has.
+  if (multiDirOf(group) !== null) {
+    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: ["schema:multi-dir:not-evaluated"], layers: null, implicitEdges: null };
+  }
   const parsed = splitOutputSchema.safeParse(rawOutput);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null };
   }
-  const overview = (run as { overview?: { commit: string } | null }).overview ?? null;
-  if (overview === null) throw new ControlError("recovery-blocked", "requirement-overview-missing");
-  readRequirementGroup(deps.store, run.groupId);
+  const overview = (run as { overview?: RunOverview | null }).overview ?? null;
+  if (overview === null || !("commit" in overview)) throw new ControlError("recovery-blocked", "requirement-overview-missing");
   const rounds = chainRounds(readRounds(deps.store, run.groupId));
   const latest = rounds.filter((round) => round.result !== null).at(-1)?.result ?? null;
   if (latest === null) throw new ControlError("recovery-blocked", "requirement-understanding-missing");
@@ -341,10 +389,12 @@ function recordSplit(store: ControlStore, group: RequirementGroup, target: Requi
 export const SPLIT_HANDLER: SingleCallHandler = {
   purpose: "split",
   async prepare(deps, run) {
-    return prepareRequirementCall(deps, run, SPLIT_JSON_SCHEMA, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+    // Multi-directory projects spec §6.4: a multi group's split names writes per directory, in the multi schema.
+    const multi = multiDirOf(readRequirementGroup(deps.store, run.groupId)) !== null;
+    return prepareRequirementCall(deps, run, multi ? SPLIT_JSON_SCHEMA_MULTI : SPLIT_JSON_SCHEMA, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
       buildSplitPrompt({
         document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, run.groupId)), acceptedSplit: null }),
-        overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no),
+        overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no), ...(multi ? { multi: true } : {}),
       }));
   },
   evaluate: evaluateSplit,

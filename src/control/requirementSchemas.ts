@@ -87,6 +87,16 @@ export const splitTaskSchema = z.object({
   targetPaths: z.array(nonempty).min(1), checks: z.array(nonempty).min(1), dependsOn: z.array(nonempty), traces: z.array(nonempty),
 }).strict();
 export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string() }).strict();
+/**
+ * Multi-directory projects spec §6.1: one task's writes as the model names them, per directory (`dir`, `targetPaths`,
+ * `checks`). A non-primary entry may have no checks; the primary's checks are checked by validation (O5).
+ */
+export const multiSplitWriteSchema = z.object({ dir: nonempty, targetPaths: z.array(nonempty).min(1), checks: z.array(nonempty) }).strict();
+export const multiSplitTaskSchema = z.object({
+  taskId: nonempty, title: nonempty, labels: z.array(z.string()), loopPlan: nonempty.optional(), goal: nonempty, successCondition: nonempty,
+  writes: z.array(multiSplitWriteSchema).min(1), dependsOn: z.array(nonempty), traces: z.array(nonempty),
+}).strict();
+export const multiSplitOutputSchema = z.object({ tasks: z.array(multiSplitTaskSchema).min(1), notes: z.string() }).strict();
 /** Spec §8.4: an implicit edge, with the write-set conflict behind it (graph.ts buildGraph). */
 export const implicitEdgeSchema = z.object({ from: nonempty, to: nonempty, conflicts: z.array(z.object({ a: nonempty, b: nonempty }).strict()).min(1) }).strict();
 export const draftBodySchema = z.object({

@@ -49,9 +49,9 @@ async function world() {
   const multiKey = controlRepoKey("all");
   const multi = createMultiDirProjects();
   multi.add({ repoId: multiKey, dirs: [
-    { key: "one", repoId: controlRepoKey("one"), kind: "repo", path: one },
-    { key: "two", repoId: controlRepoKey("two"), kind: "repo", path: two },
-    { key: "folder", repoId: controlRepoKey("folder"), kind: "dir", path: folder },
+    { key: "one", name: "one", repoId: controlRepoKey("one"), kind: "repo", path: one },
+    { key: "two", name: "two", repoId: controlRepoKey("two"), kind: "repo", path: two },
+    { key: "folder", name: "Folder", repoId: controlRepoKey("folder"), kind: "dir", path: folder },
   ] });
   const runtime = (await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch: "epoch-multi-config", env, multiDirProjects: multi }))!;
   return { root, one, folder, multiKey, runtime, close: () => { runtime.close(); rmSync(root, { recursive: true, force: true }); } };

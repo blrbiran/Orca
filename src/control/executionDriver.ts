@@ -2,6 +2,8 @@ import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} f
 import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
+import type { MultiDirProjectOf } from "./multiGroup.js";
+import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
@@ -119,6 +121,11 @@ export interface ExecutionDriverDeps {
   checkReproduction?: typeof checkReproduction;
   /** Dir-requirements spec §6.1 (Rule 17): the panel's environment, where a dir group's vault is found ($ORCA_VAULT_DIR). */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Multi-directory projects spec §6.3: the registry's members of a multi-dir project by control repo id, for the
+   * composed overview's member names. A2 passes it through to the purpose's prepare deps.
+   */
+  multiDirProjectOf?: MultiDirProjectOf;
 }
 
 export interface DriverRun {
@@ -275,7 +282,11 @@ export function stepA1(deps: ExecutionDriverDeps, runId: string): boolean {
     const run = readDriverRun(store, runId);
     if (run.state !== "starting") return false;
     const purpose = singleCallPurposeOf(run);
-    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, groupRepoId(store, run.groupId)).workspaceMode, purpose === null);
+    // Multi-directory projects spec §5.4: a multi group has no single repo id; its primary member's setting is a
+    // placeholder for a single call / task run (a single-call run has no workspace at all). A2 recomputes the ccloop
+    // primary's mode for a multi run (O6).
+    const settingRepoId = isMultiGroup(store, run.groupId) ? multiPrimaryRepoId(store, run.groupId) : groupRepoId(store, run.groupId);
+    const drive = newDrive(deps.roots, runId, readWorkspaceSetting(store, settingRepoId).workspaceMode, purpose === null);
     const refuse = (reason: string): boolean => {
       const current = readDriverRun(store, runId);
       current.state = "blocked";

@@ -26,7 +26,7 @@ export interface ProjectEntryV1 { id: string; name: string; path: string; kind?:
  */
 export interface MultiDirProjectEntryV1 { id: string; name: string; dirs: string[] }
 /** Multi-directory projects spec §4.3: a member as the control plane names it. */
-export interface MultiDirMember { key: string; repoId: string; kind: ProjectKind; path: string }
+export interface MultiDirMember { key: string; name: string; repoId: string; kind: ProjectKind; path: string }
 export const projectKindOf = (entry: Pick<ProjectEntryV1, "kind">): ProjectKind => entry.kind ?? "repo";
 export interface ProjectsFileV1 { version: 1; controlStateDir?: string; projects: ProjectEntryV1[]; multiDirProjects?: MultiDirProjectEntryV1[] }
 export interface FileSignature { mtimeNs: bigint; size: bigint; ino: bigint; ctimeNs: bigint }

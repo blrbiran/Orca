@@ -22,6 +22,20 @@ export const OVERVIEW_LIMITS: Readonly<OverviewLimits> = Object.freeze({
   maxPaths: 4_000, maxListBytes: 120 * 1024, maxDocBytes: 16 * 1024, maxDocsBytes: 48 * 1024,
   maxExportBytes: 50 * 1024 * 1024, maxStructureBytes: 120 * 1024, structureTimeoutMs: 30_000,
 });
+/**
+ * Multi-directory projects spec §6.3: the overview of a project made of several directories, each entry the canonical
+ * overview of that member's commit. `dirs` is in registered order; the first is the primary.
+ */
+export interface ProjectOverviewDir { key: string; name: string; kind: "repo" | "dir"; primary: boolean; overview: RepositoryOverview }
+export interface ProjectOverview { schema: "orca-project-overview-v1"; dirs: ProjectOverviewDir[] }
+/**
+ * Spec §6.3 (writer's call): each member's count limits are divided by the member count (floor, at least 1), so the
+ * composed path list stays within one repository's size order; each member's byte caps are unchanged. `maxPaths` is the
+ * only count limit.
+ */
+export function dividedOverviewLimits(memberCount: number): { maxPaths: number } {
+  return { maxPaths: Math.max(1, Math.floor(OVERVIEW_LIMITS.maxPaths / Math.max(1, memberCount))) };
+}
 /** DR22: the files whose exported symbols ast-grep's built-in outline rules list. */
 export const OUTLINE_EXTENSIONS = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "go", "rs", "java", "kt", "swift", "rb", "php", "cs", "c", "h", "cc", "cpp", "hpp", "scala", "lua"] as const;
 const ROOT_DOCUMENT = /^(README[^/]*|CLAUDE\.md|AGENTS\.md|CONTRIBUTING\.md)$/;
@@ -265,7 +279,13 @@ export async function buildRepositoryOverview(input: {
   // Spec §13: a crashed build's export directory is removed by the next build (the driver builds one overview at a time).
   for (const name of readdirSync(root)) if (name.startsWith("tmp-")) await rm(join(root, name), { recursive: true, force: true });
   const commit = (await run(input.repo, ["rev-parse", "--verify", `${input.commit ?? "HEAD"}^{commit}`])).trim();
-  const cacheFile = join(privateDirectory(join(root, input.repoId, commit)), "overview.json");
+  // Multi-directory projects spec §6.3 (review fix): a divided build and a default one must never share an entry, since
+  // the caps decide what `files` and `docs` hold. The canonical limits keep today's path; any other set gets a
+  // digest-named directory, so a warm single-repo cache cannot answer a divided build, nor the other way round.
+  const commitDir = privateDirectory(join(root, input.repoId, commit));
+  const cacheFile = join(canonicalBytes(limits).equals(canonicalBytes(OVERVIEW_LIMITS))
+    ? commitDir
+    : privateDirectory(join(commitDir, `limits-${sha256Canonical(limits).slice(0, 16)}`)), "overview.json");
   const finish = (overview: RepositoryOverview) => ({ overview, canonicalJson: canonicalBytes(overview).toString("utf8"), hash: sha256Canonical(overview) });
   const cached = await cachedOverview(cacheFile, commit);
   if (cached !== null && cached.structure.status === "ok") return finish(cached);

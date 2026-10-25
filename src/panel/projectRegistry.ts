@@ -178,7 +178,7 @@ export function createProjectRegistry(input: {
     }
     const members = dirs.map((id): MultiDirMember => {
       const p = projects.find((entry) => entry.id === id)!;
-      return { key: id, repoId: controlRepoKey(id), kind: projectKindOf(p), path: p.path };
+      return { key: id, name: p.name, repoId: controlRepoKey(id), kind: projectKindOf(p), path: p.path };
     });
     for (let i = 0; i < members.length; i += 1) {
       for (let j = i + 1; j < members.length; j += 1) {
@@ -196,7 +196,7 @@ export function createProjectRegistry(input: {
   };
   const multiRuntime = (entry: MultiDirProjectEntryV1, projects: readonly ProjectEntryV1[]): { repoId: string; displayName: string; dirs: MultiDirMember[] } => ({
     repoId: controlRepoKey(entry.id), displayName: entry.name,
-    dirs: entry.dirs.map((id) => { const p = projects.find((x) => x.id === id)!; return { key: id, repoId: controlRepoKey(id), kind: projectKindOf(p), path: p.path }; }),
+    dirs: entry.dirs.map((id) => { const p = projects.find((x) => x.id === id)!; return { key: id, name: p.name, repoId: controlRepoKey(id), kind: projectKindOf(p), path: p.path }; }),
   });
   const realPathsOf = (entry: MultiDirProjectEntryV1, projects: readonly ProjectEntryV1[]): string[] =>
     entry.dirs.map((id) => realOf(projects.find((p) => p.id === id)!.path));

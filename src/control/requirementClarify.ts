@@ -66,6 +66,16 @@ export const CLARIFY_INSTRUCTION_V3 = [
   "Every string is non-empty. An answer that breaks any rule above is discarded whole.",
 ].join("\n");
 
+/**
+ * Multi-directory projects spec §6.4: V3's text for a project of several directories (repositories or folders), listed
+ * in order, the first being the primary. The one sentence is replaced; V3 itself stays byte-identical, and the frame
+ * names the fenced block `project-overview`.
+ */
+export const CLARIFY_INSTRUCTION_MULTI_V1 = CLARIFY_INSTRUCTION_V3.replace(
+  "for one software repository",
+  "for a project made of several directories (repositories or folders), listed in order; the first is the primary",
+);
+
 export function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) { for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child); Object.freeze(value); }
   return value;

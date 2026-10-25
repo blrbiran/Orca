@@ -252,6 +252,11 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   };
 
   const admissionGate = createAdmissionGate();
+  // Multi-directory projects spec §6.3: the composed overview's member names come from the registry's members.
+  const multiDirProjectOf = (repoId: string) => {
+    const found = multi.of(repoId);
+    return found === null ? null : { dirs: found.dirs };
+  };
   // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
   const flowProjects = () => repos.filter((repo) => repo.kind === "dir").map((repo) => ({ repoId: controlRepoKey(repo.projectKey), path: repo.path }));
   const service = new WebControlService({
@@ -284,10 +289,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     // Multi-directory projects spec §4.3: the settings setters refuse a multi id by name, inside their transaction.
     multiDirRepoId: (repoId: string) => multi.has(repoId),
     // §5.2: requirement-open freezes the members of a multi-dir project (the registry's list, copied).
-    multiDirProjectOf: (repoId: string) => {
-      const found = multi.of(repoId);
-      return found === null ? null : { dirs: found.dirs };
-    },
+    multiDirProjectOf,
     // Debug task plan Task 6: correction-debug-open finds the repository a correction's projectKey names among these.
     listRepositories: () => config.listRepositories(),
     // A correction recorded on the panel names the panel's project key; its repository's repoId is that key's.
@@ -375,6 +377,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       resolveRepository,
       // Dir-requirements spec §6.1 (Rule 17): a dir group's vault is found from this environment, never os.homedir().
       env,
+      // Multi-directory projects spec §6.3: the composed overview's member names come from the registry's members.
+      multiDirProjectOf,
       ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, dispatchedPersonDir, astGrepBin: resolveAstGrepBin(env),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
@@ -394,10 +398,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
 
   return Object.freeze({
     store, config, service, router, admissionGate, port, epoch, driver, flow,
-    multiDirProjectOf: (repoId: string) => {
-      const found = multi.of(repoId);
-      return found === null ? null : { dirs: found.dirs };
-    },
+    multiDirProjectOf,
     recover: async () => {
       await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
       await service.recoverAgentUpdates();

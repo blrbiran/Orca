@@ -33,8 +33,8 @@ async function world() {
   const link = join(x.root, "posts-link");
   symlinkSync(posts, link);
   const dirs = [
-    { key: "posts", repoId: controlRepoKey("posts"), kind: "dir" as const, path: link },
-    { key: "alpha", repoId: controlRepoKey("alpha"), kind: "repo" as const, path: alpha },
+    { key: "posts", name: "Posts", repoId: controlRepoKey("posts"), kind: "dir" as const, path: link },
+    { key: "alpha", name: "Alpha", repoId: controlRepoKey("alpha"), kind: "repo" as const, path: alpha },
   ];
   const service = new WebControlService({ ...x.service.deps, dirProjectOf: () => null,
     multiDirProjectOf: (repoId: string) => (repoId === "repo" ? { dirs } : null) });
@@ -97,8 +97,8 @@ describe("requirement-open on a multi-dir project freezes the member list (M4, ย
       mkdirSync(gone); rmSync(gone, { recursive: true });
       const service = new WebControlService({ ...w.service.deps, dirProjectOf: () => null,
         multiDirProjectOf: (repoId: string) => (repoId === "repo" ? { dirs: [
-          { key: "alpha", repoId: controlRepoKey("alpha"), kind: "repo" as const, path: join(w.root, "alpha") },
-          { key: "gone", repoId: controlRepoKey("gone"), kind: "repo" as const, path: gone },
+          { key: "alpha", name: "Alpha", repoId: controlRepoKey("alpha"), kind: "repo" as const, path: join(w.root, "alpha") },
+          { key: "gone", name: "Gone", repoId: controlRepoKey("gone"), kind: "repo" as const, path: gone },
         ] } : null) });
       const answer = await service.openRequirement({ schema: "orca-raw-command-v1", commandId: "open-gone", actorId: "human", expectedRevision: 0,
         verb: "requirement-open", target: { kind: "group", groupId: "gone-group" }, payload: { groupId: "gone-group", repoId: "repo", idea: "x" } } as never);
@@ -109,7 +109,8 @@ describe("requirement-open on a multi-dir project freezes the member list (M4, ย
 });
 
 describe("the multi map copies what it stores and what it answers (M4, ยง5.3)", () => {
-  const member = (key: string): { key: string; repoId: string; kind: "repo"; path: string } => ({ key, repoId: `@${key}`, kind: "repo", path: `/${key}` });
+  const member = (key: string): { key: string; name: string; repoId: string; kind: "repo"; path: string } =>
+    ({ key, name: `${key} project`, repoId: `@${key}`, kind: "repo", path: `/${key}` });
 
   it("does not alias the input on add, nor a previous answer on of", () => {
     const map = createMultiDirProjects();

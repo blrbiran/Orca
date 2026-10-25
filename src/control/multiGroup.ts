@@ -15,7 +15,7 @@ import { ControlError } from "./errors.js";
 import type { ControlStore } from "./store.js";
 
 /** §4.3: a member as the registry knows it. The path is the registered spelling; the frozen list below holds real paths. */
-export interface MultiDirTarget { key: string; repoId: string; kind: "repo" | "dir"; path: string }
+export interface MultiDirTarget { key: string; name: string; repoId: string; kind: "repo" | "dir"; path: string }
 
 /**
  * §4.3: the registry's multi-dir projects by control repo id. Every write and every read copies the list and each member,

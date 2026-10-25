@@ -4,6 +4,7 @@ import { buildEstimatePrompt, estimateResponseSchema, estimateTaskIds } from "./
 import { classifyEstimateOutput, readEstimateContract } from "./estimator.js";
 import { readEstimateRecord } from "./queries.js";
 import type { AdmissionGate } from "./admissionGate.js";
+import type { MultiDirProjectOf } from "./multiGroup.js";
 import type { SingleCallPurpose } from "./singleCall.js";
 import type { ControlStore } from "./store.js";
 import type { WorkspaceRoots } from "./workspace.js";
@@ -27,6 +28,11 @@ export interface SingleCallPrepareDeps {
    * own -- never os.homedir() at a call site. A dir group's call without it is blocked (repository-path).
    */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Multi-directory projects spec §6.3: the members of the multi-dir project a repo id names, for a member's display
+   * name in the composed overview. Absent or null: the member is named by its key.
+   */
+  multiDirProjectOf?: MultiDirProjectOf;
 }
 export interface SingleCallHandler {
   readonly purpose: SingleCallPurpose;
