@@ -16,13 +16,14 @@ import { reportedDecisionsOf, type ReportedDecisions } from "./reportedDecisions
 import { ccloopEvidenceString, runEvidence, runLedgerEvents, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { flowGroupOf, isDirFlowGroup, isFlowChildGroup } from "../flow/groups.js";
 import { recordLandedTip } from "./dirGroup.js";
+import { isMultiGroup } from "./multiGroup.js";
 import { appendFlowDecision } from "../flow/store.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
 import { writeDebugClosing } from "./debugClosing.js";
 import { reconcileDecision } from "../scheduler/ledgerWiring.js";
 import type { DecisionEvent } from "../ledger/schema.js";
-import { classifyCriteriaChange, criteriaDecision, flagged } from "./criteriaProtection.js";
+import { classifyCriteriaChange, criteriaDecision, flagged, type CriteriaChange, type CriteriaChangeKind } from "./criteriaProtection.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
 import { netChangeSet } from "../scheduler/harvest.js";
@@ -208,20 +209,23 @@ export function stagePending(deps: ExecutionDriverDeps, runId: string, pending: 
   });
 }
 
-type CriteriaFlag = { decisionId: string; reason: string; evidence: string[] };
+export type CriteriaFlag = { decisionId: string; reason: string; evidence: string[] };
 
 /**
  * Protect-acceptance-criteria spec §4 (as-built §8): a flagged change to the task's check-defining files gives the run's
  * `criteria` decision and the flag the landing writes; null when the attempt only added tests or left them alone.
  */
-async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: string, at: string, range?: { base: string; attempt: string }): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
+export async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: string, at: string, range?: { base: string; attempt: string; checks?: readonly string[] }): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
   const base = range?.base ?? run.drive?.base, attempt = range?.attempt ?? run.drive?.attemptSha;
   if (run.taskId === null || base == null || attempt == null) return null;
   // Checks spec 2026-10-22 §6.1 step 4: a model review writes only its findings file; its check names that file.
   if (run.groupId.startsWith("sysreview-")) return null;
   // A flow step's checks are its template's, never files of the folder: a hidden child is not judged (T18).
   if (isFlowChildGroup(deps.store, run.groupId)) return null;
-  const checks = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
+  // Multi-directory projects spec §7.2: each written directory is judged against its own result repository and its own
+  // checks, and the one flag names every directory that changed them.
+  if (range === undefined && isMultiGroup(deps.store, run.groupId)) return multiCriteriaFlag(deps, run, at);
+  const checks = range?.checks ?? readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
   const change = await classifyCriteriaChange(repo, base, attempt, checks);
   if (!flagged(change)) return null;
   // Spec §4.2: a modification whose code also passes the base versions of the checks gives no notice; a failed (or
@@ -229,8 +233,42 @@ async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, repo: s
   const baseRun = run.drive?.criteriaBase ?? null;
   if (change.kind === "modified" && baseRun?.result === "passed") return null;
   const baseNote = change.kind === "modified" && baseRun?.result === "failed" ? [`base-run-failed: ${baseRun.command}`] : [];
-  const decision = criteriaDecision(run.runId, run.groupId, base, { ...change, signals: [...change.signals, ...baseNote] }, at);
-  const reason = `${change.kind === "weakening" ? "Checks weakened" : baseNote.length > 0 ? "Only the changed checks pass" : "Checks changed"} so they pass: ${[...change.signals, ...baseNote, ...change.files].join(", ")}`.slice(0, 2048);
+  // Multi-directory projects spec §7.2: a multi run's base re-run is never started, and the flag says so.
+  const skipped = change.kind === "modified" && isMultiGroup(deps.store, run.groupId) ? ["base-run-skipped: multi-dir"] : [];
+  const decision = criteriaDecision(run.runId, run.groupId, base, { ...change, signals: [...change.signals, ...skipped, ...baseNote] }, at);
+  const reason = `${change.kind === "weakening" ? "Checks weakened" : baseNote.length > 0 ? "Only the changed checks pass" : "Checks changed"} so they pass: ${[...change.signals, ...skipped, ...baseNote, ...change.files].join(", ")}`.slice(0, 2048);
+  return { decision, flag: { decisionId: decision.id, reason, evidence: decision.evidence ?? [] } };
+}
+
+/**
+ * Multi-directory projects spec §7.2: every written directory is classified in its own result repository with its own
+ * checks -- the primary's `requiredChecks`, an extra's contract entry's. One decision covers the run; a weakening in any
+ * directory wins over a modification, and a modification is flagged with the marker for the base re-run never started.
+ */
+async function multiCriteriaFlag(deps: ExecutionDriverDeps, run: DriverRun, at: string): Promise<{ decision: DecisionEvent; flag: CriteriaFlag } | null> {
+  const drive = run.drive, dirs = drive?.dirs;
+  if (drive === undefined || dirs === undefined || run.taskId === null || drive.base === null) return null;
+  const { contract } = readConfirmedTaskExecution(deps.store, run.groupId, run.taskId);
+  const extras = (contract as unknown as { context?: { additionalRepos?: Array<{ key?: unknown; requiredChecks?: unknown }> } }).context?.additionalRepos;
+  const checksOf = (key: string, index: number): readonly string[] => {
+    if (index === 0) return contract.verification.requiredChecks;
+    const entry = Array.isArray(extras) ? extras.find((candidate) => candidate.key === key) : undefined;
+    return Array.isArray(entry?.requiredChecks) ? entry.requiredChecks.filter((check): check is string => typeof check === "string") : [];
+  };
+  const changes: CriteriaChange[] = [];
+  for (const [index, dir] of dirs.entries()) {
+    if (dir.attemptSha == null) continue;
+    const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+    const change = await classifyCriteriaChange(resultRepo, dir.base, dir.attemptSha, checksOf(dir.key, index));
+    if (flagged(change)) changes.push(change);
+  }
+  if (changes.length === 0) return null;
+  const kind: CriteriaChangeKind = changes.some((change) => change.kind === "weakening") ? "weakening" : "modified";
+  const files = [...new Set(changes.flatMap((change) => change.files))];
+  const signals = [...new Set(changes.flatMap((change) => change.signals))];
+  const skipped = kind === "modified" ? ["base-run-skipped: multi-dir"] : [];
+  const decision = criteriaDecision(run.runId, run.groupId, drive.base, { kind, files, signals: [...signals, ...skipped] }, at);
+  const reason = `${kind === "weakening" ? "Checks weakened" : "Checks changed"} so they pass: ${[...signals, ...skipped, ...files].join(", ")}`.slice(0, 2048);
   return { decision, flag: { decisionId: decision.id, reason, evidence: decision.evidence ?? [] } };
 }
 

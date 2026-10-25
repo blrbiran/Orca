@@ -114,6 +114,12 @@ export const driveRecordSchema = z.object({
   targetRepo: z.string().min(1).nullable(),
   prepared: z.boolean(),
   base: commitSchema.nullable(),
+  // Multi-directory projects spec §7.1/§7.3: each written directory's target, base and workspace, in registered order
+  // (the primary first); its attempt sha is recorded at C. Absent for every single-repository run.
+  dirs: z.array(z.object({
+    key: z.string().min(1), targetRepo: z.string().min(1), base: commitSchema, workspacePath: z.string().min(1),
+    attemptSha: commitSchema.nullable().optional(),
+  }).strict()).min(1).optional(),
   envelopeHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   inspectUnknown: safeInteger,
   outcome: z.string().min(1).nullable(),

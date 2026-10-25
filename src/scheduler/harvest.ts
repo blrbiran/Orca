@@ -121,7 +121,7 @@ export async function netChangeSet(clone: string, base: string, attemptSha: stri
   return stdout.split("\0").filter((p) => p.length > 0).sort();
 }
 
-export async function harvest(run: TaskRun, base: string, declared: ClaimedPath[]): Promise<Reconciliation> {
+export async function harvest(run: TaskRun, base: string, declared: ClaimedPath[], cloneDir: string = cloneDirOf(run.workdir)): Promise<Reconciliation> {
   // Measured in Task 8: `blocked_waiting_human` is the one terminal status that
   // leaves NO attempt ref — runLoop persists it and returns without entering
   // any cleanup path, and publishAttemptCommit only ever runs from inside
@@ -146,7 +146,7 @@ export async function harvest(run: TaskRun, base: string, declared: ClaimedPath[
     );
   }
 
-  const actualPaths = await netChangeSet(cloneDirOf(run.workdir), base, run.attemptSha);
+  const actualPaths = await netChangeSet(cloneDir, base, run.attemptSha);
 
   // Direction one. `contains` rather than a string prefix, and the shared one
   // from pathTrie rather than a second copy: "src/a" must not swallow

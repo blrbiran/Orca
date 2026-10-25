@@ -166,3 +166,18 @@ it("carries only codexSkillsDir for a Codex skill run and rejects both directory
  expect(startEnvelopeSchema.safeParse(built).success).toBe(true);
  expect(()=>toStartEnvelope(ledgerEnvelope(),runRow(),{...work,skillPluginDir:"/tmp/plugin",codexSkillsDir:"/tmp/skills"},contract)).toThrow("start-envelope-conflict");
 });
+
+// Multi-directory projects spec §7.1: the work entry names exactly the contract's extra directories -- both sides, or
+// neither. ccloop materializes what the work entry names, so a contract naming an extra the entry does not would run
+// with a missing directory, and an entry naming one the contract does not would escape the contract's claims.
+describe("the extra repositories a multi-directory envelope names", () => {
+  const multiContract = { objective: "ship", context: { additionalRepos: [{ key: "alpha", repoPath: "/tmp/alpha" }] } };
+  const extra = { key: "alpha", targetRepo: "/tmp/alpha", base: "v1" };
+
+  it("accepts them on both sides, and refuses either side alone", () => {
+    const built = toStartEnvelope(ledgerEnvelope(), runRow(), { ...work, additionalRepos: [extra] }, multiContract);
+    expect(startEnvelopeSchema.safeParse(built).success).toBe(true);
+    expect(startEnvelopeSchema.safeParse({ ...built, work: { ...built.work, additionalRepos: undefined } }).success).toBe(false);
+    expect(startEnvelopeSchema.safeParse({ ...built, work: { ...built.work, contract } }).success).toBe(false);
+  });
+});

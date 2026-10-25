@@ -94,7 +94,12 @@ export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Recor
    * Dir-requirements plan Task 4 (D5): more registered projects beside the world's repository, e.g. a `dir` project. With
    * two projects there is no default state directory, so the control state goes under `<root>/control/panel`.
    */
-  extraRepos?: Array<{ projectKey: string; path: string; kind?: "dir" }> }
+  extraRepos?: Array<{ projectKey: string; path: string; kind?: "dir" }>;
+  /**
+   * Multi-directory projects spec §7.1: a second real git repository beside the world's, registered as its own project
+   * at `<root>/<dirName>` (a multi run's extra directory). Like `extraRepos`, it moves the state under `<root>/control/panel`.
+   */
+  multiRepo?: { projectKey: string; dirName: string } }
 // *** ERRATUM (2026-10-16, Orca session a852f96a, every-agent requirement chain Task 10) *** on `declaredContextWindowTokens`
 // above ("null otherwise, so the estimate stays blocked-capability"): measured on 06f15c53 (ccloop codex/every-agent-chain
 // efcd5b3 built), a codex world's import-time estimate is blocked first by
@@ -139,6 +144,15 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     roots.push(root);
     const repo = join(root, "target");
     await mkdir(repo);
+    // Multi-directory projects spec §7.1: an extra directory of its own, a real repository on main.
+    const multiRepo = worldOptions.multiRepo === undefined ? null : join(root, worldOptions.multiRepo.dirName);
+    if (multiRepo !== null) {
+      await mkdir(multiRepo);
+      g(multiRepo, "init", "-q", "-b", "main");
+      await writeFile(join(multiRepo, "shared.txt"), "base\n");
+      g(multiRepo, "add", "shared.txt");
+      g(multiRepo, "commit", "-qm", "base");
+    }
     if (worldOptions.bareTarget === true) {
       g(repo, "init", "-q", "--bare", "--shared=0600");
       const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: repo, input: "base\n", encoding: "utf8" }).trim();
@@ -203,9 +217,10 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const profilePath = join(root, "profile.json");
     await writeFile(profilePath, JSON.stringify(snapshot));
     const repoId = controlRepoKey("e2e");
-    const repos: Array<{ projectKey: string; path: string; kind?: "dir" }> = [{ projectKey: "e2e", path: repo }, ...(worldOptions.extraRepos ?? [])];
+    const repos: Array<{ projectKey: string; path: string; kind?: "dir" }> = [{ projectKey: "e2e", path: repo },
+      ...(multiRepo === null ? [] : [{ projectKey: worldOptions.multiRepo!.projectKey, path: multiRepo }]), ...(worldOptions.extraRepos ?? [])];
     const env: NodeJS.ProcessEnv = { ORCA_CONTROL_DIR: join(root, "control"), ORCA_CCLOOP_BIN: realBinary!, ORCA_AGENTS_TABLE: table, ...worldOptions.env };
-    const stateDir = worldOptions.extraRepos === undefined ? [] : ["--control-state-dir", join(root, "control", "panel")];
+    const stateDir = worldOptions.extraRepos === undefined && multiRepo === null ? [] : ["--control-state-dir", join(root, "control", "panel")];
     const { rejection, ...control } = resolveControlOptions(["--plan", `plan=${repoId}=${planPath}`, "--profile", profilePath, "--estimator-profile", "all", "--estimate-mode", worldOptions.estimateMode ?? "soft", "--control-wake-ms", "50", ...stateDir], env, repos);
     if (rejection !== null) throw new Error(rejection);
     let epoch = 0;
@@ -244,7 +259,8 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const landings = (): number => Number(g(repo, "rev-list", "--first-parent", "--count", "main..refs/heads/orca/g"));
     const show = (path: string): string => g(repo, "show", `refs/heads/orca/g:${path}`);
     const tip = (): string => g(repo, "rev-parse", "refs/heads/orca/g");
-    return { root, repo, repoId, table, agentsTable, boot, die, teardown, calls, scripted, argv, scriptedOf, human, worktrees, landings, show, tip, claudeScriptPath: join(root, "claude-script.json"), claudeMarker };
+    return { root, repo, repoId, multiRepo, multiRepoId: worldOptions.multiRepo === undefined ? null : controlRepoKey(worldOptions.multiRepo.projectKey),
+      table, agentsTable, boot, die, teardown, calls, scripted, argv, scriptedOf, human, worktrees, landings, show, tip, claudeScriptPath: join(root, "claude-script.json"), claudeMarker };
   }
 
   const removeRoots = async (): Promise<void> => {

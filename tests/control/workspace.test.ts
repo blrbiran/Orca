@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  cleanupRunWorkspace, commitAttempt, compareAndSwap, controlWorkspaceRoots, ensureWorkBranch, ensureWorkspace,
-  incomingRefOf, makeReadOnly, removeOwnPath, removeSkillsSnapshot, skillsPathOf, workspacePathOf,
+  cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, compareAndSwap, controlWorkspaceRoots, ensureWorkBranch,
+  ensureWorkspace, extraWorkspacePathOf, incomingRefOf, makeReadOnly, removeOwnPath, removeSkillsSnapshot, skillsPathOf,
+  workspacePathOf,
 } from "../../src/control/workspace.js";
 import { within } from "../../src/control/archive.js";
 
@@ -172,6 +173,22 @@ describe("compare-and-swap and cleanup (execution driver §5.1, §3.5)", () => {
     expect(existsSync(own)).toBe(false);
     expect(existsSync(join(other, "skills", "alpha", "SKILL.md"))).toBe(true);
     chmodSync(join(other, "skills"), 0o700); chmodSync(join(other, "skills", "alpha"), 0o700);
+  });
+
+  // Multi-directory projects spec §7.1: an extra directory's workspace is a flat leaf and has no skill snapshot; its
+  // incoming ref goes with it, and a key that would leave the leaf is refused before anything is removed.
+  it("removes an extra directory's workspace and incoming ref, and refuses a key that leaves the leaf", async () => {
+    const t = await target();
+    await ensureWorkBranch(t.repo, "g");
+    const path = extraWorkspacePathOf(t.roots, "run-8", "alpha");
+    expect(path).toBe(join(t.roots.workspacesRoot, "run-8.dir-alpha"));
+    await ensureWorkspace(t.repo, "worktree", path, t.head, t.roots);
+    g(t.repo, "update-ref", incomingRefOf("run-8"), t.head);
+    await cleanupExtraWorkspace(t.repo, t.roots, "run-8", "alpha");
+    expect(existsSync(path)).toBe(false);
+    expect(g(t.repo, "for-each-ref", "--format=%(refname)", "refs/orca/")).toBe("");
+    expect(g(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(t.head);
+    await expect(cleanupExtraWorkspace(t.repo, t.roots, "run-8", "x/y")).rejects.toThrow(/not named after run-8\.dir-x\/y/);
   });
 
   it("cleans a run that never had a skill snapshot", async () => {

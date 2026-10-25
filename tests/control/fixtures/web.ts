@@ -33,6 +33,8 @@ export const profileSnapshot = (): ExecutionProfileSnapshotV1 => ({
 // Seam B (human ruling 2026-09-24, named under ruling 88): targetVersion is one positive safe integer from plan to wire.
 // Labels and progress plan Task 3 (finding F14): a task may carry plan labels; absent, the plan file is unchanged.
 export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVersion?: number; targetPaths?: string[]; agent?: PartialSelection; labels?: string[];
+  // Multi-directory projects spec §6.4: fields the hand-written contract's context carries beyond the fixture's defaults.
+  contextExtra?: Record<string, unknown>;
   // Loop plans spec §3.1: a task that names a loop plan instead of a contract file.
   loop?: Record<string, unknown>;
   /** The hand-written contract's executionPolicy.perAttemptTimeoutMs (60 000 unless said otherwise). */
@@ -94,7 +96,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
       continue;
     }
     const contract = { objective: { taskId: task.taskId, goal: "ship", successCondition: "passes", nonGoals: [] },
-      context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [] },
+      context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [], ...(task.contextExtra ?? {}) },
       executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: task.perAttemptTimeoutMs ?? 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: task.tokenBudget===undefined?99_000:task.tokenBudget, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
       safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
       verification: { verifierType: "command", requiredChecks: options.requiredChecks ?? ["true"], rejectOn: ["failure"], evidenceRequired: [] },

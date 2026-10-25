@@ -63,7 +63,11 @@ export type PriorFailure=z.infer<typeof priorFailureSchema>;
 // text 1-4096 UTF-8 bytes. Optional and never defaulted, so an envelope without it keeps its exact bytes and hash.
 export const operatorNoteSchema=z.object({text:utf8Bounded(4096),scope:z.enum(["next-attempt","remaining-attempts"])}).strict();
 export type OperatorNote=z.infer<typeof operatorNoteSchema>;
-const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional(),codexSkillsDir:z.string().min(1).optional(),ompSkillsDir:z.string().min(1).optional(),priorFailures:z.array(priorFailureSchema).min(1).max(PRIOR_FAILURE_BOUNDS.entries).optional(),operatorNote:operatorNoteSchema.optional()}).strict();
+// Multi-directory projects spec §7.1 / §11.1: the written directories beyond the primary, in the contract's order. Absent
+// for every single-repository envelope, so its bytes and hash are unchanged.
+const additionalRepoKeySchema=z.string().regex(/^[a-z0-9_](?:[a-z0-9._-]*[a-z0-9_])?$/);
+const additionalRepoWorkSchema=z.object({key:additionalRepoKeySchema,targetRepo:z.string().min(1),base:z.string().min(1)}).strict();
+const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional(),codexSkillsDir:z.string().min(1).optional(),ompSkillsDir:z.string().min(1).optional(),priorFailures:z.array(priorFailureSchema).min(1).max(PRIOR_FAILURE_BOUNDS.entries).optional(),operatorNote:operatorNoteSchema.optional(),additionalRepos:z.array(additionalRepoWorkSchema).min(1).max(7).optional()}).strict();
 const singleCallWorkSchema=z.object({kind:z.literal("single-call"),prompt:z.string().min(1),responseSchema:z.record(z.unknown()).refine(schema=>schema.type==="object",{message:"response-schema-not-object"}),maxOutputTokens:safeInteger.positive(),sourceDir:z.string().min(1)}).strict();
 export const startEnvelopeSchema=z.object({protocol:z.union([z.literal(3),z.literal(4)]),mode:z.literal("verify-saved-result").optional(),savedResultRecovery:z.object({packagePath:z.string().min(1),packageHash:z.string().regex(/^[a-f0-9]{64}$/),admissionHash:z.string().regex(/^[a-f0-9]{64}$/),recoveryOf:recoveryOfSchema}).strict().optional(),tokenPolicy:tokenPolicySchema.optional(),claim:z.object({groupId:idSchema,workItemId:idSchema,taskId:idSchema.nullable(),runId:idSchema,generation:safeInteger.positive(),graphVersion:safeInteger,targetVersion:safeInteger,commandId:idSchema,configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,ownerToken:idSchema}).strict(),contractHash:z.string().regex(/^[a-f0-9]{64}$/),inputCheckpoint:inputCheckpointSchema.nullable(),work:z.discriminatedUnion("kind",[loopWorkSchema,singleCallWorkSchema])}).strict().superRefine((value,ctx)=>{
   if((value.mode!==undefined)!==(value.savedResultRecovery!==undefined)||value.mode!==undefined&&(value.protocol!==4||value.inputCheckpoint!==null||value.work.kind!=="loop"))ctx.addIssue({code:"custom",message:"invalid-saved-result-mode"});
@@ -74,6 +78,17 @@ export const startEnvelopeSchema=z.object({protocol:z.union([z.literal(3),z.lite
   // ccloop f4de340 (live transcript spec §10.2.6): nor an operator note, for the same reason.
   if(value.mode!==undefined&&value.work.kind==="loop"&&value.work.operatorNote!==undefined)ctx.addIssue({code:"custom",path:["work","operatorNote"],message:"operator-note-with-saved-result"});
   if(value.work.kind==="loop"&&[value.work.skillPluginDir,value.work.codexSkillsDir,value.work.ompSkillsDir].filter(dir=>dir!==undefined).length>1)ctx.addIssue({code:"custom",path:["work","codexSkillsDir"],message:"skills-directories-mutually-exclusive"});
+  // Multi-directory projects spec §7.1: the work entry names exactly the contract's extra directories, in its order --
+  // absent on both sides, or present on both with the same keys.
+  if(value.work.kind==="loop"){
+    const repos=value.work.additionalRepos,context=(value.work.contract as {context?:{additionalRepos?:unknown}}|null|undefined)?.context;
+    const contractKeys=Array.isArray(context?.additionalRepos)?context.additionalRepos.map(entry=>typeof (entry as {key?:unknown}).key==="string"?(entry as {key:string}).key:null):null;
+    if(repos!==undefined){
+      if(new Set(repos.map(repo=>repo.key)).size!==repos.length)ctx.addIssue({code:"custom",path:["work","additionalRepos"],message:"duplicate-additional-repo-key"});
+      if(contractKeys===null||contractKeys.join("\0")!==repos.map(repo=>repo.key).join("\0"))ctx.addIssue({code:"custom",path:["work","additionalRepos"],message:"additional-repos-contract-mismatch"});
+    }
+    else if(contractKeys!==null&&contractKeys.length>0)ctx.addIssue({code:"custom",path:["work","additionalRepos"],message:"additional-repos-contract-mismatch"});
+  }
   // A single call is never resumed (spec §6.5): an interrupted estimate is re-estimated, not continued.
   if(value.work.kind==="single-call"&&value.inputCheckpoint!==null)ctx.addIssue({code:"custom",path:["inputCheckpoint"],message:"single-call-input-checkpoint"});
 });

@@ -47,6 +47,8 @@ export interface StartEnvelopeWork {
   ompSkillsDir?: string;
   /** ccloop priorFailures spec 2026-10-21 §3: earlier runs' failures, built once at A2 (priorFailures.ts); absent stays absent. */
   priorFailures?: PriorFailure[];
+  /** Multi-directory projects spec §7.1: the written directories beyond the primary, in the contract's order; absent for one. */
+  additionalRepos?: Array<{ key: string; targetRepo: string; base: string }>;
 }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
@@ -120,6 +122,7 @@ export function toStartEnvelope(
       ...(work.codexSkillsDir !== undefined ? { codexSkillsDir: work.codexSkillsDir } : {}),
       ...(work.ompSkillsDir !== undefined ? { ompSkillsDir: work.ompSkillsDir } : {}),
       ...(work.priorFailures !== undefined ? { priorFailures: work.priorFailures } : {}),
+      ...(work.additionalRepos !== undefined ? { additionalRepos: work.additionalRepos } : {}),
     },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so

@@ -37,6 +37,9 @@ export function controlWorkspaceRoots(stateDir: string): WorkspaceRoots {
 export const sourceDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.runsRoot, runId);
 export const workspacePathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, runId);
 export const landingPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `landing-${runId}`);
+/** Multi-directory projects spec §7.1: one flat leaf per written directory beyond the primary (`assertOwnPath` unchanged). */
+export const extraWorkspacePathOf = (roots: WorkspaceRoots, runId: string, key: string): string => join(roots.workspacesRoot, `${runId}.dir-${key}`);
+export const extraLandingPathOf = (roots: WorkspaceRoots, runId: string, key: string): string => join(roots.workspacesRoot, `landing-${runId}.dir-${key}`);
 export const conflictPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `conflict-${runId}`);
 export const reconcileRunsDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `reconcile-${runId}`);
 /** Syncskill integration spec §10.6: the run's skill snapshot, the plugin dir ccloop is handed (runIds are `run-<uuid>`, so no collision). */
@@ -176,5 +179,16 @@ export async function cleanupRunWorkspace(targetRepo: string, roots: WorkspaceRo
   if (basename(workspacePath) !== runId) throw new Error(`orca: refusing to clean ${workspacePath}, which is not named after ${runId}`);
   await removeOwnPath(targetRepo, roots, workspacePath);
   await removeSkillsSnapshot(targetRepo, roots, runId);
+  await git(targetRepo, [...QUIET_GIT, "update-ref", "-d", incomingRefOf(runId)]).catch(() => undefined);
+}
+
+/**
+ * Multi-directory projects spec §7.1: an extra directory's workspace and its incoming ref. The skill snapshot belongs to
+ * the primary (skills inject there only), so it is not removed here.
+ */
+export async function cleanupExtraWorkspace(targetRepo: string, roots: WorkspaceRoots, runId: string, key: string): Promise<void> {
+  const path = extraWorkspacePathOf(roots, runId, key);
+  if (basename(path) !== `${runId}.dir-${key}`) throw new Error(`orca: refusing to clean ${path}, which is not named after ${runId}.dir-${key}`);
+  await removeOwnPath(targetRepo, roots, path);
   await git(targetRepo, [...QUIET_GIT, "update-ref", "-d", incomingRefOf(runId)]).catch(() => undefined);
 }

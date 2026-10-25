@@ -13,6 +13,7 @@ import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
 import type { AgentsView, StartEnvelope } from "../../../src/control/executionPort.js";
 import type { SyncskillOptions } from "../../../src/skills/syncskill.js";
 import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
+import type { MultiDirProjectOf } from "../../../src/control/multiGroup.js";
 
 /** A `ccloop run` stand-in for reconciliation criteria (created in Task 6). */
 export const FAKE_CCLOOP_RUN = resolve("tests/control/fixtures/fake-ccloop-run.mjs");
@@ -58,6 +59,10 @@ export interface HarnessOptions {
   requiredChecks?: string[];
   /** Checks spec 2026-10-22 §6.1: the terminal's budgetSnapshot the synthetic ccloop reports (driverPort.ts). */
   budgetSnapshot?: (workItemId: string) => { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null } | undefined;
+  /** Multi-directory projects spec §5.2: repositories beside the primary, by control repo id (built under the fixture root). */
+  repositories?: (root: string) => Promise<Record<string, string>> | Record<string, string>;
+  /** Multi-directory projects spec §4.3: the live registry, when a criterion needs it to disagree with the frozen list. */
+  multiDirProjectOf?: MultiDirProjectOf;
 }
 
 /**
@@ -72,7 +77,8 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   await writeFile(join(repo, "base.txt"), "base\n");
   git(repo, "add", "base.txt");
   git(repo, "commit", "-qm", "base");
-  const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId === "repo", ...(options.syncskill ? { syncskill: options.syncskill } : {}) });
+  const repositories: Record<string, string> = { repo, ...(options.repositories === undefined ? {} : await options.repositories(h.root)) };
+  const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId in repositories, ...(options.syncskill ? { syncskill: options.syncskill } : {}) });
   const confirmed = await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: options.budgetMode ?? "soft" }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const fake = fakeCcloopPort({
@@ -90,9 +96,15 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
-    roots: controlWorkspaceRoots(h.store.stateDir), resolveRepository: () => repo,
+    roots: controlWorkspaceRoots(h.store.stateDir),
+    // Without `repositories` the fixture collapses every id (a dir flow group's vault included) onto its one real
+    // repository, as it always has; a test that registers extras gets strict resolution instead.
+    resolveRepository: options.repositories === undefined
+      ? () => repo
+      : (repoId: string) => { const path = repositories[repoId]; if (path === undefined) throw new Error(`unknown repository ${repoId}`); return path; },
     ccloopBin: FAKE_CCLOOP_RUN, agentsTablePath: join(h.root, "reconcile-agents.json"),
     ...(options.syncskill ? { syncskill: options.syncskill } : {}),
+    ...(options.multiDirProjectOf ? { multiDirProjectOf: options.multiDirProjectOf } : {}),
   };
   const dispatch = { store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate };
   /** Start guard spec (2026-10-15) §3.2: while the group's execution is pending a second start is refused, so a later
@@ -115,5 +127,5 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     for (let i = 0; i < rounds && !predicate(); i += 1) await driver.round();
     if (!predicate()) throw new Error("the driver did not reach the expected state");
   };
-  return { h, repo, service, fake, deps, dispatch, claim, body, until, driver: () => createExecutionDriver(deps) };
+  return { h, repo, repositories, service, fake, deps, dispatch, claim, body, until, driver: () => createExecutionDriver(deps) };
 }

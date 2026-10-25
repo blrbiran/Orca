@@ -15,7 +15,8 @@ import {
 } from "./stopIntent.js";
 import { isSingleCallRun, isWebWorkRun } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
-import { cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
+import { cleanupExtraWorkspace, cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
+import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
@@ -121,8 +122,14 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
   }
   let cleanupError: string | null = null;
   // Single-call estimate spec §6.5 (review I3): an estimate run has no workspace; nothing in the target repository is touched.
+  // Multi-directory projects spec §7.1: a multi group has no single repository, so its primary is resolved from the frozen
+  // list, and every extra workspace A2 made (recorded as it was made) goes too.
   if (run.drive !== undefined && run.drive.workspacePath !== null) {
-    try { await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, run.groupId)), deps.roots, runId, run.drive.workspacePath); }
+    try {
+      const repoId = isMultiGroup(store, run.groupId) ? multiPrimaryRepoId(store, run.groupId) : groupRepoId(store, run.groupId);
+      await cleanupRunWorkspace(deps.resolveRepository(repoId), deps.roots, runId, run.drive.workspacePath);
+      for (const dir of run.drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
+    }
     catch (error) { cleanupError = describeError(error); }
   }
   return write(deps, () => {

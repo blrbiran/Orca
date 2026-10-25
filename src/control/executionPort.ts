@@ -13,7 +13,7 @@ import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } 
 import type { VersionRefresh } from "../agents/versionRefresh.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
-export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote }
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote;additionalRepos?:Array<{key:string;targetRepo:string;base:string}> }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
 export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};

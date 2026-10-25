@@ -3,7 +3,7 @@ import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import type { MultiDirProjectOf } from "./multiGroup.js";
-import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
+import { dirTargetRepoId, isMultiGroup, multiDirOf, multiPrimaryRepoId, type FrozenMultiDir } from "./multiGroup.js";
 import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
@@ -44,7 +44,7 @@ import { singleCallPurposeOf } from "./singleCall.js";
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
@@ -54,8 +54,9 @@ import { classifyCriteriaChange, runChecksAtBase, type CriteriaBaseVerdict } fro
 import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
-import { harvest } from "../scheduler/harvest.js";
-import { writeSetOf } from "../scheduler/writeSet.js";
+import { harvest, type Reconciliation } from "../scheduler/harvest.js";
+import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
+import { taskWrites } from "./requirementRecords.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { DriveRecord, DriveStep } from "./driveRecord.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -326,6 +327,17 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     return true;
   }
   const drive = run.drive;
+  // Multi-directory projects spec §7.1/§7.4: a multi group has no single repository, and A2 reads its frozen list (never
+  // the live registry). What a multi run cannot do (continuation, allowance resume, saved-result recovery) is named here,
+  // before any workspace exists.
+  const multi = multiDirOf(readGroup(store, run.groupId));
+  if (multi !== null) {
+    if (run.mode === "verify-saved-result" || run.recoveryOf !== undefined) { blockRun(deps, runId, "A2", "multi-dir-recovery-unsupported"); return true; }
+    const allowancePredecessor = (allowanceWork(store, run.groupId, run.workItemId) as { allowancePredecessorRunId?: string }).allowancePredecessorRunId;
+    const allowanceBase = allowancePredecessor === undefined ? null : readDriverRun(store, allowancePredecessor).drive?.base ?? null;
+    if (run.continuationIntentId || allowanceBase !== null) { blockRun(deps, runId, "A2", "multi-dir-continuation-unsupported"); return true; }
+    return stepA2Multi(deps, run, multi, frozenAgent);
+  }
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "A2", "repository-path"); return true; }
@@ -403,6 +415,116 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
     current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills };
     if(current.mode==="verify-saved-result"||current.recoveryOf!==undefined){const marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted")throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,envelopeHash};}
+    saveDriverRun(store, current);
+    return true;
+  });
+}
+
+/**
+ * A2 for a multi group's run (multi-directory projects spec §7.1): every written directory, in registered order, gets its
+ * work branch and workspace. The first written one is the ccloop primary and keeps today's workspace path; the others are
+ * flat leaves of the workspaces root. Skills inject into the primary only.
+ */
+async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: FrozenMultiDir, frozenAgent: ReturnType<typeof readConfirmedTaskExecution>["agent"]): Promise<boolean> {
+  const { store } = deps;
+  const runId = run.runId, drive = run.drive!, taskId = run.taskId!;
+  const writes = taskWrites(store, run.groupId, taskId);
+  if (writes === null || writes.length === 0) { blockRun(deps, runId, "A2", "multi-dir-writes-missing"); return true; }
+  const order = new Map(multi.dirs.map((dir, index) => [dir.key, index] as const));
+  for (const write of writes) {
+    if (!order.has(write.dir)) { blockRun(deps, runId, "A2", `multi-dir-writes:${write.dir}`); return true; }
+  }
+  const written = [...writes].sort((left, right) => order.get(left.dir)! - order.get(right.dir)!);
+  privateDirectory(drive.sourceDir);
+  const preparedDirs: Array<{ key: string; targetRepo: string; base: string; workspacePath: string; mode: WorkspaceMode }> = [];
+  // Recorded as each workspace is made: a block after one still names every extra directory a cleanup must remove (the
+  // primary's is already `drive.workspacePath`). Only the prepared write below records the envelope.
+  const recordDirs = (): void => {
+    write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
+      current.drive = { ...current.drive, dirs: preparedDirs.map(({ key, targetRepo, base, workspacePath }) => ({ key, targetRepo, base, workspacePath })) };
+      saveDriverRun(store, current);
+      return true;
+    });
+  };
+  for (const write of written) {
+    const member = multi.dirs.find((dir) => dir.key === write.dir)!;
+    const targetRepoId = dirTargetRepoId(store, run.groupId, write.dir);
+    let targetRepo: string;
+    try { targetRepo = deps.resolveRepository(targetRepoId); }
+    catch { blockRun(deps, runId, "A2", "repository-path"); return true; }
+    // Dir-requirements spec §6.5: a dir member's work branch is made by the export; there is none to read here.
+    if (member.kind === "dir" && !(await revParse(targetRepo, workBranchRef(run.groupId)).then(() => true, () => false))) {
+      blockRun(deps, runId, "A2", "dir-base-missing");
+      return true;
+    }
+    const base = await ensureWorkBranch(targetRepo, run.groupId, null);
+    const mode = readWorkspaceSetting(store, targetRepoId).workspaceMode;
+    const workspacePath = preparedDirs.length === 0 ? workspaceOf(drive) : extraWorkspacePathOf(deps.roots, runId, write.dir);
+    await ensureWorkspace(targetRepo, mode, workspacePath, base, deps.roots);
+    preparedDirs.push({ key: write.dir, targetRepo, base, workspacePath, mode });
+    recordDirs();
+  }
+  deps.crash?.("A2-after-workspace");
+  const primary = preparedDirs[0]!;
+  const confirmed = readConfirmedTaskExecution(store, run.groupId, taskId);
+  // Flow engine spec §12.2 phase 1: a flow step's child injects exactly its step's skills through the same path.
+  const declaredSkills = confirmed.skills ?? flowChildSkills(store, run.groupId);
+  let skills: DriveRecord["skills"] = null;
+  let skillsKind: string | undefined;
+  if (declaredSkills !== null) {
+    try {
+      skillsKind = (await portFor(deps, run).listAgents()).installations.find(installation => installation.id === frozenAgent.agent.agent)?.kind;
+      if (skillsKind !== "claude" && skillsKind !== "codex" && skillsKind !== "omp") {
+        blockRun(deps, runId, "A2", `skills-unsupported-agent:${taskId}:${frozenAgent.agent.agent}:${skillsKind ?? "not-in-table"}`);
+        return true;
+      }
+      skills = await injectRunSkills(deps, primary.targetRepo, runId, declaredSkills);
+    } catch (error) {
+      blockRun(deps, runId, "A2", `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}`);
+      return true;
+    }
+  }
+  const contractContext = (confirmed.contract as unknown as { context: Record<string, unknown> & { additionalRepos?: Array<{ key: string }> } }).context;
+  const contractExtras = Array.isArray(contractContext.additionalRepos) ? contractContext.additionalRepos : [];
+  for (const extra of contractExtras) {
+    if (!preparedDirs.some((dir) => dir.key === extra.key)) { blockRun(deps, runId, "A2", `multi-dir-contract:${extra.key}`); return true; }
+  }
+  for (const dir of preparedDirs.slice(1)) {
+    if (!contractExtras.some((extra) => extra.key === dir.key)) { blockRun(deps, runId, "A2", `multi-dir-contract:${dir.key}`); return true; }
+  }
+  const workspaceOfKey = new Map(preparedDirs.map((dir) => [dir.key, dir.workspacePath] as const));
+  const runtime = {
+    ...confirmed.contract,
+    context: {
+      ...contractContext, repoPath: primary.workspacePath,
+      ...(contractExtras.length === 0 ? {} : { additionalRepos: contractExtras.map((extra) => ({ ...extra, repoPath: workspaceOfKey.get(extra.key)! })) }),
+    },
+    executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
+  };
+  // Flow engine spec §12.1: a flow step's `{{skill.<name>.dir}}` names the copy this run injected, known only now.
+  const filled = confirmed.skills == null && skills !== null && flowChildSkills(store, run.groupId) !== null
+    ? withSkillDirs(runtime, skills.dir, skills.lock.map((entry) => entry.name)) : { value: runtime };
+  if ("unknown" in filled) { blockRun(deps, runId, "A2", `flow-skill-dir-unknown:${filled.unknown}`); return true; }
+  const contract = filled.value;
+  const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId, runId }, { recovery: false, predecessorRunId: null });
+  const additionalRepos = preparedDirs.slice(1).map(({ key, targetRepo, base }) => ({ key, targetRepo, base }));
+  const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
+    sourceDir: drive.sourceDir, targetRepo: primary.targetRepo, base: primary.base,
+    ...(additionalRepos.length === 0 ? {} : { additionalRepos }),
+    ...(priorFailures !== undefined ? { priorFailures } : {}),
+    ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : skillsKind === "omp" ? { ompSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
+  }, contract, null);
+  const envelopeHash = sha256Canonical(envelope);
+  return write(deps, () => {
+    writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
+    const current = readDriverRun(store, runId);
+    if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
+    current.drive = {
+      ...current.drive, workspaceMode: primary.mode, targetRepo: primary.targetRepo, base: primary.base, envelopeHash, prepared: true, skills,
+      dirs: preparedDirs.map(({ key, targetRepo, base, workspacePath }) => ({ key, targetRepo, base, workspacePath })),
+    };
     saveDriverRun(store, current);
     return true;
   });
@@ -609,7 +731,7 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
     });
   }
   try {
-  if(report.terminal&&run.taskId!==null&&run.mode===undefined&&run.recoveryOf===undefined&&(await port.readFeatures?.())?.savedResultRecovery==="v1"&&port.collectSavedResultEvidence&&port.readSavedResultEvidence){
+  if(report.terminal&&run.taskId!==null&&run.mode===undefined&&run.recoveryOf===undefined&&!isMultiGroup(store,run.groupId)&&(await port.readFeatures?.())?.savedResultRecovery==="v1"&&port.collectSavedResultEvidence&&port.readSavedResultEvidence){
     const page=savedResultCollectionSchema.parse(await port.collectSavedResultEvidence(readStartEnvelope(store,run)));
     if(page.identity.runId!==runId||page.identity.envelopeHash!==run.drive?.envelopeHash||page.identity.executionId!==run.executionId)throw new ControlError("report-identity-conflict");
     if(page.capsule){
@@ -672,12 +794,41 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
   }
-  const attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));
+  let attemptSha: string;
   const contract = readConfirmedTaskExecution(store, run.groupId, run.taskId).contract;
-  const measured = await harvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, writeSetOf(contract));
-  if (measured.outOfBounds.length > 0) {
-    blockRun(deps, runId, "C", `out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
-    return true;
+  // Multi-directory projects spec §7.2: one attempt commit and one harvest per written directory, each with its own
+  // claims. The primary's sha stays in drive.attemptSha; every directory's sha is kept in drive.dirs[].
+  const multi = isMultiGroup(store, run.groupId);
+  const multiDirs = multi ? drive.dirs ?? null : null;
+  if (multi && multiDirs === null) { blockRun(deps, runId, "C", "multi-dir-writes-missing", { outcome }); return true; }
+  const dirAttempts: string[] = [];
+  const dirReconciliations: Array<{ key: string; outOfBounds: string[]; empty: boolean }> = [];
+  let measured: Reconciliation;
+  if (multiDirs === null) {
+    attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));
+    measured = await harvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, writeSetOf(contract));
+    if (measured.outOfBounds.length > 0) {
+      blockRun(deps, runId, "C", `out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
+      return true;
+    }
+  } else {
+    for (const [index, dir] of multiDirs.entries()) {
+      const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+      const dirSha = await commitAttempt(resultRepo);
+      dirAttempts.push(dirSha);
+      const declared = index === 0 ? writeSetOf(contract) : extraClaimsOf(contract, dir.key);
+      const result = await harvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha: dirSha }, dir.base, declared, resultRepo);
+      dirReconciliations.push({ key: dir.key, outOfBounds: result.outOfBounds, empty: result.empty });
+    }
+    attemptSha = dirAttempts[0]!;
+    measured = { actualPaths: [], outOfBounds: [], declaredNotProduced: [], empty: dirReconciliations.every((dir) => dir.empty) };
+    const offending = dirReconciliations.filter((dir) => dir.outOfBounds.length > 0).map((dir) => `${dir.key}:${dir.outOfBounds.join(",")}`);
+    if (offending.length > 0) {
+      // The runs that were committed stay named on the blocked run, as the primary's sha is.
+      const dirs = multiDirs.map((dir, index) => ({ ...dir, ...(dirAttempts[index] === undefined ? {} : { attemptSha: dirAttempts[index]! }) }));
+      blockRun(deps, runId, "C", `out-of-bounds:${offending.join(";")}`, { outcome, attemptSha, dirs });
+      return true;
+    }
   }
   // Debug-task design §12.8 (plan Task 8): a debug group's run is checked before it moves on, an empty attempt included
   // (it added no test, so it fails `no-tests`). Fix round 1 (R1): the check runs off the driver round. The marker that
@@ -700,7 +851,9 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // defining its checks has its required checks re-run with the base versions of those files, off the driver round and
   // under the same marker as the reproduce-first check. A weakening is flagged whatever the re-run says, so it is not run.
   // A flow run's hidden child is never judged (its checks are the template's; driverLanding.criteriaFlagOf), so not re-run.
-  if (!measured.empty && !isFlowChildGroup(store, run.groupId)) {
+  // A multi run's per-directory criteria check and base re-run are skipped here (spec §7.2: the base re-run is never
+  // started; the landing's flag says `base-run-skipped: multi-dir`), so drive.criteriaBase stays null.
+  if (!measured.empty && multiDirs === null && !isFlowChildGroup(store, run.groupId)) {
     const workdir = join(drive.sourceDir, "repo");
     const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks);
     if (change.kind === "modified") {
@@ -723,10 +876,39 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // Deviation D14: an empty result is not landed; `landedCommit` stays null and the settle step
     // (Task 7) applies D14 and decides E from there.
     current.state = measured.empty ? "landed" : "collected";
-    current.drive = { ...current.drive!, outcome, attemptSha, landedCommit: null };
+    current.drive = {
+      ...current.drive!, outcome, attemptSha, landedCommit: null,
+      ...(multiDirs === null ? {} : { dirs: multiDirs.map((dir, index) => ({ ...dir, attemptSha: dirAttempts[index]! })) }),
+    };
     saveDriverRun(store, current);
     return true;
   });
+}
+
+/**
+ * Multi-directory projects spec §7.1: the repository whose worktree cleanup acts in -- a multi run's first written
+ * directory, which owns the run's workspace and skill snapshot. A run blocked before its prepared write has no
+ * `drive.dirs`; its first write in registered order is the directory A2 made first.
+ */
+function cleanupRepoIdOf(store: ControlStore, run: DriverRun): string {
+  const multi = multiDirOf(readGroup(store, run.groupId));
+  if (multi === null) return groupRepoId(store, run.groupId);
+  const recorded = run.drive?.dirs?.[0]?.key;
+  if (recorded !== undefined) return dirTargetRepoId(store, run.groupId, recorded);
+  const order = new Map(multi.dirs.map((dir, index) => [dir.key, index] as const));
+  const writes = run.taskId === null ? null : taskWrites(store, run.groupId, run.taskId);
+  const first = (writes ?? []).slice().sort((left, right) =>
+    (order.get(left.dir) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.dir) ?? Number.MAX_SAFE_INTEGER))[0];
+  return dirTargetRepoId(store, run.groupId, first?.dir ?? multi.dirs[0]!.key);
+}
+
+/** Multi-directory projects spec §7.2: an extra directory's claims are its contract entry's targetPaths ∪ allowlistPaths. */
+function extraClaimsOf(contract: unknown, key: string): ClaimedPath[] {
+  const context = (contract as { context?: { additionalRepos?: Array<{ key?: string; targetPaths?: unknown; allowlistPaths?: unknown }> } } | null | undefined)?.context;
+  const entry = context?.additionalRepos?.find((candidate) => candidate.key === key);
+  if (entry === undefined) throw new ControlError("multi-dir-invalid", `contract:${key}`);
+  const paths = (value: unknown): string[] => Array.isArray(value) ? value.filter((path): path is string => typeof path === "string") : [];
+  return [...paths(entry.targetPaths), ...paths(entry.allowlistPaths)].map(normalizeClaim);
 }
 
 function debugChecksOf(context: DriverContext | undefined): Map<string, DebugCheck> {
@@ -1027,7 +1209,8 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
   }
   const afterPublish = readDriverRun(store, runId);
   if (afterPublish.state !== "settled" || afterPublish.drive === undefined || afterPublish.drive.cleanedUp) return settledJustNow;
-  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, afterPublish.groupId)), deps.roots, runId, workspaceOf(afterPublish.drive));
+  await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, afterPublish)), deps.roots, runId, workspaceOf(afterPublish.drive));
+  for (const dir of afterPublish.drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
   write(deps, () => {
     const current = readDriverRun(store, runId);
     current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
@@ -1048,7 +1231,8 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
   const drive = run.drive;
   const report = await savedReport(store, runId);
   await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
-  await cleanupRunWorkspace(deps.resolveRepository(groupRepoId(store, run.groupId)), deps.roots, runId, workspaceOf(drive));
+  await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, run)), deps.roots, runId, workspaceOf(drive));
+  for (const dir of drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
   write(deps, () => {
     const current = readDriverRun(store, runId);
     if (current.state !== "settled-failed" || current.drive === undefined) return;
