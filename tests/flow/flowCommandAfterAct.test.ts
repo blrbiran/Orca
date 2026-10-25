@@ -16,7 +16,10 @@ const ONE = { one: { yaml: "format: orca-flow-v1\nid: one\nworkspace: {kind: dir
 
 describe("a flow command whose run failed to advance after the act (M4)", () => {
   it("is booked as the run it started; the error is on the run", async () => {
-    const children = (): FlowChildPort => ({ open: async () => { throw new Error("driver unavailable"); }, status: async () => null });
+    const children = (): FlowChildPort => ({
+      open: async () => { throw new Error("driver unavailable"); }, status: async () => null,
+      attemptTimeoutMs: () => null, stop: () => {}, stopState: () => ({ state: "none" }), resume: () => [],
+    });
     const w = await flowWorld(ONE, { children }); try {
       const service = new WebControlService({ store: w.store, port: {} as never, profileRouter: {} as never, trustedConfig: {} as never, flowDeps: () => w.deps,
         flowProjects: () => [{ repoId: "articles-00000000", path: w.folder }] } as never);

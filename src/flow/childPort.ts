@@ -17,8 +17,10 @@
 import { updateRevision } from "../control/commandLedger.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { resumeFlowChildInTransaction } from "../control/continuation.js";
 import { isTerminallyFailedRun, type DriveRecord } from "../control/driveRecord.js";
 import { ControlError } from "../control/errors.js";
+import { readConfirmedTaskExecution } from "../control/executionSnapshot.js";
 import { savedReport } from "../control/executionDriver.js";
 import { ORCHESTRATION_ACTOR } from "../control/orchestration.js";
 import { normalizeControlPlan, writeImportedPlan, type ImportDeps } from "../control/planImport.js";
@@ -26,10 +28,12 @@ import { readArchivedPlan, readBudgetProposal } from "../control/queries.js";
 import { recordProjectionChange } from "../control/projectionJournal.js";
 import { reportedFlowOf } from "../control/reportedDecisions.js";
 import type { ControlStore } from "../control/store.js";
+import { applyFlowHandoffStop, groupStopState, readStopIntent, type FlowStopMarker } from "../control/stopIntent.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { workBranchRef } from "../control/workspace.js";
 import { flowBlockOf, flowVaultRepoId, vaultPathOfRepoId } from "./groups.js";
-import type { FlowChildOpen, FlowChildPort, FlowChildStatus } from "./kinds/work.js";
+import { FlowRefusal } from "./kernel.js";
+import type { FlowChildOpen, FlowChildPort, FlowChildResume, FlowChildStatus, FlowChildStopState } from "./kinds/work.js";
 import { readParentConfirmation } from "./parent.js";
 import { getFlowRun } from "./store.js";
 
@@ -176,6 +180,33 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
   return { state: "landed", commit, spentTokens, ...(landedRules === undefined ? {} : { toolRules: landedRules }), ...(skills === undefined ? {} : { skills }), ...(current.drive?.skills?.dir === undefined ? {} : { skillsDir: current.drive.skills.dir }), ...(flow === undefined ? {} : { flow }) };
 }
 
+function sameMarker(left: FlowStopMarker, right: FlowStopMarker): boolean {
+  return left.flowRunId === right.flowRunId && left.stepKey === right.stepKey && left.seq === right.seq && left.reason === right.reason;
+}
+
+/** §10.5.1: the held work item's current run can be continued only when it settled recoverable at a checkpoint. */
+function childRecoverable(store: ControlStore, childGroupId: string): boolean {
+  const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid LIMIT 1").get(childGroupId);
+  if (row === undefined) return false;
+  const currentRunId = (JSON.parse(String(row.body)) as { currentRunId?: unknown }).currentRunId;
+  if (typeof currentRunId !== "string") return false;
+  const run = store.db.prepare("SELECT body FROM runs WHERE id=?").get(currentRunId);
+  if (run === undefined) return false;
+  const body = JSON.parse(String(run.body)) as { state?: unknown; recoverable?: unknown; checkpointId?: unknown };
+  return body.state === "settled-recoverable" && body.recoverable === true && typeof body.checkpointId === "string";
+}
+
+/** Plan D7: none, not-complete (a handoff still open), resumable, or foreign (a stop the flow did not place). */
+function childStopState(store: ControlStore, childGroupId: string, flowStop: FlowStopMarker): FlowChildStopState {
+  const intent = readStopIntent(store, childGroupId);
+  if (intent === null) return { state: "none" };
+  if (intent.flowStop === undefined || !sameMarker(intent.flowStop, flowStop)) return { state: "foreign", stopState: intent.state };
+  const state = groupStopState(store, childGroupId);
+  if (state === "handoff-complete") return { state: "resumable", recoverable: childRecoverable(store, childGroupId) };
+  if (state === "handoff-pending" || state === "handoff-partial" || state === "handoff-unresolved") return { state: "not-complete", stopState: state };
+  return { state: "foreign", stopState: state };
+}
+
 export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort {
   return {
     async open(request) {
@@ -189,5 +220,38 @@ export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort 
       await confirmChild(deps, request);
     },
     status: (childGroupId) => childStatus(deps, childGroupId),
+    attemptTimeoutMs(childGroupId) {
+      try {
+        const row = deps.store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid LIMIT 1").get(childGroupId);
+        if (row === undefined) return null;
+        const taskId = (JSON.parse(String(row.body)) as { taskId?: unknown }).taskId;
+        if (typeof taskId !== "string") return null;
+        const value = readConfirmedTaskExecution(deps.store, childGroupId, taskId).contract.executionPolicy.perAttemptTimeoutMs;
+        return Number.isSafeInteger(value) && value > 0 ? value : null;
+      } catch { return null; }
+    },
+    stop(childGroupId, input) {
+      applyFlowHandoffStop(deps.store, childGroupId, input);
+    },
+    stopState: (childGroupId, flowStop) => childStopState(deps.store, childGroupId, flowStop),
+    resume(children: FlowChildResume[]) {
+      return deps.store.transaction(() => children.map((child) => {
+        const state = childStopState(deps.store, child.childGroupId, child.flowStop);
+        if (state.state !== "resumable") {
+          const detail = state.state === "not-complete" ? state.stopState : "foreign";
+          throw new FlowRefusal("flow-pause-stop-incomplete", `${child.childGroupId}:${detail}`);
+        }
+        try {
+          const revision = Number(deps.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(child.childGroupId)!.revision) + 1;
+          updateRevision(deps.store, child.childGroupId, revision);
+          const { pendingRunId } = resumeFlowChildInTransaction(deps.store, child.childGroupId, revision, child.operatorNote);
+          return { childGroupId: child.childGroupId, pendingRunId };
+        } catch (error) {
+          if (!(error instanceof ControlError)) throw error;
+          if (error.code === "continuation-budget-unavailable" || error.code === "group-budget-unavailable") throw new FlowRefusal(error.code, child.childGroupId);
+          throw new FlowRefusal("flow-pause-resume-failed", error.code);
+        }
+      }));
+    },
   };
 }

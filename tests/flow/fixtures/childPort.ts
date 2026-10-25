@@ -29,6 +29,10 @@ export function fakeChildPort() {
       if (failNextOpen) { failNextOpen = false; throw new Error("crash after the dispatch, before the kernel recorded it"); }
     },
     status: async (id) => statuses.get(id) ?? null,
+    attemptTimeoutMs: () => null,
+    stop: () => {},
+    stopState: () => ({ state: "none" }),
+    resume: (children) => children.map((child) => ({ childGroupId: child.childGroupId, pendingRunId: null })),
   };
   /** Land child `id` with these files written on its base; returns the landed commit. */
   const land = (id: string, files: Record<string, string>, extra: Partial<Extract<FlowChildStatus, { state: "landed" }>> = {}): string => {

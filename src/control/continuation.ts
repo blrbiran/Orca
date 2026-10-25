@@ -15,7 +15,7 @@ import { add, readRun, subtract, type RunRecord } from "./budget.js";
 import { ControlError } from "./errors.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { idSchema, safeInteger } from "./schema.js";
+import { idSchema, operatorNoteSchema, safeInteger, type OperatorNote } from "./schema.js";
 import { refuseClarifying } from "./requirementRecords.js";
 import { rearmParkedEstimates } from "./estimateParking.js";
 import {
@@ -26,6 +26,7 @@ import {
   readStopIntent,
   saveGroupBody,
   setAllocationStates,
+  startSchedulerWake,
   type RunBody,
   type StopDeps,
 } from "./stopIntent.js";
@@ -73,6 +74,8 @@ export interface RegisteredContinuation {
   checkpointId: string;
   pendingRunId: string;
   claimOrdinal: number;
+  /** Live transcript spec §10.5.2: the operator note this continuation carries (frozen into the envelope by A2). */
+  operatorNote?: OperatorNote;
 }
 
 interface ContinuationWork {
@@ -98,6 +101,8 @@ const registeredContinuationSchema = z
     checkpointId: idSchema,
     pendingRunId: idSchema,
     claimOrdinal: safeInteger.positive(),
+    // Optional and never defaulted: an old registration's exact canonical bytes stay valid.
+    operatorNote: operatorNoteSchema.optional(),
   })
   .strict();
 
@@ -155,7 +160,7 @@ function assertPredecessor(store: ControlStore, groupId: string, work: Continuat
   return run;
 }
 
-function registerContinuation(store: ControlStore, groupId: string, selection: { taskId: string; predecessorRunId: string; checkpointId: string }, resumeRevision: number): RegisteredContinuation {
+function registerContinuation(store: ControlStore, groupId: string, selection: { taskId: string; predecessorRunId: string; checkpointId: string }, resumeRevision: number, operatorNote?: OperatorNote): RegisteredContinuation {
   const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, selection.taskId);
   if (!row) throw new ControlError("work-not-found", selection.taskId);
   const work = JSON.parse(String(row.body)) as ContinuationWork;
@@ -182,6 +187,7 @@ function registerContinuation(store: ControlStore, groupId: string, selection: {
     resumeRevision, taskId: work.workItemId, desiredIntentId, continuationIntentId,
     predecessorRunId: selection.predecessorRunId, checkpointId: selection.checkpointId,
     pendingRunId: `run-${randomUUID()}`, claimOrdinal: 1,
+    ...(operatorNote === undefined ? {} : { operatorNote }),
   };
   saveWork(store, groupId, { ...work, status: "continuing", pendingRunId: registered.pendingRunId, claimOrdinal: 1, continuation: registered } as never);
   setAllocationStates(store, groupId, work.workItemId, "continuing");
@@ -195,6 +201,54 @@ function armContinuationWake(store: ControlStore, groupId: string, resumeRevisio
     ON CONFLICT(id) DO UPDATE SET kind='resume', body=excluded.body, delivered=0`)
     .run(wakeId, groupId, canonicalBytes({ groupId, resumeRevision, continuations: registrations }).toString("utf8"));
   return wakeId;
+}
+
+/**
+ * Live transcript spec §10.5.1 (plan D7): register the continuation a flow resume of a recoverable child needs. The
+ * child's one work item holds its current run, and only a settled-recoverable run with a committed checkpoint continues.
+ */
+export function registerFlowContinuation(store: ControlStore, groupId: string, resumeRevision: number, operatorNote?: OperatorNote): RegisteredContinuation {
+  const rows = store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid").all(groupId);
+  if (rows.length !== 1) throw new ControlError("continuation-predecessor-unrecoverable", groupId);
+  const work = JSON.parse(String(rows[0].body)) as ContinuationWork;
+  if (typeof work.currentRunId !== "string") throw new ControlError("continuation-predecessor-unrecoverable", groupId);
+  const run = runBody(store, work.currentRunId);
+  if (run?.state !== "settled-recoverable" || run.recoverable !== true || typeof run.checkpointId !== "string") {
+    throw new ControlError("continuation-predecessor-unrecoverable", groupId);
+  }
+  return registerContinuation(store, groupId, { taskId: work.workItemId, predecessorRunId: work.currentRunId, checkpointId: run.checkpointId }, resumeRevision, operatorNote);
+}
+
+/**
+ * Live transcript spec §10.5.1, plan D8: lift one child's flow stop inside the caller's batch transaction. A recoverable
+ * child gets a continuation and a resume wake; a restartable one gets an ordinary start wake and no continuation. The
+ * stop row is cleared and the group un-stopped either way. Opens no transaction of its own.
+ */
+export function resumeFlowChildInTransaction(store: ControlStore, groupId: string, revision: number, operatorNote?: OperatorNote): { pendingRunId: string | null } {
+  const rows = store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid").all(groupId);
+  if (rows.length !== 1) throw new ControlError("continuation-predecessor-unrecoverable", groupId);
+  const work = JSON.parse(String(rows[0].body)) as ContinuationWork;
+  const run = typeof work.currentRunId === "string" ? runBody(store, work.currentRunId) : null;
+  if (run !== null && run.state === "settled-recoverable" && run.recoverable === true && typeof run.checkpointId === "string") {
+    const registered = registerFlowContinuation(store, groupId, revision, operatorNote);
+    store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
+    const group = readGroup(store, groupId);
+    group.stopped = false;
+    saveGroup(store, group);
+    rearmParkedEstimates(store, groupId);
+    armContinuationWake(store, groupId, revision, [registered]);
+    return { pendingRunId: registered.pendingRunId };
+  }
+  if (run !== null && run.state === "settled-restartable") {
+    store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
+    const group = readGroup(store, groupId);
+    group.stopped = false;
+    saveGroup(store, group);
+    rearmParkedEstimates(store, groupId);
+    startSchedulerWake(store, groupId, revision);
+    return { pendingRunId: null };
+  }
+  throw new ControlError("continuation-predecessor-unrecoverable", groupId);
 }
 
 function pendingRunViews(registrations: readonly RegisteredContinuation[]): Extract<CommandSuccessV1["result"], { kind: "resumed-from-handoff" }>["pendingRuns"] {

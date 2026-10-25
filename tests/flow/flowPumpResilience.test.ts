@@ -47,7 +47,8 @@ describe("one flow run's error stays with that run (C2)", () => {
     const fake = fakeChildPort();
     const children = (store: Parameters<typeof fake.port>[0]): FlowChildPort => {
       const port = fake.port(store);
-      return { open: async (request) => { if (broken) throw new Error("git: EACCES on the vault"); await port.open(request); }, status: port.status };
+      return { open: async (request) => { if (broken) throw new Error("git: EACCES on the vault"); await port.open(request); }, status: port.status,
+        attemptTimeoutMs: port.attemptTimeoutMs, stop: port.stop, stopState: port.stopState, resume: port.resume };
     };
     const w = await flowWorld({ w: WORK, d: DRAFT }, { children }); try {
       const failing = await w.start({ templateRef: "builtin/w" });

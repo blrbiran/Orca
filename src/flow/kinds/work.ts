@@ -10,6 +10,8 @@
 import type { LockSkill } from "../../skills/syncskill.js";
 import type { SkillLock } from "../journal/fingerprint.js";
 import { buildFlowStepPlanSource, type FlowStepPlanInput } from "../../control/flowStepPlan.js";
+import type { OperatorNote } from "../../control/schema.js";
+import type { FlowStopMarker } from "../../control/stopIntent.js";
 import type { Amount } from "../../control/types.js";
 import type { FlowNeeds } from "../../control/reportedDecisions.js";
 import type { ToolRulesReport } from "../../control/toolRules.js";
@@ -55,10 +57,24 @@ export type FlowChildStatus =
   /** `commit` null: an effect step that changed no file (§9.6); its output is no files. */
   | { state: "landed"; commit: string | null; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; skillsDir?: string; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string }; effectExtraKeys?: string[] } }
   | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[] };
-/** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
+/** What the flow must know before it lifts a stop it placed on a work step's child (spec §10.5.1, plan D7). */
+export type FlowChildStopState =
+  | { state: "none" }
+  | { state: "not-complete"; stopState: string }
+  | { state: "resumable"; recoverable: boolean }
+  | { state: "foreign"; stopState: string };
+export interface FlowChildResume { childGroupId: string; flowStop: FlowStopMarker; operatorNote?: OperatorNote }
+/** The driver-backed side of a work step: open (idempotent per child id), read how the child is doing, and stop/resume it. */
 export interface FlowChildPort {
   open(request: FlowChildOpen): Promise<void>;
   status(childGroupId: string): Promise<FlowChildStatus | null>;
+  /** The step contract's `executionPolicy.perAttemptTimeoutMs`, or null when the child's confirmation cannot answer it. */
+  attemptTimeoutMs(childGroupId: string): number | null;
+  /** A flow-placed handoff stop; its own transaction, idempotent for the same marker (plan D3). */
+  stop(childGroupId: string, input: { acceptedAt: string; deadlineAt: string; flowStop: FlowStopMarker }): void;
+  stopState(childGroupId: string, flowStop: FlowStopMarker): FlowChildStopState;
+  /** Lift the batch's stops: a continuation when the child is recoverable, a dispatch when it is restartable (plan D8). */
+  resume(children: FlowChildResume[]): Array<{ childGroupId: string; pendingRunId: string | null }>;
 }
 
 /** §6.2: deterministic, so a restart opens nothing twice. */
