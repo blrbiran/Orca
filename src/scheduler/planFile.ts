@@ -194,6 +194,17 @@ const terminalStatesSchema = z.array(z.enum(terminalStates)).refine(states =>
   && terminalStates.every(state => states.includes(state)),
 );
 
+/**
+ * Multi-directory projects spec §6.4/§11.1: ccloop's contract `context.repoKey` and `context.additionalRepos`, mirrored
+ * from ccloop's own schema (an extra repository's paths are relative to its root; at most seven of them). Both are
+ * optional with no default, so a single-repository contract's bytes are unchanged.
+ */
+const repoKeySchema = z.string().regex(/^[a-z0-9_](?:[a-z0-9._-]*[a-z0-9_])?$/);
+const additionalRepoSchema = z.object({
+  key: repoKeySchema, repoPath: z.string().min(1), targetPaths: z.array(z.string()).min(1),
+  allowlistPaths: z.array(z.string()).optional(), denylistPaths: z.array(z.string()).optional(), requiredChecks: z.array(z.string()).optional(),
+}).strict();
+
 /** Closed ccloop V1 contract shape, mirrored from the foundation validator. */
 export const taskContractSchema = z.object({
   objective: z.object({
@@ -204,7 +215,16 @@ export const taskContractSchema = z.object({
     repoPath: z.string().min(1), targetPaths: z.array(z.string()).min(1),
     relevantDocs: z.array(z.string()).default([]), buildTestCommands: z.array(z.string()).min(1),
     constraints: z.array(z.string()).default([]),
-  }).strict(),
+    repoKey: repoKeySchema.optional(), additionalRepos: z.array(additionalRepoSchema).min(1).max(7).optional(),
+  }).strict().superRefine((context, issues) => {
+    if ((context.repoKey === undefined) !== (context.additionalRepos === undefined)) {
+      issues.addIssue({ code: z.ZodIssueCode.custom, message: "repoKey is present if and only if additionalRepos is" });
+    }
+    const keys = [context.repoKey, ...(context.additionalRepos ?? []).map((repo) => repo.key)];
+    if (context.additionalRepos !== undefined && new Set(keys).size !== keys.length) {
+      issues.addIssue({ code: z.ZodIssueCode.custom, message: "repository keys must be unique and differ from repoKey" });
+    }
+  }),
   executionPolicy: z.object({
     autonomyLevel: z.literal("L2"), maxAttempts: z.number().int().positive(),
     perAttemptTimeoutMs: z.number().int().positive(), totalRuntimeBudgetMs: z.number().int().positive(),

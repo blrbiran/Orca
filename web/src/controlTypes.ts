@@ -236,6 +236,19 @@ export type SplitTaskV1 = {
   dependsOn: string[];
   traces: string[];
 };
+/** Multi-directory projects spec §6.2: a split task that writes several directories, one write per directory. */
+export type MultiSplitWriteV1 = { dir: string; targetPaths: string[]; checks: string[] };
+export type MultiSplitTaskV1 = {
+  taskId: string;
+  title: string;
+  labels: string[];
+  loopPlan?: string;
+  goal: string;
+  successCondition: string;
+  writes: MultiSplitWriteV1[];
+  dependsOn: string[];
+  traces: string[];
+};
 /** N1 spec §8: a draft as the requirement view shows it -- the stored plan is left out (draftBodySchema without `plan`). */
 export type DraftViewV1 = {
   draftNo: number;
@@ -243,7 +256,7 @@ export type DraftViewV1 = {
   autoRetry: number;
   waiting: null | "requirement-budget-exhausted" | "requirement-usage-unknown";
   feedback: string | null;
-  output: { tasks: SplitTaskV1[]; notes: string } | null;
+  output: { tasks: SplitTaskV1[]; notes: string } | { tasks: MultiSplitTaskV1[]; notes: string } | null;
   draftHash: string | null;
   reasons: string[];
   layers: string[][] | null;

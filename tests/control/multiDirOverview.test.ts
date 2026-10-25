@@ -9,23 +9,22 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
 import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V1, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
-import { readDraft, readRequirementGroup } from "../../src/control/requirementRecords.js";
-import { WebControlService } from "../../src/control/webService.js";
-import { flowVaultRepoId, vaultPathOfRepoId } from "../../src/flow/groups.js";
+import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { writeTree } from "./fixtures/dirRequirement.js";
-import { requirementHarness, type QueuedAnswer } from "./fixtures/requirementHarness.js";
-import { ROUND_ONE, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
+import { multiHarness } from "./fixtures/multiRequirement.js";
+import { requirementHarness } from "./fixtures/requirementHarness.js";
+import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
 
 const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
 /** The bytes of the single-repository prompts and schemas at commit 2d707b29, before this task. */
@@ -43,62 +42,6 @@ const FENCE_OF = (prompt: string, name: string): unknown => {
   expect(match, `the ${name} fence is in the prompt`).not.toBeNull();
   return JSON.parse(match![2]!);
 };
-
-/**
- * A multi group on "repo": members in a deliberately non-alphabetical order -- the `dir` folder "posts" first (the
- * primary) and the git repository "alpha" second. The registry's names are "Posts notes" and "Alpha service".
- */
-async function multiHarness(options: { answers: QueuedAnswer[]; startAt?: "none" | "split"; alphaFileCount?: number }) {
-  const x = await requirementHarness({ answers: options.answers, startAt: options.startAt ?? "none" });
-  const env: NodeJS.ProcessEnv = {
-    HOME: join(x.root, "home"), ORCA_VAULT_DIR: join(x.root, "vaults"), ORCA_CONTROL_DIR: join(x.root, "control"), ORCA_PROJECTS_FILE: join(x.root, "projects.json"),
-  };
-  mkdirSync(env.HOME!, { mode: 0o700 });
-  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value!);
-  const alpha = join(x.root, "alpha");
-  // `alphaFileCount`: that many small files in one directory, for the divided-limit test; without it the two above.
-  writeTree(alpha, { "README.md": "# Alpha service\nThe alpha service.\n", ...(options.alphaFileCount === undefined ? { "src/a.ts": "export const a = 1;\n" } : {}) });
-  if (options.alphaFileCount !== undefined) {
-    mkdirSync(join(alpha, "big"), { recursive: true });
-    for (let no = 1; no <= options.alphaFileCount; no += 1) writeFileSync(join(alpha, "big", `f${String(no).padStart(4, "0")}.txt`), "x\n");
-  }
-  const alphaGit = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd: alpha, encoding: "utf8" }).trim();
-  alphaGit("init", "-q", "-b", "main"); alphaGit("add", "-A"); alphaGit("commit", "-qm", "alpha base");
-  const alphaHead = alphaGit("rev-parse", "HEAD");
-  const posts = join(x.root, "posts");
-  writeTree(posts, { "README.md": "# Posts notes\nthe posts folder.\n", "notes/p1.md": "first post\n" });
-  const dirs = [
-    { key: "posts", name: "Posts notes", repoId: controlRepoKey("posts"), kind: "dir" as const, path: posts },
-    { key: "alpha", name: "Alpha service", repoId: controlRepoKey("alpha"), kind: "repo" as const, path: alpha },
-  ];
-  x.deps.env = env;
-  x.deps.multiDirProjectOf = (repoId: string) => (repoId === "repo" ? { dirs } : null);
-  x.deps.resolveRepository = (repoId: string) => vaultPathOfRepoId(env, repoId) ?? alpha;
-  const service = new WebControlService({ ...x.service.deps,
-    multiDirProjectOf: (repoId: string) => (repoId === "repo" ? { dirs } : null) });
-  const body = () => JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as Record<string, unknown>;
-  const open = () => service.openRequirement({ schema: "orca-raw-command-v1", commandId: "open-r", actorId: "human", expectedRevision: 0, verb: "requirement-open",
-    target: { kind: "group", groupId: "r" }, payload: { groupId: "r", repoId: "repo", idea: "Let people export their notes as Markdown." } } as never);
-  // `startAt: "split"` seeds the group consensus leaves behind; the multi list is what requirement-open would have frozen.
-  if (options.startAt === "split") {
-    const seeded = body();
-    const realPosts = realpathSync(posts).normalize("NFC");
-    seeded.multiDir = { project: "repo", landing: null, dirs: [
-      { key: "posts", repoId: controlRepoKey("posts"), kind: "dir", dirWorkspace: { dir: realPosts, vaultId: vaultKeyOf(realPosts) } },
-      { key: "alpha", repoId: controlRepoKey("alpha"), kind: "repo" },
-    ] };
-    x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify(seeded));
-  }
-  /** The import commit the posts member's vault holds (its one import ref). */
-  const postsVault = (): string => {
-    const frozen = (body().multiDir as { dirs: Array<{ key: string; dirWorkspace?: { vaultId: string } }> }).dirs[0]!;
-    return vaultPathOfRepoId(env, flowVaultRepoId(frozen.dirWorkspace!.vaultId))!;
-  };
-  const importCommit = (): string => execFileSync("git", ["--git-dir", postsVault(), "for-each-ref", "--format=%(objectname)", "refs/orca/import/"], { encoding: "utf8" }).trim();
-  const promptOf = (index: number): string => PROMPT_OF(x.fake.calls.accept[index]! as { work: { kind: string; prompt?: string } });
-  return { ...x, env, alpha, alphaHead, posts, postsVault, importCommit, open, body, promptOf,
-    dispose: async () => { vi.unstubAllEnvs(); await x.dispose(); } };
-}
 
 describe("the overview across directories (M5, §6.3)", () => {
   it("builds one entry per member in registered order, each from its own commit, and keeps commits per key", async () => {
@@ -237,18 +180,6 @@ describe("the split prompt across directories (M5, §6.4)", () => {
         writes: [{ dir: "alpha", targetPaths: ["src/a.ts"], checks: [] }], dependsOn: [], traces: ["AC1"] }] }).success).toBe(true);
       expect(multiSplitOutputSchema.safeParse({ notes: "", tasks: [{ taskId: "t1", title: "T", labels: [], goal: "G", successCondition: "S",
         targetPaths: ["src/a.ts"], checks: ["true"], dependsOn: [], traces: ["AC1"] }] }).success).toBe(false);
-    } finally { await x.dispose(); }
-  });
-});
-
-describe("a multi split answer is handed back at O4, not resolved against the multi id", () => {
-  it("books an invalid draft and retries instead of blocking the run at C", async () => {
-    const x = await multiHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
-    try {
-      await x.until(() => readDraft(x.store, "r", 1).state === "invalid");
-      expect(x.runs().some((run) => run.state === "blocked")).toBe(false);
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", calls: [{ outcome: "invalid", reason: "schema:multi-dir:not-evaluated" }] });
-      expect(readDraft(x.store, "r", 2)).toMatchObject({ state: "drafting", autoRetry: 1 });
     } finally { await x.dispose(); }
   });
 });

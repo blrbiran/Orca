@@ -273,7 +273,11 @@ export interface ImportedPlanWrite {
 /** Spec §9.1, §15: what started a group a schedule fired; passed in-process by the fire, never a payload field. */
 export interface ImportOrigin { kind: "schedule"; scheduleId: string; slot: number }
 /** N1 spec §9.1: what a requirement brings into the plan group it becomes. */
-export interface RequirementCarryOver { existingBody: Record<string, unknown>; used: Amount; usageUnknown: boolean; traces: Readonly<Record<string, readonly string[]>> }
+export interface RequirementCarryOver {
+  existingBody: Record<string, unknown>; used: Amount; usageUnknown: boolean; traces: Readonly<Record<string, readonly string[]>>;
+  /** Multi-directory projects spec §6.1: each task's writes in registered order; absent for every single-repository group. */
+  writes?: Readonly<Record<string, readonly { dir: string; targetPaths: readonly string[]; checks: readonly string[] }[]>>;
+}
 
 /**
  * The import's writes, shared by import-plan (a new group, carry null) and requirement-draft-accept (N1 spec §9.1: the
@@ -399,6 +403,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   writeCanonicalRecord(deps.store, input.groupId, planHash, planCanonicalJson);
   for (const task of plan.tasks) {
     writeCanonicalRecord(deps.store, input.groupId, task.originalContractHash, task.originalContractCanonicalJson);
+    // Multi-directory projects spec §6.1: a multi group's task keeps the directories it writes (an absent key adds no byte).
+    const writes = carry === null ? undefined : carry.writes?.[task.taskId];
     const work = {
       workItemId: task.taskId, taskId: task.taskId, kind: "task", dependsOn: task.dependencyTaskIds,
       contract: { contentAddressedHash: task.originalContractHash },
@@ -409,6 +415,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
       // Ruling review R7: the task's panel layer; the plan's `agent` for this task stays in the archived plan.
       agentOverride: null,
       ...(carry === null ? {} : { traces: [...(carry.traces[task.taskId] ?? [])] }),
+      ...(writes === undefined ? {} : { writes: writes.map((write) => ({ dir: write.dir, targetPaths: [...write.targetPaths], checks: [...write.checks] })) }),
     };
     deps.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)")
       .run(input.groupId, task.taskId, task.targetVersion, JSON.stringify(work));

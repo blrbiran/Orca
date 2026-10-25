@@ -4,6 +4,7 @@ import { dirWorkspaceOf, groupRepoId, initialPlacement } from "./dirGroup.js";
 import { importFolder, openDirWorkspace } from "./dirWorkspace.js";
 import { ControlError } from "./errors.js";
 import { waitingPrerequisites } from "./groupEdges.js";
+import { dirTargetRepoId, multiDirOf, type FrozenMultiDir } from "./multiGroup.js";
 import { documentPathOf } from "./requirementDocument.js";
 import { readRequirementGroup, saveRequirementGroup, type RequirementBlock } from "./requirementRecords.js";
 import { readCanonicalRecord } from "./snapshot.js";
@@ -38,6 +39,23 @@ function record(deps: ExportDeps, groupId: string, exported: RequirementBlock["e
     const group = readRequirementGroup(deps.store, groupId);
     group.requirement.export = exported;
     if (dirBase !== null && exported.state === "done") group.placement = initialPlacement({ base: dirBase, landedTip: exported.commit!, at: deps.store.now() });
+    saveRequirementGroup(deps.store, group);
+  });
+}
+
+/**
+ * Multi-directory projects spec §6.4, §9.2: one transaction records the export and this export's base per member as
+ * `multiDir.landing.lastLanded` (a never-written directory keeps its work branch there, so it is never due). Other
+ * landing fields are preserved; a null landing becomes an object.
+ */
+function recordMulti(deps: ExportDeps, groupId: string, exported: RequirementBlock["export"], lastLanded: Record<string, string>): void {
+  write(deps, () => {
+    const group = readRequirementGroup(deps.store, groupId);
+    const multi = multiDirOf(group);
+    if (multi === null) throw new ControlError("multi-dir-invalid", `not-multi:${groupId}`);
+    group.requirement.export = exported;
+    const landing = typeof multi.landing === "object" && multi.landing !== null && !Array.isArray(multi.landing) ? multi.landing as Record<string, unknown> : {};
+    group.multiDir = { ...multi, landing: { ...landing, lastLanded } };
     saveRequirementGroup(deps.store, group);
   });
 }
@@ -124,39 +142,25 @@ async function documentCommitPath(run: ExportGit, commit: string, requirement: R
   return createHash("sha256").update(blob, "utf8").digest("hex") === requirement.document!.sha256 ? changed[0]! : null;
 }
 
+/** One primary export's outcome: the document is on the work branch, it conflicts, or another writer created the branch. */
+type PrimaryExport = { kind: "done"; path: string; commit: string; parent: string } | { kind: "conflict"; detail: string } | { kind: "retry" };
+
 /**
- * N1 spec §9.2 (as corrected by the controller's ruling on the Task 11 review): git plumbing only -- hash-object and
- * mktree on stdin, commit-tree on HEAD, and a create-only update-ref of orca/<groupId>. The person's working tree and index are never read
- * or written. A branch that already exists with anything else blocks (requirement-export-conflict) and is never moved;
- * a .orca or .orca/requirements in HEAD that is not a directory blocks (requirement-export-path-blocked).
+ * The requirement document's export onto `orca/<groupId>` in one repository: an existing branch is judged by
+ * documentCommitPath and never moved; otherwise the document is committed on `base` (HEAD for a repository) with git
+ * plumbing only, and the branch is created only if it is still absent. Shared by a single-repository group, a dir group
+ * and a multi group's primary.
  */
-export async function exportRequirementDocument(deps: ExportDeps, groupId: string): Promise<"done" | "conflict" | "nothing" | "waiting"> {
-  const group = readRequirementGroup(deps.store, groupId);
-  const requirement = group.requirement;
-  if (requirement.document === null || requirement.export.state !== "pending" || requirement.slug === null) return "nothing";
-  // Dir-requirements spec §6.4 step 1: a dir group's base must hold what its prerequisites placed in the folder, so it
-  // waits for them -- a DB read only, before any git child or vault access.
-  const frozen = dirWorkspaceOf(group);
-  if (frozen !== null && waitingPrerequisites(deps.store, groupId).length > 0) return "waiting";
-  const text = (JSON.parse(readCanonicalRecord(deps.store, requirement.document.recordHash)) as { text: string }).text;
-  if (createHash("sha256").update(text, "utf8").digest("hex") !== requirement.document.sha256) throw new ControlError("recovery-blocked", "requirement-document-hash");
-  // Dir-requirements spec §6.1: the target repository (a dir group's is its folder's vault).
-  const repo = deps.resolveRepository(groupRepoId(deps.store, groupId));
-  const run = exportGit(deps, repo);
-  const dirBase = frozen === null ? null : await dirBaseOf(deps, groupId, run, frozen);
-  const ref = workBranchRef(groupId);
+async function exportPrimaryBody(run: ExportGit, groupId: string, requirement: RequirementBlock, text: string, base: string | null): Promise<PrimaryExport> {
+  const ref = workBranchRef(groupId), slug = requirement.slug!;
   const existing = await tipOf(run, ref);
   if (existing !== null) {
     const path = await documentCommitPath(run, existing, requirement);
-    if (path === null) {
-      record(deps, groupId, { ...requirement.export, state: "conflict", detail: `${EXPORT_CONFLICT}:${ref} is at ${existing}` });
-      return "conflict";
-    }
-    record(deps, groupId, { state: "done", path, commit: existing, parent: await revParse(run, `${existing}^`), detail: null }, dirBase);
-    return "done";
+    return path === null ? { kind: "conflict", detail: `${EXPORT_CONFLICT}:${ref} is at ${existing}` }
+      : { kind: "done", path, commit: existing, parent: await revParse(run, `${existing}^`) };
   }
   // Dir-requirements spec §6.4 step 3: a dir group's document goes on its base (the vault's HEAD is never read).
-  const head = dirBase ?? await revParse(run, "HEAD");
+  const head = base ?? await revParse(run, "HEAD");
   // Controller ruling (Task 11 review): no temporary index and nothing written outside the repository. HEAD's three
   // levels are read with ls-tree, and each changed level is written bottom-up with mktree, every child under the
   // target's own umask, so the objects get the modes git gives them there.
@@ -167,33 +171,98 @@ export async function exportRequirementDocument(deps: ExportDeps, groupId: strin
     requirements = await subtree(run, orca, "requirements", ".orca/requirements");
   } catch (error) {
     if (!(error instanceof PathBlocked)) throw error;
-    // Controller ruling (fix round 2): durable, like a conflict -- the wake is delivered, and recovery-retry re-arms it
-    // once the person has changed HEAD.
-    record(deps, groupId, { ...requirement.export, state: "conflict", detail: `${EXPORT_PATH_BLOCKED}:${error.message}` });
-    return "conflict";
+    return { kind: "conflict", detail: `${EXPORT_PATH_BLOCKED}:${error.message}` };
   }
   const taken = (name: string) => requirements.some((entry) => entry.name.equals(Buffer.from(name, "utf8")));
   let suffix = 1;
-  while (taken(documentPathOf(requirement.createdOn, requirement.slug, suffix).slice(".orca/requirements/".length))) suffix += 1;
-  const path = documentPathOf(requirement.createdOn, requirement.slug, suffix);
+  while (taken(documentPathOf(requirement.createdOn, slug, suffix).slice(".orca/requirements/".length))) suffix += 1;
+  const path = documentPathOf(requirement.createdOn, slug, suffix);
   const blob = (await run(["hash-object", "-w", "--stdin", "--no-filters"], { input: text })).trim();
   const requirementsTree = await makeTree(run, requirements, entryOf("100644", "blob", blob, path.slice(".orca/requirements/".length)));
   const orcaTree = await makeTree(run, orca, entryOf("040000", "tree", requirementsTree, "requirements"));
   const tree = await makeTree(run, root, entryOf("040000", "tree", orcaTree, ".orca"));
   // DR21: dated at the freeze, so a re-run builds the same commit. commit-tree signs only with -S: a target's
   // commit.gpgSign is not read (measured on git 2.50.1; the criterion pins that no signing program runs).
-  const at = requirement.document.frozenAt;
+  const at = requirement.document!.frozenAt;
   const commit = (await run(["commit-tree", tree, "-p", head], {
-    input: `docs(requirements): ${requirement.slug}\n\n${TRAILER}: ${requirement.document.sha256}\n`,
+    input: `docs(requirements): ${slug}\n\n${TRAILER}: ${requirement.document!.sha256}\n`,
     env: { GIT_AUTHOR_NAME: "Orca", GIT_AUTHOR_EMAIL: "orca@localhost", GIT_COMMITTER_NAME: "Orca", GIT_COMMITTER_EMAIL: "orca@localhost", GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at },
   })).trim();
   try { await run(["update-ref", ref, commit, ""]); }
   catch (error) {
     // Created concurrently: whatever is there now is judged like any existing branch. Any other failure is thrown.
     if ((await tipOf(run, ref)) === null) throw error;
-    return exportRequirementDocument(deps, groupId);
+    return { kind: "retry" };
   }
-  record(deps, groupId, { state: "done", path, commit, parent: head, detail: null }, dirBase);
+  return { kind: "done", path, commit, parent: head };
+}
+
+/**
+ * Multi-directory projects spec §6.4: every member is based in one pass, in registered order -- a `repo` member at its
+ * HEAD, a `dir` member at the create-only base/placed dirBaseOf keeps. The document is exported to the primary; every
+ * other member's work branch is created at its base, create-only (an existing one is untouched). One transaction then
+ * records the export and every member's base as `landing.lastLanded`.
+ */
+async function exportMultiProject(deps: ExportDeps, groupId: string, multi: FrozenMultiDir, requirement: RequirementBlock, text: string): Promise<"done" | "conflict" | "nothing" | "waiting"> {
+  const bases: Record<string, string> = {}, runs = new Map<string, ExportGit>();
+  for (const member of multi.dirs) {
+    const run = exportGit(deps, deps.resolveRepository(dirTargetRepoId(deps.store, groupId, member.key)));
+    runs.set(member.key, run);
+    if (member.kind === "repo") { bases[member.key] = await revParse(run, "HEAD"); continue; }
+    if (member.dirWorkspace === undefined) throw new ControlError("multi-dir-invalid", `dir-workspace:${member.key}`);
+    bases[member.key] = await dirBaseOf(deps, groupId, run, member.dirWorkspace);
+  }
+  const primary = multi.dirs[0]!;
+  const body = await exportPrimaryBody(runs.get(primary.key)!, groupId, requirement, text, bases[primary.key]!);
+  // A lost create-only race: judged again, as every export judges an existing branch.
+  if (body.kind === "retry") return exportRequirementDocument(deps, groupId);
+  if (body.kind === "conflict") {
+    record(deps, groupId, { ...requirement.export, state: "conflict", detail: body.detail });
+    return "conflict";
+  }
+  // A branch that already carried the document names the base it was actually committed on, not today's HEAD.
+  bases[primary.key] = body.parent;
+  const ref = workBranchRef(groupId);
+  for (const member of multi.dirs.slice(1)) {
+    const run = runs.get(member.key)!, existing = await tipOf(run, ref);
+    // A branch that survived an interrupted export is this export's: its tip is the base it was created at.
+    if (existing !== null) { bases[member.key] = existing; continue; }
+    try { await run(["update-ref", ref, bases[member.key]!, ""]); }
+    catch (error) { if (await tipOf(run, ref) === null) throw error; }
+  }
+  recordMulti(deps, groupId, { state: "done", path: body.path, commit: body.commit, parent: body.parent, detail: null }, bases);
+  return "done";
+}
+
+/**
+ * N1 spec §9.2 (as corrected by the controller's ruling on the Task 11 review): git plumbing only -- hash-object and
+ * mktree on stdin, commit-tree on HEAD, and a create-only update-ref of orca/<groupId>. The person's working tree and index are never read
+ * or written. A branch that already exists with anything else blocks (requirement-export-conflict) and is never moved;
+ * a .orca or .orca/requirements in HEAD that is not a directory blocks (requirement-export-path-blocked).
+ * Multi-directory projects spec §6.4: a multi group exports the document to its primary and bases every member.
+ */
+export async function exportRequirementDocument(deps: ExportDeps, groupId: string): Promise<"done" | "conflict" | "nothing" | "waiting"> {
+  const group = readRequirementGroup(deps.store, groupId);
+  const requirement = group.requirement;
+  if (requirement.document === null || requirement.export.state !== "pending" || requirement.slug === null) return "nothing";
+  // Dir-requirements spec §6.4 step 1: a dir group's base must hold what its prerequisites placed in the folder, so it
+  // waits for them -- a DB read only, before any git child or vault access.
+  const multi = multiDirOf(group), frozen = dirWorkspaceOf(group);
+  if (multi === null && frozen !== null && waitingPrerequisites(deps.store, groupId).length > 0) return "waiting";
+  const text = (JSON.parse(readCanonicalRecord(deps.store, requirement.document.recordHash)) as { text: string }).text;
+  if (createHash("sha256").update(text, "utf8").digest("hex") !== requirement.document.sha256) throw new ControlError("recovery-blocked", "requirement-document-hash");
+  if (multi !== null) return exportMultiProject(deps, groupId, multi, requirement, text);
+  // Dir-requirements spec §6.1: the target repository (a dir group's is its folder's vault).
+  const repo = deps.resolveRepository(groupRepoId(deps.store, groupId));
+  const run = exportGit(deps, repo);
+  const dirBase = frozen === null ? null : await dirBaseOf(deps, groupId, run, frozen);
+  const body = await exportPrimaryBody(run, groupId, requirement, text, dirBase);
+  if (body.kind === "retry") return exportRequirementDocument(deps, groupId);
+  if (body.kind === "conflict") {
+    record(deps, groupId, { ...requirement.export, state: "conflict", detail: body.detail });
+    return "conflict";
+  }
+  record(deps, groupId, { state: "done", path: body.path, commit: body.commit, parent: body.parent, detail: null }, dirBase);
   return "done";
 }
 

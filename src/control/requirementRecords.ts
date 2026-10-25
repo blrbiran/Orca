@@ -235,3 +235,19 @@ export function clarifyLimits(store: ControlStore, group: RequirementGroup): Cla
   const tier = clarifyTier(effective);
   return { classification, override, effective, tier, roundCap: Math.max(CLARIFY_CAPS[tier].rounds, group.requirement.roundsGranted ?? 0) };
 }
+
+/** Multi-directory projects spec §6.1: the directories one work item writes, in registered order. */
+const taskWriteSchema = z.object({ dir: z.string().min(1), targetPaths: z.array(z.string().min(1)).min(1), checks: z.array(z.string().min(1)) }).strict();
+const taskWritesSchema = z.array(taskWriteSchema);
+export type TaskWrite = z.infer<typeof taskWriteSchema>;
+
+/** A work item's stored `writes`, or null when it has none (every single-repository task). One that is there but malformed is loud. */
+export function taskWrites(store: ControlStore, groupId: string, taskId: string): TaskWrite[] | null {
+  const row = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, taskId);
+  if (!row) throw new ControlError("work-not-found", taskId);
+  const field = (JSON.parse(String(row.body)) as { writes?: unknown }).writes;
+  if (field === undefined) return null;
+  const parsed = taskWritesSchema.safeParse(field);
+  if (!parsed.success) throw blocked(`work-item-writes:${taskId}:${parsed.error.issues[0]?.path.join(".") ?? "invalid"}`);
+  return parsed.data;
+}

@@ -92,16 +92,23 @@ export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(
  * `checks`). A non-primary entry may have no checks; the primary's checks are checked by validation (O5).
  */
 export const multiSplitWriteSchema = z.object({ dir: nonempty, targetPaths: z.array(nonempty).min(1), checks: z.array(nonempty) }).strict();
+/** Multi-directory projects spec §6.1: one entry per directory, each directory at most once. */
 export const multiSplitTaskSchema = z.object({
   taskId: nonempty, title: nonempty, labels: z.array(z.string()), loopPlan: nonempty.optional(), goal: nonempty, successCondition: nonempty,
   writes: z.array(multiSplitWriteSchema).min(1), dependsOn: z.array(nonempty), traces: z.array(nonempty),
-}).strict();
+}).strict().superRefine((task, context) => {
+  const seen = new Set<string>();
+  task.writes.forEach((write, index) => {
+    if (seen.has(write.dir)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["writes", index, "dir"], message: `duplicate-dir:${write.dir}` });
+    seen.add(write.dir);
+  });
+});
 export const multiSplitOutputSchema = z.object({ tasks: z.array(multiSplitTaskSchema).min(1), notes: z.string() }).strict();
 /** Spec §8.4: an implicit edge, with the write-set conflict behind it (graph.ts buildGraph). */
 export const implicitEdgeSchema = z.object({ from: nonempty, to: nonempty, conflicts: z.array(z.object({ a: nonempty, b: nonempty }).strict()).min(1) }).strict();
 export const draftBodySchema = z.object({
   draftNo: positive, state: z.enum(DRAFT_STATES), autoRetry: retries, waiting: z.enum(REQUIREMENT_WAITING).nullable(),
-  feedback: z.string().nullable(), output: splitOutputSchema.nullable(), plan: z.record(z.unknown()).nullable(), draftHash: hash.nullable(),
+  feedback: z.string().nullable(), output: z.union([splitOutputSchema, multiSplitOutputSchema]).nullable(), plan: z.record(z.unknown()).nullable(), draftHash: hash.nullable(),
   reasons: z.array(nonempty), layers: z.array(z.array(nonempty)).nullable(), implicitEdges: z.array(implicitEdgeSchema).nullable(),
   // `requirement-revised` (spec §10.3): an earlier clarify round was revised, so the draft no longer follows the requirement.
   reasonCode: z.enum(["split-output-invalid", "split-validation-exhausted", "requirement-revised"]).nullable(), calls: z.array(callRecordSchema),
@@ -114,5 +121,6 @@ export type RoundBody = z.infer<typeof roundBodySchema>;
 export type DraftBody = z.infer<typeof draftBodySchema>;
 export type ClarifyResult = z.infer<typeof clarifyResultSchema>;
 export type SplitOutput = z.infer<typeof splitOutputSchema>;
+export type MultiSplitOutput = z.infer<typeof multiSplitOutputSchema>;
 export type CallRecord = z.infer<typeof callRecordSchema>;
 export type RequirementExport = z.infer<typeof requirementExportSchema>;

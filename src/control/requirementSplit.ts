@@ -1,12 +1,13 @@
 import { ControlError } from "./errors.js";
 import { SYSTEM_LABELS } from "./labels.js";
-import { expandLoopTask, LOOP_PLAN_IDS, type LoopPlanFileInput } from "./loopPlans.js";
+import { documentCheck, expandLoopTask, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput } from "./loopPlans.js";
 import { normalizeControlPlan } from "./planImport.js";
 import { deepFreeze, fence } from "./requirementClarify.js";
 import { overviewPathExists } from "./requirementOverview.js";
-import type { DraftBody, SplitOutput } from "./requirementSchemas.js";
+import type { DraftBody, MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
 import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
+import { normalizeClaim, qualifiedWriteSetOf } from "../scheduler/writeSet.js";
 
 export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 1.";
 /** Multi-directory projects spec §6.4: the multi instruction's own head line. */
@@ -128,6 +129,127 @@ export function expandSplitDraft(output: SplitOutput, context: { targetRepo: str
     goal: context.statement, successConditions: context.acceptanceCriteria.map((criterion) => criterion.text),
     tasks: output.tasks.map((task) => ({ taskId: task.taskId, loop: loopOf(task), dependsOn: [...task.dependsOn], targetVersion: 1 as const, ...(task.labels.length === 0 ? {} : { labels: [...task.labels] }) })),
   };
+}
+
+/**
+ * Multi-directory projects spec §6.1: a task's writes in the project's registered order. The model is told to list them
+ * that way, but code never trusts it -- the ccloop primary is the first *written* directory in registered order. A write
+ * naming no registered key sorts last; validation names it separately (`dir:<task>:<key>`).
+ */
+export function orderWrites<T extends { dir: string }>(writes: readonly T[], keys: readonly string[]): T[] {
+  const position = new Map(keys.map((key, index) => [key, index]));
+  return [...writes].sort((left, right) => (position.get(left.dir) ?? keys.length) - (position.get(right.dir) ?? keys.length));
+}
+
+/** Multi-directory projects spec §6.4: what expansion needs of a multi group; `dirs` is in registered order. */
+export interface MultiSplitContext {
+  targetRepo: string; ccloopBin: string; runsDir: string; groupId: string; statement: string;
+  successConditions: readonly string[];
+  dirs: readonly { key: string; path: string }[];
+}
+
+const loopOfMulti = (task: MultiSplitOutput["tasks"][number], keys: readonly string[]): LoopPlanFileInput => {
+  const primary = orderWrites(task.writes, keys)[0]!;
+  return { goal: task.goal, successCondition: task.successCondition, targetPaths: [...primary.targetPaths], checks: [...primary.checks],
+    ...(task.loopPlan === undefined ? {} : { plan: task.loopPlan }) };
+};
+
+/**
+ * Multi-directory projects spec §6.4: the model's multi split as a plan (mirroring expandSplitDraft, each task's ccloop
+ * primary filling the existing loop fields) and, per task, the ccloop contract. A task writing several directories gets
+ * `context.repoKey` and `context.additionalRepos` in registered order, each extra directory's targetPaths also its
+ * allowlist and its document checks followed by its own checks. A task writing one directory keeps an ordinary contract.
+ * A task naming a directory this context does not have gets no contract here: validation names the directory itself.
+ */
+export function expandMultiSplitDraft(output: MultiSplitOutput, context: MultiSplitContext): { plan: SplitPlanFile; contracts: Map<string, Record<string, unknown>>; reasons: string[] } {
+  const keys = context.dirs.map((dir) => dir.key);
+  const pathOf = new Map(context.dirs.map((dir) => [dir.key, dir.path]));
+  const plan: SplitPlanFile = {
+    targetRepo: context.targetRepo, ccloopBin: context.ccloopBin, runsDir: context.runsDir, workBranch: `orca/${context.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo",
+    goal: context.statement, successConditions: [...context.successConditions],
+    tasks: output.tasks.map((task) => ({ taskId: task.taskId, loop: loopOfMulti(task, keys), dependsOn: [...task.dependsOn], targetVersion: 1 as const,
+      ...(task.labels.length === 0 ? {} : { labels: [...task.labels] }) })),
+  };
+  const contracts = new Map<string, Record<string, unknown>>(), reasons: string[] = [];
+  for (const task of output.tasks) {
+    const writes = orderWrites(task.writes, keys), primaryPath = pathOf.get(writes[0]!.dir);
+    if (primaryPath === undefined || writes.some((write) => !pathOf.has(write.dir))) continue;
+    const expanded = expandLoopTask(task.taskId, primaryPath, loopOfMulti(task, keys), task.labels);
+    if (!expanded.ok) { reasons.push(`expand:${task.taskId}:${expanded.reason}`); continue; }
+    if (writes.length === 1) { contracts.set(task.taskId, expanded.contract); continue; }
+    const definition = loopPlanDefinition(expanded.recipe.planId, expanded.recipe.planVersion);
+    const additionalRepos = writes.slice(1).map((write) => {
+      const checks = [...(definition?.documentChecks === true ? write.targetPaths.map(documentCheck) : []), ...write.checks];
+      return { key: write.dir, repoPath: pathOf.get(write.dir)!, targetPaths: [...write.targetPaths], allowlistPaths: [...write.targetPaths],
+        ...(checks.length === 0 ? {} : { requiredChecks: checks }) };
+    });
+    const contract = expanded.contract;
+    contracts.set(task.taskId, { ...contract, context: { ...(contract.context as Record<string, unknown>), repoKey: writes[0]!.dir, additionalRepos } });
+  }
+  return { plan, contracts, reasons };
+}
+
+/**
+ * Multi-directory projects spec §6.1-§6.4: every reason in check order -- loadPlan's, the Web import's dependency and
+ * success-condition checks, each write's directory and each task's primary checks, a non-primary `.decisions` write,
+ * each task's expansion, each target path against that directory's overview commit, each trace -- and only for a draft
+ * with none, the import itself (one reason per item) and the layers, with qualified write sets so two tasks conflict
+ * only within one directory.
+ */
+export async function validateMultiSplitDraft(input: {
+  output: MultiSplitOutput; plan: SplitPlanFile; contracts: Map<string, Record<string, unknown>>;
+  /** The caller's `expandMultiSplitDraft` reasons: expansion needs every member's path, which this validator lacks. */
+  expandReasons: readonly string[];
+  paths: ReadonlyMap<string, string>; commits: ReadonlyMap<string, string>;
+  criterionIds: readonly string[]; adrIds: readonly string[];
+}): Promise<SplitValidation> {
+  const reasons: string[] = [];
+  const { output, plan } = input, keys = [...input.paths.keys()];
+  const loaded = loadPlan(plan, "");
+  if ("rejections" in loaded) for (const rejection of loaded.rejections) reasons.push(`plan:${rejection.code}:${rejection.message}`);
+  const ids = new Set(output.tasks.map((task) => task.taskId));
+  for (const task of output.tasks) {
+    if (new Set(task.dependsOn).size !== task.dependsOn.length) reasons.push(`import:duplicate-dependency:${task.taskId}`);
+    for (const dependency of task.dependsOn) if (!ids.has(dependency)) reasons.push(`import:dangling-dependency:${task.taskId}:${dependency}`);
+  }
+  if (new Set(plan.successConditions).size !== plan.successConditions.length) reasons.push("import:duplicate-success-condition");
+  for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
+    if (!input.paths.has(write.dir)) reasons.push(`dir:${task.taskId}:${write.dir}`);
+  }
+  const ledgerPath = (declared: string): boolean => {
+    const normalized = normalizeClaim(declared).normalized;
+    return normalized === ".decisions" || normalized.startsWith(".decisions/");
+  };
+  for (const task of output.tasks) {
+    const writes = orderWrites(task.writes, keys);
+    if (input.paths.has(writes[0]!.dir) && writes[0]!.checks.length === 0) reasons.push(`checks-primary:${task.taskId}`);
+    for (const write of writes.slice(1)) if (write.targetPaths.some(ledgerPath)) reasons.push(`ledger-path:${task.taskId}:${write.dir}`);
+  }
+  reasons.push(...input.expandReasons);
+  for (const task of output.tasks) {
+    if (task.writes.some((write) => !input.paths.has(write.dir))) continue;
+    for (const write of orderWrites(task.writes, keys)) for (const path of write.targetPaths) {
+      if (!(await overviewPathExists(input.paths.get(write.dir)!, input.commits.get(write.dir)!, path))) reasons.push(`path:${task.taskId}:${write.dir}:${path}`);
+    }
+  }
+  const known = new Set([...input.criterionIds, ...input.adrIds]);
+  for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
+  for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
+  if (reasons.length > 0) return { ok: false, reasons, layers: null, implicitEdges: null };
+  try {
+    normalizeControlPlan({ ...schedulerControlPlanSourceOf(plan, plan.targetRepo), repoId: "requirement", planId: "requirement-draft" });
+  } catch (error) {
+    if (!(error instanceof ControlError)) throw error;
+    return { ok: false, reasons: importReasons(error), layers: null, implicitEdges: null };
+  }
+  let graph: ReturnType<typeof buildGraph>;
+  try {
+    graph = buildGraph({ ...plan, tasks: output.tasks.map((task) => ({ taskId: task.taskId, contract: task.taskId, dependsOn: task.dependsOn })) } as PlanFile,
+      input.contracts, new Map(output.tasks.map((task) => [task.taskId, qualifiedWriteSetOf(task.writes)])));
+  } catch (error) {
+    return { ok: false, reasons: [`graph:${error instanceof Error ? error.message : String(error)}`], layers: null, implicitEdges: null };
+  }
+  return { ok: true, reasons, layers: graph.layers, implicitEdges: graph.implicit.map((edge) => ({ from: edge.from, to: edge.to, conflicts: edge.conflicts.map((c) => ({ a: c.a.declared, b: c.b.declared })) })) };
 }
 
 /**

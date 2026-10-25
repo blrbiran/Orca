@@ -10,14 +10,17 @@ import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildRepositoryOverview, dividedOverviewLimits, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
 import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
 import { flowVaultRepoId } from "../flow/groups.js";
-import { multiDirOf } from "./multiGroup.js";
+import { dirTargetRepoId, multiDirOf, type FrozenMultiDir } from "./multiGroup.js";
 import { DirFolderMissing, importFolder, openDirWorkspace } from "./dirWorkspace.js";
 import {
   clarifyingLedger, clarifyLimits, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
-import { MAX_AUTO_RETRIES, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
-import { buildSplitPrompt, expandSplitDraft, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI, validateSplitDraft, type SplitPlanFile } from "./requirementSplit.js";
+import { MAX_AUTO_RETRIES, multiSplitOutputSchema, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
+import {
+  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft,
+  type SplitPlanFile,
+} from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
@@ -338,16 +341,48 @@ interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "autoRet
 }
 
 /**
- * Evaluated outside the transaction (it reads the target repository at the commit A2's overview named); its result is
+ * Multi-directory projects spec §6.4: a multi group's split answer, parsed with multiSplitOutputSchema, expanded per
+ * task against the directories it names and validated with every reason code's own check. The run's overview must name
+ * one commit per member; a member it does not name is a recovery block, as a single call's missing commit is.
+ */
+async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, multi: FrozenMultiDir, rawOutput: unknown): Promise<SplitEvaluation> {
+  const parsed = multiSplitOutputSchema.safeParse(rawOutput);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null };
+  }
+  const overview = (run as { overview?: RunOverview | null }).overview ?? null;
+  if (overview === null || !("commits" in overview)) throw new ControlError("recovery-blocked", "requirement-overview-missing");
+  const rounds = chainRounds(readRounds(deps.store, run.groupId));
+  const latest = rounds.filter((round) => round.result !== null).at(-1)?.result ?? null;
+  if (latest === null) throw new ControlError("recovery-blocked", "requirement-understanding-missing");
+  const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
+  const paths = new Map<string, string>(), commits = new Map<string, string>();
+  for (const member of multi.dirs) {
+    const commit = overview.commits[member.key];
+    if (commit === undefined) throw new ControlError("recovery-blocked", "requirement-overview-missing");
+    paths.set(member.key, deps.resolveRepository(dirTargetRepoId(deps.store, run.groupId, member.key)));
+    commits.set(member.key, commit);
+  }
+  const dirs = [...paths].map(([key, path]) => ({ key, path }));
+  const expanded = expandMultiSplitDraft(parsed.data, { targetRepo: dirs[0]!.path, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId,
+    statement: latest.statement, successConditions: latest.acceptanceCriteria.map((criterion) => criterion.text), dirs });
+  const validated = await validateMultiSplitDraft({ output: parsed.data, plan: expanded.plan, contracts: expanded.contracts, expandReasons: expanded.reasons, paths, commits,
+    criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
+  // DR12: the hash is of the expanded plan, the bytes the person reviews; a draft with a reason keeps neither.
+  return validated.ok
+    ? { schemaValid: true, output: parsed.data, plan: expanded.plan, draftHash: sha256Canonical(expanded.plan), ...validated }
+    : { schemaValid: true, output: parsed.data, plan: null, draftHash: null, ...validated };
+}
+
+/**
+ * Evaluated outside the transaction (it reads the target repositories at the commits A2's overview named); its result is
  * what `complete` records. A call that failed with no output is schema-invalid (Task 6 ruling: it uses a retry).
  */
 async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<SplitEvaluation> {
   const group = readRequirementGroup(deps.store, run.groupId);
-  // O5 replaces this refusal with multiSplitOutputSchema and writes validation; until then a multi answer is handed
-  // back schema-invalid (and retried) rather than resolved against a multi id, which no repository has.
-  if (multiDirOf(group) !== null) {
-    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: ["schema:multi-dir:not-evaluated"], layers: null, implicitEdges: null };
-  }
+  const multi = multiDirOf(group);
+  if (multi !== null) return evaluateMultiSplit(deps, run, multi, rawOutput);
   const parsed = splitOutputSchema.safeParse(rawOutput);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

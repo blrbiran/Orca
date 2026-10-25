@@ -217,9 +217,14 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
       <h4>{t("requirements.draft", { n: draft.draftNo })} · {enumText("draftState", draft.state)}</h4>
       {draft.output !== null && (
         <table><thead><tr>{(["id", "title", "labels", "loopPlan", "targetPaths", "checks", "dependsOn", "traces"] as const).map((c) => <th key={c}>{t(`requirements.columns.${c}`)}</th>)}</tr></thead>
-          <tbody>{draft.output.tasks.map((task) => (
+          <tbody>{draft.output.tasks.map((task) => {
+            // Multi-directory projects spec §6.2: a multi task's paths and checks are per directory.
+            const writes = "writes" in task ? task.writes : [{ dir: "", targetPaths: task.targetPaths, checks: task.checks }];
+            const targetPaths = writes.flatMap((write) => write.targetPaths.map((path) => (write.dir === "" ? path : `${write.dir}:${path}`)));
+            return (
             <tr key={task.taskId}><td>{task.taskId}</td><td>{task.title}</td><td>{task.labels.join(", ")}</td><td>{task.loopPlan ?? ""}</td>
-              <td>{task.targetPaths.join(", ")}</td><td>{task.checks.join(" ; ")}</td><td>{task.dependsOn.join(", ")}</td><td>{task.traces.join(", ")}</td></tr>))}</tbody></table>
+              <td>{targetPaths.join(", ")}</td><td>{writes.flatMap((write) => write.checks).join(" ; ")}</td><td>{task.dependsOn.join(", ")}</td><td>{task.traces.join(", ")}</td></tr>);
+          })}</tbody></table>
       )}
       {draft.layers?.map((layer, index) => <p key={index}>{t("requirements.layer", { n: index + 1, tasks: layer.join(", ") })}</p>)}
       {draft.implicitEdges?.map((edge) => <p key={`${edge.from}>${edge.to}`}>{t("requirements.implicitEdge", { from: edge.from, to: edge.to, paths: [...new Set(edge.conflicts.map((c) => `${c.a} ∩ ${c.b}`))].join(", ") })}</p>)}

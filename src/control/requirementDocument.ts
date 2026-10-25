@@ -1,5 +1,5 @@
 import type { RequirementBlock } from "./requirementRecords.js";
-import type { RoundBody, SplitOutput } from "./requirementSchemas.js";
+import type { RoundBody, MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
 
 /** DR20: prose headings in the requirement's content language; ids, paths and dates are not translated. */
 const WORDS = {
@@ -16,7 +16,7 @@ export interface RequirementDocumentInput {
   groupId: string;
   requirement: Pick<RequirementBlock, "requirementId" | "repoId" | "slug" | "contentLanguage" | "createdOn" | "consensus">;
   rounds: readonly RoundBody[];
-  acceptedSplit: SplitOutput | null;
+  acceptedSplit: SplitOutput | MultiSplitOutput | null;
 }
 
 /** Spec §9.2: `.orca/requirements/<createdOn>-<slug>.md`; the n-th candidate (n >= 2) gets `-<n>`. */

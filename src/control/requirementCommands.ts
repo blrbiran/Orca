@@ -8,7 +8,7 @@ import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
 import type { DirProjectOf } from "./dirGroup.js";
 import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from "./dirWorkspace.js";
-import { freezeMultiDir, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
+import { freezeMultiDir, dirTargetRepoId, multiDirOf, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
 import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
@@ -24,7 +24,8 @@ import {
 } from "./requirementRecords.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
-import { REQUIREMENT_LIMIT_DEFAULT } from "./requirementSchemas.js";
+import { expandMultiSplitDraft, orderWrites, type SplitPlanFile } from "./requirementSplit.js";
+import { REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput } from "./requirementSchemas.js";
 import { commandSuccess, readStopIntent } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -364,14 +365,40 @@ export async function applyRequirementDraftAccept(
         group.requirement = { ...group.requirement, acceptedDraftNo: draft.draftNo, document: { sha256: documentSha256, recordHash, frozenAt: now.toISOString() },
           export: { state: "pending", path: null, commit: null, parent: null, detail: null } };
         // 2. Import the stored plan into this group (spec §9.1: a stored plan instead of an allowlisted file; DR23 planId).
-        const stored = draft.plan as { targetRepo: string };
+        const stored = draft.plan as unknown as SplitPlanFile;
         const planId = `requirement-draft-${draft.draftNo}`;
-        const plan = normalizeControlPlan({ ...schedulerControlPlanSourceOf(stored, stored.targetRepo), repoId: group.requirement.repoId, planId });
+        const source = schedulerControlPlanSourceOf(stored, stored.targetRepo);
+        // Multi-directory projects spec §6.4: the frozen contracts are re-expanded here, with every member's path resolved
+        // now, so the archived contracts name the directories' current targets and the ccloop primary's repoKey. The
+        // model's split is the source (`writes`); a resolver-less accept cannot name those targets.
+        const multi = multiDirOf(group);
+        const keys = multi === null ? [] : multi.dirs.map((member) => member.key);
+        const paths = new Map<string, string>();
+        if (multi !== null) {
+          if (deps.resolveRepository === undefined) throw new ControlError("control-target-not-allowed");
+          for (const member of multi.dirs) paths.set(member.key, deps.resolveRepository(dirTargetRepoId(deps.store, id, member.key)));
+        }
+        const expanded = multi === null ? null : expandMultiSplitDraft(draft.output as MultiSplitOutput, {
+          targetRepo: [...paths.values()][0]!, ccloopBin: stored.ccloopBin, runsDir: stored.runsDir, groupId: id,
+          statement: source.goal, successConditions: source.successConditions,
+          dirs: [...paths].map(([key, path]) => ({ key, path })),
+        });
+        const tasks = expanded === null ? source.tasks : source.tasks.map((task) => {
+          const contract = expanded.contracts.get(task.taskId);
+          if (contract === undefined) throw new ControlError("recovery-blocked", `multi-dir-contract:${task.taskId}`);
+          return { ...task, originalContract: contract, originalContractCanonicalJson: canonicalBytes(contract).toString("utf8"), originalContractHash: sha256Canonical(contract) };
+        });
+        // Multi-directory projects spec §6.4: delivery is the multi landing, so the group gets no integration record.
+        const plan = normalizeControlPlan({ ...source, tasks, repoId: group.requirement.repoId, planId });
         const importDeps: ImportDeps = { ...deps, defaults: () => defaults, estimatorSlot: slot.outcome, estimatorLayerAuthority: slot.layerAuthority,
           estimatorObservation: (selected) => { if (selected !== profile) throw new ControlError("profile-changed"); return slot.observation; } };
+        const writes = multi === null ? undefined : Object.fromEntries((draft.output as MultiSplitOutput).tasks.map((task) => [task.taskId,
+          orderWrites(task.writes, keys).map((write) => ({ dir: write.dir, targetPaths: [...write.targetPaths], checks: [...write.checks] }))]));
         const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId, commandId: command.commandId, at: now.getTime(),
-          estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode },
-          { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])) });
+          estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode,
+          ...(multi === null ? {} : { integration: null }) },
+          { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])),
+            ...(writes === undefined ? {} : { writes }) });
         // Tester round 2 spec §6.2.1 (ruling H3): the agent the person picked on New requirement (the estimator override)
         // becomes the group's worker default -- an ordinary panel layer, still editable -- unless a worker override exists
         // or the accepted plan names a group agent (the panel layer would mask it). Seeded after the import, whose

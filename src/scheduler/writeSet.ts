@@ -68,6 +68,20 @@ export function writeSetOf(contract: unknown): ClaimedPath[] {
 }
 
 /**
+ * Multi-directory projects spec §6.2: a multi-directory task's write set, qualified by the directory it belongs to.
+ * Every claim gets the directory key as a NUL-prefixed root (`\0<key>/`), a byte no path can contain, so two claims in
+ * different directories can never intersect while the same path in one directory still does. A normalized empty prefix
+ * (a bare `**` or a declaration with no restriction) claims that directory's root, not the whole project. `declared`
+ * stays printable for diagnostics: `<key>:<the path the model wrote>`.
+ */
+export function qualifiedWriteSetOf(writes: ReadonlyArray<{ dir: string; targetPaths: readonly string[] }>): ClaimedPath[] {
+  return writes.flatMap((write) => write.targetPaths.map((declared) => {
+    const normalized = normalizeClaim(declared).normalized;
+    return { normalized: normalized === "" ? `\0${write.dir}/` : `\0${write.dir}/${normalized}`, declared: `${write.dir}:${declared}` };
+  }));
+}
+
+/**
  * Spec §5.3 / §9.1(6): the set union of two contracts' `verification.
  * requiredChecks` — an intersecting pair whose union is empty would "pass"
  * reconciliation by having nothing to check, which is a green that means

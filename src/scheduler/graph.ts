@@ -175,11 +175,16 @@ function buildImplicitEdges(tasks: PlanTask[], writeSets: Map<string, ClaimedPat
  * of them — without forcing tasks that are merely downstream of it, but not
  * of each other, to serialise too.
  */
-export function buildGraph(plan: PlanFile, contracts: Map<string, unknown>): TaskGraph {
+export function buildGraph(plan: PlanFile, contracts: Map<string, unknown>, claims?: Map<string, ClaimedPath[]>): TaskGraph {
   const taskIds = plan.tasks.map((t) => t.taskId);
   const writeSets = new Map<string, ClaimedPath[]>();
   for (const task of plan.tasks) {
-    writeSets.set(task.taskId, writeSetOf(contracts.get(task.taskId)));
+    // Multi-directory projects spec §6.2: a multi group's claims are qualified by directory and come from the task's
+    // `writes`, never from a contract's `repoKey` (the model names directories; code decides what they mean).
+    if (claims === undefined) { writeSets.set(task.taskId, writeSetOf(contracts.get(task.taskId))); continue; }
+    const claimed = claims.get(task.taskId);
+    if (claimed === undefined) throw new Error(`buildGraph: no claims for ${task.taskId}`);
+    writeSets.set(task.taskId, claimed);
   }
 
   const explicit: Array<[string, string]> = [];
