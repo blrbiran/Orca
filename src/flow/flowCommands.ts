@@ -34,6 +34,8 @@ export interface FlowCommandDeps {
   store: ControlStore; flow(): FlowDeps | null;
   /** Review finding I4: the registered `dir` projects (settings key, folder); absent: none, so no start is accepted. */
   projects?(): ReadonlyArray<{ repoId: string; path: string }>;
+  /** Multi-directory projects spec §12: a flow runs on one folder, so a multi-dir project is refused by name. */
+  multiDirRepoId?(repoId: string): boolean;
 }
 
 /**
@@ -99,7 +101,7 @@ export async function applyFlowCommand(deps: FlowCommandDeps, command: FlowComma
   try {
     const flow = deps.flow();
     if (flow === null) throw new ControlError("flow-unavailable", "this panel runs no flow kernel (no execution driver)");
-    result = await act(flow, command, deps.projects ?? (() => []));
+    result = await act(flow, command, deps.projects ?? (() => []), deps.multiDirRepoId);
   } catch (failure) {
     const error = asFlowControlError(failure);
     return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
@@ -119,12 +121,15 @@ async function advanceAfter(flow: FlowDeps, flowRunId: string): Promise<void> {
   catch (error) { recordRunError(flow, flowRunId, error instanceof Error ? error.message : String(error)); }
 }
 
-async function act(flow: FlowDeps, command: FlowCommand, projects: () => ReadonlyArray<{ repoId: string; path: string }>): Promise<Result> {
+async function act(flow: FlowDeps, command: FlowCommand, projects: () => ReadonlyArray<{ repoId: string; path: string }>,
+  multiDirRepoId?: (repoId: string) => boolean): Promise<Result> {
   const who = routedAttributionFor(command.commandId) ?? { by: command.actorId, via: "web" };
   switch (command.verb) {
     case "flow-start": {
       const p = command.payload;
       if (p.dir === undefined) throw new ControlError("control-argument-invalid", "phase 1 runs a flow on a folder: give dir");
+      // Multi-directory projects spec §12: refused before the folder resolver, which would answer flow-dir-unregistered.
+      if (p.projectId !== undefined && (multiDirRepoId?.(p.projectId) ?? false)) throw new ControlError("flow-project-multi-dir-unsupported", p.projectId);
       const projectId = await registeredDirProject(projects(), p.dir, p.projectId);
       const template = p.template.startsWith("builtin/") ? p.template : `builtin/${p.template}`;
       const started = await startFlowRun(flow, {

@@ -10,6 +10,7 @@ import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "..
 import { commandAttributionFor } from "../commandClient.js";
 import { ControlError } from "../errors.js";
 import { readArchivedPlan } from "../queries.js";
+import { isMultiGroup } from "../multiGroup.js";
 import { readGroupBody } from "../stopIntent.js";
 import { readGroupIntegration } from "../integrationScheme.js";
 import type { ControlStore } from "../store.js";
@@ -29,6 +30,8 @@ export interface ScheduleDeps {
   flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
   knownRepository?: (repoId: string) => boolean;
   resolveRepository?: (repoId: string) => string;
+  /** Multi-directory projects spec §5.1: a scheduled flow or group runs on one folder, so a multi id refuses by name. */
+  multiDirRepoId?: (repoId: string) => boolean;
   now?: () => Date;
 }
 
@@ -100,6 +103,9 @@ function set(deps: ScheduleDeps, context: WebCommandContext, command: Extract<Sc
     return success(context, { kind: "schedule-set", scheduleId }, context.nextCommandRevision, null);
   }
   if (row !== null) throw new ControlError("control-argument-invalid", "schedule-exists");
+  // Multi-directory projects spec §5.1: a scheduled flow or group runs on one folder. Checked before the start's own
+  // validation, whose flow-projects list would answer flow-dir-unregistered for the same id.
+  if (deps.multiDirRepoId?.(payload.projectId) ?? false) throw new ControlError("flow-project-multi-dir-unsupported", payload.projectId);
   if (liveScheduleCount(deps.store, payload.projectId) >= SCHEDULE_LIMIT) throw new ControlError("schedule-limit", `${SCHEDULE_LIMIT}`);
   const start = validateStart(validationDeps(deps), payload.projectId, payload.start);
   const body = makeBody(deps, { id: scheduleId, projectId: payload.projectId, name: payload.name, cron: payload.cron, enabled: payload.enabled, start, who, now });
@@ -153,6 +159,9 @@ function resume(deps: ScheduleDeps, context: WebCommandContext, command: Extract
 function fromGroup(deps: ScheduleDeps, context: WebCommandContext, command: Extract<ScheduleCommand, { verb: "schedule-from-group" }>): { status: number; body: CommandSuccessV1 } {
   if (command.target.kind !== "group") throw new ControlError("control-target-not-allowed");
   const groupId = command.target.groupId;
+  // Multi-directory projects spec §5.1: a scheduled group runs on one folder. The source group's own body says it is a
+  // multi group, which the plan read would not name (its repoId is the multi project id, which knownRepository accepts).
+  if (isMultiGroup(deps.store, groupId)) throw new ControlError("flow-project-multi-dir-unsupported", groupId);
   const payload = command.payload;
   const scheduleId = checkId(payload.scheduleId);
   if (readSchedule(deps.store, scheduleId) !== null) throw new ControlError("control-argument-invalid", "schedule-exists");

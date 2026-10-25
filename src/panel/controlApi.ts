@@ -6,6 +6,7 @@ import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
+import { isMultiGroup, multiPrimaryRepoId } from "../control/multiGroup.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { planLibraryEntryView, planLibraryListView, planLibraryVersionBytes } from "../control/planLibrary/views.js";
 import { scheduleDetailView, scheduleFiresView, scheduleListView } from "../control/schedules/views.js";
@@ -243,7 +244,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   app.get("/api/control/groups/:groupId/decisions", asyncRoute(async (req, res) => {
     const groupId = String(req.params.groupId);
     try {
-      const repoId = groupRepoId(deps.store, groupId);
+      // Multi-directory projects spec §5.4: one ledger, in the primary directory's commit (the group has no single repository).
+      const repoId = isMultiGroup(deps.store, groupId) ? multiPrimaryRepoId(deps.store, groupId) : groupRepoId(deps.store, groupId);
       // Dir-requirements spec §10: a vault id (a dir group's, a dir flow group's) is resolved by the panel's resolver; it
       // is no trusted repository. Every other id keeps the trusted-repository check.
       const repo = repoId.startsWith(FLOW_VAULT_REPO_PREFIX) || deps.service?.repositoryKnown(repoId) ? deps.service?.repositoryPathOf(repoId) ?? null : null;

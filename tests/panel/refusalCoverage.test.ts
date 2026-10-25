@@ -65,6 +65,9 @@ const VIEW_REASONS = [
   "codex-skills-source-invalid", "codex-exit-error",
   // Feedback #62: Codex answered HTTP 429 and ccloop's backoff ran out (ccloop 3069dbf codexAdapter.ts).
   "codex-rate-limited",
+  // Multi-directory projects spec §7.4, §9.6: a multi run's blocks (src/control/executionDriver.ts, driverLanding.ts).
+  "multi-dir-recovery-unsupported", "multi-dir-continuation-unsupported", "multi-dir-landing-conflict",
+  "multi-dir-writes-missing", "multi-dir-writes",
 ];
 /**
  * Gaps spec §13 (plan Task 9): a flow message's rejection reason, and a feedback intake's failure, is a code (with a

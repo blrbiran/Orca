@@ -452,7 +452,9 @@ export type ControlAction =
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
   | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
-  | { verb: "resolve-folder-change"; groupId: string; expectedRevision: number; payload: { action: "take-folder" | "recheck" | "withhold" } }
+  | { verb: "resolve-folder-change"; groupId: string; expectedRevision: number; payload: { action: "take-folder" | "recheck" | "withhold"; dir?: string } }
+  // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
+  | { verb: "multi-dir-landing"; groupId: string; expectedRevision: number; payload: { action: "retry-rest" | "mark-resolved" } }
   | { verb: "set-task-labels"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLabelsPayloadV1 }
   | { verb: "set-task-loop"; groupId: string; taskId: string; expectedRevision: number; payload: SetTaskLoopPayloadV1 }
   // N1 spec §11.1: the requirement commands (accept's server route is Task 10's).
@@ -534,6 +536,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/integration/resolve`;
     case "resolve-folder-change":
       return `${group}/folder-change`;
+    case "multi-dir-landing":
+      return `${group}/multi-dir-landing`;
     case "archive-group":
       return `${group}/archive`;
     case "unarchive-group":

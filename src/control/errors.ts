@@ -320,6 +320,11 @@ export const durableCommandErrorStatuses = {
   "multi-dir-delivery-unsupported": 422,
   "multi-dir-delivery-fixed": 422,
   "folder-change-dir-mismatch": 409,
+  // Multi-directory projects spec §12: a multi id takes no imported plan, no flow and no debug open; each is refused by
+  // name before the dir or repository lookup would answer for it.
+  "multi-dir-plan-import-unsupported": 422,
+  "flow-project-multi-dir-unsupported": 422,
+  "debug-multi-dir-unsupported": 422,
   // Multi-directory projects spec §9.7: no stopped landing waits for this answer on the group.
   "multi-dir-landing-not-pending": 409,
   // Scheduled flows and groups spec 2026-10-24 §5: the plan library. A document over 2 MiB canonical; a version whose

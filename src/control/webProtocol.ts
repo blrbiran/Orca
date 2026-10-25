@@ -1537,6 +1537,31 @@ export const groupSummarySchema = z
     }).strict().optional(),
     // Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group and why its fire waits.
     scheduleStart: z.object({ scheduleId: idSchema, name: nonemptyString, slot: safeInteger, waitingReason: nonemptyString.nullable() }).strict().optional(),
+    // Multi-directory projects spec §9.4, §12: a multi group's directories and its landing, for the group's integration
+    // region (per-directory state, both answers) and the overview's needs-you row. Optional so every other group's
+    // summary keeps its bytes; `landing` is null until accept freezes it.
+    multiDir: z.object({
+      project: idSchema,
+      dirs: z.array(z.object({
+        key: nonemptyString, kind: z.enum(["repo", "dir"]), primary: z.boolean(),
+        delivery: z.enum(["keep", "local", "push-target", "place"]).nullable(),
+        lastLanded: commitShaSchema.nullable(), landed: z.boolean(), failed: z.boolean(),
+        placement: z.object({
+          state: z.enum(["idle", "folder-changed", "folder-unwritable", "folder-missing", "failed"]),
+          detail: z.string().nullable(), changedTotal: safeInteger, unwritableTotal: safeInteger,
+        }).strict().optional(),
+      }).strict()).min(2).max(8),
+      landing: z.object({
+        state: z.enum(["idle", "prechecking", "landing", "landed", "partial", "blocked", "folder-changed", "folder-unwritable"]),
+        landedKeys: z.array(nonemptyString),
+        reason: z.string().nullable(), detail: z.string().nullable(), failedKey: z.string().nullable(),
+        movedBeforeAny: z.union([z.literal(0), z.literal(1)]),
+        resolution: z.object({
+          action: z.enum(["retry-rest", "mark-resolved"]), by: nonemptyString, at: safeInteger, unlanded: z.array(nonemptyString).optional(),
+        }).strict().nullable(),
+        at: safeInteger,
+      }).strict().nullable(),
+    }).strict().optional(),
   })
   .strict();
 

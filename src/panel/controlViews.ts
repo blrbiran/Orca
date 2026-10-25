@@ -16,6 +16,8 @@ import { peerCode } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
+import { multiDirOf } from "../control/multiGroup.js";
+import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
@@ -504,6 +506,39 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const escalation = archived === null ? [] : escalationsOf(store, groupId);
   // Dir-requirements spec §9.4: a dir group's placement record, without the journal's `from/to` (not the panel's business).
   const placement = dirWorkspaceOf(body) === null ? null : readPlacement((body as { placement?: unknown }).placement);
+  // Multi-directory projects spec §12: a multi group's directories and landing, as its integration region shows them. The
+  // per-directory state is derived here, so the page never has to agree a second time on what "landed" means.
+  const multi = multiDirOf(body);
+  const multiLanding = multi === null ? null : readMultiLanding(multi.landing);
+  // What this landing has done, not what accept seeded: `lastLanded` starts at every export base, so it cannot say a
+  // directory has this group's latest work. Completed all carried directories count; while running or stopped, only the
+  // keys it recorded. A `keep` directory is never carried (§9.4), so nothing lands there.
+  const carried = (key: string): boolean =>
+    (multiLanding?.delivery.find((entry) => entry.key === key)?.scheme.delivery ?? "keep") !== "keep";
+  const landedNow = (key: string): boolean =>
+    multiLanding !== null && carried(key) && (multiLanding.state === "landed" || (multiLanding.pending?.landed.includes(key) ?? false));
+  const multiSummary = multi === null ? null : {
+    project: multi.project,
+    dirs: multi.dirs.map((dir, index) => {
+      const memberPlacement = multiLanding?.placement?.[dir.key];
+      return {
+        key: dir.key, kind: dir.kind, primary: index === 0,
+        delivery: multiLanding?.delivery.find((entry) => entry.key === dir.key)?.scheme.delivery ?? null,
+        lastLanded: multiLanding?.lastLanded[dir.key] ?? null,
+        landed: landedNow(dir.key),
+        failed: multiLanding?.failedKey === dir.key,
+        ...(memberPlacement === undefined ? {} : { placement: {
+          state: memberPlacement.state, detail: memberPlacement.detail,
+          changedTotal: memberPlacement.changedTotal, unwritableTotal: memberPlacement.unwritableTotal,
+        } }),
+      };
+    }),
+    landing: multiLanding === null ? null : {
+      state: multiLanding.state, landedKeys: multiLanding.pending?.landed ?? [],
+      reason: multiLanding.reason, detail: multiLanding.detail, failedKey: multiLanding.failedKey,
+      movedBeforeAny: multiLanding.movedBeforeAny, resolution: multiLanding.resolution, at: multiLanding.at,
+    },
+  };
   const scheduleStart = scheduleStartOf(store, groupId, body as Record<string, unknown>);
   const summary = {
     groupId,
@@ -528,6 +563,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
     ...(escalation.length === 0 ? {} : { escalation }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
+    ...(multiSummary === null ? {} : { multiDir: multiSummary }),
     ...(debugMark === null ? {} : { debug: {
       correctionId: debugMark.correctionId, ordinal: debugMark.ordinal, missing: debugMark.missing,
       agentFallback: debugMark.agentFallback === null ? null : { reason: debugMark.agentFallback.reason },

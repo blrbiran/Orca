@@ -508,7 +508,7 @@ function persistAsyncPreparationFailure(store: ControlStore, command: ImportComm
  * identity/CAS preflight happens before dynamic defaults or I/O; applyWebCommand
  * repeats both checks after the await to close concurrent commit races.
  */
-export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf }, command: ImportCommand, opts: { origin?: ImportOrigin } = {}): Promise<ImportResult> {
+export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf; multiDirRepoId?: (repoId: string) => boolean }, command: ImportCommand, opts: { origin?: ImportOrigin } = {}): Promise<ImportResult> {
   const preflight = preflightWebCommand(deps.store, command);
   if (preflight) return preflight.body;
 
@@ -517,6 +517,9 @@ export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjec
   let prepared: PreparedEstimatorSlot | null;
   try {
     const raw = command.payload;
+    // Multi-directory projects spec §12: a multi id imports no plan -- its work comes from a requirement's split. Refused
+    // by name before the dir refusal (a multi project is neither a repository nor a folder).
+    if (deps.multiDirRepoId?.(raw.repoId) ?? false) throw new ControlError("multi-dir-plan-import-unsupported", raw.repoId);
     // Dir-requirements spec §5.2: only a requirement gets a dir workspace; a plan on a `dir` project is refused by name,
     // before its plan file is looked up (a folder has none).
     if ((deps.dirProjectOf?.(raw.repoId) ?? null) !== null) throw new ControlError("dir-project-plan-import-unsupported", raw.repoId);

@@ -1165,7 +1165,7 @@ export class WebControlService {
   /** Flow engine spec §14.2: every flow verb (flowCommands.ts); the kernel acts first, the ledger books the outcome. */
   async flowCommand(command: FlowCommand): Promise<WebCommandResult> {
     const release = this.deps.admissionGate?.enter();
-    try { return await applyFlowCommand({ store: this.store, flow: this.deps.flowDeps ?? (() => null), projects: this.deps.flowProjects ?? (() => []) }, command) as WebCommandResult; }
+    try { return await applyFlowCommand({ store: this.store, flow: this.deps.flowDeps ?? (() => null), projects: this.deps.flowProjects ?? (() => []), ...(this.deps.multiDirRepoId === undefined ? {} : { multiDirRepoId: this.deps.multiDirRepoId }) }, command) as WebCommandResult; }
     finally { release?.(); }
   }
   /** Scheduled flows and groups spec §5.3, §5.6: the plan library's writes (planLibrary/commands.ts), one transaction each. */
@@ -1176,6 +1176,7 @@ export class WebControlService {
   scheduleCommand(command: ScheduleCommand): WebCommandResult {
     return this.mutate(() => applyScheduleCommand({
       store: this.store, flowProjects: this.deps.flowProjects ?? (() => []), knownRepository: this.deps.knownRepository ?? (() => false),
+      ...(this.deps.multiDirRepoId === undefined ? {} : { multiDirRepoId: this.deps.multiDirRepoId }),
       ...(this.deps.resolveRepository === undefined ? {} : { resolveRepository: this.deps.resolveRepository }), ...(this.deps.now === undefined ? {} : { now: this.deps.now }),
     }, command)) as WebCommandResult;
   }
@@ -1201,7 +1202,12 @@ export class WebControlService {
     const out = { started: [] as string[], initialised: [] as string[], skipped: [] as string[], opened: [] as string[] };
     if (this.deps.resolveRepository === undefined) return out;
     const repoIds = [...new Set(this.store.db.prepare("SELECT body FROM groups").all().flatMap((row) => {
-      try { const repoId = (JSON.parse(String(row.body)) as { plan?: { repoId?: unknown } }).plan?.repoId; return typeof repoId === "string" ? [repoId] : []; } catch { return []; }
+      try {
+        const repoId = (JSON.parse(String(row.body)) as { plan?: { repoId?: unknown } }).plan?.repoId;
+        // Multi-directory projects spec §5.4: a multi id has no single path, so it is skipped by name -- never resolved to
+        // a member here, and never a `multi-dir-no-single-path` log line per round.
+        return typeof repoId === "string" && !(this.deps.multiDirRepoId?.(repoId) ?? false) ? [repoId] : [];
+      } catch { return []; }
     }))];
     const now = (this.deps.now?.() ?? new Date()).getTime();
     for (const repoId of repoIds) {

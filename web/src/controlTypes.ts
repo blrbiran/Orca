@@ -113,6 +113,8 @@ export type GroupSummaryV1 = {
   systemDebug?: GroupSystemDebugV1;
   /** Dir-requirements spec §9.4: present only on a dir group -- its folder placement record (§8.2 without the journal's from/to). */
   placement?: GroupPlacementV1;
+  /** Multi-directory projects spec §12: present only on a multi group -- its directories and landing, for the integration region. */
+  multiDir?: GroupMultiDirV1;
   /** §3.5: tasks of this group the escalation ladder took over; `exhausted` is level 3 (needs you). */
   escalation?: GroupEscalationV1[];
   /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
@@ -136,6 +138,26 @@ export type GroupPlacementV1 = {
   detail: string | null;
   resolution: null | { id: string; action: "take-folder" | "recheck" | "withhold"; by: string; at: number };
   at: number;
+};
+
+/** Multi-directory projects spec §9.4, §12: a multi group's members and landing as the summary sends them. */
+export type GroupMultiDirV1 = {
+  project: string;
+  dirs: Array<{
+    key: string; kind: "repo" | "dir"; primary: boolean;
+    delivery: null | "keep" | "local" | "push-target" | "place";
+    lastLanded: string | null; landed: boolean; failed: boolean;
+    placement?: { state: "idle" | "folder-changed" | "folder-unwritable" | "folder-missing" | "failed"; detail: string | null; changedTotal: number; unwritableTotal: number };
+  }>;
+  landing: null | {
+    state: "idle" | "prechecking" | "landing" | "landed" | "partial" | "blocked" | "folder-changed" | "folder-unwritable";
+    /** The keys this landing has recorded as written, in order; empty while idle, and empty once it completes. */
+    landedKeys: string[];
+    reason: string | null; detail: string | null; failedKey: string | null;
+    movedBeforeAny: 0 | 1;
+    resolution: null | { action: "retry-rest" | "mark-resolved"; by: string; at: number; unlanded?: string[] };
+    at: number;
+  };
 };
 
 export type GroupSystemDebugV1 = {

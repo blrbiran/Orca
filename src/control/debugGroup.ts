@@ -157,6 +157,10 @@ async function prepare(deps: DebugOpenDeps, command: CorrectionDebugOpenCommand)
   if (correction === undefined) throw new ControlError("correction-not-found");
   // Amendment 1: a withdrawn correction is not open work; refused before its input is frozen.
   if (withdrawnIds(await readWithdrawals(dir)).has(correctionId)) throw new ControlError("correction-withdrawn");
+  // Multi-directory projects spec §5.1, §12: a debug group imports a plan, which a multi id refuses by name. Checked
+  // before the lookup: its repository list holds no multi id, so the lookup would answer correction-repository-unknown.
+  const namedRepoId = deps.repoIdOfProjectKey?.(correction.projectKey) ?? null;
+  if (namedRepoId !== null && (deps.multiDirRepoId?.(namedRepoId) ?? false)) throw new ControlError("debug-multi-dir-unsupported", namedRepoId);
   const repository = await repositoryOf(deps, correction.projectKey);
   if (repository === null) throw new ControlError("correction-repository-unknown", correction.projectKey);
   // Dir-requirements spec §5.2, §6.5: a debug group imports a plan; on a `dir` project that is refused as import-plan is.

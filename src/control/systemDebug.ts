@@ -179,8 +179,10 @@ function success(context: Parameters<Parameters<typeof applyWebCommand>[1]["appl
 export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemDebugOpenCommand, reviewAgent?: PartialSelection): WebCommandResult {
   const { source, stackOn, repoId, facts, checks, review } = command.payload;
   let repoPath: string | null = null, refusal: unknown = null;
+  // Multi-directory projects spec §12: a debug group imports a plan, which a multi id refuses by name.
+  if (deps.multiDirRepoId?.(repoId) ?? false) refusal = new ControlError("debug-multi-dir-unsupported", repoId);
   // Dir-requirements spec §5.2, §6.5: a system debug group imports a plan; on a `dir` project that is refused as import-plan is.
-  if ((deps.dirProjectOf?.(repoId) ?? null) !== null) refusal = new ControlError("dir-project-plan-import-unsupported", repoId);
+  else if ((deps.dirProjectOf?.(repoId) ?? null) !== null) refusal = new ControlError("dir-project-plan-import-unsupported", repoId);
   else try { repoPath = deps.repositoryPath(repoId); } catch (error) { refusal = error instanceof ControlError ? error : new ControlError("correction-repository-unknown", repoId); }
   return applyWebCommand<WebCommandResult>(deps.store, {
     rawCommand: command,

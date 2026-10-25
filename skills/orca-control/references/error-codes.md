@@ -97,6 +97,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `debug-checks-unnamed` | 409 |
 | `debug-group-active` | 409 |
 | `debug-group-not-reopenable` | 409 |
+| `debug-multi-dir-unsupported` | 422 |
 | `decision-approve-reconciling` | 409 |
 | `decision-approve-tip-moved` | 409 |
 | `decision-not-found` | 404 |
@@ -128,6 +129,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `flow-plan-stale` | 409 |
 | `flow-plan-step-not-candidate` | 409 |
 | `flow-profiles-unresolved` | 422 |
+| `flow-project-multi-dir-unsupported` | 422 |
 | `flow-refused` | 409 |
 | `flow-run-not-found` | 404 |
 | `flow-run-stopped` | 409 |
@@ -192,6 +194,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `multi-dir-invalid` | 422 |
 | `multi-dir-landing-not-pending` | 409 |
 | `multi-dir-no-single-path` | 422 |
+| `multi-dir-plan-import-unsupported` | 422 |
 | `multi-dir-project-setting-unsupported` | 422 |
 | `no-chose-instead` | 400 |
 | `no-op-command` | 422 |
