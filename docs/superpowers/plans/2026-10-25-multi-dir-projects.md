@@ -355,39 +355,71 @@ Accepted gaps and observations (recorded honestly at review):
 
 ## Task O9 — every `groupRepoId` site, refusals, access, copy and M15 (§5.4, §12, §13) — M14, M16, M19
 
-Files: `src/control/executionDriver.ts`, `src/control/driverHandoff.ts`, `src/control/driverLanding.ts`,
-`src/control/integrationPass.ts`, `src/control/integrationResolve.ts`, `src/control/integrationCommands.ts`,
-`src/panel/controlApi.ts`, `src/control/requirementCalls.ts`, `src/control/requirementExport.ts`,
-`src/control/webService.ts` (`checksPass`), `src/control/planImport.ts`, `src/control/systemDebug.ts`,
-`src/control/debugGroup.ts`, `src/flow/flowCommands.ts`, `src/panel/humanOnly.ts`, `src/panel/permissions.ts`,
-`src/control/webProtocol.ts` (`groupSummarySchema`), `src/commands/domains/work.ts`, `src/commands/generate.ts` docs,
-`web/src/controlTypes.ts`, `web/src/ControlGroupView.tsx`, `web/src/IntegrationScheme.tsx`, locales.
+Files: `src/control/debugGroup.ts`, `errors.ts`, `integrationPass.ts`, `planImport.ts`, `schedules/commands.ts`,
+`systemDebug.ts`, `webProtocol.ts`, `webService.ts`, `src/flow/flowCommands.ts`, `src/panel/controlApi.ts`,
+`controlViews.ts`, `skills/orca-control/references/error-codes.md`, `web/src/ControlGroupView.tsx`, `controlApi.ts`,
+`controlTypes.ts`, `locales/en.ts`, `locales/zh.ts`, `MultiDirLanding.tsx` (new); `tests/control/multiDirAccess.test.ts`,
+`multiDirSites.test.ts`, `tests/panel/multiDirSummary.test.ts`, `web/tests/multiDirCopy.test.tsx` (all new),
+`tests/panel/refusalCoverage.test.ts` (updated).
 
-- [ ] Sites from §5.4, measured again: A1 workspace mode per written dir; A2 multi branch; cleanup at
-  `executionDriver.ts:1019/:1040` (primary `cleanupRunWorkspace`, each extra `cleanupExtraWorkspace`); saved-result
-  A2 `:1362` unreachable (refused in O6); `driverHandoff.ts:125` per written dir; `:313` unreachable;
-  `driverLanding.ts:126` = `multiPrimaryRepoId`; `:285` = O7; `:566` unreachable; integration pass skips a multi group
-  beside the dir skip; `integrationResolve` unreachable; `controlApi.ts:246` decisions route = primary;
-  `requirementCalls.ts:148/:315` and `requirementExport.ts:144` use `multiPrimaryRepoId` with multi branches.
-- [ ] `checksPass` skips multi repo ids by name when it builds its list (no `multi-dir-no-single-path` per round).
-- [ ] Refusals: `import-plan` on a multi id ⇒ `multi-dir-plan-import-unsupported` (beside the dir refusal at
-  `planImport.ts:515`); `flow-start --project <multi>` ⇒ `flow-project-multi-dir-unsupported` **before**
-  `registeredDirProject`; correction/system-debug on a multi group ⇒ `debug-multi-dir-unsupported`; settings refusal
-  already in O3.
-- [ ] Access: `VERB_ACCESS["multi-dir-landing"] = "human-only"`, `SOCKET_TIER` `token`; `group multi-land` and
-  `group folder-change --dir` rows; `npm run gen:cli-docs`; `web/src/controlTypes.ts` verb union.
-- [ ] `groupSummarySchema` gains a `multiDir` summary (directories with per-directory landing state), additive and
-  optional so single groups keep their bytes.
-- [ ] Copy: every §13 code in en and zh; the group integration region shows per-directory states and both buttons in
-  both locales; the form copy from O2.
-- [ ] M19 (sites): `groupRepoId` throws; extra cleanup removes every extra workspace and deletes the incoming ref in
-  every written dir target; decisions read the primary; mutations `fallback-to-primary`, `clean-primary-only`,
-  `nested-landing-leaf`, `remove-skills-in-extra`, `multi-id-reaches-checksPass`.
-- [ ] M14 (access/Rule 17): §12 rows; `VERB_ACCESS`; temp `HOME`/`ORCA_*` and nothing under `HOME`; flow/import
-  refusals. Mutations: `verb-any`, `flow-dir-unregistered-first`.
-- [ ] M16 (copy): every §13 code has en and zh; the integration region shows the per-directory states and both
-  buttons. Mutation `drop-one-zh-key`.
-- [ ] M15: the listed existing suites pass with no edit; then full `npm test` to a file, read whole.
+- [x] Sites from §5.4, measured again: A1/A2, the extra cleanup, `driverHandoff.ts`'s cleanup, `driverLanding.ts`'s
+  primary and O7 branches, `requirementCalls.ts` and `requirementExport.ts` were already multi-aware from O4–O8. O9
+  changed the remaining reachable ones: the decisions route reads `multiPrimaryRepoId` for a multi group, and the
+  integration pass skips a multi group beside the dir skip. The rest stay unreachable for a multi group (stepDMulti
+  owns D/R; a multi group never reconciles, has no integration copy, returns from the multi export path first, and its
+  recovery/continuation are refused at A2). One probe is reachable: `driverHandoff.ts`'s `landedUnrecorded` for a
+  blocked multi run at D/R -- `groupRepoId` throws, and the probe's catch answers "cannot prove the landing absent",
+  leaving the request to a person, exactly the conservative branch it documents.
+- [x] `checksPass` skips multi repo ids by name when it builds its list (no `multi-dir-no-single-path` per round).
+- [x] Refusals: `import-plan` on a multi id ⇒ `multi-dir-plan-import-unsupported` (before the dir refusal); `flow-start`
+  on a multi project ⇒ `flow-project-multi-dir-unsupported` **before** `registeredDirProject`; a scheduled flow or group
+  on a multi id, and `schedule-from-group` from a multi group ⇒ the same flow code (both checks were added at review:
+  the schedule's own start validation answered `flow-dir-unregistered`, and the group body is the only place a scheduled
+  group's multi membership can be seen); correction (`correction-debug-open`) and system-debug on a multi project ⇒
+  `debug-multi-dir-unsupported`, checked before the repository lookup would answer `correction-repository-unknown`.
+  Status 422 each; `errors.ts` and the generated error-code reference carry all three.
+- [x] Access: `VERB_ACCESS`/`SOCKET_TIER`/CLI rows for `multi-dir-landing` and `resolve-folder-change --dir` landed with
+  O8; O9 adds the Web action union (`multi-dir-landing`, `dir` on the folder answer) and the access tests. The access
+  suite relocates HOME (and every XDG/ORCA path) to a temp directory and asserts after each test that nothing appeared
+  there (Rule 17).
+- [x] `groupSummarySchema` gains an optional `multiDir` summary; `readGroupSummary` derives each directory's `landed`
+  from the landing's own record -- a `keep` member never lands (`lastLanded` alone cannot say it, since accept seeds it
+  with every export base) -- and `landedKeys` is the journal's list, empty at idle and after completion.
+- [x] Copy: every §13 code in en and zh; the integration region is `MultiDirLandingBlock` in place of the scheme picker,
+  showing each directory's delivery and state, the landing reason in the reader's language, "Updated in this landing"
+  from the journal, both stopped-landing answers, and a folder member's three answers with the same gating as the
+  single-folder region (take only `folder-changed`, recheck on any stopped state, withhold when changed + unwritable > 0).
+- [x] M19 (sites): `groupRepoId` throws for a multi group; extra cleanup removes every extra workspace and its incoming
+  ref; the decisions route reads the primary. Mutations `fallback-to-primary`, `clean-primary-only`, `nested-landing-leaf`
+  and `multi-id-reaches-checksPass` each seen red. `remove-skills-in-extra` is GREEN (expected): extras have no skills
+  snapshot, so removing it once per extra is observably equivalent; it stays out of `cleanupExtraWorkspace`.
+- [x] M14 (access/Rule 17): §12 rows; `VERB_ACCESS`; temp HOME/ORCA_*; flow/import/schedule/debug refusals. Mutations
+  `verb-any` and `flow-dir-unregistered-first` seen red; the debug and schedule guards added at review were mutated too
+  (early debug guard removed ⇒ the open answered `correction-repository-unknown`; both schedule guards removed ⇒ the
+  start reached `flow-dir-unregistered`).
+- [x] M16 (copy): every §13 code has en and zh; the integration region shows the per-directory states and both buttons.
+  Mutation `drop-one-zh-key` seen red. At quality review two derived states were pinned by mutations of their own: a
+  `keep` member counted landed (red) and the folder answers' withhold gating collapsed to `unwritable > 0` (red).
+- [x] M15: the listed suites pass with no edit; the full root suite ran to a file and was read whole: 669 files, 6308
+  passed, 37 skipped, exit 0, including the real-ccloop M19 cleanup test (`removes every written directory's workspace
+  and its incoming ref`) under the pinned ccloop.
+
+Accepted gaps and observations (recorded honestly at review):
+
+- The overview's needs-you rows for a stopped multi landing reuse the §13 refusal sentence as the row's title
+  (`controlOverview.ts` adds them with `needsYou`); there is no separate "needs you" wording. Pre-existing row behavior.
+- Member-list refusals are suffixed (`multi-dir-member-duplicate:<id>`), and the Web's `refusalText` looks codes up
+  exactly, so the server's English sentence is shown as sent even though the en/zh entries exist; those entries are
+  exercised by the copy test, not by that runtime path.
+- The pseudo-locale sweep (`i18nPseudo.test.tsx`'s `AREAS`) has no multi group; the region's two locales are covered by
+  `multiDirCopy.test.tsx`.
+- The integration pass's multi skip has no test: a multi group never has an integration record, so removing it changes no
+  observable behavior; it stays as an explicit guard beside the dir skip.
+- `applyMultiDirLanding` relies on `applyWebCommand`'s projection recording; the explicit `recordProjectionChange` calls
+  remain only where the pass writes outside any command (`multiLanding.ts:139/:350`).
+- The first `O9-M19a` mutation entry in the log reads "GREEN (unexpected)" although the run exited 1: the runner had
+  inverted its label. It was fixed and rerun immediately; the rerun entry is the evidence, and the worktree was
+  byte-identical both times.
 
 ---
 
