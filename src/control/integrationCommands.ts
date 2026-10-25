@@ -3,6 +3,7 @@ import { FLOW_GROUP_DELIVERY_FIXED, isDirFlowGroup } from "../flow/groups.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { dirWorkspaceOf, type DirProjectOf } from "./dirGroup.js";
+import { multiDirOf } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
 import { approveResolution, type ResolutionPrepared } from "./integrationResolve.js";
 import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -93,6 +94,8 @@ export function applySetGroupIntegration(
       if (isDirFlowGroup(deps.store, groupId)) throw new ControlError(FLOW_GROUP_DELIVERY_FIXED);
       // Dir-requirements spec §7: a dir group delivers by placement into its folder only.
       if (dirWorkspaceOf(group) !== null) throw new ControlError("dir-group-delivery-fixed");
+      // Multi-directory projects spec §9.2: each member's delivery was frozen at accept; no single setter applies.
+      if (multiDirOf(group) !== null) throw new ControlError("multi-dir-delivery-fixed");
       // A clarifying group has no plan yet; it gets its copy when its split is accepted.
       if (group.status === "clarifying") throw new ControlError("group-state-invalid");
       refuseFailedCheck(failedCheck);

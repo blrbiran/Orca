@@ -1,5 +1,7 @@
 import { applyWebCommand } from "./commandLedger.js";
 import { dirWorkspaceOf, readPlacement } from "./dirGroup.js";
+import { readMultiLanding } from "./multiLandingRecord.js";
+import { multiDirOf } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
@@ -42,10 +44,11 @@ function tasksAllDone(store: ControlStore, groupId: string): boolean {
 
 /**
  * Delivered locally: a non-keep record whose scheme delivers into a local target branch. Dir-requirements spec §7: a dir
- * group too -- its work reaches its folder by placement, so a dependent never stacks on its work branch.
+ * group too -- its work reaches its folder by placement, so a dependent never stacks on its work branch. Multi-directory
+ * projects spec §9.9: a multi group's work is on several branches, so it is never a stack base either.
  */
 function deliversLocally(group: Record<string, unknown>): boolean {
-  return dirWorkspaceOf(group) !== null || readGroupIntegration(group)?.scheme.delivery === "local";
+  return dirWorkspaceOf(group) !== null || multiDirOf(group) !== null || readGroupIntegration(group)?.scheme.delivery === "local";
 }
 
 /**
@@ -57,10 +60,23 @@ function dirPlacementCaughtUp(group: Record<string, unknown>): boolean {
   return placement !== null && placement.state === "idle" && placement.pending === null && placement.tip === placement.landedTip;
 }
 
+/**
+ * §9.9: a multi group is done when every task is done and every directory delivered `local` or `place` has landed its
+ * tip, with nothing pending and state `landed`. `push-target` / `keep` directories hold no dependent back (DB only).
+ */
+function multiLandingDone(group: Record<string, unknown>): boolean {
+  const multi = multiDirOf(group)!;
+  const landing = readMultiLanding(multi.landing);
+  if (landing === null || landing.state !== "landed" || landing.pending !== null) return false;
+  return landing.delivery.every(({ key, scheme }) =>
+    (scheme.delivery !== "local" && scheme.delivery !== "place") || landing.lastLanded[key] !== undefined);
+}
+
 export function prerequisiteDone(store: ControlStore, groupId: string): boolean {
   const group = groupBody(store, groupId);
   if (group === null || !tasksAllDone(store, groupId)) return false;
   if (dirWorkspaceOf(group) !== null) return dirPlacementCaughtUp(group);
+  if (multiDirOf(group) !== null) return multiLandingDone(group);
   if (!deliversLocally(group)) return true;
   const integration = readGroupIntegration(group)!;
   return integration.lastIntegrated !== null && integration.pending === null && integration.conflict === null && integration.state === "idle";

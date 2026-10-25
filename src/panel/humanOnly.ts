@@ -50,6 +50,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Dir-requirements spec §9.2, D5: a folder change the person made is answered by the person (owner only), whatever
   // the answer -- take-folder, withhold or recheck.
   "resolve-folder-change": "human-only",
+  // Multi-directory projects spec §9.7: what lands, and what is left unlanded, is the person's answer (owner only).
+  "multi-dir-landing": "human-only",
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
   "resolve-integration-conflict": "human-only",
@@ -209,6 +211,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "set-usage-calendar": "token",
   // Dir-requirements spec §9.2, D5: all three answers are a person's; a socket agent needs the person token.
   "resolve-folder-change": "token",
+  // Multi-directory projects spec §9.7: as resolve-folder-change.
+  "multi-dir-landing": "token",
   "settle-unknown-usage": "token",
   "apply-agent-update": "token",
   // Scheduled flows and groups spec §11.1 (I-3): a new entry copies data Orca already holds (open); appending a version

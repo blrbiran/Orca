@@ -182,11 +182,26 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "take-folder", type: "boolean", summary: "keep the folder's changes and continue" },
       { name: "recheck", type: "boolean", summary: "look at the folder again" },
       { name: "withhold", type: "boolean", summary: "leave these paths out of the folder and place the rest" },
+      { name: "dir", type: "string", summary: "the multi project's folder member (required on a multi group)" },
     ],
     route: (c) => `groups/${group(c)}/folder-change`,
     payload: (c) => {
       const chosen = (["take-folder", "recheck", "withhold"] as const).filter((flag) => c.args.flags[flag] === true);
       if (chosen.length !== 1) throw invalid("give exactly one of --take-folder, --recheck and --withhold");
+      const dir = str(c, "dir");
+      return { action: chosen[0], ...(dir === undefined ? {} : { dir }) };
+    } }),
+  // Multi-directory projects spec §9.7: the person's answer to a stopped landing (retry the rest, or record it as done).
+  verb({ domain: "group", action: "multi-land", summary: "answer a stopped multi-directory landing: --retry-rest or --mark-resolved",
+    verb: "multi-dir-landing", positionals: [GROUP], access: "token",
+    flags: [
+      { name: "retry-rest", type: "boolean", summary: "pre-check and land the directories not yet landed" },
+      { name: "mark-resolved", type: "boolean", summary: "record that the person landed them: they are not due again" },
+    ],
+    route: (c) => `groups/${group(c)}/multi-dir-landing`,
+    payload: (c) => {
+      const chosen = (["retry-rest", "mark-resolved"] as const).filter((flag) => c.args.flags[flag] === true);
+      if (chosen.length !== 1) throw invalid("give exactly one of --retry-rest and --mark-resolved");
       return { action: chosen[0] };
     } }),
   ...(["depend", "undepend"] as const).map((action) => verb({

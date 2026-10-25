@@ -178,7 +178,7 @@ function describe(error: unknown): string {
 }
 
 /** spec §5: every task-kind work item done and no run active (a reconciling run is active). */
-function groupComplete(store: ControlStore, groupId: string): boolean {
+export function groupComplete(store: ControlStore, groupId: string): boolean {
   const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
     .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
   if (tasks.some((work) => work.status !== "done")) return false;
@@ -251,7 +251,7 @@ function failureOutcome(error: unknown, scheme: Scheme, remoteKey: string | null
   throw error;
 }
 
-async function remoteConfigured(repo: string, remote: string): Promise<boolean> {
+export async function remoteConfigured(repo: string, remote: string): Promise<boolean> {
   return (await remoteUrl(repo, remote)) !== null;
 }
 
@@ -330,7 +330,7 @@ type Computed = { kind: "new"; commit: string } | { kind: "conflict"; paths: str
  * `squash` is one commit whose tree is the three-way merge of the new work with `lastIntegrated` as merge base, so work
  * an earlier integration already carried is never re-applied over what the person did since.
  */
-async function computeNew(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration, method: "merge" | "squash", base: string, tip: string): Promise<Computed> {
+export async function computeNew(deps: Pick<IntegrationDeps, "roots">, repo: string, groupId: string, integration: GroupIntegration, method: "merge" | "squash", base: string, tip: string): Promise<Computed> {
   if (method === "squash") {
     const mergeBase = integration.lastIntegrated ?? (await gitOk(repo, ["merge-base", tip, base])).trim();
     const merged = await gitChild(repo, ["merge-tree", "--write-tree", "--name-only", `--merge-base=${mergeBase}`, base, tip]);
@@ -358,7 +358,7 @@ async function computeNew(deps: IntegrationDeps, repo: string, groupId: string, 
 type Published = "ok" | "moved" | Outcome;
 
 /** Where a delivery that computes `new` on a base reads that base and publishes `new` (spec §6.1 steps 3-4, §6.3). */
-interface Delivery { readBase(): Promise<string>; publish(next: string, base: string): Promise<Published> }
+export interface Delivery { readBase(): Promise<string>; publish(next: string, base: string): Promise<Published> }
 
 /**
  * spec §6.1 steps 3-4: write-ahead, publish; a base that moved in between clears the record and answers "moved".
@@ -392,7 +392,7 @@ async function computeAndPublish(deps: IntegrationDeps, repo: string, groupId: s
 }
 
 /** `local`: `refs/heads/<target>` of the target repository moves to `new` (spec §6.3 when a worktree has it checked out). */
-function localDelivery(repo: string, scheme: Extract<Scheme, { delivery: "local" }>): Delivery {
+export function localDelivery(repo: string, scheme: Extract<Scheme, { delivery: "local" }>): Delivery {
   const ref = `refs/heads/${scheme.target}`;
   return {
     readBase: async () => { const at = await refTip(repo, ref); if (at === null) throw new BranchMissing(scheme.target); return at; },
@@ -423,7 +423,7 @@ async function integrateLocal(deps: IntegrationDeps, repo: string, groupId: stri
 }
 
 /** The worktree of the target repository that has `ref` checked out, if any. */
-async function worktreeOf(repo: string, ref: string): Promise<string | null> {
+export async function worktreeOf(repo: string, ref: string): Promise<string | null> {
   let path: string | null = null;
   for (const line of (await gitOk(repo, ["worktree", "list", "--porcelain"])).split("\n")) {
     if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
@@ -433,7 +433,7 @@ async function worktreeOf(repo: string, ref: string): Promise<string | null> {
 }
 
 /** `push-target`: `new` computed on the freshly fetched `<remote>/<target>` and pushed there, never forced. */
-function pushTargetDelivery(repo: string, groupId: string, scheme: Extract<Scheme, { delivery: "push-target" }>): Delivery {
+export function pushTargetDelivery(repo: string, groupId: string, scheme: Extract<Scheme, { delivery: "push-target" }>): Delivery {
   return {
     readBase: () => fetchInto(repo, scheme.remote, scheme.target, fetchedRefOf(groupId, "target")),
     publish: async (next) => {

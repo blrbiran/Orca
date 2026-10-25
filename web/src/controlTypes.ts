@@ -648,6 +648,7 @@ export type CommandSuccessV1 = {
     | "set-flow-settings" | "set-flow-locks"
     | "flow-start" | "flow-message" | "flow-plan" | "flow-rerun" | "flow-answer" | "flow-effect" | "flow-pool" | "flow-plan-step"
     | "resolve-folder-change"
+    | "multi-dir-landing"
     | "plan-library-save" | "plan-library-import" | "plan-library-archive"
     | "schedule-set" | "schedule-enable" | "schedule-remove" | "schedule-resume" | "schedule-from-group";
   target: CommandTargetV1;
@@ -706,6 +707,7 @@ export type CommandSuccessV1 = {
     | { kind: "integration-retried"; groupId: string }
     | { kind: "integration-resolution-started"; groupId: string }
     | { kind: "folder-change-resolved"; groupId: string; action: "take-folder" | "recheck" | "withhold" }
+    | { kind: "multi-dir-landing-set"; groupId: string; action: "retry-rest" | "mark-resolved" }
     | { kind: "archived"; groupId: string; at: number }
     | { kind: "unarchived"; groupId: string }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }

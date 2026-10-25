@@ -137,6 +137,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `flow-template-invalid` | 422 |
 | `flow-template-version-missing` | 422 |
 | `flow-unavailable` | 409 |
+| `folder-change-dir-mismatch` | 409 |
 | `folder-change-not-pending` | 409 |
 | `grant-amendment-unsupported` | 422 |
 | `graph-change-needs-handoff` | 422 |
@@ -185,8 +186,11 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `login-required` | 401 |
 | `login-throttled` | 429 |
 | `loop-plan-invalid` | 422 |
+| `multi-dir-delivery-fixed` | 422 |
+| `multi-dir-delivery-unsupported` | 422 |
 | `multi-dir-group-no-single-repo` | 422 |
 | `multi-dir-invalid` | 422 |
+| `multi-dir-landing-not-pending` | 409 |
 | `multi-dir-no-single-path` | 422 |
 | `multi-dir-project-setting-unsupported` | 422 |
 | `no-chose-instead` | 400 |

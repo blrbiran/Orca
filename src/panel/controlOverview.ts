@@ -3,6 +3,8 @@ import { flowRoleSql } from "../flow/groups.js";
 import { ControlError } from "../control/errors.js";
 import { readProjectionState } from "../control/projectionJournal.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
+import { multiDirOf } from "../control/multiGroup.js";
+import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { hasRequirementBlock } from "../control/requirementRecords.js";
 import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
@@ -104,6 +106,18 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     if (placement !== undefined) {
       const reason = ({ "folder-changed": "dir-folder-changed", "folder-unwritable": "dir-folder-unwritable", "folder-missing": "dir-folder-missing", failed: "dir-placement-failed" } as Record<string, string | undefined>)[placement.state];
       if (reason !== undefined) add("integration-review", groupId, repoId, reason, groupDestination("integration"), `placement:${placement.state}:${placement.watch ?? placement.detail ?? ""}`, null, null, true);
+    }
+    // Multi-directory projects spec §9.4, §9.5: a landing that stopped or partly landed is the person's, on the same region.
+    const multi = multiDirOf(body);
+    const landing = multi === null ? null : readMultiLanding(multi.landing);
+    if (landing !== null) {
+      const failed = landing.failedKey ?? "";
+      if (landing.state === "partial") add("integration-review", groupId, repoId, "multi-dir-partially-landed", groupDestination("integration"), `multi-landing:partial:${failed}:${landing.reason ?? ""}`, null, null, true);
+      else if (landing.state === "blocked") add("integration-review", groupId, repoId, "multi-dir-precheck-failed", groupDestination("integration"), `multi-landing:blocked:${failed}:${landing.reason ?? ""}`, null, null, true);
+      else if (landing.state === "folder-changed" || landing.state === "folder-unwritable") {
+        const reason = landing.state === "folder-changed" ? "dir-folder-changed" : "dir-folder-unwritable";
+        add("integration-review", groupId, repoId, reason, groupDestination("integration"), `multi-landing:${landing.state}:${failed}`, null, null, true);
+      }
     }
     for (const estimate of estimates) {
       if (estimate.state === "start-unknown") add("recovery-review", groupId, repoId, "estimate-start-unknown", groupDestination("problem"), `estimate:${estimate.estimateId}:start-unknown`);

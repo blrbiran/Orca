@@ -679,6 +679,8 @@ export const commandVerbSchema = z.enum([
   "flow-plan-step",
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
   "resolve-folder-change",
+  // Multi-directory projects spec §9.7: the person's answer to a stopped landing (`retry-rest`, `mark-resolved`).
+  "multi-dir-landing",
   // Scheduled flows and groups spec 2026-10-24 §11.1: the plan library's writes (save from Orca's data, import a file,
   // archive), one `@plan-library` scope with constant revision 0.
   "plan-library-save",
@@ -947,7 +949,11 @@ export const setGroupIntegrationPayloadSchema = z.object({ integration: integrat
 // Dir-requirements spec §9.2: keep the folder's version and continue, check again, or leave these paths out.
 export const folderChangeActionSchema = z.enum(["take-folder", "recheck", "withhold"]);
 export type FolderChangeAction = z.infer<typeof folderChangeActionSchema>;
-export const resolveFolderChangePayloadSchema = z.object({ action: folderChangeActionSchema }).strict();
+export const resolveFolderChangePayloadSchema = z.object({ action: folderChangeActionSchema, dir: idSchema.optional() }).strict();
+// Multi-directory projects spec §9.7: retry the directories not yet landed, or record that the person landed the rest.
+export const multiDirLandingActionSchema = z.enum(["retry-rest", "mark-resolved"]);
+export type MultiDirLandingAction = z.infer<typeof multiDirLandingActionSchema>;
+export const multiDirLandingPayloadSchema = z.object({ action: multiDirLandingActionSchema }).strict();
 // Controller ruling W6-8: the envelope's expectedRevision (checked against agent_preferences.revision) is the only one.
 export const setAgentPreferencesPayloadSchema = z.object({ preferences: operatorPreferencesSchema }).strict();
 export const applyAgentUpdatePayloadSchema = z.object({
@@ -1219,6 +1225,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   // Dir-requirements spec §9.2: the person's answer to a stopped folder change.
   z.object({ ...rawCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
+  // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
+  z.object({ ...rawCommandFields, verb: z.literal("multi-dir-landing"), target: groupCommandTargetSchema, payload: multiDirLandingPayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
   z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1315,6 +1323,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("multi-dir-landing"), target: groupCommandTargetSchema, payload: multiDirLandingPayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
   z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -2098,6 +2107,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("integration-resolution-started"), groupId: idSchema }).strict(),
   // Dir-requirements spec §9.2: the answer was recorded; the next placement round does its work.
   z.object({ kind: z.literal("folder-change-resolved"), groupId: idSchema, action: folderChangeActionSchema }).strict(),
+  // Multi-directory projects spec §9.7: the answer was recorded; the next round does the git and folder work.
+  z.object({ kind: z.literal("multi-dir-landing-set"), groupId: idSchema, action: multiDirLandingActionSchema }).strict(),
   // Issue-fixes spec §6.3: `at` is the archive mark's time (ms since the epoch).
   z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),

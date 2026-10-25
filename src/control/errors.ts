@@ -315,6 +315,13 @@ export const durableCommandErrorStatuses = {
   // Dir-requirements spec §9.2, §9.3: no folder change waits for this answer on the group (or the answer is one this
   // state cannot take: take-folder outside folder-changed, withhold with nothing withheld-able).
   "folder-change-not-pending": 409,
+  // Multi-directory projects spec §9.2, §9.7, §9.8: a frozen delivery that cannot be carried; a delivery setter on a
+  // multi group; a folder answer that names no member of a multi group (or names one on any other group).
+  "multi-dir-delivery-unsupported": 422,
+  "multi-dir-delivery-fixed": 422,
+  "folder-change-dir-mismatch": 409,
+  // Multi-directory projects spec §9.7: no stopped landing waits for this answer on the group.
+  "multi-dir-landing-not-pending": 409,
   // Scheduled flows and groups spec 2026-10-24 §5: the plan library. A document over 2 MiB canonical; a version whose
   // stored bytes no longer hash to its sha256; an entry of another project than the command's; a CLI-read plan file whose
   // targetRepo is not the project's path, or whose contract path is outside the repository or reached through a link.

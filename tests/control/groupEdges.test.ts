@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { stackBaseOf, waitingPrerequisites } from "../../src/control/groupEdges.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
+import { initialLanding } from "../../src/control/multiLandingRecord.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { ensureWorkBranch, unsetInheritedGitEnv } from "../../src/control/workspace.js";
@@ -75,6 +76,40 @@ describe("edges between groups (kanban spec §3.3-§3.4)", () => {
       expect(waitingPrerequisites(h.store, "g")).toEqual([]);
       // Local delivery: the dependent branches from the target, not from the prerequisite's branch.
       expect(stackBaseOf(h.store, "g")).toBeNull();
+    } finally { await h.dispose(); }
+  });
+
+  it("waits for a multi prerequisite's local and place directories, and never stacks on it", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      edge(h, service, "add-group-dependency", "g", "p");
+      finishTasks(h, "p");
+      const landing = {
+        ...initialLanding([
+          { key: "a", scheme: LOCAL },
+          { key: "b", scheme: { delivery: "push-target", trigger: "task", method: "merge", target: "main", remote: "origin" } },
+          { key: "c", scheme: { delivery: "place" } },
+        ], 1),
+        state: "landed", lastLanded: { a: "a".repeat(40) },
+      };
+      const multiDir = { project: "p", dirs: [
+        { key: "a", repoId: "repo", kind: "repo" },
+        { key: "b", repoId: "other", kind: "repo" },
+        { key: "c", repoId: "vault", kind: "dir", dirWorkspace: { dir: h.root, vaultId: "b".repeat(64) } },
+      ], landing };
+      setBody(h, "p", { ...body(h, "p"), multiDir });
+      // The place directory has not landed yet: only its tasks being done is not enough.
+      expect(waitingPrerequisites(h.store, "g")).toEqual(["p"]);
+      const done = { ...landing, lastLanded: { a: "a".repeat(40), c: "c".repeat(40) } };
+      setBody(h, "p", { ...body(h, "p"), multiDir: { ...multiDir, landing: done } });
+      // The push-target directory holds no dependent back, so its missing `lastLanded` does not matter.
+      expect(waitingPrerequisites(h.store, "g")).toEqual([]);
+      // §9.9: a multi group's work is on several branches, so a dependent never stacks on it.
+      expect(stackBaseOf(h.store, "g")).toBeNull();
+      // A journaled landing is not done.
+      setBody(h, "p", { ...body(h, "p"), multiDir: { ...multiDir, landing: { ...done, state: "landing", pending: { plan: [], landed: [], startedAt: 1 } } } });
+      expect(waitingPrerequisites(h.store, "g")).toEqual(["p"]);
     } finally { await h.dispose(); }
   });
 

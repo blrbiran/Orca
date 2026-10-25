@@ -157,7 +157,7 @@ approve an agent resolving the group's integration conflict
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
-## `orca group folder-change <group> [--take-folder] [--recheck] [--withhold]`
+## `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]`
 
 answer a folder change that stopped placement: --take-folder, --recheck or --withhold
 
@@ -167,6 +167,17 @@ answer a folder change that stopped placement: --take-folder, --recheck or --wit
 - `--take-folder`: keep the folder's changes and continue
 - `--recheck`: look at the folder again
 - `--withhold`: leave these paths out of the folder and place the rest
+- `--dir <dir>`: the multi project's folder member (required on a multi group)
+
+## `orca group multi-land <group> [--retry-rest] [--mark-resolved]`
+
+answer a stopped multi-directory landing: --retry-rest or --mark-resolved
+
+- What it does: sends control verb `multi-dir-landing`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--retry-rest`: pre-check and land the directories not yet landed
+- `--mark-resolved`: record that the person landed them: they are not due again
 
 ## `orca group depend <group> --on <on>`
 

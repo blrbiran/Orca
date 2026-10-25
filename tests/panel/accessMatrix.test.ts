@@ -43,6 +43,7 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "retry-integration", payload: {}, tier: "open", member: V },
   { entry: "resolve-integration-conflict", payload: {}, tier: "open", member: V },
   { entry: "resolve-folder-change", payload: { action: "take-folder" }, tier: "token", member: V },
+  { entry: "multi-dir-landing", payload: { action: "retry-rest" }, tier: "token", member: V },
   // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the integration-check setter is removed (checks spec 2026-10-22
   // §4.4); its tiers carry over to set-check-settings per the checks plan's access mapping. Their member code
   // is V: checks spec 2026-10-22 §4.4's table lists each new verb `human-only` (a verb, as set-integration-check was).

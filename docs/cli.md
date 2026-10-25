@@ -60,7 +60,8 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where this group's finished work goes
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle
 - `orca group resolve-integration <group>` — approve an agent resolving the group's integration conflict
-- `orca group folder-change <group> [--take-folder] [--recheck] [--withhold]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
+- `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
+- `orca group multi-land <group> [--retry-rest] [--mark-resolved]` — answer a stopped multi-directory landing: --retry-rest or --mark-resolved (person token)
 - `orca group depend <group> --on <on>` — make the group wait until --on <group> has landed
 - `orca group undepend <group> --on <on>` — remove that wait
 - `orca group schedule <group> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]` — schedule this group from its archived plan: one library version pins the fires; needs a person token (person token)

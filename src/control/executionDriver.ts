@@ -39,6 +39,8 @@ import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
 import { placeDirGroups, type DirPlacementCrashPoint } from "./dirPlacement.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
+import { landMultiDirGroups, type MultiLandingCrashPoint, type MultiPrecheck } from "./multiLanding.js";
+import { DISPATCHED_PERSON_DIRNAME } from "./commandClient.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
@@ -80,7 +82,9 @@ export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-term
   // Integration spec §6.1: the integration pass's outward actions (integrationPass.ts).
   | IntegrationCrashPoint
   // Dir-requirements spec §8.5 (D7): the placement pass's journal, folder writes and swap (dirPlacement.ts).
-  | DirPlacementCrashPoint;
+  | DirPlacementCrashPoint
+  // Multi-directory projects spec §9.6: the multi landing's journal, publish and record (multiLanding.ts).
+  | MultiLandingCrashPoint;
 
 /** Test-only fault injection (spec §7.2 R1): thrown from `crash`, it ends the driver as a process death would. */
 export class DriverCrash extends Error {
@@ -144,6 +148,8 @@ export interface DriverContext {
   reconciling: Map<string, Promise<void>>; stopped: boolean;
   /** Debug task plan Task 8 (fix round 1, R1): reproduce-first checks in flight, by run; absent, a process-wide map is used. */
   debugChecks?: Map<string, DebugCheck>;
+  /** Multi-directory projects spec §9.4: opt-in checks in flight, by group; a restart re-pre-checks (nothing was written). */
+  multiPrechecks?: Map<string, MultiPrecheck>;
 }
 
 /** One reproduce-first check running off the driver round: aborted by stop(), its outcome read by a later round. */
@@ -1376,7 +1382,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map() };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
@@ -1448,6 +1454,15 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Multi-directory projects spec §9.1: the multi landing, right after integration (its git side effects are the driver's).
+    try {
+      if (await landMultiDirGroups({
+        store: deps.store, roots: deps.roots, repoPathOf: (repoId) => deps.resolveRepository(repoId),
+        personDir: deps.dispatchedPersonDir ?? join(deps.store.stateDir, DISPATCHED_PERSON_DIRNAME),
+        admissionGate: deps.admissionGate, env: deps.env, stopped: () => context.stopped, prechecks: context.multiPrechecks ?? new Map(),
+        ...(deps.crash === undefined ? {} : { crash: deps.crash }),
+      })) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Dir-requirements spec §8.5: placement of each dir group's landed work into its folder, right after integration.
     try {
       if (await placeDirGroups({ store: deps.store, admissionGate: deps.admissionGate, env: deps.env, stopped: () => context.stopped, ...(deps.crash === undefined ? {} : { crash: deps.crash }) })) progressed = true;

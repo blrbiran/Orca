@@ -207,6 +207,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "retry-integration": { call: (s, c) => s.retryIntegration(c), target: "group", payload: {} },
   "resolve-integration-conflict": { call: (s, c) => s.resolveIntegrationConflict(c), target: "group", payload: {} },
   "resolve-folder-change": { call: (s, c) => s.resolveFolderChange(c), target: "group", payload: { action: "recheck" } },
+  "multi-dir-landing": { call: (s, c) => s.multiDirLanding(c), target: "group", payload: { action: "retry-rest" } },
   "set-task-labels": { call: (s, c) => s.setTaskLabels(c), target: "task", payload: { labels: null, baseLabelsVersion: 0 } },
   "set-task-loop": { call: (s, c) => s.setTaskLoop(c), target: "task", payload: LOOP_PAYLOAD },
   "requirement-open": { call: (s, c) => s.openRequirement(c), target: "group", payload: { groupId: "g", repoId: "repo", idea: "an idea" } },

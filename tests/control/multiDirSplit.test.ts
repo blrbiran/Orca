@@ -22,6 +22,8 @@ import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { buildGraph } from "../../src/scheduler/graph.js";
 import type { PlanFile } from "../../src/scheduler/planFile.js";
 import { qualifiedWriteSetOf } from "../../src/scheduler/writeSet.js";
+import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
+import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { writeTree } from "./fixtures/dirRequirement.js";
 import { multiHarness } from "./fixtures/multiRequirement.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -291,6 +293,14 @@ describe("a multi split accepted and exported (§6.4, M6)", () => {
       if ("error" in done) throw new Error(JSON.stringify(done));
       // The group has no integration record: a multi group delivers by its landing.
       expect(x.body()).not.toHaveProperty("integration");
+      // §9.2: each member's delivery is frozen at accept, in the project's registered order.
+      expect((x.body().multiDir as { landing: { delivery: unknown; state: string } }).landing).toMatchObject({
+        state: "idle",
+        delivery: [
+          { key: "posts", scheme: { delivery: "place" } },
+          { key: "alpha", scheme: { delivery: "keep" } },
+        ],
+      });
       // Work items keep the model's writes in registered order; taskWrites reads them back.
       expect(taskWrites(x.store, "r", "both")).toEqual([
         { dir: "posts", targetPaths: ["notes/p1.md"], checks: ["true"] },
@@ -338,6 +348,37 @@ describe("a multi split accepted and exported (§6.4, M6)", () => {
       saveRequirementGroup(x.store, pending);
       expect(await exportRequirementDocument({ store: x.store, resolveRepository: x.deps.resolveRepository!, env: x.env }, "r")).toBe("done");
       expect(x.body()).toMatchObject({ multiDir: { landing: { lastLanded: { posts: base, alpha: x.alphaHead } } } });
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses to accept a project whose member repository defaults to a PR delivery, and changes nothing", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_SPLIT }], startAt: "split" });
+    try {
+      writeRepositorySettingsBody(x.store, controlRepoKey("alpha"), { workspaceMode: "worktree", revision: 1,
+        integration: { delivery: "github-pr", trigger: "task", target: "main", remote: "origin" } });
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const answer = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
+      // mutation: freeze every repository's scheme without this check -> the accept succeeds, red
+      expect(answer).toMatchObject({ error: { code: "multi-dir-delivery-unsupported", message: "multi-dir-delivery-unsupported:alpha" } });
+      expect(readDraft(x.store, "r", 1).state).toBe("awaiting-review");
+      expect(x.body().multiDir).toMatchObject({ landing: null });
+      expect(x.body()).not.toHaveProperty("integration");
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses set-group-integration on an accepted multi group: each member's delivery was frozen at accept", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_SPLIT }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const done = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
+      if ("error" in done) throw new Error(JSON.stringify(done));
+      const before = x.body().multiDir;
+      const answer = await x.service.setGroupIntegration(x.command("set-group-integration", {
+        integration: { delivery: "local", trigger: "task", method: "merge", target: "other" } }));
+      // mutation: drop the multi branch from the setter -> a single scheme replaces the frozen ones, red
+      expect(answer).toMatchObject({ error: { code: "multi-dir-delivery-fixed" } });
+      expect(x.body().multiDir).toEqual(before);
+      expect(x.body()).not.toHaveProperty("integration");
     } finally { await x.dispose(); }
   });
 

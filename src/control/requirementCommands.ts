@@ -9,6 +9,8 @@ import { ControlError } from "./errors.js";
 import type { DirProjectOf } from "./dirGroup.js";
 import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from "./dirWorkspace.js";
 import { freezeMultiDir, dirTargetRepoId, multiDirOf, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
+import { readIntegrationDefault } from "./integrationScheme.js";
+import { initialLanding, type LandingScheme } from "./multiLandingRecord.js";
 import { estimatorCompatibility } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
@@ -373,6 +375,19 @@ export async function applyRequirementDraftAccept(
         // model's split is the source (`writes`); a resolver-less accept cannot name those targets.
         const multi = multiDirOf(group);
         const keys = multi === null ? [] : multi.dirs.map((member) => member.key);
+        // §9.2: delivery is frozen here: a folder is placed; a repository carries its default. A PR delivery on a multi
+        // project is a design of its own (N pull requests that must merge together), so it is refused by name.
+        if (multi !== null) {
+          const delivery: Array<{ key: string; scheme: LandingScheme }> = multi.dirs.map((member) => {
+            if (member.kind === "dir") return { key: member.key, scheme: { delivery: "place" } };
+            const scheme = readIntegrationDefault(deps.store, member.repoId).scheme;
+            if (scheme.delivery === "push-branch" || scheme.delivery === "github-pr") {
+              throw new ControlError("multi-dir-delivery-unsupported", member.key);
+            }
+            return { key: member.key, scheme };
+          });
+          group.multiDir = { ...multi, landing: initialLanding(delivery, now.getTime()) };
+        }
         const paths = new Map<string, string>();
         if (multi !== null) {
           if (deps.resolveRepository === undefined) throw new ControlError("control-target-not-allowed");

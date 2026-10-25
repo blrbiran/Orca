@@ -354,6 +354,17 @@ export type Prepared =
 const STOPPED = new Set(["folder-changed", "folder-unwritable"]);
 const revParse = async (ws: DirWorkspace, rev: string): Promise<string> => (await vaultGit(ws.vault, ["rev-parse", "--verify", "-q", rev])).trim();
 
+/**
+ * §8.6/§9.8: a stopped placement whose folder signature moved since its stop — the person undid the edit, or the
+ * folder moved on — so the pass may classify again without a new answer. An answered stop is `false`: the answer is
+ * consumed by the next preparation itself.
+ */
+export async function folderStopMoved(env: NodeJS.ProcessEnv, frozen: FrozenDirWorkspace, record: PlacementRecord): Promise<boolean> {
+  if (!STOPPED.has(record.state) || record.resolution !== null) return false;
+  const paths = await stoppingPaths(null, env, frozen, record);
+  return await watchOf(frozen.dir, record.landedTip, paths) !== record.watch;
+}
+
 /** "<mode> <blob>" for every path of a commit's tree. */
 async function entriesOf(ws: DirWorkspace, commit: string): Promise<Map<string, string>> {
   const entries = new Map<string, string>();

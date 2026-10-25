@@ -231,6 +231,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
 | `POST groups/<groupId>/folder-change` | resolve-folder-change | `{"action":"take-folder"}` |
+| `POST groups/<groupId>/multi-dir-landing` | multi-dir-landing | `{"action":"retry-rest"}` |
 | `POST groups/<groupId>/archive` | archive-group | `{}` |
 | `POST groups/<groupId>/unarchive` | unarchive-group | `{}` |
 | `POST groups/<groupId>/decisions/approve` | approve-pending-decision | `{"pendingId":"pending-run-x-0","undoHow":"git revert --no-edit <sha>"}` |

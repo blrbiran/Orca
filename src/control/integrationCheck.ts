@@ -67,8 +67,8 @@ const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.s
  * Each command as ccloop runs a required check (`sh -lc`, inherited environment); a timeout is a failure.
  * `personDir`: the panel's empty `dispatched-person` directory, the commands' ORCA_PERSON_DIR (CLI v2 spec §15.3, review M1).
  */
-export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], at: number, personDir: string): Promise<IntegrationCheckRun> {
-  const head = await gitChild(repo, ["rev-parse", "--verify", `refs/heads/${target}^{commit}`]);
+export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], at: number, personDir: string, rev: string = `refs/heads/${target}`): Promise<IntegrationCheckRun> {
+  const head = await gitChild(repo, ["rev-parse", "--verify", `${rev}^{commit}`]);
   if (head.code !== 0) throw new Error(`integration-check: target ${target} unreadable: ${head.stderr.trim().slice(0, 200)}`);
   const commit = head.stdout.trim();
   const checkId = `integration-check-${createHash("sha256").update(repoId).digest("hex").slice(0, 12)}-${at}`;

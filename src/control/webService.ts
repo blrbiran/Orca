@@ -23,6 +23,7 @@ import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_S
 import type { ExecutionPort } from "./executionPort.js";
 import { isDirGroup, type DirProjectOf } from "./dirGroup.js";
 import type { MultiDirProjectOf } from "./multiGroup.js";
+import { isMultiGroup } from "./multiGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults, type ImportOrigin } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
@@ -45,6 +46,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
+import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
@@ -1428,7 +1430,8 @@ export class WebControlService {
    */
   async setGroupIntegration(command: SetGroupIntegrationCommand): Promise<WebCommandResult> {
     // Dir-requirements spec §7: a dir group's folder is not checked (the transaction refuses it dir-group-delivery-fixed).
-    const repoId = isDirGroup(this.store, command.target.groupId) ? null : this.planRepository(command.target.groupId);
+    // Multi-directory projects spec §9.2: a multi group's delivery is frozen per member (multi-dir-delivery-fixed).
+    const repoId = isDirGroup(this.store, command.target.groupId) || isMultiGroup(this.store, command.target.groupId) ? null : this.planRepository(command.target.groupId);
     const failedCheck = repoId === null ? null : await this.schemeCheck(repoId, command.payload.integration);
     const release = this.deps.admissionGate?.enter();
     try {
@@ -1443,6 +1446,10 @@ export class WebControlService {
   /** Dir-requirements spec §9.2: the person's answer to a stopped folder change (no git child; the next round acts). */
   resolveFolderChange(command: ResolveFolderChangeCommand): WebCommandResult {
     return this.mutate(() => applyResolveFolderChange({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Multi-directory projects spec §9.7: retry the rest, or record that the person landed it (no git child; next round acts). */
+  multiDirLanding(command: MultiDirLandingCommand): WebCommandResult {
+    return this.mutate(() => applyMultiDirLanding({ store: this.store }, command)) as WebCommandResult;
   }
   /** Issue-fixes spec §6.3: archive a group (it keeps every record and takes no new work) / take it back. */
   archiveGroup(command: ArchiveGroupCommand): WebCommandResult {
