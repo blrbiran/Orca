@@ -10,9 +10,9 @@
  *   record, or files committed onto the active workspace output; the edited step is not re-run, later steps are planned.
  *   Gaps spec §9: an `edit` at a `round {stepKey, roundNo}` of a clarify step revises that round (kinds/clarify.ts); it
  *   makes no plan itself -- the revised step's consensus does.
- * - `command`: `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`; `pause` and `resume` are
- *   interventions taken mid-run (consumeInterventions, live transcript spec §10.5.1). A command that does not hold at its
- *   boundary is stored `rejected` with the reason; `budget` is the human-only `flow-pool` verb's.
+ * - `command`: `stop`, `retry` (a failed step), `rewind` (rewind.ts), `repin {version}`; `pause`, `resume` and `note` are
+ *   interventions taken mid-run (consumeInterventions, live transcript spec §10.5.1/§10.5.2). A command that does not hold
+ *   at its boundary is stored `rejected` with the reason; `budget` is the human-only `flow-pool` verb's.
  * - Gaps spec §6: `skip`, `defer {effects?}` and `fill` on a step (marks.ts derives the marks from the applied ones). A
  *   skip/defer closes the step's open effect record (discarded by the person), follows its newest execution with a
  *   `skipped` one carrying `body.mark`, takes it out of a running plan that had not run it, and recomposes the flow head
@@ -29,13 +29,14 @@ import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { writeCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
 import { ControlError } from "../control/errors.js";
+import { operatorNoteSchema } from "../control/schema.js";
 import { flowHandoffDeadline, type FlowStopMarker } from "../control/stopIntent.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
 import {
   advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
 } from "./kernel.js";
-import type { ExecutionBody, FlowPauseStep, LoadedRun } from "./kinds/registry.js";
+import type { ExecutionBody, FlowNoteIntent, FlowNoteStep, FlowPauseStep, LoadedRun, OperatorNoteEntry } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
 import { discardEffect } from "./effects.js";
 import { holdableAfter, holdTargets, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
@@ -87,10 +88,34 @@ const revisionOf = (body: Record<string, unknown>, roundNo: number): RevisionPay
   return { roundNo, answers, glossaryDecisions, adrDecisions, ...(reason === undefined ? {} : { reason }), ...(exclude === undefined ? {} : { exclude }) };
 };
 
-const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill", "params"] as const;
-/** Live transcript spec §10.5.1: the commands taken mid-run by consumeInterventions, never at a boundary. */
-const INTERVENTIONS: ReadonlySet<string> = new Set(["pause", "resume"]);
+const COMMANDS = ["pause", "resume", "stop", "retry", "rewind", "repin", "skip", "defer", "fill", "params", "note"] as const;
+/** Live transcript spec §10.5.1, §10.5.2: the commands taken mid-run by consumeInterventions, never at a boundary. */
+const INTERVENTIONS: ReadonlySet<string> = new Set(["pause", "resume", "note"]);
 const stepKeyOf = (target: MessageTarget): string | null => ("stepKey" in target ? target.stepKey : null);
+
+/** Live transcript spec §10.5.2 (plan T5): a note's body; the schema's own bound is the note's 4096 UTF-8 bytes. */
+const noteCommandSchema = z.object({ command: z.literal("note"), ...operatorNoteSchema.shape }).strict();
+/**
+ * Live transcript spec §10.5.2 (plan D9): the notes a boundary would deliver -- every `remaining-attempts` note plus
+ * `next-attempt` notes not yet delivered to a continuation; a consumed note is done, whatever its scope.
+ */
+export function pendingNotes(entryNotes: OperatorNoteEntry[] | undefined): OperatorNoteEntry[] {
+  return (entryNotes ?? []).filter((note) => note.consumedAt === undefined && (note.scope === "remaining-attempts" || note.deliveredTo === undefined));
+}
+/**
+ * Live transcript spec §10.5.2 (plan D9): the joined text of the pending notes and, last, the note just accepted (its
+ * seq is the newest). The scope is `remaining-attempts` when any joined note has it. An empty join is `{text: "",
+ * scope: "next-attempt"}` -- one shape, never null.
+ */
+export function joinPendingNotes(notes: OperatorNoteEntry[], next?: { text: string; scope: OperatorNoteEntry["scope"] }): { text: string; scope: OperatorNoteEntry["scope"] } {
+  const ordered = [...notes].sort((left, right) => left.seq - right.seq);
+  return {
+    text: [...ordered.map((note) => note.text), ...(next === undefined ? [] : [next.text])].join("\n"),
+    scope: ordered.some((note) => note.scope === "remaining-attempts") || next?.scope === "remaining-attempts" ? "remaining-attempts" : "next-attempt",
+  };
+}
+/** The wire field's bound is UTF-8 bytes, never JS string length (plan D9). */
+export function noteBytes(text: string): number { return Buffer.byteLength(text, "utf8"); }
 
 /** What can be told at once, before any boundary: the shape and that the target exists. */
 function shapeRefusal(deps: FlowDeps, run: LoadedRun, input: FlowMessageInput): string | null {
@@ -133,6 +158,16 @@ function shapeRefusal(deps: FlowDeps, run: LoadedRun, input: FlowMessageInput): 
       if (target.kind !== "run") return "flow-message-target-missing";
       const set = input.body.set;
       if (Object.keys(input.body).some((key) => key !== "command" && key !== "set") || typeof set !== "object" || set === null || Array.isArray(set) || Object.keys(set).length === 0) return "flow-message-invalid:set";
+    }
+    // Live transcript spec §10.5.2: a note is aimed at one step, and only a running work child can receive it.
+    if (command === "note") {
+      const parsed = noteCommandSchema.safeParse(input.body);
+      if (!parsed.success) return `flow-message-invalid:${parsed.error.issues[0]?.path.join(".") || "body"}`;
+      if (target.kind !== "step") return "flow-message-target-missing";
+      const execution = listExecutions(store, run.row.id).find((e) => e.state === "running" && e.kind === "work" && e.stepKey === target.stepKey && e.childGroupId !== null);
+      if (execution === undefined) return "flow-note-no-running-work";
+      const joined = joinPendingNotes(pendingNotes((execution.body as ExecutionBody).operatorNotes), parsed.data);
+      if (noteBytes(joined.text) > 4096) return "flow-note-too-large";
     }
     if (MARK_COMMANDS.has(String(command))) {
       if (stepKey === null) return "flow-message-target-missing";
@@ -186,11 +221,11 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
     catch (error) { if (!(error instanceof FlowRefusal)) throw error; refusal = error.code; }
   }
   const at = deps.now();
-  // Live transcript spec §10.5.3: the routed facts a pause or resume is judged by are recorded with it; other commands
-  // keep only a mark's `personAuthority`.
+  // Live transcript spec §10.5.3: the routed facts a pause, resume or note is judged by are recorded with it; other
+  // commands keep only a mark's `personAuthority`.
   const command = input.kind === "command" ? input.body.command : undefined;
   const authority = command === "pause" ? { pauseAuthority: input.pauseAuthority === true }
-    : command === "resume" ? { personAuthority: input.personAuthority === true } : {};
+    : command === "resume" || command === "note" ? { personAuthority: input.personAuthority === true } : {};
   const { row, deduped } = deps.store.transaction(() => {
     const appended = appendMessage(deps.store, {
       flowRunId, requestId: input.requestId, kind: input.kind, target: input.target.kind,
@@ -210,9 +245,9 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
 }
 
 /**
- * Live transcript spec §10.5.1: the mid-run lane. An accepted `pause` or `resume` is taken at any time, in seq order, even
- * while a step runs; every other command still waits for a boundary. Nothing here plans or recomposes. True when anything
- * was taken (applied or rejected).
+ * Live transcript spec §10.5.1, §10.5.2: the mid-run lane. An accepted `pause`, `resume` or `note` is taken at any time,
+ * in seq order, even while a step runs; every other command still waits for a boundary. Nothing here plans or recomposes.
+ * True when anything was taken (applied or rejected).
  */
 export async function consumeInterventions(deps: FlowDeps, flowRunId: string): Promise<boolean> {
   if (loadRun(deps.store, flowRunId).row.state === "stopped") return false;
@@ -234,6 +269,11 @@ export async function consumeInterventions(deps: FlowDeps, flowRunId: string): P
 const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
   ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "pause" });
 
+/** Live transcript spec §10.5.2 (plan D6): a step a note owes a boundary delivery; one already owing keeps its entry. */
+const mergeNoteStep = (intent: FlowNoteIntent | undefined, step: FlowNoteStep): FlowNoteIntent =>
+  intent === undefined ? { steps: [step] }
+    : intent.steps.some((existing) => existing.stepKey === step.stepKey) ? intent : { steps: [...intent.steps, step] };
+
 /**
  * §10.5.1 pause: record the intent, stop every running work child through the port and move the run to `paused`; the
  * execution stays `running`. With no running work child the run simply pauses. A failed stop is the run's error, not a
@@ -243,7 +283,7 @@ const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
  * message is rejected and the intent stays. Success clears the intent and moves the run back to `running`.
  */
 async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: MessageRow): Promise<void> {
-  const body = message.body as { command?: unknown; pauseAuthority?: unknown; personAuthority?: unknown };
+  const body = message.body as { command?: unknown; pauseAuthority?: unknown; personAuthority?: unknown; text?: unknown; scope?: unknown; target?: unknown };
   if (body.command === "pause") {
     if (body.pauseAuthority !== true) throw new FlowRefusal("flow-command-needs-person", "pause");
     if (run.row.state !== "running") throw new FlowRefusal("flow-run-not-running", run.row.state);
@@ -275,6 +315,36 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
         recordRunError(deps, run.row.id, `flow-pause-stop-failed:${step.stepKey}:${error.code}`);
       }
     }
+    return;
+  }
+  if (body.command === "note") {
+    if (body.personAuthority !== true) throw new FlowRefusal("flow-command-needs-person", "note");
+    const target = body.target as MessageTarget | undefined;
+    if (target === undefined || target.kind !== "step") throw new FlowRefusal("flow-message-target-missing");
+    const parsed = noteCommandSchema.safeParse({ command: "note", text: body.text, scope: body.scope });
+    if (!parsed.success) throw new FlowRefusal(`flow-message-invalid:${parsed.error.issues[0]?.path.join(".") || "body"}`);
+    const stepKey = target.stepKey;
+    const execution = listExecutions(deps.store, run.row.id).find((e) => e.state === "running" && e.kind === "work" && e.stepKey === stepKey && e.childGroupId !== null);
+    if (execution === undefined) throw new FlowRefusal("flow-note-no-running-work");
+    // A step a pause already covers records only: its pending stop's resume delivers the note (T6).
+    const covered = run.row.state === "paused" || run.body.pauseIntent?.steps.some((step) => step.stepKey === stepKey) === true;
+    const acceptedAt = new Date(deps.now()).toISOString();
+    let deadlineAt: string | null = null;
+    if (!covered) {
+      const timeoutMs = deps.children?.attemptTimeoutMs(execution.childGroupId!) ?? null;
+      if (timeoutMs === null || !(timeoutMs > 0)) throw new FlowRefusal("flow-pause-timeout-unknown", stepKey);
+      deadlineAt = flowHandoffDeadline(acceptedAt, timeoutMs);
+    }
+    const notes = (execution.body as ExecutionBody).operatorNotes ?? [];
+    deps.store.transaction(() => {
+      finishExecution(deps.store, { flowRunId: run.row.id, stepKey, seq: execution.seq }, "running", "running", deps.now(), {
+        body: { ...(execution.body as ExecutionBody), operatorNotes: [...notes, { seq: message.seq, by: message.by, at: acceptedAt, text: parsed.data.text, scope: parsed.data.scope }] },
+      });
+      if (!covered) updateFlowRunBody(deps.store, run.row.id, (current) => ({
+        ...current,
+        noteIntent: mergeNoteStep(current.noteIntent as FlowNoteIntent | undefined, { stepKey, seq: execution.seq, childGroupId: execution.childGroupId!, acceptedAt, deadlineAt: deadlineAt! }),
+      }));
+    });
     return;
   }
   if (body.command !== "resume") throw new FlowRefusal("flow-command-unknown", String(body.command));

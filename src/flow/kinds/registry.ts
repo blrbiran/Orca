@@ -62,6 +62,15 @@ export interface RoleResolution { agent: string; model: string | null; source: "
 /** Live transcript spec §10.5.1: the pause a flow run is waiting on, with one entry per running work child. */
 export interface FlowPauseStep { stepKey: string; seq: number; childGroupId: string; acceptedAt: string; deadlineAt: string }
 export interface FlowPauseIntent { messageSeq: number; at: string; steps: FlowPauseStep[] }
+/** Live transcript spec §10.5.2 (plan D6): the note recorded on the work execution that received it. */
+export interface OperatorNoteEntry {
+  seq: number; by: string; at: string; text: string; scope: "next-attempt" | "remaining-attempts";
+  /** The continuation runs the note was delivered to (a `remaining-attempts` one stays pending). */
+  deliveredTo?: string[]; consumedAt?: string;
+}
+/** Live transcript spec §10.5.2 (plan D6): the step a note owes a boundary delivery; `seq` is the execution's. */
+export interface FlowNoteStep { stepKey: string; seq: number; childGroupId: string; acceptedAt: string; deadlineAt: string }
+export interface FlowNoteIntent { steps: FlowNoteStep[] }
 export interface FlowRunBody {
   templateRef: string; params: Record<string, ParamValue>; roles: Record<string, RoleResolution>; clarify: "skip" | null; unattended: boolean;
   projectId: string | null; dir: string | null; vaultPath: string | null; importCommit: string | null; by: string; via: string; startedAt: number;
@@ -71,11 +80,15 @@ export interface FlowRunBody {
   origin?: { kind: "schedule"; scheduleId: string; slot: number };
   /** Live transcript spec §10.5.1: the stops a pause placed on the run's running work children (absent: no pause). */
   pauseIntent?: FlowPauseIntent;
+  /** Live transcript spec §10.5.2: the boundary deliveries accepted notes owe (absent: none). */
+  noteIntent?: FlowNoteIntent;
   /** The last error a pump pass met advancing this run (other runs went on); cleared by the next clean pass. */
   lastError?: { message: string; at: number };
 }
 export interface ExecutionBody {
   basis: Record<string, number>; retries: number; retryReason: string | null; feedback: string[];
+  /** Live transcript spec §10.5.2 (plan D6): the notes this execution received, oldest first (absent: none). */
+  operatorNotes?: OperatorNoteEntry[];
   call?: { purpose: string }; failure?: string; flags?: string[]; ask?: unknown; [key: string]: unknown;
 }
 
