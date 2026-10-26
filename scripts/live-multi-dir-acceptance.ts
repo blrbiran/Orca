@@ -105,9 +105,9 @@ const CLAUDE_ISOLATION = ["--permission-mode", "acceptEdits", "--no-session-pers
 const IDEA = "Release 0.2.0 across the whole project. In alpha's package.json and in beta's package.json set the version field to 0.2.0, "
   + "and add a file VERSION at the root of the notes folder whose entire content is the characters 0.2.0 followed by one newline. "
   + "It is one release: one task changes all three directories together. Change no other file. "
-  + "Every member is worked on inside a git working tree, the notes folder too, so verify a file by reading its contents; "
-  + "never prove a directory's contents by listing it, since a working tree also holds .git, and never by git status or git diff, "
-  + "since a new file is untracked and the change is uncommitted when the checks run.";
+  + "Every member is worked on inside a git working tree, the notes folder too, so verify a file by reading its contents "
+  + "(python3 is installed, python is not); never prove a directory's contents by listing it, since a working tree also holds .git, "
+  + "and never by git status or git diff, since a new file is untracked and the change is uncommitted when the checks run.";
 const FEEDBACK = "This is one release across the whole project: make it one task whose writes list all three directories (alpha, beta and notes), "
   + "one entry per directory, rather than one task per directory. Do not change the requirement's scope.";
 // A check that inspects git state instead of the file is not a check of what was delivered: at verify time a new file is
@@ -116,6 +116,12 @@ const FEEDBACK_CHECKS = "Keep it one task whose writes list all three directorie
   + "parse package.json, and compare VERSION's bytes (`printf '0.2.0\\n' | cmp - VERSION` or `grep -qx 0.2.0 VERSION`). "
   + "Do not use `git status` or `git diff`: a newly written file is untracked and the change is not committed when the checks run, "
   + "so they say nothing about the delivered contents. Do not change the requirement's scope.";
+// The checks run through sh on this machine, which has python3 and no python: a `python -c` check exits 127 whatever the
+// files hold, and the loop reads that as the task's failure until the attempts run out (o9-codex-6, "[notes] ... stderr=sh:
+// python: command not found | exit=127").
+const FEEDBACK_PYTHON = "Keep it one task whose writes list all three directories, and make each write's checks run on this machine: "
+  + "it has python3 but no python, so a `python -c …` check always fails. Compare VERSION's bytes with "
+  + "`printf '0.2.0\\n' | cmp - VERSION` or `grep -qx 0.2.0 VERSION`, or spell python3. Do not change the requirement's scope.";
 
 const g = (cwd: string, ...rest: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...rest], { cwd, encoding: "utf8" }).trim();
@@ -299,6 +305,12 @@ const checksReadVcsState = (output: unknown): boolean =>
     .flatMap((task) => task.writes ?? [])
     .flatMap((write) => (write.checks ?? []).map(String))
     .some((check) => /\bgit\s+(status|diff)\b/.test(check));
+/** This machine has python3 and no python: a bare `python` check exits 127 whatever the files hold. */
+const checksUseMissingPython = (output: unknown): boolean =>
+  ((output as { tasks?: Array<{ writes?: Array<{ checks?: unknown[] }> }> } | null)?.tasks ?? [])
+    .flatMap((task) => task.writes ?? [])
+    .flatMap((write) => (write.checks ?? []).map(String))
+    .some((check) => /(^|[^\w.])python(?![\w.])/.test(check));
 const fakeCalls = (): number => existsSync(`${marker}.calls`) ? readFileSync(`${marker}.calls`, "utf8").trim().split("\n").filter(Boolean).length : 0;
 /** The fake omp's next call's answer: one assistant message_end whose text is `output`. */
 let fakeSeq = 0;
@@ -421,11 +433,15 @@ try {
       summary.drafts = readDrafts(rt.store, "g");
       const draft = reviewable();
       if (!arrived || draft === undefined) break;
-      const spans = spansDirs(rt, draft.draftNo), vcsChecks = checksReadVcsState(readDraft(rt.store, "g", draft.draftNo).output);
-      if (!spans || vcsChecks) {
-        log(`draft ${draft.draftNo} ${spans ? "verifies git state instead of file contents" : `does not span directories (${JSON.stringify(draftWrites(readDraft(rt.store, "g", draft.draftNo).output))})`}; asking again`);
+      const spans = spansDirs(rt, draft.draftNo), output = readDraft(rt.store, "g", draft.draftNo).output;
+      const vcsChecks = checksReadVcsState(output), pyChecks = checksUseMissingPython(output);
+      if (!spans || vcsChecks || pyChecks) {
+        const why = !spans ? `does not span directories (${JSON.stringify(draftWrites(output))})`
+          : vcsChecks ? "verifies git state instead of file contents"
+          : "checks a `python` binary this machine does not have";
+        log(`draft ${draft.draftNo} ${why}; asking again`);
         if (attempt === maxDrafts - 1) break;
-        const feedback = rt.service.requirementDraftFeedback(raw(rt, `feedback-${draft.draftNo}`, "requirement-draft-feedback", { draftNo: draft.draftNo, feedback: spans ? FEEDBACK_CHECKS : FEEDBACK }));
+        const feedback = rt.service.requirementDraftFeedback(raw(rt, `feedback-${draft.draftNo}`, "requirement-draft-feedback", { draftNo: draft.draftNo, feedback: !spans ? FEEDBACK : vcsChecks ? FEEDBACK_CHECKS : FEEDBACK_PYTHON }));
         summary.lastFeedback = feedback;
         if ("error" in feedback) throw new Error(`requirement-draft-feedback refused: ${JSON.stringify(feedback.error)}`);
         continue;
