@@ -21,6 +21,15 @@ import { dirname, join } from "node:path";
 import { expandKeepingSkillDirs } from "../template/vars.js";
 import { expansionParams } from "../params.js";
 import { vaultGitBytes, type Vault } from "../vault/vault.js";
+import { checksProjection, runAcceptance, type CheckResult } from "./check.js";
+import type { FlowCheck, FlowStep } from "../template/schema.js";
+
+type DiagnosticCheck = FlowCheck & { id: string; role: "diagnostic" };
+
+/** D1: the step's non-gating checks, numbered by their place in the acceptance list (an unnamed one is `check-<n>`). */
+function diagnosticsOf(step: Extract<FlowStep, { kind: "work" }>): DiagnosticCheck[] {
+  return (step.acceptance?.checks ?? []).flatMap((check, i) => check.role === "diagnostic" ? [{ ...check, id: check.id ?? `check-${i + 1}`, role: "diagnostic" as const }] : []);
+}
 
 /**
  * §12.1 `{{base:<path>}}` for a `work` step: the checks run later, in the child's attempt, so the copy is written now,
@@ -44,7 +53,7 @@ export interface FlowChildOpen {
 export type FlowChildStatus =
   | { state: "running" }
   /** `commit` null: an effect step that changed no file (§9.6); its output is no files. */
-  | { state: "landed"; commit: string | null; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string }; effectExtraKeys?: string[] } }
+  | { state: "landed"; commit: string | null; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[]; skillsDir?: string; flow?: { needs?: FlowNeeds; candidates?: Record<string, { items: string[]; recommended: number }>; effect?: { remoteId: string; url?: string }; effectExtraKeys?: string[] } }
   | { state: "failed"; reason: string; spentTokens: number; toolRules?: ToolRulesReport; skills?: LockSkill[] };
 /** The driver-backed side of a work step: open (idempotent per child id) and read how the child is doing. */
 export interface FlowChildPort {
@@ -87,6 +96,7 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
   // driver's to fill once the child injected them.
   let gates: string[];
   let tools: typeof step.tools;
+  let diagnostics: DiagnosticCheck[] = [];
   try {
     const bases = join(composition.vault.path, "orca-base", key.flowRunId, `${key.stepKey}-${key.seq}`);
     const copies: Array<{ file: string; path: string }> = [];
@@ -104,6 +114,10 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
     gates = (step.acceptance?.checks ?? []).filter((c) => c.role === "gate").map((c) => expand(c.run));
     tools = step.tools === undefined ? undefined : { ...step.tools, ...(step.tools.commands === undefined ? {} : {
       commands: step.tools.commands.map((rule) => ("exact" in rule ? { exact: expand(rule.exact) } : { prefix: expand(rule.prefix) })) }) };
+    // §12.1, D1: diagnostics are Orca's (ccloop has no non-gating check); one that cannot expand never fails the start.
+    diagnostics = diagnosticsOf(step).flatMap((check) => {
+      try { return [{ ...check, run: expand(check.run) }]; } catch { return []; }
+    });
     for (const copy of copies) await writeBaseCopy(composition.vault, composition.commit, copy.path, copy.file);
   } catch (error) { return { failed: { reason: `flow-command-vars:${(error as Error).message}` } }; }
   // §12.3: the step's role, as resolved at run start, is the child's agent (the plan's own layer). A step without a role
@@ -113,8 +127,9 @@ async function start(ctx: KindContext): Promise<KindOutcome> {
   const role = step.role === undefined ? (fallback === undefined ? undefined : { agent: fallback.agent, model: fallback.model }) : run.body.roles[step.role];
   const input: FlowStepPlanInput = {
     flowRunId: key.flowRunId, step: { ...step, ...(tools === undefined ? {} : { tools }) }, seq: key.seq, baseCommit: composition.commit, vaultPath: composition.vault.path,
-    // The agent reads the gates as they will run (the tool rules allow exactly those spellings).
-    promptEnvelope: ctx.prompt({ acceptance: gates.map((gate) => `gate: ${gate}`) }), gates, effectRecordId,
+    // The agent reads the gates as they will run (the tool rules allow exactly those spellings); the diagnostics are
+    // listed too, so it knows what Orca will check after it lands (D1).
+    promptEnvelope: ctx.prompt({ acceptance: [...gates.map((gate) => `gate: ${gate}`), ...diagnostics.map((check) => `diagnostic: ${check.run}`)] }), gates, effectRecordId,
     ...(role === undefined ? {} : { agent: { agent: role.agent, ...(role.model === null ? {} : { model: role.model }) } }),
   };
   let plan: ReturnType<typeof buildFlowStepPlanSource>;
@@ -144,8 +159,11 @@ export function skillLocksOf(ctx: KindContext, lock: readonly LockSkill[] | unde
 /**
  * How the settled child ends the step: its landed commit is the output; the tool-rule report is kept per execution. An
  * effect step that changed no file has no commit: its output is the record, and the composition does not move (§5.3).
+ * On a landed child the step's diagnostics run in a throwaway tree at the landed commit (§4.2 `check`'s mechanism);
+ * they never fail the step (D1, D2), and only a non-empty result is recorded.
  */
-function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome {
+async function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): Promise<KindOutcome> {
+  if (ctx.step.kind !== "work") throw new Error("orca: work kind on a non-work step");
   const flags = toolRuleFlags(status.toolRules);
   const { skillLocks, warnings: lockWarnings } = skillLocksOf(ctx, status.skills);
   // The effect's stripped keys (reportedFlowOf): shown, never a refusal -- the effect itself is applied.
@@ -154,8 +172,34 @@ function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "run
   const record = { toolRules: status.toolRules ?? null, ...(status.skills === undefined ? {} : { skills: status.skills }), ...(warnings.length === 0 ? {} : { warnings }) };
   if (status.state === "failed") return { failed: { reason: status.reason, record, ...(flags.length === 0 ? {} : { flags }) } };
   if (status.flow?.needs !== undefined) return { needs: status.flow.needs };
+  const diagnostics = diagnosticsOf(ctx.step);
+  const notRun = (check: FlowCheck, index: number, error: unknown): CheckResult => ({
+    id: check.id ?? `check-${index + 1}`, role: "diagnostic", exitCode: 1, output: `orca: diagnostic not run: ${error instanceof Error ? error.message : String(error)}`, cut: 0,
+  });
+  let checks: CheckResult[] = [];
+  if (status.state === "landed" && diagnostics.length > 0) {
+    const skillsDir = status.skillsDir;
+    // A2 fills the copies of the skills the child actually injected; a declared one it did not is an unknown token,
+    // recorded as not run rather than guessed (§12.1).
+    const injected = (status.skills ?? []).map((skill) => skill.name);
+    const effectRecordId = typeof ctx.body.effectRecordId === "string" ? ctx.body.effectRecordId : undefined;
+    const scope = {
+      params: expansionParams(ctx.env, ctx.run), runId: ctx.run.row.id,
+      skillDirs: skillsDir === undefined ? {} : Object.fromEntries(injected.map((name) => [name, `${skillsDir}/skills/${name}`])),
+      ...(effectRecordId === undefined ? {} : { effectRecordId }),
+    };
+    try {
+      // The landed commit is the tree the diagnostics judge; `{{base:<path>}}` reads this execution's composition.
+      const composition = await ctx.composition();
+      checks = await runAcceptance({
+        checks: diagnostics, vault: composition?.vault ?? null, commit: status.commit,
+        baseCommit, scope, runCommand: ctx.runCommand, onError: (check, index, error) => notRun(check, index, error),
+      });
+    } catch (error) { checks = diagnostics.map((check, index) => notRun(check, index, error)); }
+  }
   return { done: {
-    record, ...(status.commit === null ? {} : { commit: { commit: status.commit, parent: baseCommit } }), ...(flags.length === 0 ? {} : { flags }),
+    record: checks.length === 0 ? record : { ...record, checks },
+    ...(status.commit === null ? {} : { commit: { commit: status.commit, parent: baseCommit } }), ...(flags.length === 0 ? {} : { flags }),
     ...(status.skills === undefined ? {} : { skillLocks }), ...(warnings.length === 0 ? {} : { warnings }),
     // §4.3, §9.6: what the agent reported for later asks, and the remote id of the effect it enacted.
     ...(status.flow?.candidates === undefined && status.flow?.effect === undefined ? {} : { reported: {
@@ -164,4 +208,4 @@ function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "run
 }
 
 export const EFFECT_REPORT_EXTRA_KEYS = "effect-report-extra-keys";
-export const WORK_KIND: KindDefinition & { settle: typeof settle } = { kind: "work", kindVersion: 1, interactive: false, start, settle };
+export const WORK_KIND: KindDefinition & { settle: typeof settle } = { kind: "work", kindVersion: 1, interactive: false, start, settle, projection: checksProjection };

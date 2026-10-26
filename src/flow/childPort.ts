@@ -173,7 +173,7 @@ async function childStatus(deps: DriverChildPortDeps, childGroupId: string): Pro
     ...(reported.value.effect === undefined ? {} : { effect: reported.value.effect }),
     ...(reported.effectExtraKeys === undefined ? {} : { effectExtraKeys: reported.effectExtraKeys }),
   } : undefined;
-  return { state: "landed", commit, spentTokens, ...(landedRules === undefined ? {} : { toolRules: landedRules }), ...(skills === undefined ? {} : { skills }), ...(flow === undefined ? {} : { flow }) };
+  return { state: "landed", commit, spentTokens, ...(landedRules === undefined ? {} : { toolRules: landedRules }), ...(skills === undefined ? {} : { skills }), ...(current.drive?.skills?.dir === undefined ? {} : { skillsDir: current.drive.skills.dir }), ...(flow === undefined ? {} : { flow }) };
 }
 
 export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort {

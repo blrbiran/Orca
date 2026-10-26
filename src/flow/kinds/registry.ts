@@ -109,7 +109,7 @@ export interface KindDefinition {
   /** A call that failed before any output (ccloop's code): what the kind records of it; the kernel retries as for invalid. */
   callFailed?(ctx: KindContext, failure: string): void;
   /** A child-group kind (`work`): what its settled child means for the step. */
-  settle?(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome;
+  settle?(ctx: KindContext, status: Exclude<FlowChildStatus, { state: "running" }>, baseCommit: string): KindOutcome | Promise<KindOutcome>;
   /** A record's summary for later steps' pointers (§12.1). */
   projection?(record: unknown): string;
 }

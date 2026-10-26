@@ -329,9 +329,17 @@ export function contextFor(deps: FlowDeps, run: LoadedRun, execution: ExecutionR
       if (exec.outputKind === "artifact") {
         const record = recordOfExecution(deps.store, exec);
         const projection = kindFor(deps, earlier)?.projection;
-        summary = projection === undefined ? JSON.stringify(record) : projection(record);
-      } else if (exec.outputKind === "commit") summary = `workspace commit ${exec.outputRef}`;
-      else continue;
+        // An empty projection falls back to the record, preserving the pointer of kinds that project nothing (a work step
+        // without diagnostics) and an effect step's record output.
+        const text = projection === undefined ? "" : projection(record);
+        summary = text === "" ? JSON.stringify(record) : text;
+      } else if (exec.outputKind === "commit") {
+        // §12.1: a workspace output's code-owned pointer; a kind's record projection (the check results) follows it.
+        const projection = kindFor(deps, earlier)?.projection;
+        const record = (exec.body as ExecutionBody).record;
+        const text = projection === undefined || record === undefined ? "" : projection(record);
+        summary = `workspace commit ${exec.outputRef}${text === "" ? "" : `\n${text}`}`;
+      } else continue;
       const cut = bounded(summary, POINTER_MAX_BYTES);
       out.push(`### ${earlier.id} (${earlier.kind}, execution ${seq})\n${cut.text}${cut.cut > 0 ? `\n[cut: ${cut.cut} more bytes]` : ""}`);
     }
@@ -1014,7 +1022,7 @@ async function pollChild(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow
   }
   const status = deps.children === undefined ? null : await deps.children.status(execution.childGroupId);
   if (status === null || status.state === "running" || kind.settle === undefined) return false;
-  const outcome = kind.settle(contextFor(deps, run, execution), status, execution.baseCommit!);
+  const outcome = await kind.settle(contextFor(deps, run, execution), status, execution.baseCommit!);
   deps.store.transaction(() => { returnUnspent(deps.store, run.row.id, execution.childGroupId!, status.spentTokens); });
   await applyOutcome(deps, run, execution, "running", outcome);
   return true;

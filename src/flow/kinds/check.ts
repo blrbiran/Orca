@@ -9,11 +9,12 @@ import { spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expandVars } from "../template/vars.js";
+import { expandVars, type VarScope } from "../template/vars.js";
 import { expansionParams } from "../params.js";
 import { bounded } from "../prompt.js";
 import { vaultGit, vaultGitBytes, type Vault } from "../vault/vault.js";
 import type { KindDefinition } from "./registry.js";
+import type { FlowCheck } from "../template/schema.js";
 
 export const CHECK_OUTPUT_MAX_BYTES = 64 * 1024;
 const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -43,46 +44,102 @@ async function materialize(vault: Vault, commit: string, dir: string): Promise<v
   } finally { await rm(index, { force: true }); }
 }
 
+/**
+ * The checks in a throwaway tree at `commit` (§4.2 `check`, §12.1 `{{base:<path>}}`): each runs in template order in a
+ * private worktree of the composition, never in the person's folder, with the base copies read from the commit. A
+ * `work` step reuses this after its child lands (the landed commit is the tree the checks judge, `baseCommit` the
+ * composition `{{base:<path>}}` reads). With `onError` a check that cannot expand or run is recorded instead of
+ * throwing (a diagnostic never breaks a step).
+ */
+export async function runAcceptance(input: {
+  checks: readonly FlowCheck[];
+  vault: Vault | null;
+  commit: string | null;
+  /** Where `{{base:<path>}}` is read; `commit` when absent (the `check` kind's base is the tree it runs in). */
+  baseCommit?: string | null;
+  scope: Omit<VarScope, "workspace" | "base">;
+  runCommand: (command: string, cwd: string) => Promise<{ exitCode: number; output: string }>;
+  onError?: (check: FlowCheck, index: number, error: unknown) => CheckResult;
+}): Promise<CheckResult[]> {
+  const baseAt = input.baseCommit === undefined ? input.commit : input.baseCommit;
+  const onError = input.onError;
+  const root = await mkdtemp(join(tmpdir(), "orca-flow-check-"));
+  try {
+    const work = join(root, "work");
+    const bases = join(root, "base");
+    await mkdir(work, { mode: 0o700 }); await mkdir(bases, { mode: 0o700 });
+    if (input.vault !== null && input.commit !== null) {
+      try { await materialize(input.vault, input.commit, work); }
+      catch (error) {
+        if (onError === undefined) throw error;
+        return input.checks.map((check, i) => onError(check, i, error));
+      }
+    }
+    let n = 0;
+    const baseCopies = new Map<string, string>();
+    const results: CheckResult[] = [];
+    for (const [i, check] of input.checks.entries()) {
+      // {{base:<path>}}: resolved before the command runs; a path the base lacks is an empty read-only file.
+      const pending: Array<Promise<void>> = [];
+      const base = (path: string): string => {
+        const known = baseCopies.get(path);
+        if (known !== undefined) return known;
+        const file = join(bases, `${n += 1}-${path.replace(/[^A-Za-z0-9._-]/g, "_")}`);
+        baseCopies.set(path, file);
+        pending.push((async () => {
+          const bytes = input.vault === null || baseAt === null ? Buffer.alloc(0)
+            : await vaultGitBytes(input.vault, ["cat-file", "blob", `${baseAt}:${path}`]).catch(() => Buffer.alloc(0));
+          await writeFile(file, bytes, { mode: 0o400 });
+          await chmod(file, 0o400);
+        })());
+        return file;
+      };
+      let command: string;
+      try { command = expandVars(check.run, { ...input.scope, workspace: work, base }, "command"); }
+      catch (error) {
+        // The copies the expansion asked for are still being written: settle them before the report, never an unhandled
+        // rejection racing the finally's removal of the tree.
+        await Promise.allSettled(pending);
+        if (onError === undefined) throw error;
+        results.push(onError(check, i, error));
+        continue;
+      }
+      try {
+        await Promise.all(pending);
+        const ran = await input.runCommand(command, work);
+        const out = bounded(ran.output, CHECK_OUTPUT_MAX_BYTES);
+        results.push({ id: check.id ?? `check-${i + 1}`, role: check.role, exitCode: ran.exitCode, output: out.text, cut: out.cut });
+      } catch (error) {
+        if (onError === undefined) throw error;
+        results.push(onError(check, i, error));
+      }
+    }
+    return results;
+  } finally { await rm(root, { recursive: true, force: true }); }
+}
+
+/** A record's `checks` for later prompts (§12.1); absent or empty yields "" (a `work` step without diagnostics). */
+export function checksProjection(record: unknown): string {
+  const checks = (record as { checks?: readonly CheckResult[] } | null)?.checks;
+  if (checks === undefined || checks.length === 0) return "";
+  return checks.map((c) => `check ${c.id} (${c.role}) exit ${c.exitCode}${c.cut > 0 ? ` (output cut by ${c.cut} bytes)` : ""}:\n${c.output.trimEnd()}`).join("\n");
+}
+
 export const CHECK_KIND: KindDefinition = {
   kind: "check", kindVersion: 1, interactive: false,
   async start(ctx) {
     if (ctx.step.kind !== "check") throw new Error("orca: check kind on a non-check step");
-    const root = await mkdtemp(join(tmpdir(), "orca-flow-check-"));
-    try {
-      const work = join(root, "work");
-      const bases = join(root, "base");
-      await mkdir(work, { mode: 0o700 }); await mkdir(bases, { mode: 0o700 });
-      const composition = await ctx.composition();
-      if (composition !== null) await materialize(composition.vault, composition.commit, work);
-      let n = 0;
-      const baseCopies = new Map<string, string>();
-      const results: CheckResult[] = [];
-      for (const [i, check] of ctx.step.acceptance.checks.entries()) {
-        // {{base:<path>}}: resolved before the command runs; a path the base lacks is an empty read-only file.
-        const pending: Array<Promise<void>> = [];
-        const base = (path: string): string => {
-          const known = baseCopies.get(path);
-          if (known !== undefined) return known;
-          const file = join(bases, `${n += 1}-${path.replace(/[^A-Za-z0-9._-]/g, "_")}`);
-          baseCopies.set(path, file);
-          pending.push((async () => {
-            const bytes = composition === null ? Buffer.alloc(0) : await vaultGitBytes(composition.vault, ["cat-file", "blob", `${composition.commit}:${path}`]).catch(() => Buffer.alloc(0));
-            await writeFile(file, bytes, { mode: 0o400 });
-            await chmod(file, 0o400);
-          })());
-          return file;
-        };
-        const command = expandVars(check.run, { params: expansionParams(ctx.env, ctx.run), runId: ctx.run.row.id, workspace: work, skillDirs: {}, base }, "command");
-        await Promise.all(pending);
-        const ran = await ctx.runCommand(command, work);
-        const out = bounded(ran.output, CHECK_OUTPUT_MAX_BYTES);
-        results.push({ id: check.id ?? `check-${i + 1}`, role: check.role, exitCode: ran.exitCode, output: out.text, cut: out.cut });
-      }
-      const record = { checks: results };
-      const failedGate = results.find((r) => r.role === "gate" && r.exitCode !== 0);
-      return failedGate === undefined ? { done: { record } } : { failed: { reason: `gate-failed:${failedGate.id}`, record } };
-    } finally { await rm(root, { recursive: true, force: true }); }
+    const composition = await ctx.composition();
+    const results = await runAcceptance({
+      checks: ctx.step.acceptance.checks,
+      vault: composition?.vault ?? null,
+      commit: composition?.commit ?? null,
+      scope: { params: expansionParams(ctx.env, ctx.run), runId: ctx.run.row.id, skillDirs: {} },
+      runCommand: ctx.runCommand,
+    });
+    const record = { checks: results };
+    const failedGate = results.find((r) => r.role === "gate" && r.exitCode !== 0);
+    return failedGate === undefined ? { done: { record } } : { failed: { reason: `gate-failed:${failedGate.id}`, record } };
   },
-  projection: (record) => (record as { checks: CheckResult[] }).checks
-    .map((c) => `check ${c.id} (${c.role}) exit ${c.exitCode}${c.cut > 0 ? ` (output cut by ${c.cut} bytes)` : ""}:\n${c.output.trimEnd()}`).join("\n"),
+  projection: checksProjection,
 };
