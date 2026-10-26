@@ -153,7 +153,7 @@ describe("the project switcher", () => {
     const requirementSelect = (): HTMLSelectElement =>
       within(screen.getByRole("form", { name: "New requirement" })).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
     await waitFor(() => expect(chainSelect().value).toBe("alpha"));
-    expect(requirementSelect().value).toBe("alpha-11111111");
+    await waitFor(() => expect(requirementSelect().value).toBe("alpha-11111111"));
 
     // Chains moves the selection: the sidebar and Requirements follow.
     fireEvent.change(chainSelect(), { target: { value: "beta" } });
