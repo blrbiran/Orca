@@ -435,3 +435,25 @@ Accepted gaps and observations (recorded honestly at review):
   person's separate authorization. Record the gate numbers in the handoff after the merge, not before.
 - [ ] O9 (real-agent acceptance on a repo+repo+folder project, claude → codex → omp, plus one forced `partial`) is a
   separate paid run, requested from the person when H7 is otherwise ready.
+
+---
+
+## O9 as built (2026-10-26)
+
+The paid acceptance lives in `scripts/live-multi-dir-acceptance.ts` (own commit; its header is the guide). Codex
+(`gpt-6-luna`) and omp (`local-litellm/deepseek-flash`) each passed every check: alpha published, the driver crashed,
+the store was closed as a process death and the rebooted runtime replayed the journal into a `partial` landing
+(`multi-dir-target-moved:beta`, `pending.landed` holding alpha), `retry-rest` landed beta on top of the person's sibling
+and placed the folder; the work run held three prepared workspaces (primary, `.dir-beta`, `.dir-notes`), alpha and beta
+ended at 0.2.0 and notes at `0.2.0\n`. Evidence: `/private/tmp/orca-ffec7b28/o9-codex-5/` and `o9-omp-5/`. The claude
+leg is still owed: it needs its quota back and a fresh nod from the person.
+
+Two defects surfaced and were fixed before the passing runs:
+
+- `archiveRun` captured ccloop's `<sourceDir>/repos/<key>` result repositories as source evidence, filing every extra
+  `.git` as `nested-git` and leaving every multi-directory checkpoint `partial` (`fix(archive): leave the extra
+  directories' result repositories out of the source capture`).
+- The fixture wrote its plan file into alpha's working tree, which the landing pre-check correctly refused
+  (`integration-worktree-dirty:alpha`); it now sits in `alpha/.git`. A draft whose write checks inspect `git status`
+  or `git diff` is handed back with `requirement-draft-feedback`: a new file is untracked, so such a check of it can
+  only fail (one work phase exhausted its attempts on exactly that).
