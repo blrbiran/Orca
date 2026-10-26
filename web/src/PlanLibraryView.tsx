@@ -41,7 +41,9 @@ const originText = (origin: LibraryOriginV1, t: TFunction): string => {
 };
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  // SubtleCrypto brand-checks its input, so an ArrayBuffer from another realm is refused; a view over the same bytes
+  // is built here and is what it accepts.
+  const digest = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
