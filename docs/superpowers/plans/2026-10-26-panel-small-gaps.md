@@ -59,4 +59,5 @@
 
 ### awaitingHuman
 
-- push；`panel restart`（安装到真面板要人点头）；worktree 删除（`git worktree remove`，不带 force）可在合入后由 agent 做。
+- 只剩 push。
+- 按人 2026-10-27 的指令：已 ff 合入 `main`、根与 web 重建后 `panel restart`（7777 应答 200，新构建含 `documentChecks` 与存在性检查文案）、worktree 与分支已清。
