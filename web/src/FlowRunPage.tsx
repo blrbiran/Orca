@@ -600,6 +600,41 @@ function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string;
   );
 }
 
+/** Spec §10.5: the note's cap, in UTF-8 bytes (the server counts the note plus the step's pending ones). */
+const NOTE_MAX_BYTES = 4096;
+function utf8Bytes(text: string): number {
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  let bytes = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
+
+/** Spec §10.5: an operator's note for a running work step -- the step's next attempt only, or every remaining one. */
+function NoteForm(props: { step: Step; runId: string; send: Send }): JSX.Element {
+  const { t } = useTranslation();
+  const [text, setText] = useState("");
+  const [scope, setScope] = useState<"next-attempt" | "remaining-attempts">("next-attempt");
+  const body = text.trim();
+  const tooLarge = utf8Bytes(body) > NOTE_MAX_BYTES;
+  return (
+    <form className="flow-note" aria-label={t("flow.note.title", { step: props.step.stepKey })}
+      onSubmit={(event) => { event.preventDefault(); if (body === "" || tooLarge) return;
+        props.send("messages", { runId: props.runId, kind: "command", target: { kind: "step", stepKey: props.step.stepKey }, body: { command: "note", text: body, scope } });
+        setText(""); }}>
+      <textarea aria-label={t("flow.note.text")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
+      <select aria-label={t("flow.note.scope")} value={scope} onChange={(event) => setScope(event.currentTarget.value as typeof scope)}>
+        <option value="next-attempt">{t("flow.note.next-attempt")}</option>
+        <option value="remaining-attempts">{t("flow.note.remaining-attempts")}</option>
+      </select>
+      <button type="submit" disabled={body === "" || tooLarge}>{t("flow.note.send")}</button>
+      {tooLarge && <p data-tone="warn" role="status">{t("flow.note.tooLarge")}</p>}
+    </form>
+  );
+}
+
 /** The step kinds a person may skip or defer (gaps spec §6.1: clarify takes consensus, ask its answer). */
 const MARKABLE = new Set(["work", "draft", "check", "review"]);
 
@@ -774,6 +809,8 @@ function StepCard(props: { step: Step; view: FlowRunViewV1; may: boolean; send: 
       {open && step.heldBy.length > 0 && <HeldCard step={step} steps={view.steps} runId={view.flowRunId} send={props.send} messages={props.messages} waiting={props.waiting} onWait={props.onWait} />}
       {/* Task 11 acceptance (session ffec7b28): a finished run offers no new skip or defer; a standing mark can still be filled. */}
       {open && (view.state !== "done" || step.mark !== null) && <StepMarks step={step} runId={view.flowRunId} send={props.send} />}
+      {open && step.kind === "work" && latest?.state === "running" && props.may
+        && <NoteForm step={step} runId={view.flowRunId} send={props.send} />}
       {step.kind === "clarify" && <ClarifyRounds step={step} runId={view.flowRunId} open={open} send={props.send} />}
       {older.length > 0 && (
         <details>
@@ -800,10 +837,12 @@ function RunControls(props: { view: FlowRunViewV1; may: boolean; send: Send }): 
     <section aria-label={t("flow.controls")}>
       <p>
         {view.state === "running" && <button type="button" onClick={() => command({ command: "pause" })}>{t("flow.pause")}</button>}
-        {view.state === "paused" && <button type="button" onClick={() => command({ command: "resume" })}>{t("flow.resume")}</button>}
+        {view.state === "paused" && props.may && <button type="button" onClick={() => command({ command: "resume" })}>{t("flow.resume")}</button>}
         {view.state !== "stopped" && <>{" "}<button type="button" onClick={() => command({ command: "stop" })}>{t("flow.stop")}</button></>}
         {view.state !== "stopped" && <>{" "}<button type="button" onClick={() => props.send("plan", { runId: view.flowRunId })}>{t("flow.makePlan")}</button></>}
       </p>
+      {/* §10.5: a pause is any Web user's; the resume that carries the note is the owner's. */}
+      {view.state === "paused" && !props.may && <p role="note" data-testid="flow-resume-owner-only">{t("flow.ownerOnly")}</p>}
       {view.state !== "stopped" && (
         <p>
           <label>{t("flow.rewindTo")}<input type="text" value={to} onChange={(event) => setTo(event.currentTarget.value)} /></label>{" "}

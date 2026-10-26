@@ -1280,6 +1280,16 @@ export const zh: Translation<typeof en> = {
     pool: "预算池：各步骤已提取 {{drawn}}，共 {{pool}} token",
     raiseBy: "给预算池加的 token 数",
     raise: "加预算",
+    // Flow engine spec §10.5：给正在运行的工作步骤留下的备注。
+    note: {
+      title: "给 {{step}} 的备注",
+      text: "给这一步的备注",
+      scope: "备注何时生效",
+      "next-attempt": "仅下一次尝试",
+      "remaining-attempts": "之后每次尝试",
+      send: "发送备注",
+      tooLarge: "备注超过 4096 字节，请缩短。",
+    },
   },
   settings: {
     // Flow engine spec §11.2 (plan Task 16): a layer's flow settings with source and lock.
@@ -2017,6 +2027,13 @@ export const zhErrors: Record<string, string> = {
   "flow-attachment-invalid": "附件没有收下：{{detail}}",
   "flow-run-stopped": "流程运行已停止：{{detail}}",
   "flow-pause-resume-via-flow": "这个任务组的停止来自一次流程暂停：请改为恢复那次流程运行。",
+  // Flow engine spec §10.5：暂停、恢复和备注的拒绝。
+  "flow-command-needs-person": "这条命令是本人（面板所有者）的；请以所有者身份登录后再发一次：{{detail}}",
+  "flow-note-no-running-work": "这一步当前没有正在运行的执行，没有可附备注的地方：{{detail}}",
+  "flow-note-too-large": "这条备注加上这一步尚未送达的备注超过 4096 字节，请缩短：{{detail}}",
+  "flow-pause-stop-incomplete": "这一步还没能为了暂停停下来，暂停仍在等。等它可以停下时再试：{{detail}}",
+  "flow-pause-timeout-unknown": "不知道这一步单次尝试的超时时间，备注无法得到安全的截止时间：{{detail}}",
+  "flow-pause-resume-failed": "这一步没能带着备注恢复，备注仍然待送达：{{detail}}",
   "flow-refused": "流程拒绝了这条命令：{{detail}}",
   "flow-unavailable": "这个面板不运行流程（没有执行驱动）：{{detail}}",
   "check-time-zone-invalid": "定时检查用的时区本机不认识：{{detail}}",

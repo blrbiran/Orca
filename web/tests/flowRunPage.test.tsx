@@ -882,3 +882,68 @@ describe("the execution's transcripts (live transcript §10.4.4)", () => {
     expect(reads.filter((url) => url.includes("/transcripts"))).toEqual(["/api/control/runs/run-child-1/transcripts"]);
   });
 });
+
+/**
+ * Flow engine spec §10.5: a paused run is resumed by the owner only (a member sees why), and while a work step runs the
+ * owner may leave it a note -- for the step's next attempt or every remaining one.
+ */
+describe("a pause, a resume and a note (§10.5)", () => {
+  const runningWork = (): FlowRunViewV1 => runView({ steps: [step("voice", "work", [exec(1, { state: "running", output: null })])] });
+
+  it("gives the owner the pause and a note form on a running work step, and sends the note", async () => {
+    await mount(owner, runningWork());
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+    expect(screen.queryByTestId("flow-resume-owner-only")).toBeNull();
+    const form = within(stepBox("voice")).getByRole("form", { name: "Note for voice" });
+    const text = within(form).getByRole("textbox", { name: "Note for the step" });
+    const send = within(form).getByRole("button", { name: "Send the note" }) as HTMLButtonElement;
+    // mutation: enable the send on an empty text -> enabled, red
+    expect(send.disabled).toBe(true);
+    fireEvent.change(text, { target: { value: "   " } });
+    expect(send.disabled).toBe(true);
+    // 4096 ASCII bytes is the cap; 4097 is one over.
+    fireEvent.change(text, { target: { value: "a".repeat(4096) } });
+    expect(send.disabled).toBe(false);
+    fireEvent.change(text, { target: { value: "a".repeat(4097) } });
+    expect(send.disabled).toBe(true);
+    expect(form.textContent).toContain("The note is longer than 4096 bytes; shorten it.");
+    // é is two bytes in UTF-8: 2049 of them are 4098 bytes, 2048 are exactly 4096.
+    fireEvent.change(text, { target: { value: "é".repeat(2049) } });
+    // mutation: count characters instead of bytes -> still enabled, red
+    expect(send.disabled).toBe(true);
+    fireEvent.change(text, { target: { value: "é".repeat(2048) } });
+    expect(send.disabled).toBe(false);
+    fireEvent.change(text, { target: { value: "  keep the metaphors  " } });
+    fireEvent.change(within(form).getByRole("combobox", { name: "When the note applies" }), { target: { value: "remaining-attempts" } });
+    fireEvent.click(send);
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: {
+      runId: RUN, kind: "command", target: { kind: "step", stepKey: "voice" }, body: { command: "note", text: "keep the metaphors", scope: "remaining-attempts" } } }) });
+    // The text is cleared after a send.
+    expect((text as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("gives the owner the resume on a paused run, and no owner-only line", async () => {
+    await mount(owner, runView({ state: "paused" }));
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(screen.queryByTestId("flow-resume-owner-only")).toBeNull();
+  });
+
+  it("lets a member pause, but shows no resume and no note form", async () => {
+    await mount(member, runningWork());
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+    // mutation: render the note form for every reader -> the form exists, red
+    expect(within(stepBox("voice")).queryByRole("form", { name: "Note for voice" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send the note" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+  });
+
+  it("shows a member a paused run's resume as the owner's own act", async () => {
+    await mount(member, runView({ state: "paused" }));
+    // mutation M11: render resume for everyone -> the member's Resume button exists, red
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    const line = screen.getByTestId("flow-resume-owner-only");
+    expect(line.getAttribute("role")).toBe("note");
+    expect(line.textContent).toBe("Only the panel owner can do this here.");
+  });
+});

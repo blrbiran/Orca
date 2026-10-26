@@ -1410,6 +1410,16 @@ export const en = {
     pool: "Pool: {{drawn}} of {{pool}} tokens drawn by steps",
     raiseBy: "Tokens to add to the pool",
     raise: "Raise the pool",
+    // Flow engine spec §10.5: the operator's note for a running work step.
+    note: {
+      title: "Note for {{step}}",
+      text: "Note for the step",
+      scope: "When the note applies",
+      "next-attempt": "the next attempt only",
+      "remaining-attempts": "every remaining attempt",
+      send: "Send the note",
+      tooLarge: "The note is longer than 4096 bytes; shorten it.",
+    },
   },
   settings: {
     // Flow engine spec §11.2 (plan Task 16): a layer's flow settings with source and lock.
@@ -2094,6 +2104,13 @@ export const enErrors: Record<string, string> = {
   "flow-attachment-invalid": "The attachment was not taken: {{detail}}",
   "flow-run-stopped": "The flow run is stopped: {{detail}}",
   "flow-pause-resume-via-flow": "This group's stop came from a flow pause; resume the flow run instead.",
+  // Flow engine spec §10.5: the pause, resume and note refusals.
+  "flow-command-needs-person": "This command is the person's (the panel owner's); log in as the owner and send it again: {{detail}}",
+  "flow-note-no-running-work": "No execution of this step is running, so there is nothing to attach a note to: {{detail}}",
+  "flow-note-too-large": "This note plus the step's pending notes is over 4096 bytes. Shorten it: {{detail}}",
+  "flow-pause-stop-incomplete": "The step could not be stopped for the pause yet, so the pause waits. Try again when it can stop: {{detail}}",
+  "flow-pause-timeout-unknown": "The step's attempt timeout is unknown, so a note cannot get a safe deadline: {{detail}}",
+  "flow-pause-resume-failed": "The step could not be resumed with the note, so the note stays pending: {{detail}}",
   "flow-refused": "The flow refused the command: {{detail}}",
   "flow-unavailable": "This panel runs no flows (it has no execution driver): {{detail}}",
   "check-time-zone-invalid": "The schedule's time zone is not one this host knows: {{detail}}",
