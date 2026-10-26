@@ -3,7 +3,9 @@
 _Leave it to Orca — every idea, made real._
 
 Orca turns an idea into tasks, runs those tasks with coding agents (Claude Code, Codex or OMP), and lands the results
-on a git branch for you to review. You drive it from a local Web panel.
+on a git branch — or writes them into a folder — for you to review. It can also run a **flow**: a fixed sequence of
+steps, some of them model calls and some of them effects outside Orca, against a folder. You drive it from a local Web
+panel.
 
 This README is about that panel: what Orca is, how to install and configure it, how to start the panel, what each
 section does, and what is and is not safe. The command-line reference (`orca plan preview`, `orca dev correct`, checkpoints, the
@@ -27,8 +29,10 @@ Orca is the system layer. Some pieces are separate projects:
 | **syncskill** | Supplies skills to tasks. | optional |
 
 The flow: an **idea** becomes a **requirement**, the requirement becomes a **group of tasks**, and each task may have
-more than one ccloop run after a retry or continuation. Finished work lands on **`orca/<groupId>`**. You decide
-whether that branch goes into `main`.
+more than one ccloop run after a retry or continuation. For a repository, finished work lands on **`orca/<groupId>`**;
+what happens next is the project's integration scheme, and the default (`keep`) merges and pushes nothing. A **folder
+project** gets its finished work written into the folder instead. A **multi-directory project** groups 2–8 projects and
+lands each member by its own delivery, once per driver round.
 
 ## Requirements
 
@@ -220,16 +224,35 @@ starts from default budget allocations that you edit by hand in Task control. Us
 ### 4. Repositories and where state lives
 
 - **Projects.** With no `--repo` and no `--root`, the panel runs in *file mode*: its projects are the list in
-  `$HOME/.orca/projects.json` (`$ORCA_PROJECTS_FILE` overrides the path), `{ "version": 1, "projects": [{ "id", "name", "path" }] }`.
+  `$HOME/.orca/projects.json` (`$ORCA_PROJECTS_FILE` overrides the path):
+  `{ "version": 1, "projects": [{ "id", "name", "path", "kind"?: "repo" | "dir", "plans"?: [...] }], "multiDirProjects"?: [{ "id", "name", "dirs": [...] }] }`.
   A missing file is an empty list. In the UI you can **add** a project (a name and the absolute path of a git repository's
-  top-level directory) and **rename** one. Removing a project or changing its path needs a restart, as does changing the file's
-  optional `controlStateDir`; the panel names such pending changes. A hand edit that adds a project or changes a name applies
-  without a restart; a file broken while the panel runs keeps the last good list, and one broken at start is refused (`projects-file-invalid`). In file mode the control state defaults to
-  `$ORCA_CONTROL_DIR/panel` (or the file's `controlStateDir`), so `--control-state-dir` is not needed.
+  top-level directory), **rename** one, and **Group several projects** into a multi-directory project. Removing a
+  project, changing its path, or adding a member's new path needs a restart; the panel names such pending changes. A
+  hand edit that adds a project or changes a name applies without a restart; a file broken while the panel runs keeps
+  the last good list, and one broken at start is refused (`projects-file-invalid`). In file mode the control state
+  defaults to `$ORCA_CONTROL_DIR/panel` (or the file's `controlStateDir`), so `--control-state-dir` is not needed.
+- **Folder projects.** A **folder project** is a directory registered by hand while the panel is stopped:
+  `{ "id": "...", "name": "...", "path": "/abs/folder", "kind": "dir" }`. It need not be a git repository. Orca keeps
+  its work in a private bare vault under `$ORCA_VAULT_DIR` (default `$HOME/.orca/vault`), commits there, and writes a
+  group's finished work into the folder file by file. An installed service does not capture `ORCA_VAULT_DIR`, so it uses
+  the default vault path. A folder project takes requirements and flows only: plan import
+  is refused (`dir-project-plan-import-unsupported`), as are debug opens, and it has no integration scheme (delivery is
+  the folder placement, `dir-group-delivery-fixed`). A requirement opened on a missing folder is refused
+  (`dir-folder-missing`).
+- **Multi-directory projects.** **Group several projects** makes a multi-directory project of 2–8 single projects, in
+  an order you set; the first is the **primary** and keeps the group's decisions. Two members may not be the same
+  directory or nest inside one another. A multi project takes requirements only: plan import, flow starts and debug
+  opens are refused (`multi-dir-plan-import-unsupported`, `flow-project-multi-dir-unsupported`,
+  `debug-multi-dir-unsupported`). Its settings live on its member projects. Delivery is frozen at split acceptance,
+  per member: a folder member is written into its folder, a repository member uses that project's integration default,
+  and `push-branch`/`github-pr` is refused (`multi-dir-delivery-unsupported`). Continuation and saved-result recovery
+  are blocked on a multi group (`multi-dir-continuation-unsupported`, `multi-dir-recovery-unsupported`).
 - `--repo <key>=<path-to-repo>` is the alternative: it registers a repository on the command line. Repeatable. With `--repo`
   (or `--root`) **projects are fixed at launch**, the UI cannot add or rename any (the server answers
   `projects-from-command-line`), and `--projects-file` together with `--repo`/`--root` is refused. To add one, restart the
-  panel. An installed service started with `--repo` is in this mode too: run `orca panel install` again without `--repo`
+  panel. A `--repo` project is always a repository: folder and multi-directory projects exist only in file mode. An
+  installed service started with `--repo` is in this mode too: run `orca panel install` again without `--repo`
   to get file mode. That moves the panel to a different control store: with one `--repo` it was
   `$ORCA_CONTROL_DIR/<repo key encoded as in "Plans for Task control">`, in file mode it is `$ORCA_CONTROL_DIR/panel`, which starts
   empty. To keep the old store, point `controlStateDir` in `projects.json` (or `--control-state-dir`, which wins over it) at the
@@ -239,9 +262,10 @@ starts from default budget allocations that you edit by hand in Task control. Us
 - Control state (a SQLite store, plus run copies and workspaces beside it) lives under `$ORCA_CONTROL_DIR`
   (default `$HOME/.orca/control/<repo key>` with one `--repo`). With more than one `--repo` there is no single key to name it
   after, so you must also pass `--control-state-dir <path>`.
-  This build upgrades that store (`control.sqlite`) to schema version 9 on its first start (from 7 or 8; version 9 adds
-  the activity record), and the upgrade is one-way (an older build refuses a version-9 store with
-  `control-schema-unsupported`), so back up `control.sqlite` before you first start it.
+  This build upgrades that store (`control.sqlite`) to schema version 20 on its first start (from any older version),
+  and the upgrade is one-way (an older build refuses a newer store with `control-schema-unsupported`). It writes a
+  `VACUUM INTO` copy named `control.sqlite.pre-v<n>-<timestamp>` beside the store before it migrates, but still back up
+  `control.sqlite` yourself before the first start of a new build.
 - Decisions and Metrics read the `.decisions/` ledgers of every `--repo`, plus every repository found under
   `--root <dir>` if you pass it.
 - Reviews and corrections you record in the panel go to `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`).
@@ -301,7 +325,7 @@ A task may give a `loop` block instead of a `contract` file:
 }
 ```
 
-The import form uses registered plans for the selected project; if several exist, choose one. In **All projects**, explicitly choose the target repository before importing.
+The import form uses registered plans for the selected project; if several exist, choose one. In **All projects**, explicitly choose the target repository before importing. A folder project or a multi-directory project refuses an imported plan (`dir-project-plan-import-unsupported`, `multi-dir-plan-import-unsupported`): those reach tasks through a requirement (and a folder project also through a flow).
 
 ### 6. Optional integrations
 
@@ -377,13 +401,15 @@ page shows members the relevant values; a member's new requirement gets the defa
 
 ## The sections
 
-The sidebar has **Overview**, **Requirements**, **Task control**, **Decisions**, **Memory**, **Metrics**, **Global
-settings** and **Project settings**. It keeps the selected project visible across sections. The active section is in
-the URL hash. Language and theme switches are in the sidebar.
+The sidebar has **Overview**, **Requirements**, **Task control**, **Board**, **Decisions**, **Memory**, **Metrics**,
+**Global settings** and **Project settings**, plus **Continuous improvement (advanced)** when it is enabled. It keeps
+the selected project visible across sections. The active section is in the URL hash. Language and theme switches are in
+the sidebar.
 
 ```
- idea ──> Requirements ──accept──> Task control ──runs──> branch orca/<groupId> ──> you merge (outside Orca)
+ idea ──> Requirements ──accept──> Task control ──runs──> branch orca/<groupId> ──> delivery (default: you merge)
                                         │
+                                        ├── Board: every group's column, plus flow runs
                                         └── choices agents record ──> Decisions ──> Metrics
  Memory: read-only, across everything        Continuous improvement: Orca development, unrelated to groups
 ```
@@ -393,12 +419,13 @@ the URL hash. Language and theme switches are in the sidebar.
 | Overview | Open the selected project's next actions and groups. |
 | Requirements | From an idea to a set of tasks, with a model. |
 | Task control | Budget, configure, start and watch groups of tasks. |
+| Board | Every group as a card in a column, plus flow runs. |
 | Decisions | Review the decisions agents recorded. |
 | Memory | Read ccmem's memory (read-only). |
 | Metrics | Correction rate, repair rate, review coverage. |
-| Global settings | Agent preferences, installation review, usage caps and advanced navigation preference. |
-| Project settings | Workspace and integration defaults for the selected project. |
 | Continuous improvement (advanced) | Unattended Claude Code sessions that develop Orca itself; hidden by default in Global settings. An active chain still shows its status and stop control. A `#chains` link remains available. |
+| Global settings | Agent preferences, installation review, usage caps and advanced navigation preference. |
+| Project settings | Workspace, integration, checks, flow settings, schedules and the plan library for the selected project. |
 
 ### Requirements
 
@@ -412,17 +439,17 @@ cap in its catalog, or an OpenRouter one, in either mode. Then pick another agen
 budgets manually if no usable estimator is available. A default selection is also resolved by the server, so ensure
 your default can run single calls in the panel's estimate mode.
 
-1. Pick a repository, type the idea, set a token limit, the content language and the agent, and press
-   **Start clarifying**. This creates a group in state `clarifying`.
+1. Pick a project (a repository, a folder project, or a multi-directory project), type the idea, set a token limit, the
+   content language and the agent, and press **Start clarifying**. This creates a group in state `clarifying`.
 2. The model asks questions in rounds; each comes with a recommended answer and why. Accept the recommendation or
    write your own, and send. The panel shows the current understanding: statement, acceptance criteria, glossary,
    decisions, open branches.
 3. When you agree (**We agree**), the model drafts a **split** into tasks: titles, loop plans, target paths, checks,
    dependencies and layers. Send it back with feedback, or **Accept this split**.
 4. Accepting turns the **same group** into a `draft` group with those tasks; it now appears in Task control. The
-   requirement document is committed as `.orca/requirements/<date>-<slug>.md` onto the branch `orca/<groupId>`; the
-   group starts only once that commit exists. **Go to task preparation** opens that exact group for review; acceptance
-   does not confirm or start it.
+   requirement document is committed as `.orca/requirements/<date>-<slug>.md` onto the branch `orca/<groupId>` (for a
+   folder project, into its vault; a multi group exports it to its primary); the group starts only once that commit
+   exists. **Go to task preparation** opens that exact group for review; acceptance does not confirm or start it.
 
 Each model call is counted against the requirement's token limit. When the next call does not fit, it stops and asks
 you to raise the limit.
@@ -434,7 +461,8 @@ acceptance, budgets, workspace and integration, choose the agents/models, **Conf
 agents before confirming. The driver schedules eligible tasks and their dependencies automatically within the group.
 You do not need to start each task separately. Watch the dependency graph and open a task for activity and evidence.
 
-Groups come from an accepted requirement or from an imported plan (**Import plan**). For each group you can:
+Groups come from an accepted requirement or from an imported plan (**Import plan**); a folder or multi-directory
+project only from a requirement. For each group you can:
 
 - **Budget:** see the proposal (per task and a group reserve), apply the estimator's suggestions or set the numbers
   yourself, set a group limit and optional explicit token policy, then **Confirm task plan**. A token ceiling is not
@@ -453,10 +481,15 @@ Groups come from an accepted requirement or from an imported plan (**Import plan
   **Stopped** is shown only after authoritative stop facts, and does not mean every task is complete or recoverable.
   Continuable, retryable and unresolved work are shown separately.
 - **Watch:** a dependency graph, each task's status and progress, each run's phase, state, usage and evidence (which
-  you can list and download), handoff requests and estimates.
+  you can list and download), handoff requests, estimates, and — for a run whose ccloop records one — a live
+  **Transcript** of each agent call as it streams, with its size and whether it is still live or finished. A ccloop
+  that records no transcript says so instead. Recording stops at 128 MiB per call; an oversized or unterminated line
+  is kept as a single marker line.
 - **Git:** each task runs in its own git worktree (default) or a private clone, selectable per repository; each
-  finished task lands on `orca/<groupId>` as one merge commit. Merge into `main` and push are marked as waiting on a
-  person: the panel has no button for either.
+  finished task lands on `orca/<groupId>` as one merge commit. What happens to that branch is the project's integration
+  scheme — default `keep` merges and pushes nothing (see
+  [Safety](#safety-what-orca-will-and-will-not-do)). In a multi-directory group this lands per member by its frozen
+  delivery, and a folder member is written into its folder.
 - **Recovery:** after a crash the panel reconciles before it accepts connections; anything it cannot settle is shown
   as a blocker, and it will not start new runs until recovery is observed.
 
@@ -490,6 +523,14 @@ Completed groups open **Results** by default, including when no explanation was 
 select it in **Progress**, then choose **Results**; its controls and unfinished inputs stay mounted across region
 changes. **Runs and evidence** retains the original permission-checked evidence downloads.
 
+For a multi-directory group, **Results** also carries **Directories and landing**: each member's kind and delivery,
+whether its work landed, and the group's one landing state. Landing is due once per driver round after integration;
+it writes the whole plan to a journal, publishes it in member order, and never reverts a partial landing. When it
+stops, the region gives the reason and the two answers a person can give: **Retry the rest** and **Mark resolved**. A
+folder member whose folder changed or became unwritable has its own answers: **Take folder**, **Recheck**, and, when
+files were withheld, **Withhold**. A single folder group's **Folder placement** region offers the same three folder
+answers.
+
 Results distinguish task acceptance, execution, actual controller verification, the Agent's explanation, goal review
 and Git delivery. Missing or invalid explanation does not change a successful task's outcome. Verification says
 `not-run`, `in-progress`, `passed`, `failed` or `unavailable` only from admitted controller evidence; an Agent's claim
@@ -519,6 +560,29 @@ retry and recovery remain separate actions and only appear when their current se
 
 Each run invokes ccloop, and **runs cost money** (see [Cost](#cost)). A task can have multiple runs after a retry or continuation.
 
+### Board
+
+The board is the whole queue at a glance: every group is a card in the column the server's summary puts it in —
+**Clarifying**, **Awaiting confirmation**, **Queued**, **Running**, **Needs you**, **Done** — and **Archived** cards
+show with a toggle. A card carries its goal, tokens used against its limit, decisions waiting for review, a failed
+task's cause, and badges for a flow's template, a schedule, or the run's token pool. Dragging is deliberately weak:
+only **pause**, **resume**, **archive** and **unarchive** send a command; any other drop is refused on the page and the
+card stays where the summary puts it. The **Board** / **Group graph** switch draws the person's edges between groups
+instead of columns.
+
+**Flows** live here. **Start a flow** chooses one of the built-in templates this install ships (`flows/builtin/`), a
+folder, and that template's parameters; a field left alone takes the project preset, then the global preset, then the
+template's default, and a start with nobody to answer takes those defaults and records them as decisions. The folder
+must be a registered folder project (`flow-dir-unregistered` otherwise). A flow run has its own page: its steps and
+executions, each execution's output, the decisions it made, messages and feedback on the whole run, re-run plans (the
+model proposes which steps to skip), the run's token pool, and effect records with **Enact** / **Discard**. An
+irreversible step always asks for a confirm card in this version; an external step runs with a flag unless its settings
+raise it to confirm, and a run started by a schedule waits for you before either. **Pause** is any signed-in person's;
+**resume**, answers, re-runs, effects and raising the pool are the panel owner's. A **Note for the step** applies to the
+next attempt only or to every remaining attempt; the child group stops at a phase boundary and continues with the
+note. The tool rules ccloop held for each call are listed with their status: enforced, detected, recorded-only or
+refused.
+
 ### Decisions
 
 The unreviewed high-tier decisions agents recorded in the `.decisions/` ledgers of your repositories, filterable by
@@ -546,11 +610,36 @@ remain available, and an active chain keeps its status and stop access. The sect
 maximum sessions, a soft maximum cost in USD, session timeout) and stops one after its current session. Details in
 [docs/cli.md](docs/cli.md#unattended-chains-orca-dev-chain).
 
+### Project settings
+
+**Project settings** holds the selected project's workspace mode (worktree or clone), its integration scheme (delivery,
+trigger, method, target and remote), its check commands, its flow settings (effect levels, re-run plan review, token
+pool per run, allowed skill sources), its **Schedules**, and its **Plan library**. Each value names the layer it came
+from (project, global or built-in) and whether a lock overrides it. A folder project shows no integration scheme and no
+checks; its workspace mode, flow settings, schedules and plan library still apply, and it schedules flows only.
+
+**Schedules** fire a flow or a group at a cron time (at most hourly). A schedule shows its next three slots, its last
+fire, and whether that start was late, skipped because the previous run was still active, or waited for you. Three
+failed starts in a row pause it until you resume it. A save is pinned to a plan version: a newer version is named, and
+**Use the newest version** repins it. The server owns the cron, the slots and the fire outcome. A fired group either
+confirms on its own (no limit, no delivery scheme) or waits for your click (a token limit or a delivery scheme); a
+fired flow waits for you before any external or irreversible step. A panel with no execution port does not fire
+schedules.
+
+**Plan library** keeps the plans a project has saved (from a group or an accepted requirement split) and every version
+of each, with its origin and provenance. An owner can import a plan file, import a version into a new group at once,
+schedule it, download the version's bytes, or archive an entry. Importing a file trusts its tasks and their check
+commands for that project. Archiving is refused while a schedule uses the entry.
+
 ## Known limitations
 
-- With `--repo` or `--root`, projects are fixed at launch; in file mode (the default) the UI adds and renames projects, and
-  removing one or changing its path needs a restart. The sidebar's selected project switches the panel's project views.
-  A project's registered plans remain bound to its repository.
+- With `--repo` or `--root`, projects are fixed at launch; in file mode (the default) the UI adds and renames projects,
+  and removing one or changing its path needs a restart. The sidebar's selected project switches the panel's project
+  views. A project's registered plans remain bound to its repository.
+- A **folder project** has no UI form: add it to `projects.json` by hand while the panel is stopped. A
+  **multi-directory project** takes requirements only — no imported plan, no flow, no debug open — and continuation,
+  saved-result recovery and branch/PR delivery are refused on its groups.
+- Flows ship with the templates under `flows/builtin/`; there is no UI to publish a new one.
 - No Orca command writes the profile snapshot; you write it by hand.
 - Paid acceptance runs against real agents so far are **n=1** each: they show the path works, not how reliably.
 
@@ -567,20 +656,28 @@ maximum sessions, a soft maximum cost in USD, session timeout) and stops one aft
   machines, not for a team.
 - **Anyone with a session can start paid agent work**, including unattended chains that commit.
 
-**Git**
+**Git and folders**
 
-- Orca never pushes, never merges into `main`, never deletes branches or worktrees. Finished tasks land on
-  `orca/<groupId>`; merging that into `main` is your job, in your own terminal.
+- What happens to finished work is the project's **integration scheme**. Its default is `keep`: a group's commits are
+  on `orca/<groupId>` in the project's own repository, and nothing is merged or pushed. An owner can set `local` (merge
+  the group's commits into a local branch), `push-target` (merge and push the result to a named remote), `push-branch`
+  (push `orca/<groupId>` itself) or `github-pr` (push the branch and open a pull request with `gh`). Orca never forces a
+  push and never deletes branches or worktrees; it pushes only when the scheme says so.
 - Agents change code in their own worktree or clone; what reaches your repository is the `orca/<groupId>` branch
-  (and, in worktree mode, the worktree entries git records).
+  (and, in worktree mode, the worktree entries git records). A folder project's finished work is written into its
+  folder instead, file by file; a file that changed under Orca or cannot be written stops the write (`folder-changed`,
+  `folder-unwritable`) and waits for your answer. Nothing in the folder is overwritten in that case.
 
 **What it writes outside your repositories**
 
 | Path | Written by |
 |---|---|
 | `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agent init`; its `version` fields (and `<table>.bak-auto`) also `orca agent refresh`, the Agents page and the control plane on a version drift |
+| `$ORCA_PROJECTS_FILE` (default `$HOME/.orca/projects.json`) | the panel, when you add, rename or group projects in the UI |
 | `$ORCA_CONTROL_DIR/<repo key>` and its `.runs` / `.workspaces` siblings, or `--control-state-dir` | the panel's control plane |
 | `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`) | reviews and corrections from the panel or `orca dev correct` |
+| `$ORCA_VAULT_DIR` (default `$HOME/.orca/vault`) | the flow kernel and control plane: one private bare repository per folder project or flow folder |
+| a folder project's or a flow's folder | the driver: a group's finished work, written file by file (never over a file that changed under it) |
 | ccmem's data directory | ccmem itself, when the Memory section opens it (it may migrate it) |
 
 Point these variables at a scratch directory when you are trying Orca out.
@@ -588,7 +685,8 @@ Point these variables at a scratch directory when you are trying Orca out.
 ## Cost
 
 Real agent runs spend money on your agent accounts: clarifying a requirement, splitting it, estimating (unless neither the
-profile nor ccloop reports a context window for the selected agent), and every task run. Budgets in `soft` mode are settled after the fact, not
+profile nor ccloop reports a context window for the selected agent), and every task run. A flow spends model usage on
+its steps, bounded by the run's token pool. Budgets in `soft` mode are settled after the fact, not
 prevented. Verifying saved results skips execution but may still spend model usage on validation and verification.
 Chains have a soft cost limit checked after each session.
 
@@ -612,11 +710,12 @@ Chains have a soft cost limit checked after each session.
 | Unknown usage blocks admission | An owner can inspect and explicitly conservatively settle the remaining work and handoff grants in the Web UI. This charges remaining allowances as used; it is not a measured provider report and does not itself retry or clear a stop. |
 | `recovery-blocked` | Read the named blocker and inspect evidence. If a database was manually edited, preserve a backup and diagnose the damaged record separately; refreshing cookies does not repair store data. |
 | Started, but no task runs | Check the group stop banner, global recovery/admission blockers, budget/caps, dependencies, agent preview and execution-port configuration. Open the task activity and evidence before retrying. |
+| Schedules do not fire | The panel has no execution port (see [ccloop](#2-ccloop)), or the schedule paused itself after three failed starts. The schedule row names the last fire and why it was late, skipped or failed. |
+| A landing or folder placement stopped | Read the reason. A multi group offers **Retry the rest** and **Mark resolved**; a folder offers **Take folder**, **Recheck** and **Withhold**. A stopped write never overwrote anything in the folder. |
 
 A requirement waiting for answers/review or a failed idle requirement can be archived from its detail. A drafting call
 or unresolved stop must finish/recover first. Archiving keeps its records; the archived detail is read-only and offers
 **Unarchive**. Recent task activity displays the latest returned window in chronological order; it is not the full run
 history. Runs use K/M/B token units with exact counts in the tooltip, and keep raw identifiers in expandable details.
-
 
 The genuine saved-result integration gate is `npm run verify:saved-result`. It uses isolated fake providers and requires three explicit paths: `ORCA_SAVED_RESULT_OLD_ORCA_ROOT` at immutable Orca `c2a1f4220006ca22b620bd81f390a728e5d07b8c`, `ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT` at immutable ccloop `5b0adea413b885a1151259d5eb88d21eedcc2ce0`, and the built feature-capable `ORCA_SAVED_RESULT_CCLOOP_BIN`. Both historical producers must be built and have unchanged tracked source. The gate builds an immutable schema11 reader from the existing local f00bfdb797ee3f5de130585557fdf77dc421d535 Git object in its own private clone with existing dependencies, and proves genuine 10→11→12 migration plus old11 rejection of schema12 before dispatch; it never fetches or installs. Missing local source or a failed reader build fails the gate. The paired binary is separate from `ORCA_CCLOOP_BIN`; this gate never changes the default dependency pin. The gate fails on missing or invalid prerequisites and runs every genuine migration, owner-settlement and crash criterion with `ORCA_SAVED_RESULT_VERIFY=1`. Ordinary root tests explicitly skip that native integration file when this opt-in flag is absent; all synthetic controller, route and browser tests still run.
