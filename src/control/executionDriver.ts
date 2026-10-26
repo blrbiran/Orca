@@ -343,7 +343,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     const allowancePredecessor = (allowanceWork(store, run.groupId, run.workItemId) as { allowancePredecessorRunId?: string }).allowancePredecessorRunId;
     const allowanceBase = allowancePredecessor === undefined ? null : readDriverRun(store, allowancePredecessor).drive?.base ?? null;
     if (run.continuationIntentId || allowanceBase !== null) { blockRun(deps, runId, "A2", "multi-dir-continuation-unsupported"); return true; }
-    return stepA2Multi(deps, run, multi, frozenAgent);
+    return stepA2Multi(deps, run, multi);
   }
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
@@ -378,42 +378,22 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     await cleanupPredecessor(deps, targetRepo, continued.predecessorRunId);
   }
   const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId);
-  // Flow engine spec §12.2 phase 1: a flow step's child injects exactly its step's skills through the same path.
-  const declaredSkills = confirmed.skills ?? flowChildSkills(store, run.groupId);
-  let skills: DriveRecord["skills"] = null;
-  let skillsKind: string | undefined;
-  if (declaredSkills !== null) {
-    try {
-      skillsKind = (await portFor(deps,run).listAgents()).installations.find(installation=>installation.id===frozenAgent.agent.agent)?.kind;
-      if (skillsKind !== "claude" && skillsKind !== "codex" && skillsKind !== "omp") {
-        blockRun(deps,runId,"A2",`skills-unsupported-agent:${run.taskId}:${frozenAgent.agent.agent}:${skillsKind ?? "not-in-table"}`);
-        return true;
-      }
-      skills = await injectRunSkills(deps, targetRepo, runId, declaredSkills);
-    }
-    catch (error) {
-      blockRun(deps, runId, "A2", `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}`);
-      return true;
-    }
-  }
   // ccloop opens its attempt worktrees from repoPath's HEAD, not from `base` (spec §3.2), so the
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
   const runtime = {
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
     executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
   };
-  // Flow engine spec §12.1: a flow step's `{{skill.<name>.dir}}` names the copy this run injected, known only now.
-  const filled = confirmed.skills == null && skills !== null && flowChildSkills(store, run.groupId) !== null
-    ? withSkillDirs(runtime, skills.dir, skills.lock.map((entry) => entry.name)) : { value: runtime };
-  if ("unknown" in filled) { blockRun(deps, runId, "A2", `flow-skill-dir-unknown:${filled.unknown}`); return true; }
-  const contract = filled.value;
+  const prepared = await skillFilledRuntime(deps, run, targetRepo, runtime, confirmed);
+  if ("blocked" in prepared) { blockRun(deps, runId, "A2", prepared.blocked); return true; }
+  const contract = prepared.runtime, skills = prepared.skills;
   // ccloop priorFailures spec 2026-10-21 §3 (kanban spec §6 level 1): built once here, frozen in the envelope below. A
   // continuation copies its predecessor's entries; a saved-result recovery carries none (ccloop refuses them there).
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId: run.taskId, runId }, { recovery: recovery !== null, predecessorRunId: continued?.predecessorRunId ?? null });
   const packageRecord=recovery?{...materializeRecoveryPackage(store,drive.sourceDir,recovery),recoveryOf:recovery.recoveryOf}:undefined;
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
-    sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : skillsKind === "omp" ? { ompSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
+    sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...skillEnvelopeKey(prepared.kind, skills),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
@@ -432,7 +412,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
  * work branch and workspace. The first written one is the ccloop primary and keeps today's workspace path; the others are
  * flat leaves of the workspaces root. Skills inject into the primary only.
  */
-async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: FrozenMultiDir, frozenAgent: ReturnType<typeof readConfirmedTaskExecution>["agent"]): Promise<boolean> {
+async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: FrozenMultiDir): Promise<boolean> {
   const { store } = deps;
   const runId = run.runId, drive = run.drive!, taskId = run.taskId!;
   const writes = taskWrites(store, run.groupId, taskId);
@@ -476,23 +456,6 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
   deps.crash?.("A2-after-workspace");
   const primary = preparedDirs[0]!;
   const confirmed = readConfirmedTaskExecution(store, run.groupId, taskId);
-  // Flow engine spec §12.2 phase 1: a flow step's child injects exactly its step's skills through the same path.
-  const declaredSkills = confirmed.skills ?? flowChildSkills(store, run.groupId);
-  let skills: DriveRecord["skills"] = null;
-  let skillsKind: string | undefined;
-  if (declaredSkills !== null) {
-    try {
-      skillsKind = (await portFor(deps, run).listAgents()).installations.find(installation => installation.id === frozenAgent.agent.agent)?.kind;
-      if (skillsKind !== "claude" && skillsKind !== "codex" && skillsKind !== "omp") {
-        blockRun(deps, runId, "A2", `skills-unsupported-agent:${taskId}:${frozenAgent.agent.agent}:${skillsKind ?? "not-in-table"}`);
-        return true;
-      }
-      skills = await injectRunSkills(deps, primary.targetRepo, runId, declaredSkills);
-    } catch (error) {
-      blockRun(deps, runId, "A2", `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}`);
-      return true;
-    }
-  }
   const contractContext = (confirmed.contract as unknown as { context: Record<string, unknown> & { additionalRepos?: Array<{ key: string }> } }).context;
   const contractExtras = Array.isArray(contractContext.additionalRepos) ? contractContext.additionalRepos : [];
   for (const extra of contractExtras) {
@@ -510,18 +473,17 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
     },
     executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
   };
-  // Flow engine spec §12.1: a flow step's `{{skill.<name>.dir}}` names the copy this run injected, known only now.
-  const filled = confirmed.skills == null && skills !== null && flowChildSkills(store, run.groupId) !== null
-    ? withSkillDirs(runtime, skills.dir, skills.lock.map((entry) => entry.name)) : { value: runtime };
-  if ("unknown" in filled) { blockRun(deps, runId, "A2", `flow-skill-dir-unknown:${filled.unknown}`); return true; }
-  const contract = filled.value;
+  // Flow engine spec §12.2 phase 1 / §12.1: a flow step's skills are injected for this run and its dir tokens filled.
+  const prepared = await skillFilledRuntime(deps, run, primary.targetRepo, runtime, confirmed);
+  if ("blocked" in prepared) { blockRun(deps, runId, "A2", prepared.blocked); return true; }
+  const contract = prepared.runtime, skills = prepared.skills;
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId, runId }, { recovery: false, predecessorRunId: null });
   const additionalRepos = preparedDirs.slice(1).map(({ key, targetRepo, base }) => ({ key, targetRepo, base }));
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
     sourceDir: drive.sourceDir, targetRepo: primary.targetRepo, base: primary.base,
     ...(additionalRepos.length === 0 ? {} : { additionalRepos }),
     ...(priorFailures !== undefined ? { priorFailures } : {}),
-    ...(skills !== null ? skillsKind === "codex" ? { codexSkillsDir: join(skills.dir,"skills") } : skillsKind === "omp" ? { ompSkillsDir: join(skills.dir,"skills") } : { skillPluginDir: skills.dir } : {}),
+    ...skillEnvelopeKey(prepared.kind, skills),
   }, contract, null);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
@@ -556,6 +518,46 @@ async function injectRunSkills(deps: ExecutionDriverDeps, targetRepo: string, ru
   await writeFile(join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "orca-run-skills", version: "0.0.0" }), { mode: 0o600 });
   await makeReadOnly(join(dir, "skills"));
   return { dir, profile: frozen.profile, lock };
+}
+
+/** The envelope's skill key, by the frozen installation's kind; absent for a run without skills. */
+function skillEnvelopeKey(
+  kind: "claude" | "codex" | "omp" | undefined,
+  skills: DriveRecord["skills"],
+): { skillPluginDir?: string; codexSkillsDir?: string; ompSkillsDir?: string } {
+  if (skills === null) return {};
+  return kind === "codex" ? { codexSkillsDir: join(skills.dir, "skills") } : kind === "omp" ? { ompSkillsDir: join(skills.dir, "skills") } : { skillPluginDir: skills.dir };
+}
+
+/**
+ * Syncskill integration spec §10.6, flow engine spec §12.2 phase 1 / §12.1: A2's skill block, shared with the
+ * saved-result inspection input so a rebuilt envelope names the same copies a dispatch would. Injects the task's frozen
+ * set (a flow child's step skills when it declares none) into this run's snapshot, fills `{{skill.<name>.dir}}` only for
+ * flow-declared skills whose copy is now known, and answers the installation kind for the envelope key. Any failure is
+ * the caller's block reason, exactly as A2 named it.
+ */
+async function skillFilledRuntime<T>(
+  deps: ExecutionDriverDeps,
+  run: DriverRun,
+  targetRepo: string,
+  runtime: T,
+  confirmed: Pick<ReturnType<typeof readConfirmedTaskExecution>, "agent" | "skills">,
+): Promise<{ kind: "claude" | "codex" | "omp" | undefined; skills: DriveRecord["skills"]; runtime: T } | { blocked: string }> {
+  const flowSkills = flowChildSkills(deps.store, run.groupId);
+  const declared = confirmed.skills ?? flowSkills;
+  if (declared === null) return { kind: undefined, skills: null, runtime };
+  try {
+    const kind = (await portFor(deps, run).listAgents()).installations.find((installation) => installation.id === confirmed.agent.agent.agent)?.kind;
+    if (kind !== "claude" && kind !== "codex" && kind !== "omp") {
+      return { blocked: `skills-unsupported-agent:${run.taskId}:${confirmed.agent.agent.agent}:${kind ?? "not-in-table"}` };
+    }
+    const skills = await injectRunSkills(deps, targetRepo, run.runId, declared);
+    if (confirmed.skills !== null || flowSkills === null) return { kind, skills, runtime };
+    const filled = withSkillDirs(runtime, skills.dir, skills.lock.map((entry) => entry.name));
+    return "unknown" in filled ? { blocked: `flow-skill-dir-unknown:${filled.unknown}` } : { kind, skills, runtime: filled.value };
+  } catch (error) {
+    return { blocked: `skills-inject-failed:${error instanceof SyncskillError ? error.code : describeError(error)}` };
+  }
 }
 
 /** The registration this continuation run was claimed from, and its predecessor's base (spec §4). */
@@ -1572,8 +1574,14 @@ export async function savedRecoveryInspectionInput(deps:ExecutionDriverDeps,run:
  if(original.work.kind!=="loop")throw new ControlError("saved-result-source-stale");
  const drive=run.drive??newDrive(deps.roots,run.runId,readWorkspaceSetting(deps.store,groupRepoId(deps.store,run.groupId)).workspaceMode,true);
  privateDirectory(drive.sourceDir);const targetRepo=deps.resolveRepository(groupRepoId(deps.store,run.groupId)),base=original.work.base;
- const packageRecord={...materializeRecoveryPackage(deps.store,drive.sourceDir,record),recoveryOf:record.recoveryOf},contract:any=original.work.contract;
- const runtime={...contract,context:{...contract.context,repoPath:workspaceOf(drive)},executionPolicy:withinGrant(contract.executionPolicy,(run.grant as any).work)};
- const input=toStartEnvelope(readWorkClaimEnvelope(deps.store,run.groupId,run.runId),{...run,savedResultRecovery:packageRecord},{sourceDir:drive.sourceDir,targetRepo,base},runtime,null),envelopeHash=sha256Canonical(input);
- write(deps,()=>{const current=readDriverRun(deps.store,run.runId),still=savedDispatchSchema.parse(current.savedDispatch);if(still.state!=="never-submitted"||still.admissionHash!==record.admission.hash)throw new ControlError("saved-result-source-stale");writeCanonicalRecord(deps.store,run.groupId,envelopeHash,canonicalBytes(input).toString());current.drive={...drive,targetRepo,base,envelopeHash};current.savedDispatch={...still,envelopeHash};saveDriverRun(deps.store,current);});return input;
+ if(run.taskId===null)throw new ControlError("recovery-blocked","saved-result-accept-unknown");
+ const packageRecord={...materializeRecoveryPackage(deps.store,drive.sourceDir,record),recoveryOf:record.recoveryOf};
+ // The rebuilt envelope mirrors A2 (syncskill integration spec §10.6): the frozen contract, and the same skill snapshot
+ // a dispatch would name, injected under this run's id -- never the source run's dirs, which are gone.
+ const confirmed=readConfirmedTaskExecution(deps.store,run.groupId,run.taskId);
+ const runtime={...confirmed.contract,context:{...confirmed.contract.context,repoPath:workspaceOf(drive)},executionPolicy:withinGrant(confirmed.contract.executionPolicy,(run.grant as any).work)};
+ const prepared=await skillFilledRuntime(deps,run,targetRepo,runtime,confirmed);
+ if("blocked" in prepared)throw new ControlError("recovery-blocked",prepared.blocked);
+ const input=toStartEnvelope(readWorkClaimEnvelope(deps.store,run.groupId,run.runId),{...run,savedResultRecovery:packageRecord},{sourceDir:drive.sourceDir,targetRepo,base,...skillEnvelopeKey(prepared.kind,prepared.skills)},prepared.runtime,null),envelopeHash=sha256Canonical(input);
+ write(deps,()=>{const current=readDriverRun(deps.store,run.runId),still=savedDispatchSchema.parse(current.savedDispatch);if(still.state!=="never-submitted"||still.admissionHash!==record.admission.hash)throw new ControlError("saved-result-source-stale");writeCanonicalRecord(deps.store,run.groupId,envelopeHash,canonicalBytes(input).toString());current.drive={...drive,targetRepo,base,envelopeHash,skills:prepared.skills};current.savedDispatch={...still,envelopeHash};saveDriverRun(deps.store,current);});return input;
 }
