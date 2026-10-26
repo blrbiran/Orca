@@ -46,7 +46,7 @@ const PICK_ASK = { kind: "ask" as const, form: { title: { type: "text" } }, cand
 function runView(over: Partial<FlowRunViewV1> = {}): FlowRunViewV1 {
   return {
     schema: "orca-flow-run-view-v1", flowRunId: RUN, groupId: "flow-g", templateRef: "builtin/wechat-article@1", state: "running",
-    params: { idea: "Tea" }, poolTokens: 2_000_000, poolDrawn: 750_000, by: "olga", via: "web", dir: "/home/o/tea", scheduled: null,
+    params: { idea: "Tea" }, poolTokens: 2_000_000, poolDrawn: 750_000, by: "olga", via: "web", dir: "/home/o/tea", scheduled: null, lastError: null,
     template: { id: "wechat-article", version: 1, title: { en: "WeChat article", zh: "公众号文章" } },
     steps: [
       step("brief", "clarify", [exec(1, { output: { kind: "artifact", ref: "a".repeat(64), hash: "b".repeat(64) } })]),
@@ -273,6 +273,14 @@ describe("messages, run commands and the pool (§8, §6.3)", () => {
     expect(screen.getAllByTestId("flow-decision").map((d) => d.textContent)).toEqual([expect.stringContaining("major")]);
     fireEvent.click(screen.getByRole("checkbox", { name: "Show 1 minor decision" }));
     expect(screen.getAllByTestId("flow-decision")).toHaveLength(2);
+  });
+
+  it("shows the last pass's diagnostic", async () => {
+    await mount(owner, runView({ lastError: { message: "flow-pause-stop-incomplete:voice:handoff-partial", at: 7 } }));
+    const alert = screen.getByTestId("flow-last-error");
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(alert.getAttribute("data-tone")).toBe("danger");
+    expect(alert.textContent).toBe("The last pass reported a problem: flow-pause-stop-incomplete:voice:handoff-partial. Orca retries when the run advances.");
   });
 });
 

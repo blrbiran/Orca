@@ -12,7 +12,7 @@ import { advanceRun, appendQueued, loadRun, ranOnInputsOf } from "../../src/flow
 import type { ExecutionBody, FlowRunBody } from "../../src/flow/kinds/registry.js";
 import { childGroupIdOf, type FlowChildPort } from "../../src/flow/kinds/work.js";
 import { acceptMessage, type FlowMessageInput } from "../../src/flow/messages.js";
-import { getFlowRun, listExecutions, listMessages } from "../../src/flow/store.js";
+import { appendMessage, getFlowRun, listExecutions, listMessages } from "../../src/flow/store.js";
 import { fakeChildPort } from "./fixtures/fakeChildPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
@@ -99,12 +99,41 @@ describe("operator note (§10.5.2)", () => {
     } finally { await w.dispose(); }
   });
 
+  it("a note with an unknown attempt timeout is refused at accept with the step named; nothing is recorded", async () => {
+    const child = fakeChildPort({ timeoutMs: null });
+    const w = await flowWorld(TPL, { children: (store) => boundPort(child, store), files: { "notes.txt": "n\n" } });
+    try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+      await w.advance();
+      expect(w.latest(flowRunId, "write")).toMatchObject({ state: "running" });
+      const rejected = await acceptMessage(w.deps, flowRunId, note("hello"));
+      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-pause-timeout-unknown:write" });
+      expect(notesOf(w, flowRunId)).toHaveLength(0);
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      expect(child.stops).toHaveLength(0);
+    } finally { await w.dispose(); }
+  });
+
   it("two notes whose joined text passes 4096 bytes: the second is refused flow-note-too-large", async () => {
     const { w, flowRunId } = await started(); try {
       const first = await acceptMessage(w.deps, flowRunId, note("x".repeat(3000)));
       expect(first.state).toBe("applied");
       const second = await acceptMessage(w.deps, flowRunId, note("x".repeat(3000)));
       expect(second).toMatchObject({ state: "rejected", reason: "flow-note-too-large" });
+      expect(notesOf(w, flowRunId)).toHaveLength(1);
+    } finally { await w.dispose(); }
+  });
+
+  it("the joined cap is checked again when a note is applied, not only when it arrives", async () => {
+    const { w, flowRunId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, note("x".repeat(3000)));
+      appendMessage(w.store, {
+        flowRunId, requestId: "arrived-before-the-first-note", kind: "command", target: "step",
+        body: { command: "note", text: "y".repeat(3000), scope: "next-attempt", personAuthority: true, target: TARGET },
+        by: "ann", via: "web", state: "accepted", reason: null, at: w.deps.now(),
+      });
+      await w.advance();
+      expect(listMessages(w.store, flowRunId).at(-1)).toMatchObject({ state: "rejected", reason: "flow-note-too-large" });
       expect(notesOf(w, flowRunId)).toHaveLength(1);
     } finally { await w.dispose(); }
   });
@@ -243,6 +272,21 @@ describe("operator note (§10.5.2)", () => {
     } finally { await w.dispose(); }
   });
 
+  it("a restartable note resume consumes only the next-attempt note; a remaining-attempts note stays pending", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, note("one-off"));
+      await acceptMessage(w.deps, flowRunId, note("keep me", "remaining-attempts"));
+      child.completeStop(childGroupId, { recoverable: false });
+      await w.advance();
+      expect(child.resumes).toHaveLength(1);
+      const [oneOff, keep] = notesOf(w, flowRunId);
+      expect(oneOff!.consumedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(keep).toMatchObject({ text: "keep me", scope: "remaining-attempts" });
+      expect(keep!.consumedAt).toBeUndefined();
+      expect(keep!.deliveredTo).toBeUndefined();
+    } finally { await w.dispose(); }
+  });
+
   it("a budget refusal keeps the intent and its error, and the next pass delivers", async () => {
     const { w, child, flowRunId, childGroupId } = await started(); try {
       await acceptMessage(w.deps, flowRunId, note("please retry"));
@@ -250,7 +294,7 @@ describe("operator note (§10.5.2)", () => {
       child.failResume(childGroupId, "continuation-budget-unavailable");
       await advanceRun(w.deps, flowRunId);
       expect(runOf(w, flowRunId).noteIntent!.steps).toHaveLength(1);
-      expect(runOf(w, flowRunId).lastError!.message).toBe("continuation-budget-unavailable");
+      expect(runOf(w, flowRunId).lastError!.message).toMatch(/^continuation-budget-unavailable:/);
       expect(child.resumes).toHaveLength(0);
       expect(notesOf(w, flowRunId)[0]!.deliveredTo).toBeUndefined();
       child.clearResumeFailure(childGroupId);
@@ -258,6 +302,21 @@ describe("operator note (§10.5.2)", () => {
       expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
       expect(child.resumes).toHaveLength(1);
       expect(notesOf(w, flowRunId)[0]!.deliveredTo).toEqual([`run-${childGroupId}`]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a pump pass keeps the diagnostic it recorded until the next pass starts", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, note("please retry"));
+      child.completeStop(childGroupId);
+      child.failResume(childGroupId, "continuation-budget-unavailable");
+      await w.advance();
+      expect(runOf(w, flowRunId).lastError!.message).toMatch(/^continuation-budget-unavailable:flow-/);
+      expect(runOf(w, flowRunId).noteIntent!.steps).toHaveLength(1);
+      child.clearResumeFailure(childGroupId);
+      await w.advance();
+      expect(runOf(w, flowRunId).lastError).toBeUndefined();
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
     } finally { await w.dispose(); }
   });
 

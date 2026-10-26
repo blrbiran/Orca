@@ -20,6 +20,11 @@ export const CLI_DOC_END = "<!-- /generated:commands -->";
 const SKILL = "skills/orca-control/SKILL.md";
 const REFERENCES = "skills/orca-control/references";
 const CLI_DOC = "docs/cli.md";
+/** Live transcript spec §10.5.1-§10.5.2 (plan T8): the refusals this lane defines; stored, not HTTP errors. */
+export const INTERVENTION_REFUSALS = [
+  "flow-command-needs-person", "flow-note-no-running-work", "flow-note-too-large",
+  "flow-pause-stop-incomplete", "flow-pause-timeout-unknown", "flow-pause-resume-failed",
+] as const;
 /** Not in the skill's references: `dev` is for developing Orca itself (MCP refuses it); `control` is escape-hatch.md, by hand. */
 const NOT_REFERENCED = new Set(["dev", "control"]);
 /** The commands that are a whole domain (`orca status`) share one reference. */
@@ -78,6 +83,10 @@ function errorCodes(errors: GeneratorInputs["errors"]): string {
     "A `retryable: true` error may be sent again with the same command id; anything else needs a change first (re-read, ask a person, fix the input).",
     "", "| code | status |", "|---|---|",
     ...rows.map((row) => `| \`${row.code}\` | ${row.status} |`),
+    "", "## Flow message rejections", "",
+    "A `pause`, `resume` or `note` message is stored even when refused (`body.result.state` is `rejected`, HTTP 200); its `reason` may carry a `:<detail>` suffix naming the step or the child's stop state. These are the refusals this lane defines; a message may also carry a reason from the command it extends (`flow-run-stopped`, `flow-run-not-running`, `flow-run-not-paused`, `flow-message-invalid:*`, `flow-message-target-missing`, a budget code).",
+    "", "| reason |", "|---|",
+    ...INTERVENTION_REFUSALS.map((code) => `| \`${code}\` |`),
     "", "## Never answered by name", "",
     "These are the control plane's own failures. The panel answers them as `control-internal-error` (500, retryable): read `orca status`, then retry.",
     "", internal.map(([code, kind]) => `\`${code}\` (${kind})`).join(", "), "",

@@ -120,7 +120,7 @@ export function readFlowRun(store: ControlStore, flowRunId: string): unknown {
     poolTokens: run.row.poolTokens, poolDrawn: run.row.poolDrawn, by: run.body.by, via: run.body.via, dir: run.body.dir,
     // Scheduled flows and groups spec §13.3: the schedule and slot that started it, named from the library's row.
     scheduled: scheduledOf(store, (run.body as { origin?: unknown }).origin),
-    // Why nothing moves, when a kernel pass keeps failing (kernel.recordRunError); null once a pass succeeds.
+    // Why nothing moves, when a kernel pass keeps failing (kernel.recordRunError); cleared when the run is next passed.
     lastError: (run.body as { lastError?: { message: string; at: number } }).lastError ?? null,
     template: { id: run.template.id, version: run.template.version ?? null, title: run.template.title ?? null },
     steps: run.template.steps.map((step) => {

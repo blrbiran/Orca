@@ -773,7 +773,7 @@ describe("the board and the run page name the schedule that started a run (spec 
   const runView = (over: Partial<FlowRunViewV1> = {}): FlowRunViewV1 => ({
     schema: "orca-flow-run-view-v1", flowRunId: "fr-a", groupId: "g", templateRef: "builtin/dev@1", state: "running",
     params: {}, poolTokens: 1000, poolDrawn: 0, by: "olga", via: "web", dir: null,
-    scheduled: { scheduleId: "sch-a", name: "Nightly", slot: SLOT }, template: { id: "dev", version: 1, title: null },
+    scheduled: { scheduleId: "sch-a", name: "Nightly", slot: SLOT }, template: { id: "dev", version: 1, title: null }, lastError: null,
     steps: [{
       stepKey: "send", kind: "work", head: null, executor: null, parallelWith: null, effect: null, latest: execution, executions: [execution],
       clarify: null, clarifyRevision: null, mark: null, heldBy: [], deferHolds: [], whenParams: [], spend: flowSpend(0),

@@ -1220,6 +1220,8 @@ export type FlowRunViewV1 = {
   plans: FlowPlanV1[];
   intakes: FlowIntakeV1[];
   spend: FlowSpendV1;
+  /** The last advance pass's diagnostic; a pass that records one keeps it until the next pass starts. */
+  lastError: { message: string; at: number } | null;
   effects: FlowEffectV1[];
   decisions: Array<{ seq: number; grade: "major" | "minor"; stepKey: string | null; body: Record<string, unknown>; by: string }>;
 };

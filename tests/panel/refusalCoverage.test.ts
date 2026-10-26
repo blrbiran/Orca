@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { INTERVENTION_REFUSALS } from "../../src/commands/generate.js";
 import { controlErrorCatalog } from "../../src/panel/controlErrors.js";
 import { enCcloopErrors, enErrors } from "../../web/src/locales/en.js";
 import { zhCcloopErrors, zhErrors } from "../../web/src/locales/zh.js";
@@ -80,6 +81,8 @@ const FLOW_MESSAGE_REASONS = [
   "flow-step-parked",
   // Task 9 fix round (controller's ruling): a mark that would release a held effect without the person.
   "flow-effect-needs-person",
+  // Live transcript spec §10.5.1-§10.5.2 (plan T8): the pause, resume and note refusals a message stores as its reason.
+  ...INTERVENTION_REFUSALS,
 ];
 const TABLES = { zh: zhErrors, en: enErrors } as const;
 const has = (table: Record<string, string>, code: string): boolean => Object.prototype.hasOwnProperty.call(table, code);

@@ -948,6 +948,7 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
       {view !== null && (<>
         <div key={remountKey(view)}>
           <p>{t("flow.facts", { template: view.templateRef, dir: view.dir ?? "", by: view.by, via: view.via })}</p>
+          {view.lastError !== null && <p role="alert" data-tone="danger" data-testid="flow-last-error">{t("flow.lastError", { message: view.lastError.message })}</p>}
           {/* Spec §15 (H2): the article flow ends at the draft box; publishing stays the person's own act. */}
           {view.template.id === "wechat-article" && <p role="note" data-testid="flow-publish-note">{t("flow.wechatPublish")}</p>}
           {!may && <p role="note">{t("flow.ownerOnlyAll")}</p>}

@@ -295,6 +295,19 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `work-already-done` | 409 |
 | `work-not-found` | 404 |
 
+## Flow message rejections
+
+A `pause`, `resume` or `note` message is stored even when refused (`body.result.state` is `rejected`, HTTP 200); its `reason` may carry a `:<detail>` suffix naming the step or the child's stop state. These are the refusals this lane defines; a message may also carry a reason from the command it extends (`flow-run-stopped`, `flow-run-not-running`, `flow-run-not-paused`, `flow-message-invalid:*`, `flow-message-target-missing`, a budget code).
+
+| reason |
+|---|
+| `flow-command-needs-person` |
+| `flow-note-no-running-work` |
+| `flow-note-too-large` |
+| `flow-pause-stop-incomplete` |
+| `flow-pause-timeout-unknown` |
+| `flow-pause-resume-failed` |
+
 ## Never answered by name
 
 These are the control plane's own failures. The panel answers them as `control-internal-error` (500, retryable): read `orca status`, then retry.

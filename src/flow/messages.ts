@@ -159,6 +159,13 @@ function shapeRefusal(deps: FlowDeps, run: LoadedRun, input: FlowMessageInput): 
       const set = input.body.set;
       if (Object.keys(input.body).some((key) => key !== "command" && key !== "set") || typeof set !== "object" || set === null || Array.isArray(set) || Object.keys(set).length === 0) return "flow-message-invalid:set";
     }
+    // Live transcript spec §10.5.2 (plan D5): an unknown attempt timeout cannot make the deadline, so it refuses at accept.
+    if (command === "pause" && run.row.state === "running") {
+      for (const execution of listExecutions(store, run.row.id).filter((e) => e.state === "running" && e.kind === "work" && e.childGroupId !== null)) {
+        const timeoutMs = deps.children?.attemptTimeoutMs(execution.childGroupId!) ?? null;
+        if (timeoutMs === null || !(timeoutMs > 0)) return `flow-pause-timeout-unknown:${execution.stepKey}`;
+      }
+    }
     // Live transcript spec §10.5.2: a note is aimed at one step, and only a running work child can receive it.
     if (command === "note") {
       const parsed = noteCommandSchema.safeParse(input.body);
@@ -166,6 +173,11 @@ function shapeRefusal(deps: FlowDeps, run: LoadedRun, input: FlowMessageInput): 
       if (target.kind !== "step") return "flow-message-target-missing";
       const execution = listExecutions(store, run.row.id).find((e) => e.state === "running" && e.kind === "work" && e.stepKey === target.stepKey && e.childGroupId !== null);
       if (execution === undefined) return "flow-note-no-running-work";
+      const covered = run.row.state === "paused" || run.body.pauseIntent?.steps.some((step) => step.stepKey === target.stepKey) === true;
+      if (!covered) {
+        const timeoutMs = deps.children?.attemptTimeoutMs(execution.childGroupId!) ?? null;
+        if (timeoutMs === null || !(timeoutMs > 0)) return `flow-pause-timeout-unknown:${target.stepKey}`;
+      }
       const joined = joinPendingNotes(pendingNotes((execution.body as ExecutionBody).operatorNotes), parsed.data);
       if (noteBytes(joined.text) > 4096) return "flow-note-too-large";
     }
@@ -259,7 +271,7 @@ export async function consumeInterventions(deps: FlowDeps, flowRunId: string): P
       deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied"));
     } catch (error) {
       if (!(error instanceof FlowRefusal)) throw error;
-      deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "rejected", error.code));
+      deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "rejected", error.detail === "" ? error.code : `${error.code}:${error.detail}`));
     }
   }
   return pending.length > 0;
@@ -326,6 +338,10 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
     const stepKey = target.stepKey;
     const execution = listExecutions(deps.store, run.row.id).find((e) => e.state === "running" && e.kind === "work" && e.stepKey === stepKey && e.childGroupId !== null);
     if (execution === undefined) throw new FlowRefusal("flow-note-no-running-work");
+    // D9: two notes accepted at once each passed the shape check against the notes before them; the join is checked again here.
+    if (noteBytes(joinPendingNotes(pendingNotes((execution.body as ExecutionBody).operatorNotes), parsed.data).text) > 4096) {
+      throw new FlowRefusal("flow-note-too-large");
+    }
     // A step a pause already covers records only: its pending stop's resume delivers the note (T6).
     const covered = run.row.state === "paused" || run.body.pauseIntent?.steps.some((step) => step.stepKey === stepKey) === true;
     const acceptedAt = new Date(deps.now()).toISOString();

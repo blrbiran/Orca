@@ -84,11 +84,26 @@ describe("pause and resume while a work step runs (§10.5.1)", () => {
     } finally { await w.dispose(); }
   });
 
+  it("pause with an unknown attempt timeout is refused at accept with the step named; the run stays running", async () => {
+    const child = fakeChildPort({ timeoutMs: null });
+    const w = await flowWorld(TPL, { children: (store) => boundPort(child, store), files: { "notes.txt": "n\n" } });
+    try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+      await w.advance();
+      expect(w.latest(flowRunId, "write")).toMatchObject({ state: "running" });
+      const rejected = await acceptMessage(w.deps, flowRunId, message({ body: { command: "pause" }, pauseAuthority: true }));
+      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-pause-timeout-unknown:write" });
+      expect(stateOf(w, flowRunId)).toBe("running");
+      expect(runOf(w, flowRunId).pauseIntent).toBeUndefined();
+      expect(child.stops).toHaveLength(0);
+    } finally { await w.dispose(); }
+  });
+
   it("resume while the stop is pending is refused flow-pause-stop-incomplete; the run stays paused with its intent", async () => {
     const { w, flowRunId, pauseSeq } = await paused(); try {
       const rejected = await acceptMessage(w.deps, flowRunId, message({ body: { command: "resume" }, personAuthority: true }));
       expect(rejected.state).toBe("rejected");
-      expect(rejected.reason).toMatch(/^flow-pause-stop-incomplete/);
+      expect(rejected.reason).toBe("flow-pause-stop-incomplete:write:handoff-pending");
       expect(stateOf(w, flowRunId)).toBe("paused");
       expect(runOf(w, flowRunId).pauseIntent!.messageSeq).toBe(pauseSeq);
     } finally { await w.dispose(); }
@@ -121,7 +136,7 @@ describe("pause and resume while a work step runs (§10.5.1)", () => {
   it("pause without pause authority is refused flow-command-needs-person; the run stays running", async () => {
     const { w, child, flowRunId } = await started(); try {
       const rejected = await acceptMessage(w.deps, flowRunId, message({ body: { command: "pause" } }));
-      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-command-needs-person" });
+      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-command-needs-person:pause" });
       expect(stateOf(w, flowRunId)).toBe("running");
       expect(child.stops).toHaveLength(0);
     } finally { await w.dispose(); }
@@ -130,7 +145,7 @@ describe("pause and resume while a work step runs (§10.5.1)", () => {
   it("resume without person authority is refused flow-command-needs-person; the run stays paused", async () => {
     const { w, flowRunId } = await paused(); try {
       const rejected = await acceptMessage(w.deps, flowRunId, message({ body: { command: "resume" } }));
-      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-command-needs-person" });
+      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-command-needs-person:resume" });
       expect(stateOf(w, flowRunId)).toBe("paused");
       expect(runOf(w, flowRunId).pauseIntent).toBeDefined();
     } finally { await w.dispose(); }
@@ -141,7 +156,7 @@ describe("pause and resume while a work step runs (§10.5.1)", () => {
       child.completeStop(childGroupId, { recoverable: true });
       child.failResume(childGroupId, "group-budget-unavailable");
       const rejected = await acceptMessage(w.deps, flowRunId, message({ body: { command: "resume" }, personAuthority: true }));
-      expect(rejected).toMatchObject({ state: "rejected", reason: "group-budget-unavailable" });
+      expect(rejected).toMatchObject({ state: "rejected", reason: `group-budget-unavailable:${childGroupId}` });
       expect(stateOf(w, flowRunId)).toBe("paused");
       expect(runOf(w, flowRunId).pauseIntent!.messageSeq).toBe(pauseSeq);
     } finally { await w.dispose(); }

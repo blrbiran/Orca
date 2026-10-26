@@ -869,10 +869,10 @@ export function recordNoteDelivery(deps: FlowDeps, run: LoadedRun, execution: Ex
   if (delivered.length > 0) {
     const settled = new Set(delivered.map((note) => note.seq));
     const notes = ((execution.body as ExecutionBody).operatorNotes ?? []).map((note) => {
-      if (!settled.has(note.seq)) return note;
+      if (!settled.has(note.seq) || note.scope !== "next-attempt") return note;
+      // D10: a restartable child has no continuation to address the note to, so its next-attempt note is spent now.
       if (pendingRunId === null) return { ...note, consumedAt: new Date(now).toISOString() };
-      // A next-attempt note is spent by the continuation that carried it; a remaining-attempts one stays pending.
-      return note.scope === "next-attempt" ? { ...note, deliveredTo: [...(note.deliveredTo ?? []), pendingRunId] } : note;
+      return { ...note, deliveredTo: [...(note.deliveredTo ?? []), pendingRunId] };
     });
     finishExecution(deps.store, { flowRunId: run.row.id, stepKey: execution.stepKey, seq: execution.seq }, "running", "running", now, {
       body: { ...(execution.body as ExecutionBody), operatorNotes: notes },
@@ -947,7 +947,7 @@ async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolea
     } catch (error) {
       // A budget refusal or a lost stop keeps the intent and is retried; the note is not lost.
       if (!(error instanceof FlowRefusal)) throw error;
-      recordRunError(deps, run.row.id, error.code);
+      recordRunError(deps, run.row.id, error.detail === "" ? error.code : `${error.code}:${error.detail}`);
       continue;
     }
     deps.store.transaction(() => recordNoteDelivery(deps, run, execution, delivered, pendingRunId));
@@ -1149,11 +1149,16 @@ export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
   // feedback intakes (passRun's first stage); a paused run's open plan and its deadlines still wait for the resume.
   for (const flowRunId of listRunsWithOpenWork(deps.store)) {
     if (getFlowRun(deps.store, flowRunId)?.state === "stopped") continue;
+    // Cleared before the pass, not after: a diagnostic this pass records (a pause stop that never completed) would
+    // otherwise be wiped by its own clean end.
+    try { recordRunError(deps, flowRunId, null); }
+    catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: clearing lastError failed: ${error instanceof Error ? error.message : String(error)}\n`); }
     let failed: string | null = null;
     try { await advanceRun(deps, flowRunId); }
     catch (error) { failed = error instanceof Error ? error.message : String(error); }
+    if (failed === null) continue;
     try { recordRunError(deps, flowRunId, failed); }
-    catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: ${failed ?? ""} (not recorded: ${error instanceof Error ? error.message : String(error)})\n`); }
+    catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: ${failed} (not recorded: ${error instanceof Error ? error.message : String(error)})\n`); }
   }
 }
 

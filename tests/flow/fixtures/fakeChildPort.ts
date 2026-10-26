@@ -35,7 +35,7 @@ export function fakeChildPort(opts: { timeoutMs?: number | null } = {}) {
     async status(childGroupId) {
       return statuses.get(childGroupId) ?? { state: "running" };
     },
-    attemptTimeoutMs: () => opts.timeoutMs ?? 3_600_000,
+    attemptTimeoutMs: () => (opts.timeoutMs === undefined ? 3_600_000 : opts.timeoutMs),
     stop(childGroupId, input) {
       stops.push({ childGroupId, acceptedAt: input.acceptedAt, deadlineAt: input.deadlineAt, flowStop: input.flowStop });
       stopStates.set(childGroupId, "handoff-pending");
