@@ -63,7 +63,16 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.000000000 会话 `ffec7b28`（2026-10-24）—— **先读这一节**
+### 3.0000000000 会话 `a98b77d2`（2026-10-26／27）—— **先读这一节**
+
+> 接着 `ffec7b28` 的文档／skill 收尾做。计划 `docs/superpowers/plans/2026-10-26-panel-small-gaps.md`（含门与 as-built）；spec `2026-09-30-loop-plans-design.md` §16（追加的具名更正）。
+
+- **面板小缺口批已合入、已装、已清**：loop 卡的验收计数现在含配方（design／investigate，v2／v3）的 document checks。服务端视图 `loopPlan.documentChecks` 必填、Web 侧可选（缺省读 false，`tests/panel/webParity.test.ts` 的桥负责归一），卡片把 `inputs.checks` 与每个 target path 的存在性检查一起计数，折叠列表加一行「另有 N 条存在性检查」（en／zh `loopPlan.documentChecks_one/_other`）。三笔代码提交按主题行取：`feat(control): the loop plan view names the recipe's document checks`、`feat(web): the loop card counts the document checks it runs`、`test(panel): the parity bridge reads an absent documentChecks as false`。命名变异 M1–M3 在 `git clone --local` 副本里各红 9／4／1 条，恢复后 diff 0。
+- **门与三条真红**：最终门根 578 文件 1 红（`startForm` ECONNRESET）、web 159 文件 1 红（`memoryLayout` scroll 时序），都是 `known-load-flakes.md` 已登记形状，单文件各连跑 3 次 3/3 绿（负载 14–17）；`npm run typecheck`、`npm run build --workspace web`、`npm run --ws check` 全绿。同门前几轮红的三条**不是负载**，已逐条修掉并登记：① `web/tests/schedules.test.tsx` 的导入用例**单跑必红**——jsdom 的 `File.arrayBuffer()` 给另一个 realm 的 `ArrayBuffer`，Node 的 `SubtleCrypto.digest` brand check 拒收（不是并发），`sha256Hex` 改喂本 realm 视图后 39/39（`fix(web): hash a plan file's bytes through a realm-local view`）；② `tests/service/command.test.ts` 的 skill 字面量停在主题行 `docs(skill): route orca-control to the current CLI` 之前（skill 已把 `status|logs` 并入同一句，`test(service): the skill's service line now names status and logs`）；③ `projectSwitcher` C 在 Requirements 表单挂载前就读 select（初始断言改 `waitFor`，`test(web): wait for the requirement form before reading its select`）。
+- **装与清**：ff 合入 main，主仓装好（`npm run build`＋web build）；`panel restart` 后 7777 应答 200，`web/dist` 含新文案；schema 仍 20（无迁移，未动控制库）；本轮 worktree 与已合分支已删，只剩 `main`。收尾文档提交 `docs(loop): the batch is merged, installed and cleaned up`。人在本轮自行 push，`ls-remote` 现测与本地 main 同笔（本文不写哈希）。
+- **仍待人**：§4.2 第 5 条的 O9 claude 一段（2026-10-27 09:00 Asia/Shanghai 额度重置＋人新一次点头）。
+
+### 3.000000000 会话 `ffec7b28`（2026-10-24）
 
 > 唯一进度源：会话台账 `.superpowers/sdd/2026-10-24-session-ffec7b28/progress.md`（人裁原话两批、每个 spec 的审阅轮、控制器裁定、实施进度、文末「Handoff state」）。各实施计划在 `docs/superpowers/plans/2026-10-24-*.md`（均已随各自分支合入 main）。
 > 人裁（本会话）：「这个session中，尽量将这些要做的task都完整做完…这次批准改写所有必要的判据。这一轮允许必要的付费真跑。这一轮如果要做 repin ccloop 的工作的话，临时允许你 push ccloop 仓库到 origin main。…先按你的建议执行。执行完在最后阶段报给我审核。」⚠️ ccloop push 被 Orca 的 Tier 0 闸门拦下（人的临时授权在 agent 会话里做不成，Rule 15），由人手推。会话结束原因：所有在飞 subagent 撞每周 API 限额（10-27 09:00 Asia/Shanghai 重置）。
@@ -208,7 +217,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **错误码**：ccloop 进程失败答 424 `ccloop-failed:<码>[: 细节]`（例外：`apply-agent-update` 仍 500）；「组在执行」单一判定（`src/control/executionPending.ts`），执行中 `start` 答 409 `group-execution-pending`。`set-task-loop` 在组 `running`／`review`／暂停时也能改**未开始**的任务。omp clarify／split 的上限拒绝不自动重试，人点 group 重试时按冻结的 `agentSlot.selection` 重算上限。web 统一经 `web/src/ccloopCodes.ts` 解释码（兜底文案不说「ccloop」）。
 - **纠正 ⇒ debug task**（会话 `3d44b2fb`／`f3a75a90`，spec `2026-10-18-correction-debug-task-design.md`）：纠正开独立 debug group、复现优先检查、落地带关闭记录、「已关闭」＝目标 ref 的树里有关闭行、只限人的记录／人工关闭／撤回 verb、Decisions 页里的纠正列表。**付费端到端与推送类合入方案的关闭都没验过**。
 - **Decisions 页撤回**：撤回自己的审阅／未关闭的纠正（§3.00）；撤回记录在 `reviews.jsonl` 的 `withdrawn` 行与 `~/.orca/correction-withdrawals.jsonl`。
-- 控制库：**schema 18、单向**，真实 `~/.orca` 已迁到 18（2026-10-23，会话 `0e13a9b7` 备份到 `~/.orca/backups/pre-schema18-20261023-230314/` 后重启；15 的备份 `~/.orca/backups/schema15-cutover-1792586473769/`，14 的见 §3.01）（切换与回退：`2026-10-12-live-service-cutover.md`）。Linux systemd 用户服务跑通过一次（两仓全量没在 Linux 跑过；`2026-10-12-followup-acceptance.md`）。
+- 控制库：**schema 20、单向**，真实 `~/.orca` 已迁到 20（2026-10-25 会话 `ffec7b28` 的 scheduled 装库，备份 `~/.orca/backups/pre-schema20-20261025-023827/`；19、18 的备份见 §3，15 的备份 `~/.orca/backups/schema15-cutover-1792586473769/`，14 的见 §3.01）（切换与回退：`2026-10-12-live-service-cutover.md`）。Linux systemd 用户服务跑通过一次（两仓全量没在 Linux 跑过；`2026-10-12-followup-acceptance.md`）。
 
 ### 3.2 还不能说的（**诚实边界，原样保留**）
 
@@ -258,6 +267,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - 会话 `9ec98639` 各线合入前的 `npm test`（各自台账行有数）：最大一次是失败原因分支顶端（对 pin `71d650c` 的 build），选中 540 文件，根 3553 过／35 跳过、web 1182/1182、rc 0；`schedulerBridge`「success」在负载 10–14 下单跑 3×9/9（机器全天没空闲过）。
 - 会话 `b37f7ce9` 合并前的 `npm test`（三条线 rebase 到 main 之后的流程分支顶端，`ORCA_CCLOOP_BIN`＝ccloop `fbd3512` 的 build）：选中 734 文件，根 5374 过／37 跳过／0 红、web 1255，rc 0；其后两笔修复（无改动的效果步、宽松读 effect）各跑一次 `npm test`，最后一次根 5378 过／37 跳过、web 1255，rc 0。
 - 会话 `0e13a9b7` 合并前的 `npm test`（流程缺口分支 rebase 到 main 之后；计划台账「Task 11: npm test at rebased」行）：选中 683 文件，根 4816 过／35 跳过、web 1335，rc 0；随后 `--ff-only` 合入并装上。
+- 会话 `a98b77d2`（2026-10-26／27）小缺口批合入前的门：根 578 文件 1 红（`startForm` ECONNRESET）、web 159 文件 1 红（`memoryLayout` scroll 时序），都是 `known-load-flakes.md` 已登记形状，单文件各 3/3 绿（负载 14–17）；typecheck、web build、`--ws check` 0。同轮的三条真红（`schedules` 跨 realm、`command.test` 字面量、`projectSwitcher` 时序）已修，见 §3 新节。
 - 更早的门都已被取代；flake 判别在 `known-load-flakes.md`。
 
 ---
@@ -272,6 +282,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - `~/.syncskill/config.json` 的 `runskills`、`aifusion` 本地源仍指已搬走的路径（人的文件未动）；ccmem embedding 账号无额度；想开「纠正写回 ccmem」用面板 flag `--ccmem-corrections`。
 
 ### 4.2 agent 的活（会话 `ffec7b28` 收尾时的建议顺序）
+
+> 会话 `a98b77d2` 已把 §3 新节的面板小缺口批做完（合入、装上、清完、人已推）；下表是剩余顺序。
 
 1. ~~接着做在飞的 Orca 分支~~ **已全部合入**：live-transcript、dir-requirements、scheduled 三条都在 main 并已装（scheduled = schema 20）。后续分支仍按同一流程：计划 → 变异 → 全量门禁 → 独立审阅 → rebase → ff → build＋web build＋panel restart；schema 动之前先备份。
 2. ~~H7（多目录项目）~~ **已合并并装上**（O1–O9，见 §3；schema 仍 20）。剩付费验收见第 5 条。
