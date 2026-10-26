@@ -273,7 +273,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 1. ~~接着做在飞的 Orca 分支~~ **已全部合入**：live-transcript、dir-requirements、scheduled 三条都在 main 并已装（scheduled = schema 20）。后续分支仍按同一流程：计划 → 变异 → 全量门禁 → 独立审阅 → rebase → ff → build＋web build＋panel restart；schema 动之前先备份。
 2. ~~H7（多目录项目）~~ **已合并并装上**（O1–O9，见 §3；schema 仍 20）。剩付费验收见第 5 条。
-3. 实时转录 Orca 侧的 `operatorNote` 生产方（人给下一次 attempt 留话）若 spec 没定 Orca 界面，补一行 spec 再做。
+3. ~~实时转录 Orca 侧的 `operatorNote` 生产方~~ **已做**：spec 实时转录 §2（`live-transcript-design.md:28`）人裁「放在 web 运行页里。orca cli 现阶段不用做」，`web/src/FlowRunPage.tsx` 发 `{command:"note"}`；判据 `tests/flow/operatorNote.test.ts`。
 4. ~~登记未修~~ **本轮已清**：Orca F1–F6（计划 `docs/superpowers/plans/2026-10-26-registered-fixes.md`）与 ccloop 的 OMP empty-stop、perf L7（ccloop 计划 `2026-10-26-omp-empty-stop-and-perf-l7.md`）都已修并过门；接受的残余见各计划文末。
 5. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 已合并，待真 agent 跑一次多仓端到端（repo+repo+folder，claude→codex→omp，一次强制 `partial`）——人已允许 codex 跑、claude 额度按记录 **2026-10-27 09:00 Asia/Shanghai** 重置（真 codex 会往 `~/.codex/config.toml` 追加 trust 条目）。
 
@@ -454,7 +454,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。
-  2. 人做：`git -C /Users/biran/code/skills/orca/Orca branch -D feat/tester-round2-server`、`branch -D feat/scheduled`（内容都已 ff 在 main，`-d` 会拒）；`/private/tmp/orca-ffec7b28/` 的清理（三条 Orca 分支与 ccloop multi-repo 都已合完；`ccloop-f4de340` 是测试用 bin、`ccloop-cache` 是测试缓存，删前确认不再需要）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/`。
+  2. 人做：~~`branch -D feat/tester-round2-server`／`branch -D feat/scheduled`~~ **不必了**——2026-10-26 查 `branch --list` 只剩 `main`、`worktree list` 只剩主仓，没有可删的分支；`/private/tmp/orca-ffec7b28/` 的清理（人 2026-10-26 已授权，`ccloop-fe985b0` 是当前钉住的测试用 bin 要留；`ccloop-cache*` 是测试缓存）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/`。
   3. `~/.codex/config.toml` 里 agent 跑出来的 trust 条目要不要清（人的文件，未动）。
 - **会话 `9ec98639` 的控制器裁定待人审**（人说「执行完在最后阶段报给我审核」）：台账 `.superpowers/sdd/2026-10-21-session-9ec98639/progress.md` 每条线的「Criteria changed」与决定；偏离已有裁定的三处——L2 是叠栈的 debug 组而非组内任务、系统 debug 不经估算、自动审阅员是完整 run 而非单次调用；ccmem 那笔超出人裁的 SIGTERM 修复（ccmem handoff §1.000）。人审后删本条。
 - **付费**（每一次先问）：§4.2 第 6、8 条。
