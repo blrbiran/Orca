@@ -51,6 +51,7 @@ import { parentGroupBody, type FlowParentConfirmation } from "./parent.js";
 import type { FlowCallResult } from "./calls.js";
 import { completePlanCall, finishPlan, isOpenQuestion, makePlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
+import { inFlowLane } from "./lane.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
 import { consumeAtBoundary, consumeInterventions, joinPendingNotes, pendingNotes } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
@@ -1092,7 +1093,11 @@ async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   }
   if (plan !== null && satisfied) { deps.store.transaction(() => finishPlan(deps.store, plan)); return true; }
   // Gaps spec §4.2: an intake Orca still owes a move (locating, triaging, restating, ready) keeps the run from `done`.
-  if (satisfied && run.row.state === "running" && !hasBusyIntake(deps.store, run.row.id)) { deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done")); }
+  if (satisfied && run.row.state === "running" && !hasBusyIntake(deps.store, run.row.id)) {
+    deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, "running", "done"));
+    // A done run leaves the pump's open work, so its last error would never be cleared by a later pass.
+    recordRunError(deps, run.row.id, null);
+  }
   return false;
 }
 
@@ -1174,9 +1179,11 @@ export function recordRunError(deps: FlowDeps, flowRunId: string, message: strin
 
 /** Advance one run at its boundaries (a message, a plan run or an answer moved it). */
 export async function advanceRun(deps: FlowDeps, flowRunId: string): Promise<void> {
-  for (let pass = 0; pass < 1000; pass += 1) {
-    if (!(await passRun(deps, loadRun(deps.store, flowRunId)))) break;
-  }
+  await inFlowLane(flowRunId, async () => {
+    for (let pass = 0; pass < 1000; pass += 1) {
+      if (!(await passRun(deps, loadRun(deps.store, flowRunId)))) break;
+    }
+  });
 }
 
 /**

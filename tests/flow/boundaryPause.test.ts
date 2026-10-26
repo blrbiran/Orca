@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import type { FlowRunBody } from "../../src/flow/kinds/registry.js";
 import { childGroupIdOf, type FlowChildPort } from "../../src/flow/kinds/work.js";
+import { advanceRun, recordRunError } from "../../src/flow/kernel.js";
 import { acceptMessage, type FlowMessageInput } from "../../src/flow/messages.js";
 import { getFlowRun, listMessages } from "../../src/flow/store.js";
 import type { ControlStore } from "../../src/control/store.js";
@@ -184,6 +185,28 @@ describe("pause and resume while a work step runs (§10.5.1)", () => {
       await w.advance();
       expect(stateOf(w, flowRunId)).toBe("stopped");
       expect(listMessages(w.store, flowRunId).find((m) => (m.body as { command?: string }).command === "stop")!.state).toBe("applied");
+    } finally { await w.dispose(); }
+  });
+
+  it("stopping the run clears the lastError it showed: a stopped run is never passed again", async () => {
+    const { w } = await world(); try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+      recordRunError(w.deps, flowRunId, "git: EACCES on the vault");
+      expect(runOf(w, flowRunId).lastError?.message).toBe("git: EACCES on the vault");
+      const applied = await acceptMessage(w.deps, flowRunId, message({ body: { command: "stop" } }));
+      expect(applied.state).toBe("applied");
+      expect(stateOf(w, flowRunId)).toBe("stopped");
+      expect(runOf(w, flowRunId).lastError).toBeUndefined();
+    } finally { await w.dispose(); }
+  });
+
+  it("a run that finishes clears the lastError it showed, even when the advance is not the pump's", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      recordRunError(w.deps, flowRunId, "recovery-blocked:flow-child-agent-selection-rejected");
+      child.land(childGroupId);
+      await advanceRun(w.deps, flowRunId);
+      expect(stateOf(w, flowRunId)).toBe("done");
+      expect(runOf(w, flowRunId).lastError).toBeUndefined();
     } finally { await w.dispose(); }
   });
 });

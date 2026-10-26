@@ -114,6 +114,37 @@ describe("operator note (§10.5.2)", () => {
     } finally { await w.dispose(); }
   });
 
+  it("a note refused at accept neither advances the run nor takes a note already accepted", async () => {
+    const child = fakeChildPort({ timeoutMs: null });
+    const w = await flowWorld(TPL, { children: (store) => boundPort(child, store), files: { "notes.txt": "n\n" } });
+    try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+      await w.advance();
+      expect(w.latest(flowRunId, "write")).toMatchObject({ state: "running" });
+      appendMessage(w.store, {
+        flowRunId, requestId: "accepted-before-the-refused-one", kind: "command", target: "step",
+        body: { command: "note", text: "earlier", scope: "next-attempt", personAuthority: true, target: TARGET },
+        by: "ann", via: "web", state: "accepted", reason: null, at: w.deps.now(),
+      });
+      const rejected = await acceptMessage(w.deps, flowRunId, note("hello"));
+      expect(rejected).toMatchObject({ state: "rejected", reason: "flow-pause-timeout-unknown:write" });
+      expect(notesOf(w, flowRunId)).toHaveLength(0);
+      expect(listMessages(w.store, flowRunId).find((m) => m.requestId === "accepted-before-the-refused-one")!.state).toBe("accepted");
+    } finally { await w.dispose(); }
+  });
+
+  it("two notes accepted at once are taken one at a time: the cap refuses the second, no stale write", async () => {
+    const { w, flowRunId } = await started(); try {
+      const results = await Promise.all([
+        acceptMessage(w.deps, flowRunId, note("x".repeat(3000))),
+        acceptMessage(w.deps, flowRunId, note("y".repeat(3000))),
+      ]);
+      expect(results.map((result) => result.state).sort()).toEqual(["applied", "rejected"]);
+      expect(results.find((result) => result.state === "rejected")!.reason).toBe("flow-note-too-large");
+      expect(notesOf(w, flowRunId)).toHaveLength(1);
+    } finally { await w.dispose(); }
+  });
+
   it("two notes whose joined text passes 4096 bytes: the second is refused flow-note-too-large", async () => {
     const { w, flowRunId } = await started(); try {
       const first = await acceptMessage(w.deps, flowRunId, note("x".repeat(3000)));

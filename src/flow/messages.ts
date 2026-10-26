@@ -38,6 +38,7 @@ import {
 } from "./kernel.js";
 import type { ExecutionBody, FlowNoteIntent, FlowNoteStep, FlowPauseStep, LoadedRun, OperatorNoteEntry } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
+import { inFlowLane } from "./lane.js";
 import { discardEffect } from "./effects.js";
 import { holdableAfter, holdTargets, MARK_COMMANDS, MARKABLE_KINDS, marksOf } from "./marks.js";
 import { applyRewind, EDIT_NO_LONGER_APPLIES, reapplyEdits, roundRevisionNoLongerApplies } from "./rewind.js";
@@ -249,8 +250,10 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
     return appended;
   });
   if (!deduped && refusal === null) {
-    await consumeAtBoundary(deps, flowRunId);
-    await advanceRun(deps, flowRunId);
+    await inFlowLane(flowRunId, async () => {
+      await consumeAtBoundary(deps, flowRunId);
+      await advanceRun(deps, flowRunId);
+    });
   }
   const stored = listMessages(deps.store, flowRunId).find((m) => m.seq === row.seq)!;
   return { state: stored.state, reason: stored.reason, seq: stored.seq, deduped };
@@ -507,7 +510,12 @@ async function applyCommand(deps: FlowDeps, run: LoadedRun, message: MessageRow,
     deps.store.transaction(() => setFlowRunState(deps.store, run.row.id, state, to));
   };
   switch (body.command) {
-    case "stop": move(["running", "paused", "done"], "stopped"); deps.store.transaction(() => withdrawIntakes(deps.store, run.row.id, `run stopped by message ${message.seq}`, deps.now())); return null;
+    case "stop":
+      move(["running", "paused", "done"], "stopped");
+      deps.store.transaction(() => withdrawIntakes(deps.store, run.row.id, `run stopped by message ${message.seq}`, deps.now()));
+      // A stopped run is never passed again, so the pump cannot clear the error it showed.
+      recordRunError(deps, run.row.id, null);
+      return null;
     case "retry": {
       const stepKey = stepKeyOf(target)!;
       const latest = latestByStep(listExecutions(deps.store, run.row.id)).get(stepKey);
