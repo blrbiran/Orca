@@ -9,8 +9,12 @@ import type { CommandIo, ParsedArgs } from "./types.js";
  * and never writes, starts or fixes anything; its modules load on demand so `orca panel …` never pays for them.
  */
 export interface StatusCheck { level: "ok" | "warn" | "fail"; subject: string; fact: string; fix?: string }
-export interface CheckContext { env: NodeJS.ProcessEnv; stateDirFlag?: string; checkout: string }
+/** `serviceEnv`: the installed service's environment, when one exists (launchd hands its panel that, not this shell). */
+export interface CheckContext { env: NodeJS.ProcessEnv; serviceEnv?: NodeJS.ProcessEnv | null; stateDirFlag?: string; checkout: string }
 export type Check = (ctx: CheckContext) => Promise<StatusCheck>;
+
+/** What the panel would see. The service config's location and manager selection stay this shell's (`ctx.env`). */
+export const envOf = (ctx: CheckContext): NodeJS.ProcessEnv => ctx.serviceEnv ?? ctx.env;
 
 /** The Orca checkout this CLI runs from: the nearest directory above this module holding a package.json. */
 export function cliCheckout(): string {
@@ -45,7 +49,7 @@ export async function panelSocketCheck(ctx: CheckContext): Promise<StatusCheck> 
   const { requestOverSocket } = await import("../entry/socketClient.js");
   const { EntryRejection } = await import("../entry/envelope.js");
   try {
-    const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: ctx.env });
+    const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
     const { status, body } = await requestOverSocket({ socketPath, method: "GET", path: "summary", client: "cli", timeoutMs: 10_000 });
     if (status !== 200) return { level: "fail", subject: "panel", fact: `${socketPath} answered ${status}`, fix: "orca panel logs" };
     const groups = (body as { groups?: unknown[] }).groups?.length ?? 0;
@@ -60,7 +64,7 @@ export async function panelSocketCheck(ctx: CheckContext): Promise<StatusCheck> 
 export async function panelHttpCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { servicePaths } = await import("../service/paths.js");
   const { readPanelJson } = await import("../service/instance.js");
-  const file = servicePaths(ctx.env).panelJson;
+  const file = servicePaths(envOf(ctx)).panelJson;
   const read = readPanelJson(file);
   if (read.kind === "missing") return { level: "warn", subject: "panel-http", fact: `no ${file} (only the service panel writes one)` };
   if (read.kind === "invalid") return { level: "fail", subject: "panel-http", fact: `${file}: ${read.reason}`, fix: "orca panel restart" };
@@ -78,7 +82,7 @@ export async function schemaCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { discoverSocketPath } = await import("../entry/discovery.js");
   const { schemaVersion } = await import("../control/migrations.js");
   let stateDir: string;
-  try { stateDir = dirname(discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: ctx.env })); }
+  try { stateDir = dirname(discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) })); }
   catch (error) { return { level: "warn", subject: "schema", fact: `no control state directory found (${message(error)})` }; }
   const file = join(stateDir, "control.sqlite");
   if (!existsSync(file)) return { level: "warn", subject: "schema", fact: `no control store at ${file} yet; this CLI writes schema ${schemaVersion}` };
@@ -95,7 +99,7 @@ export async function schemaCheck(ctx: CheckContext): Promise<StatusCheck> {
 /** The agents table: present, JSON, a ccloop-agents-table-v1 document. */
 export async function agentsTableCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { agentsTablePath } = await import("../agents/paths.js");
-  const table = agentsTablePath(ctx.env);
+  const table = agentsTablePath(envOf(ctx));
   if (!existsSync(table)) return { level: "warn", subject: "agents", fact: `no agents table at ${table}`, fix: "orca agent init" };
   let parsed: unknown;
   try { parsed = JSON.parse(readFileSync(table, "utf8")); }
@@ -115,7 +119,8 @@ export async function ccloopPinCheck(ctx: CheckContext): Promise<StatusCheck> {
   let installed: string | null;
   try { installed = pinOf((JSON.parse(readFileSync(join(ctx.checkout, "node_modules", ".package-lock.json"), "utf8")) as { packages?: Record<string, { resolved?: string }> }).packages?.["node_modules/ccloop"]?.resolved); }
   catch { installed = null; }
-  const override = ctx.env.ORCA_CCLOOP_BIN !== undefined && ctx.env.ORCA_CCLOOP_BIN.length > 0 ? `; ORCA_CCLOOP_BIN=${ctx.env.ORCA_CCLOOP_BIN} overrides it` : "";
+  const overrideBin = envOf(ctx).ORCA_CCLOOP_BIN;
+  const override = overrideBin !== undefined && overrideBin.length > 0 ? `; ORCA_CCLOOP_BIN=${overrideBin} overrides it` : "";
   if (pinned === null) return { level: "fail", subject: "ccloop", fact: "package.json pins no ccloop commit", fix: "node scripts/pin-ccloop.mjs <commit>" };
   if (installed === null) return { level: "fail", subject: "ccloop", fact: `pinned ${pinned.slice(0, 7)}, none installed under ${join(ctx.checkout, "node_modules")}${override}`, fix: "npm install" };
   if (installed !== pinned) return { level: "fail", subject: "ccloop", fact: `pinned ${pinned.slice(0, 7)}, installed ${installed.slice(0, 7)}${override}`, fix: "npm install" };
@@ -124,7 +129,7 @@ export async function ccloopPinCheck(ctx: CheckContext): Promise<StatusCheck> {
 
 /** ORCA_CCMEM_BIN: unset is a warning (memory off); set, it must be an absolute executable file. */
 export async function ccmemCheck(ctx: CheckContext): Promise<StatusCheck> {
-  const bin = ctx.env.ORCA_CCMEM_BIN;
+  const bin = envOf(ctx).ORCA_CCMEM_BIN;
   if (bin === undefined || bin.length === 0) return { level: "warn", subject: "ccmem", fact: "ORCA_CCMEM_BIN is not set; memory features are off" };
   if (!isAbsolute(bin)) return { level: "fail", subject: "ccmem", fact: `ORCA_CCMEM_BIN=${bin} is not an absolute path`, fix: "set ORCA_CCMEM_BIN to the ccmem binary's absolute path" };
   try { accessSync(bin, constants.X_OK); }
@@ -142,7 +147,7 @@ export const frontmatterVersion = (text: string): string | null =>
 /** Spec §8: every installed skill copy's frontmatter `version:` against this CLI's package version. */
 export async function skillCheck(ctx: CheckContext): Promise<StatusCheck> {
   const cli = packageVersion(ctx.checkout);
-  const candidates = skillCopies(ctx.env);
+  const candidates = skillCopies(envOf(ctx));
   const found = candidates.filter((path) => existsSync(path));
   const source = join(ctx.checkout, "skills", "orca-control");
   if (found.length === 0) return { level: "warn", subject: "skill", fact: `no installed orca-control skill found (looked in ${candidates.map((path) => dirname(path)).join(", ")})`, fix: `link ${source} into your agent's skills directory` };
@@ -169,8 +174,19 @@ export async function runChecks(checks: readonly Check[], ctx: CheckContext): Pr
   return results;
 }
 
-export const contextOf = (args: ParsedArgs, io: CommandIo): CheckContext =>
-  ({ env: io.env, checkout: cliCheckout(), ...(args.global.controlStateDir === undefined ? {} : { stateDirFlag: args.global.controlStateDir }) });
+/**
+ * The checks' context. Rule 17 stays intact: this only reads. A service config that is absent, unreadable or invalid
+ * leaves `serviceEnv` null, so the checks fall back to this shell exactly as before.
+ */
+export const contextOf = async (args: ParsedArgs, io: CommandIo): Promise<CheckContext> => {
+  let serviceEnv: NodeJS.ProcessEnv | null = null;
+  try {
+    const { servicePaths } = await import("../service/paths.js");
+    const { readServiceConfig } = await import("../service/files.js");
+    serviceEnv = readServiceConfig(servicePaths(io.env)).env;
+  } catch { serviceEnv = null; }
+  return { env: io.env, serviceEnv, checkout: cliCheckout(), ...(args.global.controlStateDir === undefined ? {} : { stateDirFlag: args.global.controlStateDir }) };
+};
 
 /** Spec §8: one line per check, `ok|warn|fail <subject>: <fact>`, plus (doctor) one fix line per failure; exit 1 on any fail. */
 export function report(results: readonly StatusCheck[], args: ParsedArgs, io: CommandIo, schema: string, fixes: boolean): number {
@@ -190,7 +206,7 @@ export function report(results: readonly StatusCheck[], args: ParsedArgs, io: Co
 }
 
 export async function runStatus(args: ParsedArgs, io: CommandIo, checks: readonly Check[] = STATUS_CHECKS): Promise<number> {
-  const results = await runChecks(checks, contextOf(args, io));
+  const results = await runChecks(checks, await contextOf(args, io));
   // Fix advice is doctor's; status keeps its one-line-per-check shape.
   return report(results.map(({ fix: _fix, ...rest }) => rest), args, io, "orca-status-v1", false);
 }

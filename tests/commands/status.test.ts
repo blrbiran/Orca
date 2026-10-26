@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ccloopBinCheck, DOCTOR_CHECKS, orcaModesCheck, runDoctor, staleSocketsCheck } from "../../src/commands/doctor.js";
 import { runRegistered } from "../../src/commands/run.js";
-import { runStatus, skillCheck, STATUS_CHECKS, type Check, type CheckContext } from "../../src/commands/status.js";
+import { runStatus, agentsTableCheck, ccmemCheck, schemaCheck, skillCheck, STATUS_CHECKS, type Check, type CheckContext } from "../../src/commands/status.js";
 import type { CommandIo, ParsedArgs } from "../../src/commands/types.js";
 
 const CHECKOUT = resolve(import.meta.dirname, "..", "..");
@@ -104,6 +104,52 @@ describe("orca status (spec §8)", () => {
     expect(DOCTOR_CHECKS.slice(0, STATUS_CHECKS.length)).toEqual(STATUS_CHECKS);
     // Issue 92: plus the ccloop bin the panel would start with (rewritten under 0e13a9b7's ruling to add it).
     expect(DOCTOR_CHECKS.slice(STATUS_CHECKS.length).map((check) => check.name)).toEqual(["agentPathCheck", "orcaModesCheck", "staleSocketsCheck", "ccloopBinCheck"]);
+  });
+});
+
+describe("orca status reads the installed service's environment (D4)", () => {
+  const install = (env: NodeJS.ProcessEnv, serviceEnv: NodeJS.ProcessEnv): void => {
+    const dir = env.ORCA_PANEL_DIR!;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "service.json"), JSON.stringify({
+      schema: "orca-panel-service-v1", node: process.execPath, entry: join(CHECKOUT, "dist", "cli.js"), args: [], env: serviceEnv,
+    }));
+  };
+
+  it("names the service's ccmem bin and agents table when service.json exists, this shell's without it", async () => {
+    const { home, env } = sandbox();
+    const executable = (name: string): string => { const path = join(home, name); writeFileSync(path, "#!/bin/sh\n", { mode: 0o755 }); return path; };
+    const table = (name: string): string => { const path = join(home, name); writeFileSync(path, JSON.stringify({ schema: "ccloop-agents-table-v1", installations: [] }), { mode: 0o600 }); return path; };
+    const callerBin = executable("caller-ccmem"), serviceBin = executable("service-ccmem");
+    const callerTable = table("caller-agents.json"), serviceTable = table("service-agents.json");
+    const caller = { ...env, ORCA_CCMEM_BIN: callerBin, ORCA_AGENTS_TABLE: callerTable };
+    const plain = capture(caller);
+    expect(await runStatus(args(), plain.io, [ccmemCheck, agentsTableCheck])).toBe(0);
+    expect(plain.out()).toContain(callerBin);
+    expect(plain.out()).toContain(callerTable);
+    expect(plain.out()).not.toContain(serviceBin);
+    expect(plain.out()).not.toContain(serviceTable);
+    install(caller, { ORCA_CCMEM_BIN: serviceBin, ORCA_AGENTS_TABLE: serviceTable });
+    const service = capture(caller);
+    expect(await runStatus(args(), service.io, [ccmemCheck, agentsTableCheck])).toBe(0);
+    expect(service.out()).toContain(serviceBin);
+    expect(service.out()).toContain(serviceTable);
+    expect(service.out()).not.toContain(callerBin);
+    expect(service.out()).not.toContain(callerTable);
+  });
+
+  it("--control-state-dir still decides the control directory", async () => {
+    const { home, env } = sandbox();
+    const serviceControl = join(home, "service-control");
+    mkdirSync(serviceControl);
+    install(env, { ORCA_CONTROL_DIR: serviceControl });
+    const flag = join(home, "flag-control");
+    mkdirSync(flag);
+    const flagged = { ...args(), global: { ...args().global, controlStateDir: flag } };
+    const { io, out } = capture(env);
+    expect(await runStatus(flagged, io, [schemaCheck])).toBe(0);
+    expect(out()).toContain(join(flag, "control.sqlite"));
+    expect(out()).not.toContain(join(serviceControl, "control.sqlite"));
   });
 });
 

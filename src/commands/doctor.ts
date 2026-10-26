@@ -107,5 +107,5 @@ export async function ccloopBinCheck(ctx: CheckContext): Promise<StatusCheck> {
 export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck, ccloopBinCheck];
 
 export async function runDoctor(args: ParsedArgs, io: CommandIo, checks: readonly Check[] = DOCTOR_CHECKS): Promise<number> {
-  return report(await runChecks(checks, contextOf(args, io)), args, io, "orca-doctor-v1", true);
+  return report(await runChecks(checks, await contextOf(args, io)), args, io, "orca-doctor-v1", true);
 }
