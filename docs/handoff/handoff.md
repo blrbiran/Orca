@@ -462,7 +462,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **ccmem embedding 账号无额度**。
 - **`orca chain` 真钱活体验收**：要人提交 `.orca/chain.json` 选 model（不存在时开链被 `chain-config-missing` 拒）。
 - **面板的真浏览器视觉验收**（深浅主题、几何、依赖图 SVG）——人没看过第二批以后。
-- **ccloop 判据改写授权**：ccloop 里仍有改既有判据才能修的（M3／M4 等，ccloop 人裁 88 要逐条点名）；ccloop 要不要对别的客户端设 `setTimeout` 溢出防护。
+- ~~ccloop 判据改写授权~~ **已结清（2026-09-29）**：ccloop #14 的 M3／M4 由 `docs/superpowers/plans/2026-09-29-backlog-hardening.md` Task 8（只加不改，ccloop `789c026`／`799b0c6`，判据 `records one contention when the re-read after an abandoned transfer meets the same $name lock`）与 Task 9（人授权四条具名改写，ccloop `2190b89`，`snapshotTree` 记 `"."`）处置，均已在 ccloop main。
+- **ccloop 的 `setTimeout` 溢出防护**：要不要对别的客户端也设（未决）。
 - **未审完的历史轮次裁定**（各台账 `Ruling:` 行，人回复后删）：面板项目过滤（`.superpowers/sdd/2026-10-06-panel-project-filtering/progress.md`）、Task control 刷新＋项目切换（会话 `08011394`）、syncskill 跟进（`9d95e6c8`）、面板 HTTP＋syncskill 补三件（`16ab00f2`）、UI 一轮改写的四条判据（`REWRITTEN … U1–U4`）、会话 `b39a5527` 的六条可逆决定（结清按保守额记组账、`recovered` 扣额排除出谱系等，原文在该会话台账）。
 - **一揽子／历史决定**：「第二个 panel 不挂控制面」维不维持；裁决甲 `plan` 那一半未获指名授权；子系统 B 暂缓到有 `not_my_taste` 行（`~/.orca/corrections.jsonl` 2026-10-18 仍不存在）；`import-plan` 的上限按 agent 定的 task 数算。
 - **归属行**：若干提交的 `Co-Authored-By` 写的是实施席自己的模型；两笔 trailer 格式小瑕疵——**都不 amend，由人决定**。
