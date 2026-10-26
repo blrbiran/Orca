@@ -487,3 +487,14 @@ Board spec `docs/superpowers/specs/2026-10-03-board-graph-and-git-design.md` D7:
 workspace mode the page already reads -- worktree keeps the old line word for word, clone has its own, and a page that
 has not read the mode (or read another repository's) says so. A caller passing no mode keeps the old line (the default
 mode). The skill-set line is unchanged.
+
+## 16. The card counts the document checks it runs (2026-10-26, session `a98b77d2`)
+
+The text above stays as written; where it differs from this section, this section wins. §13's last bullet ("The panel
+card's "Acceptance: N check commands" still counts the task's own checks only; the document checks are named in the
+plan's discipline line.") no longer holds. The loop plan view now carries the recipe's `documentChecks` flag
+(`loopPlanViewSchema`), and the card counts `inputs.checks` plus one existence check per target path for a recipe that
+sets it (design and investigate, v2 and v3), in both the acceptance line and the collapsed list. The list names the
+derived checks in one line ("Plus N existence checks, one per target path...") and does not copy their command text into
+the panel. A view without the flag keeps the old count, so literal fixtures need no edit. Subject line:
+`feat(web): the loop card counts the document checks it runs`.
