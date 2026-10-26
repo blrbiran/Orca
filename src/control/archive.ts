@@ -170,7 +170,10 @@ export async function archiveRun(store:ControlStore,input:{runId:string;sourceDi
  const sourceIdentity={dev:String(sourceStat.dev),ino:String(sourceStat.ino),birthtimeNs:String(sourceStat.birthtimeNs)};
  const missing:string[]=[];
  if(!input.stopProof || !input.stopProof.isolated || input.stopProof.executionId!==run.executionId || input.stopProof.generation!==run.generation) missing.push("stop-unconfirmed");
- const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo),...TASK_RESULT_SOURCE_EXCLUSIONS]);
+ // Multi-directory projects spec §11.6: ccloop puts one result repository per extra directory at <sourceDir>/repos/<key>,
+ // beside the primary's <sourceDir>/repo. Both are git working trees ccloop owns, not source evidence; walking them would
+ // file every extra `.git` as nested-git and leave every multi-directory checkpoint partial.
+ const logs=await captureTree(store,source,"",missing,deps,[relative(source,repo),relative(source,join(source,"repos")),...TASK_RESULT_SOURCE_EXCLUSIONS]);
  const snapshot=await captureSnapshot(store,repo,missing,deps);
  const manifest={version:1,runId:run.runId,sourceIdentity,logs,snapshot,missing};
  const bytes=Buffer.from(JSON.stringify(manifest));const archive=await writeArtifact(store,"archive-"+createHash("sha256").update(bytes).digest("hex"),bytes,deps);

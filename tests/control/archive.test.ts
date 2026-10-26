@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { archiveRun,readArtifact,writeArtifact } from "../../src/control/archive.js";
 import { verifySnapshot } from "../../src/control/snapshot.js";
-import { archiveCase } from "./fixtures/archive.js";
+import { archiveCase, git } from "./fixtures/archive.js";
 import { openTestStore } from "./fixtures/store.js";
 import { createAdmissionGate } from "../../src/control/admissionGate.js";
 const latch=()=>{let release!:()=>void;const promise=new Promise<void>(resolve=>{release=resolve;});return {promise,release};};
@@ -17,6 +17,19 @@ describe("independent evidence archive",{timeout:30000},()=>{
    const contents=await Promise.all(result.artifacts.map(ref=>readArtifact(h.store,ref)));
    for(const file of ["stdout.log","stderr.log","usage.json","verification.log","contract.json","config.json"]) expect(contents.some(b=>b.equals(Buffer.from("raw "+file+"\n")))).toBe(true);
    for(let i=0;i<contents.length;i++) expect(createHash("sha256").update(contents[i]).digest("hex")).toBe(result.artifacts[i].hash);
+  }finally{await h.dispose();}
+ });
+ it("leaves the extra directories' result repositories out of the source capture",async()=>{
+  const h=await archiveCase();try{
+   for(const key of ["beta","notes"]){
+    const result=join(h.sourceDir,"repos",key);await mkdir(result,{recursive:true});git(result,"init","-q");
+    await writeFile(join(result,"package.json"),"{\"version\":\"0.2.0\"}\n");git(result,"add",".");git(result,"commit","-qm",key);
+   }
+   const archived=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof:h.stopProof});
+   expect(archived.missing).toEqual([]);
+   const manifestRef=archived.artifacts.find(ref=>ref.artifactId.startsWith("archive-"))!;
+   const manifest=JSON.parse((await readArtifact(h.store,manifestRef)).toString()) as {logs:Array<{path:string}>};
+   expect(manifest.logs.some(entry=>entry.path==="repos"||entry.path.startsWith("repos/"))).toBe(false);
   }finally{await h.dispose();}
  });
  it("rejects immutable ID conflict, forged hashes and traversal, with private archive files",async()=>{
