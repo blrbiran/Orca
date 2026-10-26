@@ -868,6 +868,7 @@ function taskPlanView(
       // or is not the imported one (an amendment written without the flag). A budget-only change writes the same bytes.
       amended: body.planChanged === true || task.originalContractHash !== importedContractHash, loopVersion: body.loopVersion ?? 0,
       inputs: task.loop.inputs, maxFiles: contract.safetyPolicy.maxFilesTouched, hasDiscipline: plan.discipline !== null,
+      documentChecks: plan.documentChecks,
       // Syncskill integration spec §10.4: omitted when the recipe has none, so a view without skills keeps its bytes.
       ...(task.loop.skills === undefined ? {} : { skills: task.loop.skills }),
       // §4.6: once the group is confirmed, the names the task's skill set froze to (a profile's members at that moment).

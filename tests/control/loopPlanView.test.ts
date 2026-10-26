@@ -23,7 +23,7 @@ describe("a task's plan in the group view (spec §4.1)", () => {
       const item = readControlGroup(h.store, "epoch", "g").workItems[0]!;
       expect(item.loopPlan).toEqual({
         planId: "bugfix", planVersion: 3, chosenBy: "labels", chosenByLabel: "bug",
-        amended: false, loopVersion: 0, inputs: recipe.inputs, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true,
+        amended: false, loopVersion: 0, inputs: recipe.inputs, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true, documentChecks: false,
       });
       // Rewritten under the human's 2026-10-01 ruling on C4: the contract's success condition carries bugfix v2's red-first line.
       expect(item.objective).toEqual({ goal: "fix login", successCondition: "the login test passes\nAlso: a test that reproduces the bug was added, and it failed before the fix." });

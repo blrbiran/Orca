@@ -10,7 +10,7 @@ import { webFixture } from "./fixtures/web.js";
  * carries summary or planName.
  */
 const LOOP = { goal: "fix login", successCondition: "the login test passes", targetPaths: ["a"], checks: ["npm test"] };
-const FIELDS = ["amended", "chosenBy", "chosenByLabel", "hasDiscipline", "inputs", "loopVersion", "maxFiles", "planId", "planVersion"];
+const FIELDS = ["amended", "chosenBy", "chosenByLabel", "documentChecks", "hasDiscipline", "inputs", "loopVersion", "maxFiles", "planId", "planVersion"];
 
 describe("the loop plan view's fields (panel i18n spec §3.1, §6.8)", () => {
   it("carries exactly the fields of §3.1: the contract's file cap and whether the plan version has a discipline line", async () => {
@@ -22,9 +22,10 @@ describe("the loop plan view's fields (panel i18n spec §3.1, §6.8)", () => {
     try {
       const [a, b, c] = readControlGroup(h.store, "epoch", "g").workItems.map((item) => item.loopPlan!);
       expect(Object.keys(a!).sort()).toEqual(FIELDS);
-      expect(a).toMatchObject({ planId: "standard", planVersion: 3, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false });
-      expect(b).toMatchObject({ planId: "bugfix", planVersion: 3, maxFiles: 7, hasDiscipline: true });
-      expect(c).toMatchObject({ planId: "investigate", planVersion: 3, maxFiles: 1, hasDiscipline: true });
+      expect(a).toMatchObject({ planId: "standard", planVersion: 3, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false, documentChecks: false });
+      expect(b).toMatchObject({ planId: "bugfix", planVersion: 3, maxFiles: 7, hasDiscipline: true, documentChecks: false });
+      // C4: investigate v2 and later carry one existence check per target path; the view names the recipe's flag, not the commands.
+      expect(c).toMatchObject({ planId: "investigate", planVersion: 3, maxFiles: 1, hasDiscipline: true, documentChecks: true });
     } finally { await h.dispose(); }
   });
 
@@ -32,7 +33,7 @@ describe("the loop plan view's fields (panel i18n spec §3.1, §6.8)", () => {
     const view = {
       planId: "standard", planVersion: 3, chosenBy: "explicit", chosenByLabel: null, amended: false, loopVersion: 0,
       inputs: { goal: "g", successCondition: "s", targetPaths: ["a"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
-      maxFiles: 1, hasDiscipline: false,
+      maxFiles: 1, hasDiscipline: false, documentChecks: false,
     };
     expect(loopPlanViewSchema.safeParse(view).success).toBe(true);
     expect(loopPlanViewSchema.safeParse({ ...view, summary: ["Goal: g"] }).success).toBe(false);

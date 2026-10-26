@@ -1683,6 +1683,8 @@ export const loopPlanViewSchema = z
     inputs: loopInputsSchema,
     maxFiles: positiveSafeInteger,
     hasDiscipline: z.boolean(),
+    // C4 (loop plans spec §13): the recipe prepends one existence check per target path to the person's checks.
+    documentChecks: z.boolean(),
     // Syncskill integration spec §10.4: the recipe's skill set, absent when it has none; the card sends it back unchanged.
     skills: loopSkillsSchema.optional(),
     // Syncskill integration spec §4.6: the names the task's skill set froze to at confirm; absent before that.
