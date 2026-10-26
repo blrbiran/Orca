@@ -955,6 +955,8 @@ export const en = {
     handWritten: "Hand-written contract",
     summaryRegion: "Plan summary {{taskId}}",
     checkCommands: "Check commands ({{n}})",
+    documentChecks_one: "Plus {{count}} existence check, one per target path: each must exist and be non-empty",
+    documentChecks_other: "Plus {{count}} existence checks, one per target path: each must exist and be non-empty",
     budgetLine: "Budget: {{tokens}} tokens · active time {{activeMs}} ms · max attempts {{attempts}}",
     git: "Git workspace: its own worktree, merged back into <code>orca/{{groupId}}</code>; pushing is done by a person",
     gitClone: "Git workspace: its own private clone, merged back into <code>orca/{{groupId}}</code>; pushing is done by a person",

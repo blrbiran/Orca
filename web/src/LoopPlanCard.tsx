@@ -43,6 +43,9 @@ export function loopPlanTitle(plan: LoopPlanViewV1): string {
  * The check commands' text is never in a line -- the card shows it collapsed. In English these are exactly the lines the
  * server's describeLoopPlan used to send (§6.3).
  */
+/** Loop plans spec §13 (C4): design and investigate prepend one existence check per target path to the person's checks. */
+const documentChecksOf = (plan: LoopPlanViewV1): number => plan.documentChecks === true ? plan.inputs.targetPaths.length : 0;
+
 export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
   const inputs = plan.inputs;
   const separator = i18n.t("loopPlan.summary.pathSeparator");
@@ -52,7 +55,7 @@ export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
     i18n.t("loopPlan.summary.onlyChanges", { paths: inputs.targetPaths.join(separator) }),
     ...(inputs.protectedPaths.length > 0 ? [i18n.t("loopPlan.summary.mustNotChange", { paths: inputs.protectedPaths.join(separator) })] : []),
     plan.maxFiles === Number.MAX_SAFE_INTEGER ? i18n.t("loopPlan.summary.noFileLimit") : i18n.t("loopPlan.summary.files", { count: plan.maxFiles }),
-    i18n.t("loopPlan.summary.checks", { count: inputs.checks.length }),
+    i18n.t("loopPlan.summary.checks", { count: inputs.checks.length + documentChecksOf(plan) }),
     ...(plan.hasDiscipline ? [planText(plan.planId, plan.planVersion, "discipline")] : []),
   ];
 }
@@ -247,8 +250,11 @@ export function LoopPlanCard(props: LoopPlanCardProps): JSX.Element | null {
         {loopSummaryLines(plan).map((line, index) => <li key={index}>{line}</li>)}
       </ul>
       <details>
-        <summary>{t("loopPlan.checkCommands", { n: plan.inputs.checks.length })}</summary>
-        <ul>{plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}</ul>
+        <summary>{t("loopPlan.checkCommands", { n: plan.inputs.checks.length + documentChecksOf(plan) })}</summary>
+        <ul>
+          {plan.inputs.checks.map((check, index) => <li key={index}><code>{check}</code></li>)}
+          {documentChecksOf(plan) > 0 && <li>{t("loopPlan.documentChecks", { count: documentChecksOf(plan) })}</li>}
+        </ul>
       </details>
       {work !== undefined && <p>{t("loopPlan.budgetLine", { tokens: work.amount.tokens===null?t("budget.unlimited"):work.amount.tokens, activeMs: work.amount.activeMs, attempts: work.amount.attempts })}</p>}
       <p><Trans i18nKey={gitLineKey(props.workspaceMode)} values={{ groupId: view.summary.groupId }} components={{ code: <code /> }} /></p>

@@ -27,6 +27,11 @@ const PLAN: LoopPlanViewV1 = {
   inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**"], checks: ["npm test -- --run auth"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
   maxFiles: 25, hasDiscipline: true,
 };
+// Loop plans spec §13 (C4): design v2 runs one existence check per target path ahead of the person's checks.
+const DESIGN_PLAN: LoopPlanViewV1 = {
+  ...PLAN, planId: "design", planVersion: 2, documentChecks: true,
+  inputs: { ...PLAN.inputs, targetPaths: ["docs/design.md", "docs/notes.md"], checks: ["npm test -- --run auth"] },
+};
 const item = (over: Partial<WorkItemViewV1> = {}): WorkItemViewV1 => ({
   taskId: "a", status: "ready", dependencyTaskIds: [], targetVersion: 1, configHash: "d".repeat(64), originalContractHash: "e".repeat(64),
   derivedContractHash: "f".repeat(64), currentRunId: null, pendingRunId: null, lineageRunIds: [], labels: ["bug"], labelsProvenance: "plan", labelsVersion: 0,
@@ -52,6 +57,16 @@ describe("the loop plan card (spec §4.1)", () => {
     // Rewritten under human ruling H18 (2026-10-01) for panel i18n: the lines are built by the panel; the text is unchanged.
     expect(within(screen.getByRole("list", { name: "Plan summary a" })).getAllByRole("listitem").map((line) => line.textContent))
       .toEqual(["Goal: fix login", "Done when: the login test passes", "Only changes: src/auth/**", "At most 25 files changed (reported by the agent)", "Acceptance: 1 check command, all must pass", "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)"]);
+  });
+
+  it("counts the document checks in the acceptance line and names them in the collapsed list (spec §13, C4)", () => {
+    detail([item({ loopPlan: DESIGN_PLAN })]);
+    expect(within(screen.getByRole("list", { name: "Plan summary a" })).getAllByRole("listitem").map((line) => line.textContent))
+      .toContain("Acceptance: 3 check commands, all must pass");
+    const details = screen.getByText("npm test -- --run auth").closest("details")!;
+    expect(details.querySelector("summary")?.textContent).toBe("Check commands (3)");
+    expect(within(details).getAllByRole("listitem").map((line) => line.textContent))
+      .toContain("Plus 2 existence checks, one per target path: each must exist and be non-empty");
   });
 
   it("keeps the check commands collapsed", () => {

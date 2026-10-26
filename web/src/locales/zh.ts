@@ -830,6 +830,8 @@ export const zh: Translation<typeof en> = {
     handWritten: "手写契约",
     summaryRegion: "做法摘要 {{taskId}}",
     checkCommands: "检查命令（{{n}} 条）",
+    documentChecks_one: "另有 {{count}} 条文档存在性检查：每个目标路径都要存在且非空",
+    documentChecks_other: "另有 {{count}} 条文档存在性检查：每个目标路径都要存在且非空",
     budgetLine: "预算：{{tokens}} token · 活跃时间 {{activeMs}} ms · 最多尝试次数 {{attempts}}",
     git: "git 工作区：独立 worktree，合回 <code>orca/{{groupId}}</code> 分支，push 由人做",
     gitClone: "git 工作区：独立的私有克隆，合回 <code>orca/{{groupId}}</code> 分支，push 由人做",

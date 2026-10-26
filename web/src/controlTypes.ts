@@ -952,6 +952,8 @@ export type LoopSkillsV1 = { profile: string } | { names: string[] };
 export type LoopPlanViewV1 = {
   planId: LoopPlanIdV1; planVersion: number; chosenBy: "explicit" | "labels"; chosenByLabel: string | null;
   amended: boolean; loopVersion: number; inputs: LoopInputsV1; maxFiles: number; hasDiscipline: boolean;
+  /** The recipe runs one existence check per target path ahead of the person's checks; optional so literal fixtures need no edit. */
+  documentChecks?: boolean;
   /** Absent when the recipe has none. */
   skills?: LoopSkillsV1;
   /** Syncskill integration spec §4.6: the names the skill set froze to at confirm; absent before that. */
