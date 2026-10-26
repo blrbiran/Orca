@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { git, gitBytes } from "../scheduler/gitExec.js";
-import { isDirGroup } from "./dirGroup.js";
+import { dirWorkspaceOf } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { readGroup } from "./queries.js";
@@ -70,10 +70,11 @@ export async function readSource(repo: string, source: LedgerSource): Promise<Le
 
 /**
  * Cross-plan resolution 4: the group's integration target as a ref of the target repository -- `refs/heads/<target>`
- * for `local`, `refs/remotes/<remote>/<target>` for the push schemes, null under `keep` (no record).
+ * for `local`, `refs/remotes/<remote>/<target>` for the push schemes, null under `keep` (no record). A caller that
+ * already read the group passes it, so the body is read once.
  */
-export async function integrationTargetRef(store: ControlStore, groupId: string): Promise<string | null> {
-  const integration = readGroupIntegration(readGroup(store, groupId));
+export async function integrationTargetRef(store: ControlStore, groupId: string, group?: unknown): Promise<string | null> {
+  const integration = readGroupIntegration(group ?? readGroup(store, groupId));
   if (integration === null) return null;
   const { scheme } = integration;
   if (scheme.delivery === "keep") return null;
@@ -84,10 +85,12 @@ export async function integrationTargetRef(store: ControlStore, groupId: string)
  * Where a group's decision can be, in the order the first holder wins: working tree, integration target, group branch.
  * Dir-requirements spec §10: a dir group's ledger lives only on its work branch in the (bare) vault -- no working tree,
  * no integration target. Its base is an import with `.decisions/` left out, so every ledger line on the branch was added
- * by a landing of the group; a base that holds one is a broken invariant (Rule 12).
+ * by a landing of the group; a base that holds one is a broken invariant (Rule 12). A caller that already read the group
+ * passes it, so the body is read once.
  */
-export async function ledgerSources(store: ControlStore, repo: string, groupId: string): Promise<LedgerSource[]> {
-  if (isDirGroup(store, groupId)) {
+export async function ledgerSources(store: ControlStore, repo: string, groupId: string, group?: unknown): Promise<LedgerSource[]> {
+  const record = group ?? readGroup(store, groupId);
+  if (dirWorkspaceOf(record) !== null) {
     let base: string | null;
     try { base = (await git(repo, [...QUIET_GIT, "rev-parse", "--verify", "--quiet", `refs/orca/group/${groupId}/base^{commit}`])).trim(); }
     catch { base = null; } // not exported yet: no base, and no branch to read either
@@ -96,7 +99,7 @@ export async function ledgerSources(store: ControlStore, repo: string, groupId: 
     }
     return [{ where: "group-branch", ref: `refs/heads/orca/${groupId}` }];
   }
-  const target = await integrationTargetRef(store, groupId);
+  const target = await integrationTargetRef(store, groupId, record);
   return [
     { where: "working-tree", ref: null },
     ...(target === null ? [] : [{ where: "target" as const, ref: target }]),

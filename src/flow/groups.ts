@@ -43,9 +43,9 @@ function groupBodyOf(store: ControlStore, groupId: string): unknown {
   try { return JSON.parse(String(row.body)); } catch { return null; }
 }
 
-/** The flow block of a group and its run's workspace; null for a group that is not a flow group. */
-export function flowGroupOf(store: ControlStore, groupId: string): (FlowGroupBlock & { workspaceKind: string; vaultId: string | null }) | null {
-  const block = flowBlockOf(groupBodyOf(store, groupId));
+/** The flow block of a group and its run's workspace; null for a group that is not a flow group. A caller that already read the body passes it. */
+export function flowGroupOf(store: ControlStore, groupId: string, body?: unknown): (FlowGroupBlock & { workspaceKind: string; vaultId: string | null }) | null {
+  const block = flowBlockOf(body ?? groupBodyOf(store, groupId));
   if (block === null) return null;
   const run = store.db.prepare("SELECT workspace, vault_id FROM flow_runs WHERE id=?").get(block.flowRunId);
   if (run === undefined) return null;
@@ -82,8 +82,8 @@ export function vaultPathOfRepoId(env: NodeJS.ProcessEnv, repoId: string): strin
 }
 
 /** §6.2 repository resolution: a `dir` flow group's target is its run's vault; null for any other group. */
-export function flowGroupRepoId(store: ControlStore, groupId: string): string | null {
-  const group = flowGroupOf(store, groupId);
+export function flowGroupRepoId(store: ControlStore, groupId: string, body?: unknown): string | null {
+  const group = flowGroupOf(store, groupId, body);
   return group === null || group.workspaceKind !== "dir" || group.vaultId === null ? null : flowVaultRepoId(group.vaultId);
 }
 

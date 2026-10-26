@@ -57,9 +57,10 @@ const ARTIFACT_UNREADABLE = new Set<string>(["artifact-not-found", "artifact-has
  * correction names (the caller reads the corrections store), and a flag on one of them reads `corrected` -- disagreeing
  * is a correction, so it no longer waits for the person. Nothing is written here.
  */
-export async function readGroupDecisionsView(store: ControlStore, repo: string, groupId: string, correctedIds: ReadonlySet<string> = new Set()): Promise<GroupDecisionsViewV1> {
-  readGroup(store, groupId); // group-not-found before any git child
-  const { first, lines } = await labelDecisions(repo, await ledgerSources(store, repo, groupId));
+export async function readGroupDecisionsView(store: ControlStore, repo: string, groupId: string, correctedIds: ReadonlySet<string> = new Set(), group?: unknown): Promise<GroupDecisionsViewV1> {
+  // group-not-found before any git child; a caller that already read the group passes it.
+  const record = group ?? readGroup(store, groupId);
+  const { first, lines } = await labelDecisions(repo, await ledgerSources(store, repo, groupId, record));
   const pendingRows = listPendingDecisions(store, groupId);
   // Checks spec 2026-10-22 §6.6: a model-review finding this group is involved in is listed here too (its row is the
   // review group's, named as ownerGroupId so a ratify goes there).

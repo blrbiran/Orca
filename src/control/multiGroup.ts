@@ -115,19 +115,27 @@ export function isMultiGroup(store: ControlStore, groupId: string): boolean {
 }
 
 /** §5.3: the repository a member writes: its own repo id for a `repo` member, its folder's vault for a `dir` member. */
+function targetRepoIdOf(target: FrozenMultiDirTarget): string {
+  if (target.kind === "repo") return target.repoId;
+  if (target.dirWorkspace === undefined) throw new ControlError("multi-dir-invalid", `dir-workspace:${target.key}`);
+  return flowVaultRepoId(target.dirWorkspace.vaultId);
+}
+
 export function dirTargetRepoId(store: ControlStore, groupId: string, key: string): string {
   const multi = multiDirOf(bodyOf(store, groupId));
   if (multi === null) throw new ControlError("multi-dir-invalid", `not-multi:${groupId}`);
   const target = multi.dirs.find((dir) => dir.key === key);
   if (target === undefined) throw new ControlError("multi-dir-invalid", `dir:${key}`);
-  if (target.kind === "repo") return target.repoId;
-  if (target.dirWorkspace === undefined) throw new ControlError("multi-dir-invalid", `dir-workspace:${key}`);
-  return flowVaultRepoId(target.dirWorkspace.vaultId);
+  return targetRepoIdOf(target);
 }
 
-/** §5.3: the repository of the primary (registered first) member. */
-export function multiPrimaryRepoId(store: ControlStore, groupId: string): string {
-  const multi = multiDirOf(bodyOf(store, groupId));
+/** §5.3: the repository of the primary (registered first) member, from a group body the caller already read. */
+export function multiPrimaryRepoIdOf(group: unknown, groupId = ""): string {
+  const multi = multiDirOf(group);
   if (multi === null || multi.dirs.length === 0) throw new ControlError("multi-dir-invalid", `not-multi:${groupId}`);
-  return dirTargetRepoId(store, groupId, multi.dirs[0]!.key);
+  return targetRepoIdOf(multi.dirs[0]!);
+}
+
+export function multiPrimaryRepoId(store: ControlStore, groupId: string): string {
+  return multiPrimaryRepoIdOf(bodyOf(store, groupId), groupId);
 }

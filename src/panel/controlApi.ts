@@ -6,7 +6,8 @@ import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
-import { isMultiGroup, multiPrimaryRepoId } from "../control/multiGroup.js";
+import { multiDirOf, multiPrimaryRepoIdOf } from "../control/multiGroup.js";
+import { readGroup } from "../control/queries.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { planLibraryEntryView, planLibraryListView, planLibraryVersionBytes } from "../control/planLibrary/views.js";
 import { scheduleDetailView, scheduleFiresView, scheduleListView } from "../control/schedules/views.js";
@@ -244,13 +245,14 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   app.get("/api/control/groups/:groupId/decisions", asyncRoute(async (req, res) => {
     const groupId = String(req.params.groupId);
     try {
+      const group = readGroup(deps.store, groupId);
       // Multi-directory projects spec §5.4: one ledger, in the primary directory's commit (the group has no single repository).
-      const repoId = isMultiGroup(deps.store, groupId) ? multiPrimaryRepoId(deps.store, groupId) : groupRepoId(deps.store, groupId);
+      const repoId = multiDirOf(group) !== null ? multiPrimaryRepoIdOf(group, groupId) : groupRepoId(deps.store, groupId, group);
       // Dir-requirements spec §10: a vault id (a dir group's, a dir flow group's) is resolved by the panel's resolver; it
       // is no trusted repository. Every other id keeps the trusted-repository check.
       const repo = repoId.startsWith(FLOW_VAULT_REPO_PREFIX) || deps.service?.repositoryKnown(repoId) ? deps.service?.repositoryPathOf(repoId) ?? null : null;
       if (repo === null) { sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id."); return; }
-      res.json(await readGroupDecisionsView(deps.store, repo, groupId, await deps.service!.correctedDecisionIds()));
+      res.json(await readGroupDecisionsView(deps.store, repo, groupId, await deps.service!.correctedDecisionIds(), group));
     } catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));

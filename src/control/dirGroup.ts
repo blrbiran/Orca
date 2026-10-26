@@ -35,25 +35,26 @@ export function isDirGroup(store: ControlStore, groupId: string): boolean {
   return dirWorkspaceOf(bodyOf(store, groupId)) !== null;
 }
 
-/** §6.1: a dir group's target repo id is its folder's vault (`flow-vault-<vaultId>`, resolved by vaultPathOfRepoId); null otherwise. */
-export function dirGroupRepoId(store: ControlStore, groupId: string): string | null {
-  const frozen = dirWorkspaceOf(bodyOf(store, groupId));
+/** §6.1: a dir group's repo id from a body the caller already read: its folder's vault (`flow-vault-<vaultId>`); null otherwise. */
+export function dirGroupRepoIdOf(body: unknown): string | null {
+  const frozen = dirWorkspaceOf(body);
   return frozen === null ? null : flowVaultRepoId(frozen.vaultId);
 }
 
 /**
  * The repository a group's driver works in (the target repo id, §2). Moved here from executionDriver.ts, which
- * re-exports it, so requirementCalls.ts can read it without entering the driver's import cycle.
+ * re-exports it, so requirementCalls.ts can read it without entering the driver's import cycle. A caller that already
+ * read the group passes it, so the body is read once.
  */
-export function groupRepoId(store: ControlStore, groupId: string): string {
-  const group = readGroup(store, groupId) as unknown as { plan?: { repoId: string }; requirement?: { repoId: string } };
+export function groupRepoId(store: ControlStore, groupId: string, group?: unknown): string {
+  const record = (group ?? readGroup(store, groupId)) as { plan?: { repoId: string }; requirement?: { repoId: string } };
   // Multi-directory projects spec §5.3: a multi group has no single target repository; its callers resolve a member on
   // purpose (multiPrimaryRepoId, dirTargetRepoId) or branch. The detail names the group.
-  if (multiDirOf(group) !== null) throw new ControlError("multi-dir-group-no-single-repo", groupId);
+  if (multiDirOf(record) !== null) throw new ControlError("multi-dir-group-no-single-repo", groupId);
   // Flow engine spec §6.2: a `dir` flow group (parent or child) targets its run's vault, whatever else it names.
   // Dir-requirements spec §6.1: a dir group (a requirement opened on a `dir` project) targets its folder's vault.
   // N1 plan F16: a clarifying group has no plan yet; its requirement names the repository.
-  const repoId = flowGroupRepoId(store, groupId) ?? dirGroupRepoId(store, groupId) ?? group.plan?.repoId ?? group.requirement?.repoId;
+  const repoId = flowGroupRepoId(store, groupId, record) ?? dirGroupRepoIdOf(record) ?? record.plan?.repoId ?? record.requirement?.repoId;
   if (repoId === undefined) throw new ControlError("recovery-blocked", `group-repository-missing:${groupId}`);
   return repoId;
 }

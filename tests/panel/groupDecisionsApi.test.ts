@@ -97,6 +97,22 @@ async function world(options: HarnessOptions = {}) {
 const runOf = (view: View, runId: string) => view.tasks.flatMap((task) => task.runs).find((run) => run.runId === runId)!;
 
 describe("the group decisions view (control run decisions Task 8)", { timeout: 60_000 }, () => {
+  it("reads the group body once per GET", async () => {
+    const w = await world(); try {
+      const db = w.h.store.db;
+      const prepare = db.prepare;
+      let reads = 0;
+      let status = 0;
+      db.prepare = ((sql: string, ...args: unknown[]) => {
+        if (sql === "SELECT body FROM groups WHERE id=?") reads += 1;
+        return (prepare as unknown as (...values: unknown[]) => unknown).call(db, sql, ...args);
+      }) as typeof db.prepare;
+      try { status = (await w.get()).status; } finally { db.prepare = prepare; }
+      expect(status).toBe(200);
+      expect(reads).toBe(1);
+    } finally { await w.dispose(); }
+  });
+
   it("shows a landed decision as group-branch before integration and as target after", async () => {
     const w = await world({ decisions: () => [good()] }); try {
       const runId = await w.claim();
