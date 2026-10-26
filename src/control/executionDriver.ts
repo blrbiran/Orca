@@ -33,7 +33,7 @@ import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { priorFailuresAtPrepare } from "./priorFailures.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordActivity } from "./activity.js";
-import {artifactSchema,type RunProgress} from "./schema.js";
+import {artifactSchema,operatorNoteSchema,type OperatorNote,type RunProgress} from "./schema.js";
 import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
@@ -333,6 +333,15 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     blockRun(deps, runId, "A2", "agent-unfrozen");
     return true;
   }
+  // Live transcript spec §10.5.2: a continuation's note is frozen into the start envelope, so a row that no longer parses
+  // is blocked by name rather than dispatched without its note.
+  const rawNote = (run as { operatorNote?: unknown }).operatorNote;
+  let operatorNote: OperatorNote | undefined;
+  if (rawNote !== undefined) {
+    const parsed = operatorNoteSchema.safeParse(rawNote);
+    if (!parsed.success) { blockRun(deps, runId, "A2", "run:operatorNote"); return true; }
+    operatorNote = parsed.data;
+  }
   const drive = run.drive;
   // Multi-directory projects spec §7.1/§7.4: a multi group has no single repository, and A2 reads its frozen list (never
   // the live registry). What a multi run cannot do (continuation, allowance resume, saved-result recovery) is named here,
@@ -343,7 +352,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     const allowancePredecessor = (allowanceWork(store, run.groupId, run.workItemId) as { allowancePredecessorRunId?: string }).allowancePredecessorRunId;
     const allowanceBase = allowancePredecessor === undefined ? null : readDriverRun(store, allowancePredecessor).drive?.base ?? null;
     if (run.continuationIntentId || allowanceBase !== null) { blockRun(deps, runId, "A2", "multi-dir-continuation-unsupported"); return true; }
-    return stepA2Multi(deps, run, multi);
+    return stepA2Multi(deps, run, multi, operatorNote);
   }
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
@@ -394,6 +403,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
     sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...skillEnvelopeKey(prepared.kind, skills),
+    ...(operatorNote === undefined ? {} : { operatorNote }),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
@@ -412,7 +422,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
  * work branch and workspace. The first written one is the ccloop primary and keeps today's workspace path; the others are
  * flat leaves of the workspaces root. Skills inject into the primary only.
  */
-async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: FrozenMultiDir): Promise<boolean> {
+async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: FrozenMultiDir, operatorNote: OperatorNote | undefined): Promise<boolean> {
   const { store } = deps;
   const runId = run.runId, drive = run.drive!, taskId = run.taskId!;
   const writes = taskWrites(store, run.groupId, taskId);
@@ -484,6 +494,7 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
     ...(additionalRepos.length === 0 ? {} : { additionalRepos }),
     ...(priorFailures !== undefined ? { priorFailures } : {}),
     ...skillEnvelopeKey(prepared.kind, skills),
+    ...(operatorNote === undefined ? {} : { operatorNote }),
   }, contract, null);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {

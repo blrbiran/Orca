@@ -167,6 +167,23 @@ it("carries only codexSkillsDir for a Codex skill run and rejects both directory
  expect(()=>toStartEnvelope(ledgerEnvelope(),runRow(),{...work,skillPluginDir:"/tmp/plugin",codexSkillsDir:"/tmp/skills"},contract)).toThrow("start-envelope-conflict");
 });
 
+// Live transcript spec §10.5.2: the operator's note travels on the work entry, from the note intent A2 read off the run.
+describe("the operator note on a loop envelope", () => {
+  const note = { text: "please also update the changelog", scope: "next-attempt" as const };
+
+  it("emits the note when the run carries one, and the strict schema accepts the envelope", () => {
+    const built = toStartEnvelope(ledgerEnvelope(), runRow(), { ...work, operatorNote: note }, contract);
+    expect(built.work).toEqual({ kind: "loop", contract, targetRepo: "/tmp/repo", base: "v1", sourceDir: "/tmp/src", operatorNote: note });
+    expect(startEnvelopeSchema.safeParse(built).success).toBe(true);
+  });
+
+  it("freezes the note: two different notes are two different envelopes", () => {
+    const first = toStartEnvelope(ledgerEnvelope(), runRow(), { ...work, operatorNote: note }, contract);
+    const second = toStartEnvelope(ledgerEnvelope(), runRow(), { ...work, operatorNote: { ...note, text: "and the tests" } }, contract);
+    expect(sha256Canonical(second)).not.toBe(sha256Canonical(first));
+  });
+});
+
 // Multi-directory projects spec §7.1: the work entry names exactly the contract's extra directories -- both sides, or
 // neither. ccloop materializes what the work entry names, so a contract naming an extra the entry does not would run
 // with a missing directory, and an entry naming one the contract does not would escape the contract's claims.

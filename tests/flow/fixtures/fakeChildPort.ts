@@ -68,6 +68,9 @@ export function fakeChildPort(opts: { timeoutMs?: number | null } = {}) {
     failResume(childGroupId: string, code: string): void {
       resumeFailures.set(childGroupId, code);
     },
+    clearResumeFailure(childGroupId: string): void {
+      resumeFailures.delete(childGroupId);
+    },
     setStopState(childGroupId: string, state: "handoff-pending" | "handoff-partial" | "handoff-unresolved"): void {
       stopStates.set(childGroupId, state);
     },

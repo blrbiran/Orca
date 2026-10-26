@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import type { ControlStore } from "../../src/control/store.js";
-import { appendQueued, loadRun, ranOnInputsOf } from "../../src/flow/kernel.js";
+import { advanceRun, appendQueued, loadRun, ranOnInputsOf } from "../../src/flow/kernel.js";
 import type { ExecutionBody, FlowRunBody } from "../../src/flow/kinds/registry.js";
 import { childGroupIdOf, type FlowChildPort } from "../../src/flow/kinds/work.js";
 import { acceptMessage, type FlowMessageInput } from "../../src/flow/messages.js";
@@ -82,8 +82,8 @@ describe("operator note (§10.5.2)", () => {
       expect(step).toMatchObject({ stepKey: "write", seq: 1, childGroupId, acceptedAt: recorded[0]!.at });
       expect(Object.keys(step).sort()).toEqual(["acceptedAt", "childGroupId", "deadlineAt", "seq", "stepKey"]);
       expect(Date.parse(step.deadlineAt) - Date.parse(step.acceptedAt)).toBe(TIMEOUT_MS + 60_000);
-      // T5 places no stop: the delivery is settleStopIntents' (T6).
-      expect(child.stops).toHaveLength(0);
+      // T6: the accept's own pass issues the delivery stop, the same boundary a pause uses.
+      expect(child.stops).toMatchObject([{ childGroupId, flowStop: { flowRunId, stepKey: "write", seq: 1, reason: "note" } }]);
     } finally { await w.dispose(); }
   });
 
@@ -168,6 +168,117 @@ describe("operator note (§10.5.2)", () => {
       expect(notesOf(w, flowRunId)).toMatchObject([{ seq: accepted.seq, text: "one more thing", scope: "remaining-attempts" }]);
       expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
       expect(runOf(w, flowRunId).pauseIntent!.steps).toHaveLength(1);
+    } finally { await w.dispose(); }
+  });
+
+  it("a note stop completes and the resume delivers it through a continuation carrying the joined note", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      const text = "please also update the changelog";
+      const accepted = await acceptMessage(w.deps, flowRunId, note(text));
+      expect(accepted.state).toBe("applied");
+      const intent = runOf(w, flowRunId).noteIntent!;
+      expect(intent.steps).toHaveLength(1);
+      await w.advance();
+      expect(child.stops).toHaveLength(1);
+      expect(child.stops[0]).toMatchObject({
+        childGroupId, acceptedAt: intent.steps[0]!.acceptedAt, deadlineAt: intent.steps[0]!.deadlineAt,
+        flowStop: { flowRunId, stepKey: "write", seq: 1, reason: "note" },
+      });
+      child.completeStop(childGroupId);
+      await w.advance();
+      expect(child.resumes).toHaveLength(1);
+      expect(child.resumes[0]!.children).toEqual([{
+        childGroupId, flowStop: { flowRunId, stepKey: "write", seq: 1, reason: "note" },
+        operatorNote: { text, scope: "next-attempt" },
+      }]);
+      expect(child.resumes[0]!.result).toEqual([{ childGroupId, pendingRunId: `run-${childGroupId}` }]);
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      expect(stateOf(w, flowRunId)).toBe("running");
+      expect(w.latest(flowRunId, "write")!.state).toBe("running");
+      expect(notesOf(w, flowRunId)[0]).toMatchObject({ text, scope: "next-attempt", deliveredTo: [`run-${childGroupId}`] });
+    } finally { await w.dispose(); }
+  });
+
+  it("two notes join in message order and a remaining-attempts note wins the scope", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      const first = await acceptMessage(w.deps, flowRunId, note("first"));
+      const second = await acceptMessage(w.deps, flowRunId, note("second", "remaining-attempts"));
+      expect([first.state, second.state]).toEqual(["applied", "applied"]);
+      expect(runOf(w, flowRunId).noteIntent!.steps).toHaveLength(1);
+      child.completeStop(childGroupId);
+      await w.advance();
+      expect(child.resumes).toHaveLength(1);
+      expect(child.resumes[0]!.children[0]!.operatorNote).toEqual({ text: "first\nsecond", scope: "remaining-attempts" });
+    } finally { await w.dispose(); }
+  });
+
+  it("a delivered next-attempt note is not re-sent; a remaining-attempts note is", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, note("one-off"));
+      await acceptMessage(w.deps, flowRunId, note("keep me", "remaining-attempts"));
+      child.completeStop(childGroupId);
+      await w.advance();
+      expect(child.resumes[0]!.children[0]!.operatorNote).toEqual({ text: "one-off\nkeep me", scope: "remaining-attempts" });
+      const accepted = await acceptMessage(w.deps, flowRunId, note("and this"));
+      expect(accepted.state).toBe("applied");
+      await w.advance();
+      expect(child.resumes).toHaveLength(2);
+      expect(child.resumes[1]!.children[0]!.operatorNote).toEqual({ text: "keep me\nand this", scope: "remaining-attempts" });
+    } finally { await w.dispose(); }
+  });
+
+  it("a restartable note resume continues with no continuation and consumes the note", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      const accepted = await acceptMessage(w.deps, flowRunId, note("one-off"));
+      expect(accepted.state).toBe("applied");
+      child.completeStop(childGroupId, { recoverable: false });
+      await w.advance();
+      expect(child.resumes).toHaveLength(1);
+      expect(child.resumes[0]!.result).toEqual([{ childGroupId, pendingRunId: null }]);
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      expect(stateOf(w, flowRunId)).toBe("running");
+      const recorded = notesOf(w, flowRunId)[0]!;
+      expect(recorded.deliveredTo).toBeUndefined();
+      expect(recorded.consumedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    } finally { await w.dispose(); }
+  });
+
+  it("a budget refusal keeps the intent and its error, and the next pass delivers", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, note("please retry"));
+      child.completeStop(childGroupId);
+      child.failResume(childGroupId, "continuation-budget-unavailable");
+      await advanceRun(w.deps, flowRunId);
+      expect(runOf(w, flowRunId).noteIntent!.steps).toHaveLength(1);
+      expect(runOf(w, flowRunId).lastError!.message).toBe("continuation-budget-unavailable");
+      expect(child.resumes).toHaveLength(0);
+      expect(notesOf(w, flowRunId)[0]!.deliveredTo).toBeUndefined();
+      child.clearResumeFailure(childGroupId);
+      await advanceRun(w.deps, flowRunId);
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      expect(child.resumes).toHaveLength(1);
+      expect(notesOf(w, flowRunId)[0]!.deliveredTo).toEqual([`run-${childGroupId}`]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a note recorded during a pause is delivered by the resume message", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      const paused = await acceptMessage(w.deps, flowRunId, message({ body: { command: "pause" }, pauseAuthority: true }));
+      expect(paused.state).toBe("applied");
+      const accepted = await acceptMessage(w.deps, flowRunId, note("after the pause"));
+      expect(accepted.state).toBe("applied");
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      child.completeStop(childGroupId);
+      const resumed = await acceptMessage(w.deps, flowRunId, message({ body: { command: "resume" }, personAuthority: true }));
+      expect(resumed.state).toBe("applied");
+      expect(child.resumes).toHaveLength(1);
+      expect(child.resumes[0]!.children[0]).toEqual({
+        childGroupId, flowStop: { flowRunId, stepKey: "write", seq: 1, reason: "pause" },
+        operatorNote: { text: "after the pause", scope: "next-attempt" },
+      });
+      expect(runOf(w, flowRunId).pauseIntent).toBeUndefined();
+      expect(stateOf(w, flowRunId)).toBe("running");
+      expect(notesOf(w, flowRunId)[0]!.deliveredTo).toEqual([`run-${childGroupId}`]);
     } finally { await w.dispose(); }
   });
 });

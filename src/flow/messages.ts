@@ -34,7 +34,7 @@ import { flowHandoffDeadline, type FlowStopMarker } from "../control/stopIntent.
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
 import {
-  advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
+  advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordNoteDelivery, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
 } from "./kernel.js";
 import type { ExecutionBody, FlowNoteIntent, FlowNoteStep, FlowPauseStep, LoadedRun, OperatorNoteEntry } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
@@ -362,11 +362,29 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
     if (state.state !== "resumable") throw new FlowRefusal("flow-pause-stop-incomplete", `${step.stepKey}:${state.state === "not-complete" ? state.stopState : state.state}`);
   }
   // One batch: a refusal leaves the run paused with the intent in place (D8).
-  children.resume(intent.steps.map((step) => ({ childGroupId: step.childGroupId, flowStop: pauseMarker(run, step) })));
+  // Live transcript spec §10.5.2: notes recorded during the pause travel on the resume, once.
+  const pausedSteps = intent.steps.map((step) => {
+    const execution = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.stepKey && e.seq === step.seq);
+    const delivered = pendingNotes((execution?.body as ExecutionBody | undefined)?.operatorNotes);
+    const joined = delivered.length === 0 ? undefined : joinPendingNotes(delivered);
+    return {
+      execution, delivered,
+      resume: { childGroupId: step.childGroupId, flowStop: pauseMarker(run, step), ...(joined === undefined ? {} : { operatorNote: joined }) },
+    };
+  });
+  const resumed = children.resume(pausedSteps.map((entry) => entry.resume));
   deps.store.transaction(() => {
+    pausedSteps.forEach((entry, index) => {
+      if (entry.execution !== undefined) recordNoteDelivery(deps, run, entry.execution, entry.delivered, resumed[index]?.pendingRunId ?? null);
+    });
     updateFlowRunBody(deps.store, run.row.id, (current) => {
       const { pauseIntent: _done, ...rest } = current;
-      return rest;
+      const steps = (rest.noteIntent as FlowNoteIntent | undefined)?.steps.filter((step) => !intent.steps.some((paused) => paused.stepKey === step.stepKey)) ?? [];
+      if (steps.length === 0) {
+        const { noteIntent: _again, ...without } = rest;
+        return without;
+      }
+      return { ...rest, noteIntent: { steps } };
     });
     setFlowRunState(deps.store, run.row.id, "paused", "running");
   });

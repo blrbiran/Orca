@@ -29,6 +29,7 @@ import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
 import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capStatuses } from "./spendCaps.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
+import type { OperatorNote } from "./schema.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -42,7 +43,10 @@ export interface DispatchRun {
   claimOrdinal: number | null; providerAttemptOrdinal: number; remaining: { work: unknown; handoff: unknown };
   cumulative: unknown; unknown: { work: boolean; handoff: boolean }; highWater: number; breaches: unknown[];
   executionProfile: unknown; handoffProfile: unknown;
-  failureCode: string | null; [key: string]: unknown;
+  failureCode: string | null;
+  /** Live transcript spec §10.5.2: the operator note a flow continuation carries into its start envelope (A2). */
+  operatorNote?: OperatorNote;
+  [key: string]: unknown;
 }
 type CommandResult = CommandSuccessV1 | CommandErrorBodyV1;
 
@@ -427,6 +431,7 @@ export function createStartingRun(
     grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
+    ...(continuation?.operatorNote !== undefined ? { operatorNote: continuation.operatorNote } : {}),
     continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
   };

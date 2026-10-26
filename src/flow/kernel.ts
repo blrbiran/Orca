@@ -24,7 +24,7 @@ import type { ControlStore } from "../control/store.js";
 import type { FlowStopMarker } from "../control/stopIntent.js";
 import { definitionHash, outputHashOfCommit, outputHashOfRecord, type SkillLock } from "./journal/fingerprint.js";
 import { runShell } from "./kinds/check.js";
-import { builtinKinds, type ExecutionBody, type FlowPauseStep, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type RoleResolution } from "./kinds/registry.js";
+import { builtinKinds, type ExecutionBody, type FlowNoteIntent, type FlowNoteStep, type FlowPauseStep, type FlowRunBody, type KindContext, type KindDefinition, type KindOutcome, type KindRegistry, type LoadedRun, type OperatorNoteEntry, type RoleResolution } from "./kinds/registry.js";
 import { buildStepPrompt, bounded } from "./prompt.js";
 import {
   appendExecution, appendFlowDecision, appendMessage, FEEDBACK_KEY, finishExecution, getEffect, getFlowRun, getHead, insertFlowRun, listExecutions, listHeads, listMessages, listRunsWithOpenWork, setDefinitionHash, setEffectState, setFlowRunState, setHead,
@@ -52,7 +52,7 @@ import type { FlowCallResult } from "./calls.js";
 import { completePlanCall, finishPlan, isOpenQuestion, makePlan, planOf, PLAN_KEY } from "./rerun.js";
 import { flowLayers, readFlowSettings } from "./settings.js";
 import { EFFECT_NOT_REPORTED, effectUnreported, gateEffect, settleEffect } from "./effects.js";
-import { consumeAtBoundary, consumeInterventions } from "./messages.js";
+import { consumeAtBoundary, consumeInterventions, joinPendingNotes, pendingNotes } from "./messages.js";
 import { heldBy, markPointer, marksOf, suppressedSteps, type Mark } from "./marks.js";
 import { advanceIntakes, completeIntakeCall, feedbackForWork, hasBusyIntake } from "./feedback/intake.js";
 import { expansionParams, paramsIdentity, resolveStartParams, storeImages } from "./params.js";
@@ -859,19 +859,47 @@ export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution:
 /** The marker a pause placed on a step's child (live transcript spec §10.5.1, plan D4). */
 const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
   ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "pause" });
+/** The marker a note placed on a step's child (live transcript spec §10.5.2, plan D6). */
+const noteMarker = (run: LoadedRun, step: FlowNoteStep): FlowStopMarker =>
+  ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "note" });
+
+/** D10: the notes this delivery settled, and the intent step it clears; the caller supplies the transaction. */
+export function recordNoteDelivery(deps: FlowDeps, run: LoadedRun, execution: ExecutionRow, delivered: OperatorNoteEntry[], pendingRunId: string | null): void {
+  const now = deps.now();
+  if (delivered.length > 0) {
+    const settled = new Set(delivered.map((note) => note.seq));
+    const notes = ((execution.body as ExecutionBody).operatorNotes ?? []).map((note) => {
+      if (!settled.has(note.seq)) return note;
+      if (pendingRunId === null) return { ...note, consumedAt: new Date(now).toISOString() };
+      // A next-attempt note is spent by the continuation that carried it; a remaining-attempts one stays pending.
+      return note.scope === "next-attempt" ? { ...note, deliveredTo: [...(note.deliveredTo ?? []), pendingRunId] } : note;
+    });
+    finishExecution(deps.store, { flowRunId: run.row.id, stepKey: execution.stepKey, seq: execution.seq }, "running", "running", now, {
+      body: { ...(execution.body as ExecutionBody), operatorNotes: notes },
+    });
+  }
+  updateFlowRunBody(deps.store, run.row.id, (current) => {
+    const steps = (current.noteIntent as FlowNoteIntent | undefined)?.steps.filter((step) => step.stepKey !== execution.stepKey) ?? [];
+    if (steps.length === 0) {
+      const { noteIntent: _done, ...rest } = current;
+      return rest;
+    }
+    return { ...current, noteIntent: { steps } };
+  });
+}
 
 /**
- * Live transcript spec §10.5.1 (plan D2): the stops a pause owes. For every step of the run's `pauseIntent`, a missing
- * stop is issued; a partial or unresolved stop, or one the flow did not place, is recorded on the run and left for the
- * person's recovery; a complete stop waits for the resume. Expected refusals never throw through the pass. True when a
- * stop was issued.
+ * Live transcript spec §10.5.1, §10.5.2 (plan D2): the stops a pause or note owes. For every step of the run's
+ * `pauseIntent` or `noteIntent`, a missing stop is issued; a note whose stop is complete is resumed with its joined
+ * notes (D9) and settled (D10); a partial or unresolved stop, or one the flow did not place, is recorded on the run and
+ * left for the person's recovery. A pause's complete stop waits for the person's resume. Expected refusals never throw
+ * through the pass. True when something moved.
  */
 async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
-  const intent = run.body.pauseIntent;
   const children = deps.children;
-  if (intent === undefined || children === undefined) return false;
+  if (children === undefined) return false;
   let issued = false;
-  for (const step of intent.steps) {
+  for (const step of run.body.pauseIntent?.steps ?? []) {
     const state = children.stopState(step.childGroupId, pauseMarker(run, step));
     if (state.state === "none") {
       try {
@@ -888,6 +916,42 @@ async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolea
     if (state.state === "not-complete" && state.stopState === "handoff-pending") continue;
     if (state.state === "not-complete") recordRunError(deps, run.row.id, `flow-pause-stop-incomplete:${step.stepKey}:${state.stopState}`);
     else if (state.state === "foreign") recordRunError(deps, run.row.id, `flow-pause-stop-incomplete:${step.stepKey}:foreign`);
+  }
+  for (const step of run.body.noteIntent?.steps ?? []) {
+    const execution = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.stepKey && e.seq === step.seq);
+    if (execution === undefined) continue;
+    const state = children.stopState(step.childGroupId, noteMarker(run, step));
+    if (state.state === "none") {
+      try {
+        children.stop(step.childGroupId, { acceptedAt: step.acceptedAt, deadlineAt: step.deadlineAt, flowStop: noteMarker(run, step) });
+        issued = true;
+      } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        recordRunError(deps, run.row.id, `flow-pause-stop-failed:${step.stepKey}:${error.code}`);
+      }
+      continue;
+    }
+    if (state.state === "not-complete" && state.stopState === "handoff-pending") continue;
+    if (state.state !== "resumable") {
+      if (state.state === "not-complete") recordRunError(deps, run.row.id, `flow-pause-stop-incomplete:${step.stepKey}:${state.stopState}`);
+      else if (state.state === "foreign") recordRunError(deps, run.row.id, `flow-pause-stop-incomplete:${step.stepKey}:foreign`);
+      continue;
+    }
+    const delivered = pendingNotes((execution.body as ExecutionBody).operatorNotes);
+    // A defensive resume with no note: the intent is still settled, and the child continues without one.
+    const joined = delivered.length === 0 ? undefined : joinPendingNotes(delivered);
+    let pendingRunId: string | null;
+    try {
+      const [resumed] = children.resume([{ childGroupId: step.childGroupId, flowStop: noteMarker(run, step), ...(joined === undefined ? {} : { operatorNote: joined }) }]);
+      pendingRunId = resumed?.pendingRunId ?? null;
+    } catch (error) {
+      // A budget refusal or a lost stop keeps the intent and is retried; the note is not lost.
+      if (!(error instanceof FlowRefusal)) throw error;
+      recordRunError(deps, run.row.id, error.code);
+      continue;
+    }
+    deps.store.transaction(() => recordNoteDelivery(deps, run, execution, delivered, pendingRunId));
+    issued = true;
   }
   return issued;
 }

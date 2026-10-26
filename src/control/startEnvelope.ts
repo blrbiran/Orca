@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
 import { dispatchEnvelopeSchema, type DispatchEnvelopeV1 } from "./webProtocol.js";
-import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema, type PriorFailure } from "./schema.js";
+import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema, type OperatorNote, type PriorFailure } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 
 /**
@@ -49,6 +49,8 @@ export interface StartEnvelopeWork {
   priorFailures?: PriorFailure[];
   /** Multi-directory projects spec §7.1: the written directories beyond the primary, in the contract's order; absent for one. */
   additionalRepos?: Array<{ key: string; targetRepo: string; base: string }>;
+  /** Live transcript spec §10.5.2: the operator note a flow continuation carries; absent for every other run (no key). */
+  operatorNote?: OperatorNote;
 }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
@@ -123,6 +125,7 @@ export function toStartEnvelope(
       ...(work.ompSkillsDir !== undefined ? { ompSkillsDir: work.ompSkillsDir } : {}),
       ...(work.priorFailures !== undefined ? { priorFailures: work.priorFailures } : {}),
       ...(work.additionalRepos !== undefined ? { additionalRepos: work.additionalRepos } : {}),
+      ...(work.operatorNote !== undefined ? { operatorNote: work.operatorNote } : {}),
     },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so
