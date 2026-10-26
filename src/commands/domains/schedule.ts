@@ -170,9 +170,15 @@ const scheduleList: CommandDef = {
       const repoIds = [...new Set(listed.projects.flatMap((p) => (typeof p.controlRepoId === "string" && p.controlRepoId.length > 0 ? [p.controlRepoId] : [])))];
       return repoIds.map((repoId) => `schedules?repoId=${enc(repoId)}`);
     },
-    compose: (bodies, c) => c.args.flags.all === true
-      ? { schema: "orca-schedules-v1", all: true, schedules: bodies.flatMap((body) => (body as { schedules: unknown[] }).schedules) }
-      : bodies[0],
+    compose: (bodies, c) => {
+      if (c.args.flags.all !== true) return bodies[0];
+      const views = bodies as Array<{ schedules: unknown[]; corrupt?: unknown[] }>;
+      return {
+        schema: "orca-schedules-v1", all: true,
+        schedules: views.flatMap((body) => body.schedules),
+        corrupt: views.flatMap((body) => body.corrupt ?? []),
+      };
+    },
   },
   examples: ["orca schedule list", "orca schedule list --all"], format: (body) => text(body),
 };

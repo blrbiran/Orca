@@ -1441,6 +1441,7 @@ export const zh: Translation<typeof en> = {
     schedules: {
       region: "定时任务",
       unread: "读不到定时任务。",
+      corrupt: "无法读取的定时任务行（存储内容无法解析）：{{ids}}",
       ownerOnly: "只有面板所有者能改定时任务。",
       enabled: "启用",
       failureStreak: "连续 {{count}} 次启动失败",

@@ -254,18 +254,39 @@ describe("the schedule reads (§13.1, B2): revision, guarded bodies", () => {
     } finally { s.close(); }
   });
 
-  it("refuses a hand-edited body whose cron no longer parses, as schedule-body-invalid", async () => {
+  it("reports a hand-edited body whose cron no longer parses as a corrupt row, not a failed list", async () => {
     const s = await store();
     try {
       expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
       const row = readSchedule(s, "sch-a")!;
-      s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(JSON.stringify({ ...row.body, cron: "nope" }), "sch-a");
-      expect(() => readSchedule(s, "sch-a")).toThrow("recovery-blocked:schedule-body-invalid");
-      expect(() => scheduleListView(s, REPO, NOW)).toThrow("recovery-blocked:schedule-body-invalid");
       // §6's at-most-hourly rule holds of the stored body too: every minute is not a valid stored cron.
-      s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(JSON.stringify({ ...row.body, cron: "* * * * *" }), "sch-a");
-      expect(() => readSchedule(s, "sch-a")).toThrow("recovery-blocked:schedule-body-invalid");
-      expect(() => scheduleListView(s, REPO, NOW)).toThrow("recovery-blocked:schedule-body-invalid");
+      for (const cron of ["nope", "* * * * *"]) {
+        s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run(JSON.stringify({ ...row.body, cron }), "sch-a");
+        expect(() => readSchedule(s, "sch-a"), cron).toThrow("recovery-blocked:schedule-body-invalid");
+        expect(scheduleListView(s, REPO, NOW), cron).toEqual({
+          schema: "orca-schedules-v1", repoId: REPO, schedules: [],
+          corrupt: [{ id: "sch-a", code: "recovery-blocked", message: "recovery-blocked:schedule-body-invalid" }],
+        });
+      }
+    } finally { s.close(); }
+  });
+
+  it("removes a corrupt schedule without parsing it, keeping its body bytes; a parseable row is unchanged", async () => {
+    const s = await store();
+    try {
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      s.db.prepare("UPDATE schedules SET body=? WHERE id=?").run("not json", "sch-a");
+      expect(run(s, command("rm-corrupt", "schedule-remove", {}, { expectedRevision: 1 })).error).toBeUndefined();
+      const row = s.db.prepare("SELECT revision,removed,body FROM schedules WHERE id='sch-a'").get()!;
+      expect([Number(row.revision), Number(row.removed), String(row.body)]).toEqual([2, 1, "not json"]);
+      expect(refused(s, command("rm-again", "schedule-remove", {}, { expectedRevision: 2 })).code).toBe("no-op-command");
+      // Removed rows are not live, so the live list carries neither the corrupt row nor a corrupt entry for it.
+      expect(scheduleListView(s, REPO, NOW)).toEqual({ schema: "orca-schedules-v1", repoId: REPO, schedules: [], corrupt: [] });
+      // A live parseable row still lists and removes through the stamped path.
+      expect(run(s, command("c2", "schedule-set", flowCreate(), { scheduleId: "sch-b" })).error).toBeUndefined();
+      expect(scheduleListView(s, REPO, NOW).schedules.map((candidate) => candidate.id)).toEqual(["sch-b"]);
+      expect(run(s, command("rm-b", "schedule-remove", {}, { scheduleId: "sch-b", expectedRevision: 1 })).error).toBeUndefined();
+      expect(readSchedule(s, "sch-b")).toMatchObject({ removed: true, revision: 2, body: { updatedBy: "ana" } });
     } finally { s.close(); }
   });
 });

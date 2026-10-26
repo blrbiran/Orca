@@ -1571,6 +1571,7 @@ export const en = {
     schedules: {
       region: "Schedules",
       unread: "The schedules could not be read.",
+      corrupt: "Unreadable schedule rows (the stored body does not parse): {{ids}}",
       ownerOnly: "Only the panel owner can change schedules.",
       enabled: "Enabled",
       failureStreak: "{{count}} failed start(s) in a row",

@@ -404,6 +404,7 @@ export function ScheduleSettings(props: {
   const may = mayHumanOnly(useContext(AccountContext));
   const repoId = props.scope.repoId;
   const [view, setView] = useState<SchedulesViewV1 | null>(null);
+  const corrupt = view?.corrupt ?? [];
   const [unread, setUnread] = useState(false);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const [noPump, setNoPump] = useState(false);
@@ -447,13 +448,17 @@ export function ScheduleSettings(props: {
       {refusal !== null && <Refusal refusal={refusal} />}
       {noPump && <p role="note" data-testid="schedules-no-pump">{t("schedules.noPump")}</p>}
       {unread && <p data-testid="schedules-unread">{t("settings.schedules.unread")}</p>}
+      {corrupt.length > 0 && (
+        <p data-testid="schedules-corrupt">{t("settings.schedules.corrupt", { ids: corrupt.map((row) => row.id).join(", ") })}</p>
+      )}
       {!may && <p role="note">{t("settings.schedules.ownerOnly")}</p>}
-      {view !== null && (view.schedules.length === 0 ? <p>{t("settings.schedules.none")}</p> : (
+      {view !== null && view.schedules.length === 0 && corrupt.length === 0 && <p>{t("settings.schedules.none")}</p>}
+      {view !== null && view.schedules.length > 0 && (
         // Keyed by the revision, so an edit or an add starts again from what the server holds after a change.
         <ul key={view.schedules.map((schedule) => `${schedule.id}:${schedule.revision}`).join(",")}>
           {view.schedules.map((schedule) => <ScheduleRow key={schedule.id} schedule={schedule} may={may} send={send} onFires={setDetailId} />)}
         </ul>
-      ))}
+      )}
       {may && view !== null && (props.dir === true
         ? <FlowScheduleForm repoId={repoId} dirPath={props.dirPath ?? null} send={send} />
         : <GroupScheduleForm repoId={repoId} defaultIntegration={props.defaultIntegration ?? null} send={send} />)}

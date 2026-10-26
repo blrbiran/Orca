@@ -7,7 +7,7 @@ import { parseCron, nextSlots } from "../checks/cron.js";
 import type { ControlStore } from "../store.js";
 import { readUsageCalendar } from "../usageCalendar.js";
 import { newestVersionSha } from "../planLibrary/store.js";
-import { listSchedules, listFires, latestFire, readSchedule, type ScheduleFire, type ScheduleRow } from "./store.js";
+import { listLiveSchedules, listFires, latestFire, readSchedule, type ScheduleFire, type ScheduleRow } from "./store.js";
 
 const fireView = (fire: ScheduleFire | null) => fire === null ? null : {
   seq: fire.seq, slot: fire.slot, at: fire.at, lateMs: fire.body.lateMs ?? null, missed: fire.body.missed ?? 0,
@@ -40,9 +40,14 @@ const scheduleView = (store: ControlStore, row: ScheduleRow, now: number) => ({
   newerVersion: newerVersion(store, row),
 });
 
-/** GET /api/control/schedules?repoId=<id>: the project's live schedules, creation order. */
+/** GET /api/control/schedules?repoId=<id>: the project's live schedules, creation order; a body this panel cannot read is a `corrupt` row, never a failed read. */
 export function scheduleListView(store: ControlStore, repoId: string, now: number) {
-  return { schema: "orca-schedules-v1" as const, repoId, schedules: listSchedules(store, repoId).map((row) => scheduleView(store, row, now)) };
+  const listed = listLiveSchedules(store, repoId);
+  return {
+    schema: "orca-schedules-v1" as const, repoId,
+    schedules: listed.rows.map((row) => scheduleView(store, row, now)),
+    corrupt: listed.corrupt.map(({ id, error }) => ({ id, code: error.code, message: error.message })),
+  };
 }
 
 /** GET /api/control/schedules/:scheduleId: the body, its next slots and last fire, and newer-version information. */

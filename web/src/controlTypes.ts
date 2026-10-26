@@ -1268,7 +1268,11 @@ export type ScheduleViewV1 = {
   lastSlot: number | null; tz: string | null; failureStreak: number; paused: boolean; pausedReason: string | null;
   nextSlots: number[]; lastFire: ScheduleFireViewV1 | null; newerVersion: string | null;
 };
-export type SchedulesViewV1 = { schema: "orca-schedules-v1"; repoId: string; schedules: ScheduleViewV1[] };
+export type SchedulesViewV1 = {
+  schema: "orca-schedules-v1"; repoId: string; schedules: ScheduleViewV1[];
+  /** A live row whose stored body cannot be read: listed by id, never rendered as a schedule. */
+  corrupt?: Array<{ id: string; code: string; message: string }>;
+};
 export type ScheduleDetailV1 = { schema: "orca-schedule-v1" } & ScheduleViewV1;
 export type ScheduleFiresViewV1 = { schema: "orca-schedule-fires-v1"; scheduleId: string; fires: ScheduleFireViewV1[] };
 // §5.3, §13.3: mirrors of src/control/planLibrary/views.ts and store.ts.

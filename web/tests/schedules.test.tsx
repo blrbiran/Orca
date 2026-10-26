@@ -220,6 +220,23 @@ describe("the project's schedules (spec §13.3, C13)", () => {
     // §13.3: the fire row's link goes to the run on the board.
     expect(within(fired).getByTestId("schedule-fire-link-1").getAttribute("href")).toBe("#board/flow/fr-00000000-0000-0000-0000-000000000001");
   });
+
+  it("names a corrupt row instead of calling the project empty", async () => {
+    serve((url) => {
+      if (url === "/api/control/config") return config();
+      if (url.startsWith("/api/control/schedules?")) return {
+        ...list(), corrupt: [{ id: "sch-broken", code: "recovery-blocked", message: "recovery-blocked:schedule-body-invalid" }],
+      };
+      if (url.startsWith("/api/control/plan-library?")) return libraryList();
+      return {};
+    });
+    render(as(owner, <ScheduleSettings scope={{ repoId: "repo" }} />));
+    // mutation: drop the paragraph, or keep "No schedules yet." beside it -> red
+    expect((await screen.findByTestId("schedules-corrupt")).textContent)
+      .toBe("Unreadable schedule rows (the stored body does not parse): sch-broken");
+    expect(screen.queryByText("No schedules yet.")).toBeNull();
+    expect(document.querySelector("section[aria-label='Schedules'] ul")).toBeNull();
+  });
 });
 
 describe("the add-group form's confirm mode (spec §13.3, M-C13c auto-with-delivery)", () => {

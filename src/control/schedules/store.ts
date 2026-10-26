@@ -45,16 +45,15 @@ export function readSchedule(store: ControlStore, scheduleId: string): ScheduleR
   return row === undefined ? null : rowOf(row);
 }
 
-/** A project's schedules, removed ones excluded unless asked, in creation order. */
-export function listSchedules(store: ControlStore, projectId: string | null, includeRemoved = false): ScheduleRow[] {
-  const where = [projectId === null ? null : "project_id=?", includeRemoved ? null : "removed=0"].filter((clause) => clause !== null).join(" AND ");
-  return store.db.prepare(`SELECT ${COLUMNS} FROM schedules${where === "" ? "" : ` WHERE ${where}`} ORDER BY rowid`)
-    .all(...(projectId === null ? [] : [projectId])).map(rowOf);
+/** The row's mark without its body: a corrupt body is no reason for a remove's no-op check to fail. */
+export function readScheduleState(store: ControlStore, scheduleId: string): { removed: boolean } | null {
+  const row = store.db.prepare("SELECT removed FROM schedules WHERE id=?").get(scheduleId);
+  return row === undefined ? null : { removed: Number(row.removed) === 1 };
 }
 
 export type ScheduleListing = { rows: ScheduleRow[]; corrupt: Array<{ id: string; error: ControlError }> };
 
-/** The same live listing as listSchedules, but a corrupt body is a per-row fact, not a throw that ends the read. */
+/** A project's live schedules in creation order; a corrupt body is a per-row fact, not a throw that ends the read. */
 export function listLiveSchedules(store: ControlStore, projectId: string | null): ScheduleListing {
   const where = [projectId === null ? null : "project_id=?", "removed=0"].filter((clause) => clause !== null).join(" AND ");
   const rows: ScheduleRow[] = [];
@@ -84,6 +83,11 @@ export function writeSchedule(store: ControlStore, scheduleId: string, input: { 
 
 export function markRemoved(store: ControlStore, scheduleId: string, input: { revision: number; body: ScheduleBody }): void {
   store.db.prepare("UPDATE schedules SET revision=?,removed=1,body=? WHERE id=?").run(input.revision, JSON.stringify(input.body), scheduleId);
+}
+
+/** A remove of a row whose body cannot be parsed: the mark and the revision only, so the stored bytes stay as they are. */
+export function markRemovedUnparsed(store: ControlStore, scheduleId: string, input: { revision: number }): void {
+  store.db.prepare("UPDATE schedules SET revision=?,removed=1 WHERE id=?").run(input.revision, scheduleId);
 }
 
 const FIRE_COLUMNS = "schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,\"by\",via,body";

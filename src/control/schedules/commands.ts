@@ -19,7 +19,7 @@ import { libraryEntryId } from "../planLibrary/commands.js";
 import { canonicalPlanDoc, docFromArchivedPlan } from "../planLibrary/codec.js";
 import { appendVersion, insertEntry } from "../planLibrary/store.js";
 import { initialiseState, SCHEDULE_ID, SCHEDULE_LIMIT, validateStart, type ScheduleBody, type ScheduleStart } from "./model.js";
-import { insertSchedule, liveScheduleCount, markRemoved, readSchedule, writeSchedule } from "./store.js";
+import { insertSchedule, liveScheduleCount, markRemoved, markRemovedUnparsed, readSchedule, readScheduleState, writeSchedule, type ScheduleRow } from "./store.js";
 
 export const SCHEDULE_VERBS = ["schedule-set", "schedule-enable", "schedule-remove", "schedule-resume", "schedule-from-group"] as const;
 export type ScheduleCommand = Extract<RawAuthorityCommandV1, { verb: (typeof SCHEDULE_VERBS)[number] }>;
@@ -133,8 +133,18 @@ function enable(deps: ScheduleDeps, context: WebCommandContext, command: Extract
 
 function remove(deps: ScheduleDeps, context: WebCommandContext, command: Extract<ScheduleCommand, { verb: "schedule-remove" }>): { status: number; body: CommandSuccessV1 } {
   const scheduleId = checkId(scheduleTarget(command));
-  const row = readSchedule(deps.store, scheduleId);
-  if (row === null || row.removed) throw new ControlError("no-op-command");
+  const state = readScheduleState(deps.store, scheduleId);
+  if (state === null || state.removed) throw new ControlError("no-op-command");
+  let row: ScheduleRow | null;
+  try { row = readSchedule(deps.store, scheduleId); }
+  catch (error) {
+    if (!(error instanceof ControlError) || error.detail !== "schedule-body-invalid") throw error;
+    // An unreadable body cannot be stamped; the mark needs none of it, the stored bytes stay, and the ledger keeps the
+    // attribution this write would otherwise put in the body.
+    markRemovedUnparsed(deps.store, scheduleId, { revision: context.nextCommandRevision });
+    return success(context, { kind: "schedule-removed", scheduleId }, context.nextCommandRevision, null);
+  }
+  if (row === null) throw new ControlError("control-target-not-allowed", scheduleId);
   const who = commandAttributionFor(command.commandId, command.actorId);
   const next = structuredClone(row.body);
   next.updatedBy = who.by; next.updatedVia = who.via; next.updatedAt = at(deps);

@@ -239,11 +239,11 @@ describe("a group pin shows its provenance and confirm mode (§13.1, §9.3)", ()
 
 describe("the schedule reads: list, --all, fires and show (§13.1)", () => {
   it("list reads only this project's schedules", async () => {
-    const w = await world({}, { "GET schedules?repoId=repo-1": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-1", schedules: [] } } });
+    const w = await world({}, { "GET schedules?repoId=repo-1": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-1", schedules: [], corrupt: [] } } });
     const out = await run(["schedule", "list", "--json"], w.dir);
     expect(out.code, out.stdout + out.stderr).toBe(0);
     expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects", "GET schedules?repoId=repo-1"]);
-    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", repoId: "repo-1", schedules: [] });
+    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", repoId: "repo-1", schedules: [], corrupt: [] });
   });
 
   it("list --all reads projects once, then one schedules read per controlRepoId, and merges them", async () => {
@@ -255,12 +255,17 @@ describe("the schedule reads: list, --all, fires and show (§13.1)", () => {
         { projectKey: "none", name: "none", path: "/repos/none", controlRepoId: null },
       ] } },
       "GET schedules?repoId=repo-1": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-1", schedules: [{ id: "sch-a" }] } },
-      "GET schedules?repoId=repo-2": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-2", schedules: [{ id: "sch-b" }] } },
+      "GET schedules?repoId=repo-2": { status: 200, body: { schema: "orca-schedules-v1", repoId: "repo-2", schedules: [{ id: "sch-b" }],
+        corrupt: [{ id: "sch-bad", code: "recovery-blocked", message: "recovery-blocked:schedule-body-invalid" }] } },
     });
     const out = await run(["schedule", "list", "--all", "--json"], w.dir);
     expect(out.code, out.stdout + out.stderr).toBe(0);
     expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects", "GET schedules?repoId=repo-1", "GET schedules?repoId=repo-2"]);
-    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", all: true, schedules: [{ id: "sch-a" }, { id: "sch-b" }] });
+    // An older panel without `corrupt` contributes none; a corrupt row rides beside the flattened schedules.
+    expect(out.json().body).toEqual({
+      schema: "orca-schedules-v1", all: true, schedules: [{ id: "sch-a" }, { id: "sch-b" }],
+      corrupt: [{ id: "sch-bad", code: "recovery-blocked", message: "recovery-blocked:schedule-body-invalid" }],
+    });
   });
 
   it("list --all with no control repositories reads projects once and never falls back to resolving a project", async () => {
@@ -270,7 +275,7 @@ describe("the schedule reads: list, --all, fires and show (§13.1)", () => {
     const out = await run(["schedule", "list", "--all", "--json"], w.dir, w.dir);
     expect(out.code, out.stdout + out.stderr).toBe(0);
     expect(w.requests.map((r) => `${r.method} ${r.path}`)).toEqual(["GET projects"]);
-    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", all: true, schedules: [] });
+    expect(out.json().body).toEqual({ schema: "orca-schedules-v1", all: true, schedules: [], corrupt: [] });
   });
 
   const FIRES: Array<[string[], string]> = [
