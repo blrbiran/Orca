@@ -231,11 +231,14 @@ function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): plan T14 fix round 1 (wave 3 M-5) adds the
 // group's frozen reconcile slot, `agents`, optional on the Web side for the same reason and normalised to
 // `{ reconcile: null }` when absent; every other field, and `agents` itself when present, is still checked both ways.
+// Loop plans spec §16 (C4): `loopPlan.documentChecks` is optional on the Web side for the same reason, and an absent
+// flag reads as false (a plan that runs no document checks), which is what every pre-C4 literal fixture means.
 function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 {
   return { ...x,
     agents: x.agents ?? { reconcile: null },
     runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null, continuable: run.continuable ?? false })),
-    workItems: x.workItems.map((item) => ({ ...item, agent: item.agent ?? null, agentProvenance: item.agentProvenance ?? null })) };
+    workItems: x.workItems.map((item) => ({ ...item, agent: item.agent ?? null, agentProvenance: item.agentProvenance ?? null,
+      loopPlan: item.loopPlan ? { ...item.loopPlan, documentChecks: item.loopPlan.documentChecks ?? false } : item.loopPlan })) };
 }
 function recoveryServerToWeb(x: ServerRecoveryViewV1): WebRecoveryViewV1 { return x; }
 function recoveryWebToServer(x: WebRecoveryViewV1): ServerRecoveryViewV1 { return x; }
