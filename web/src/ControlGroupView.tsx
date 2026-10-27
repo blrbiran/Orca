@@ -7,6 +7,7 @@
  * rather than being painted green, because the ledger has not decided whether an
  * execution is still alive.
  */
+import { ChargeRetry } from "./ChargeRetry.js";
 import type { JSX } from "react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -131,7 +132,11 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
     >
       {t("control.group.retryTask", { taskId: String(run.taskId) })}
     </button>
-  ) : null) : run.state === "blocked" && run.blockedReason ? (
+  ) : null) : run.state === "blocked" && run.estimateId !== null && run.blockedReason && /^estimate-usage-unknown(:|$)/.test(run.blockedReason) ? (
+    // Spec 2026-10-27 single-call unknown usage §9 R1: an estimate blocked on unknown usage is retried by charging its grant.
+    <ChargeRetry charge={{ tokens: run.remaining.tokens ?? 0, usageLowerBound: null }}
+      onCharge={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId, acknowledge: "charge-remaining-grant" } })} />
+  ) : run.state === "blocked" && run.blockedReason ? (
     <button
       type="button"
       onClick={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId } })}

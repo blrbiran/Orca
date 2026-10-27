@@ -60,6 +60,8 @@ export type RequirementSummaryV1 = {
   usageUnknown: boolean;
   /** Final review finding 4: the requirement's call the driver blocked, and why (webProtocol.ts). */
   blockedRun: { runId: string; reason: string | null } | null;
+  /** Spec 2026-10-27 single-call unknown usage §9 R1, R6: only when blockedRun is blocked on unknown usage -- the grant its retry charges. */
+  blockedRunCharge?: { tokens: number; usageLowerBound: number | null };
   /** Issue #75: the requirement's slug once a round named one. Optional so literal fixtures need no edit; the server always sends it. */
   slug?: string | null;
   /** Task 10a: the short title the latest clarify round gave; absent while none did. Cards show it before the goal. */
@@ -617,7 +619,7 @@ export type HandoffStopPayloadV1 = { handoffDeadlineAt?: string };
 export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string; checkpointId: string };
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
-export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string } | { scope: "group"; groupId: string };
+export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string; acknowledge?: "charge-remaining-grant" } | { scope: "group"; groupId: string };
 /** CLI v2 spec §14 R2: `runId` is the run the person saw failing; the panel refuses task-run-moved once it is not current. */
 export type RetryTaskPayloadV1 = { taskId: string; runId?: string };
 /** N1 spec §11.1: the five requirement commands (src/control/webProtocol.ts, field for field). */

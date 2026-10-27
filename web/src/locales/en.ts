@@ -1066,9 +1066,18 @@ export const en = {
     },
   },
   // N1 spec §11.2: the Requirements section.
+  // Spec 2026-10-27 single-call unknown usage §9 R1, R6: the retry of a single call whose usage is unknown charges its grant.
+  chargeRetry: {
+    open: "Charge the call's grant ({{tokens}} tokens) and retry",
+    lowerBound: "At least {{tokens}} tokens were observed before the call stopped.",
+    confirmText: "This books the call's remaining grant, {{tokens}} tokens, as spent (its real usage is not known), then retries the call. The retry reserves another grant, so a finite limit or a spend cap may hold it.",
+    confirm: "Charge {{tokens}} tokens and retry",
+    cancel: "Cancel",
+    owner: "Only an owner can charge the call's grant and retry it.",
+  },
   requirements: {
     goToPreparation: "Go to task preparation",
-    next: { label: "Next: ", retry: "a step stopped or failed; retry it.", answer: "answer round {{n}}.", consensus: "say \"We agree\", or ask for one more round.", review: "review split draft {{n}}: send it back or accept it.", prepare: "go to task preparation.", waiting: "nothing for you; Orca is working on the next step.", go: "Go there" },
+    next: { label: "Next: ", retry: "a step stopped or failed; retry it.", settle: "a call stopped without reporting its usage; charge its grant, then it retries.", answer: "answer round {{n}}.", consensus: "say \"We agree\", or ask for one more round.", review: "review split draft {{n}}: send it back or accept it.", prepare: "go to task preparation.", waiting: "nothing for you; Orca is working on the next step.", go: "Go there" },
     ownerRaisesLimit: "Only an owner can raise this limit; ask one to.",
     title: "Requirements",
     list: "Requirement list",
@@ -1183,7 +1192,7 @@ export const en = {
       "split-output-invalid": "The model's split was not valid JSON for a split three times.",
       "split-validation-exhausted": "The split failed code's checks three times; the last reasons are shown.",
       "requirement-budget-exhausted": "The next call does not fit the limit; raise the limit to go on.",
-      "requirement-usage-unknown": "Some of this requirement's usage is unknown, so no further call is made; as for a plan group, this version cannot clear it.",
+      "requirement-usage-unknown": "Some of this requirement's usage is unknown, so no further call is made. Settle the blocked call's usage (charge its grant), then it retries.",
       "requirement-export-conflict": "orca/{{groupId}} already exists with other commits; it was not touched.",
       "requirement-export-path-blocked": "A file named .orca or .orca/requirements in HEAD blocks the document's export; nothing was written.",
       "requirement-export-pending": "The requirement document is not on orca/{{groupId}} yet; the group starts once it is.",
@@ -2442,6 +2451,8 @@ export const enCcloopErrors: Record<string, string> = {
   "omp-model-catalog-invalid": "omp's model catalog could not be read ({{detail}}).",
   "omp-single-call-cap-exceeded": "omp's catalog now caps this model's output above the bound this call was prepared with, so the call was refused before it started. Retry: a retry or a new estimate recomputes the bound from the current catalog.",
   "omp-single-call-unavailable": "omp cannot make this single call with the selected model ({{detail}}).",
+  // Spec 2026-10-27 single-call unknown usage §9 R5: omp's (or ccloop's) stream watchdog stopped a call that went silent.
+  "omp-stalled": "The model's stream went silent and the call was stopped (stalled).",
   "agent-config-invalid": "The agent's configuration is not valid ({{detail}}).",
   "single-call-unsupported": "This agent cannot make single calls (estimate, clarify, split); choose another agent.",
   "single-call-output-invalid": "The model's answer was not the JSON this call asked for.",

@@ -11,6 +11,7 @@ import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
+import { ChargeRetry } from "./ChargeRetry.js";
 import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText } from "./i18n.js";
 import { explainBesideCode, explainEstimateReason, explainEstimatorCheck } from "./ccloopCodes.js";
 import { explainRefusal, explainRunReason } from "./refusalExplain.js";
@@ -487,7 +488,7 @@ function Elapsed(props: { since: number }): JSX.Element {
 /** Tester #35: the share of a finite token limit from which the requirement's budget line warns. */
 const NEAR_LIMIT = 0.8;
 
-type NextStep = { key: "retry" | "answer" | "consensus" | "review" | "prepare" | "waiting"; n?: number; region: "problem" | "answers" | "draft" | null };
+type NextStep = { key: "retry" | "settle" | "answer" | "consensus" | "review" | "prepare" | "waiting"; n?: number; region: "problem" | "answers" | "draft" | null };
 
 /**
  * Tester #27, #33, #34: the one next step, said under the heading, from the facts the page already shows further down.
@@ -536,6 +537,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const retryable = (reason !== null && RETRYABLE.includes(reason)) || stalled || stopped || (stopUnresolved && view.summary.requirement?.stopRetryable === true);
   // Final review finding 4: the step's call blocked by the driver, retried on its run.
   const blockedRun = view.summary.requirement?.blockedRun ?? null;
+  // Spec 2026-10-27 single-call unknown usage §9 R1: such a call's retry charges its grant (ChargeRetry), never a plain retry.
+  const blockedCharge = view.summary.requirement?.blockedRunCharge ?? null;
   // ccloop error codes spec (2026-10-15) §4.6: only a blocked reason that carries a ccloop code after its prefix is explained;
   // a bare reason keeps its code alone (web/tests/requirements.test.tsx "names a blocked call's reason ...").
   const blockedWords = blockedRun?.reason?.includes(":") ? explainRunReason(blockedRun.reason) : null;
@@ -546,6 +549,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       || view.summary.stopState === "handoff-complete" || view.summary.stopState === "handoff-partial");
   const lastEntry = chainOf(view).at(-1) ?? null;
   const nextStep: NextStep | null = archived ? null
+    // Spec 2026-10-27 single-call unknown usage §5 O4: a call blocked on unknown usage is settled (its grant charged), then retried.
+    : blockedCharge !== null ? { key: "settle", region: "problem" }
     : blockedRun !== null || retryable || stopUnresolved ? { key: "retry", region: "problem" }
     : drafting ? { key: "waiting", region: null }
     : lastEntry !== null && lastEntry.round.state === "awaiting-answers" && lastEntry.round.result !== null && view.requirement.consensus === null
@@ -604,8 +609,10 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       )}
       {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason}{explainBesideCode(failedCall.reason) !== null ? ` · ${explainBesideCode(failedCall.reason)}` : ""}</p>}
       {!archived && blockedRun !== null && (
-        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}{t("requirements.blockedRun")}{" "}
-          <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button>
+        <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}
+          {blockedCharge !== null ? <ChargeRetry charge={blockedCharge}
+            onCharge={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId, acknowledge: "charge-remaining-grant" } })} /> : <>{t("requirements.blockedRun")}{" "}
+          <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button></>}
         </p>
       )}
       {!archived && reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
