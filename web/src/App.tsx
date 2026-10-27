@@ -1735,6 +1735,7 @@ export function App(): JSX.Element {
             },
           }}
           projectKey={panelRepoId ?? "unresolved"}
+          pick={{ projects, project: scope.kind === "project" ? project : null, onProject: chooseProject }}
           project={{
             repoId: panelRepoId, repoLabel: panelRepoId === null ? null : repoLabel(panelRepoId),
             repoPath: repoPathOf(projects, panelRepoId),

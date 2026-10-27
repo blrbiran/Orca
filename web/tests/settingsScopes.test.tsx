@@ -34,6 +34,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); localStorage.clear(); sessionSt
 const project = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
 const globalRegion = (): HTMLElement => screen.getByRole("region", { name: "Global settings" });
 const projectRegion = (): HTMLElement => screen.getByRole("region", { name: "Project settings" });
+const settingsPick = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Settings for project" }) as HTMLSelectElement;
 async function open(section: string): Promise<void> { await act(async () => { window.location.hash = section; window.dispatchEvent(new Event("hashchange")); }); }
 
 describe("settings scopes", () => {
@@ -78,27 +79,61 @@ describe("settings scopes", () => {
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
     fireEvent.change(project(), { target: { value: ALL_PROJECTS } });
     await open("project-settings");
-    expect(projectRegion().textContent).toContain("Choose a concrete project");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #69: the old "choose in the project picker" sentence is gone; under All the page's own select asks for a project.
+    expect(settingsPick().value).toBe("");
+    expect(projectRegion().textContent).not.toContain(ALPHA);
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     expect(within(projectRegion()).queryByRole("button", { name: "Save integration" })).toBeNull();
     panel.projects = { status: 503, body: { code: "projects-unavailable" } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await waitFor(() => expect(projectRegion().textContent).toContain("Choose a concrete project"));
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #69: an unread project list shows no project's settings and no select (was the old sentence).
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "Settings for project" })).toBeNull());
+    expect(projectRegion().textContent).not.toContain(ALPHA);
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     expect(panel.posts).toEqual([]);
+  });
+
+  // Tester #69 (spec §24, session 3cd8fb02): "This project" had no way to pick a project, and under All projects said only
+  // "choose in the project picker". Its own select is bound to the panel's one project scope: it shows the sidebar's
+  // choice, a pick there switches every page, and under All it reads "Choose a project" with the settings hidden.
+  it("picks the project on the page itself, bound to the sidebar's scope, and asks for one under All", async () => {
+    render(<App />);
+    await open("settings/project");
+    await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
+    // mutation: drop the picker -> not found, red
+    expect(settingsPick().value).toBe("alpha");
+    expect([...settingsPick().options].map((o) => o.value)).toEqual(["alpha", "beta"]);
+    expect(document.querySelector('[data-category="project"]')!.textContent).toContain("Changing it changes the project for every page.");
+    // mutation: keep a page-local selection instead of the panel's scope -> the sidebar stays on alpha, red
+    fireEvent.change(settingsPick(), { target: { value: "beta" } });
+    await waitFor(() => expect(projectRegion().textContent).toContain(BETA));
+    expect(project().value).toBe("beta");
+    // The sidebar's All empties it: "Choose a project", the settings hidden, no old sentence.
+    fireEvent.change(project(), { target: { value: ALL_PROJECTS } });
+    await waitFor(() => expect(settingsPick().value).toBe(""));
+    expect(settingsPick().selectedOptions[0]!.textContent).toBe("Choose a project");
+    expect(within(projectRegion()).queryByRole("radio")).toBeNull();
+    expect(projectRegion().textContent).not.toContain(BETA);
+    expect(document.body.textContent).not.toContain("project picker");
+    // A pick from the settings page leaves All for that project everywhere.
+    fireEvent.change(settingsPick(), { target: { value: "alpha" } });
+    await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
+    expect(project().value).toBe("alpha");
   });
 
   it("keeps preparation unresolved and a failed concrete registry from exposing prior settings", async () => {
     let release!: () => void;
     panel.holdProjects = new Promise<void>(resolve => { release = resolve; });
     render(<App />);
-    expect(projectRegion().textContent).toContain("Choose a concrete project");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #69: while the list is unread no project is shown (was the old sentence).
+    expect(projectRegion().textContent).not.toContain(ALPHA);
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     await act(async () => { release(); });
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
     panel.projects = { status: 503, body: { code: "projects-unavailable" } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await waitFor(() => expect(projectRegion().textContent).toContain("Choose a concrete project"));
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #69: a failed list hides the prior project's settings (was the old sentence).
+    await waitFor(() => expect(projectRegion().textContent).not.toContain(ALPHA));
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     expect(within(projectRegion()).queryByRole("button", { name: "Save integration" })).toBeNull();
     expect(panel.posts).toEqual([]);

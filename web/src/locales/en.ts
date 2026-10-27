@@ -1487,7 +1487,9 @@ export const en = {
     browserScope: "Theme and language are remembered in this browser.",
     showAdvanced: "Show continuous improvement",
     agentScope: "Agent defaults belong to the shared panel operator. Existing confirmed groups keep their frozen choices.",
-    account: "Account", chooseProject: "Choose a concrete project in the project picker to view or change its settings.",
+    account: "Account",
+    // Tester #69 (spec §24): "This project" picks its project itself; the pick is the panel's one project scope.
+    projectPick: { label: "Settings for project", choose: "Choose a project", note: "Changing it changes the project for every page." },
     projectHeading: "Project settings — {{project}}",
     projectScope: "Defaults for {{project}}. Existing groups keep their own choices.",
     workspaceUnavailable: "Workspace settings have not been read.", integrationUnavailable: "Integration settings have not been read.",

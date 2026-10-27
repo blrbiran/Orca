@@ -31,7 +31,8 @@ export function ProjectSettings(props: {
       <h2>{props.repoId === null ? t("nav.projectSettings") : t("settings.projectHeading", { project: props.repoLabel ?? props.repoId })}</h2>
       {props.repoId !== null && props.repoPath != null && <p className="section-meta" data-testid="project-settings-path">{props.repoPath}</p>}
       {props.refusal && <RefusalNotice refusal={props.refusal} testId="project-settings-refusal" />}
-      {props.repoId === null ? <p role="note">{t("settings.chooseProject")}</p> : (
+      {/* Tester #69 (spec §24): with no concrete project the settings stay hidden; the project select above them says so. */}
+      {props.repoId === null ? null : (
         <>
           <p>{t("settings.projectScope", { project: props.repoLabel ?? props.repoId })}</p>
           {props.workspace === null ? <p role="status">{t("settings.workspaceUnavailable")}</p> : <WorkspaceModeSelector workspace={props.workspace} onChange={props.onWorkspaceMode} />}
