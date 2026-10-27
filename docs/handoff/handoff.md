@@ -63,18 +63,27 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00000000000 会话 `7753e97d`（2026-10-27）—— **先读这一节**
+### 3.00000000000 会话 `7753e97d`（2026-10-27；中途续接的会话 id `03c89de8`）—— **先读这一节**
 
-> 唯一进度源：台账 `.superpowers/sdd/2026-10-27-session-7753e97d/progress.md`（人裁原话、接手边界、六路审阅的修复清单 A/B、O9 claude 结果）。
-> 人裁（本会话）：「同意按你的建议走」——审阅接手 agent 的**代码**提交（「主要目标是代码提交，可以不审文档提交」），在其基础上修、不 revert；外部反馈按建议改；O9 claude 付费一次「同意可以跑」；#60 按控制器方向（plan 不放开 bash，ccloop 给具名失败原因＋plan 提示写明可用工具，Orca 给下一步文案；先写 spec）。
+> 唯一进度源：台账 `.superpowers/sdd/2026-10-27-session-7753e97d/progress.md`（两批人裁原话、接手边界、六路审阅的修复清单、各线结果、O9 两次付费）。
+> 人裁（本会话）：「同意按你的建议走」；「审阅结论 => 按你建议的修复」；「forget 同意改成归档」；H6／H8／H10「同意你的建议」（已写进 `goal.md` G12–G14）；O9 claude「同意可以跑」「同意再跑一次付费真跑」；/handoff 轮：「这个session暂时不要考虑context大小。这次批准改写所有必要的判据。这一轮允许必要的付费真跑…先按你的建议执行。执行完在最后阶段报给我审核。」⚠️ 上下文越过 T2（人豁免，已在检查点记录）。
 
-- **接手边界**（按台账 `ffec7b28` 的 Handoff state 与提交时间现测）：接手 agent 从 `perf(agentTranscript): T-F's script…`（T11）起，含 dir-requirements Task 5 起、scheduled P2 起、H7 O1–O9、F1–F6、流程暂停／留言、两次 repin、ccloop 三处修复、ccmem `forget`/`pin`、面板小缺口批。
-- **已合入 main**：`fix(systemDebug): a paused group is not escalated, and its open ladder waits`（测试者 #61：暂停后 L1 重试被 `stop-mode-conflict` 拒、拒绝行算作 L1 已做 ⇒ 下一趟开 ladder；quota 重试同样被用掉；现在 candidates 跳过 `groupStopped`，已开的 ladder 在原组暂停时不确认、不回折）。3 条新判据，变异 M1–M3 各红在自己用例、还原 0 字节；`npm test` 507 文件首跑 30 文件红**全是工作树缺 `web/dist`（`panel-dist-missing`）**，web build 后 30/30（260 条）绿。
-- **在分支上**：`fix/dir-take-folder`（`/private/tmp/orca-7753e97d/wt-dir`）——审阅 blocker：take-folder 后记录 `tip=T′`，落地里人没碰的路径永不写进文件夹而组显示完成；现在记 P 真正代表的 tip，并同一轮继续第 3–5 步（与 withhold 同路），D7 判据不改。新判据＋变异红；`npm test` 见台账。
-- **O9 claude（付费一次，已跑，未过）**：`/private/tmp/orca-7753e97d/o9-claude-1/`。链路 open→…→start 通、`--add-dir` 正确；两次 verify 被模型自拟的「alpha 只有两个文件」检查否决——Orca 导出把需求文档 `.orca/requirements/…md` 提交进主目录，而拆分提示（`src/control/requirementSplit.ts`，带版本的固定指令）从不提它 ⇒ 要升拆分指令 v2（与 #60 同批写 spec）。harness `scripts/live-multi-dir-acceptance.ts:601` 的 `--add-dir` 解析吞掉其后全部参数（`claudeAddDir` 假 false）。工具报 claude 9 次调用合计 $1.725014；`~/.orca` 未变。**再跑需人新点头。**
-- **六路审阅结论**（报告是模型输出，逐条复核后才修；清单 A/B 与复现路径在台账）：会出错／卡死的有多目录「只写非主目录且无决定」落地后任务 blocked、流程「子任务已结束后才生效的暂停」永远恢复不了、留言后暂停会重启子任务、定时任务同趟被禁用／删除仍触发、坏 fire 行让整个定时 pass 停摆（同类 4 处）、转录 JSON 键值密钥不脱敏＋两条正则平方级耗时。ccmem `forget` 直接删除（与 resurrect 的归档路径及 v0.1 §5.4 冲突，Rule 7 待人）。
-- **待人**：H6／H8／H10 的建议已报（侧栏三段＋设置合一页左侧分类、记忆指标不合并、主题语言放「外观」；仪器风格只采纳状态灯与等宽数字；multi-endpoint 结案、脚本快速通道记 goal 待议）；ccmem `forget` 归档还是保留删除；O9 claude 重跑。
-- **注意**：跑门的工作树要先 `npm run build --workspace web`；zsh 里把多个测试文件放进变量要 `${=files}`（否则成一个参数，vitest 报 No test files found）。测试用 bin：`/private/tmp/orca-7753e97d/ccloop-b97d5bd/dist/cli.js`（`/private/tmp/orca-ffec7b28/` 已不在）。
+- **审阅**：接手 agent（从 T11 `perf(agentTranscript): T-F's script…` 起）的代码提交分六路独立审阅（不审文档提交），报告逐条由实现席先复核再修。整体判断：权限边界、崩溃回放、不覆盖人的文件这几块扎实；漏在边角状态与坏数据隔离。
+- **已合入 Orca main 并已装**（都 rebase 后 `--ff-only`；按主题行取）：
+  - `fix(systemDebug): a paused group is not escalated, and its open ladder waits`（测试者 #61）；`fix(dirPlacement): take-folder places the rest of the stopped landing in the same round`（审阅 blocker）。
+  - 多目录 9 笔（只写非主目录的 run 落地后不再 blocked、pre-check 抛错即 `multi-dir-precheck-failed`、retry-rest 期间的 mark-resolved 不丢、`prerequisiteDone` 不在未搬运的 tip 上报完成、collect `resultRepo` 校验、多目录 `landedUnrecorded` 精确探测、harness `--add-dir` 解析与 python 探测）。
+  - 流程暂停／留言 5 笔（子任务已结束后的暂停可恢复、pump 会过暂停中的 run、留言后暂停接管其 stop、resume 与记账同一事务、已落地子任务的留言标 `undelivered`、fake 端口对齐真端口；**控制器裁定**：人对暂停中的 run 发 stop 立即生效并结算各步，spec §14）。
+  - 定时 10 笔（同趟被禁用／删除不再触发、坏 fire／schedule 行逐行隔离、step 9 让位 R2、`add group` 钉项目交付默认、写入时校验模板版本、DST 判据、永不确认的 fire 收尾；spec §23）。
+  - 转录 12 笔（JSON 键值密钥脱敏、两条正则改线性、索引并发增长串行化、六个盲分支补判据、equal-size 头哈希、组件逐级 walk、web 窗口连续与请求排队；spec §12.6）。
+  - 目录放置 9 笔（base 导入在文件夹锁内、第二个回答不被覆盖、`withheld` 不再存 Orca 自己的文件、目录级大小写冲突、按钮只在可答状态出现；spec §21）。
+  - 拆分指令 v2（写明 `.orca/requirements/…` 与 `.decisions/` 会在目标里，检查不得断言目录只含某些文件；N1 spec §16、多目录 spec §22）＋ #60 Orca 侧（`omp-phase-tool-forbidden` 的下一步文案）。#60 的「自动确认无限循环」从代码复现不出（每个提案版本只拒一次，C22c/C24 钉着）。
+  - Web：H6（侧栏三段、设置合一页左侧分类、`#settings/<分类>`，旧 hash 映射）、H8（组卡片状态灯、`.num` 等宽数字）、#56（快捷键按钮改图标、只在有快捷键的页面）、#57（依赖图选中只框一个节点）、#58（徽标 kind 有译名、长文字在框内换行）；其余测试者 UI 项 18 笔（准备页 Agent 在预算前、分配表折叠、需求页「下一步」行、拆分草案 4 列、新建需求表单置顶、Overview「Next」标记与空状态、拖拽时标出可放／不可放列、打开的组滚入视野等；逐项状态表在台账；#22 延后（与转录 run 详情重叠），#20／#24／#29／#38 判不改）。
+  - 文档：live-transcript spec §15（L7 实测口径）。
+- **ccmem 本地 main（未推）**：`forget` 改归档＋审计、id 严格解析；968/968（ccmem handoff §1.00000）。**ccloop 本地 main（未推）**：codex strict 投影修复、omp 单调用空停续跑、#60 plan 工具名单＋`tool-rule-violated`（ccloop handoff「本轮」节）。**Orca pin 仍是 `b97d5bd`**：repin 要等人先推 ccloop。
+- **O9 claude（付费两次）**：第一次 `/private/tmp/orca-7753e97d/o9-claude-1/` 未过（模型检查断言 alpha 只含两个文件，而导出把需求文档放进了主目录；$1.725014）；修拆分指令 v2 后第二次 `/private/tmp/orca-7753e97d/o9-claude-2/` **22/22 全真**（含 `claudeAddDir`、崩溃→partial→retry-rest→三成员落地、`orcaHomeUnchanged`），工具报 $0.7925112。三家多仓端到端都已过。
+- **门**：各实现线的门在 8 条并跑、负载 100–400 下跑，红全是超时类，逐个文件单跑全绿（日志 `/private/tmp/orca-7753e97d/fix-*-rerun*.log`）。合并后 main 上 `npm test`（负载约 35）：根 599 文件 2 红（`criteriaBaseRun`、`startForm`，已登记形状，单跑各 3/3 绿）、web 165/165；最后合入的 UI 线自己的门 164 文件全绿、`--ws check` 0。build＋web build＋`panel restart`，7777 应答 200，schema 仍 20（无迁移）。
+- **残余（各线报的，登记未修）**：暂停中 run 被 stop 时已落地的子任务结果记在 vault、不复制回人的文件夹；`.orca-<hex>` 临时名不从快照排除（理由在台账）；完成的 take-folder 的 resolution 下一轮被清（trailer 与 drift ref 仍在）；定时 condition-8 的 waiting fire 在人确认后不收尾；ccmem 无 un-archive 命令；测试者 #22。
+- **注意**：跑门的工作树要先 `npm run build --workspace web`（否则 `panel-dist-missing`）；zsh 里多文件变量要 `${=files}`；别同时开 8 个门（负载 400，门失去判别力）。测试用 bin：`/private/tmp/orca-7753e97d/ccloop-b97d5bd/dist/cli.js`。
 
 ### 3.0000000000 会话 `a98b77d2`（2026-10-26／27）—— 已合、已装
 
@@ -83,7 +92,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **面板小缺口批已合入、已装、已清**：loop 卡的验收计数现在含配方（design／investigate，v2／v3）的 document checks。服务端视图 `loopPlan.documentChecks` 必填、Web 侧可选（缺省读 false，`tests/panel/webParity.test.ts` 的桥负责归一），卡片把 `inputs.checks` 与每个 target path 的存在性检查一起计数，折叠列表加一行「另有 N 条存在性检查」（en／zh `loopPlan.documentChecks_one/_other`）。三笔代码提交按主题行取：`feat(control): the loop plan view names the recipe's document checks`、`feat(web): the loop card counts the document checks it runs`、`test(panel): the parity bridge reads an absent documentChecks as false`。命名变异 M1–M3 在 `git clone --local` 副本里各红 9／4／1 条，恢复后 diff 0。
 - **门与三条真红**：最终门根 578 文件 1 红（`startForm` ECONNRESET）、web 159 文件 1 红（`memoryLayout` scroll 时序），都是 `known-load-flakes.md` 已登记形状，单文件各连跑 3 次 3/3 绿（负载 14–17）；`npm run typecheck`、`npm run build --workspace web`、`npm run --ws check` 全绿。同门前几轮红的三条**不是负载**，已逐条修掉并登记：① `web/tests/schedules.test.tsx` 的导入用例**单跑必红**——jsdom 的 `File.arrayBuffer()` 给另一个 realm 的 `ArrayBuffer`，Node 的 `SubtleCrypto.digest` brand check 拒收（不是并发），`sha256Hex` 改喂本 realm 视图后 39/39（`fix(web): hash a plan file's bytes through a realm-local view`）；② `tests/service/command.test.ts` 的 skill 字面量停在主题行 `docs(skill): route orca-control to the current CLI` 之前（skill 已把 `status|logs` 并入同一句，`test(service): the skill's service line now names status and logs`）；③ `projectSwitcher` C 在 Requirements 表单挂载前就读 select（初始断言改 `waitFor`，`test(web): wait for the requirement form before reading its select`）。
 - **装与清**：ff 合入 main，主仓装好（`npm run build`＋web build）；`panel restart` 后 7777 应答 200，`web/dist` 含新文案；schema 仍 20（无迁移，未动控制库）；本轮 worktree 与已合分支已删，只剩 `main`。收尾文档提交 `docs(loop): the batch is merged, installed and cleaned up`。人在本轮自行 push，`ls-remote` 现测与本地 main 同笔（本文不写哈希）。
-- **仍待人**：§4.2 第 5 条的 O9 claude 一段（2026-10-27 09:00 Asia/Shanghai 额度重置＋人新一次点头）。
+- ~~仍待人：O9 claude 一段~~ 已在会话 `7753e97d` 跑过并通过（见上一节）。
 
 ### 3.000000000 会话 `ffec7b28`（2026-10-24）
 
@@ -302,7 +311,10 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 2. ~~H7（多目录项目）~~ **已合并并装上**（O1–O9，见 §3；schema 仍 20）。剩付费验收见第 5 条。
 3. ~~实时转录 Orca 侧的 `operatorNote` 生产方~~ **已做**：spec 实时转录 §2（`live-transcript-design.md:28`）人裁「放在 web 运行页里。orca cli 现阶段不用做」，`web/src/FlowRunPage.tsx` 发 `{command:"note"}`；判据 `tests/flow/operatorNote.test.ts`。
 4. ~~登记未修~~ **本轮已清**：Orca F1–F6（计划 `docs/superpowers/plans/2026-10-26-registered-fixes.md`）与 ccloop 的 OMP empty-stop、perf L7（ccloop 计划 `2026-10-26-omp-empty-stop-and-perf-l7.md`）都已修并过门；接受的残余见各计划文末。
-5. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 的多仓端到端 **codex、omp 已过**（见 §3 的 O9 条）。codex 一段已对齐 main：`14e2080` 上 origin 后 repin（pin `b97d5bd`，主题行 `chore(deps): repin ccloop to b97d5bd for the codex strict single call`），`o9-codex-7` 全绿。claude 一段额度 **2026-10-27 09:00 Asia/Shanghai** 重置（2026-10-26 20:31 探针 429 `usage_limit_reached`），且要人新一次点头（真 codex 会往 `~/.codex/config.toml` 追加 trust 条目，跑完即清）。
+5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
+6. 人推 ccloop main 之后：Orca repin 到 ccloop 新 main（带 #60 plan 提示与 `tool-rule-violated`、strict 投影修复、omp 单调用空停续跑），按 §3.3 的 repin 门做；之后可用真 omp 复验 #60（付费，先问人）。
+7. 残余登记（§3 本会话一节最后一条）与测试者 #22，按需排期。
+8. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
 
@@ -479,6 +491,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
+- **会话 `7753e97d` 待人审／待人做**：① push Orca／ccloop／ccmem 三仓 main（本会话合入的都只在本地）；② ccloop 推了之后 Orca repin（agent 可做，§4.2 第 6 条）；③ 审本会话的控制器裁定：流程「暂停中的 run 收到 stop 立即生效」（spec live-transcript §14）、ccmem `forget` 不再写 trash 文件（归档行即备份）、#56 快捷键按钮只在有快捷键的页面、#60 用已有的 `tool-rule-violated` 而不新增 cause 且不重试、拆分指令 v1 不保留（已发出的调用按存下的 envelope 校验）、UI 线判不改的 #20／#24／#29／#38；④ `/private/tmp/orca-7753e97d/` 清理（`ccloop-b97d5bd` 是当前测试用 bin，repin 前要留）。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。
   2. 人做：~~`branch -D feat/tester-round2-server`／`branch -D feat/scheduled`~~ **不必了**——2026-10-26 查 `branch --list` 只剩 `main`、`worktree list` 只剩主仓，没有可删的分支；`/private/tmp/orca-ffec7b28/` 的清理（人 2026-10-26 已授权，`ccloop-fe985b0` 是当前钉住的测试用 bin 要留；`ccloop-cache*` 是测试缓存）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/`。
