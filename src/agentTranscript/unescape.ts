@@ -186,31 +186,10 @@ export function createDecoder(from: DecoderState = initialDecoderState()): Strea
         i = j;
         continue;
       }
-      if (b >= 0xc2 && b <= 0xdf) {
-        const c1 = bytes[i + 1];
-        if (c1 !== undefined && c1 >= 0x80 && c1 <= 0xbf) { units += 1; i += 2; } else { units += 1; i += 1; }
-        continue;
-      }
-      if (b >= 0xe0 && b <= 0xef) {
-        const c1 = bytes[i + 1];
-        const ok1 = c1 !== undefined && c1 >= (b === 0xe0 ? 0xa0 : 0x80) && c1 <= (b === 0xed ? 0x9f : 0xbf);
-        if (!ok1) { units += 1; i += 1; continue; }
-        const c2 = bytes[i + 2];
-        if (c2 !== undefined && c2 >= 0x80 && c2 <= 0xbf) { units += 1; i += 3; } else { units += 1; i += 2; }
-        continue;
-      }
-      if (b >= 0xf0 && b <= 0xf4) {
-        const c1 = bytes[i + 1];
-        const ok1 = c1 !== undefined && c1 >= (b === 0xf0 ? 0x90 : 0x80) && c1 <= (b === 0xf4 ? 0x8f : 0xbf);
-        if (!ok1) { units += 1; i += 1; continue; }
-        const c2 = bytes[i + 2];
-        if (c2 === undefined || c2 < 0x80 || c2 > 0xbf) { units += 1; i += 2; continue; }
-        const c3 = bytes[i + 3];
-        if (c3 !== undefined && c3 >= 0x80 && c3 <= 0xbf) { units += 2; i += 4; } else { units += 1; i += 3; }
-        continue;
-      }
-      units += 1;
-      i += 1;
+      // A multi-byte sequence (or a byte decoded alone), as `Buffer.toString` decodes it.
+      const { units: u, size } = sequenceAt(bytes, i);
+      units += u;
+      i += size;
     }
     return units;
   };
