@@ -32,7 +32,8 @@ import { profileSnapshot } from "./web.js";
 export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null; errorCode?: string | null }
 // A multi-dir group's split prompt has the multi instruction's head; a single-repository group's has V1's (M5).
 const HEADS = { clarify: ["Orca requirement clarification, instruction version 3."],
-  split: ["Orca requirement split, instruction version 1.", "Orca requirement split (several directories), instruction version 1."],
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (split version 1 -> 2)
+  split: ["Orca requirement split, instruction version 2.", "Orca requirement split (several directories), instruction version 2."],
   estimate: ["You are estimating the budget"] } as const;
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 

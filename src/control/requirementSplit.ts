@@ -9,12 +9,18 @@ import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
 import { normalizeClaim, qualifiedWriteSetOf } from "../scheduler/writeSet.js";
 
-export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 1.";
+export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 2.";
 /** Multi-directory projects spec §6.4: the multi instruction's own head line. */
-export const SPLIT_PROMPT_HEAD_MULTI = "Orca requirement split (several directories), instruction version 1.";
+export const SPLIT_PROMPT_HEAD_MULTI = "Orca requirement split (several directories), instruction version 2.";
 
-/** N1 spec §8.1: the fixed instruction. Changing it means version 2. The two word lists come from the code that reads them. */
-const SPLIT_INSTRUCTION_V1 = [
+/**
+ * N1 spec §8.1: the fixed instruction. The two word lists come from the code that reads them. Version 2 (N1 spec §16,
+ * Orca session 7753e97d): the requirement document Orca commits before the tasks run (§9.2) and Orca's own files are in
+ * the repository, so a check must not assert a directory holds only certain files -- a paid O9 run failed on exactly
+ * that. A call already started under version 1 keeps its stored envelope (stepC compares the prompt's hash against it).
+ * Changing it means version 3.
+ */
+const SPLIT_INSTRUCTION_V2 = [
   SPLIT_PROMPT_HEAD,
   "",
   "A person and you agreed a requirement for one software repository. Split it into loop tasks that an agent will carry out one by one. You have no tools. Answer with one JSON object and nothing else.",
@@ -34,6 +40,7 @@ const SPLIT_INSTRUCTION_V1 = [
   "- `traces` names the acceptance criteria (and decisions) each task serves. Every acceptance criterion must be traced by at least one task.",
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
+  "- Before the tasks run, Orca commits the agreed requirement document to the repository at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the repository while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "",
   "## The answer",
   "",
@@ -46,11 +53,12 @@ const SPLIT_INSTRUCTION_V1 = [
 
 const str = { type: "string" }, strings = { type: "array", items: str };
 /**
- * Multi-directory projects spec §6.4: V1's instruction for a project of several directories. A task names the
+ * Multi-directory projects spec §6.4: the instruction for a project of several directories. A task names the
  * directories it changes as `writes` entries (each with `dir`, `targetPaths` and `checks`) instead of one
- * `targetPaths`/`checks` pair. SPLIT_INSTRUCTION_V1 stays byte-identical.
+ * `targetPaths`/`checks` pair. Version 2 (spec §22, correcting §6.4; Orca session 7753e97d): as SPLIT_INSTRUCTION_V2's, the
+ * requirement document Orca commits to the primary directory and Orca's own files there. Changing it means version 3.
  */
-export const SPLIT_INSTRUCTION_MULTI_V1 = [
+export const SPLIT_INSTRUCTION_MULTI_V2 = [
   SPLIT_PROMPT_HEAD_MULTI,
   "",
   "A person and you agreed a requirement for a project made of several directories (repositories or folders), listed in order; the first is the primary. Split it into loop tasks that an agent will carry out one by one. You have no tools. Answer with one JSON object and nothing else.",
@@ -68,6 +76,7 @@ export const SPLIT_INSTRUCTION_MULTI_V1 = [
   "- `writes` names the directories the task changes: one entry `{ \"dir\": <key>, \"targetPaths\": [ ], \"checks\": [ ] }` per directory. `dir` is a directory's `key` (as `project-overview` lists them), not its name or path. Name only the directories the task changes.",
   "- `writes[].targetPaths` are paths relative to that directory's root: an existing file, a new file in an existing directory, `<directory>/**`, or `**`. Name every path a task may write.",
   "- `writes[].checks` are shell commands, run in that directory, that pass only when the task is done.",
+  "- Before the tasks run, Orca commits the agreed requirement document to the primary directory at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the primary directory while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "- List `writes` in the project's registered order (as `project-overview` lists the directories), one entry per directory, each directory at most once; the first entry is the task's primary directory and its `checks` must not be empty.",
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
   "- `traces` names the acceptance criteria (and decisions) each task serves. Every acceptance criterion must be traced by at least one task.",
@@ -316,7 +325,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const nonce = input.overview.hash.slice(0, 16);
   const earlier = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0)
     .map((draft) => ({ draftNo: draft.draftNo, tasks: draft.output?.tasks ?? null, feedback: draft.feedback, handedBackFor: draft.reasons }));
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V1 : SPLIT_INSTRUCTION_V1;
+  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V2 : SPLIT_INSTRUCTION_V2;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   return `${[instruction, fence("requirement-document", nonce, input.document), fence(contextName, nonce, input.overview.canonicalJson),
     fence("earlier-drafts", nonce, JSON.stringify(earlier))].join("\n\n")}\n`;

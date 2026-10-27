@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { expandSplitDraft, validateSplitDraft } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, expandSplitDraft, validateSplitDraft } from "../../src/control/requirementSplit.js";
+import { documentPathOf } from "../../src/control/requirementDocument.js";
 import { expandLoopTask } from "../../src/control/loopPlans.js";
 import { buildGraph } from "../../src/scheduler/graph.js";
 import type { SplitOutput } from "../../src/control/requirementSchemas.js";
@@ -91,4 +92,24 @@ describe("validating a split (N1 spec §8.3)", () => {
     const out = await validate(traced, [], []);
     expect(out).toMatchObject({ ok: false, reasons: ["import:missing-success-conditions"], layers: null, implicitEdges: null });
   });
+});
+
+// N1 spec §16 (Orca session 7753e97d): before the tasks run, Orca commits the requirement document into the target
+// (§9.2; a multi group's primary). A paid O9 run failed because the split model, never told, wrote a check asserting a
+// directory held only README.md and package.json. Both instructions now name the document's directory -- the one
+// documentPathOf builds, so a moved export moves this criterion -- and forbid "only these files" checks.
+describe("the split instruction names Orca's own files in the target (version 2)", () => {
+  const overview = { canonicalJson: "{}", hash: "a".repeat(64) };
+  const exportDir = documentPathOf("2026-10-27", "x", 1).replace(/[^/]+$/, "");
+  for (const multi of [false, true]) {
+    it(multi ? "several directories: in the primary directory" : "one repository", () => {
+      const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], ...(multi ? { multi: true } : {}) });
+      const instruction = prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
+      expect(instruction.split("\n", 1)[0]).toMatch(/instruction version 2\.$/);
+      expect(instruction).toContain(`Orca commits the agreed requirement document to the ${multi ? "primary directory" : "repository"} at \`${exportDir}<date>-<slug>.md\``);
+      expect(instruction).toContain("`.decisions/` when present");
+      expect(instruction).toContain("A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist");
+      expect(instruction).toContain("prefer checks that read the delivered files");
+    });
+  }
 });

@@ -1151,3 +1151,19 @@ review.
 | N2 | `checksPass` resolves every group's `plan.repoId`, and a multi id would throw there each round | multi repo ids are skipped by name when `checksPass` (`webService.ts:1077-1083`) builds its list; listed in §5.4 "other places" | M19 |
 | N3 | A due group with nothing to carry never left "due" | the pre-check sets `lastLanded[key] = tip` for every directory with nothing to carry; an empty plan ends as `landed` with no publish (§9.4) | M17 (new case and mutation) |
 | N4 | ccloop left empty `dirs/attempt-<n>` behind | normal cleanup removes the empty `<runDir>/dirs/attempt-<n>`, then `<runDir>/dirs` once it is empty (§11.2) | C3 (new case and mutation) |
+
+## 22. Correction to §6.4: split instruction version 2 (2026-10-27, Orca session `7753e97d`, on `ebf680ee`; the text above is kept as written)
+
+Approved by the human in session `7753e97d` (「同意你的修法」); the single-repository side is N1 spec §16. §6.4's
+`SPLIT_INSTRUCTION_MULTI_V1` never said that the export commits the agreed document into the primary directory, and a
+paid O9 run failed on a check asserting a directory held only certain files.
+
+1. `SPLIT_INSTRUCTION_MULTI_V2` (head "Orca requirement split (several directories), instruction version 2.") replaces
+   `SPLIT_INSTRUCTION_MULTI_V1`. It adds one rule after the `writes[].checks` rule: before the tasks run Orca commits the
+   agreed requirement document to the primary directory at `.orca/requirements/<date>-<slug>.md`; Orca's own files (that
+   document, and `.decisions/` when present, §10) are in the primary directory while the tasks and their checks run; a
+   check must not assert that a directory holds only certain files and must not fail because Orca's files exist; prefer
+   checks that read the delivered files.
+2. §6.4's "`SPLIT_INSTRUCTION_V1` ... stay[s] byte-identical" no longer holds: the single-repository instruction is
+   version 2 as well (N1 spec §16). `SPLIT_JSON_SCHEMA` and `SPLIT_JSON_SCHEMA_MULTI` are unchanged.
+3. A call started under version 1 keeps its stored envelope (N1 spec §16 item 3).

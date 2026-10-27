@@ -407,3 +407,26 @@ Found by the plan's drafter against the code (`docs/superpowers/plans/2026-10-02
     outside the repository. A `.orca` or `.orca/requirements` that is a file in `HEAD` blocks the export durably
     (state `conflict`, reason `requirement-export-path-blocked`), and `recovery-retry` re-arms it (Task 11 reviews,
     controller rulings).
+
+## 16. Correction: split instruction version 2 (2026-10-27, Orca session `7753e97d`, on `ebf680ee`; the text above is kept as written)
+
+Approved by the human in session `7753e97d` (「同意你的修法」). §8.1 lists the split's input but the instruction never
+said that §9.2's export commits the agreed document at `.orca/requirements/<createdOn>-<slug>.md` onto the base the
+tasks run on. A paid O9 run (`o9-claude-1`, run `e1484d0a`, attempts 1 and 2) failed `required-check-failed` because the
+model wrote a check that walked the directory and asserted it held only `README.md` and `package.json`; the walk found
+`.orca/requirements/2026-10-27-release-0-2-0-across-project.md`.
+
+1. `SPLIT_INSTRUCTION_V2` (head "Orca requirement split, instruction version 2.") replaces V1. It adds one rule after
+   the `checks` rule: before the tasks run Orca commits the agreed requirement document to the repository at
+   `.orca/requirements/<date>-<slug>.md`; Orca's own files (that document, and `.decisions/` when present) are in the
+   repository while the tasks and their checks run; a check must not assert that a directory holds only certain files
+   and must not fail because Orca's files exist; prefer checks that read the delivered files.
+2. A dir group uses the same instruction: its document is committed on the folder's vault base (dir-requirements spec
+   §6.4 step 3), which is the tree its tasks and checks run in.
+3. No stored record names the instruction version. A call already started under version 1 keeps its stored envelope:
+   C compares ccloop's `promptSha256` with that envelope, never with a rebuilt prompt, so it settles as before. A run
+   whose A2 had not yet prepared (`prepared: false`) was never sent and is prepared under version 2.
+4. Criteria: `tests/control/requirementSplit.test.ts` ("the split instruction names Orca's own files in the target
+   (version 2)"); the single-repository pin `PINNED.splitPrompt` in `tests/control/multiDirOverview.test.ts` and the
+   fake port's prompt heads in `tests/control/fixtures/requirementHarness.ts` move to version 2 (rewrites authorised in
+   session `7753e97d`).

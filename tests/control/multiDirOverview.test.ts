@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V1, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V2, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -31,7 +31,9 @@ const sha = (text: string): string => createHash("sha256").update(text).digest("
 const PINNED = {
   clarifyInstructionV3: "09e9b2484492755ed729ffb7a35c9f763eacc3fa891e642e0ccd4f14e2465c0e",
   clarifyPrompt: "082285a1b2a23f21335bf704699b5e5decbf20fdcb24b29d9d1551513e93e4fc",
-  splitPrompt: "97f7c9191b49cd975dcd05c5508992f14c67cacee705a363792be5e6f7ef78ac",
+  // Split instruction version 2 (the requirement document and Orca's files are in the repository): the pin moves with it.
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+  splitPrompt: "cfe027bc99a0fa77a999619d5379cc1208f9a671831d307607f9461f7582a263",
   splitSchema: "0e8a8113c3a739af427bd6b730ef7995c2bcdcf41ea808d2ba526b1e66ecf728",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
@@ -157,8 +159,9 @@ describe("the split prompt across directories (M5, §6.4)", () => {
       const envelope = x.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
       expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_MULTI);
       const prompt = envelope.work.prompt;
-      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 1.")).toBe(true);
-      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V1.split("\n", 1)[0]!);
+      // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
+      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 2.")).toBe(true);
+      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V2.split("\n", 1)[0]!);
       expect(prompt).toContain("`writes[].targetPaths` are paths relative to that directory's root");
       expect(prompt).toContain("`writes[].checks` are shell commands, run in that directory");
       expect(prompt).toContain("`dir` is a directory's `key`");
@@ -239,7 +242,8 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
       await split.until(() => split.fake.calls.accept.length > 0);
       const envelope = split.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
       expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA);
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 1.")).toBe(true);
+      // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 2.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");
