@@ -682,6 +682,8 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
   const ws = await openDirWorkspace(io.env, target.frozen);
   // §9.2: the person's answer, under the folder lock. take-folder takes the person's paths and, like withhold (which
   // writes the withheld entries), lets §8.5 place the rest; recheck clears the stopped state and starts again from step 1.
+  // Why the person is asked again, when this pass did not do what they answered (review 2026-10-27, session 7753e97d).
+  let note: string | null = null;
   if (record.resolution !== null) {
     const resolution = record.resolution;
     if (resolution.action === "take-folder" && record.state === "folder-changed") {
@@ -690,8 +692,10 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
       record = taken.record;
     } else if (resolution.action === "withhold") record = await withholdPaths(ws, target, io, record, resolution);
     else {
-      // recheck -- and a take-folder whose state moved (the folder went missing) since the command was recorded.
-      record = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail: null, resolution: answered(current, resolution.id, null) }));
+      // recheck -- and a take-folder whose state moved (the folder went missing) since the command was recorded: a stop
+      // this pass makes says so, rather than asking the same question again without a word.
+      if (resolution.action === "take-folder") note = `take-folder not applied: the placement was ${record.state} when the answer was read; checked again`;
+      record = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail: note, resolution: answered(current, resolution.id, null) }));
       await dropRef(ws, target.refs.stop);
     }
   }
@@ -702,7 +706,7 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
     const kept = await settleJournal(ws, pending, landing);
     io.save((current) => ({ ...current, pending: { ...pending, tmp: [], aside: [] } }));
     const classified = await classifyLanding(ws.frozen.dir, landing);
-    const detail = kept.length === 0 ? null : `kept aside: ${kept.join(", ")}`;
+    const detail = [kept.length === 0 ? null : `kept aside: ${kept.join(", ")}`, note].filter((part) => part !== null).join("; ") || null;
     if (classified.changed.length > 0 || classified.unwritable.length > 0) {
       await stop(ws, target, io, { changed: classified.changed, unwritable: classified.unwritable, to: pending.to, tip: pending.tip, consumed, detail });
       return { kind: "done" };
@@ -744,7 +748,7 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
   const classified = await classifyLandingPaths(ws, placed, next.commit);
   io.hook?.("after-classify");
   if (classified.changed.length > 0 || classified.unwritable.length > 0) {
-    await stop(ws, target, io, { changed: classified.changed, unwritable: classified.unwritable, to: next.commit, tip, consumed, detail: null, patch: { withheld } });
+    await stop(ws, target, io, { changed: classified.changed, unwritable: classified.unwritable, to: next.commit, tip, consumed, detail: note, patch: { withheld } });
     return { kind: "done" };
   }
   return { kind: "write", ws, from: placed, to: next.commit, tip, owed: false, classified, withheld, consumed };

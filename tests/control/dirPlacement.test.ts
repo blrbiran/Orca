@@ -326,6 +326,22 @@ describe("the person's answers (§9.2)", () => {
     expect(w.record().resolution).toMatchObject({ id: "second", action: second });
   }));
 
+  // Review 2026-10-27 (session 7753e97d): a recorded take-folder that meets a state other than folder-changed (the folder
+  // went missing before the pass ran) is acted on as a recheck; the person is asked again, so the page says why.
+  it("a take-folder the folder-missing state overtook is a recheck, and the stop asks again saying why", () => inWorld({ "a.md": "A\n" }, async (w) => {
+    w.land({ "a.md": "A2\n" });
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    expect(await w.place()).toBe(true);
+    expect(w.resolve("take-folder")).toEqual({ ok: true });
+    renameSync(w.folder, `${w.folder}-away`);
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-missing" });
+    renameSync(`${w.folder}-away`, w.folder);
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"], resolution: null, detail: "take-folder not applied: the placement was folder-missing when the answer was read; checked again" });
+    expect(read(w, "a.md")).toBe("mine\n");
+  }));
+
   it("withhold with no stopped state, or take-folder outside folder-changed, is refused", () => inWorld({ "a.md": "A\n" }, async (w) => {
     expect(w.resolve("withhold")).toEqual({ ok: false, code: "folder-change-not-pending" });
     expect(w.resolve("take-folder")).toEqual({ ok: false, code: "folder-change-not-pending" });
