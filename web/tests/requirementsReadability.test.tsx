@@ -205,3 +205,15 @@ describe("the requirement's budget line (tester #35)", () => {
     expect(at(5_000_000, null)).toBeNull();
   });
 });
+
+describe("the requirement document (tester #32)", () => {
+  // Before consensus the document is a stub at the page's bottom; it folds then, and is open once there is consensus.
+  const fold = (): HTMLDetailsElement => screen.getByRole("region", { name: "Requirement document" }).querySelector("details.requirement-document")!;
+  it("is folded before consensus and open after it", () => {
+    show(requirementView("awaiting-answers"));
+    expect(fold().open).toBe(false);
+    cleanup();
+    show(requirementView("awaiting-review"));
+    expect(fold().open).toBe(true);
+  });
+});

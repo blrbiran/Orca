@@ -640,8 +640,12 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       <div id={overviewRegionId("requirement", groupId, "draft")} tabIndex={-1} data-overview-region="draft">
       {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} archived={archived} {...editable} />)}
       <section aria-label={t("requirements.document")}>
-        <h4>{t("requirements.document")}</h4>
-        <DocumentText text={view.document} />
+        {/* Tester #32: while clarifying the document is only the idea's stub, so it folds; from consensus on it is the
+            requirement's real product and is open. */}
+        <details className="requirement-document" open={view.requirement.consensus !== null}>
+          <summary><h4>{t("requirements.document")}</h4></summary>
+          <DocumentText text={view.document} />
+        </details>
         {/* Dir-requirements spec §9.3: a dir group's document stays in Orca's store, never in the folder. */}
         {view.summary.placement !== undefined
           ? <p>{t("requirements.exportKept")}</p>
