@@ -390,17 +390,17 @@ export { BUSY_WORK } from "../control/executionPending.js";
  */
 function blockedRequirementRun(store: ControlStore, groupId: string, clarifying: boolean, snapshot?: GroupReadSnapshot): Pick<RequirementSummaryV1, "blockedRun" | "blockedRunCharge"> {
   const rows = snapshot === undefined
-    ? store.db.prepare("SELECT id,active,work_item_id,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
+    ? store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
     : snapshot.runsByRowid;
-  type Row = { phase?: string; purpose?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
+  type Row = { phase?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
   const decode = (row: (typeof rows)[number]): { runId: string; run: Row } => ({ runId: String(row.id),
     run: (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as Row });
   // The driver's block on an active call; else, while the requirement is still clarifying (code review S1), a requirement
   // call a stop closed with its usage still unknown, whose stale block reason names what is left to do -- charge its grant.
-  // Only active rows and inactive requirement-call rows are read, as before: other runs are judged by the group view.
+  // A converted requirement's runs are not read here (its runs are judged by the group view), as before.
   const pick = rows.filter(row => Number(row.active) === 1).map(decode).find(({ run }) => run.phase === "single-call" && run.state === "blocked")
-    ?? (!clarifying ? undefined : rows.filter(row => Number(row.active) !== 1 && /^(round|draft)-[1-9]\d*$/.test(String(row.work_item_id))).map(decode)
-      .find(({ run }) => run.phase === "single-call" && (run.purpose === "clarify" || run.purpose === "split") && settleableSingleCallBlock(run as never)?.closed === true));
+    ?? (!clarifying ? undefined : rows.filter(row => Number(row.active) !== 1).map(decode)
+      .find(({ run }) => run.phase === "single-call" && settleableSingleCallBlock(run as never)?.closed === true));
   if (pick === undefined) return { blockedRun: null };
   const { runId, run } = pick;
   // Spec 2026-10-27 single-call unknown usage §9 R1, R6: a call blocked on unknown usage is retried by charging its
