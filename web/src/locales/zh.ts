@@ -113,6 +113,7 @@ export const zh: Translation<typeof en> = {
     viewBoard: "看板",
     viewGraph: "组关系图",
     showArchived: "显示已归档",
+    dropHint: { "pause-dispatch": "松开以暂停", "resume-dispatch": "松开以恢复", "archive-group": "松开以归档", "unarchive-group": "松开以取消归档" },
     dropRefused: "{{groupId}} 不能拖到“{{column}}”：拖拽只能暂停、恢复、归档和取消归档。",
     column: { clarifying: "澄清中", "awaiting-confirmation": "待确认", queued: "排队中", running: "运行中", "needs-you": "需要你", done: "已完成", archived: "已归档" },
     card: {

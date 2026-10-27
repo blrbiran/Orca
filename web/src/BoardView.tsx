@@ -64,7 +64,7 @@ function needsYouReason(group: GroupSummaryV1): "refused" | "paused" | "stopping
   return "recovery";
 }
 
-function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () => void }): JSX.Element {
+function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () => void; onDragging?: (group: GroupSummaryV1 | null) => void }): JSX.Element {
   const { t } = useTranslation();
   const { group } = props;
   const o = group.orchestration;
@@ -73,9 +73,9 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
     : o?.state === "held" ? t("board.card.held") : null;
   const reason = needsYouReason(group);
   const facts = group.card;
-  const onDragStart = (event: DragEvent<HTMLElement>): void => { event.dataTransfer.setData("text/plain", group.groupId); };
+  const onDragStart = (event: DragEvent<HTMLElement>): void => { event.dataTransfer.setData("text/plain", group.groupId); props.onDragging?.(group); };
   return (
-    <li className="board-card" draggable onDragStart={onDragStart} data-testid={`board-card-${group.groupId}`}>
+    <li className="board-card" draggable onDragStart={onDragStart} onDragEnd={() => props.onDragging?.(null)} data-testid={`board-card-${group.groupId}`}>
       <button type="button" className="board-card-open" onClick={props.onOpen}>
         {/* Ruling H8: the status light; decorative, the state is in this text. */}
         <span className="led" data-led={groupLed(group)} aria-hidden="true" />
@@ -118,6 +118,8 @@ export function BoardView(props: BoardViewProps): JSX.Element {
   const [view, setView] = useState<"board" | "graph">("board");
   const [showArchived, setShowArchived] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // Tester #54: the card being dragged, so each column can say before the drop whether it takes it (boardDrop decides).
+  const [dragging, setDragging] = useState<GroupSummaryV1 | null>(null);
   const scope = props.scope;
   if (scope.kind === "unresolved") return <p role="note">{t("project.listUnavailable")}</p>;
   const groups = props.groups.filter((group) => inScope(scope, group.repoId));
@@ -128,6 +130,7 @@ export function BoardView(props: BoardViewProps): JSX.Element {
 
   const drop = (to: BoardColumn) => (event: DragEvent<HTMLElement>): void => {
     event.preventDefault();
+    setDragging(null);
     const group = groups.find((candidate) => candidate.groupId === event.dataTransfer.getData("text/plain"));
     if (group === undefined) return;
     const decided = boardDrop(group, to);
@@ -156,12 +159,17 @@ export function BoardView(props: BoardViewProps): JSX.Element {
           {columns.map((column) => {
             const cards = groups.filter((group) => boardColumn(group) === column);
             const flowCards = flows.filter((run) => flowColumn(run) === column);
+            const decided = dragging === null ? null : boardDrop(dragging, column);
+            const dropState = decided === null ? undefined : "verb" in decided ? "allowed" : decided.refused === "same" ? undefined : "refused";
             return (
-              <section key={column} className="board-column" aria-label={t(`board.column.${column}` as const)} data-column={column}
+              // The drop stays accepted everywhere so a refused drop still says why (board.dropRefused); the marking is the
+              // before-the-drop half of the same answer.
+              <section key={column} className="board-column" aria-label={t(`board.column.${column}` as const)} data-column={column} data-drop={dropState}
                 onDragOver={(event) => event.preventDefault()} onDrop={drop(column)}>
                 <h3>{t(`board.column.${column}` as const)} <span className="nav-count">{cards.length + flowCards.length}</span></h3>
+                {decided !== null && "verb" in decided && <p className="board-drop-hint" data-testid={`board-drop-hint-${column}`}>{t(`board.dropHint.${decided.verb}` as const)}</p>}
                 <ul>
-                  {cards.map((group) => <BoardCard key={group.groupId} group={group} repoText={label(group.repoId)} onOpen={() => props.onOpen(group)} />)}
+                  {cards.map((group) => <BoardCard key={group.groupId} group={group} repoText={label(group.repoId)} onOpen={() => props.onOpen(group)} onDragging={setDragging} />)}
                   {flowCards.map((run) => <FlowCard key={run.flowRunId} run={run} onOpen={() => props.onOpenFlow?.(run.flowRunId)} />)}
                 </ul>
               </section>

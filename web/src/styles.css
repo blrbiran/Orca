@@ -486,6 +486,10 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .flow-start-dialog fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin: 0 0 10px; }
 .board-columns { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; }
 .board-column { flex: 0 0 240px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 120px; }
+/* Tester #54: while a card is dragged, the columns that take it are outlined in the accent; the rest dim. */
+.board-column[data-drop="allowed"] { border-color: var(--accent); border-style: dashed; }
+.board-column[data-drop="refused"] { opacity: 0.55; }
+.board-drop-hint { margin: 0 0 6px; color: var(--accent); font-size: 12px; }
 .board-column ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .board-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px; cursor: grab; }
 .board-card-open { all: unset; cursor: pointer; font-weight: 600; }

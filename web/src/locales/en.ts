@@ -244,6 +244,7 @@ export const en = {
     viewBoard: "Board",
     viewGraph: "Group graph",
     showArchived: "Show archived",
+    dropHint: { "pause-dispatch": "Drop to pause", "resume-dispatch": "Drop to resume", "archive-group": "Drop to archive", "unarchive-group": "Drop to unarchive" },
     dropRefused: "{{groupId}} cannot be moved to {{column}}: only pause, resume, archive and unarchive can be done by dragging.",
     column: { clarifying: "Clarifying", "awaiting-confirmation": "Awaiting confirmation", queued: "Queued", running: "Running", "needs-you": "Needs you", done: "Done", archived: "Archived" },
     card: {

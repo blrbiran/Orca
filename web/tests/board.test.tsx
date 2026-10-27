@@ -89,6 +89,22 @@ describe("the board tab (kanban spec §4)", () => {
     expect(screen.getByTestId("board-refusal").textContent).toContain("draft1 cannot be moved to Running");
   });
 
+  // Tester #54: a refusal used to be known only after the drop. While a card is dragged each column says beforehand
+  // whether it takes the card (from boardDrop, the same function the drop obeys), and the marks go when the drag ends.
+  it("marks, while a card is dragged, the columns that take it and those that refuse it", () => {
+    const groups = [g({ groupId: "run1", state: "running" }), g({ groupId: "draft1", state: "draft" })];
+    render(<BoardView groups={groups} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const column = (name: string): HTMLElement => screen.getByRole("region", { name });
+    fireEvent.dragStart(screen.getByTestId("board-card-run1"), { dataTransfer: dataTransfer() });
+    expect(column("Queued").getAttribute("data-drop")).toBe("allowed");
+    expect(screen.getByTestId("board-drop-hint-queued").textContent).toBe("Drop to pause");
+    expect(column("Done").getAttribute("data-drop")).toBe("refused");
+    expect(column("Running").getAttribute("data-drop")).toBeNull();
+    fireEvent.dragEnd(screen.getByTestId("board-card-run1"));
+    expect(column("Queued").getAttribute("data-drop")).toBeNull();
+    expect(screen.queryByTestId("board-drop-hint-queued")).toBeNull();
+  });
+
   it("keeps a failure the panel cannot word (an Orca reason, or a cause it does not know) as written", () => {
     const card = (cause: string) => g({ groupId: `g-${cause}`, state: "running", card: { budget: { usedTokens: 0, limitTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "a", cause } } });
     render(<BoardView groups={[card("terminal:failed"), card("a-newer-cause")]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
