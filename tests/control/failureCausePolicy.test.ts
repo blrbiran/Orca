@@ -81,6 +81,24 @@ describe("a quota wait retries the task after the re-probe interval (§5)", { ti
     } finally { await w.t.h.dispose(); }
   });
 
+  // Tester issue #61: a paused group's retry is refused stop-mode-conflict, and the refused row (keyed by the run) would
+  // use up this run's one retry. The wait holds while paused and retries once the person resumes.
+  it("waits while the group is paused, and retries once the person resumes", async () => {
+    const w = await world("quota"); try {
+      expect("error" in (w.setWait([w.installation]) as object)).toBe(false);
+      expect("error" in (await w.service.pauseDispatch(w.t.h.command("pause-dispatch", {})) as object)).toBe(false);
+      w.clock.value += QUOTA_REPROBE_MS;
+      // mutation: drop groupStopped from quotaWaitCandidates -> the candidate is listed and its refused retry booked, red
+      expect(quotaWaitCandidates(w.t.h.store, new Set([w.installation]), w.clock.value)).toEqual([]);
+      await w.service.systemDebugPass();
+      expect(w.retriedBy()).toEqual([]);
+      expect("error" in (await w.service.resumeDispatch(w.t.h.command("resume-dispatch", {})) as object)).toBe(false);
+      w.succeedNext();
+      await w.service.systemDebugPass();
+      expect(w.retriedBy()).toEqual([[`orca-auto-quota-retry-a-${w.runId}`, "orca-auto"]]);
+    } finally { await w.t.h.dispose(); }
+  });
+
   it("does not wait on a cause other than quota", async () => {
     const w = await world("auth"); try {
       expect("error" in (w.setWait([w.installation]) as object)).toBe(false);

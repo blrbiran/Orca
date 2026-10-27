@@ -126,6 +126,40 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
     } finally { await t.h.dispose(); }
   });
 
+  // Tester issue #61: pausing a group stops Orca's own escalation of it. Before the fix level 1's retry was refused
+  // stop-mode-conflict, that refused row counted as level 1 done, and the next pass opened a ladder group anyway.
+  it("a paused group is not escalated: no level-1 retry is booked and no ladder opens until the person resumes", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      await w.failedRun();
+      expect("error" in (await w.service.pauseDispatch(t.h.command("pause-dispatch", {})) as object)).toBe(false);
+      // mutation: drop groupStopped from ladderCandidates -> the refused level-1 row is booked and the second pass opens LADDER, red
+      for (let pass = 0; pass < 2; pass++) {
+        const out = await w.service.systemDebugPass();
+        expect([out.redispatched, out.opened, out.confirmed]).toEqual([[], [], []]);
+      }
+      expect(t.h.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id='orca-auto-ladder-l1-a'").get()).toBeUndefined();
+      expect(t.h.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(LADDER)).toBeUndefined();
+      expect("error" in (await w.service.resumeDispatch(t.h.command("resume-dispatch", {})) as object)).toBe(false);
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("an open ladder waits while its original group is paused: it is not folded back until the person resumes", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      const failedRunId = await w.failedThroughLevelOne();
+      expect((await w.service.systemDebugPass()).confirmed).toEqual([LADDER]);
+      await w.driveDebug((status) => status === "done");
+      expect("error" in (await w.service.pauseDispatch(t.h.command("pause-dispatch", {})) as object)).toBe(false);
+      // mutation: drop the pass's paused-source hold -> the fold runs, its retry is refused and the mark settles, red
+      const held = await w.service.systemDebugPass();
+      expect([held.folded, held.settled]).toEqual([[], []]);
+      expect(readSystemDebugMark(w.body(LADDER))?.settled).toBeNull();
+      expect(t.body(failedRunId).state).toBe("blocked");
+      expect("error" in (await w.service.resumeDispatch(t.h.command("resume-dispatch", {})) as object)).toBe(false);
+      expect((await w.service.systemDebugPass()).folded).toEqual([LADDER]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("level 3: the rerun failing again is the person's (exhausted), and nothing further is opened", async () => {
     const w = await ladderWorld(); const { t } = w; try {
       await w.failedThroughLevelOne();

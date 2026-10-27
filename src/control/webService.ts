@@ -5,7 +5,7 @@ import { applyScheduleCommand, type ScheduleCommand } from "./schedules/commands
 import { schedulesPass, type SchedulePassDeps } from "./schedules/pass.js";
 import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerFailure } from "./ccloopPort.js";
-import {retainSavedInterruption,readDriverRun,describeError} from "./executionDriver.js";
+import {retainSavedInterruption,readDriverRun,describeError,groupStopped} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
@@ -886,6 +886,9 @@ export class WebControlService {
       // group is never started, a running one is not folded back.
       const superseded = mark.source.kind === "ladder" && terminallyFailedRun(this.store, mark.source.groupId, mark.source.taskId!)?.runId !== mark.source.runId;
       if (superseded && (group.status === "draft" || allTasksDone(this.store, groupId))) { settleSystemDebug(this.store, groupId, "superseded", null); out.settled.push(groupId); continue; }
+      // Issue #61: while the person has the original group paused or stopped, its ladder is neither confirmed (no new
+      // spend on its behalf) nor folded back (the fold's retry would be refused and settle the ladder); it waits.
+      if (mark.source.kind === "ladder" && groupStopped(this.store, mark.source.groupId)) continue;
       if (group.status === "draft") {
         // Checks spec 2026-10-22 §6.1: a finding's fix takes the profiles of its newest involved group that is confirmed,
         // else the repository's newest confirmed group.

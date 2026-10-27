@@ -7,6 +7,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
 import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
+import { groupStopped } from "./executionDriver.js";
 import { ControlError } from "./errors.js";
 import { buildModelReviewPlanSource } from "./modelReview/plan.js";
 import { normalizeControlPlan, writeImportedPlan } from "./planImport.js";
@@ -285,6 +286,9 @@ export function anyTaskFailed(store: ControlStore, groupId: string): boolean {
 /**
  * §3.1: a ladder candidate -- a group Orca orchestrates (an orchestration record in mode `run`: a "Confirm only" group is
  * the person's to drive, so Orca adds no run to it), not itself a debug group, with a failed task and no ladder yet.
+ * Nor a paused or stopped group (tester issue #61, 2026-10-26): its level-1 retry would be refused `stop-mode-conflict`,
+ * and that refused row would count as level 1 done, so the next pass opened a ladder group the person had paused out of.
+ * The candidate returns once the person resumes.
  */
 export function ladderCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> {
   const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> = [];
@@ -297,7 +301,7 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
       body = JSON.parse(String(row.body)) as Record<string, unknown>;
       if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue;
     } catch { continue; }
-    if (Object.hasOwn(body, "debug") || Object.hasOwn(body, "systemDebug") || isGroupArchived(store, groupId)) continue;
+    if (Object.hasOwn(body, "debug") || Object.hasOwn(body, "systemDebug") || isGroupArchived(store, groupId) || groupStopped(store, groupId)) continue;
     const repoId = (body.plan as { repoId?: unknown } | undefined)?.repoId;
     if (typeof repoId !== "string") continue;
     for (const { id: taskId } of tasksOf(store, groupId)) {
@@ -329,6 +333,7 @@ export const QUOTA_REPROBE_MS = 30 * 60_000;
  * Failure-cause spec 2026-10-21 §5 ("on quota exhausted, wait instead of switching", per installation, default off): an
  * orchestrated group's task whose current run ended with cause `quota` on an installation the person set to wait, and
  * whose last activity (its `run-blocked` row) is at least QUOTA_REPROBE_MS old. The retry itself is the re-probe.
+ * A paused or stopped group waits (issue #61): its retry would be refused and the refusal would use up this run's retry.
  */
 export function quotaWaitCandidates(store: ControlStore, waiting: ReadonlySet<string>, now: number): Array<{ groupId: string; taskId: string; runId: string }> {
   if (waiting.size === 0) return [];
@@ -337,7 +342,7 @@ export function quotaWaitCandidates(store: ControlStore, waiting: ReadonlySet<st
   for (const row of store.db.prepare(`SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
     const groupId = String(row.id);
     try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue; } catch { continue; }
-    if (isGroupArchived(store, groupId)) continue;
+    if (isGroupArchived(store, groupId) || groupStopped(store, groupId)) continue;
     for (const { id: taskId } of tasksOf(store, groupId)) {
       const run = terminallyFailedRun(store, groupId, taskId) as (ReturnType<typeof terminallyFailedRun> & { agent?: { agent?: unknown } }) | null;
       if (run === null || run.drive?.failureCause?.cause !== "quota" || typeof run.agent?.agent !== "string" || !waiting.has(run.agent.agent)) continue;
