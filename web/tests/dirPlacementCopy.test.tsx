@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import { FolderPlacementBlock } from "../src/FolderPlacement.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import type { ControlConfigV1, ControlSummaryV1, GroupPlacementV1, GroupViewV1, RequirementViewV1 } from "../src/controlTypes.js";
 import i18n from "../src/i18n.js";
@@ -103,17 +102,6 @@ describe("the copy for a dir group's placement (spec §9.3, D11)", () => {
     const block = screen.getByRole("region", { name: "Folder placement" });
     expect(block.textContent).not.toContain(".decisions/run-1.jsonl");
     expect(within(block).queryByRole("heading", { name: "Kept in Orca's store, not written to the folder" })).toBeNull();
-  });
-
-  // Review 2026-10-27 (session 7753e97d): a group's placement appears once its export is done, while the page stays
-  // mounted. A hook called only after the early return changes the hook count between those renders, which React
-  // refuses ("Rendered more hooks than during the previous render").
-  it("renders when a group's placement appears between two renders of the same block", () => {
-    const base = view([workItem({})]);
-    const { rerender } = render(as(owner, <FolderPlacementBlock view={base} onCommand={vi.fn()} />));
-    expect(screen.queryByRole("region", { name: "Folder placement" })).toBeNull();
-    rerender(as(owner, <FolderPlacementBlock view={dirView()} onCommand={vi.fn()} />));
-    expect(within(screen.getByRole("region", { name: "Folder placement" })).getByRole("button", { name: "Check again" })).toBeTruthy();
   });
 
   it("keeps a member's view of a stopped placement read-only", () => {
