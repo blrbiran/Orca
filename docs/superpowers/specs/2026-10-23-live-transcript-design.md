@@ -989,3 +989,33 @@ helpers.
   - N5: the C5 cost is scoped to the assignment rule alone, over the first 64 MiB of lines.
   - N6: the `type` allow-list in C6, and its T3 case.
   - N7: the consequence noted in C1.
+
+## 13. Correction (review 7753e97d, session orca-dev-03c89de8, 2026-10-27, on branch `fix/flow-pause-review`)
+
+This section supersedes the parts of 10.5.1 and 10.5.2 it names; their text stays as written.
+
+- **A settled child under a pause (10.5.1 "Resume").** A child that landed or failed after the pause reached it has no
+  turn to continue, and `resume-from-handoff` refuses it for good (`continuation-predecessor-unrecoverable`). The flow's
+  `resume` now reads each paused child's status first. A settled child leaves the resume batch, its pending notes are
+  spent with `undelivered: "child-settled"`, and the kernel collects its result once the run is `running` again. Its
+  stop, which froze nothing, stays on the finished child.
+- **A note whose child settled first (10.5.2 "Delivery").** The note is spent the same way, and its `noteIntent` step is
+  cleared, so the step settles and the run can finish. The run view shows each such note as `undeliveredNotes:
+  [{seq, reason}]` on the execution.
+- **A pause meeting a note's stop.** A child holds one stop, and the child refuses a second one (`stop-mode-conflict`).
+  When a pause finds a step whose note has already stopped it, the pause step takes that stop over (`stop: "note"`,
+  the note's marker and deadline), and its `noteIntent` step is removed. The note's own resume therefore never
+  restarts a paused child, and the person's `resume` delivers the note.
+- **One transaction for a resume.** The port's `resume` takes the flow's bookkeeping (notes delivered, intents cleared,
+  run state) as a callback, and runs it inside the transaction that lifts the stops. A crash leaves both or neither,
+  so a note is never sent twice.
+- **The pump passes a paused run that still owes stops.** This means a run with a `pauseIntent` or `noteIntent`. A
+  stop that failed is placed again, and an incomplete one is shown in `lastError`. A persistent `lastError` is
+  written once, not cleared and written again on every tick.
+- **Open (not closed by this correction).** A flow-stopped child whose handoff ends `handoff-partial` (a frozen run
+  settled unrecoverable) or `handoff-unresolved` has no recovery verb. The flow's `resume` needs `handoff-complete`,
+  and `resume-dispatch` / `resume-from-handoff` refuse a flow stop (`flow-pause-resume-via-flow`). `recovery-retry`
+  refuses a flow child (`flow-child-managed`). The run's `stop` waits for a boundary that never comes. The run view
+  names the state (`lastError: flow-pause-stop-incomplete:<step>:handoff-partial|handoff-unresolved`). What the flow
+  should do with such a child (fail the step for a `retry`, restart it, or let `stop` end a paused run) is left to a
+  person's ruling.

@@ -60,13 +60,19 @@ export interface LoadedRun {
 }
 export interface RoleResolution { agent: string; model: string | null; source: "project" | "global" | "template" | "default" }
 /** Live transcript spec §10.5.1: the pause a flow run is waiting on, with one entry per running work child. */
-export interface FlowPauseStep { stepKey: string; seq: number; childGroupId: string; acceptedAt: string; deadlineAt: string }
+export interface FlowPauseStep {
+  stepKey: string; seq: number; childGroupId: string; acceptedAt: string; deadlineAt: string;
+  /** `note`: the pause took over the stop a note had already placed on this child, so its marker is the note's. */
+  stop?: "note";
+}
 export interface FlowPauseIntent { messageSeq: number; at: string; steps: FlowPauseStep[] }
 /** Live transcript spec §10.5.2 (plan D6): the note recorded on the work execution that received it. */
 export interface OperatorNoteEntry {
   seq: number; by: string; at: string; text: string; scope: "next-attempt" | "remaining-attempts";
   /** The continuation runs the note was delivered to (a `remaining-attempts` one stays pending). */
   deliveredTo?: string[]; consumedAt?: string;
+  /** Why a consumed note never reached the agent (its child settled before the boundary); absent: it was delivered. */
+  undelivered?: string;
 }
 /** Live transcript spec §10.5.2 (plan D6): the step a note owes a boundary delivery; `seq` is the execution's. */
 export interface FlowNoteStep { stepKey: string; seq: number; childGroupId: string; acceptedAt: string; deadlineAt: string }

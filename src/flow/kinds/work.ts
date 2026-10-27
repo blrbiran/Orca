@@ -73,8 +73,12 @@ export interface FlowChildPort {
   /** A flow-placed handoff stop; its own transaction, idempotent for the same marker (plan D3). */
   stop(childGroupId: string, input: { acceptedAt: string; deadlineAt: string; flowStop: FlowStopMarker }): void;
   stopState(childGroupId: string, flowStop: FlowStopMarker): FlowChildStopState;
-  /** Lift the batch's stops: a continuation when the child is recoverable, a dispatch when it is restartable (plan D8). */
-  resume(children: FlowChildResume[]): Array<{ childGroupId: string; pendingRunId: string | null }>;
+  /**
+   * Lift the batch's stops: a continuation when the child is recoverable, a dispatch when it is restartable (plan D8).
+   * `record` -- the flow's own bookkeeping of the resume (notes delivered, intent cleared) -- runs inside the same
+   * transaction, so a crash leaves both or neither: never a lifted stop whose note the flow would deliver again.
+   */
+  resume(children: FlowChildResume[], record?: (resumed: Array<{ childGroupId: string; pendingRunId: string | null }>) => void): Array<{ childGroupId: string; pendingRunId: string | null }>;
 }
 
 /** §6.2: deterministic, so a restart opens nothing twice. */

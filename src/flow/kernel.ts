@@ -857,9 +857,12 @@ export async function resumeExecution(deps: FlowDeps, run: LoadedRun, execution:
   await advanceRun(deps, run.row.id);
 }
 
-/** The marker a pause placed on a step's child (live transcript spec §10.5.1, plan D4). */
-const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
-  ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "pause" });
+/**
+ * The marker a pause placed on a step's child (live transcript spec §10.5.1, plan D4) -- or the note's, when the pause
+ * took over the stop a note had already placed there.
+ */
+export const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
+  ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: step.stop ?? "pause" });
 /** The marker a note placed on a step's child (live transcript spec §10.5.2, plan D6). */
 const noteMarker = (run: LoadedRun, step: FlowNoteStep): FlowStopMarker =>
   ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "note" });
@@ -879,14 +882,41 @@ export function recordNoteDelivery(deps: FlowDeps, run: LoadedRun, execution: Ex
       body: { ...(execution.body as ExecutionBody), operatorNotes: notes },
     });
   }
+  clearNoteStep(deps, run, execution.stepKey);
+}
+
+function clearNoteStep(deps: FlowDeps, run: LoadedRun, stepKey: string): void {
   updateFlowRunBody(deps.store, run.row.id, (current) => {
-    const steps = (current.noteIntent as FlowNoteIntent | undefined)?.steps.filter((step) => step.stepKey !== execution.stepKey) ?? [];
+    const steps = (current.noteIntent as FlowNoteIntent | undefined)?.steps.filter((step) => step.stepKey !== stepKey) ?? [];
     if (steps.length === 0) {
       const { noteIntent: _done, ...rest } = current;
       return rest;
     }
     return { ...current, noteIntent: { steps } };
   });
+}
+
+/** True when the child has settled (landed or failed): it has no turn left for a stop, a resume or a note. */
+export async function childSettled(children: FlowChildPort, childGroupId: string): Promise<boolean> {
+  const status = await children.status(childGroupId);
+  return status?.state === "landed" || status?.state === "failed";
+}
+
+/**
+ * Live transcript spec §10.5.2: a note whose child settled before its boundary never reaches the agent. Its pending notes
+ * are spent with the reason (`undelivered`, shown on the run view) and its intent step cleared, so the step settles as
+ * any other; the caller supplies the transaction.
+ */
+export function dropUndeliveredNotes(deps: FlowDeps, run: LoadedRun, stepKey: string, execution: ExecutionRow | undefined, reason: string): void {
+  const body = execution?.body as ExecutionBody | undefined;
+  const pending = new Set(pendingNotes(body?.operatorNotes).map((note) => note.seq));
+  if (execution !== undefined && pending.size > 0) {
+    const at = new Date(deps.now()).toISOString();
+    const notes = (body!.operatorNotes ?? []).map((note) => !pending.has(note.seq) ? note
+      : { ...note, consumedAt: at, ...(note.deliveredTo === undefined ? { undelivered: reason } : {}) });
+    finishExecution(deps.store, { flowRunId: run.row.id, stepKey, seq: execution.seq }, execution.state, execution.state, deps.now(), { body: { ...body!, operatorNotes: notes } });
+  }
+  clearNoteStep(deps, run, stepKey);
 }
 
 /**
@@ -920,7 +950,12 @@ async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolea
   }
   for (const step of run.body.noteIntent?.steps ?? []) {
     const execution = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.stepKey && e.seq === step.seq);
-    if (execution === undefined) continue;
+    // A child that settled first has no turn left to hear the note: spent visibly, and the step is settleRunning's.
+    if (execution === undefined || execution.state !== "running" || await childSettled(children, step.childGroupId)) {
+      deps.store.transaction(() => dropUndeliveredNotes(deps, run, step.stepKey, execution, "child-settled"));
+      issued = true;
+      continue;
+    }
     const state = children.stopState(step.childGroupId, noteMarker(run, step));
     if (state.state === "none") {
       try {
@@ -941,17 +976,16 @@ async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolea
     const delivered = pendingNotes((execution.body as ExecutionBody).operatorNotes);
     // A defensive resume with no note: the intent is still settled, and the child continues without one.
     const joined = delivered.length === 0 ? undefined : joinPendingNotes(delivered);
-    let pendingRunId: string | null;
     try {
-      const [resumed] = children.resume([{ childGroupId: step.childGroupId, flowStop: noteMarker(run, step), ...(joined === undefined ? {} : { operatorNote: joined }) }]);
-      pendingRunId = resumed?.pendingRunId ?? null;
+      // The delivery is recorded in the resume's own transaction: a crash between them would send the note twice.
+      children.resume([{ childGroupId: step.childGroupId, flowStop: noteMarker(run, step), ...(joined === undefined ? {} : { operatorNote: joined }) }],
+        ([resumed]) => recordNoteDelivery(deps, run, execution, delivered, resumed?.pendingRunId ?? null));
     } catch (error) {
       // A budget refusal or a lost stop keeps the intent and is retried; the note is not lost.
       if (!(error instanceof FlowRefusal)) throw error;
       recordRunError(deps, run.row.id, error.detail === "" ? error.code : `${error.code}:${error.detail}`);
       continue;
     }
-    deps.store.transaction(() => recordNoteDelivery(deps, run, execution, delivered, pendingRunId));
     issued = true;
   }
   return issued;
@@ -1154,20 +1188,29 @@ export async function advanceFlowRuns(deps: FlowDeps): Promise<void> {
   // feedback intakes (passRun's first stage); a paused run's open plan and its deadlines still wait for the resume.
   for (const flowRunId of listRunsWithOpenWork(deps.store)) {
     if (getFlowRun(deps.store, flowRunId)?.state === "stopped") continue;
-    // Cleared before the pass, not after: a diagnostic this pass records (a pause stop that never completed) would
-    // otherwise be wiped by its own clean end.
-    try { recordRunError(deps, flowRunId, null); }
-    catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: clearing lastError failed: ${error instanceof Error ? error.message : String(error)}\n`); }
+    // A clean pass clears the error after it, but only when the pass itself recorded none: a diagnostic this pass
+    // records (a pause stop that never completed) must outlive its own clean end, and one that persists is written
+    // once, not cleared and written again every tick.
+    erroredThisPass.delete(flowRunId);
     let failed: string | null = null;
     try { await advanceRun(deps, flowRunId); }
     catch (error) { failed = error instanceof Error ? error.message : String(error); }
-    if (failed === null) continue;
+    if (failed === null) {
+      if (erroredThisPass.has(flowRunId)) continue;
+      try { recordRunError(deps, flowRunId, null); }
+      catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: clearing lastError failed: ${error instanceof Error ? error.message : String(error)}\n`); }
+      continue;
+    }
     try { recordRunError(deps, flowRunId, failed); }
     catch (error) { process.stderr.write(`orca-flow: run ${flowRunId}: ${failed} (not recorded: ${error instanceof Error ? error.message : String(error)})\n`); }
   }
 }
 
+/** The runs a pump pass recorded an error on (advanceFlowRuns clears a run's error only after a pass that recorded none). */
+const erroredThisPass = new Set<string>();
+
 export function recordRunError(deps: FlowDeps, flowRunId: string, message: string | null): void {
+  if (message !== null) erroredThisPass.add(flowRunId);
   const stored = (getFlowRun(deps.store, flowRunId)?.body as FlowRunBody | undefined)?.lastError;
   if (message === null ? stored === undefined : stored?.message === message) return;
   const at = deps.now();

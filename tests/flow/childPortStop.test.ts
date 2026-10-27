@@ -282,7 +282,9 @@ describe("FlowChildPort.resume (spec §10.5.1, plan D8)", () => {
 });
 
 describe("the fake child port fixture", () => {
-  it("models landing, stop states and resume outcomes for T4–T6", async () => {
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. The fixture now refuses
+  // what the driver port refuses (review finding 6); the old case resumed a landed child, which the real port never does.
+  it("models landing, stop states and resume outcomes for T4–T6 as the driver port does", async () => {
     const { fakeChildPort } = await import("./fixtures/fakeChildPort.js");
     const fake = fakeChildPort();
     const marker = stopMarkerOf("write");
@@ -290,13 +292,30 @@ describe("the fake child port fixture", () => {
     expect(fake.port.attemptTimeoutMs("child")).toBe(3_600_000);
     fake.port.stop("child", { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: marker });
     expect(fake.port.stopState("child", marker)).toEqual({ state: "not-complete", stopState: "handoff-pending" });
-    fake.land("child", "c".repeat(40));
-    expect(await fake.port.status("child")).toEqual({ state: "landed", commit: "c".repeat(40), spentTokens: 0 });
+    // applyFlowHandoffStop: the same marker again is a no-op, any other marker is refused.
+    fake.port.stop("child", { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: marker });
+    expect(() => fake.port.stop("child", { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: { ...marker, reason: "note" } }))
+      .toThrow(expect.objectContaining({ code: "stop-mode-conflict" }));
+    expect(fake.stops).toHaveLength(1);
+    expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }])).toThrow(expect.objectContaining({ code: "flow-pause-stop-incomplete", detail: "child:handoff-pending" }));
     fake.completeStop("child", { recoverable: false });
-    expect(fake.port.resume([{ childGroupId: "child", flowStop: marker }])).toEqual([{ childGroupId: "child", pendingRunId: null }]);
     fake.failResume("child", "continuation-budget-unavailable");
     expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }])).toThrow(expect.objectContaining({ code: "continuation-budget-unavailable" }));
-    expect(fake.stops).toHaveLength(1);
+    fake.clearResumeFailure("child");
+    // A throw in the flow's record lifts nothing.
+    expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }], () => { throw new Error("crash"); })).toThrow("crash");
+    expect(fake.port.stopState("child", marker)).toEqual({ state: "resumable", recoverable: false });
+    let recorded: unknown = null;
+    expect(fake.port.resume([{ childGroupId: "child", flowStop: marker }], (resumed) => { recorded = resumed; })).toEqual([{ childGroupId: "child", pendingRunId: null }]);
+    expect(recorded).toEqual([{ childGroupId: "child", pendingRunId: null }]);
+    // resumeFlowChildInTransaction deletes the stop row it lifts.
+    expect(fake.port.stopState("child", marker)).toEqual({ state: "none" });
     expect(fake.resumes).toHaveLength(1);
+    // A settled child: its stop freezes nothing (complete at once) and it can never be continued.
+    fake.land("other", "c".repeat(40));
+    expect(await fake.port.status("other")).toEqual({ state: "landed", commit: "c".repeat(40), spentTokens: 0 });
+    fake.port.stop("other", { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: marker });
+    expect(fake.port.stopState("other", marker)).toEqual({ state: "resumable", recoverable: false });
+    expect(() => fake.port.resume([{ childGroupId: "other", flowStop: marker }])).toThrow(expect.objectContaining({ code: "flow-pause-resume-failed", detail: "continuation-predecessor-unrecoverable" }));
   });
 });

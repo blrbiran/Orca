@@ -234,24 +234,28 @@ export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort 
       applyFlowHandoffStop(deps.store, childGroupId, input);
     },
     stopState: (childGroupId, flowStop) => childStopState(deps.store, childGroupId, flowStop),
-    resume(children: FlowChildResume[]) {
-      return deps.store.transaction(() => children.map((child) => {
-        const state = childStopState(deps.store, child.childGroupId, child.flowStop);
-        if (state.state !== "resumable") {
-          const detail = state.state === "not-complete" ? state.stopState : "foreign";
-          throw new FlowRefusal("flow-pause-stop-incomplete", `${child.childGroupId}:${detail}`);
-        }
-        try {
-          const revision = Number(deps.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(child.childGroupId)!.revision) + 1;
-          updateRevision(deps.store, child.childGroupId, revision);
-          const { pendingRunId } = resumeFlowChildInTransaction(deps.store, child.childGroupId, revision, child.operatorNote);
-          return { childGroupId: child.childGroupId, pendingRunId };
-        } catch (error) {
-          if (!(error instanceof ControlError)) throw error;
-          if (error.code === "continuation-budget-unavailable" || error.code === "group-budget-unavailable") throw new FlowRefusal(error.code, child.childGroupId);
-          throw new FlowRefusal("flow-pause-resume-failed", error.code);
-        }
-      }));
+    resume(children: FlowChildResume[], record) {
+      return deps.store.transaction(() => {
+        const resumed = children.map((child) => {
+          const state = childStopState(deps.store, child.childGroupId, child.flowStop);
+          if (state.state !== "resumable") {
+            const detail = state.state === "not-complete" ? state.stopState : "foreign";
+            throw new FlowRefusal("flow-pause-stop-incomplete", `${child.childGroupId}:${detail}`);
+          }
+          try {
+            const revision = Number(deps.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(child.childGroupId)!.revision) + 1;
+            updateRevision(deps.store, child.childGroupId, revision);
+            const { pendingRunId } = resumeFlowChildInTransaction(deps.store, child.childGroupId, revision, child.operatorNote);
+            return { childGroupId: child.childGroupId, pendingRunId };
+          } catch (error) {
+            if (!(error instanceof ControlError)) throw error;
+            if (error.code === "continuation-budget-unavailable" || error.code === "group-budget-unavailable") throw new FlowRefusal(error.code, child.childGroupId);
+            throw new FlowRefusal("flow-pause-resume-failed", error.code);
+          }
+        });
+        record?.(resumed);
+        return resumed;
+      });
     },
   };
 }

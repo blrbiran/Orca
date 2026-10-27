@@ -12,6 +12,8 @@ import { advanceRun, appendQueued, loadRun, ranOnInputsOf } from "../../src/flow
 import type { ExecutionBody, FlowRunBody } from "../../src/flow/kinds/registry.js";
 import { childGroupIdOf, type FlowChildPort } from "../../src/flow/kinds/work.js";
 import { acceptMessage, type FlowMessageInput } from "../../src/flow/messages.js";
+import { readFlowRun } from "../../src/flow/views.js";
+import { ControlError } from "../../src/control/errors.js";
 import { appendMessage, getFlowRun, listExecutions, listMessages } from "../../src/flow/store.js";
 import { fakeChildPort } from "./fixtures/fakeChildPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
@@ -281,6 +283,11 @@ describe("operator note (§10.5.2)", () => {
       expect(child.resumes[0]!.children[0]!.operatorNote).toEqual({ text: "one-off\nkeep me", scope: "remaining-attempts" });
       const accepted = await acceptMessage(w.deps, flowRunId, note("and this"));
       expect(accepted.state).toBe("applied");
+      // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. The resume deleted
+      // the first stop (as the driver port does), so the second note places a stop of its own and waits for it.
+      expect(child.stops).toHaveLength(2);
+      expect(child.resumes).toHaveLength(1);
+      child.completeStop(childGroupId);
       await w.advance();
       expect(child.resumes).toHaveLength(2);
       expect(child.resumes[1]!.children[0]!.operatorNote).toEqual({ text: "keep me\nand this", scope: "remaining-attempts" });
@@ -369,6 +376,144 @@ describe("operator note (§10.5.2)", () => {
       expect(runOf(w, flowRunId).pauseIntent).toBeUndefined();
       expect(stateOf(w, flowRunId)).toBe("running");
       expect(notesOf(w, flowRunId)[0]!.deliveredTo).toEqual([`run-${childGroupId}`]);
+    } finally { await w.dispose(); }
+  });
+});
+/**
+ * Review 7753e97d (findings 1-5, 10): a pause or note meeting a child that already settled, a note followed by a pause,
+ * a crash inside the delivery, and a paused run the pump must still pass. The fake port refuses what the driver port
+ * refuses (finding 6), so each case fails on the wedge the real child would produce.
+ */
+describe("pause and note at the edges (review 7753e97d)", () => {
+  const pause = () => message({ body: { command: "pause" }, pauseAuthority: true });
+  const resume = () => message({ body: { command: "resume" }, personAuthority: true });
+  const latestView = (w: World, flowRunId: string) =>
+    (readFlowRun(w.store, flowRunId) as { steps: Array<{ stepKey: string; latest: { undeliveredNotes?: unknown } | null }> }).steps.find((s) => s.stepKey === "write")!.latest!;
+
+  // Finding 1: the child landed after the pause reached it; its run can never be continued, so a resume that insisted
+  // on continuing it left the run paused for good (every resume rejected, a stop never at a boundary).
+  it("a pause that met a settled child is undone by the resume, and the step's result is taken", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      child.land(childGroupId);
+      expect((await acceptMessage(w.deps, flowRunId, pause())).state).toBe("applied");
+      expect(stateOf(w, flowRunId)).toBe("paused");
+      expect((await acceptMessage(w.deps, flowRunId, note("too late"))).state).toBe("applied");
+      const resumed = await acceptMessage(w.deps, flowRunId, resume());
+      expect([resumed.state, resumed.reason]).toEqual(["applied", null]);
+      await w.advance();
+      expect(w.latest(flowRunId, "write")!.state).toBe("done");
+      expect(stateOf(w, flowRunId)).toBe("done");
+      expect(runOf(w, flowRunId).pauseIntent).toBeUndefined();
+      expect(child.resumes).toHaveLength(0);
+      // The note recorded during the pause never reached an agent: spent, with the reason, on the run view.
+      expect(notesOf(w, flowRunId)[0]).toMatchObject({ text: "too late", undelivered: "child-settled" });
+      expect(latestView(w, flowRunId).undeliveredNotes).toEqual([{ seq: notesOf(w, flowRunId)[0]!.seq, reason: "child-settled" }]);
+    } finally { await w.dispose(); }
+  });
+
+  // Finding 5: a note to a child that landed before its boundary stayed in noteIntent past the run's end, lost in silence.
+  it("a note whose child settled first is spent with its reason, and the run finishes", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      child.land(childGroupId);
+      expect((await acceptMessage(w.deps, flowRunId, note("late"))).state).toBe("applied");
+      await w.advance();
+      expect(stateOf(w, flowRunId)).toBe("done");
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      expect(child.resumes).toHaveLength(0);
+      const [spent] = notesOf(w, flowRunId);
+      expect(spent).toMatchObject({ text: "late", undelivered: "child-settled" });
+      expect(spent!.consumedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(latestView(w, flowRunId).undeliveredNotes).toEqual([{ seq: spent!.seq, reason: "child-settled" }]);
+    } finally { await w.dispose(); }
+  });
+
+  // Finding 3: the pause's own stop was refused (the note's stop held the child), and the note's resume then restarted
+  // the child while the run showed paused.
+  it("a pause meeting a note's stop takes it over: the child stays stopped, and the resume delivers the note", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, note("hello"));
+      expect(child.stops.map((stop) => stop.flowStop.reason)).toEqual(["note"]);
+      expect((await acceptMessage(w.deps, flowRunId, pause())).state).toBe("applied");
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+      expect(runOf(w, flowRunId).lastError).toBeUndefined();
+      child.completeStop(childGroupId);
+      await w.advance();
+      expect(child.resumes).toHaveLength(0);
+      expect(stateOf(w, flowRunId)).toBe("paused");
+      expect((await acceptMessage(w.deps, flowRunId, resume())).state).toBe("applied");
+      expect(child.resumes).toHaveLength(1);
+      expect(child.resumes[0]!.children[0]).toMatchObject({ flowStop: { reason: "note" }, operatorNote: { text: "hello", scope: "next-attempt" } });
+      expect(stateOf(w, flowRunId)).toBe("running");
+      expect(notesOf(w, flowRunId)[0]).toMatchObject({ deliveredTo: [`run-${childGroupId}`] });
+      expect(child.stops).toHaveLength(1);
+    } finally { await w.dispose(); }
+  });
+
+  // Finding 4: the stop was lifted in one transaction and the delivery booked in another; a crash between them left the
+  // note pending on a child already continued, so it was sent again.
+  it("a crash inside the delivery lifts no stop, and the retry delivers the note once", async () => {
+    const child = fakeChildPort({ timeoutMs: TIMEOUT_MS });
+    // As the driver port does: the lift and the flow's record in one store transaction.
+    const w = await flowWorld(TPL, { children: (store) => {
+      const bound = boundPort(child, store);
+      return { ...bound, resume: (children, record) => store.transaction(() => child.port.resume(children, record)) };
+    }, files: { "notes.txt": "n\n" } });
+    try {
+      const { flowRunId } = await w.start({ templateRef: "builtin/t" });
+      await w.advance();
+      const childGroupId = childGroupIdOf(flowRunId, "write", 1);
+      await acceptMessage(w.deps, flowRunId, note("once please"));
+      child.completeStop(childGroupId);
+      const db = w.store.db;
+      const prepare = db.prepare.bind(db);
+      let armed = true;
+      db.prepare = ((sql: string) => {
+        if (armed && sql.startsWith("UPDATE step_executions SET updated_at")) { armed = false; throw new Error("simulated crash"); }
+        return prepare(sql);
+      }) as typeof db.prepare;
+      await w.advance();
+      expect(armed).toBe(false);
+      expect(runOf(w, flowRunId).lastError!.message).toBe("simulated crash");
+      await w.advance();
+      // Whatever the child now holds, its handoff finished; a second delivery would go out here.
+      child.completeStop(childGroupId);
+      await w.advance();
+      expect(child.resumes).toHaveLength(1);
+      expect(child.stops).toHaveLength(1);
+      expect(notesOf(w, flowRunId)[0]!.deliveredTo).toEqual([`run-${childGroupId}`]);
+      expect(runOf(w, flowRunId).noteIntent).toBeUndefined();
+    } finally { await w.dispose(); }
+  });
+
+  // Finding 2: the pump passed only `running` runs, so a pause stop that failed was never placed again.
+  it("the pump passes a paused run whose pause still owes a stop, and places it", async () => {
+    const { w, child, flowRunId } = await started(); try {
+      const port = w.deps.children!;
+      const stop = port.stop;
+      port.stop = () => { throw new ControlError("stop-mode-conflict", "busy"); };
+      expect((await acceptMessage(w.deps, flowRunId, pause())).state).toBe("applied");
+      expect(runOf(w, flowRunId).lastError!.message).toBe("flow-pause-stop-failed:write:stop-mode-conflict");
+      expect(child.stops).toHaveLength(0);
+      port.stop = stop;
+      await w.advance();
+      expect(child.stops.map((placed) => placed.flowStop.reason)).toEqual(["pause"]);
+      expect(stateOf(w, flowRunId)).toBe("paused");
+    } finally { await w.dispose(); }
+  });
+
+  // Finding 10: a persistent error was cleared and written again on every tick (two run-row writes per tick, forever).
+  it("a persistent pump error is written once, not rewritten every tick", async () => {
+    const { w, flowRunId } = await started(); try {
+      const port = w.deps.children!;
+      port.stop = () => { throw new ControlError("stop-mode-conflict", "busy"); };
+      await acceptMessage(w.deps, flowRunId, pause());
+      await w.advance();
+      const revision = getFlowRun(w.store, flowRunId)!.revision;
+      const at = runOf(w, flowRunId).lastError!.at;
+      await w.advance();
+      await w.advance();
+      expect(getFlowRun(w.store, flowRunId)!.revision).toBe(revision);
+      expect(runOf(w, flowRunId).lastError).toEqual({ message: "flow-pause-stop-failed:write:stop-mode-conflict", at });
     } finally { await w.dispose(); }
   });
 });

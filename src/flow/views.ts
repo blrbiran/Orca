@@ -12,6 +12,7 @@ import type { ControlStore } from "../control/store.js";
 import type { ToolRulesReport } from "../control/toolRules.js";
 import { FlowRefusal, isDeferredPark, latestByStep, loadRun, openAsks, recordOfExecution } from "./kernel.js";
 import { heldBy, holdableAfter, marksOf } from "./marks.js";
+import type { OperatorNoteEntry } from "./kinds/registry.js";
 import { whenParams } from "./template/checklist.js";
 import { waitingIntakes } from "./feedback/intake.js";
 import { executionSpend, intakeSpend, planSpend, sumSpend, type Spend } from "./spend.js";
@@ -29,6 +30,8 @@ export interface FlowExecutionViewV1 {
   toolRules: ToolRulesReport | null; ask: unknown; needsYou: unknown; reported: unknown; warnings: string[]; effectRecordId: string | null;
   /** Gaps spec §10: the tool-reported tokens of its calls and child group; never an allocation. */
   spend: Spend;
+  /** Live transcript spec §10.5.2: the operator notes spent without reaching the agent, and why (absent: none). */
+  undeliveredNotes?: Array<{ seq: number; reason: string }>;
 }
 
 /** Task 16: the run list (`orca flow list`, the kanban's flow cards); paired with the Web's copy (webParity). */
@@ -83,7 +86,13 @@ function executionView(store: ControlStore, execution: ExecutionRow): FlowExecut
     toolRules: record?.toolRules ?? null, ask: body.ask ?? null, needsYou: body.needsYou ?? null, reported: body.reported ?? null,
     warnings: (body.warnings as string[] | undefined) ?? [], effectRecordId: typeof body.effectRecordId === "string" ? body.effectRecordId : null,
     spend: executionSpend(store, execution),
+    ...undeliveredOf(body.operatorNotes as OperatorNoteEntry[] | undefined),
   };
+}
+
+function undeliveredOf(notes: OperatorNoteEntry[] | undefined): { undeliveredNotes?: Array<{ seq: number; reason: string }> } {
+  const undelivered = (notes ?? []).filter((note) => note.undelivered !== undefined).map((note) => ({ seq: note.seq, reason: note.undelivered! }));
+  return undelivered.length === 0 ? {} : { undeliveredNotes: undelivered };
 }
 
 /** A failed `work` execution keeps its tool-rule report in its artifact record (kernel.ts applyOutcome). */

@@ -30,11 +30,11 @@ import { writeCanonicalRecord } from "../control/snapshot.js";
 import type { ControlStore } from "../control/store.js";
 import { ControlError } from "../control/errors.js";
 import { operatorNoteSchema } from "../control/schema.js";
-import { flowHandoffDeadline, type FlowStopMarker } from "../control/stopIntent.js";
+import { flowHandoffDeadline } from "../control/stopIntent.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
 import {
-  advanceRun, advanceWorkspace, appendQueued, FlowRefusal, latestByStep, loadRun, recordNoteDelivery, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
+  advanceRun, advanceWorkspace, appendQueued, childSettled, dropUndeliveredNotes, FlowRefusal, latestByStep, loadRun, pauseMarker, recordNoteDelivery, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
 } from "./kernel.js";
 import type { ExecutionBody, FlowNoteIntent, FlowNoteStep, FlowPauseStep, LoadedRun, OperatorNoteEntry } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
@@ -280,10 +280,6 @@ export async function consumeInterventions(deps: FlowDeps, flowRunId: string): P
   return pending.length > 0;
 }
 
-/** The stop marker a pause places on a step's child (§10.5.1, plan D4). */
-const pauseMarker = (run: LoadedRun, step: FlowPauseStep): FlowStopMarker =>
-  ({ flowRunId: run.row.id, stepKey: step.stepKey, seq: step.seq, reason: "pause" });
-
 /** Live transcript spec §10.5.2 (plan D6): a step a note owes a boundary delivery; one already owing keeps its entry. */
 const mergeNoteStep = (intent: FlowNoteIntent | undefined, step: FlowNoteStep): FlowNoteIntent =>
   intent === undefined ? { steps: [step] }
@@ -308,9 +304,14 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
       return;
     }
     const acceptedAt = new Date(deps.now()).toISOString();
+    const noted = (run.body.noteIntent as FlowNoteIntent | undefined)?.steps ?? [];
     const steps: FlowPauseStep[] = running.map((execution) => {
       const timeoutMs = deps.children?.attemptTimeoutMs(execution.childGroupId!) ?? null;
       if (timeoutMs === null || !(timeoutMs > 0)) throw new FlowRefusal("flow-pause-timeout-unknown", execution.stepKey);
+      // A note already stopping this child: the pause takes that stop over (one stop per child; the child refuses a
+      // second), and its resume delivers the note.
+      const note = noted.find((step) => step.stepKey === execution.stepKey && step.seq === execution.seq);
+      if (note !== undefined) return { stepKey: note.stepKey, seq: note.seq, childGroupId: note.childGroupId, acceptedAt: note.acceptedAt, deadlineAt: note.deadlineAt, stop: "note" };
       return {
         stepKey: execution.stepKey, seq: execution.seq, childGroupId: execution.childGroupId!, acceptedAt,
         deadlineAt: flowHandoffDeadline(acceptedAt, timeoutMs),
@@ -318,13 +319,17 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
     });
     deps.store.transaction(() => {
       setFlowRunState(deps.store, run.row.id, "running", "paused");
-      updateFlowRunBody(deps.store, run.row.id, (current) => ({ ...current, pauseIntent: { messageSeq: message.seq, at: acceptedAt, steps } }));
+      updateFlowRunBody(deps.store, run.row.id, (current) => {
+        const { noteIntent, ...rest } = current as typeof current & { noteIntent?: FlowNoteIntent };
+        const left = (noteIntent?.steps ?? []).filter((step) => !steps.some((paused) => paused.stop === "note" && paused.stepKey === step.stepKey));
+        return { ...rest, ...(left.length === 0 ? {} : { noteIntent: { steps: left } }), pauseIntent: { messageSeq: message.seq, at: acceptedAt, steps } };
+      });
     });
     // Idempotent per marker; outside the transaction because the port writes the child's own rows. `settleStopIntents`
     // retries a stop that failed, so the pause is not rejected for it.
     for (const step of steps) {
       try {
-        deps.children!.stop(step.childGroupId, { acceptedAt, deadlineAt: step.deadlineAt, flowStop: pauseMarker(run, step) });
+        deps.children!.stop(step.childGroupId, { acceptedAt: step.acceptedAt, deadlineAt: step.deadlineAt, flowStop: pauseMarker(run, step) });
       } catch (error) {
         if (!(error instanceof ControlError)) throw error;
         recordRunError(deps, run.row.id, `flow-pause-stop-failed:${step.stepKey}:${error.code}`);
@@ -376,13 +381,19 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
   }
   const children = deps.children;
   if (children === undefined) throw new FlowRefusal("flow-pause-stop-incomplete", "work-port-unavailable");
-  for (const step of intent.steps) {
+  // A child that settled (landed or failed) after the pause reached it has no turn to continue -- its run cannot be
+  // resumed, ever. Its step leaves the batch, its notes are spent visibly, and settleRunning takes its result once the
+  // run runs again; the stop it carries froze nothing.
+  const live: FlowPauseStep[] = [];
+  const settled: FlowPauseStep[] = [];
+  for (const step of intent.steps) (await childSettled(children, step.childGroupId) ? settled : live).push(step);
+  for (const step of live) {
     const state = children.stopState(step.childGroupId, pauseMarker(run, step));
     if (state.state !== "resumable") throw new FlowRefusal("flow-pause-stop-incomplete", `${step.stepKey}:${state.state === "not-complete" ? state.stopState : state.state}`);
   }
   // One batch: a refusal leaves the run paused with the intent in place (D8).
   // Live transcript spec §10.5.2: notes recorded during the pause travel on the resume, once.
-  const pausedSteps = intent.steps.map((step) => {
+  const pausedSteps = live.map((step) => {
     const execution = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.stepKey && e.seq === step.seq);
     const delivered = pendingNotes((execution?.body as ExecutionBody | undefined)?.operatorNotes);
     const joined = delivered.length === 0 ? undefined : joinPendingNotes(delivered);
@@ -391,11 +402,14 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
       resume: { childGroupId: step.childGroupId, flowStop: pauseMarker(run, step), ...(joined === undefined ? {} : { operatorNote: joined }) },
     };
   });
-  const resumed = children.resume(pausedSteps.map((entry) => entry.resume));
-  deps.store.transaction(() => {
+  // The flow's bookkeeping commits with the lifted stops (the port's transaction): both or neither.
+  const record = (resumed: Array<{ pendingRunId: string | null }>): void => {
     pausedSteps.forEach((entry, index) => {
       if (entry.execution !== undefined) recordNoteDelivery(deps, run, entry.execution, entry.delivered, resumed[index]?.pendingRunId ?? null);
     });
+    for (const step of settled) {
+      dropUndeliveredNotes(deps, run, step.stepKey, listExecutions(deps.store, run.row.id).find((e) => e.stepKey === step.stepKey && e.seq === step.seq), "child-settled");
+    }
     updateFlowRunBody(deps.store, run.row.id, (current) => {
       const { pauseIntent: _done, ...rest } = current;
       const steps = (rest.noteIntent as FlowNoteIntent | undefined)?.steps.filter((step) => !intent.steps.some((paused) => paused.stepKey === step.stepKey)) ?? [];
@@ -406,7 +420,9 @@ async function applyIntervention(deps: FlowDeps, run: LoadedRun, message: Messag
       return { ...rest, noteIntent: { steps } };
     });
     setFlowRunState(deps.store, run.row.id, "paused", "running");
-  });
+  };
+  if (pausedSteps.length === 0) deps.store.transaction(() => record([]));
+  else children.resume(pausedSteps.map((entry) => entry.resume), record);
 }
 
 /**
