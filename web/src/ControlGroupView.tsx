@@ -655,9 +655,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           )}
         </div>
       )}
-      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={preparationReadOnly} selectionsHash={selectionsHashFor(view, props.preview)}
-        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null}
-        ownAgent={ownAgentOnly(props.preview)} />
+      {/* Tester #7/#13/#14: the agents, the part most often changed, come first; the budget table and the confirm buttons at its end follow, so confirm is the last thing on the page. */}
       {props.agents !== undefined && (
         <AgentSelectionEditor
           view={view} agents={props.agents} preview={props.preview ?? null} preferences={props.agentPreferences}
@@ -669,6 +667,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           drafts={drafts} onDraft={onDraft} onCommand={onCommand}
         />
       )}
+      <BudgetEditor view={view} config={config} drafts={drafts} onDraft={onDraft} onCommand={onCommand} onCommands={props.onCommands} archived={preparationReadOnly} selectionsHash={selectionsHashFor(view, props.preview)}
+        suggestedTarget={props.integrationFor?.(view.plan.repoId)?.suggestedTarget ?? null}
+        ownAgent={ownAgentOnly(props.preview)} />
 </>,
         problem: <>
       <h3>{t("detail.problem")}</h3>

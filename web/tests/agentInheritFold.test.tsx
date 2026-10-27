@@ -118,3 +118,17 @@ describe("own default agent on the checklist (§7.4 item 3)", () => {
     expect(screen.queryByTestId("auto-own-agent")).toBeNull();
   });
 });
+
+describe("preparation order (tester #7, #13, #14)", () => {
+  // The agents are what a person most often changes before confirming, so they come before the long budget table, and
+  // the confirm buttons (at the budget's end) are the last control: everything confirm depends on is above it.
+  it("puts Agent selection above the budget, and confirm after both", () => {
+    render(<ControlGroupView view={group()} config={config} uncertain={[]} drafts={{}} onDraft={() => {}} onCommand={() => {}} agents={agents} preview={three()} />);
+    const agentsRegion = document.querySelector('section[aria-label="Agent selection"]')!;
+    const budgetRegion = document.querySelector('section[aria-label="Budget proposal"]')!;
+    const confirm = [...document.querySelectorAll("button")].find((button) => button.textContent === "Confirm task plan")!;
+    expect(agentsRegion.compareDocumentPosition(budgetRegion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(agentsRegion.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(agentsRegion.contains(confirm)).toBe(false);
+  });
+});

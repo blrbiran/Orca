@@ -54,7 +54,8 @@ const blockerLines = (): string[] => screen.queryByRole("list", { name: "Before 
 describe("the confirm checklist (C27)", () => {
   it.each([
     ["profiles", { config: { ...config, defaults: null } }, "Choose a budget mode and agent profiles, or set the defaults in Global settings."],
-    ["selections", { hash: null }, "Every agent slot must resolve; see Agent selection below, or check installation and defaults in Global settings"],
+    // Tester #7/#14: Agent selection now sits above the budget, so "below" became "above". Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+    ["selections", { hash: null }, "Every agent slot must resolve; see Agent selection above, or check installation and defaults in Global settings"],
     ["owner", { me: member, view: { integration } }, "This group has a delivery scheme (push or PR); only an owner can confirm it."],
     ["draft", { drafts: { "g:group-limit:tokens": "invalid" } }, "Fix the highlighted values first."],
     // Spec §21 (review I1): a limited group over its limit; the server refuses confirm until the limit is raised.
