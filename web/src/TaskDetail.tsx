@@ -235,7 +235,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
   const runNumber = taskRunNumber(view, item.taskId);
   return (
-    <section tabIndex={-1} data-task-id={item.taskId} aria-label={t("control.task.region", { taskId: item.taskId })}>
+    // Tester #21: the open task is set apart from the table and graph around it by an accent edge (styles.css .task-detail).
+    <section tabIndex={-1} className="task-detail" data-task-id={item.taskId} aria-label={t("control.task.region", { taskId: item.taskId })}>
       <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
       <p>
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}

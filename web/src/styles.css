@@ -150,6 +150,8 @@ a { color: var(--accent); }
 }
 .section-pane section { padding: 16px; margin-bottom: 16px; }
 .section-pane section section { background: var(--well); box-shadow: none; }
+/* Tester #21: an open task's detail stands apart from the group's table and graph. */
+.section-pane section.task-detail { border-left: 3px solid var(--accent); }
 .section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
 .section-lede { color: var(--muted); font-size: var(--text-sm); margin-bottom: 12px; }
 .count { color: var(--muted); font-size: var(--text-sm); font-family: var(--mono); }

@@ -122,3 +122,15 @@ it("an opened group scrolls itself into view once, unless a focus on it does the
   expect(scrolled.filter((element) => element.matches("section[aria-label=\x27Control group g\x27]"))).toEqual([]);
  } finally { Element.prototype.scrollIntoView = original; }
 });
+// Tester #21: an open task's detail had nothing setting it apart from the table and graph around it. It carries
+// .task-detail, whose accent edge is declared after the generic nested-section rules it must out-rank.
+it("an open task's detail carries the accent edge, declared after the nested-section rules", async () => {
+ const { readFileSync } = await import("node:fs"); const { fileURLToPath } = await import("node:url"); const { dirname, join } = await import("node:path");
+ const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
+ mount(view([workItem({ taskId: "a" })]));
+ fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
+ expect(screen.getByRole("region", { name: "Task a" }).classList.contains("task-detail")).toBe(true);
+ const rule = css.indexOf(".section-pane section.task-detail {");
+ expect(rule).toBeGreaterThan(css.indexOf(".section-pane section section {"));
+ expect(css.slice(rule, css.indexOf("}", rule))).toContain("border-left: 3px solid var(--accent)");
+});
