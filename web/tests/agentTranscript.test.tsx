@@ -167,5 +167,14 @@ describe("review 7753e97d: what one open call keeps, and its Earlier/Later", () 
     expect(container.textContent).toContain("oldest");
   });
 
+  it("a composite tool input is summarised by its first key, not `{`", async () => {
+    vi.useFakeTimers();
+    const input = JSON.stringify({ file_path: "src/x.ts", content: "x" }, null, 2);
+    const tool: TranscriptEventV1 = { at: 0, i: 0, kind: "tool_call", meta: { name: "Write" }, fields: { input: { text: input, length: input.length, more: false } } };
+    answer = (url) => (url.endsWith("/transcripts") ? LISTING : win([tool], 0, 10, true));
+    render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    expect(screen.getAllByTestId("transcript-event")[0]!.textContent).toContain('Write file_path: "src/x.ts"');
+  });
 });
 

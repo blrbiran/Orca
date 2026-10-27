@@ -51,12 +51,21 @@ const firstLine = (text: string | undefined): string => {
   return line.length > 160 ? `${line.slice(0, 160)}…` : line;
 };
 
+/**
+ * A tool input's first line. A composite input is pretty-printed JSON whose first line is `{`; review 7753e97d: its first
+ * key is shown instead (`file_path: "src/x.ts"`).
+ */
+const inputLine = (text: string | undefined): string => {
+  if (text === undefined || !text.startsWith("{\n")) return firstLine(text);
+  return firstLine(text.slice(2).trimStart()).replace(/^"((?:[^"\\]|\\.)*)":/, "$1:").replace(/,$/, "");
+};
+
 function summary(event: TranscriptEventV1, t: TFunction): string {
   const f = event.fields ?? {};
   const meta = event.meta ?? {};
   switch (event.kind) {
     case "message": return `${meta.role ?? ""}: ${firstLine(f.text?.text)}`;
-    case "tool_call": return `${meta.name ?? ""} ${firstLine(f.input?.text)}`;
+    case "tool_call": return `${meta.name ?? ""} ${inputLine(f.input?.text)}`;
     case "tool_result": return `${event.flag?.error === true ? t("transcript.toolError") : t("transcript.toolDone")} ${firstLine(f.output?.text)}`;
     case "file_change": return `${meta.change ?? ""} ${f.path?.text ?? ""}`;
     case "result": return firstLine(f.text?.text);
