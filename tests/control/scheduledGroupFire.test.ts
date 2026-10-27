@@ -169,19 +169,30 @@ describe("C7: a group fire is one booked import", () => {
     else expect((body.integration as { scheme: unknown }).scheme).toEqual(expected);
   });
 
-  it("an estimate that ended in failure leaves the fire waiting estimate-failed, the streak unchanged, and the group in needs-you (M-C7g)", async () => {
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. Review finding 6: with
+  // nothing port-free blocking R2 the first pass must leave the fire to R2's booked attempt, so `estimate-failed` is
+  // only recorded once R2 cannot try -- here a hand-written estimate row left `start-unknown` (R2 condition 7).
+  it("an estimate that ended in failure while R2 cannot try leaves the fire waiting estimate-failed, the streak unchanged, and the group in needs-you (M-C7g)", async () => {
     // No plan agent: orca-auto has no operator default, so the import's estimator slot is rejected as blocked-capability.
     const { h, clock, save, schedule, fire } = await world({ planAgent: false });
     const { entryId, sha256 } = save();
     schedule("sch-g", { entryId, sha256, tokenLimit: null, integration: null });
     expect(await fire(at(1, 9))).toEqual({ crashes: [] });
     const groupId = firedGroupId("sch-g", at(1, 9));
+    // R2 has not run in this file: nothing blocks it, so step 9 leaves the row for R2's attempt.
+    expect(fireRows(h, "sch-g")[0]).toMatchObject({ outcome: "started", reason: null });
+    h.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,0,'start-unknown','{}')").run(groupId, "est-stale");
+    expect(await fire(at(1, 10))).toEqual({ crashes: [] });
     const reason = "estimate-failed:blocked-capability:agent-selection-rejected:estimator:agent-unselected";
     const rows = fireRows(h, "sch-g");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.outcome).toBe("waiting");
     expect(rows[0]!.reason).toBe(reason);
     expect(readSchedule(h.store, "sch-g")!.body.state.failureStreak).toBe(0);
+    // The hand-written stale row is not a body the group readers accept; drop it. The recorded reason is write-once.
+    h.store.db.prepare("DELETE FROM estimates WHERE id='est-stale'").run();
+    expect(await fire(at(1, 11))).toEqual({ crashes: [] });
+    expect(fireRows(h, "sch-g")[0]).toMatchObject({ outcome: "waiting", reason });
     const step = readControlOverview(h.store, "epoch").steps.find((entry) => entry.kind === "budget-review" && entry.groupId === groupId);
     expect(step).toMatchObject({ reason: `scheduled-waiting:${reason}`, destination: { kind: "group", groupId, region: "preparation" } });
   });

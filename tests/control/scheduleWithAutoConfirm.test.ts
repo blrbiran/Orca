@@ -41,7 +41,8 @@ const commandsOf = (h: Fixture, groupId: string, like: string): Array<Record<str
 
 interface WorldOptions {
   defaults?: "configured" | "null";
-  planAgents?: WebFixtureOptions["planAgents"];
+  /** null: no plan agent, so orca-auto's estimator slot is rejected and the import's estimate ends blocked-capability. */
+  planAgents?: WebFixtureOptions["planAgents"] | null;
   tasks?: Parameters<typeof webFixture>[1];
   snapshot?: ReturnType<typeof profileSnapshot>;
 }
@@ -49,7 +50,8 @@ interface WorldOptions {
 /** A fixture whose group "g" is the library source; the clock, the defaults and the schedule service share this world. */
 async function world(options: WorldOptions = {}) {
   const h = await webFixture(options.snapshot, options.tasks ?? [{ taskId: "a" }], {
-    tokenPolicy: "optional-v1", importContext: PERSON, planAgents: options.planAgents ?? PLAN_AGENT,
+    tokenPolicy: "optional-v1", importContext: PERSON,
+    ...(options.planAgents === null ? {} : { planAgents: options.planAgents ?? PLAN_AGENT }),
   });
   fixtures.push(h);
   h.store.db.prepare("INSERT INTO usage_calendar(singleton,time_zone,week_start) VALUES (1,'UTC',1)").run();
@@ -278,5 +280,22 @@ describe("C7a: a fired group meets R2's pass in the real pump order", () => {
     expect(third.confirmed).not.toContain(fired());
     expect(fireAt(w.h, at(1, 9))).toMatchObject({ outcome: "waiting", reason: "auto-confirm-ineligible:10" });
     expect(commandsOf(w.h, fired(), "orca-auto-confirm-unlimited-v%")).toHaveLength(1);
+  });
+
+  // Review finding 6 (session 7753e97d): step 9 runs before R2 in the pump. With nothing port-free blocking R2, a failed
+  // estimate must not be recorded as a write-once waiting reason ahead of the attempt R2 is about to book.
+  it("a failed estimate R2 has not tried yet records nothing; R2's booked attempt is what the fire copies", async () => {
+    const w = await world({ planAgents: null });
+    const { entryId, sha256 } = w.save();
+    w.schedule({ entryId, sha256, tokenLimit: null, integration: null });
+    const first = await w.pump(at(1, 9));
+    expect(first.crashes).toEqual([]);
+    expect(w.h.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(fired())).toEqual([{ state: "blocked-capability" }]);
+    expect(fireAt(w.h, at(1, 9))).toMatchObject({ outcome: "started", reason: null });
+    expect(commandsOf(w.h, fired(), "orca-auto-confirm-unlimited-v%")).toHaveLength(1);
+    const second = await w.pump(at(2, 9));
+    expect(second.crashes).toEqual([]);
+    expect(fireAt(w.h, at(1, 9))).toMatchObject({ outcome: "waiting", reason: "auto-confirm-ineligible:10" });
+    skippedNext(w.h);
   });
 });

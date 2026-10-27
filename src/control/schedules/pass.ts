@@ -207,15 +207,16 @@ function groupFireWrite(store: ControlStore, fire: ScheduleFire, now: number, de
   if (group.status !== "draft") return null;
   // Rule 5: a finite limit is the person's one-click confirm.
   if ((group.limit as { tokens?: unknown }).tokens !== null) return { outcome: "waiting", reason: "limited" };
-  // Rule 6: R2's own predicate; only condition 8 (no control-config defaults) never clears by waiting. Condition 6 (a
-  // delivery scheme) is rule 7's to name; every other condition is transient.
+  // Rule 6: R2's own predicate; only condition 8 (no control-config defaults) never clears by waiting.
   const blocker = autoConfirmBlocker(store, group, defaults);
   if (blocker !== null && blocker.condition === 8) return { outcome: "waiting", reason: "auto-confirm-ineligible:8" };
-  if (blocker !== null && blocker.condition !== 6) return null;
+  // Nothing port-free blocks R2, so its pass (after this one in the pump) books an attempt, and that booked row is the
+  // first fact of §9.2's table (rule 3) on the next pass. A write-once reason recorded now would pre-empt it.
+  if (blocker === null) return null;
   // Rule 7: any delivery scheme keeps the owner's click (C-2).
   const integration = readGroupIntegration(group);
   if (integration !== null) return { outcome: "waiting", reason: `delivery-needs-person:${integration.scheme.delivery}` };
-  // Rule 8: an estimate that ended in a failure will not run by waiting either.
+  // Rule 8: R2 cannot try now, and an estimate that ended in a failure will not run by waiting either.
   const estimate = store.db.prepare("SELECT state, body FROM estimates WHERE group_id=? ORDER BY estimate_version DESC LIMIT 1").get(groupId) as
     { state: unknown; body: unknown } | undefined;
   if (estimate !== undefined && FAILED_ESTIMATE_STATES.has(String(estimate.state))) {
@@ -225,7 +226,7 @@ function groupFireWrite(store: ControlStore, fire: ScheduleFire, now: number, de
       reason: `estimate-failed:${String(estimate.state)}${typeof reasonCode === "string" && reasonCode !== "" ? `:${reasonCode}` : ""}`,
     };
   }
-  // Rule 9: transient -- an estimate is still running or queued, or R2 has not tried yet.
+  // Rule 9: transient -- an estimate is still running or queued (any other blocker R2 names).
   return null;
 }
 
