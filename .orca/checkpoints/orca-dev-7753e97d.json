@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "runId": "orca-dev-7753e97d",
+  "runtime": "claude-code",
+  "sessionRef": "7753e97d-d084-4f3e-b90c-24c28e65f079",
+  "writtenAt": "2026-10-27T01:25:19.900Z",
+  "head": "fb33abeebdaeda9e1e69c870bf221a99bd43dac1",
+  "level": {
+    "kind": "reading",
+    "level": 344640,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "merge fix/paused-ladder after npm test (log /private/tmp/orca-7753e97d/npmtest-61.log)",
+    "#58 badge kind text",
+    "verify+fix dirreq blocker (take-folder tip) and sched should-fixes",
+    "spec: split prompt v2 naming the requirement document; #60",
+    "report H6/H8/H10, O9 claude result, review findings"
+  ],
+  "open": [
+    "reviewers transcript, multidir, flowfix, ccloop still running",
+    "ledger .superpowers/sdd/2026-10-27-session-7753e97d/progress.md"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "second paid O9 claude run after the split-prompt fix"
+    },
+    {
+      "kind": "irreversible",
+      "what": "push Orca main"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca log --oneline -3",
+      "exitCode": 0,
+      "commit": "fb33abeebdaeda9e1e69c870bf221a99bd43dac1",
+      "observedAt": "2026-10-27T01:25:19.748Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-7753e97d-GouUnt/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca worktree list",
+      "exitCode": 0,
+      "commit": "fb33abeebdaeda9e1e69c870bf221a99bd43dac1",
+      "observedAt": "2026-10-27T01:25:19.823Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-7753e97d-GouUnt/2.txt"
+    }
+  ]
+}
