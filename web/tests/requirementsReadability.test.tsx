@@ -231,3 +231,12 @@ describe("the original idea folds once a round is answered (tester #28)", () => 
     expect(fold.querySelector("summary")!.textContent).toBe("Original idea Let people take a note out as Markdown. Keep the images as links.");
   });
 });
+
+describe("the requirement list's name prefers the short title (tester #1)", () => {
+  // The id requirement-… is the group's key and stays; what a person reads is the name, the same one the cards show.
+  it("names a requirement by the clarify round's short title when there is one, the id still the title attribute", () => {
+    const button = listWith({ goal: "Let people take a note out as Markdown." }, { slug: "markdown-export", title: "Export notes as Markdown" });
+    expect(button.textContent).toBe("Export notes as Markdown · clarifying");
+    expect(button.getAttribute("title")).toBe("requirement-1e36e0a6");
+  });
+});

@@ -689,6 +689,10 @@ const LIST_NAME_MAX = 60;
  * goal is a clarifying group's idea); null when neither is known, and the group id names it as before.
  */
 function listName(group: ControlSummaryV1["groups"][number]): string | null {
+  // Tester #1: the id stays (it is the group's key and its work branch); the list names it as the cards do, by the
+  // clarify round's short title first (CardGoal), then the slug, then the idea.
+  const title = group.requirement?.title?.trim() ?? "";
+  if (title !== "") return title;
   const slug = group.requirement?.slug ?? null;
   if (slug !== null) return slug;
   if (group.goal === undefined) return null;
