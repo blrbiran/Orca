@@ -139,13 +139,12 @@ import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
 import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
-import { DEFAULT_SECTION, consumeOwnHash, formatRoute, parseRoute, rememberOwnHash } from "./sections.js";
+import { DEFAULT_SECTION, DEFAULT_SETTINGS_CATEGORY, consumeOwnHash, formatRoute, parseRoute, rememberOwnHash } from "./sections.js";
 import type { Route } from "./sections.js";
 import { DETAIL_REGIONS, focusedDetailRegion, type DetailRegion } from "./detailRegion.js";
 import { BackLine } from "./BackLine.js";
 import type { Section } from "./sections.js";
-import { GlobalSettings } from "./GlobalSettings.js";
-import { ProjectSettings } from "./ProjectSettings.js";
+import { SettingsPage } from "./SettingsPage.js";
 import { NAV_KEY, SectionPane, Shell, controlAlert } from "./Shell.js";
 import { FlowBoard } from "./FlowBoard.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
@@ -1684,47 +1683,51 @@ export function App(): JSX.Element {
         <p data-testid="decision-origin">{t("decisions.origin", { group: decisionOrigin.groupId, task: decisionOrigin.taskId ?? "—", run: decisionOrigin.runId })}</p>
       )}
       {from !== null && formatRoute(route) === from.pushedHash && <BackLine label={from.label} />}
-      <SectionPane section="global-settings" active={section}>
-        <GlobalSettings
-          theme={theme}
-          showAdvanced={showAdvanced}
-          onAdvanced={(value) => { setShowAdvanced(value); writeShowAdvanced(browserStorage(), value); }}
-          language={currentLanguage()}
-          onLanguage={(lang) => {
-            writeLanguage(browserStorage(), lang);
-            void i18n.changeLanguage(lang);
+      {/* Ruling H6(b): one Settings page; the route names its category (an old #global-settings / #project-settings maps to one). */}
+      <SectionPane section="settings" active={section}>
+        <SettingsPage
+          category={route.kind === "settings" ? route.category : DEFAULT_SETTINGS_CATEGORY}
+          global={{
+            theme,
+            showAdvanced,
+            onAdvanced: (value) => { setShowAdvanced(value); writeShowAdvanced(browserStorage(), value); },
+            language: currentLanguage(),
+            onLanguage: (lang) => {
+              writeLanguage(browserStorage(), lang);
+              void i18n.changeLanguage(lang);
+            },
+            onTheme: (pref) => {
+              setTheme(pref);
+              writeTheme(browserStorage(), pref);
+              applyTheme(document.documentElement, pref);
+            },
+            refusal: agentPreferences === null ? null : settingsRefusal(`@operator:${agentPreferences.operatorId}`),
+            agents: agents === null || agentPreferences === null ? null : {
+              agents, preferences: agentPreferences, drafts: control.drafts,
+              onDraft: (key, text) => dispatchControl({ type: "draft", key, text }),
+              onSave: (preferences, revision) => { void sendAgentPreferences(preferences, revision); },
+              installationState: agentInstallations,
+              updateNotice: agentUpdateNotice,
+              updateBusy: agentUpdateBusy,
+              onDetectUpdates: () => { void detectInstallationUpdates(); },
+              onRefreshVersions: () => { void refreshVersions(); },
+              onApplyUpdates: (ids) => { void applyInstallationUpdates(ids); },
+              onRetryPendingUpdate: () => { void retryPendingInstallationUpdate(); },
+              unansweredCommandId: localPendingUpdate?.commandId ?? null,
+              models: modelsFor, onRefreshModels: refreshModels,
+            },
           }}
-          onTheme={(pref) => {
-            setTheme(pref);
-            writeTheme(browserStorage(), pref);
-            applyTheme(document.documentElement, pref);
+          projectKey={panelRepoId ?? "unresolved"}
+          project={{
+            repoId: panelRepoId, repoLabel: panelRepoId === null ? null : repoLabel(panelRepoId),
+            repoPath: repoPathOf(projects, panelRepoId),
+            dir: projectKindForRepo(projects ?? [], panelRepoId) === "dir",
+            refusal: panelRepoId === null ? null : settingsRefusal(`@repository:${panelRepoId}`),
+            workspace: panelRepoId === null ? null : workspaces[panelRepoId] ?? null,
+            integration: panelRepoId === null ? null : integrations[panelRepoId] ?? null,
+            onWorkspaceMode: (mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); },
+            onIntegrationScheme: (scheme, revision) => { if (panelRepoId !== null) void sendRepositoryIntegration(panelRepoId, scheme, revision); },
           }}
-          refusal={agentPreferences === null ? null : settingsRefusal(`@operator:${agentPreferences.operatorId}`)}
-          agents={agents === null || agentPreferences === null ? null : {
-            agents, preferences: agentPreferences, drafts: control.drafts,
-            onDraft: (key, text) => dispatchControl({ type: "draft", key, text }),
-            onSave: (preferences, revision) => { void sendAgentPreferences(preferences, revision); },
-            installationState: agentInstallations,
-            updateNotice: agentUpdateNotice,
-            updateBusy: agentUpdateBusy,
-            onDetectUpdates: () => { void detectInstallationUpdates(); },
-            onRefreshVersions: () => { void refreshVersions(); },
-            onApplyUpdates: (ids) => { void applyInstallationUpdates(ids); },
-            onRetryPendingUpdate: () => { void retryPendingInstallationUpdate(); },
-            unansweredCommandId: localPendingUpdate?.commandId ?? null,
-            models: modelsFor, onRefreshModels: refreshModels,
-          }}
-        />
-      </SectionPane>
-      <SectionPane section="project-settings" active={section}>
-        <ProjectSettings key={panelRepoId ?? "unresolved"} repoId={panelRepoId} repoLabel={panelRepoId === null ? null : repoLabel(panelRepoId)}
-          repoPath={repoPathOf(projects, panelRepoId)}
-          dir={projectKindForRepo(projects ?? [], panelRepoId) === "dir"}
-          refusal={panelRepoId === null ? null : settingsRefusal(`@repository:${panelRepoId}`)}
-          workspace={panelRepoId === null ? null : workspaces[panelRepoId] ?? null}
-          integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
-          onWorkspaceMode={(mode, revision) => { if (panelRepoId !== null) void sendWorkspaceMode(panelRepoId, mode, revision); }}
-          onIntegrationScheme={(scheme, revision) => { if (panelRepoId !== null) void sendRepositoryIntegration(panelRepoId, scheme, revision); }}
         />
       </SectionPane>
       <SectionPane section="overview" active={section}>

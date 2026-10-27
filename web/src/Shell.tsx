@@ -6,11 +6,11 @@
  */
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { SECTIONS, hashFor } from "./sections.js";
+import { NAV_BANDS, hashFor } from "./sections.js";
 import { ShortcutsHelp } from "./ShortcutsHelp.js";
 import type { Section } from "./sections.js";
 
-export const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", board: "nav.board", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", "global-settings": "nav.globalSettings", "project-settings": "nav.projectSettings" } as const satisfies Record<Section, string>;
+export const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", board: "nav.board", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", settings: "nav.settings" } as const satisfies Record<Section, string>;
 
 /**
  * The four conditions that light the red nav dot. "No execution port" is a note, and "projection refetch
@@ -64,15 +64,18 @@ export function Shell(props: {
       <nav className="sidebar" aria-label={t("nav.sections")}>
         <div className="brand" title={t("shell.brandTitle")}><span className="brand-dot" />Orca</div>
         {props.projectControl}
+        {/* Ruling H6(a): one list in three bands; a band's first item draws the rule above it, Settings sits at the bottom. */}
         <ul className="nav">
-          {SECTIONS.filter((section) => section !== "chains" || props.showAdvanced === true || props.badges.chainRunning || props.active === "chains").map((section) => (
-            <li key={section}>
-              <a className="nav-item" href={hashFor(section)} aria-current={section === props.active ? "page" : undefined}>
-                <span>{t(NAV_KEY[section])}</span>
-                <Badge section={section} badges={props.badges} />
-              </a>
-            </li>
-          ))}
+          {NAV_BANDS.flatMap((band, at) => band
+            .filter((section) => section !== "chains" || props.showAdvanced === true || props.badges.chainRunning || props.active === "chains")
+            .map((section, index) => (
+              <li key={section} data-band={at} className={index === 0 && at > 0 ? "nav-band-start" : undefined}>
+                <a className="nav-item" href={hashFor(section)} aria-current={section === props.active ? "page" : undefined}>
+                  <span>{t(NAV_KEY[section])}</span>
+                  <Badge section={section} badges={props.badges} />
+                </a>
+              </li>
+            )))}
         </ul>
         <div className="sidebar-foot">
           {props.footer.map((line) => <p key={line}>{line}</p>)}

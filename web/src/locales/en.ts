@@ -227,7 +227,7 @@ export const en = {
   detail: { regions: "Group detail", progress: "Progress", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "Keyboard shortcuts", title: "Keys Orca uses", decisions: "j / k: next / previous row · a: agree · c: correct — on the Decisions page, with focus on the page", retry: "r: retry the open task's run — in a group, where Retry task is offered", arrows: "Arrow keys: move between region tabs and menu items", close: "Close" },
-  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
+  nav: { overview: "Overview", sections: "Sections", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", settings: "Settings", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
   overview: {
     title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
     global: "Global control", ownerUnknown: "owner not in registry", ownerRequired: "An owner must take this action.",
@@ -1466,6 +1466,9 @@ export const en = {
         save: "Save locks",
       },
     },
+    // Ruling H6(b): the Settings page's categories.
+    categories: "Settings categories",
+    category: { appearance: "Appearance", account: "Account", orchestration: "Orchestration", checks: "Checks", flows: "Flows", agents: "Agents", project: "This project" },
     browserScope: "Theme and language are remembered in this browser.",
     showAdvanced: "Show continuous improvement",
     agentScope: "Agent defaults belong to the shared panel operator. Existing confirmed groups keep their frozen choices.",

@@ -341,7 +341,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     ...blockers.map((blocker) => (
       <li key={blocker} data-blocker={blocker}>
         {t(`budget.blocker.${blocker}` as const)}
-        {blocker === "selections" && <> <a href="#global-settings">{t("nav.globalSettings")}</a></>}
+        {blocker === "selections" && <> <a href="#settings/agents">{t("nav.globalSettings")}</a></>}
         {blocker === "deficit" && <> <button type="button" onClick={toLimit}>{t("budget.blocker.toLimit")}</button></>}
       </li>
     )),

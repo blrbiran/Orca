@@ -97,7 +97,7 @@ export const zh: Translation<typeof en> = {
   detail: { regions: "任务组详情", progress: "进度", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", nextAction: "查看进度、准备或问题；各区域保留当前读取状态允许的操作。" },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "键盘快捷键", title: "Orca 用到的按键", decisions: "j / k：下一条 / 上一条 · a：同意 · c：纠正 —— 在决策页、焦点在页面上时", retry: "r：重试打开的任务的运行 —— 在任务组里、提供“重试任务”时", arrows: "方向键：在区域标签和菜单项之间移动", close: "关闭" },
-  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", globalSettings: "全局设置", projectSettings: "项目设置", back: "← 返回{{label}}", routeMissing: "没有找到 {{id}}，显示{{section}}。", otherProject: "{{id}} 属于项目 {{project}}。", switchProject: "切换到 {{project}}" },
+  nav: { overview: "概览", sections: "分区", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", settings: "设置", globalSettings: "全局设置", projectSettings: "项目设置", back: "← 返回{{label}}", routeMissing: "没有找到 {{id}}，显示{{section}}。", otherProject: "{{id}} 属于项目 {{project}}。", switchProject: "切换到 {{project}}" },
   overview: {
     title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划",
     global: "全局控制", ownerUnknown: "所属项目未登记", ownerRequired: "这一步需要所有者处理。",
@@ -1336,6 +1336,9 @@ export const zh: Translation<typeof en> = {
         save: "保存锁",
       },
     },
+    // Ruling H6(b): the Settings page's categories.
+    categories: "设置分类",
+    category: { appearance: "外观", account: "账户", orchestration: "编排", checks: "检查", flows: "流程", agents: "Agent", project: "本项目" },
     browserScope: "主题和语言只记在当前浏览器里。",
     showAdvanced: "显示链（连续改进）",
     agentScope: "Agent 默认值属于面板共用的 operator。已确认的任务组保留冻结时的选择。",

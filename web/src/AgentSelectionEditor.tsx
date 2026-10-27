@@ -198,7 +198,7 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
             <button type="button" disabled={preview.groupOverrides[slot] === undefined} onClick={() => send(scope, null)}>{t("agents.clearGroup", { slot: enumText("agentSlot", slot) })}</button>
             {/* Tester round 2 §6.2.5: no layer names an agent for the group worker. */}
             {slot === "worker" && workerRole?.kind === "rejected" && workerRole.code === "agent-unselected" && (
-              <p role="note" data-testid="agents-no-worker">{t("agents.noWorker")} <a href="#global-settings">{t("nav.globalSettings")}</a></p>
+              <p role="note" data-testid="agents-no-worker">{t("agents.noWorker")} <a href="#settings/agents">{t("nav.globalSettings")}</a></p>
             )}
             {slot === "estimator" && (
               // Wave 3 review M-7 / ruling R7: the estimator is not part of the confirm; it is used at the next re-estimate.

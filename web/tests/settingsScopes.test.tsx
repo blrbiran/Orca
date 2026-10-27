@@ -39,9 +39,12 @@ async function open(section: string): Promise<void> { await act(async () => { wi
 describe("settings scopes", () => {
   it("offers separate deep links with browser controls and shared Agent defaults only in global settings; import stays in Tasks", async () => {
     render(<App />);
-    await screen.findByRole("link", { name: "Global settings" });
-    expect(screen.getByRole("link", { name: "Project settings" }).getAttribute("href")).toBe("#project-settings");
-    expect(screen.getByRole("link", { name: "Global settings" }).getAttribute("aria-current")).toBe("page");
+    // Rewritten for ruling H6(b): one Settings page whose categories are the deep links; the old hash still opens it. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+    await screen.findByRole("link", { name: "Settings" });
+    const categories = screen.getByRole("navigation", { name: "Settings categories" });
+    expect(within(categories).getByRole("link", { name: "This project" }).getAttribute("href")).toBe("#settings/project");
+    expect(within(categories).getByRole("link", { name: "Appearance" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
     expect(window.location.hash).toBe("#global-settings");
     await waitFor(() => expect(globalRegion().textContent).toContain("shared-panel-operator"));
     expect(within(globalRegion()).getByRole("combobox", { name: "Theme" })).toBeTruthy();

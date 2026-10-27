@@ -1029,3 +1029,13 @@ independent code review of that branch (finding I1, controller's choice). Rule 1
    (`budget.blocker.deficit`) carries a button (`budget.blocker.toLimit`) that moves focus to the group limit field, the
    one way out. An unlimited-token group never shows it. Criterion: C27's `deficit` row (`web/tests/confirmChecklist.test.tsx`).
 2. **§7.4 item 2 — an empty checklist is not rendered.** The `<ul>` appears only when it has a line.
+
+## 22. Correction — settings routes after ruling H6 (appended 2026-10-27, Orca session 7753e97d, branch `feat/web-nav-settings`; earlier text unchanged)
+
+1. **§9 (H11) route grammar gains `#settings/<category>`.** `Section` loses `global-settings` and `project-settings` and
+   gains `settings`; `Route` gains `{ kind: "settings"; section: "settings"; category }` written `#settings/<category>`.
+   A bare `#settings` is the section (it shows Appearance); an unknown category or a longer tail is the bare section, as
+   for every other section. The old `#global-settings` and `#project-settings` (with any tail) parse to the Appearance and
+   This project categories. Criteria: `web/tests/routes.test.ts` (round trips, the old-hash cases, the fallbacks).
+2. **The links of §7 (`agents.noWorker`, the `selections` blocker) point at `#settings/agents`**, the category that holds
+   the agent defaults, instead of `#global-settings`; their text is unchanged.

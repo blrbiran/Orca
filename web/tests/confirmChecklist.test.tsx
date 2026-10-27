@@ -87,7 +87,8 @@ describe("the confirm checklist (C27)", () => {
 
   it("links the selections blocker to Global settings", () => {
     editor(draft(), { hash: null });
-    expect(within(checklist()).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#global-settings");
+    // H6(b): the link opens the Agents category of the one Settings page. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+    expect(within(checklist()).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#settings/agents");
   });
 
   it("with nothing blocking a limited group: one status line, the starts note, and both buttons enabled", () => {

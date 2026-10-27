@@ -73,3 +73,12 @@ This section supersedes conflicting earlier freshness/default-region wording. So
 P2-1: decision todo has independent freshness. Fetch unfiltered todo independently of metrics while Overview is active, initially and every 5000 ms; control overview retains its control/changeSeq polling. Track loading/available/stale/unavailable separately. Latest-request tokens and auth/epoch/scope identity prevent older replies replacing newer source state. An external decision/review change with unchanged control changeSeq must appear by the next successful todo refresh. Metrics failure must not discard successful todo/control reads; the shell and Overview render with explicit source issues even when metrics are unavailable. Do not display zero owed decisions or a zero badge for an unavailable source. Non-overview metrics views retain explicit metrics failure handling. Active-only timers are cleaned up on auth/unmount/pane change; no decision detail reads or opened/reviewed writes accompany todo refresh.
 
 Shared detail default: completed work opens the Results region even when explanation is missing, so the missing state is visible. A user's current region remains stable through polling; explicit navigation targets override the default.
+
+## 9. Correction — one Settings section (appended 2026-10-27, Orca session 7753e97d, branch `feat/web-nav-settings`; earlier text unchanged)
+
+Human ruling H6 (2026-10-27, 「同意你的建议」) supersedes §4's two hash sections `global-settings` and `project-settings`:
+they are one section, `settings`, a page with a category nav (Appearance, Account, Orchestration, Checks, Flows, Agents,
+This project), each category at `#settings/<category>` (`web/src/sections.ts` `SETTINGS_CATEGORIES`). The old hashes keep
+working: `#global-settings` opens Appearance and `#project-settings` opens This project (`parseRoute`). The global/project
+scope split is unchanged: the global categories stay in the region named "Global settings", the project category in the
+region named "Project settings". Criteria: `web/tests/settingsPage.test.tsx`, `web/tests/routes.test.ts`.

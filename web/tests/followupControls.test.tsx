@@ -123,7 +123,8 @@ it("advanced navigation is opt-in, but a running chain remains linked", () => {
 
 it("global settings edits the advanced preference", () => {
   const onAdvanced = vi.fn();
-  render(<GlobalSettings theme="system" onTheme={vi.fn()} language="en" onLanguage={vi.fn()} agents={null} showAdvanced={false} onAdvanced={onAdvanced} />);
+  // H6(b): the global settings show one category at a time; the advanced switch is under Appearance. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+  render(<GlobalSettings category="appearance" theme="system" onTheme={vi.fn()} language="en" onLanguage={vi.fn()} agents={null} showAdvanced={false} onAdvanced={onAdvanced} />);
   fireEvent.click(screen.getByRole("checkbox", { name: "Show continuous improvement" }));
   expect(onAdvanced).toHaveBeenCalledWith(true);
 });
@@ -181,7 +182,8 @@ it("unresolved Agent selections give a destination before confirmation", () => {
   shown.proposal.state = "editable";
   render(<ControlGroupView view={shown} config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
   const region = screen.getByRole("tabpanel", { name: "Preparation" });
-  expect(within(region).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#global-settings");
+  // H6(b): the link opens the Agents category of the one Settings page. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+  expect(within(region).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#settings/agents");
   expect((within(region).getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(true);
 });
 

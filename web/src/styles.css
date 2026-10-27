@@ -103,6 +103,10 @@ a { color: var(--accent); }
 .dot-ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .dot-danger { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
 .sidebar-foot { margin-top: auto; font-size: var(--text-xs); color: var(--muted); padding: 0 8px; overflow-wrap: anywhere; }
+/* Ruling H6(a): the nav fills the sidebar in three bands -- a rule above each later band, Settings pushed to the bottom. */
+.nav { flex: 1 0 auto; }
+.nav-band-start { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
+.nav > li[data-band="2"] { margin-top: auto; }
 .theme-pick { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 /* Section tabs are navigation (a selected row with an accent bar); the project control is a grouped
    card whose Add/Rename are compact secondary buttons, so the two never read as the same kind of control. */
@@ -299,6 +303,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
   .nav-item[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--accent); }
   .project-control { width: 100%; }
   .sidebar-foot { margin-top: 0; width: 100%; }
+  .nav-band-start { border-top: 0; margin-top: 0; padding-top: 0; border-left: 1px solid var(--border); margin-left: 4px; padding-left: 4px; }
   .split { grid-template-columns: 1fr; }
   .split-detail { position: static; max-height: none; }
   .content { padding: 16px; }
@@ -424,6 +429,18 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 @media (max-width: 850px) { .overview-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
 
 /* Settings reuse the panel's forms inside its common viewport. */
+/* Ruling H6(b): one Settings page -- the category nav on the left, one category shown (the rest stay mounted, hidden here);
+   narrow, the categories wrap in rows above the content. */
+.settings-page { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; align-items: start; }
+.settings-nav { position: sticky; top: 0; }
+.settings-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-body { min-width: 0; }
+.settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none; }
+@media (max-width: 760px) {
+  .settings-page { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .settings-nav { position: static; }
+  .settings-nav ul { flex-direction: row; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+}
 .settings { min-width: 0; overflow-wrap: anywhere; }
 .settings-browser { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
 .settings-password { max-width: 420px; margin-bottom: 24px; }

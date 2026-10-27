@@ -5,9 +5,20 @@
 // Kanban spec 2026-10-20 §4: the board is its own tab, right after Task control (the list stays; decide later from usage).
 import { DETAIL_REGIONS, type DetailRegion } from "./detailRegion.js";
 
-export const SECTIONS = ["overview", "requirements", "tasks", "board", "decisions", "memory", "metrics", "chains", "global-settings", "project-settings"] as const;
+// Ruling H6 (2026-10-27, session 7753e97d): the sidebar has three bands -- the work, the tools that read across it, and
+// one Settings entry at the bottom; global and project settings are one Settings page with a category nav.
+export const SECTIONS = ["overview", "requirements", "tasks", "board", "decisions", "memory", "metrics", "chains", "settings"] as const;
 export type Section = (typeof SECTIONS)[number];
 export const DEFAULT_SECTION: Section = "overview";
+/** H6(a): the sidebar's bands, in SECTIONS order; Settings stands alone at the bottom. */
+export const NAV_BANDS: readonly (readonly Section[])[] = [["overview", "requirements", "tasks", "board", "decisions"], ["memory", "metrics", "chains"], ["settings"]];
+
+/** H6(b): the Settings page's categories, in nav order; every one but `project` is a global (shared or browser) setting. */
+export const SETTINGS_CATEGORIES = ["appearance", "account", "orchestration", "checks", "flows", "agents", "project"] as const;
+export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
+export const DEFAULT_SETTINGS_CATEGORY: SettingsCategory = "appearance";
+/** H6(b): the two settings hashes from before the merge keep working; each opens the category that holds what it showed first. */
+const LEGACY_SETTINGS: Readonly<Record<string, SettingsCategory>> = { "global-settings": "appearance", "project-settings": "project" };
 
 /**
  * Tester round 2 spec §9.2 (ruling H11): the parsed URL hash. A section alone, or one owner inside it: a group (with its
@@ -19,7 +30,8 @@ export type Route =
   | { kind: "requirement"; section: "requirements"; groupId: string }
   | { kind: "decision"; section: "decisions"; projectKey: string; decisionId: string }
   | { kind: "corrections"; section: "decisions" }
-  | { kind: "flow-run"; section: "board"; flowRunId: string };
+  | { kind: "flow-run"; section: "board"; flowRunId: string }
+  | { kind: "settings"; section: "settings"; category: SettingsCategory };
 
 const bare = (section: Section): Route => ({ kind: "section", section });
 
@@ -39,6 +51,8 @@ function decodeParts(parts: readonly string[]): string[] | null {
 /** Never throws: an unknown section is Overview, a known section with a malformed tail is that section alone. */
 export function parseRoute(hash: string): Route {
   const [head = "", ...rest] = hash.replace(/^#/, "").split("/");
+  const legacy = Object.hasOwn(LEGACY_SETTINGS, head) ? LEGACY_SETTINGS[head] : undefined;
+  if (legacy !== undefined) return { kind: "settings", section: "settings", category: legacy };
   if (!(SECTIONS as readonly string[]).includes(head)) return bare(DEFAULT_SECTION);
   const section = head as Section;
   if (rest.length === 0) return bare(section);
@@ -53,6 +67,9 @@ export function parseRoute(hash: string): Route {
   if (section === "decisions" && parts.length === 1 && rest[0] === "corrections") return { kind: "corrections", section };
   if (section === "decisions" && parts.length === 2) return { kind: "decision", section, projectKey: parts[0]!, decisionId: parts[1]! };
   if (section === "board" && parts.length === 2 && rest[0] === "flow") return { kind: "flow-run", section, flowRunId: parts[1]! };
+  if (section === "settings" && parts.length === 1 && (SETTINGS_CATEGORIES as readonly string[]).includes(rest[0]!)) {
+    return { kind: "settings", section, category: rest[0] as SettingsCategory };
+  }
   return bare(section);
 }
 
@@ -69,6 +86,7 @@ export function formatRoute(route: Route): string {
     case "decision": return `#decisions/${e(route.projectKey)}/${e(route.decisionId)}`;
     case "corrections": return "#decisions/corrections";
     case "flow-run": return `#board/flow/${e(route.flowRunId)}`;
+    case "settings": return `#settings/${route.category}`;
   }
 }
 

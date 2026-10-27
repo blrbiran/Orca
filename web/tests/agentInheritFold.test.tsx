@@ -94,7 +94,8 @@ describe("per-task agent fields fold away (C18)", () => {
     show(withRole(resolvedPreview(), { kind: "rejected", code: "agent-unselected" }));
     const note = screen.getByTestId("agents-no-worker");
     expect(note.textContent).toBe("No agent is chosen for the group worker. Choose one here, or set a default agent in Global settings");
-    expect(note.querySelector("a")!.getAttribute("href")).toBe("#global-settings");
+    // H6(b): the link opens the Agents category of the one Settings page. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+    expect(note.querySelector("a")!.getAttribute("href")).toBe("#settings/agents");
     expect(screen.queryByTestId("agents-inherit-line")).toBeNull();
     cleanup();
     show(three());
