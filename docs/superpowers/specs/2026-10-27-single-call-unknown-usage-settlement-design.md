@@ -168,3 +168,40 @@ must, it is named in the commit (human blanket approval of this round does not e
   anyone reconciling later.
 - omp provider errors other than the stream watchdog stay `unknown` (no samples).
 - A call blocked before this change ships is settled by the same verb (the state is the same); no migration.
+
+## 9. Revision 1 — after the independent review (session `3cd8fb02`, 2026-10-27; review `/private/tmp/orca-3cd8fb02/review62/REVIEW.md`)
+
+The review found 3 blockers and 8 should-fixes; each was checked against the code. This section **supersedes** the parts
+of §2–§7 it names; the text above stays as written.
+
+- **R1 (replaces O2's new verb; review n3, S3, S8).** No new verb. The run-scoped `recovery-retry` the requirement view
+  already offers on a blocked call (`RequirementsPanel.tsx` "Retry run") and the estimate's per-run settle slot gain the
+  settlement: for a single-call run blocked at C with a reason starting with its purpose's `usageUnknownReason`, the
+  command must carry `acknowledge: "charge-remaining-grant"` (refused by name without it — today's retry just collects the
+  same record and blocks again). The charge arithmetic (`cumulative += remaining`, `used += charge`,
+  `reserved -= charge`, `bookSettledUsage`, ledger recompute) is one helper shared with `settle-unknown-usage`, not a
+  copy. Scope: requirement clarify/split and estimate. **Flow calls are out of scope** (no surface, flow parents are not
+  recomputed — review S1/S8); registered residual.
+- **R2 (B1, S2, S4).** Each purpose's `complete` is split into an in-transaction core (record + settle, no
+  `store.transaction`) and the transaction wrapper the driver keeps calling. The settlement runs the core inside the
+  command's own transaction, with the driver's `commitTerminal` (one shared function), `rawOutput: null` and the failure
+  code from the blocked reason (part after the purpose's reason and `:`); split's evaluation for a failed call is computed
+  before the transaction as the driver does. If the round/draft/estimate moved, the call settles through the interrupt
+  path (`interruptRequirementCall` / its estimate twin) instead of refusing.
+- **R3 (S1).** After charging, the group's usage-unknown flag is recomputed (`syncRequirementLedger` for clarifying groups,
+  `syncWebBudget` otherwise); a criterion shows the next claim is no longer parked with `requirement-usage-unknown`.
+- **R4 (B3).** The lower bound and the settlement marker live under new **optional, strict** keys of the persisted run
+  (`singleCallUsageLowerBound`, `singleCallSettlement`), added to `persistedRunSchema` (`src/panel/controlViews.ts`) — not
+  under the task-shaped `usageSettlement`. A criterion parses the read model (summary + Overview) with a settled
+  requirement run present.
+- **R5 (B2, S6, S7 — replaces C1 and C2's plumbing).** C1 is single-call only: in `OmpAdapter.singleCall`'s failure
+  branch, an `exit-error` whose last assistant message is omp's watchdog error throws with `code: "omp-stalled"` (the
+  name ccloop's own idle watchdog already gives a stalled single call) — so the record's `errorCode` carries it and Orca's
+  next-step text can name it. The phase path is unchanged (no change to `workObserved` or retries). C2: the bound travels
+  on the thrown error (`usageLowerBound`), and the record writer (`src/control/singleCall.ts`) copies it into the optional
+  `usageLowerBound` record key when positive.
+- **R6 (S5).** The charge stays the call's remaining grant (D2); the confirm text names the amount (1,000,000 tokens for
+  a requirement call) and that the retry reserves another grant, so a finite limit or spend cap may then hold the retry.
+  An amount chosen by the person (review n4) is not built.
+- **Order (replaces §7).** Orca O1 (accept the record key and the two run keys) and ccloop C1/C2 in parallel; Orca R1–R4
+  on top of O1; ccloop needs the human's push before the repin that brings `omp-stalled` and the bound into Orca.
