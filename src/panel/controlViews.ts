@@ -388,17 +388,19 @@ export { BUSY_WORK } from "../control/executionPending.js";
  * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
  * that the driver blocked, with its reason; null when there is none.
  */
-function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): Pick<RequirementSummaryV1, "blockedRun" | "blockedRunCharge"> {
+function blockedRequirementRun(store: ControlStore, groupId: string, clarifying: boolean, snapshot?: GroupReadSnapshot): Pick<RequirementSummaryV1, "blockedRun" | "blockedRunCharge"> {
   const rows = snapshot === undefined
-    ? store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
+    ? store.db.prepare("SELECT id,active,work_item_id,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
     : snapshot.runsByRowid;
-  type Row = { phase?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
-  const runs = rows.map(row => ({ runId: String(row.id), active: Number(row.active) === 1,
-    run: (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as Row }));
-  // The driver's block on an active call; else (code review S1) a call a stop closed with its usage still unknown, whose
-  // stale block reason names what is left to do -- charge its grant.
-  const pick = runs.find(({ active, run }) => active && run.phase === "single-call" && run.state === "blocked")
-    ?? runs.find(({ active, run }) => !active && run.phase === "single-call" && settleableSingleCallBlock(run as never)?.closed === true);
+  type Row = { phase?: string; purpose?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
+  const decode = (row: (typeof rows)[number]): { runId: string; run: Row } => ({ runId: String(row.id),
+    run: (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as Row });
+  // The driver's block on an active call; else, while the requirement is still clarifying (code review S1), a requirement
+  // call a stop closed with its usage still unknown, whose stale block reason names what is left to do -- charge its grant.
+  // Only active rows and inactive requirement-call rows are read, as before: other runs are judged by the group view.
+  const pick = rows.filter(row => Number(row.active) === 1).map(decode).find(({ run }) => run.phase === "single-call" && run.state === "blocked")
+    ?? (!clarifying ? undefined : rows.filter(row => Number(row.active) !== 1 && /^(round|draft)-[1-9]\d*$/.test(String(row.work_item_id))).map(decode)
+      .find(({ run }) => run.phase === "single-call" && (run.purpose === "clarify" || run.purpose === "split") && settleableSingleCallBlock(run as never)?.closed === true));
   if (pick === undefined) return { blockedRun: null };
   const { runId, run } = pick;
   // Spec 2026-10-27 single-call unknown usage §9 R1, R6: a call blocked on unknown usage is retried by charging its
@@ -424,7 +426,7 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? exportReasonOf(group.requirement.export.detail) : null),
     exportState: group.requirement.export.state,
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
-    ...blockedRequirementRun(store, groupId, snapshot),
+    ...blockedRequirementRun(store, groupId, group.status === "clarifying", snapshot),
     slug: group.requirement.slug,
     ...(group.requirement.title === undefined ? {} : { title: group.requirement.title }),
     // Issue 91 review fix: only on a handoff-unresolved stop -- whether recovery-retry can act on it.
