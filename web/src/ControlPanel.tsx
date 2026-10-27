@@ -8,6 +8,7 @@
  * so nothing here decides whether a group may start, how much budget is free, or
  * whether an unknown run is finished.
  */
+import { ShortcutsHelp } from "./ShortcutsHelp.js";
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
@@ -351,6 +352,9 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       ))}
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect}
         onSelectRequirement={props.onSelectRequirement} onAction={props.onGroupAction} refusals={props.groupRefusals} now={props.now} onOpenDispatch={props.onOpenDispatch} />
+      {/* Issue #56: the keys an open group's view takes (r, the arrows on its region tabs and menus), above that view and
+          outside it, so the group's own actions stay exactly its actions. */}
+      {view !== undefined && <div className="group-view-keys"><ShortcutsHelp /></div>}
       {view !== undefined && (
         <ControlGroupView
           active={props.active}

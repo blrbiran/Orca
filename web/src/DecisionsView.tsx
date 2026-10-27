@@ -4,6 +4,7 @@
  * It takes over PanelHome's job (task 8 ruling K5): the Decisions pane is the default
  * section, so the first screen is still the work a person owes.
  */
+import { ShortcutsHelp } from "./ShortcutsHelp.js";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -140,6 +141,7 @@ export function DecisionsView(props: {
         {props.reviewedCount !== undefined && props.reviewedCount > 0 && (
           <span className="count" data-testid="reviewed-count">{t("decisions.reviewedThisSession", { n: props.reviewedCount })}</span>
         )}
+        <ShortcutsHelp />
       </div>
       <p className="section-lede">
         {t(heading.lede)}

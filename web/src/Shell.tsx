@@ -7,7 +7,6 @@
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { NAV_BANDS, hashFor } from "./sections.js";
-import { ShortcutsHelp } from "./ShortcutsHelp.js";
 import type { Section } from "./sections.js";
 
 export const NAV_KEY = { overview: "nav.overview", decisions: "nav.decisions", chains: "nav.chains", tasks: "nav.tasks", board: "nav.board", requirements: "nav.requirements", memory: "nav.memory", metrics: "nav.metrics", settings: "nav.settings" } as const satisfies Record<Section, string>;
@@ -79,7 +78,6 @@ export function Shell(props: {
         </ul>
         <div className="sidebar-foot">
           {props.footer.map((line) => <p key={line}>{line}</p>)}
-          <ShortcutsHelp />
         </div>
       </nav>
       <main className="content" id="main-content" tabIndex={-1}>

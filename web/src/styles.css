@@ -175,6 +175,10 @@ button:hover { background: var(--bg-hover); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--text-strong)); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Issue #56: a button that is only an icon (its name is its aria-label); square, the icon centred, pushed to the row's end. */
+.icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; line-height: 0; }
+.section-head > .icon-button { margin-left: auto; align-self: center; }
+.group-view-keys { display: flex; justify-content: flex-end; margin-top: 12px; }
 input, select, textarea {
   font: inherit; font-size: var(--text-sm); color: var(--text-strong); background: var(--field);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 8px;
