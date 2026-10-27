@@ -10,7 +10,11 @@ import type { CommandIo, ParsedArgs } from "./types.js";
  */
 export interface StatusCheck { level: "ok" | "warn" | "fail"; subject: string; fact: string; fix?: string }
 /** `serviceEnv`: the installed service's environment, when one exists (launchd hands its panel that, not this shell). */
-export interface CheckContext { env: NodeJS.ProcessEnv; serviceEnv?: NodeJS.ProcessEnv | null; stateDirFlag?: string; checkout: string }
+export interface CheckContext {
+  env: NodeJS.ProcessEnv; serviceEnv?: NodeJS.ProcessEnv | null; stateDirFlag?: string; checkout: string;
+  /** Why an installed service's config could not be read (absent: none installed, or it read). */
+  serviceConfigUnreadable?: string;
+}
 export type Check = (ctx: CheckContext) => Promise<StatusCheck>;
 
 /** What the panel would see. The service config's location and manager selection stay this shell's (`ctx.env`). */
@@ -167,6 +171,11 @@ export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, 
 /** Every check in order; one that throws is a fail by name, never a crash of the whole screen. */
 export async function runChecks(checks: readonly Check[], ctx: CheckContext): Promise<StatusCheck[]> {
   const results: StatusCheck[] = [];
+  // Review 7753e97d finding 8: a config that exists but cannot be read is said, not swallowed -- the checks below then
+  // describe this shell, which may not be what the panel sees.
+  if (ctx.serviceConfigUnreadable !== undefined) {
+    results.push({ level: "warn", subject: "service-config", fact: `${ctx.serviceConfigUnreadable}; the checks below use this shell's environment` });
+  }
   for (const check of checks) {
     try { results.push(await check(ctx)); }
     catch (error) { results.push({ level: "fail", subject: "check", fact: `${check.name || "a check"} threw: ${message(error)}` }); }
@@ -176,16 +185,25 @@ export async function runChecks(checks: readonly Check[], ctx: CheckContext): Pr
 
 /**
  * The checks' context. Rule 17 stays intact: this only reads. A service config that is absent, unreadable or invalid
- * leaves `serviceEnv` null, so the checks fall back to this shell exactly as before.
+ * leaves `serviceEnv` null, so the checks fall back to this shell exactly as before; one that exists but cannot be read
+ * is named (`serviceConfigUnreadable`), so the fallback is not silent.
  */
 export const contextOf = async (args: ParsedArgs, io: CommandIo): Promise<CheckContext> => {
   let serviceEnv: NodeJS.ProcessEnv | null = null;
+  let unreadable: string | undefined;
   try {
     const { servicePaths } = await import("../service/paths.js");
     const { readServiceConfig } = await import("../service/files.js");
     serviceEnv = readServiceConfig(servicePaths(io.env)).env;
-  } catch { serviceEnv = null; }
-  return { env: io.env, serviceEnv, checkout: cliCheckout(), ...(args.global.controlStateDir === undefined ? {} : { stateDirFlag: args.global.controlStateDir }) };
+  } catch (error) {
+    serviceEnv = null;
+    // No service installed is the ordinary case for a shell-only user, not a warning.
+    if ((error as { code?: unknown }).code !== "service-not-installed") unreadable = `the service config is unreadable (${message(error)})`;
+  }
+  return {
+    env: io.env, serviceEnv, checkout: cliCheckout(), ...(args.global.controlStateDir === undefined ? {} : { stateDirFlag: args.global.controlStateDir }),
+    ...(unreadable === undefined ? {} : { serviceConfigUnreadable: unreadable }),
+  };
 };
 
 /** Spec §8: one line per check, `ok|warn|fail <subject>: <fact>`, plus (doctor) one fix line per failure; exit 1 on any fail. */

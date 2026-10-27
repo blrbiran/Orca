@@ -138,6 +138,20 @@ describe("orca status reads the installed service's environment (D4)", () => {
     expect(service.out()).not.toContain(callerTable);
   });
 
+  // Review 7753e97d finding 8: an installed service whose config cannot be read used to fall back to this shell in
+  // silence, so every line below described an environment the panel may not have.
+  it("says so when service.json exists but cannot be read, and only then", async () => {
+    const { env } = sandbox();
+    const absent = capture(env);
+    expect(await runStatus(args(), absent.io, [ccmemCheck])).toBe(0);
+    expect(absent.out()).not.toContain("service-config");
+    mkdirSync(env.ORCA_PANEL_DIR!, { recursive: true });
+    writeFileSync(join(env.ORCA_PANEL_DIR!, "service.json"), "{ not json");
+    const broken = capture(env);
+    expect(await runStatus(args(), broken.io, [ccmemCheck])).toBe(0);
+    expect(broken.out()).toMatch(/^warn service-config: the service config is unreadable \(.*service\.json.*\); the checks below use this shell's environment$/m);
+  });
+
   it("--control-state-dir still decides the control directory", async () => {
     const { home, env } = sandbox();
     const serviceControl = join(home, "service-control");
