@@ -1039,3 +1039,7 @@ independent code review of that branch (finding I1, controller's choice). Rule 1
    This project categories. Criteria: `web/tests/routes.test.ts` (round trips, the old-hash cases, the fallbacks).
 2. **The links of §7 (`agents.noWorker`, the `selections` blocker) point at `#settings/agents`**, the category that holds
    the agent defaults, instead of `#global-settings`; their text is unchanged.
+3. **§10.2 (H12) — the shortcuts button is not in the sidebar footer** (tester issue #56). It is a keyboard icon (inline
+   SVG, `aria-hidden`; the button's name stays `shortcuts.open`) on the pages whose keys the list names: the Decisions
+   header, and above an open group's view in Tasks (outside the group's region). The dialog, its heading and focus return
+   are unchanged. Criteria: `web/tests/shortcutsHelp.test.tsx` (where the shortcuts button is).
