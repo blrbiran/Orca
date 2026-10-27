@@ -196,3 +196,21 @@ describe("T4 / C8: an oversized line's pages (decoded, from checkpoints)", () =>
     expect(served).toContain(REDACTED);
   });
 });
+
+describe("review 7753e97d: redaction is linear in its input (it runs on the panel's event loop)", () => {
+  // Unbounded, the URL scheme and the assignment name rescanned the rest of a run from every word start: 1.5 s at 32K
+  // characters of `a.`, 35 s at 128K. Linear, each of these takes milliseconds; the bound is generous for a loaded machine.
+  const n = 65536;
+  const cases: Array<[string, string]> = [
+    ["dotted", "a.".repeat(n / 2)],
+    ["dashed", "ab-".repeat(n / 3)],
+    ["a run of `key`", "key".repeat(n / 3)],
+    ["a run of `pass_`", "pass_".repeat(n / 5)],
+    ["dotted jwt heads", "eyJaaaaaaaaa.".repeat(n / 13)],
+  ];
+  it.each(cases)("%s, 64K characters, in under a second", (_name, text) => {
+    const t0 = performance.now();
+    redactFull(redactor, text);
+    expect(performance.now() - t0).toBeLessThan(1000);
+  });
+});

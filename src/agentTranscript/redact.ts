@@ -34,11 +34,14 @@ const SHAPES = [
 ].join("|");
 // Case-insensitive rules. Groups: 1 = authorization header prefix, 2/3 = URL user prefix and `@`, 4 = assignment prefix
 // (C5: the NAME match is case-insensitive; `monkey=…` is an accepted false positive).
+// Review 7753e97d (spec §12.6): the URL scheme and the parts of an assignment name around its secret word are bounded
+// ({0,31}, {0,64}); unbounded, each word start rescanned the rest of a dotted or dashed run (35 s over 128K characters
+// of `a.`, on the panel's event loop).
 const INSENSITIVE = [
   String.raw`\bbearer\s+[A-Za-z0-9._~+/=-]{8,}`,
   String.raw`((?:proxy-)?authorization\s*:\s*)[^\r\n"]+`,
-  String.raw`(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@\/]+:)[^\s@\/]+(@)`,
-  String.raw`(\b[A-Za-z0-9_]*(?:key|token|secret|password|passwd|pass|pwd|credential|auth)[A-Za-z0-9_]*\s*[=:]\s*["']?)([^\s"']{8,})`,
+  String.raw`(\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:@\/]+:)[^\s@\/]+(@)`,
+  String.raw`(\b[A-Za-z0-9_]{0,64}(?:key|token|secret|password|passwd|pass|pwd|credential|auth)[A-Za-z0-9_]{0,64}\s*[=:]\s*["']?)([^\s"']{8,})`,
 ].join("|");
 const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/;
 const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
