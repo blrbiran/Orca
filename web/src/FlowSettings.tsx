@@ -39,7 +39,7 @@ function Badges(props: { sourced: FlowSourcedV1<unknown> }): JSX.Element {
 
 /** One field: its value and source, and (for a person who may) its editor, Save / Override and Reset to inherited. */
 function Field<T>(props: {
-  name: string; label: string; sourced: FlowSourcedV1<T>; layer: Layer; may: boolean; send: Send;
+  name: string; label: string; /** Tester #68: a one-line example under the label. */ hint?: string; sourced: FlowSourcedV1<T>; layer: Layer; may: boolean; send: Send;
   show: (value: T) => string; edit: (draft: T, set: (next: T) => void) => JSX.Element;
   set: (value: T) => Record<string, unknown>; parse?: (draft: T) => T | null;
 }): JSX.Element {
@@ -52,6 +52,7 @@ function Field<T>(props: {
     <div className="check-field" data-testid={`flow-setting-${props.name}`}>
       <span>{props.label}: {props.show(props.sourced.value)}</span> <Badges sourced={props.sourced} />
       {ignored !== undefined && <> <s data-testid="flow-setting-overridden">{props.show(ignored)}</s> {t("settings.flows.overriddenByLock")}</>}
+      {props.hint !== undefined && <span className="setting-hint" data-testid="flow-setting-hint">{props.hint}</span>}
       {props.may && (
         <div>
           {props.edit(draft, setDraft)}
@@ -136,7 +137,8 @@ function Locks(props: { locks: FlowLockablePathV1[]; send: Send }): JSX.Element 
         <label key={path}>
           <input type="checkbox" checked={draft.includes(path)}
             onChange={(event) => { const on = event.currentTarget.checked; setDraft(WEB_FLOW_LOCKABLE_PATHS.filter((other) => (other === path ? on : draft.includes(other)))); }} />
-          {path}
+          {/* Tester #68: an effect class's lock reads as the class's name, never its raw key. */}
+          {path.startsWith("effects.") ? t(`settings.flows.effectClass.${path.slice("effects.".length) as FlowEffectClassV1}.name`) : path}
         </label>
       ))}
       <button type="button" disabled={same(draft, initial)} onClick={() => props.send("locks", { locks: draft })}>{t("settings.flows.locks.save")}</button>
@@ -193,7 +195,7 @@ export function FlowSettings(props: { scope: FlowSettingsScope; /** Gaps spec §
   const layer: Layer = scope === "global" ? "global" : "project";
   const levelText = (value: FlowLevelSettingV1): string => t(`settings.flows.level.${value}`);
   const levelEdit = (cls: FlowEffectClassV1) => (draft: FlowLevelSettingV1, set: (next: FlowLevelSettingV1) => void): JSX.Element => (
-    <select aria-label={t("settings.flows.effectLabel", { cls })} value={draft} onChange={(event) => set(event.currentTarget.value as FlowLevelSettingV1)}>
+    <select aria-label={t(`settings.flows.effectClass.${cls}.name`)} value={draft} onChange={(event) => set(event.currentTarget.value as FlowLevelSettingV1)}>
       {LEVELS.filter((level) => !(cls === "irreversible" && level === "apply-flag")).map((level) => <option key={level} value={level}>{levelText(level)}</option>)}
     </select>
   );
@@ -209,7 +211,7 @@ export function FlowSettings(props: { scope: FlowSettingsScope; /** Gaps spec §
         <div key={JSON.stringify(view)}>
           <h4>{t("settings.flows.effects")}</h4>
           {WEB_FLOW_EFFECT_CLASSES.map((cls) => (
-            <Field key={cls} name={`effects.${cls}`} label={t("settings.flows.effectLabel", { cls })} sourced={view.effects[cls]} layer={layer} may={may} send={send}
+            <Field key={cls} name={`effects.${cls}`} label={t(`settings.flows.effectClass.${cls}.name`)} hint={t(`settings.flows.effectClass.${cls}.example`)} sourced={view.effects[cls]} layer={layer} may={may} send={send}
               show={levelText} edit={levelEdit(cls)} set={(value) => ({ effects: { [cls]: value } })} />
           ))}
           <p role="note">{t("settings.flows.irreversibleNote")}</p>

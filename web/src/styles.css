@@ -219,6 +219,8 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; border-width: 1px; border-style: solid; }
 /* Tester #67: where a setting's value was set is a quiet aside, not a badge. */
 .setting-source { color: var(--muted); font-size: var(--text-xs); }
+/* Tester #68: a setting's one-line example sits muted under its name. */
+.setting-hint { display: block; color: var(--muted); font-size: var(--text-xs); }
 
 /* Decisions */
 .filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }

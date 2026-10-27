@@ -13,7 +13,7 @@ import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import type { FlowSettingsReadV1, FlowTemplatesV1 } from "../src/controlTypes.js";
 import { FlowSettings } from "../src/FlowSettings.js";
-import "../src/i18n.js";
+import i18n from "../src/i18n.js";
 
 afterEach(cleanup);
 const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
@@ -66,7 +66,8 @@ describe("flow settings with source and lock (§11.2)", () => {
     expect(within(field("effects.external")).getByTestId("flow-setting-locked").textContent).toBe("locked");
     expect(within(field("effects.cost")).queryByTestId("flow-setting-locked")).toBeNull();
     // mutation: drop the struck-through value -> null, red
-    expect(within(field("effects.external")).getByTestId("flow-setting-overridden").textContent).toBe("run and flag for review");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #68: the level reads in words from flow engine spec §9.2 (was "run and flag for review").
+    expect(within(field("effects.external")).getByTestId("flow-setting-overridden").textContent).toBe("Run, then flag for review");
     expect(field("effects.external").textContent).toContain("overridden by lock");
   });
 
@@ -125,6 +126,58 @@ describe("flow settings with source and lock (§11.2)", () => {
     // mutation: offer the editors to a member -> buttons exist, red
     expect(screen.queryByRole("button", { name: "Override here" })).toBeNull();
     expect(screen.getByText("Only the panel owner can change flow settings.")).toBeTruthy();
+  });
+});
+
+// Tester #68 (spec §24, session 3cd8fb02): the effect rows read "Effects of class local: follow-template" -- code keys in
+// both languages. Each class is named with a one-line example (flow engine spec §9.1), each level in words (§9.2), and
+// no raw class or level key is shown, not even on the locks.
+describe("effect classes and levels in words (tester #68)", () => {
+  const CLASSES = [
+    ["local", "Local changes", "For example, land to a local branch."],
+    ["cost", "Paid steps", "For example, image generation or a paid model batch. Budget caps still apply."],
+    ["external", "Drafts outside Orca", "For example, a PR, an email or a WeChat draft."],
+    ["irreversible", "Irreversible steps", "For example, push, send email, merge to main."],
+  ] as const;
+  it("names each class with its example, each level in words, and shows no raw key", async () => {
+    serve();
+    await mount(owner, { repoId: "repo" });
+    for (const [cls, name, example] of CLASSES) {
+      const row = field(`effects.${cls}`);
+      // mutation: back to "Effects of class {{cls}}" -> red
+      expect(row.textContent!.startsWith(`${name}: `)).toBe(true);
+      // mutation: drop the example line -> red
+      expect(within(row).getByTestId("flow-setting-hint").textContent).toBe(example);
+      expect(within(row).getByRole("combobox", { name })).toBeTruthy();
+    }
+    const options = [...within(field("effects.local")).getByRole("combobox").querySelectorAll("option")].map((o) => o.textContent);
+    // mutation: back to the old level words -> red
+    expect(options).toEqual(["Run, then flag for review", "Ask before the step runs", "Prepare only, run later by hand", "Use the template's recommendation"]);
+    const region = screen.getByRole("region", { name: "Flow settings" });
+    for (const raw of ["Effects of class", "follow-template", "apply-flag", "stage-only", "class local", "class cost", "class external", "class irreversible"]) expect(region.textContent).not.toContain(raw);
+  });
+
+  it("labels an effect class's lock by its name, not its key", async () => {
+    serve();
+    await mount(owner, "global");
+    const locks = screen.getByRole("region", { name: "Locks" });
+    // mutation: label the lock with the raw path -> red
+    expect(within(locks).getByRole("checkbox", { name: "Drafts outside Orca" })).toBeTruthy();
+    expect(locks.textContent).not.toMatch(/effects\./);
+  });
+
+  it("reads the classes and levels in Chinese", async () => {
+    await i18n.changeLanguage("zh");
+    try {
+      serve();
+      await mount(owner, { repoId: "repo" });
+      const row = field("effects.cost");
+      expect(row.textContent!.startsWith("付费步骤：") || row.textContent!.startsWith("付费步骤: ")).toBe(true);
+      expect(within(row).getByTestId("flow-setting-hint").textContent).toBe("例如：生成图片、付费模型批处理。预算上限仍然有效。");
+      expect([...within(row).getByRole("combobox", { name: "付费步骤" }).querySelectorAll("option")].map((o) => o.textContent))
+        .toEqual(["先运行，再标记待复核", "步骤运行前先询问", "只准备，之后手动运行", "采用模板的建议"]);
+      expect(row.textContent).not.toMatch(/cost|confirm/);
+    } finally { await i18n.changeLanguage("en"); }
   });
 });
 

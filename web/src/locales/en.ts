@@ -1449,8 +1449,14 @@ export const en = {
       override: "Override here",
       reset: "Reset to inherited",
       effects: "Effect levels",
-      effectLabel: "Effects of class {{cls}}",
-      level: { "apply-flag": "run and flag for review", confirm: "ask before running", "stage-only": "stage only, enact later", "follow-template": "follow the template" },
+      // Tester #68 (spec §24): each class and level in words from flow engine spec §9.1/§9.2; the raw keys are never shown.
+      effectClass: {
+        local: { name: "Local changes", example: "For example, land to a local branch." },
+        cost: { name: "Paid steps", example: "For example, image generation or a paid model batch. Budget caps still apply." },
+        external: { name: "Drafts outside Orca", example: "For example, a PR, an email or a WeChat draft." },
+        irreversible: { name: "Irreversible steps", example: "For example, push, send email, merge to main." },
+      },
+      level: { "apply-flag": "Run, then flag for review", confirm: "Ask before the step runs", "stage-only": "Prepare only, run later by hand", "follow-template": "Use the template's recommendation" },
       irreversibleNote: "Irreversible effects never run without a confirm card in this version: running them with only a flag needs the owner's person token.",
       rerunReview: "Re-run plans",
       review: { review: "wait for the person", auto: "run the proposal at once" },
