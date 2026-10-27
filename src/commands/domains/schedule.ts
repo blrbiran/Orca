@@ -104,11 +104,15 @@ const addGroup = verb({
   payload: async (c) => {
     const entryId = String(c.args.positionals.entry);
     const tokenLimit = int(c, "token-limit") ?? null;
+    const projectId = (await c.project()).repoId;
+    // §6.1: `schedule add group` pins the project's delivery default at this moment; `keep` is stored as null.
+    const { integration: projectDefault } = await c.read(`repositories/${enc(projectId)}/integration`) as { integration: { delivery: string } };
+    const integration = projectDefault.delivery === "keep" ? null : projectDefault;
     await announcePin(c, entryId, String(c.args.flags.version));
-    announceMode(c, tokenLimit, null);
+    announceMode(c, tokenLimit, integration);
     return {
-      projectId: (await c.project()).repoId, name: str(c, "name") ?? entryId, cron: String(c.args.flags.cron), enabled: enabled(c),
-      start: { kind: "group", entryId, sha256: String(c.args.flags.version), tokenLimit, integration: null },
+      projectId, name: str(c, "name") ?? entryId, cron: String(c.args.flags.cron), enabled: enabled(c),
+      start: { kind: "group", entryId, sha256: String(c.args.flags.version), tokenLimit, integration },
     };
   },
 });

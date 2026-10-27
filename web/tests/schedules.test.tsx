@@ -251,9 +251,12 @@ describe("the add-group form's confirm mode (spec §13.3, M-C13c auto-with-deliv
   const form = (): HTMLElement => screen.getByRole("region", { name: "Add group schedule" });
   const mode = (): string => within(form()).getByTestId("group-confirm-mode").textContent!;
 
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. Review finding 7: the
+  // form now starts at the project's delivery default (spec §6.1), so "own" is chosen here before the auto mode is read.
   it("shows unlimited as auto, a token limit as limited, and a delivery as delivery -- never auto", async () => {
     render(as(owner, <ScheduleSettings scope={{ repoId: "repo" }} dir={false} defaultIntegration={DAYLIGHT} />));
     await waitFor(() => expect(screen.getByTestId("group-version-provenance")).toBeTruthy());
+    fireEvent.change(within(form()).getByRole("combobox", { name: "Delivery" }), { target: { value: "own" } });
     expect(mode()).toBe("Each fired group confirms on its own (unlimited tokens, no delivery scheme).");
     const limit = within(form()).getByRole("spinbutton", { name: "Token limit (empty: unlimited)" });
     fireEvent.change(limit, { target: { value: "500000" } });
@@ -275,7 +278,9 @@ describe("the add-group form's confirm mode (spec §13.3, M-C13c auto-with-deliv
     fireEvent.change(within(form()).getByRole("combobox", { name: "Version" }), { target: { value: OLD_SHA } });
     fireEvent.change(within(form()).getByLabelText("Name"), { target: { value: "Nightly two" } });
     fireEvent.change(within(form()).getByLabelText("Cron (minute hour day month weekday), at most hourly"), { target: { value: "0 4 * * *" } });
-    fireEvent.change(within(form()).getByRole("combobox", { name: "Delivery" }), { target: { value: "project" } });
+    // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. Review finding 7: the
+    // Delivery picker (chosen "project" here before) is left untouched -- the project's default is the pin.
+    expect((within(form()).getByRole("combobox", { name: "Delivery" }) as HTMLSelectElement).value).toBe("project");
     fireEvent.click(within(form()).getByRole("button", { name: "Add group schedule" }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]).toEqual({

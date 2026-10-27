@@ -304,7 +304,8 @@ function GroupScheduleForm(props: { repoId: string; defaultIntegration: Integrat
   const [name, setName] = useState("");
   const [cron, setCron] = useState("");
   const [limit, setLimit] = useState("");
-  const [delivery, setDelivery] = useState<"own" | "project">("own");
+  // §6.1: the project's delivery default is what a new group schedule pins unless the person picks "own" (keep).
+  const [deliveryChoice, setDelivery] = useState<"own" | "project" | null>(null);
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -336,6 +337,7 @@ function GroupScheduleForm(props: { repoId: string; defaultIntegration: Integrat
     return () => { live = false; };
   }, [entryId]);
   const pinned = props.defaultIntegration !== null && props.defaultIntegration.delivery !== "keep";
+  const delivery = deliveryChoice ?? (pinned ? "project" : "own");
   const integration = delivery === "project" && pinned ? props.defaultIntegration : null;
   const limitValue = positiveInt(limit);
   const version = entry?.versions.find((candidate) => candidate.sha256 === sha256) ?? null;

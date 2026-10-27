@@ -119,12 +119,15 @@ describe("a group pin shows its provenance and confirm mode (§13.1, §9.3)", ()
   const NEXT = "b".repeat(64);
   const NEW_ID = `sch-${ENTRY}`;
   const version = (over: { sha256: string; version: number; by: string; via: string; at: number; origin: string }) => ({ ...over });
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. Review finding 7: add
+  // group now reads the project's delivery default (spec §6.1), so these fixtures answer that read with `keep`.
+  const KEEP_DEFAULT = { "GET repositories/repo-1/integration": { status: 200, body: { schema: "orca-repository-integration-v1", repoId: "repo-1", integration: { delivery: "keep" }, revision: 0, suggestedTarget: null } } };
   const pinned = {
-    ...LIBRARY_READS,
+    ...LIBRARY_READS, ...KEEP_DEFAULT,
     [`GET plan-library/${ENTRY}`]: { status: 200, body: { schema: "orca-plan-library-entry-v1", entryId: ENTRY, versions: [version({ version: 1, sha256: H.plan, by: "ana", via: "web", at: AT, origin: "group" })] } },
   };
   const repinned = {
-    ...LIBRARY_READS,
+    ...LIBRARY_READS, ...KEEP_DEFAULT,
     [`GET plan-library/${ENTRY}`]: { status: 200, body: { schema: "orca-plan-library-entry-v1", entryId: ENTRY, versions: [
       version({ version: 1, sha256: H.plan, by: "ana", via: "web", at: AT, origin: "group" }),
       version({ version: 2, sha256: NEXT, by: "bo", via: "cli", at: AT + 1000, origin: "requirement" }),
@@ -148,6 +151,20 @@ describe("a group pin shows its provenance and confirm mode (§13.1, §9.3)", ()
     }]);
     expect(out.stderr).toContain(`version ${H.plan} — saved by ana via web at ${new Date(AT).toISOString()} from group`);
     expect(out.stderr).toContain(line);
+  });
+
+  // Review finding 7 (session 7753e97d): a project whose default delivers (push, local) makes every fired group wait for
+  // the person; dropping it would silently make the schedule's groups keep their work and auto-confirm instead.
+  it("add group pins the project's delivery default at write and prints the mode it gives", async () => {
+    const PUSH = { delivery: "push-branch", trigger: "group", target: "main", remote: "origin" };
+    const w = await world({}, {
+      ...pinned, [`POST schedules/${NEW_ID}`]: accept(() => 0),
+      "GET repositories/repo-1/integration": { status: 200, body: { schema: "orca-repository-integration-v1", repoId: "repo-1", integration: PUSH, revision: 2, suggestedTarget: null } },
+    });
+    const out = await run(["schedule", "add", "group", ENTRY, "--version", H.plan, "--cron", "0 9 * * 1", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect((w.posts()[0]!.payload as { start: unknown }).start).toEqual({ kind: "group", entryId: ENTRY, sha256: H.plan, tokenLimit: null, integration: PUSH });
+    expect(out.stderr).toContain("confirm mode: waits for your click (delivery push-branch)");
   });
 
   it("add group of an older version prints that version's provenance, not the newest", async () => {
