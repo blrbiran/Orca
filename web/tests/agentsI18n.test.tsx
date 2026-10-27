@@ -98,14 +98,15 @@ describe("the agents area in Chinese", () => {
     );
     const editor = container.textContent ?? "";
     for (const expected of [
-      "agent · 提案 v2", "下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。", "重新读取 agent 选择", "10 秒后重新读取（第 1/5 次重试）。",
+      "Agent 选择 提案 v2", "下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。", "重新读取 agent 选择", "10 秒后重新读取（第 1/5 次重试）。",
       "组 执行", "设置组 执行 的 agent", "清除组 估算 的 agent", " 从下次重新估算起使用；", "忽略计划里的模型（gpt-5x）", "继承（计划：codex）",
       "这个任务自己的一层", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）", "被拒 · agent-installation-missing",
       "协调", "为任务 a 设置 agent", "清除任务 a 的 agent",
     ]) expect(editor, expected).toContain(expected);
     // Each site by its own element (preflight P4: the legends and the fieldsets' names exactly).
     expect(container.querySelector("section")!.getAttribute("aria-label")).toBe("agent 选择");
-    expect(texts(container, "h3")).toEqual(["agent · 提案 v2"]);
+    // Tester #26: a plain heading, the version as small text after it. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+    expect(texts(container, "h3")).toEqual(["Agent 选择 提案 v2"]);
     expect(texts(container, `p[role="alert"]`)).toEqual(["下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。"]);
     expect(texts(container, `p[data-retry]`)).toEqual(["10 秒后重新读取（第 1/5 次重试）。"]);
     expect(texts(container, "legend")).toEqual(["组 执行", "组 估算", "组 协调", "任务 a", "任务 b"]);

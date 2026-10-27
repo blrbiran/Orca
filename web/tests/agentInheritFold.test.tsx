@@ -132,3 +132,16 @@ describe("preparation order (tester #7, #13, #14)", () => {
     expect(agentsRegion.contains(confirm)).toBe(false);
   });
 });
+
+describe("preparation headings (tester #26)", () => {
+  // "Proposal v3 · editable" told a person nothing about what the section is for; the heading names the section, and the
+  // proposal version stays only as small secondary text.
+  it("name the section first and keep the proposal version as small text", () => {
+    render(<ControlGroupView view={group()} config={config} uncertain={[]} drafts={{}} onDraft={() => {}} onCommand={() => {}} agents={agents} preview={three()} />);
+    const heading = (region: string): HTMLHeadingElement => document.querySelector(`section[aria-label="${region}"] > h3`)!;
+    expect(heading("Agent selection").firstChild!.textContent).toBe("Agent selection");
+    expect(heading("Agent selection").querySelector("small")!.textContent).toBe("proposal v3");
+    expect(heading("Budget proposal").firstChild!.textContent).toBe("Budget");
+    expect(heading("Budget proposal").querySelector("small")!.textContent).toBe("Proposal v3 · editable");
+  });
+});

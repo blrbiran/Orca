@@ -410,7 +410,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
 
   return (
     <section aria-label={t("budget.region")}>
-      <h3>{t("budget.heading", { version: view.proposal.proposalVersion, state: enumText("proposalState", view.proposal.state) })}</h3>
+      {/* Tester #26: the heading says what the section is; the proposal version and state are small text after it. */}
+      <h3>{t("budget.title")} <small>{t("budget.heading", { version: view.proposal.proposalVersion, state: enumText("proposalState", view.proposal.state) })}</small></h3>
       <p role="status">
         {t("budget.modeLine", { mode: view.proposal.budgetMode === null ? t("budget.notChosen") : enumText("budgetMode", view.proposal.budgetMode), enforcement: observedEnforcement })}
         {view.proposal.budgetMode === "soft" ? t("budget.softNote") : ""}

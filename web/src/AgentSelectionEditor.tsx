@@ -179,7 +179,8 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
 
   return (
     <section aria-label={t("agents.region")}>
-      <h3>{t("agents.proposalTitle", { version: view.proposal.proposalVersion })}</h3>
+      {/* Tester #26: the heading says what the section is; the proposal version is small text after it. */}
+      <h3>{t("agents.selectionTitle")} <small>{t("agents.proposalTitle", { version: view.proposal.proposalVersion })}</small></h3>
       {stale && <p role="status">{t("agents.staleResolution", { version: preview.proposalVersion })}</p>}
       {preview.selectionsHash === null && <p role="alert">{t("agents.unresolved")}</p>}
       {reread}
