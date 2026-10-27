@@ -17,6 +17,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 ## Type
 - Body 14px. h3 14px/600. h2 18px. h1 22px (Decisions' title is sized as an h2 so every page title matches).
 - Numbers that change (counts, rates, ids) use `font-variant-numeric: tabular-nums` where they sit in rows.
+- Key figures (tokens, durations, attempts) take the `.num` utility class (tabular digits), so a polled line or a column does not jitter (ruling H8).
 
 ## Buttons
 - One primary per view: only `.btn-primary` is filled with the accent. `type="submit"` alone is a secondary button.
@@ -25,3 +26,12 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - ≥761px: fixed shell, sidebar and content scroll independently. ≤760px wide or ≤560px tall: the page scrolls as a whole; nav is one horizontally scrolling row; the footer hides. The project caption stays (it explains the hidden Add/Rename).
 - On touch (`pointer: coarse`) buttons, selects, inputs and nav items are at least 44px tall; checkboxes and radios keep their native size; the j/k/a/c hint is hidden.
 - Panes stay mounted; only `.section-pane:not([data-active="true"])` hides one.
+
+## Status light (ruling H8, 2026-10-27)
+- A group card in the Tasks list and on the Board starts with a 7px dot, `.led[data-led]`, from `groupLed` (`groupCategory.ts`): running = `--ok` with a soft glow, failed/blocked (needs you) = `--danger`, waiting (started or queued, nothing going) = `--warn`, not started or settled = `--muted`, dimmed. Tone tokens only, so both themes follow.
+- It is decorative (`aria-hidden`): the card's text already states the state. Nothing else of an "instrument console" look is adopted.
+
+## Settings and navigation (ruling H6, 2026-10-27)
+- The sidebar is one list in three bands (work · tools · Settings at the bottom), a thin rule above each later band.
+- Settings is one page: a category nav on the left (≥761px, sticky) or wrapped in rows above the content (≤760px); one category shows, the rest stay mounted and hidden by `.settings-category:not([data-active="true"])`.
+

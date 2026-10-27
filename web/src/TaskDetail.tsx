@@ -273,7 +273,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       <button type="button" onClick={() => send(null, current)}>{t("control.task.restore")}</button>
         </>
       )}
-      <p>
+      <p className="num">
         {t("control.task.progress", { progress: progressText(item.progress) })}
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>

@@ -11,7 +11,7 @@ import { CardGoal } from "./CardGoal.js";
 import { useClock } from "./clock.js";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import {
-  GROUP_FILTERS, groupCategory, groupFilterStorage, matchesGroupFilter, needsAttention, readGroupFilter, writeGroupFilter, type GroupFilter,
+  GROUP_FILTERS, groupCategory, groupFilterStorage, groupLed, matchesGroupFilter, needsAttention, readGroupFilter, writeGroupFilter, type GroupFilter,
 } from "./groupCategory.js";
 import { enumText } from "./i18n.js";
 import { inScope, type GroupScope } from "./projectScope.js";
@@ -59,6 +59,8 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       onContextMenu={onContextMenu}
     >
       <span id={`${base}-name`} className="group-card-name">
+        {/* Ruling H8: the status light; decorative, the state is in this text. */}
+        <span className="led" data-led={groupLed(group)} aria-hidden="true" />
         {group.groupId} · {enumText("groupState", group.state)}
         {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
         {group.stopState !== null ? ` · ${enumText("stopState", group.stopState)}` : ""}
@@ -110,7 +112,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
           <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (
             <a className="group-card" href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
               aria-labelledby={`req-name-${group.groupId}`} aria-describedby={`req-goal-${group.groupId}`}>
-              <span id={`req-name-${group.groupId}`} className="group-card-name">{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
+              <span id={`req-name-${group.groupId}`} className="group-card-name"><span className="led" data-led={groupLed(group)} aria-hidden="true" />{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
               {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does. */}
               <span id={`req-goal-${group.groupId}`} className="group-card-detail"><CardGoal group={group} className="group-card-goal" /></span>
             </a>

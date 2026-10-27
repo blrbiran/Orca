@@ -31,6 +31,20 @@ export function groupCategory(summary: GroupSummaryV1): GroupCategory {
   return "not-started";
 }
 
+/**
+ * Ruling H8 (2026-10-27, session 7753e97d): the status light on a group's card, from its board column. Needs-you is red
+ * (failed or blocked), a group with a run going is green, one started or queued with none going is amber (waiting), and
+ * anything not yet started or already settled -- clarifying, awaiting confirmation, done, archived -- is dim. The card's
+ * text already states the state; the light only lets a person scan a column for the ones moving or stuck.
+ */
+export type GroupLed = "running" | "failed" | "waiting" | "idle";
+export function groupLed(summary: GroupSummaryV1): GroupLed {
+  const column = boardColumn(summary);
+  if (column === "needs-you") return "failed";
+  if (column === "running") return (summary.counts?.running ?? (summary.state === "running" ? 1 : 0)) > 0 ? "running" : "waiting";
+  return column === "queued" ? "waiting" : "idle";
+}
+
 export function matchesGroupFilter(summary: GroupSummaryV1, filter: GroupFilter): boolean {
   const category = groupCategory(summary);
   return filter === "all" ? category !== "archived" : category === filter;

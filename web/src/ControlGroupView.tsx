@@ -704,7 +704,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 </>,
         runs: <>
       <h3>{t("control.group.runs")}</h3>
-      <table>
+      <table className="num">
         <thead>
           <tr>
             <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>

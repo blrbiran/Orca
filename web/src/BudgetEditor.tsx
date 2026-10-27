@@ -436,7 +436,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           {t("budget.handoffBlocked", { profileId: profile.profileId, control: enumText("handoffControl", profile.observed.handoffControl), execution: profile.observed.handoffExecution === null ? t("common.none") : enumText("handoffExecution", profile.observed.handoffExecution) })}
         </p>
       ))}
-      <table>
+      <table className="num">
         <thead>
           <tr><th>{t("budget.th.owner")}</th><th>{t("budget.th.bucket")}</th><th>{t("budget.th.state")}</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{enumText("dimension", dimension)}</th>)}{advice !== null && <th>{t("budget.th.suggestion")}</th>}</tr>
         </thead>
@@ -558,7 +558,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         allowEmpty
         onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
       />
-      <p>
+      <p className="num">
         {/* Issue #79: the ledger's token figures short, as the rest of the panel writes them (TokenInput.tsx shortTokens). */}
         {t("budget.ledger", { used: shortTokens(view.ledger.used.tokens), committed: shortTokens(view.ledger.committedRemaining.tokens), reserve: view.ledger.explicitUnallocatedReserve.tokens===null?t("budget.unlimited"):shortTokens(view.ledger.explicitUnallocatedReserve.tokens) })}
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: shortTokens(view.ledger.budgetDeficit.tokens) }) : ""}

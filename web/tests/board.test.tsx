@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardView } from "../src/BoardView.js";
 import type { ControlAction } from "../src/controlApi.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
-import { boardColumn, boardDrop } from "../src/groupCategory.js";
+import { boardColumn, boardDrop, groupLed } from "../src/groupCategory.js";
+import { GroupList } from "../src/GroupList.js";
 import i18n from "../src/i18n.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -147,5 +148,57 @@ describe("the system-debug badge (#58)", () => {
     const rule = css.slice(at, css.indexOf("}", at));
     // mutation: drop the rule -> the 999px pill clips a two-line badge, red
     for (const part of ["border-radius: 6px", "max-width: 100%", "overflow-wrap: anywhere"]) expect(rule).toContain(part);
+  });
+});
+
+// Ruling H8 (2026-10-27, session 7753e97d): a status light on each group card in the Tasks list and on the Board, so a
+// person can scan for what is moving or stuck. It repeats the state the card's text states, so it is hidden from
+// assistive tech and never changes a card's accessible name.
+describe("the status light (H8)", () => {
+  it("is red when the group needs you, green with a run going, amber when started or queued with none going, dim otherwise", () => {
+    const cases: Array<[Partial<GroupSummaryV1>, string]> = [
+      [{ counts: { idle: 1, running: 0, waiting: 0, blocked: 1, done: 0 } }, "failed"],
+      [{ state: "blocked" }, "failed"],
+      [{ state: "running", counts: { idle: 1, running: 1, waiting: 0, blocked: 0, done: 0 } }, "running"],
+      // mutation: a running-column group is always green -> a started group with nothing going reads running, red
+      [{ orchestration: { ...queued, state: "started" } }, "waiting"],
+      [{ orchestration: queued }, "waiting"],
+      [{ orchestration: { ...queued, state: "waiting-slot" } }, "waiting"],
+      [{ state: "draft" }, "idle"],
+      [{ state: "clarifying" }, "idle"],
+      [{ completion: { done: 2, total: 2 } }, "idle"],
+      [{ completion: { done: 2, total: 2 }, archived: true }, "idle"],
+    ];
+    expect(cases.map(([over]) => groupLed(g(over)))).toEqual(cases.map(([, led]) => led));
+  });
+
+  it("sits on board cards and Tasks list cards, aria-hidden, leaving each card's name as its text", () => {
+    const running = g({ groupId: "run1", state: "running", counts: { idle: 1, running: 1, waiting: 0, blocked: 0, done: 0 } });
+    const stuck = g({ groupId: "stuck", state: "blocked" });
+    render(<BoardView groups={[running, stuck]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const led = (testId: string) => screen.getByTestId(testId).querySelector(".led");
+    // mutation: drop the light from BoardCard -> null, red
+    expect([led("board-card-run1")?.getAttribute("data-led"), led("board-card-stuck")?.getAttribute("data-led")]).toEqual(["running", "failed"]);
+    expect(led("board-card-run1")?.getAttribute("aria-hidden")).toBe("true");
+    cleanup();
+    render(<GroupList groups={[running, stuck]} selected={null} onSelect={vi.fn()} now={0} />);
+    const card = screen.getByRole("button", { name: /^run1 · running/ });
+    // mutation: drop the light from GroupCard -> null, red
+    expect(card.querySelector(".led")?.getAttribute("data-led")).toBe("running");
+    expect(screen.getByRole("button", { name: /^stuck · blocked/ }).querySelector(".led")?.getAttribute("data-led")).toBe("failed");
+  });
+
+  it("colours the light from the theme's tone tokens, glowing only while running, and sets key figures in tabular digits", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
+    const rule = (selector: string): string => { const at = css.indexOf(`${selector} {`); expect(at, selector).toBeGreaterThan(-1); return css.slice(at, css.indexOf("}", at)); };
+    expect(rule(".led")).toContain("width: 7px");
+    expect(rule('.led[data-led="running"]')).toContain("box-shadow: 0 0 6px var(--ok)");
+    expect(rule('.led[data-led="failed"]')).toContain("background: var(--danger)");
+    expect(rule('.led[data-led="waiting"]')).toContain("background: var(--warn)");
+    expect(rule(".num")).toContain("font-variant-numeric: tabular-nums");
+    render(<BoardView groups={[g({ groupId: "b", state: "running", card: { budget: { usedTokens: 1200, limitTokens: 5000 }, pendingDecisions: 0, firstFailure: null } })]}
+      scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    // mutation: drop "num" from the board card's budget line -> its figures jitter as they poll, red
+    expect(screen.getByTestId("board-card-budget").classList.contains("num")).toBe(true);
   });
 });

@@ -850,7 +850,7 @@ function RunControls(props: { view: FlowRunViewV1; may: boolean; send: Send }): 
         </p>
       )}
       {/* §6.3: the pool as stored -- the run's tokens and what its steps drew; no estimate of spend. */}
-      <p title={`${formatTokens(view.poolDrawn, currentLanguage())} / ${formatTokens(view.poolTokens, currentLanguage())}`} data-testid="flow-pool">
+      <p className="num" title={`${formatTokens(view.poolDrawn, currentLanguage())} / ${formatTokens(view.poolTokens, currentLanguage())}`} data-testid="flow-pool">
         {t("flow.pool", { drawn: shortTokens(view.poolDrawn), pool: shortTokens(view.poolTokens) })}
       </p>
       {props.may && view.state !== "stopped" && (

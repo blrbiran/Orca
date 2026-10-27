@@ -483,6 +483,13 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .board-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px; cursor: grab; }
 .board-card-open { all: unset; cursor: pointer; font-weight: 600; }
 .board-card-goal { margin: 4px 0; }
+/* Ruling H8: a group's status light, 7px, coloured by groupLed from the theme's tone tokens (DESIGN.md); decorative. */
+.led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--muted); opacity: 0.45; }
+.led[data-led="running"] { background: var(--ok); opacity: 1; box-shadow: 0 0 6px var(--ok); }
+.led[data-led="failed"] { background: var(--danger); opacity: 1; }
+.led[data-led="waiting"] { background: var(--warn); opacity: 1; }
+/* Ruling H8: key figures (tokens, durations, attempts) in equal-width digits, so a column or a polled line does not jitter. */
+.num { font-variant-numeric: tabular-nums; }
 /* Issue #58: a card is narrow, so a badge may take two lines; a pill radius would clip them, so it wraps inside a box. */
 .board-card .badge { border-radius: 6px; max-width: 100%; overflow-wrap: anywhere; }
 .group-graph-layers { display: flex; gap: 24px; overflow-x: auto; }

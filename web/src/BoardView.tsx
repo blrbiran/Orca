@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import { CardGoal } from "./CardGoal.js";
 import type { FlowListV1, GroupSummaryV1 } from "./controlTypes.js";
-import { BOARD_COLUMNS, boardColumn, boardDrop, needsAttention, type BoardColumn } from "./groupCategory.js";
+import { BOARD_COLUMNS, boardColumn, boardDrop, groupLed, needsAttention, type BoardColumn } from "./groupCategory.js";
 import { GroupGraph } from "./GroupGraph.js";
 import { currentLanguage, enumText } from "./i18n.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
@@ -49,7 +49,7 @@ function FlowCard(props: { run: FlowRun; onOpen: () => void }): JSX.Element {
       {run.scheduled != null && <span className="badge" data-tone="info" data-testid="board-flow-scheduled">{t("board.card.scheduled", { name: run.scheduled.name })}</span>}
       {run.dir !== null && <p className="board-card-goal">{run.dir}</p>}
       {run.needsYou > 0 && <p className="detail-note" data-testid="board-card-reason">{t("board.card.flowNeedsYou", { count: run.needsYou })}</p>}
-      <p className="detail-note">{t("board.card.flowPool", { drawn: shortTokens(run.poolDrawn), pool: shortTokens(run.poolTokens) })}</p>
+      <p className="detail-note num">{t("board.card.flowPool", { drawn: shortTokens(run.poolDrawn), pool: shortTokens(run.poolTokens) })}</p>
     </li>
   );
 }
@@ -77,6 +77,8 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
   return (
     <li className="board-card" draggable onDragStart={onDragStart} data-testid={`board-card-${group.groupId}`}>
       <button type="button" className="board-card-open" onClick={props.onOpen}>
+        {/* Ruling H8: the status light; decorative, the state is in this text. */}
+        <span className="led" data-led={groupLed(group)} aria-hidden="true" />
         {group.groupId} · {enumText("groupState", group.state)}{props.repoText}
       </button>
       <CardGoal group={group} as="p" className="board-card-goal" />
@@ -98,7 +100,7 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}
       {facts !== undefined && (
         // Issue #84: the budget's figures short (K/M/B), the exact ones in the title.
-        <p className="detail-note" title={[facts.budget.usedTokens, facts.budget.limitTokens].flatMap((n) => (n === null ? [] : [formatTokens(n, currentLanguage())])).join(" / ")}>
+        <p className="detail-note num" data-testid="board-card-budget" title={[facts.budget.usedTokens, facts.budget.limitTokens].flatMap((n) => (n === null ? [] : [formatTokens(n, currentLanguage())])).join(" / ")}>
           {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: shortTokens(facts.budget.usedTokens) }) : t("board.card.budget", { used: shortTokens(facts.budget.usedTokens), limit: shortTokens(facts.budget.limitTokens) })}
           {facts.pendingDecisions > 0 ? ` · ${t("board.card.decisions", { count: facts.pendingDecisions })}` : ""}
           {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: (KNOWN_FAILURE_CAUSES as readonly string[]).includes(facts.firstFailure.cause) ? t(`control.failureCause.label.${knownCause(facts.firstFailure.cause)}`) : facts.firstFailure.cause })}` : ""}
