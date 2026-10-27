@@ -42,3 +42,18 @@ describe("Overview decision rows (P1-4)", () => {
     expect(r).toContain("box-shadow: none");
   });
 });
+
+/** Tester #25, #23: the queue is in priority order, so its first row is said to be the next step; an empty Overview says how to start. */
+describe("Overview next step and empty state (tester #25, #23)", () => {
+  it("marks only the first queue row as Next", () => {
+    const html = render([budget, decision("a")]);
+    expect(html.match(/class="overview-next"/g)?.length).toBe(1);
+    expect(html.indexOf("Next</span>")).toBeLessThan(html.indexOf("question a"));
+    expect(html.indexOf("Next</span>")).toBeGreaterThan(-1);
+    expect(render([])).not.toContain("overview-next");
+  });
+
+  it("with no active group, points at New requirement and Import plan", () => {
+    expect(render([])).toContain("No active groups. Start one with New requirement or Import plan above.");
+  });
+});

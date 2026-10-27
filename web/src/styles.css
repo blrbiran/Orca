@@ -489,6 +489,8 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 /* Tester #54: while a card is dragged, the columns that take it are outlined in the accent; the rest dim. */
 .board-column[data-drop="allowed"] { border-color: var(--accent); border-style: dashed; }
 .board-column[data-drop="refused"] { opacity: 0.55; }
+/* Tester #25: the Overview queue's first row, the next step. */
+.overview-next { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; }
 .board-drop-hint { margin: 0 0 6px; color: var(--accent); font-size: 12px; }
 .board-column ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .board-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px; cursor: grab; }

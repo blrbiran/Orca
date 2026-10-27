@@ -33,6 +33,7 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
     {model.scopeUnavailable && <p role="status">{t("overview.scopeUnavailable")}</p>}
     {model.sources.filter((s) => s.kind === "progress" && s.status !== "available").map((s) => <p role="status" key={s.kind}>{t(`overview.source.${s.kind}`)} · {t(`overview.status.${s.status}`)}{s.error ? ` · ${s.error}` : ""}</p>)}
     {model.issues.map((issue, i) => <p role="alert" data-tone="warn" key={JSON.stringify([issue.groupId, issue.reason, i])}>{issue.groupId ?? t("overview.global")} · {issue.reason}</p>)}
+    {/* Tester #23: the empty state points at the two buttons in the heading that start work. */}
     {model.progress.length === 0 && model.complete && <p>{t("overview.noProgress")}</p>}
     <ul className="overview-progress">{model.progress.map(({ group, owner, ownerUnknown, target }) => <li key={group.groupId}>
      <div><button type="button" onClick={() => props.onOpen(target)}><CardGoal group={group} fallback={group.groupId} /></button><span>{owner || t("overview.global")}{ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""}</span></div>
@@ -43,7 +44,9 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
    </section>
    <section aria-label={t("overview.queue")}><h3>{t("overview.queue")}</h3>
     {model.sources.filter((s) => s.kind !== "progress" && s.status !== "available").map((s) => <p role="status" key={s.kind}>{t(`overview.source.${s.kind}`)} · {t(`overview.status.${s.status}`)}{s.error ? ` · ${s.error}` : ""}</p>)}
-    <ul className="overview-queue">{queue.rows.map((row) => <li key={row.key}>
+    {/* Tester #25: the queue is already in priority order (overviewModel.ts); its first row is marked as the next step. */}
+    <ul className="overview-queue">{queue.rows.map((row, index) => <li key={row.key} data-next={index === 0 ? "true" : undefined}>
+     {index === 0 && <span className="overview-next" data-tone="warn">{t("overview.nextMark")}</span>}
      <button type="button" onClick={() => props.onOpen(row.target)}>{t(`overview.step.${row.kind}`)} · {row.target.kind === "group" || row.target.kind === "requirement" ? row.target.groupId : row.target.kind === "decision" ? row.target.id : t("overview.global")}</button>
      <p>{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · <QueueReason row={row} /></p>
      {row.ownerRequired && <p>{t("overview.ownerRequired")}</p>}
