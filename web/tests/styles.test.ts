@@ -126,4 +126,20 @@ describe("styles.css", () => {
     expect(narrow).toMatch(/\.settings-nav ul \{[^}]*flex-direction: row;[^}]*flex-wrap: wrap;/);
     expect(narrow).toMatch(/\.settings-nav \.nav-item\[aria-current="page"\] \{[^}]*box-shadow: inset 0 -2px 0 var\(--accent\);/);
   });
+
+  // Tester #65 (spec §24, session 3cd8fb02): selects wore each platform's own arrow and fields the browser's focus ring.
+  // One rule set from the tokens, no UI library; the field colours themselves stay pinned by contrast.test.ts.
+  it("styles every select, field and checkbox from the tokens, with a token chevron and an accent focus ring", () => {
+    // mutation: drop the select rule -> the platform arrow returns, red
+    const at = css.indexOf("\nselect {");
+    expect(at).toBeGreaterThan(-1);
+    const select = css.slice(at, css.indexOf("}", at));
+    for (const part of ["appearance: none", "-webkit-appearance: none", "linear-gradient(45deg, transparent 50%, var(--muted) 50%)", "background-repeat: no-repeat"]) expect(select).toContain(part);
+    // The chevron is a background-image layered over the field colour: it must come after the base rule's `background:` shorthand.
+    expect(at).toBeGreaterThan(css.indexOf("input, select, textarea {"));
+    expect(select).not.toMatch(/background:/);
+    // mutation: drop the focus rule -> red
+    expect(rule("input:focus-visible, select:focus-visible, textarea:focus-visible")).toContain("outline: 2px solid var(--accent)");
+    expect(rule('input[type="checkbox"], input[type="radio"]')).toContain("accent-color: var(--accent)");
+  });
 });

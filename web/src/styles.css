@@ -188,6 +188,16 @@ input, select, textarea {
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 8px;
 }
 textarea { min-height: 72px; width: 100%; resize: vertical; }
+/* Tester #65 (spec §24): no UI library -- the native fields share one look from the tokens in both themes. A select drops
+   the platform's arrow for a chevron in --muted; every field focuses with the accent ring; checkboxes and radios stay
+   native, tinted with the accent. */
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+select {
+  appearance: none; -webkit-appearance: none; padding-right: 28px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px; background-repeat: no-repeat;
+}
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); padding: 0; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); color: var(--muted); margin-bottom: 10px; }
 label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .theme-pick { flex-direction: row; align-items: center; gap: 8px; }
 /* A labelled token field: the hint and the field error sit under the label, outside it (final review M-T10). */
