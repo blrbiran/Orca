@@ -118,6 +118,9 @@ export function expandKeepingSkillDirs(text: string, scope: Omit<VarScope, "skil
   return out.replace(/\u0001skill:([^\u0001]+)\u0001/g, (_, name: string) => skillDirToken(name));
 }
 
+/** Where a run's injected copy of one skill lives under its skills dir (the A2 fill and a landed step's checks). */
+export const skillDirOf = (skillsDir: string, name: string): string => `${skillsDir}/skills/${name}`;
+
 /**
  * The driver's A2 for a flow step's child: every `{{skill.<name>.dir}}` in the contract becomes the copy this run
  * injected (`<skills dir>/skills/<name>`). A token naming a skill the run did not inject is returned, never guessed.
@@ -127,7 +130,7 @@ export function withSkillDirs<T>(value: T, skillsDir: string, injected: readonly
   let unknown: string | null = null;
   const out = json.replace(SKILL_DIR_TOKEN, (token, name: string) => {
     if (!injected.includes(name)) { unknown ??= name; return token; }
-    return JSON.stringify(`${skillsDir}/skills/${name}`).slice(1, -1);
+    return JSON.stringify(skillDirOf(skillsDir, name)).slice(1, -1);
   });
   return unknown === null ? { value: JSON.parse(out) as T } : { unknown };
 }

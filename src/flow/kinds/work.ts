@@ -20,7 +20,7 @@ import { allocationFor, childWorkAmount, drawAllocation, POOL_EXHAUSTED } from "
 import type { KindContext, KindDefinition, KindOutcome } from "./registry.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { expandKeepingSkillDirs } from "../template/vars.js";
+import { expandKeepingSkillDirs, skillDirOf } from "../template/vars.js";
 import { expansionParams } from "../params.js";
 import { vaultGitBytes, type Vault } from "../vault/vault.js";
 import { checksProjection, runAcceptance, type CheckResult } from "./check.js";
@@ -205,7 +205,7 @@ async function settle(ctx: KindContext, status: Exclude<FlowChildStatus, { state
     const effectRecordId = typeof ctx.body.effectRecordId === "string" ? ctx.body.effectRecordId : undefined;
     const scope = {
       params: expansionParams(ctx.env, ctx.run), runId: ctx.run.row.id,
-      skillDirs: skillsDir === undefined ? {} : Object.fromEntries(injected.map((name) => [name, `${skillsDir}/skills/${name}`])),
+      skillDirs: skillsDir === undefined ? {} : Object.fromEntries(injected.map((name) => [name, skillDirOf(skillsDir, name)])),
       ...(effectRecordId === undefined ? {} : { effectRecordId }),
     };
     try {
