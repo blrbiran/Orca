@@ -84,20 +84,36 @@ export function appendVersion(store: ControlStore, input: { entryId: string; doc
  * P2's schedule writer and views reuse it.
  */
 export function pinningSchedules(store: ControlStore, entryId: string): string[] {
-  return store.db.prepare("SELECT id, body FROM schedules WHERE removed=0 ORDER BY id").all()
-    .filter((row) => {
-      const start = (JSON.parse(String(row.body)) as { start?: { kind?: unknown; entryId?: unknown } }).start;
-      return start?.kind === "group" && start.entryId === entryId;
-    })
-    .map((row) => String(row.id));
+  return scanPins(store, entryId).pinned;
 }
 
-/** §5.6: hides an entry from lists; refused while any schedule pins it. No unarchive in v1. */
+/**
+ * Every live schedule row, sorted into the ones that pin this entry and the ones whose body cannot be read. A corrupt
+ * body is a per-row fact (the schedules view lists it under `corrupt`), never a raw SyntaxError out of every library read.
+ */
+function scanPins(store: ControlStore, entryId: string): { pinned: string[]; unreadable: string[] } {
+  const out = { pinned: [] as string[], unreadable: [] as string[] };
+  for (const row of store.db.prepare("SELECT id, body FROM schedules WHERE removed=0 ORDER BY id").all()) {
+    let body: unknown;
+    try { body = JSON.parse(String(row.body)); }
+    catch { out.unreadable.push(String(row.id)); continue; }
+    if (body === null || typeof body !== "object" || Array.isArray(body)) { out.unreadable.push(String(row.id)); continue; }
+    const start = (body as { start?: { kind?: unknown; entryId?: unknown } | null }).start;
+    if (start?.kind === "group" && start.entryId === entryId) out.pinned.push(String(row.id));
+  }
+  return out;
+}
+
+/**
+ * §5.6: hides an entry from lists; refused while any schedule pins it. No unarchive in v1. A schedule whose body cannot
+ * be read may pin it, so it refuses too, named `<id>:unreadable`: the archive waits until that row is removed.
+ */
 export function archiveEntry(store: ControlStore, entryId: string, who: { by: string; via: string; at: number }): void {
   const entry = readEntry(store, entryId);
   if (entry === null) throw new ControlError("plan-library-entry-not-found", entryId);
-  const pinned = pinningSchedules(store, entryId);
-  if (pinned.length > 0) throw new ControlError("plan-library-entry-in-use", pinned.join(","));
+  const { pinned, unreadable } = scanPins(store, entryId);
+  const blocking = [...pinned, ...unreadable.map((id) => `${id}:unreadable`)];
+  if (blocking.length > 0) throw new ControlError("plan-library-entry-in-use", blocking.join(","));
   if (entry.state === "archived") return;
   const body: LibraryEntryBody = { ...entry.body, archivedBy: who.by, archivedVia: who.via, archivedAt: who.at };
   store.db.prepare("UPDATE plan_library SET state='archived', body=? WHERE id=?").run(JSON.stringify(body), entryId);

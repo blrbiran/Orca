@@ -9,6 +9,7 @@ import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson
 import { ControlError } from "../../src/control/errors.js";
 import { canonicalPlanDoc, PLAN_DOC_MAX_BYTES } from "../../src/control/planLibrary/codec.js";
 import { appendVersion, archiveEntry, insertEntry, listEntries, listVersions, pinningSchedules, readVersion } from "../../src/control/planLibrary/store.js";
+import { planLibraryEntryView, planLibraryListView } from "../../src/control/planLibrary/views.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -124,6 +125,28 @@ describe("the library's single writer (§5.6, C8, C10 version rows)", () => {
       s.transaction(() => archiveEntry(s, "pl-1", { by: "ana", via: "web", at: 2 }));
       expect(listEntries(s, "repo", false)).toEqual([]);
       expect(listEntries(s, "repo", true).map((e) => [e.id, e.state, e.body.archivedBy])).toEqual([["pl-1", "archived", "ana"]]);
+    } finally { s.close(); }
+  });
+
+  // Review finding 4 (session 7753e97d): one schedule body that does not parse must not turn every library read into a
+  // raw SyntaxError, and an archive cannot tell whether that schedule pins the entry -- so it refuses, by name.
+  it.each([["not json"], ["null"]])("a schedule body %s: the library still lists, usedBy names the readable pin, archive refuses it as unreadable", async (bad) => {
+    const s = await store();
+    try {
+      s.transaction(() => insertEntry(s, { id: "pl-1", projectId: "repo", name: "p", by: "ana", via: "web", at: 1 }));
+      const body = JSON.stringify({ enabled: false, start: { kind: "group", entryId: "pl-1", sha256: "a".repeat(64), tokenLimit: null, integration: null } });
+      s.db.prepare("INSERT INTO schedules(id,project_id,kind,revision,removed,body) VALUES ('sch-a','repo','group',1,0,?)").run(body);
+      s.db.prepare("INSERT INTO schedules(id,project_id,kind,revision,removed,body) VALUES ('sch-b','repo','group',1,0,?)").run(bad);
+      expect(planLibraryListView(s, "repo", false).entries.map((entry) => [entry.entryId, entry.usedBy])).toEqual([["pl-1", ["sch-a"]]]);
+      expect(planLibraryEntryView(s, "pl-1").usedBy).toEqual(["sch-a"]);
+      s.db.prepare("UPDATE schedules SET removed=1 WHERE id='sch-a'").run();
+      expect(refusal(() => s.transaction(() => archiveEntry(s, "pl-1", { by: "ana", via: "web", at: 2 }))))
+        .toEqual({ code: "plan-library-entry-in-use", detail: "sch-b:unreadable" });
+      expect(listEntries(s, "repo", false).map((e) => e.id)).toEqual(["pl-1"]);
+      // Once the person removes the unreadable row, nothing can pin the entry and the archive goes through.
+      s.db.prepare("UPDATE schedules SET removed=1 WHERE id='sch-b'").run();
+      s.transaction(() => archiveEntry(s, "pl-1", { by: "ana", via: "web", at: 2 }));
+      expect(listEntries(s, "repo", false)).toEqual([]);
     } finally { s.close(); }
   });
 });
