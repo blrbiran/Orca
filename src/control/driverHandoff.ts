@@ -18,6 +18,7 @@ import { singleCallPurposeOf } from "./singleCall.js";
 import { cleanupExtraWorkspace, cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
 import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
+import { landedAnywhere } from "./driveRecord.js";
 import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
@@ -296,7 +297,7 @@ async function settleIfPastGrace(deps: ExecutionDriverDeps, run: DriverRun, requ
 async function closeBlocked(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
   const drive = run.drive!;
   const at = drive.blockedAt;
-  if (drive.landedCommit !== null) return false;
+  if (landedAnywhere(drive)) return false;
   // Controller ruling T4-I1, 2026-09-25: D and R land through `landOnTip`, whose worktree removal runs after the
   // swap; if it throws, the change is on orca/<g> but the run is blocked with no `landedCommit`. Ask the branch.
   if ((at === "D" || at === "R") && await landedUnrecorded(deps, run)) return false;

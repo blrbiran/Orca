@@ -276,6 +276,34 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
     } finally { await w.teardown(); }
   });
 
+  // Review of H7 (Orca session 7753e97d) blocker: with no decision there is no ledger, so no primary commit; the run's
+  // work is on alpha's branch all the same. Judged by `landedCommit` alone it settled as an empty result: no acceptance,
+  // and its task `blocked` though its change landed.
+  it("settles a run that landed only the extra directory and reported no decisions as done, with acceptance", async () => {
+    const w = await multiWorld();
+    await contractRootedAtAlpha(w);
+    const primaryAtExport = g(w.repo, "rev-parse", "HEAD");
+    g(w.repo, "update-ref", "refs/heads/orca/g", primaryAtExport);
+    const runtime = await w.boot();
+    const runId = await collect(w, runtime, ["alpha"], () => ({ "src/a.ts": "export const a = 1;\n" }))
+      .catch(async (error) => { w.die(runtime); await w.teardown(); throw error; });
+    try {
+      await driveUntil(runtime, () => state(runtime, runId) === "settled" || state(runtime, runId) === "blocked", 180_000, "settle");
+      const drive = driveOf(runtime, runId);
+      const alphaTip = g(w.multiRepo!, "rev-parse", "refs/heads/orca/g");
+      expect(state(runtime, runId)).toBe("settled");
+      // The shape that made it look empty: no primary commit, the primary's branch unmoved, alpha landed.
+      expect(drive.landedCommit).toBe(null);
+      expect(drive.landedDirs).toEqual({ alpha: alphaTip });
+      expect(g(w.repo, "rev-parse", "refs/heads/orca/g")).toBe(primaryAtExport);
+      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe(`orca: land ${runId}`);
+      // What a landed run owes: the acceptance proof, so the settle marks the task done.
+      expect(runtime.store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='acceptance'").get(`acceptance:${runId}`)).toBeDefined();
+      const work = JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)) as { status: string };
+      expect(work.status).toBe("done");
+    } finally { await w.teardown(); }
+  });
+
   it("replays after a death past the ledger-only commit without writing a second one", async () => {
     const w = await multiWorld();
     await contractRootedAtAlpha(w);

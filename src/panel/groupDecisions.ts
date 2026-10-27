@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { projectKeyOf } from "../corrections/projectKey.js";
 import { CorrectRejection } from "../corrections/rejection.js";
 import { ControlError } from "../control/errors.js";
+import { landedAnywhere } from "../control/driveRecord.js";
 import { savedReport } from "../control/executionDriver.js";
 import { labelDecisions, ledgerSources } from "../control/ledgerAtRef.js";
 import { listFlaggedDecisions, listFlagsInvolving } from "../control/flaggedDecisions.js";
@@ -84,12 +85,12 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
   const shown = new Set<string>();
   for (const row of store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
     const runId = String(row.id);
-    const body = JSON.parse(String(row.body)) as { taskId?: unknown; state?: unknown; drive?: { landedCommit?: unknown; ledgerCommit?: unknown } };
+    const body = JSON.parse(String(row.body)) as { taskId?: unknown; state?: unknown; drive?: { landedCommit?: unknown; landedDirs?: unknown; ledgerCommit?: unknown } };
     if (typeof body.taskId !== "string") continue;
     const reported = await reportedOf(store, runId);
     // Final review I2: pending rows are inserted only when a landing is recorded, so a run that has any landed, even
     // an empty result whose entries were all refused (no ledger commit); its entries are pending, not also unlanded.
-    const landed = (body.drive?.landedCommit ?? null) !== null || (body.drive?.ledgerCommit ?? null) !== null
+    const landed = landedAnywhere(body.drive) || (body.drive?.ledgerCommit ?? null) !== null
       || pendingRows.some((p) => p.runId === runId);
     // Controller ruling (fix round 1): a run whose decisions may still land is not settled, so `reported` on it is not final.
     const settled = landed || !DECISIONS_MAY_STILL_LAND.has(String(body.state));

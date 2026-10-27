@@ -203,6 +203,19 @@ export const driveRecordSchema = z.object({
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 
+/**
+ * Whether a run's work is on a work branch: its `landedCommit`, or -- for a multi run (multi-dir spec §8.1 step 6) --
+ * any directory in `landedDirs`. A multi run that wrote only non-primary directories and reported no decisions has no
+ * primary commit (there is no ledger to write), yet it landed; judged by `landedCommit` alone it settled as an empty
+ * result and left its task blocked.
+ */
+export function landedAnywhere(drive: { landedCommit?: unknown; landedDirs?: unknown } | undefined): boolean {
+  if (drive === undefined) return false;
+  if ((drive.landedCommit ?? null) !== null) return true;
+  const dirs = drive.landedDirs;
+  return typeof dirs === "object" && dirs !== null && Object.keys(dirs).length > 0;
+}
+
 /** Where a run blocked at each step resumes (spec §2.3); `running` is persisted as `accepted`. */
 export const RESUME_STATE: Record<DriveStep, string> = {
   A1: "starting", A2: "start-pending", B: "start-pending", "B'": "unknown", C: "accepted", D: "collected", R: "reconciling", E: "landed",

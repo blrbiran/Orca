@@ -60,7 +60,7 @@ import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import type { DriveRecord, DriveStep } from "./driveRecord.js";
+import { landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ExecutionReport } from "./executionPort.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
@@ -1176,15 +1176,17 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     const raw = report.candidate;
     if (raw === null || report.terminal === null) throw new ControlError("control-terminal-pending");
     // Control run decisions plan Task 7: an empty result's decisions go onto the group branch in a ledger-only commit.
-    if (drive.landedCommit === null && drive.ledgerCommit === null) {
+    // A multi run that landed only non-primary directories has no `landedCommit` but is not an empty result.
+    const landed = landedAnywhere(drive);
+    if (!landed && drive.ledgerCommit === null) {
       const recorded = await recordEmptyResultDecisions(deps, runId);
       if (recorded !== "settle") return recorded === "blocked";
     }
     const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
-    if (drive.landedCommit !== null) {
+    if (landed) {
       // Same evidence shape `confirmLanding` writes (schedulerBridge.ts). checksPassed: ccloop's verifier
       // ran the contract's requiredChecks in this run and it ended `succeeded`.
-      const source = await writeArtifact(store, `acceptance-${runId}`, Buffer.from(JSON.stringify({ runId, checksPassed: true, landing: "landed", commit: drive.landedCommit, intent: `drive:${runId}` })), archiveAdmission(deps));
+      const source = await writeArtifact(store, `acceptance-${runId}`, Buffer.from(JSON.stringify({ runId, checksPassed: true, landing: "landed", commit: drive.landedCommit, ...(drive.landedDirs === null ? {} : { dirs: drive.landedDirs }), intent: `drive:${runId}` })), archiveAdmission(deps));
       write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run(`acceptance:${runId}`, JSON.stringify({ runId, accepted: true, source })));
     }
     deps.crash?.("E-after-acceptance");
