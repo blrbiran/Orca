@@ -75,11 +75,12 @@ describe("the clarification size (#86)", () => {
   it("shows the model's judgement with its reasons and the caps, and sends the person's own size", () => {
     const onCommand = mount({ ...requirementView("awaiting-answers"), clarify: { ...CLARIFY, stoppedAtCap: false } });
     const size = screen.getByRole("region", { name: "Clarification size" });
-    expect(size.textContent).toContain("The model judged: scope small (One exporter.), clarity clear (The format is named.)");
+    // Tester #37: "scope"/"clarity" read as the requirement's size and how clear it is. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+    expect(size.textContent).toContain("The model judged: size small (One exporter.), how clear: clear (The format is named.)");
     expect(size.textContent).toContain("Limits: up to 1 rounds; per round at most 3 questions, 2 glossary entries and 1 decisions.");
     const set = within(size).getByRole("button", { name: "Set the size" }) as HTMLButtonElement;
     expect(set.disabled).toBe(true);
-    fireEvent.change(within(size).getByRole("combobox", { name: "Scope" }), { target: { value: "large" } });
+    fireEvent.change(within(size).getByRole("combobox", { name: "Size of the requirement" }), { target: { value: "large" } });
     fireEvent.click(set);
     expect(onCommand).toHaveBeenCalledWith({ verb: "requirement-classify", groupId: "r", expectedRevision: 3, payload: { scope: "large", clarity: "clear" } });
   });
@@ -107,5 +108,19 @@ describe("the clarification size (#86)", () => {
     mount({ ...requirementView("awaiting-review"), clarify: CLARIFY });
     expect(screen.queryByRole("button", { name: "Clarify one more round" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Set the size" })).toBeNull();
+  });
+});
+
+describe("the clarification size in plain words (tester #37)", () => {
+  // A person did not know what "scope"/"clarity" meant or when to set them: one line says what the size is for, and
+  // setting one's own folds away, since the model's judgement is the default.
+  it("says what the size is for, and folds setting one's own", () => {
+    mount({ ...requirementView("awaiting-answers"), clarify: { ...CLARIFY, stoppedAtCap: false } });
+    const size = screen.getByRole("region", { name: "Clarification size" });
+    expect(within(size).getByRole("note").textContent).toBe("The size sets how many rounds and questions clarification may take. The model's judgement is used unless you set your own.");
+    const fold = size.querySelector<HTMLDetailsElement>("details.requirement-set-size")!;
+    expect(fold.open).toBe(false);
+    expect(fold.querySelector("summary")!.textContent).toBe("Set your own size");
+    expect(fold.contains(within(size).getByRole("button", { name: "Set the size" }))).toBe(true);
   });
 });

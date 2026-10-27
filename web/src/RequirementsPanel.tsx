@@ -325,6 +325,8 @@ function ClarifySize(props: { view: View; onCommand: OnCommand; editable: boolea
   return (
     <section aria-label={t("requirements.size")}>
       <h4>{t("requirements.size")} · {enumText("requirementScope", clarify.tier)}</h4>
+      {/* Tester #37: what the size is for, in one line; setting one's own folds away, the model's judgement is the default. */}
+      <p role="note">{t("requirements.sizeExplain")}</p>
       {classification !== null
         ? <p>{t("requirements.modelJudged", { scope: enumText("requirementScope", classification.scope), scopeReason: classification.scopeReason,
           clarity: enumText("requirementClarity", classification.clarity), clarityReason: classification.clarityReason })}</p>
@@ -332,6 +334,7 @@ function ClarifySize(props: { view: View; onCommand: OnCommand; editable: boolea
       {override !== null && <p>{t("requirements.personSet", { scope: enumText("requirementScope", override.scope), clarity: enumText("requirementClarity", override.clarity) })}</p>}
       <p>{t("requirements.caps", { rounds: clarify.roundCap, questions: clarify.questions, glossary: clarify.glossary, adrs: clarify.adrs })}</p>
       {props.editable && (
+        <details className="requirement-set-size"><summary>{t("requirements.setOwnSize")}</summary>
         <form aria-label={t("requirements.setSize")} onSubmit={(event) => {
           event.preventDefault();
           props.onCommand({ verb: "requirement-classify", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { scope, clarity } });
@@ -342,6 +345,7 @@ function ClarifySize(props: { view: View; onCommand: OnCommand; editable: boolea
             {CLARITIES.map((value) => <option key={value} value={value}>{enumText("requirementClarity", value)}</option>)}</select></label>
           <button type="submit" disabled={effective !== null && effective.scope === scope && effective.clarity === clarity}>{t("requirements.setSize")}</button>
         </form>
+        </details>
       )}
     </section>
   );
