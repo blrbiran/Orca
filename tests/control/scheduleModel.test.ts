@@ -254,6 +254,21 @@ describe("the schedule reads (§13.1, B2): revision, guarded bodies", () => {
     } finally { s.close(); }
   });
 
+  // Review finding 5 (session 7753e97d): the list builds each schedule's last fire; one fire body that does not parse is
+  // that schedule's corrupt row, while every other schedule of the project is still listed.
+  it("lists a schedule whose newest fire body is unreadable under corrupt, and still lists the others", async () => {
+    const s = await store();
+    try {
+      expect(run(s, command("c1", "schedule-set", flowCreate())).error).toBeUndefined();
+      expect(run(s, command("c2", "schedule-set", flowCreate(), { scheduleId: "sch-b" })).error).toBeUndefined();
+      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run("sch-b", 1, NOW, NOW, "failed", "x", null, null, "orca-auto", "schedule:sch-b", "not json");
+      const view = scheduleListView(s, REPO, NOW);
+      expect(view.schedules.map((row) => row.id)).toEqual(["sch-a"]);
+      expect(view.corrupt).toEqual([{ id: "sch-b", code: "recovery-blocked", message: "recovery-blocked:schedule-fire-body-invalid" }]);
+    } finally { s.close(); }
+  });
+
   it("reports a hand-edited body whose cron no longer parses as a corrupt row, not a failed list", async () => {
     const s = await store();
     try {

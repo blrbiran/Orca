@@ -43,11 +43,17 @@ const scheduleView = (store: ControlStore, row: ScheduleRow, now: number) => ({
 /** GET /api/control/schedules?repoId=<id>: the project's live schedules, creation order; a body this panel cannot read is a `corrupt` row, never a failed read. */
 export function scheduleListView(store: ControlStore, repoId: string, now: number) {
   const listed = listLiveSchedules(store, repoId);
-  return {
-    schema: "orca-schedules-v1" as const, repoId,
-    schedules: listed.rows.map((row) => scheduleView(store, row, now)),
-    corrupt: listed.corrupt.map(({ id, error }) => ({ id, code: error.code, message: error.message })),
-  };
+  const schedules: Array<ReturnType<typeof scheduleView>> = [];
+  const corrupt = listed.corrupt.map(({ id, error }) => ({ id, code: error.code, message: error.message }));
+  // A row whose own view cannot be built (its newest fire's body does not parse) is that row's fact, never the list's.
+  for (const row of listed.rows) {
+    try { schedules.push(scheduleView(store, row, now)); }
+    catch (error) {
+      if (!(error instanceof ControlError)) throw error;
+      corrupt.push({ id: row.id, code: error.code, message: error.message });
+    }
+  }
+  return { schema: "orca-schedules-v1" as const, repoId, schedules, corrupt };
 }
 
 /** GET /api/control/schedules/:scheduleId: the body, its next slots and last fire, and newer-version information. */
