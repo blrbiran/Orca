@@ -5,6 +5,7 @@
  */
 import { RequirementMarkdown } from "./RequirementMarkdown.js";
 import { overviewRegionId } from "./overviewNavigation.js";
+import { goalSummary } from "./CardGoal.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -560,9 +561,15 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
         <button type="button" onClick={() => props.onCommand({ verb: "unarchive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unarchive")}</button>
       </section> : archiveAllowed && <button type="button" onClick={() => props.onCommand({ verb: "archive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.archive")}</button>}
       {/* Issue #74: the idea as the person wrote it, in every state, so each round can be read against it. */}
+      {/* Tester #28: once a round is answered the current understanding leads, so the idea folds -- its summary keeps the
+          idea's start on screen, so a round can still be read against it (#74). */}
       <section aria-label={t("requirements.originalIdea")}>
-        <h4>{t("requirements.originalIdea")}</h4>
-        <p className="requirement-text">{view.requirement.idea}</p>
+        {view.rounds.some((r) => r.state === "answered") ? (
+          <details className="requirement-idea">
+            <summary><h4>{t("requirements.originalIdea")}</h4> <span>{goalSummary(view.requirement.idea)}</span></summary>
+            <p className="requirement-text">{view.requirement.idea}</p>
+          </details>
+        ) : <><h4>{t("requirements.originalIdea")}</h4><p className="requirement-text">{view.requirement.idea}</p></>}
       </section>
       <section aria-label={t("requirements.understanding")}>
         <h4>{t("requirements.understanding")}</h4>

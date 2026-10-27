@@ -217,3 +217,17 @@ describe("the requirement document (tester #32)", () => {
     expect(fold().open).toBe(true);
   });
 });
+
+describe("the original idea folds once a round is answered (tester #28)", () => {
+  // While the first round is open the idea is what is being clarified; after an answer the understanding leads, so the
+  // idea folds -- with its start in the summary, so a round can still be read against it (#74).
+  it("is open while no round is answered, folded with its start in the summary after one", () => {
+    show(withIdea(requirementView("awaiting-answers"), "Let people take a note out as Markdown.\nKeep the images as links."));
+    expect(screen.getByRole("region", { name: "Original idea" }).querySelector("details")).toBeNull();
+    cleanup();
+    show(withIdea(requirementView("answered"), "Let people take a note out as Markdown.\nKeep the images as links."));
+    const fold = screen.getByRole("region", { name: "Original idea" }).querySelector<HTMLDetailsElement>("details.requirement-idea")!;
+    expect(fold.open).toBe(false);
+    expect(fold.querySelector("summary")!.textContent).toBe("Original idea Let people take a note out as Markdown. Keep the images as links.");
+  });
+});

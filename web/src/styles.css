@@ -467,8 +467,8 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .split-draft dl > div { display: flex; gap: 6px; }
 .split-draft dt { color: var(--muted); }
 .split-draft dd { margin: 0; overflow-wrap: anywhere; }
-.requirement-document > summary { cursor: pointer; }
-.requirement-document > summary > h4 { display: inline; }
+.requirement-document > summary, .requirement-idea > summary { cursor: pointer; }
+.requirement-document > summary > h4, .requirement-idea > summary > h4 { display: inline; }
 
 /* Issue convergence W1 (#74, #77): a requirement's idea and document sections are shown as written, line breaks kept. */
 .requirement-text {
