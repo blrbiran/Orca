@@ -696,11 +696,14 @@ export async function landMultiDirGroups(deps: MultiLandingDeps): Promise<boolea
       if (error instanceof Crashed) throw error.error;
       if (error instanceof ControlError && error.code === "panel-draining") throw error;
       process.stderr.write(`orca-driver: multi landing ${groupId}: ${describe(error)}\n`);
-      // A thrown failure mid-sequence still leaves what landed recorded; anything before the journal is blocked by name.
+      // A thrown failure mid-sequence still leaves what landed recorded. Anything else (a pre-check, a restart's re-check,
+      // `mark-resolved` reading the tips) wrote nothing into any target: it blocks `multi-dir-precheck-failed` with the
+      // error as its detail, for a person's answer (§9.7), rather than retrying silently every round.
       try {
         saveLanding(deps, groupId, (current) => current.state === "landing"
           ? { ...current, state: (current.pending?.landed.length ?? 0) > 0 ? "partial" : "blocked", failedKey: current.failedKey, reason: current.reason ?? `multi-dir-landing-failed:${describe(error)}`, detail: current.detail ?? describe(error) }
-          : current);
+          : { ...current, state: current.state === "partial" ? "partial" : "blocked", pending: current.state === "partial" ? current.pending : null,
+            failedKey: null, reason: "multi-dir-precheck-failed", detail: describe(error), resolution: null, movedBeforeAny: 0 });
       } catch { /* the record that cannot be written is named on stderr above */ }
     }
   }

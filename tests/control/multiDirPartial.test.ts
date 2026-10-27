@@ -6,6 +6,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { initialLanding } from "../../src/control/multiLandingRecord.js";
+import { readProjectionState } from "../../src/control/projectionJournal.js";
 import { readControlOverview } from "../../src/panel/controlOverview.js";
 import { webFixture } from "./fixtures/web.js";
 import { multiLandingWorld, type MultiLandingWorld } from "./fixtures/multiLandingWorld.js";
@@ -115,5 +116,24 @@ describe("a partial landing and the person's verbs (§9.5, §9.7, M11)", () => {
     // Nothing else was attempted.
     expect(w.tipOf(w.bare, "refs/heads/main")).toBe(w.remoteMain);
     expect(w.landing().lastLanded).toMatchObject({ remote: w.remoteMain, posts: w.base });
+  });
+
+  // Review of H7 (Orca session 7753e97d): a pre-check that threw wrote the record back unchanged, bumped the projection
+  // every round and said so only on stderr -- the group sat `idle` and no one was asked.
+  it("blocks multi-dir-precheck-failed when the pre-check throws, and writes nothing more until answered", async () => {
+    world = await multiLandingWorld();
+    const w = world;
+    const repoPathOf = (id: string): string => { if (id === "remote") throw new Error("boom-precheck"); return id === "local" ? w.local : w.vault; };
+    await w.pass({ repoPathOf });
+    expect(w.landing()).toMatchObject({ state: "blocked", pending: null, failedKey: null, reason: "multi-dir-precheck-failed", detail: "boom-precheck" });
+    // Nothing landed anywhere: the pre-check writes into no target.
+    expect(w.tipOf(w.local, "refs/heads/main")).toBe(w.localMain);
+    expect(w.tipOf(w.bare, "refs/heads/main")).toBe(w.remoteMain);
+    // A blocked group waits for the person's answer: the next rounds write nothing.
+    const seq = readProjectionState(w.store).changeSeq;
+    for (let i = 0; i < 2; i += 1) await w.pass({ repoPathOf });
+    expect(readProjectionState(w.store).changeSeq).toBe(seq);
+    // The overview asks the person.
+    expect(w.answer("retry-rest")).toEqual({ ok: true, result: expect.objectContaining({ action: "retry-rest" }) });
   });
 });
