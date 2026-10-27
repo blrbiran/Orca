@@ -2429,4 +2429,6 @@ export const enCcloopErrors: Record<string, string> = {
   "agent-catalog-unavailable": "The agent could not list its models ({{detail}}). Check that it is installed and starts, then retry.",
   "codex-single-call-not-single": "Codex did more than one model call, or used a tool, in a call that must be a single answer; the usage it spent is booked.",
   "codex-single-call-unavailable": "Codex's feature list could not be read, so its tools could not be turned off; the call was refused before it started ({{detail}}).",
+  // Issue #60: omp stopped the model for a tool its phase does not allow (a plan phase only reads; a single call uses none).
+  "omp-phase-tool-forbidden": "The model tried to use a tool this step does not allow (a plan phase may only read files; a single call may use none). Retry, or choose another model or agent.",
 };

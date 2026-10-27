@@ -5,6 +5,7 @@ import {useTranslation} from "react-i18next";
  */
 import type { JSX } from "react";
 import type { RunViewV1 } from "./controlTypes.js";
+import { codedNextStep } from "./ccloopCodes.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { hasFailureOutcome, reasonCode, runReasonText } from "./runFacts.js";
 
@@ -26,7 +27,9 @@ export function RunReason(props: { run: RunViewV1 }): JSX.Element | null {
   const next = t(`control.diagnosis.next.${diagnosis.cause}`);
   const text = raw === null ? null : explainRunReason(reasonCode(raw));
   // ccloop's typed cause, when it stated one, with what to do next (en/zh); the raw reason stays beside it.
-  const failure = props.run.failureCause ?? null;
-  const causeLine = failure === null ? null : <span>{t("control.failureCause.line", { cause: t(`control.failureCause.label.${knownCause(failure.cause)}`), next: t(`control.failureCause.next.${knownCause(failure.cause)}`) })}{failure.retries > 0 && t("control.failureCause.retries", { retries: failure.retries })} </span>;
+  const failure = props.run.failureCause ?? null, causeKey = knownCause(failure?.cause ?? "unknown");
+  // Issue #60: under an unknown (or unstated) cause, a ccloop code the panel has words for names the next step itself.
+  const coded = causeKey === "unknown" ? codedNextStep(raw, props.run.failureCode) : null;
+  const causeLine = failure === null && coded === null ? null : <span>{t("control.failureCause.line", { cause: t(`control.failureCause.label.${causeKey}`), next: coded ?? t(`control.failureCause.next.${causeKey}`) })}{failure !== null && failure.retries > 0 && t("control.failureCause.retries", { retries: failure.retries })} </span>;
   return <>{lineage} — {causeLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}</>;
 }

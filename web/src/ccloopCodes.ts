@@ -70,3 +70,16 @@ export function explainEstimatorCheck(message: string): string | null {
   const reasons = codes.map((code) => String(t(`estimatorCheck.reason.${code}`))).join(currentLanguage() === "zh" ? "" : " ");
   return String(t("estimatorCheck.refused", { reasons }));
 }
+
+/**
+ * Issue #60: ccloop codes whose own words are the next step when a run's failure cause is `unknown` (or ccloop stated
+ * none) -- ccloop's cause parser does not classify them. Found as a whole code in the stop reason or failure code.
+ */
+const NEXT_STEP_CODES = ["omp-phase-tool-forbidden"] as const;
+export function codedNextStep(...texts: ReadonlyArray<string | null | undefined>): string | null {
+  for (const code of NEXT_STEP_CODES) {
+    const whole = new RegExp(`(?:^|[^a-z0-9-])${code}(?:$|[^a-z0-9-])`);
+    if (texts.some((text) => typeof text === "string" && whole.test(text))) return explainCcloopCode(code, "");
+  }
+  return null;
+}

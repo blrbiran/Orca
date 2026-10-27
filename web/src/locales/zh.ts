@@ -2351,4 +2351,6 @@ export const zhCcloopErrors: Record<string, string> = {
   "agent-catalog-unavailable": "agent 列不出它的模型（{{detail}}）。请确认它已安装且能启动，然后重试。",
   "codex-single-call-not-single": "Codex 在本应只答一次的调用里多次调用了模型或用了工具；已花的用量照记。",
   "codex-single-call-unavailable": "读不到 Codex 的功能列表，无法关闭它的工具，调用在开始前被拒绝（{{detail}}）。",
+  // Issue #60.
+  "omp-phase-tool-forbidden": "模型试图使用这一步不允许的工具（plan 阶段只能读文件；单次调用不能用任何工具）。请重试，或换一个模型或 agent。",
 };
