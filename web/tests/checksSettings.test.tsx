@@ -73,12 +73,30 @@ describe("the check settings' source layer (spec §4.3, criterion 11)", () => {
     await shown();
     expect(reads).toContain("/api/control/checks?repoId=repo");
     // mutation: render the global value's badge as `project` -> "project", red
-    expect(within(field("model-review", "enabled")).getByTestId("check-source").textContent).toBe("global");
-    expect(within(field("integration-check", "enabled")).getByTestId("check-source").textContent).toBe("project");
-    expect(within(field("model-review", "budgetTokens")).getByTestId("check-source").textContent).toBe("built-in");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a set value names where it was set, in words.
+    expect(within(field("model-review", "enabled")).getByTestId("check-source").textContent).toBe("set in global settings");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: same wording change.
+    expect(within(field("integration-check", "enabled")).getByTestId("check-source").textContent).toBe("set in project settings");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a built-in value shows no source at all (was the "built-in" badge).
+    expect(within(field("model-review", "budgetTokens")).queryByTestId("check-source")).toBeNull();
     // mutation: drop the locked badge -> null, red
     expect(within(field("integration-check", "command")).getByTestId("check-locked").textContent).toBe("locked");
     expect(within(field("model-review", "budgetTokens")).queryByTestId("check-locked")).toBeNull();
+  });
+
+  // Tester #67 (spec §24, session 3cd8fb02): a "built-in" pill on every field said nothing a person could act on. The source
+  // is muted text, not a badge, and only for a value that is not the built-in default; the lock stays a warn badge.
+  it("names a set value's source as muted text, shows nothing for a built-in value, and keeps the lock a badge", async () => {
+    render(as(owner, <ChecksSettings scope={{ repoId: "repo" }} />));
+    await shown();
+    const source = within(field("model-review", "enabled")).getByTestId("check-source");
+    // mutation: keep the badge class -> red
+    expect(source.className).toBe("setting-source");
+    // mutation: show the built-in source again -> a check-source in a built-in field, red
+    expect(within(field("model-review", "budgetTokens")).queryByTestId("check-source")).toBeNull();
+    expect(field("model-review", "budgetTokens").textContent).not.toMatch(/built-in/i);
+    const lock = within(field("integration-check", "command")).getByTestId("check-locked");
+    expect([lock.className, lock.getAttribute("data-tone")]).toEqual(["badge", "warn"]);
   });
 
   it("overrides a field in the project layer and resets a project one to inherited, under the read revision", async () => {
@@ -178,7 +196,8 @@ describe("a check's state and the person's acts on it (spec §5.4, §7, criterio
     await shown();
     const entry = screen.getByTestId("check-scheduled-weekly");
     expect(entry.textContent).toContain("0 9 * * 1");
-    expect(within(entry).getByTestId("check-source").textContent).toBe("global");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a set value names where it was set, in words.
+    expect(within(entry).getByTestId("check-source").textContent).toBe("set in global settings");
     // mutation: drop the next-slot line -> null, red
     expect(within(entry).getByTestId("check-next").textContent).toContain(new Date(SLOT).toLocaleString());
     fireEvent.click(within(entry).getByRole("checkbox", { name: "On" }));
@@ -191,7 +210,8 @@ describe("a check's state and the person's acts on it (spec §5.4, §7, criterio
     serve(projectRead({ state: [{ kind: "integration-check", target: "main", state: state({ failureStreak: 3, paused: true }) }] }));
     render(as(member, <ChecksSettings scope={{ repoId: "repo" }} />));
     await shown();
-    expect(within(field("model-review", "enabled")).getByTestId("check-source").textContent).toBe("global");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a set value names where it was set, in words.
+    expect(within(field("model-review", "enabled")).getByTestId("check-source").textContent).toBe("set in global settings");
     // mutation: drop the human-only gate -> buttons shown, red
     for (const name of ["Run now", "Resume", "Override", "Reset to inherited", "Save"]) expect(screen.queryByRole("button", { name })).toBeNull();
     expect(screen.queryByRole("checkbox", { name: "On" })).toBeNull();

@@ -27,9 +27,11 @@ const segment = (value: string): string => encodeURIComponent(value);
 
 function Badges(props: { sourced: FlowSourcedV1<unknown> }): JSX.Element {
   const { t } = useTranslation();
+  const source = props.sourced.source;
   return (
     <>
-      <span className="badge" data-testid="flow-setting-source">{t(`settings.flows.source.${props.sourced.source}`)}</span>
+      {/* Tester #67 (spec §24): the source is muted text, shown only when it is not the built-in default; the lock stays a badge. */}
+      {source !== "builtin" && <span className="setting-source" data-testid="flow-setting-source">{t(`settings.flows.source.${source}`)}</span>}
       {props.sourced.lockedBy !== null && <> <span className="badge" data-tone="warn" data-testid="flow-setting-locked">{t("settings.flows.locked")}</span></>}
     </>
   );

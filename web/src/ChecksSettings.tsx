@@ -47,9 +47,11 @@ function triggerText(trigger: CheckTriggerV1, t: TFunction): string {
 
 function SourceBadges(props: { sourced: Pick<CheckSourcedV1<unknown>, "source" | "lockedBy"> }): JSX.Element {
   const { t } = useTranslation();
+  const source = props.sourced.source;
   return (
     <>
-      <span className="badge" data-testid="check-source">{t(`settings.checks.source.${props.sourced.source}` as const)}</span>
+      {/* Tester #67 (spec §24): the source is muted text, shown only when it is not the built-in default; the lock stays a badge. */}
+      {source !== "builtin" && <span className="setting-source" data-testid="check-source">{t(`settings.checks.source.${source}` as const)}</span>}
       {props.sourced.lockedBy !== null && <> <span className="badge" data-tone="warn" data-testid="check-locked">{t("settings.checks.locked")}</span></>}
     </>
   );

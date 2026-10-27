@@ -1441,7 +1441,8 @@ export const en = {
       explain: "How flow runs treat side effects, re-run plans and budgets. A project's value wins over the global one, which wins over the built-in default.",
       unread: "The flow settings could not be read.",
       ownerOnly: "Only the panel owner can change flow settings.",
-      source: { project: "project", global: "global", builtin: "built-in" },
+      // Tester #67 (spec §24): only a value that is not the built-in default names where it was set.
+      source: { project: "set in project settings", global: "set in global settings" },
       locked: "locked",
       overriddenByLock: "overridden by lock",
       save: "Save",
@@ -1487,12 +1488,13 @@ export const en = {
     dirNoIntegration: "A folder project's runs never integrate: their results reach the folder itself.",
     checks: {
       region: "Checks",
-      explain: "Orca checks what lands on each target branch: the integration check runs the checks again on the merged result; the model review reads the merged changes of several groups for drift between them, duplication and behaviour no check covers. Each value says where it comes from: this project, the global settings, or Orca's built-in default.",
+      explain: "Orca checks what lands on each target branch: the integration check runs the checks again on the merged result; the model review reads the merged changes of several groups for drift between them, duplication and behaviour no check covers. A value set in this project or in the global settings says so; a value that says nothing is Orca's built-in default.",
       unread: "The check settings could not be read.",
       ownerOnly: "Only the panel owner can change checks.",
       kind: { "integration-check": "Integration check", "model-review": "Model review" },
       field: { enabled: "Event trigger on", trigger: "Trigger", command: "Command (instead of the groups' own checks)", budgetTokens: "Token budget per review", maxGroupsPerReview: "Groups per review" },
-      source: { project: "project", global: "global", builtin: "built-in" },
+      // Tester #67 (spec §24): only a value that is not the built-in default names where it was set.
+      source: { project: "set in project settings", global: "set in global settings" },
       locked: "locked",
       overriddenByLock: "overridden by lock",
       value: { on: "on", off: "off", noCommand: "the groups' own checks" },

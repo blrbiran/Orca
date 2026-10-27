@@ -61,12 +61,26 @@ describe("flow settings with source and lock (§11.2)", () => {
     await mount(owner, { repoId: "repo" });
     expect(reads).toContain("/api/control/flows/settings?repoId=repo");
     // mutation: show every source as built-in -> "built-in" for cost, red
-    expect(["effects.local", "effects.cost", "effects.external"].map((n) => within(field(n)).getByTestId("flow-setting-source").textContent)).toEqual(["built-in", "project", "global"]);
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a built-in value shows no source; a set one names where it was set, in words.
+    expect(["effects.local", "effects.cost", "effects.external"].map((n) => within(field(n)).queryByTestId("flow-setting-source")?.textContent ?? null)).toEqual([null, "set in project settings", "set in global settings"]);
     expect(within(field("effects.external")).getByTestId("flow-setting-locked").textContent).toBe("locked");
     expect(within(field("effects.cost")).queryByTestId("flow-setting-locked")).toBeNull();
     // mutation: drop the struck-through value -> null, red
     expect(within(field("effects.external")).getByTestId("flow-setting-overridden").textContent).toBe("run and flag for review");
     expect(field("effects.external").textContent).toContain("overridden by lock");
+  });
+
+  // Tester #67 (spec §24, session 3cd8fb02): the source is muted text only when the value is not built-in; the lock stays a badge.
+  it("shows a set value's source as muted text, nothing for a built-in one, and keeps the lock a badge", async () => {
+    serve();
+    await mount(owner, { repoId: "repo" });
+    // mutation: keep the badge class -> red
+    expect(within(field("effects.cost")).getByTestId("flow-setting-source").className).toBe("setting-source");
+    // mutation: show the built-in source again -> red
+    expect(within(field("effects.local")).queryByTestId("flow-setting-source")).toBeNull();
+    expect(field("effects.local").textContent).not.toMatch(/built-in/i);
+    const lock = within(field("effects.external")).getByTestId("flow-setting-locked");
+    expect([lock.className, lock.getAttribute("data-tone")]).toEqual(["badge", "warn"]);
   });
 
   it("writes this project's layer under the repository settings' revision, and resets a field to the next layer", async () => {
@@ -122,7 +136,8 @@ describe("the re-run question wait and the parameter presets (gaps §5.3, §8.2;
     const wait = field("rerunAskTimeoutSeconds");
     // mutation: drop the field -> not found, red
     expect(wait.textContent).toContain("How long an unsure re-run question waits (seconds): 300 s");
-    expect(within(wait).getByTestId("flow-setting-source").textContent).toBe("built-in");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a built-in value shows no source (was the "built-in" badge).
+    expect(within(wait).queryByTestId("flow-setting-source")).toBeNull();
     const input = within(wait).getByRole("spinbutton");
     fireEvent.change(input, { target: { value: "10" } });
     // mutation: accept any number -> button enabled for 10, red
@@ -140,9 +155,11 @@ describe("the re-run question wait and the parameter presets (gaps §5.3, §8.2;
     const cover = field("paramDefaults.wechat-article.coverImage"), language = field("paramDefaults.wechat-article.language");
     expect(cover.textContent).toContain("wechat-article · coverImage: /covers/c.png");
     // mutation: show every preset's source as project -> "project", red
-    expect(within(cover).getByTestId("flow-setting-source").textContent).toBe("global");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: a set value names where it was set, in words.
+    expect(within(cover).getByTestId("flow-setting-source").textContent).toBe("set in global settings");
     expect(within(cover).queryByTestId("flow-setting-locked")).toBeNull();
-    expect(within(language).getByTestId("flow-setting-source").textContent).toBe("project");
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #67: same wording change.
+    expect(within(language).getByTestId("flow-setting-source").textContent).toBe("set in project settings");
     expect(field("paramDefaults.wechat-article.illustrations").textContent).toContain("no preset");
     // A global preset is not this project's to clear: it can only be overridden here.
     // mutation: offer Clear on every preset -> button found on the cover, red

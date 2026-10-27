@@ -217,6 +217,8 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .pill-warn { color: var(--warn); background: var(--warn-subtle); border-color: color-mix(in srgb, var(--warn) 34%, var(--border)); }
 /* Control run decisions Task 11: a badge's shape only; its colours come from its data-tone (DESIGN.md). */
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; border-width: 1px; border-style: solid; }
+/* Tester #67: where a setting's value was set is a quiet aside, not a badge. */
+.setting-source { color: var(--muted); font-size: var(--text-xs); }
 
 /* Decisions */
 .filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
