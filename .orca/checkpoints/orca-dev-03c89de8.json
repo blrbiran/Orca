@@ -1,0 +1,48 @@
+{
+  "v": 1,
+  "runId": "orca-dev-03c89de8",
+  "runtime": "claude-code",
+  "sessionRef": "03c89de8-0957-4caf-bd8c-14e4cb6eaf9d",
+  "writtenAt": "2026-10-27T01:46:21.294Z",
+  "head": "9cfcec2f72e79e1216d88094b00289e2903bcd04",
+  "level": {
+    "kind": "reading",
+    "level": 429079,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "run implementers per fix lane (ledger fix queue A/B), merge serially, gate, install",
+    "split prompt v2 + #60 spec and implement; O9 claude rerun (approved)",
+    "UI: H6 nav/settings, H8 LEDs, #56-#59",
+    "update three handoffs; executive summary in chat"
+  ],
+  "open": [
+    "ledger .superpowers/sdd/2026-10-27-session-7753e97d/progress.md",
+    "brief /private/tmp/orca-7753e97d/impl-brief.md"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca/ccloop/ccmem main"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca log --oneline -3",
+      "exitCode": 0,
+      "commit": "9cfcec2f72e79e1216d88094b00289e2903bcd04",
+      "observedAt": "2026-10-27T01:46:21.222Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-03c89de8-ombg0W/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca worktree list",
+      "exitCode": 0,
+      "commit": "9cfcec2f72e79e1216d88094b00289e2903bcd04",
+      "observedAt": "2026-10-27T01:46:21.246Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-03c89de8-ombg0W/2.txt"
+    }
+  ]
+}
