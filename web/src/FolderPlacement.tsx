@@ -18,10 +18,12 @@ const ANSWERABLE = new Set(["folder-changed", "folder-unwritable", "folder-missi
 
 export function FolderPlacementBlock(props: { view: GroupViewV1; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
+  // Every hook before the early return: a group whose placement appears between renders must call the same hooks.
+  const account = useContext(AccountContext);
   const placement = props.view.summary.placement;
   if (placement === undefined) return null;
   const groupId = props.view.summary.groupId;
-  const mayAct = mayHumanOnly(useContext(AccountContext)) && props.onCommand !== undefined && props.archived !== true;
+  const mayAct = mayHumanOnly(account) && props.onCommand !== undefined && props.archived !== true;
   const send = (action: "take-folder" | "recheck" | "withhold"): void =>
     props.onCommand?.({ verb: "resolve-folder-change", groupId, expectedRevision: props.view.summary.commandRevision, payload: { action } });
   const more = (total: number): JSX.Element | null => (total > SHOWN ? <li>{t("control.placement.more", { n: total - SHOWN })}</li> : null);
