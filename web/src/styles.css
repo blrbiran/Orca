@@ -269,7 +269,9 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .group-card:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .group-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .group-card[aria-current="true"] { background: var(--accent-subtle); border-color: var(--accent); }
-.group-card-name { color: var(--text-strong); font-weight: 600; overflow-wrap: anywhere; }
+.group-card-name { color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.group-card-lead:empty { display: none; }
+.group-card-lead .group-card-goal { color: var(--text-strong); font-weight: 600; }
 .group-card-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: var(--text-xs); color: var(--muted); }
 .group-card-goal { flex-basis: 100%; color: var(--text); font-size: var(--text-sm); overflow-wrap: anywhere; }
 /* Task 10a: a card's title or goal summary (CardGoal.tsx) never runs past two lines; the whole goal is in its tooltip. */

@@ -54,10 +54,12 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       data-category={category}
       aria-current={props.selected}
       aria-labelledby={(props.repoText === "" ? [`${base}-name`] : [`${base}-name`, `${base}-repo`]).join(" ")}
-      aria-describedby={`${base}-detail`}
+      aria-describedby={`${base}-goal ${base}-detail`}
       onClick={props.onSelect}
       onContextMenu={onContextMenu}
     >
+      {/* Tester #17: what the group is for leads the card; its id and state follow as the smaller line. */}
+      <span id={`${base}-goal`} className="group-card-lead"><CardGoal group={group} className="group-card-goal" /></span>
       <span id={`${base}-name`} className="group-card-name">
         {/* Ruling H8: the status light; decorative, the state is in this text. */}
         <span className="led" data-led={groupLed(group)} aria-hidden="true" />
@@ -67,7 +69,6 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
         {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
       </span>
       <span id={`${base}-detail`} className="group-card-detail">
-        <CardGoal group={group} className="group-card-goal" />
         {group.completion !== undefined && group.completion.total > 0 && (
           <progress value={group.completion.done} max={group.completion.total}
             aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />
@@ -112,9 +113,9 @@ export function GroupList(props: GroupListProps): JSX.Element {
           <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (
             <a className="group-card" href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
               aria-labelledby={`req-name-${group.groupId}`} aria-describedby={`req-goal-${group.groupId}`}>
+              {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does; tester #17: first. */}
+              <span id={`req-goal-${group.groupId}`} className="group-card-lead"><CardGoal group={group} className="group-card-goal" /></span>
               <span id={`req-name-${group.groupId}`} className="group-card-name"><span className="led" data-led={groupLed(group)} aria-hidden="true" />{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
-              {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does. */}
-              <span id={`req-goal-${group.groupId}`} className="group-card-detail"><CardGoal group={group} className="group-card-goal" /></span>
             </a>
           )}</GroupActionsMenu>
         ) : (

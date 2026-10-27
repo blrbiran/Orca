@@ -106,3 +106,17 @@ describe("the group list (spec §6.4)", () => {
     expect(within(nav()).getByText("No group matches this filter.")).toBeTruthy();
   });
 });
+
+describe("a card leads with what the group is for (tester #17)", () => {
+  // The first line was "groupId · state"; a person scans for the goal, so the goal summary comes first and the id and
+  // state follow as the smaller line -- for a task group and a clarifying requirement alike.
+  it("puts the goal summary before the id and state line", () => {
+    render(<GroupList groups={[g("g1", { state: "running", goal: "Export notes as Markdown" }), g("r1", { state: "clarifying", goal: "Sync to a drive" })]} selected={null} onSelect={() => {}} now={NOW} />);
+    for (const [id, goal] of [["g1", "Export notes as Markdown"], ["r1", "Sync to a drive"]] as const) {
+      const card = [...document.querySelectorAll(".group-card")].find((element) => element.textContent?.includes(id))!;
+      const lead = card.querySelector(".group-card-lead")!, name = card.querySelector(".group-card-name")!;
+      expect(lead.textContent).toBe(goal);
+      expect(lead.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+});
