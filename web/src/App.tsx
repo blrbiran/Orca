@@ -433,6 +433,9 @@ export function App(): JSX.Element {
   /** The open requirement, for the poll tick, which outlives the render it was built in. */
   const requirementNow = useRef<string | null>(null);
   requirementNow.current = selectedRequirement;
+  /** The open group, for a command's answer, which outlives the render it was sent from. */
+  const selectedGroupNow = useRef<string | null>(null);
+  selectedGroupNow.current = selectedGroup;
   /** The reducer's latest value, for callbacks that outlive the render they were built in. */
   const controlNow = useRef(control);
   controlNow.current = control;
@@ -608,6 +611,20 @@ export function App(): JSX.Element {
       if (refusal.code === "agent-selection-changed" || refusal.code === "agent-selection-rejected") rereadPreview(action.groupId, 0);
     }
     if (requirementVerb) setRequirementRefusal(answer.status >= 400 ? refusalFromAnswer(answer) : null);
+    // Tester #63: an archived group leaves the list it was opened from, so its open detail closes with it; "Show
+    // archived" brings both back. Not after a scope change: that already closed every detail (scopeKey effect).
+    // The URL follows only when it names that group, so an archive from the Board or a list stays on its page.
+    if (answer.status < 400 && action.verb === "archive-group" && scopeKeyNow.current === scopeAtSend) {
+      const shown = routeNow.current;
+      if (selectedGroupNow.current === action.groupId) {
+        navigationSeq.current++; setSelectedGroup(null);
+        if (shown.kind === "group" && shown.groupId === action.groupId) navigate({ kind: "section", section: "tasks" }, { replace: true });
+      }
+      if (requirementNow.current === action.groupId) {
+        navigationSeq.current++; setSelectedRequirement(null);
+        if (shown.kind === "requirement" && shown.groupId === action.groupId) navigate({ kind: "section", section: "requirements" }, { replace: true });
+      }
+    }
     // A refused open made no group: reading it would only replace the refusal on screen with group-not-found.
     if (requirementVerb && (action.verb !== "requirement-open" || answer.status < 400)) {
       if (action.verb === "requirement-open" && scopeKeyNow.current === scopeAtSend) setSelectedRequirement(action.groupId);
