@@ -16,6 +16,7 @@ import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/sc
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { FlowRefusal, uuidOf } from "../../src/flow/kernel.js";
 import type { ScheduleFire } from "../../src/control/schedules/store.js";
+import type { ScheduleBody } from "../../src/control/schedules/model.js";
 
 const REPO = "repo";
 const FOLDER = "/repos/proj";
@@ -68,6 +69,13 @@ const disable = (s: ControlStore, clock: Clock, scheduleId: string): void => {
   mustRun(s, clock, {
     schema: "orca-raw-command-v1", commandId: `disable-${scheduleId}`, actorId: "human", expectedRevision: revision, verb: "schedule-enable",
     target: { kind: "schedule", scheduleId }, payload: { enabled: false },
+  } as ScheduleCommand);
+};
+
+const remove = (s: ControlStore, clock: Clock, scheduleId: string): void => {
+  mustRun(s, clock, {
+    schema: "orca-raw-command-v1", commandId: `remove-${scheduleId}`, actorId: "human", expectedRevision: readSchedule(s, scheduleId)!.revision,
+    verb: "schedule-remove", target: { kind: "schedule", scheduleId }, payload: {},
   } as ScheduleCommand);
 };
 
@@ -273,6 +281,55 @@ describe("C5 crash resume", () => {
       const fires = fireRows(s, "sch-a");
       expect(fires).toHaveLength(1);
       expect(fires[0]!.outcome).toBe("started");
+    } finally { s.close(); }
+  });
+
+  // Review finding 1 (session 7753e97d): the pass lists every schedule once and then awaits each start in turn, so a
+  // person's stop on a later schedule can commit while an earlier start is awaited. The stop must still win.
+  it.each([
+    ["disabled", (s: ControlStore, clock: Clock) => disable(s, clock, "sch-b")],
+    ["removed", (s: ControlStore, clock: Clock) => remove(s, clock, "sch-b")],
+  ])("a schedule %s while an earlier schedule's start is awaited does not fire and keeps its lastSlot", async (_name, stop) => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock, "sch-a");
+      createFlow(s, clock, "sch-b");
+      const before = readSchedule(s, "sch-b")!.body.state.lastSlot;
+      const started: string[] = [];
+      const starter = async (fire: ScheduleFire): Promise<{ flowRunId: string }> => {
+        started.push(fire.scheduleId);
+        if (fire.scheduleId === "sch-a") stop(s, clock);
+        return writeFlowRun(s, fire);
+      };
+      const { crashes } = await passAt(s, clock, at(1, 9), { startFlow: starter });
+      expect(crashes).toEqual([]);
+      expect(fireRows(s, "sch-a").map((row) => row.outcome)).toEqual(["started"]);
+      expect(fireRows(s, "sch-b")).toEqual([]);
+      expect(started).toEqual(["sch-a"]);
+      expect(readSchedule(s, "sch-b")!.body.state.lastSlot).toBe(before);
+      expect(count(s, "flow_runs")).toBe(1);
+    } finally { s.close(); }
+  });
+
+  it("an edit committed while an earlier schedule's start is awaited: the later start runs the edited body", async () => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock, "sch-a");
+      createFlow(s, clock, "sch-b");
+      const params: Record<string, unknown> = {};
+      const starter = async (fire: ScheduleFire, body: ScheduleBody): Promise<{ flowRunId: string }> => {
+        params[fire.scheduleId] = (body.start as { params: Record<string, unknown> }).params;
+        if (fire.scheduleId === "sch-a") {
+          mustRun(s, clock, {
+            schema: "orca-raw-command-v1", commandId: "edit-sch-b", actorId: "human", expectedRevision: readSchedule(s, "sch-b")!.revision,
+            verb: "schedule-set", target: { kind: "schedule", scheduleId: "sch-b" },
+            payload: { set: { start: { kind: "flow", template: "wechat-article", params: { idea: "edited" } } } },
+          } as ScheduleCommand);
+        }
+        return writeFlowRun(s, fire);
+      };
+      await passAt(s, clock, at(1, 9), { startFlow: starter });
+      expect(params).toEqual({ "sch-a": { idea: "a topic" }, "sch-b": { idea: "edited" } });
     } finally { s.close(); }
   });
 

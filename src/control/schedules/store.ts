@@ -162,10 +162,13 @@ const fireVia = (scheduleId: string): string => `schedule:${scheduleId}`;
  * T1 and a skip: one transaction writes the fire row and moves `lastSlot`. `UNIQUE(schedule_id, slot)` is the race guard
  * (§7.5): a second row for one slot is refused `schedule-slot-taken`, and the pass stops for that schedule.
  */
-export function insertFire(store: ControlStore, input: FireInsertInput): ScheduleFire {
+export function insertFire(store: ControlStore, input: FireInsertInput): { fire: ScheduleFire; schedule: ScheduleBody } {
   return store.transaction(() => {
     const row = readSchedule(store, input.scheduleId);
     if (row === null) throw new ControlError("recovery-blocked", "schedule-missing");
+    // §7.2 step 1 on the fresh row: the pass awaits each start, so a person's disable, pause or remove can commit after
+    // the pass listed this schedule; that stop wins and nothing is written for the slot.
+    if (row.removed || !row.body.enabled || row.body.state.paused) throw new ControlError("recovery-blocked", "schedule-state-changed");
     // §10: the attribution is the schedule's enabler; a different name never writes a fire.
     if (input.creditedTo !== row.body.enabledBy) throw new ControlError("recovery-blocked", "fire-credited-to");
     // §7.2 step 2: a write from a pass that read an older row must not resurrect a slot an enable (or a cron edit) has
@@ -193,8 +196,10 @@ export function insertFire(store: ControlStore, input: FireInsertInput): Schedul
     const next = structuredClone(row.body);
     next.state.lastSlot = input.lastSlot;
     store.db.prepare("UPDATE schedules SET revision=?,body=? WHERE id=?").run(row.revision + 1, JSON.stringify(next), input.scheduleId);
-    return fireOf({ schedule_id: input.scheduleId, seq, slot: input.slot, at: input.at, outcome: input.outcome, reason: input.reason ?? null,
+    // The start reads this body, not the pass's listing: an edit committed since the listing is what the person asked for.
+    const fire = fireOf({ schedule_id: input.scheduleId, seq, slot: input.slot, at: input.at, outcome: input.outcome, reason: input.reason ?? null,
       flow_run_id: null, group_id: null, by: FIRE_BY, via: fireVia(input.scheduleId), body: JSON.stringify(body) });
+    return { fire, schedule: next };
   });
 }
 

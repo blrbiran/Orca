@@ -327,14 +327,16 @@ export async function evaluateSchedule(deps: SchedulePassDeps, row: ScheduleRow,
       return;
     }
     // §7.2 steps 5-6: T1; a UNIQUE(schedule, slot) hit means another pass took the slot, and a moved `lastSlot` means
-    // an enable re-initialised it -- either way nothing more to record this pass.
-    const fire = insertFire(store, {
+    // an enable re-initialised it -- either way nothing more to record this pass. T1 re-reads the row, so a stop
+    // committed while an earlier schedule's start was awaited is `schedule-state-changed` too, and the start runs the
+    // fresh body.
+    const { fire, schedule } = insertFire(store, {
       scheduleId: row.id, slot, at: now, expectedLastSlot: from, lastSlot: slot, outcome: "starting",
       commandId: `orca-auto-schedule-${row.id}-${slot}`, lateMs, missed, creditedTo,
     });
     // §7.2 steps 7-8: the start is idempotent; a refusal settles `failed`, any other throw stays a crash.
     try {
-      settleStarted(store, fire, await startOf(deps, fire, body));
+      settleStarted(store, fire, await startOf(deps, fire, schedule));
     } catch (error) {
       const code = refusalCode(error);
       if (code === null) throw error;
