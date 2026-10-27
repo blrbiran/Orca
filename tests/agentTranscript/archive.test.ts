@@ -11,6 +11,7 @@ import * as archive from "../../src/control/archive.js";
 import { commitCandidate } from "../../src/control/checkpoints.js";
 import { cleanupCommittedRun } from "../../src/control/cleanup.js";
 import { noteTranscriptListing } from "../../src/agentTranscript/listing.js";
+import { openArchiveTranscript } from "../../src/agentTranscript/reader.js";
 import type { TranscriptEntry } from "../../src/control/schema.js";
 import { candidateCase } from "../control/fixtures/candidate.js";
 import { claude, jsonl } from "./fixtures.js";
@@ -71,5 +72,23 @@ describe("T6: the archive source", () => {
       // Neither source: a listed call whose file never existed and was never archived.
       expect(await web.get(`/api/control/runs/${runId}/transcripts/1/plan/2?tail=1`)).toMatchObject({ status: 404, body: { error: { code: "transcript-gone" } } });
     } finally { await web.close(); await h.dispose(); }
+  });
+});
+
+describe("review 7753e97d: an archived transcript whose bytes do not match its manifest hash is refused", () => {
+  it("a changed data file is transcript-archive-invalid; the recorded bytes open", async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { createHash } = await import("node:crypto");
+    const stateDir = await mkdtemp(join(tmpdir(), "lt-archive-"));
+    const bytes = jsonl([claude.text("archived")]);
+    const hash = createHash("sha256").update(bytes).digest("hex");
+    await mkdir(join(stateDir, "artifacts", "a1"), { recursive: true });
+    await writeFile(join(stateDir, "artifacts", "a1", "data"), Buffer.from(bytes.toString().replace("archived", "tampered")), { mode: 0o600 });
+    await expect(openArchiveTranscript(stateDir, { artifactId: "a1", hash })).rejects.toMatchObject({ code: "transcript-archive-invalid" });
+    await mkdir(join(stateDir, "artifacts", "a2"), { recursive: true });
+    await writeFile(join(stateDir, "artifacts", "a2", "data"), bytes, { mode: 0o600 });
+    const open = await openArchiveTranscript(stateDir, { artifactId: "a2", hash });
+    try { expect((await open.reader.read(0, bytes.length)).equals(bytes)).toBe(true); } finally { await open.close(); }
   });
 });

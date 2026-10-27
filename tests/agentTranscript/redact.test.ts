@@ -260,3 +260,27 @@ describe("review 7753e97d: redaction is linear in its input (it runs on the pane
     expect(performance.now() - t0).toBeLessThan(1000);
   });
 });
+
+describe("review 7753e97d: branches that stayed green when removed", () => {
+  it("short metadata (a tool's id and name) is redacted too", async () => {
+    const lines = [{ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: ghp(), name: "mcp-" + ghp(), input: { command: "ls" } }] } }];
+    expect(countMark(JSON.stringify(lines))).toBe(2);
+    const reader = memoryReader(jsonl(lines));
+    const window = await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor });
+    expect(window.events[0]!.meta!.id).toBe(REDACTED);
+    expect(countMark(JSON.stringify(window.events))).toBe(0);
+  });
+
+  it("an unparsable line is decoded before it is redacted: a token right after a \\n escape is caught", async () => {
+    const raw = JSON.stringify({ type: "x", out: "done\n" + ghp() + " more" }).slice(0, -3);
+    // The raw text holds `\n` then the token: `\b` cannot fire between `n` and `g`.
+    expect(raw).toContain("\\n" + "gh" + "p_");
+    const reader = memoryReader(Buffer.from(raw + "\n"));
+    const window = await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor });
+    expect(window.events.map((e) => e.kind)).toEqual(["unknown"]);
+    const text = window.events[0]!.fields!.raw!.text;
+    expect(text).toContain("done\n" + REDACTED);
+    expect(countMark(text)).toBe(0);
+  });
+});
+

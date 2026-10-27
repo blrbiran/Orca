@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { createIndexCache, HEAD_CHECK_BYTES, STRIDE_BYTES } from "../../src/agentTranscript/lineIndex.js";
-import { windowAfter, windowBefore, windowTail, WINDOW_BYTES, WINDOW_EVENTS } from "../../src/agentTranscript/window.js";
+import { expandField, windowAfter, windowBefore, windowTail, WINDOW_BYTES, WINDOW_EVENTS } from "../../src/agentTranscript/window.js";
 import { claude, codex, indexOf, jsonl, memoryReader, omp, prose, redactor } from "./fixtures.js";
 
 const MiB = 1024 * 1024;
@@ -168,3 +168,14 @@ describe("normalisation per runtime (real shapes, synthetic content)", () => {
     expect(events[3]!.num).toEqual({ atBytes: 134217000 });
   });
 });
+
+describe("review 7753e97d: expand never serves thinking unless asked", () => {
+  it("expanding a thinking event without include=thinking is transcript-not-found; asked, it is served", async () => {
+    const reader = memoryReader(jsonl([claude.thinking("private reasoning " + prose(5000))]));
+    const index = await indexOf(reader);
+    await expect(expandField(index, reader, 0, 0, "text", 0, { runtime: "claude", redactor })).rejects.toMatchObject({ code: "transcript-not-found" });
+    const page = await expandField(index, reader, 0, 0, "text", 0, { runtime: "claude", redactor, includeThinking: true });
+    expect(page.text.startsWith("private reasoning ")).toBe(true);
+  });
+});
+
