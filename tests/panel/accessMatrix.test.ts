@@ -96,6 +96,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "plan-library-import", payload: { projectId: "repo", name: "n", doc: {}, provenance: {} }, tier: "token", member: V },
   { entry: "plan-library-archive", payload: { entryId: "pl-0123456789abcdef" }, tier: "open", member: V },
   { entry: "import-plan.tokenLimit", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, tokenLimit: 5 }, tier: "token", member: F },
+  // Spec 2026-10-27 single-call unknown usage §9 R1: acknowledging the charge of a blocked call's grant (as settle-unknown-usage).
+  { entry: "recovery-retry.acknowledge", payload: { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" }, tier: "token", member: F },
   { entry: "import-plan.integration", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, integration: { delivery: "keep" } }, tier: "token", member: F },
   // Scheduled flows and groups spec 2026-10-24 §11.1 (Task 5): setting a schedule (its pool and token limit are budgets, its
   // scheme a delivery choice) and making one from a group are token; enabling is token, and disabling, removing and

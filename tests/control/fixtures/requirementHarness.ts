@@ -29,7 +29,11 @@ import { profileSnapshot } from "./web.js";
 
 /** N1 plan Task 6: one queued model answer per single call, in order; `purpose` is checked against the prompt's first line. */
 /** `output` may be a function of the prompt (an estimate's answer must echo the plan hash its request carries). */
-export interface QueuedAnswer { purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null; errorCode?: string | null }
+export interface QueuedAnswer {
+  purpose: "clarify" | "split" | "estimate"; output: unknown; outcome?: "complete" | "failed" | "aborted"; tokens?: number | null; errorCode?: string | null;
+  /** Spec 2026-10-27 single-call unknown usage C2/O1: keys added to ccloop's record as given (the lower bound, or a key it never writes). */
+  recordExtra?: Record<string, unknown>;
+}
 // A multi-dir group's split prompt has the multi instruction's head; a single-repository group's has V1's (M5).
 const HEADS = { clarify: ["Orca requirement clarification, instruction version 3."],
   // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (split version 1 -> 2)
@@ -73,7 +77,7 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
       const output = typeof answer.output === "function" ? (answer.output as (prompt: string) => unknown)(work.prompt) : answer.output;
       const outputRef = outcome === "complete" ? put(`output-${claim.runId}`, canonicalBytes(output)) : null;
       const record = { schema: "ccloop-single-call-record-v1", promptSha256: sha(Buffer.from(work.prompt, "utf8")), responseSchemaSha256: sha256Canonical(work.responseSchema),
-        outcome, outputRef, errorCode: outcome === "failed" ? (answer.errorCode === undefined ? "single-call-output-invalid" : answer.errorCode) : null };
+        outcome, outputRef, errorCode: outcome === "failed" ? (answer.errorCode === undefined ? "single-call-output-invalid" : answer.errorCode) : null, ...answer.recordExtra };
       const executionId = `exec-${claim.runId}`;
       const candidate: Candidate = {
         groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,

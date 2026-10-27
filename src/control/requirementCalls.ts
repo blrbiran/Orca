@@ -226,22 +226,42 @@ export function settleRequirementCall(
 ): void {
   const release = deps.admissionGate?.enter();
   try {
-    deps.store.transaction(() => {
-      const receiptId = `single-call-result:${runRow.groupId}:${runRow.runId}`;
-      if (deps.store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='single-call-result'").get(receiptId)) return;
-      commitTerminal();
-      const row = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE id=?").get(runRow.runId);
-      if (!row) throw new ControlError("run-not-found");
-      const run: SettledRun = verifyStoppedSingleCall(deps.store, row, { groupId: runRow.groupId, workItemId: runRow.workItemId, workGrant: REQUIREMENT_CALL_GRANT }, "requirement-call-ledger");
-      const group = readRequirementGroup(deps.store, run.groupId);
-      assertCallUsageBooked(group, run, "requirement-usage-unknown");
-      group.reserved = subtract(group.reserved, run.remaining.work);
-      syncLedger(group);
-      record(deps.store, group, targetOf(run.workItemId), run);
-      saveRequirementGroup(deps.store, group);
-      closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
-    });
+    deps.store.transaction(() => settleRequirementCallInTransaction(deps.store, runRow, commitTerminal, record));
   } finally { release?.(); }
+}
+
+/**
+ * Spec 2026-10-27 single-call unknown usage §9 R2: the settlement's core, inside the caller's transaction -- the driver's
+ * (settleRequirementCall above) or a usage settlement's (singleCallSettlement.ts), which share it rather than copy it.
+ */
+export function settleRequirementCallInTransaction(
+  store: ControlStore, runRow: SingleCallRunRow, commitTerminal: () => void,
+  record: (store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun) => void,
+): void {
+  const receiptId = `single-call-result:${runRow.groupId}:${runRow.runId}`;
+  if (store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='single-call-result'").get(receiptId)) return;
+  commitTerminal();
+  const row = store.db.prepare("SELECT id,active,body FROM runs WHERE id=?").get(runRow.runId);
+  if (!row) throw new ControlError("run-not-found");
+  const run: SettledRun = verifyStoppedSingleCall(store, row, { groupId: runRow.groupId, workItemId: runRow.workItemId, workGrant: REQUIREMENT_CALL_GRANT }, "requirement-call-ledger");
+  const group = readRequirementGroup(store, run.groupId);
+  assertCallUsageBooked(group, run, "requirement-usage-unknown");
+  group.reserved = subtract(group.reserved, run.remaining.work);
+  syncLedger(group);
+  record(store, group, targetOf(run.workItemId), run);
+  saveRequirementGroup(store, group);
+  closeSingleCall(store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
+}
+
+/**
+ * Same spec §9 R2: whether a requirement call's round or draft has moved on (it is no longer drafting, or the group no
+ * longer clarifying), so its purpose would refuse to record the call (recordClarify / recordSplit); a usage settlement
+ * then closes the call through interruptRequirementCall instead.
+ */
+export function requirementCallTargetMoved(store: ControlStore, run: SingleCallRunRow): boolean {
+  const group = readRequirementGroup(store, run.groupId), target = targetOf(run.workItemId);
+  if (group.status !== "clarifying") return true;
+  return (target.kind === "round" ? readRound(store, run.groupId, target.no).state : readDraft(store, run.groupId, target.no).state) !== "drafting";
 }
 
 export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null): CallRecord => ({
@@ -331,6 +351,9 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
   classify: classifyClarifyOutput,
   complete(deps, run, rawOutput, commitTerminal, failure = null) {
     settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure));
+  },
+  completeInTransaction(store, run, rawOutput, commitTerminal, failure = null) {
+    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordClarify(inner, group, target, settled, rawOutput, failure));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };
@@ -436,6 +459,9 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   classify: validateSplitDraft,
   complete(deps, run, evaluation, commitTerminal, failure = null) {
     settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure));
+  },
+  completeInTransaction(store, run, evaluation, commitTerminal, failure = null) {
+    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordSplit(inner, group, target, settled, evaluation as SplitEvaluation, failure));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };

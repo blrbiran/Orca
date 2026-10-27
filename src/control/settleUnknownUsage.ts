@@ -7,12 +7,13 @@ import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
-import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork } from "./queries.js";
+import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
 import { releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun } from "./usageSettlement.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
+import type { Amount } from "./types.js";
 import type { RawAuthorityCommandV1, CommandSuccessV1, CommandErrorBodyV1 } from "./webProtocol.js";
 
 export type SettleUnknownUsageCommand = Extract<RawAuthorityCommandV1, { verb: "settle-unknown-usage" }>;
@@ -70,6 +71,27 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
   if (stop?.mode === "pause" || (group.stopped && !stop)) throw new ControlError("stop-mode-conflict");
   return "released";
 }
+/**
+ * The charge arithmetic of a settlement (spec 2026-10-13 §A), shared with a single call's settlement (spec 2026-10-27
+ * single-call unknown usage §9 R1, singleCallSettlement.ts): each bucket's charge moves into the run's cumulative, its
+ * remainder is emptied and its usage is no longer unknown; the group's `used` grows by the charge and, when
+ * `releaseReserved`, its `reserved` shrinks by it. A metered charge is booked as settled usage (D9).
+ */
+export function chargeRunRemainder(
+  store: ControlStore, run: Pick<SettlementRun, "runId" | "groupId" | "remaining" | "cumulative" | "unknown"> & { phase?: string; purpose?: string },
+  group: Pick<GroupRecord, "used" | "reserved">, charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount },
+  options: { unmetered: boolean; releaseReserved: boolean; at: number },
+): void {
+  // Unmetered work tokens book nothing: the run keeps its observed cumulative and its unlimited (null) remainder.
+  const work = { ...charged.work, tokens: charged.work.tokens ?? 0 }, delta = add(work, charged.handoff);
+  group.used = add(group.used, delta);
+  if (options.releaseReserved) group.reserved = subtract(group.reserved, delta);
+  for (const b of ["work", "handoff"] as const) {
+    const amount = b === "work" ? work : charged.handoff, tokens = charged[b].tokens;
+    run.cumulative[b] = add(run.cumulative[b], amount); run.remaining[b] = { tokens: b === "work" && options.unmetered ? null : 0, activeMs: 0, attempts: 0, sessions: 0 } as never; run.unknown[b] = false;
+    if (tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens, appliedAt: options.at });
+  }
+}
 /** A run the owner's handoff stop ended while it was still working: no outcome, and only its usage kept it unrecoverable. */
 const stoppedWorking = (run: SettlementRun): boolean => run.drive?.outcome === null && run.state === "settled-unrecoverable";
 export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, command: SettleUnknownUsageCommand): Promise<CommandSuccessV1 | CommandErrorBodyV1> {
@@ -104,17 +126,10 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
           charged, reservationDisposition: disposition, ...evidence.proof,
           ...(disposition !== "committed" ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...evidence.checkpoint! } } : {}),
         });
-        // Unmetered work tokens book nothing: the run keeps its observed cumulative and its unlimited (null) remainder.
-        const work = { ...charged.work, tokens: charged.work.tokens ?? 0 }, group = readGroup(store, groupId), delta = add(work, charged.handoff);
+        const group = readGroup(store, groupId);
         // §3.2: an optional-v1 stop kept its reservation (allocations `unknown`); a finite-legacy stop already released it.
         const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId), parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
-        group.used = add(group.used, delta);
-        if (disposition === "committed" || (disposition === "recovered" && !legacy)) group.reserved = subtract(group.reserved, delta);
-        for (const b of ["work", "handoff"] as const) {
-          const amount = b === "work" ? work : charged.handoff;
-          run.cumulative[b] = add(run.cumulative[b], amount); run.remaining[b] = { tokens: b === "work" && unmetered ? null : 0, activeMs: 0, attempts: 0, sessions: 0 } as never; run.unknown[b] = false;
-          if (charged[b].tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens: charged[b].tokens, appliedAt: at });
-        }
+        chargeRunRemainder(store, run, group, charged, { unmetered, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy), at });
         run.usageSettlement = marker;
         // Preserve endedAt/activity: this is manual accounting, not another provider terminalisation/release.
         if (disposition === "released") { run.state = "settled-failed"; run.recoverable = false; }

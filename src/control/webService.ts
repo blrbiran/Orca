@@ -37,6 +37,8 @@ import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
 import { decideEstimateRetry, estimateRetryId, retryPromptRequired, writeEstimateRetry } from "./estimateRetry.js";
 import { parkEstimate } from "./estimateParking.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
+import { settleableSingleCallBlock } from "./singleCallSettlement.js";
+import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurposes.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
@@ -1373,7 +1375,22 @@ export class WebControlService {
   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
     const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
     const outputBound = command.target.kind === "group" ? await this.retryOutputBound(command.target.groupId) : null;
-    return applyRecoveryRetry(this.stopDeps(), command, outputBound) as WebCommandResult;
+    return applyRecoveryRetry(this.stopDeps(), command, outputBound, await this.settlementEvaluation(command)) as WebCommandResult;
+  }
+  /**
+   * Spec 2026-10-27 single-call unknown usage §9 R2 (review S2): a retry that settles a single call completes it as failed,
+   * so a purpose that evaluates its output outside the transaction (split) does so here, as the driver does, with no output.
+   * A failed call's null output is schema-invalid before anything outside the store is read (requirementCalls.ts
+   * evaluateSplit), so the store is all it is given. Undefined when the command settles nothing; the transaction decides.
+   */
+  private async settlementEvaluation(command: RecoveryRetryCommand): Promise<unknown> {
+    if (command.payload.scope !== "run" || command.payload.acknowledge === undefined) return undefined;
+    const row = this.store.db.prepare("SELECT body FROM runs WHERE id=?").get(command.payload.runId);
+    if (row === undefined) return undefined;
+    const run = JSON.parse(String(row.body)) as SingleCallRunRow;
+    const block = settleableSingleCallBlock(run);
+    if (block === null || block.handler.evaluate === undefined) return undefined;
+    return block.handler.evaluate({ store: this.store } as SingleCallPrepareDeps, run, null, block.failure);
   }
   /**
    * Spec 2026-10-15 ccloop error codes §4.8: for a clarifying requirement whose latest round or draft failed or was
@@ -2112,75 +2129,85 @@ export function completeEstimateInStore(
 ): void {
   const release = deps.admissionGate?.enter();
   try {
-    deps.store.transaction(() => {
-      const estimate = readEstimateRecord(deps.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`;
-      const { rawHash, rawIdentity, canonicalJson: rawCanonicalJson } = identifyRawEstimateOutput(rawOutput);
-      const receipt = deps.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-result'").get(receiptId);
-      if (receipt) {
-        const retained = JSON.parse(String(receipt.body));
-        if (retained.rawHash !== rawHash || retained.rawIdentity !== rawIdentity) throw new ControlError("report-identity-conflict");
-        return;
-      }
-      commitTerminal?.();
-      if (!["running", "start-unknown"].includes(estimate.state)) throw new ControlError("start-state-conflict");
-      const rows = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=?").all(id, estimateId);
-      if (rows.length !== 1) throw new ControlError("recovery-blocked");
-      // N1 spec §5.1 (PR-I4): the stop and usage checks are every single call's.
-      const run = verifyStoppedSingleCall(deps.store, rows[0], { groupId: id, workItemId: estimateId, workGrant: estimate.grant });
-      const group = readWebGroup(deps.store, id), proposal = readBudgetProposal(deps.store, id), plan = readArchivedPlan(deps.store, id);
-      assertCallUsageBooked(group, run);
-      const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
-      if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
-      // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
-      // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
-      // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
-      // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
-      const taskIds = plan.plan.tasks.map(t => t.taskId), contract = readEstimateContract(deps.store, id, estimateId);
-      let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
-      if (rawOutput !== null) {
-        const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: contract.instructionVersion });
-        if (repaired.ok) { repairs = repaired.repairs; judged = repaired.output; } else repairProblems = repaired.problems;
-      }
-      const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, taskIds);
-      let output: BudgetEstimateV1 | null = null, outputHash: string | null = null, notCanonical = false;
-      let reasonCode: string | null = classified.ok ? null
-        : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;
-      if (classified.ok) {
-        try { outputHash = sha256Canonical(classified.output); output = classified.output; }
-        catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; notCanonical = true; }
-      }
-      // Spec §4.3: why the estimate failed and the problems a retry would carry; empty problems = not retryable.
-      const failure: EstimateFailure | null = reasonCode === null ? null : { reasonCode, problems: estimateFailureProblems(reasonCode, callFailure, repairProblems, judged, notCanonical) };
-      estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = failure?.reasonCode ?? null;
-      estimate.repairs = repairs;
-      if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
-      if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
-      group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
-      const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
-      group.ledger.budgetDeficit = settledBalance.deficit;
-      setReserve(proposal, settledBalance.reserve);
-      // Spec §4.3: the one automatic retry, decided on the settled numbers by plain reads only (it never throws).
-      const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion, proposalConfirmed: proposal.state === "confirmed",
-        newestEstimateVersion: Number(deps.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0),
-        reserveAfterSettlement: settledBalance.reserve, dispatchBlocked: deps.store.dispatchBlocked });
-      if (decision.kind === "skip") estimate.retrySkipped = decision.code;
-      if (decision.kind === "retry") estimate.retriedAs = estimateRetryId(id, estimateId);
-      deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
-      if (decision.kind === "retry") {
-        // Tester round 2 spec §5.2.3: the retry's grant from the reserve after this settlement and the cap headroom read in
-        // this transaction, reserved like any queued estimate's (createEstimate).
-        const required = retryPromptRequired(contract, estimate.request!, decision.problems)!;
-        // The settlement never throws for the retry (spec §4.3): a cap reading that fails leaves the cap term out, and the
-        // claim gate then decides with the frozen grant.
-        let capHeadroom: number | null;
-        try { capHeadroom = capStatuses(deps.store, groupRepoIdOf(group as unknown as Record<string, unknown>), deps.store.now())[0]?.headroom ?? null; } catch { capHeadroom = null; }
-        const grant = estimateGrantFor({ limitTokens: group.limit.tokens, remainingTokens: settledBalance.reserve.tokens, capHeadroom, requiredRequestTokens: Number(required) });
-        writeEstimateRetry(deps.store, id, estimate, contract, decision.problems, grant);
-        group.ledger.committedRemaining = sumAmounts([group.ledger.committedRemaining, grant]);
-        setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
-      }
-      closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "estimate-result", body: { groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity } });
-      saveWebAuthority(deps.store, group, proposal); recordProjectionChange(deps.store, [id]);
-    });
+    deps.store.transaction(() => completeEstimateInTransaction(deps.store, id, estimateId, rawOutput, commitTerminal, classify, callFailure));
   } finally { release?.(); }
+}
+
+/**
+ * Spec 2026-10-27 single-call unknown usage §9 R2: the estimate's settlement core, inside the caller's transaction -- the
+ * driver's (completeEstimateInStore above) or a usage settlement's (singleCallSettlement.ts).
+ */
+export function completeEstimateInTransaction(
+  store: ControlStore, id: string, estimateId: string, rawOutput: unknown, commitTerminal?: () => void,
+  classify: typeof classifyEstimateOutput = classifyEstimateOutput, callFailure: string | null = null,
+): void {
+  const deps = { store };
+  const estimate = readEstimateRecord(deps.store, id, estimateId), receiptId = `estimate-result:${id}:${estimateId}`;
+  const { rawHash, rawIdentity, canonicalJson: rawCanonicalJson } = identifyRawEstimateOutput(rawOutput);
+  const receipt = deps.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='estimate-result'").get(receiptId);
+  if (receipt) {
+    const retained = JSON.parse(String(receipt.body));
+    if (retained.rawHash !== rawHash || retained.rawIdentity !== rawIdentity) throw new ControlError("report-identity-conflict");
+    return;
+  }
+  commitTerminal?.();
+  if (!["running", "start-unknown"].includes(estimate.state)) throw new ControlError("start-state-conflict");
+  const rows = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=?").all(id, estimateId);
+  if (rows.length !== 1) throw new ControlError("recovery-blocked");
+  // N1 spec §5.1 (PR-I4): the stop and usage checks are every single call's.
+  const run = verifyStoppedSingleCall(deps.store, rows[0], { groupId: id, workItemId: estimateId, workGrant: estimate.grant });
+  const group = readWebGroup(deps.store, id), proposal = readBudgetProposal(deps.store, id), plan = readArchivedPlan(deps.store, id);
+  assertCallUsageBooked(group, run);
+  const currentBalance = budgetBalance(group.limit, group.used, group.reserved);
+  if (!same(currentBalance.reserve, proposal.explicitUnallocatedReserve) || !same(currentBalance.deficit, group.ledger.budgetDeficit)) throw new ControlError("recovery-blocked");
+  // Single-call estimate spec §6.4: a failed estimate carries its own reason. A schema-valid answer that is not
+  // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
+  // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
+  // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
+  const taskIds = plan.plan.tasks.map(t => t.taskId), contract = readEstimateContract(deps.store, id, estimateId);
+  let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
+  if (rawOutput !== null) {
+    const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: contract.instructionVersion });
+    if (repaired.ok) { repairs = repaired.repairs; judged = repaired.output; } else repairProblems = repaired.problems;
+  }
+  const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, taskIds);
+  let output: BudgetEstimateV1 | null = null, outputHash: string | null = null, notCanonical = false;
+  let reasonCode: string | null = classified.ok ? null
+    : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;
+  if (classified.ok) {
+    try { outputHash = sha256Canonical(classified.output); output = classified.output; }
+    catch (error) { if (!(error instanceof ControlError)) throw error; reasonCode = "estimate-output-invalid"; notCanonical = true; }
+  }
+  // Spec §4.3: why the estimate failed and the problems a retry would carry; empty problems = not retryable.
+  const failure: EstimateFailure | null = reasonCode === null ? null : { reasonCode, problems: estimateFailureProblems(reasonCode, callFailure, repairProblems, judged, notCanonical) };
+  estimate.state = output ? "ready" : "failed"; estimate.output = output; estimate.outputHash = outputHash; estimate.reasonCode = failure?.reasonCode ?? null;
+  estimate.repairs = repairs;
+  if (rawCanonicalJson !== null) writeCanonicalRecord(deps.store, id, rawHash, rawCanonicalJson);
+  if (output) writeCanonicalRecord(deps.store, id, estimate.outputHash!, canonicalBytes(output).toString("utf8"));
+  group.ledger.committedRemaining = residual(group.reserved, zero(), run.remaining.work);
+  const settledBalance = budgetBalance(group.limit, group.used, group.ledger.committedRemaining);
+  group.ledger.budgetDeficit = settledBalance.deficit;
+  setReserve(proposal, settledBalance.reserve);
+  // Spec §4.3: the one automatic retry, decided on the settled numbers by plain reads only (it never throws).
+  const decision = decideEstimateRetry({ estimate, contract, failure, group, proposalVersion: proposal.proposalVersion, proposalConfirmed: proposal.state === "confirmed",
+    newestEstimateVersion: Number(deps.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0),
+    reserveAfterSettlement: settledBalance.reserve, dispatchBlocked: deps.store.dispatchBlocked });
+  if (decision.kind === "skip") estimate.retrySkipped = decision.code;
+  if (decision.kind === "retry") estimate.retriedAs = estimateRetryId(id, estimateId);
+  deps.store.db.prepare("UPDATE estimates SET state=?,body=? WHERE group_id=? AND id=?").run(estimate.state, canonicalBytes(estimate).toString("utf8"), id, estimateId);
+  if (decision.kind === "retry") {
+    // Tester round 2 spec §5.2.3: the retry's grant from the reserve after this settlement and the cap headroom read in
+    // this transaction, reserved like any queued estimate's (createEstimate).
+    const required = retryPromptRequired(contract, estimate.request!, decision.problems)!;
+    // The settlement never throws for the retry (spec §4.3): a cap reading that fails leaves the cap term out, and the
+    // claim gate then decides with the frozen grant.
+    let capHeadroom: number | null;
+    try { capHeadroom = capStatuses(deps.store, groupRepoIdOf(group as unknown as Record<string, unknown>), deps.store.now())[0]?.headroom ?? null; } catch { capHeadroom = null; }
+    const grant = estimateGrantFor({ limitTokens: group.limit.tokens, remainingTokens: settledBalance.reserve.tokens, capHeadroom, requiredRequestTokens: Number(required) });
+    writeEstimateRetry(deps.store, id, estimate, contract, decision.problems, grant);
+    group.ledger.committedRemaining = sumAmounts([group.ledger.committedRemaining, grant]);
+    setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
+  }
+  closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "estimate-result", body: { groupId: id, estimateId, runId: run.runId, rawHash, rawIdentity } });
+  saveWebAuthority(deps.store, group, proposal); recordProjectionChange(deps.store, [id]);
 }

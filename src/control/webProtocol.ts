@@ -791,7 +791,8 @@ export const resumeFromHandoffPayloadSchema = z
   .superRefine((value, ctx) => requireUnique(value.selections, (selection) => selection.taskId, ctx, ["selections"]));
 export const continueTaskPayloadSchema = z.object({ predecessorRunId: idSchema, checkpointId: idSchema }).strict();
 export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
-  z.object({ scope: z.literal("run"), runId: idSchema }).strict(),
+  // Spec 2026-10-27 single-call unknown usage §9 R1: a single call blocked on unknown usage is retried only with its grant's charge acknowledged.
+  z.object({ scope: z.literal("run"), runId: idSchema, acknowledge: z.literal("charge-remaining-grant").optional() }).strict(),
   z.object({ scope: z.literal("group"), groupId: idSchema }).strict(),
 ]);
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
@@ -1433,6 +1434,9 @@ export const requirementSummarySchema = z.object({
   // Final review finding 4: the requirement's call blocked by the driver, and why; the group view refuses a clarifying
   // group (DR25), so this is where its reason and its run-scoped recovery-retry are shown.
   blockedRun: z.object({ runId: idSchema, reason: nonemptyString.nullable() }).strict().nullable(),
+  // Spec 2026-10-27 single-call unknown usage §9 R1, R6: present only when blockedRun is a call blocked on unknown usage --
+  // the remaining grant its retry charges, and ccloop's lower bound on what it spent (null when none was observed).
+  blockedRunCharge: z.object({ tokens: safeInteger, usageLowerBound: positiveSafeInteger.nullable() }).strict().optional(),
   // Issue #75: the slug a round named (null before), so the requirement list can name a requirement without its view.
   // Optional on the wire so older fixtures still parse; the server always gives it.
   slug: nonemptyString.nullable().optional(),

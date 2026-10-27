@@ -22,6 +22,7 @@ import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from 
 import { singleCallPurposeOf } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
+import { settleableSingleCallBlock, settleSingleCallUsageInTransaction, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCallSettlement.js";
 import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
 import type { Amount, HandoffRequest } from "./types.js";
@@ -531,7 +532,11 @@ export function startSchedulerWake(store: ControlStore, groupId: string, startRe
   return wakeId;
 }
 
-export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand, outputBound: number | null = null): StopCommandResult {
+/**
+ * `settlementEvaluation`: for a run-scoped retry that settles a single call's unknown usage (singleCallSettlement.ts), what
+ * the call's purpose evaluated before this transaction for a failed call (webService.ts recoveryRetry); undefined otherwise.
+ */
+export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand, outputBound: number | null = null, settlementEvaluation?: unknown): StopCommandResult {
   const { store } = deps;
   const release = deps.admissionGate?.enter();
   try {
@@ -547,8 +552,9 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
         refuseFlowChild(store, groupId);
         // Issue 91 review fix: a requeued handoff's fresh deadline counts from this instant.
         const now = (deps.now ?? (() => new Date()))().toISOString();
+        const acknowledge = command.payload.scope === "run" ? command.payload.acknowledge : undefined;
         const observed = target.kind === "run"
-          ? retryRun(store, groupId, target.runId, context, now)
+          ? retryRun(store, groupId, target.runId, context, now, acknowledge, settlementEvaluation)
           : retryGroup(store, groupId, context, outputBound, now);
         const result: CommandSuccessV1["result"] = {
           kind: "recovery-observed", resolved: observed.resolved,
@@ -578,10 +584,19 @@ function clearedBlockers(store: ControlStore, groupId: string, runId: string | n
   return { codes, evidenceIds, resolved: rows.length > 0 };
 }
 
-function retryRun(store: ControlStore, groupId: string, runId: string, context: WebCommandContext, now: string): ObservedRecovery {
+function retryRun(store: ControlStore, groupId: string, runId: string, context: WebCommandContext, now: string, acknowledge?: string, settlementEvaluation?: unknown): ObservedRecovery {
   // Issue fixes spec §4.2(3): checked before anything is cleared, so the refusal leaves the run and its blockers as they were.
   const target = readRunBody(store, runId);
   if (target.groupId === groupId && isTerminallyFailedRun(target as { state: string; drive?: DriveRecord })) throw new ControlError("run-terminal-failed");
+  // Spec 2026-10-27 single-call unknown usage §9 R1: resuming a single call blocked on unknown usage would only collect the
+  // same record and block it again, so its retry is a settlement, and only with the charge acknowledged; the acknowledgement
+  // on any other run is refused.
+  if (target.groupId === groupId && settleableSingleCallBlock(target) !== null) {
+    if (acknowledge !== SINGLE_CALL_SETTLE_ACKNOWLEDGE) throw new ControlError("run-usage-not-settleable", "acknowledge-required");
+    settleSingleCallUsageInTransaction(store, { groupId, runId, commandId: context.rawCommand.commandId, at: Date.parse(now), evaluation: settlementEvaluation });
+    return { resolved: true, blockerCodes: [], evidenceIds: [], wakeIds: [] };
+  }
+  if (acknowledge !== undefined) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");
   const blockers = clearedBlockers(store, groupId, runId);
   const wakeIds: string[] = [];
   const run = readRunBody(store, runId);
@@ -950,7 +965,7 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   saveWork(store, groupId, work as never);
 }
 
-function interruptEstimate(store: ControlStore, groupId: string, estimateId: string): void {
+export function interruptEstimate(store: ControlStore, groupId: string, estimateId: string): void {
   const row = store.db.prepare("SELECT state,body FROM estimates WHERE group_id=? AND id=?").get(groupId, estimateId);
   if (!row) return;
   const estimate = JSON.parse(String(row.body)) as { estimateId: string; state: string; reasonCode: string | null };

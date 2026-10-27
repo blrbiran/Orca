@@ -21,7 +21,8 @@ import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
-import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint } from "../control/usageSettlement.js";
+import { settleableSingleCallBlock } from "../control/singleCallSettlement.js";
+import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
 import { settlementAcknowledgeFor, settlementAdmission } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
@@ -226,6 +227,9 @@ const persistedRunSchema = z.object({
   startedAt: safeInteger.optional(),
   endedAt: safeInteger.optional(),
   usageSettlement: usageSettlementSchema.optional(),
+  // Spec 2026-10-27 single-call unknown usage §9 R4: a single call's lower bound (ccloop's record) and its settlement marker.
+  singleCallUsageLowerBound: singleCallUsageLowerBoundSchema.optional(),
+  singleCallSettlement: singleCallSettlementSchema.optional(),
   drive: driveRecordSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
   transcripts: transcriptListingSchema.optional(),
@@ -384,15 +388,20 @@ export { BUSY_WORK } from "../control/executionPending.js";
  * Final review finding 4: the requirement's own call (a clarify or split run, never a work run of the group it became)
  * that the driver blocked, with its reason; null when there is none.
  */
-function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): RequirementSummaryV1["blockedRun"] {
+function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): Pick<RequirementSummaryV1, "blockedRun" | "blockedRunCharge"> {
   const rows = snapshot === undefined
     ? store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)
     : snapshot.runsByRowid.filter(row => row.active === 1);
   for (const row of rows) {
-    const run = (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as { phase?: string; state?: string; drive?: { blockedReason?: string | null } };
-    if (run.phase === "single-call" && run.state === "blocked") return { runId: String(row.id), reason: run.drive?.blockedReason ?? null };
+    const run = (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as { phase?: string; state?: string; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
+    if (run.phase !== "single-call" || run.state !== "blocked") continue;
+    // Spec 2026-10-27 single-call unknown usage §9 R1, R6: a call blocked on unknown usage is retried by charging its
+    // remaining grant; the view names that amount and ccloop's lower bound before the person confirms.
+    const charge = settleableSingleCallBlock(run as never) === null ? {}
+      : { blockedRunCharge: { tokens: run.remaining?.work?.tokens ?? 0, usageLowerBound: run.singleCallUsageLowerBound?.tokens ?? null } };
+    return { blockedRun: { runId: String(row.id), reason: run.drive?.blockedReason ?? null }, ...charge };
   }
-  return null;
+  return { blockedRun: null };
 }
 
 /** N1 spec §11.2: a requirement's state in one line (the summary); null round/draft fields before the first of each. */
@@ -411,7 +420,7 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     reasonCode: (group.requirement.consensus === null ? round?.reasonCode : draft?.reasonCode) ?? (group.requirement.export.state === "conflict" ? exportReasonOf(group.requirement.export.detail) : null),
     exportState: group.requirement.export.state,
     used: group.used, reserved: group.reserved, limit: group.limit, usageUnknown: group.ledger.usageUnknown,
-    blockedRun: blockedRequirementRun(store, groupId, snapshot),
+    ...blockedRequirementRun(store, groupId, snapshot),
     slug: group.requirement.slug,
     ...(group.requirement.title === undefined ? {} : { title: group.requirement.title }),
     // Issue 91 review fix: only on a handoff-unresolved stop -- whether recovery-retry can act on it.

@@ -1,4 +1,4 @@
-import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes} from "./usageSettlement.js";
+import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes,singleCallUsageLowerBoundSchema} from "./usageSettlement.js";
 import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
@@ -56,6 +56,7 @@ import { classifyCriteriaChange, runChecksAtBase, type CriteriaBaseVerdict } fro
 import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
 import { openRequestOf, stepH, visitOrder } from "./driverHandoff.js";
+import { singleCallCommitTerminal } from "./singleCallSettlement.js";
 import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
@@ -214,10 +215,12 @@ export function write<T>(deps: Pick<ExecutionDriverDeps, "store" | "admissionGat
 }
 
 /** spec §2.2: a run that cannot move on its own is blocked alone, with the step and the reason. */
-export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, runId: string, step: DriveStep, reason: string, patch: Partial<DriveRecord> = {}): void {
+/** `runFields`: keys set on the run itself beside the block (a single call's lower bound, spec 2026-10-27 §9 R4). */
+export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, runId: string, step: DriveStep, reason: string, patch: Partial<DriveRecord> = {}, runFields: Record<string, unknown> = {}): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
     if (run.drive === undefined) throw new ControlError("recovery-blocked", `drive-missing:${runId}`);
+    Object.assign(run, runFields);
     run.state = "blocked";
     run.drive = { ...run.drive, ...patch, blockedAt: step, blockedReason: reason };
     saveDriverRun(deps.store, run);
@@ -1071,6 +1074,8 @@ const singleCallRecordSchema = z.object({
   outcome: z.enum(["complete", "aborted", "failed"]),
   outputRef: z.object({ artifactId: z.string().min(1), hash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().nullable(),
   errorCode: z.string().min(1).nullable(),
+  // Spec 2026-10-27 single-call unknown usage §5 C2/O1: what ccloop observed of a call that did not complete (never usage).
+  usageLowerBound: singleCallUsageLowerBoundSchema.optional(),
 }).strict();
 
 /**
@@ -1130,16 +1135,15 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
   const failure = record.outcome === "complete" ? null : normalizeSingleCallErrorCode(record.errorCode);
   const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput, failure);
   try {
-    handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, () => {
-      if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
-      const current = readDriverRun(store, runId);
-      // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.
-      if (current.state !== "accepted") throw new ControlError("start-state-conflict", "estimate-run-moved");
-      current.state = "settled-restartable";
-      saveDriverRun(store, current);
-    }, failure);
+    // Spec 2026-10-27 single-call unknown usage §9 R2: one commit, shared with a person's usage settlement.
+    handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, singleCallCommitTerminal(store, run), failure);
   } catch (error) {
-    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") { blockRun(deps, runId, "C", failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`); return true; }
+    if (error instanceof ControlError && error.code === "run-stop-unconfirmed") {
+      // Same spec O1, R4: ccloop's lower bound stays on the blocked run for the view and the settlement marker.
+      const bound = record.usageLowerBound === undefined ? {} : { singleCallUsageLowerBound: record.usageLowerBound };
+      blockRun(deps, runId, "C", failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`, {}, bound);
+      return true;
+    }
     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;
     if (error instanceof ControlError && error.code === "start-state-conflict" && error.detail === "estimate-run-moved") return false;
     throw error;

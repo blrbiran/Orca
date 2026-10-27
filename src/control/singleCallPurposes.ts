@@ -8,7 +8,8 @@ import type { MultiDirProjectOf } from "./multiGroup.js";
 import type { SingleCallPurpose } from "./singleCall.js";
 import type { ControlStore } from "./store.js";
 import type { WorkspaceRoots } from "./workspace.js";
-import { completeEstimateInStore } from "./webService.js";
+import { completeEstimateInStore, completeEstimateInTransaction } from "./webService.js";
+import { ControlError } from "./errors.js";
 import { CLARIFY_HANDLER, SPLIT_HANDLER } from "./requirementCalls.js";
 
 /**
@@ -44,6 +45,11 @@ export interface SingleCallHandler {
   readonly classify: (...args: never[]) => unknown;
   /** Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back. */
   complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
+  /**
+   * Spec 2026-10-27 single-call unknown usage §9 R2: `complete`'s core inside the caller's transaction (no gate, no
+   * transaction of its own); `complete` wraps it. Absent: the purpose's call cannot be settled by a person (flow calls, R1).
+   */
+  completeInTransaction?(store: ControlStore, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
   /** Ce: the block reason when the call's usage is not known (completion answered run-stop-unconfirmed). */
   readonly usageUnknownReason: string;
 }
@@ -66,6 +72,9 @@ const ESTIMATE = {
   complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure: string | null = null): void {
     completeEstimateInStore(deps, run.groupId, String(run.estimateId), rawOutput, commitTerminal, ESTIMATE.classify, failure);
   },
+  completeInTransaction(store: ControlStore, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure: string | null = null): void {
+    completeEstimateInTransaction(store, run.groupId, String(run.estimateId), rawOutput, commitTerminal, ESTIMATE.classify, failure);
+  },
   usageUnknownReason: "estimate-usage-unknown",
 } as const satisfies SingleCallHandler;
 
@@ -75,6 +84,11 @@ const CLARIFY_ANY: SingleCallHandler = {
   prepare: (deps, run) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).prepare(deps, run),
   classify: CLARIFY_HANDLER.classify,
   complete: (deps, run, rawOutput, commitTerminal, failure) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).complete(deps, run, rawOutput, commitTerminal, failure),
+  // Spec 2026-10-27 §9 R1: a flow clarify call is out of the settlement's scope; singleCallSettlement.ts never reaches it.
+  completeInTransaction: (store, run, rawOutput, commitTerminal, failure) => {
+    if (isFlowCallRun(run)) throw new ControlError("run-usage-not-settleable", "flow-call");
+    CLARIFY_HANDLER.completeInTransaction!(store, run, rawOutput, commitTerminal, failure);
+  },
   usageUnknownReason: CLARIFY_HANDLER.usageUnknownReason,
 };
 const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpose, ...FLOW_CALL_HANDLER });

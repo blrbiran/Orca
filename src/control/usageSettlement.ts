@@ -26,6 +26,22 @@ export const usageSettlementSchema = z.union([
   if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
 export type UsageSettlement = z.infer<typeof usageSettlementSchema>;
+/**
+ * Spec 2026-10-27 single-call unknown usage §5 O1, §9 R4: ccloop's lower bound on a failed single call's usage (record key
+ * `usageLowerBound`), kept on the blocked run as `singleCallUsageLowerBound`. Shown to the person, never charged (D3).
+ */
+export const singleCallUsageLowerBoundSchema = z.object({ tokens: safeInteger.positive() }).strict();
+/**
+ * Same spec §9 R1, R4: the marker a single call's settlement leaves on its run (`singleCallSettlement`), the remaining-grant
+ * method of spec 2026-10-13 §A without the task-shaped fields. `disposition`: the call was completed as failed by its
+ * purpose, or interrupted because its round, draft or estimate had moved (R2).
+ */
+export const singleCallSettlementSchema = z.object({
+  method: z.literal("remaining-grant"), commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
+  groupId: idSchema, runId: idSchema, highWater: safeInteger, charged: amountSchema,
+  usageLowerBound: singleCallUsageLowerBoundSchema.nullable(), blockedReason: z.string().min(1), disposition: z.enum(["completed", "interrupted"]),
+}).strict();
+export type SingleCallSettlement = z.infer<typeof singleCallSettlementSchema>;
 export interface SettlementRun {
   runId: string; groupId: string; taskId: string | null; workItemId: string; generation: number; highWater: number;
   graphVersion: number; targetVersion: number; executionId: string | null; grant: Grant; remaining: Grant; cumulative: {work:Amount;handoff:Amount};

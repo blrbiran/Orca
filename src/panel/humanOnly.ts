@@ -131,6 +131,9 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
   // Scheduled flows and groups spec §9.1, §11.1: a library import's token limit is a budget amount and its scheme a
   // delivery choice (what confirm.integrationHash guards today).
   "import-plan": ["tokenLimit", "integration"],
+  // Spec 2026-10-27 single-call unknown usage §9 R1: charging a blocked single call's grant is an owner's act, as
+  // settle-unknown-usage is.
+  "recovery-retry": ["acknowledge"],
 };
 /**
  * CLI v2 spec §15.1: the control socket's tier for each human-only entry (a verb, or `verb.field`), the table's code mirror.
@@ -220,6 +223,7 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // Multi-directory projects spec §9.7: as resolve-folder-change.
   "multi-dir-landing": "token",
   "settle-unknown-usage": "token",
+  "recovery-retry.acknowledge": "token",
   "apply-agent-update": "token",
   // Scheduled flows and groups spec §11.1 (I-3): a new entry copies data Orca already holds (open); appending a version
   // changes what an existing entry offers every repin and one-off import (token). Importing outside bytes is the owner's
