@@ -156,3 +156,21 @@ describe("the static review lines are gone (C28, §7.4 item 5)", () => {
     for (const gone of ["Start is a separate action", "Review the effective Agent", "Review the integration target", "Review the optional token policy"]) expect(text).not.toContain(gone);
   });
 });
+
+describe("the allocation table folds (tester #7, #11, #13)", () => {
+  // The per-task table is long, wide and seldom changed; folded, the page leads with what a person decides. It opens
+  // by itself when it needs the person: an invalid value or a deficit.
+  const fold = (): HTMLDetailsElement => document.querySelector("details.budget-allocations")!;
+  it("is folded with nothing to fix, open on an invalid value or a deficit", () => {
+    editor(draft());
+    expect(fold().open).toBe(false);
+    expect(fold().querySelector("summary")!.textContent).toMatch(/^Allocations per task and bucket \(\d+ rows\)$/);
+    cleanup();
+    editor(draft(), { drafts: { "g:group-limit:tokens": "invalid" } });
+    expect(fold().open).toBe(true);
+    cleanup();
+    const base = draft();
+    editor({ ...base, ledger: { ...base.ledger, budgetDeficit: { ...base.ledger.budgetDeficit, tokens: 5 } } });
+    expect(fold().open).toBe(true);
+  });
+});

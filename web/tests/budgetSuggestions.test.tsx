@@ -111,7 +111,8 @@ describe("the budget editor's suggestion controls (single-call estimate spec §7
       const rows = [...container.querySelectorAll("tbody tr")];
       expect(rows).toHaveLength(unusable.allocations.length);
       expect(rows.map((row) => row.querySelectorAll("td").length)).toEqual(unusable.allocations.map(() => plain));
-      expect(container.querySelectorAll("details")).toHaveLength(0);
+      // Tester #11: the allocation table now folds in its own details; the rationale's is the one that must be absent. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
+      expect(container.querySelectorAll("details:not(.budget-allocations)")).toHaveLength(0);
       cleanup();
     }
   });

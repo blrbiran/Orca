@@ -761,6 +761,7 @@ export const zh: Translation<typeof en> = {
     ownerSetsLimit: "只有所有者能修改组的额度。",
     region: "预算提案",
     title: "预算",
+    allocations: "按任务和桶的分配（{{count}} 行）",
     heading: "提案 v{{version}} · {{state}}",
     modeLine: "预算模式 {{mode}} · 观测到的约束方式 {{enforcement}}",
     notChosen: "未选择",

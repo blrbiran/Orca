@@ -884,6 +884,7 @@ export const en = {
     ownerSetsLimit: "Only an owner can change the group limit.",
     region: "Budget proposal",
     title: "Budget",
+    allocations: "Allocations per task and bucket ({{count}} rows)",
     heading: "Proposal v{{version}} · {{state}}",
     modeLine: "budget mode {{mode}} · observed enforcement {{enforcement}}",
     notChosen: "not chosen",
