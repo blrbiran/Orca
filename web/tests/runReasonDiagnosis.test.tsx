@@ -63,7 +63,7 @@ describe("run failure cause (failure-cause spec §5)", () => {
   // evidence" told the person nothing: the model reached for a tool the phase does not allow, and a retry or another
   // model/agent is the way on. The code's own next step replaces the unknown one; a cause ccloop did classify keeps its own.
   it("words omp's forbidden-tool stop as its next step when the cause is unknown or unstated, in English and Chinese", async () => {
-    const forbidden = (failureCause: { cause: string; phase: string; retries: number; detail: null } | null, extra: Record<string, unknown> = {}) =>
+    const forbidden = (failureCause: { cause: string; phase: "plan"; retries: number; detail: null } | null, extra: Record<string, unknown> = {}) =>
       run({ runId: "run-f", state: "blocked", outcome: "failed", stopReason: "Error: omp-phase-tool-forbidden", failureCause, ...extra });
     const words = "Why it stopped: the cause is unknown. The model tried to use a tool this step does not allow (a plan phase may only read files; a single call may use none). Retry, or choose another model or agent.";
     expect(renderToStaticMarkup(<RunReason run={forbidden({ cause: "unknown", phase: "plan", retries: 0, detail: null })} />)).toContain(words);
