@@ -28,6 +28,7 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readPlacement } from "../../src/control/dirGroup.js";
 import { classifyLandingPaths } from "../../src/control/dirPlacement.js";
+import { withDirLock } from "../../src/flow/vault/dirLock.js";
 import { DOC, folderState, orcaNames, placementWorld, type PlacementWorld } from "./fixtures/dirPlacementWorld.js";
 
 const PLACED = "refs/orca/group/g/placed";
@@ -300,6 +301,29 @@ describe("the person's answers (§9.2)", () => {
     expect(w.record()).toMatchObject({ state: "idle", changed: [] });
     expect(w.show(w.ref("refs/heads/orca/g")!, DOC)).toBe("# Notes export");
     expect(read(w, DOC)).toBe("person's notes\n");
+  }));
+
+  // Review 2026-10-27 (session 7753e97d): the pass reads the answer before it takes the folder lock and acts on it for a
+  // while; the person may answer again meanwhile (the command is accepted while the group still reads stopped). The
+  // first answer's save must not overwrite the second: a second answer silently gone is a decision of the person's lost.
+  it.each([
+    ["take-folder", "recheck"],
+    ["withhold", "recheck"],
+    ["recheck", "withhold"],
+  ] as const)("a second answer given while the pass acts on a first (%s, then %s) is kept, not overwritten", (first, second) => inWorld({ "a.md": "A\n" }, async (w) => {
+    w.land({ "a.md": "A2\n", "n.md": "N\n" });
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"] });
+    expect(w.resolve(first, "first")).toEqual({ ok: true });
+    let pass: Promise<boolean> | undefined;
+    await withDirLock(w.frozen.dir, async () => {
+      // The pass has read the record (with the first answer) and now waits for the lock; the person answers again.
+      pass = w.place();
+      expect(w.resolve(second, "second")).toEqual({ ok: true });
+    });
+    await pass;
+    expect(w.record().resolution).toMatchObject({ id: "second", action: second });
   }));
 
   it("withhold with no stopped state, or take-folder outside folder-changed, is refused", () => inWorld({ "a.md": "A\n" }, async (w) => {

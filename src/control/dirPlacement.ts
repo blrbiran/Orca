@@ -407,6 +407,14 @@ const cleanStop = (): Pick<PlacementRecord, "changed" | "changedTotal" | "unwrit
   ({ changed: [], changedTotal: 0, unwritable: [], unwritableTotal: 0, watch: null, stopRecord: null });
 
 /**
+ * The resolution a save that acted on `consumed` leaves: `next` while the stored answer is still that one, else the newer
+ * answer the person gave meanwhile (review 2026-10-27, session 7753e97d: the answer is read before the pass, and a
+ * second one may arrive while it runs -- it is never overwritten by the first).
+ */
+const answered = (current: PlacementRecord, consumed: string | null, next: PlacementRecord["resolution"]): PlacementRecord["resolution"] =>
+  current.resolution !== null && current.resolution.id !== consumed ? current.resolution : next;
+
+/**
  * §8.5 step 9: stop. The first STOP_KEPT paths of each list in the body with exact totals; the full canonical lists (with
  * the change's `to` and tip, which a `withhold` needs) in a vault blob under `refs.stop`; the watch signature. A
  * resolution this pass acted on is answered by this stop (a new stop asks again).
@@ -422,7 +430,7 @@ async function stop(ws: DirWorkspace, target: FolderPlacementTarget, io: FolderP
     state: changed.length > 0 ? "folder-changed" : "folder-unwritable",
     changed: changed.slice(0, STOP_KEPT), changedTotal: changed.length, unwritable: unwritable.slice(0, STOP_KEPT), unwritableTotal: unwritable.length,
     stopRecord: blob, watch, detail: input.detail,
-    resolution: current.resolution !== null && current.resolution.id === input.consumed ? null : current.resolution,
+    resolution: answered(current, input.consumed, null),
   }));
 }
 
@@ -623,7 +631,7 @@ async function takeFolder(ws: DirWorkspace, target: FolderPlacementTarget, io: F
   // the last placed one) plus the person's taken paths -- not of `T′`. Recording `tip: T′` here claimed the rest of the
   // stopped landing was in the folder, and step 4 then never wrote it. The record keeps the tip `p` stands for, and the
   // caller goes on to steps 3–5 in this round, which place the rest of `T′` from `p`.
-  const saved = io.save((current) => ({ ...current, ...cleanStop(), tip: record.pending?.tip ?? record.tip, landedTip: tprime, pending: null, state: "idle", detail, resolution: { ...resolution } }));
+  const saved = io.save((current) => ({ ...current, ...cleanStop(), tip: record.pending?.tip ?? record.tip, landedTip: tprime, pending: null, state: "idle", detail, resolution: answered(current, resolution.id, { ...resolution }) }));
   await dropRef(ws, target.refs.pending);
   await dropRef(ws, target.refs.stop);
   if (notTaken.length === 0) return { kind: "continue", record: saved };
@@ -652,7 +660,7 @@ async function withholdPaths(ws: DirWorkspace, target: FolderPlacementTarget, io
   const merged = new Map(record.withheld.map((entry) => [entry.path, entry]));
   for (const entry of added) merged.set(entry.path, entry);
   const withheld = [...merged.values()].sort((a, b) => byBytes(a.path, b.path));
-  const saved = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail, pending: null, resolution: null, withheld }));
+  const saved = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail, pending: null, resolution: answered(current, resolution.id, null), withheld }));
   await dropRef(ws, target.refs.pending);
   await dropRef(ws, target.refs.stop);
   return saved;
@@ -683,7 +691,7 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
     } else if (resolution.action === "withhold") record = await withholdPaths(ws, target, io, record, resolution);
     else {
       // recheck -- and a take-folder whose state moved (the folder went missing) since the command was recorded.
-      record = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail: null, resolution: null }));
+      record = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail: null, resolution: answered(current, resolution.id, null) }));
       await dropRef(ws, target.refs.stop);
     }
   }
