@@ -1,16 +1,15 @@
 import { readRun, saveRun, syncWebBudget, type RunRecord } from "./budget.js";
 import { recordActivity } from "./activity.js";
 import { commandPrincipalFor } from "./commandClient.js";
-import { openRequestOf } from "./driverHandoff.js";
+import { singleCallCommitTerminal } from "./driverHandoff.js";
 import { resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
-import { isFlowCallRun } from "../flow/calls.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { interruptRequirementCall, requirementCallTargetMoved } from "./requirementCalls.js";
 import { amountSchema } from "./schema.js";
 import { chargeRunRemainder } from "./settleUnknownUsage.js";
-import { singleCallPurposeOf } from "./singleCall.js";
-import { singleCallHandler, type SingleCallHandler, type SingleCallRunRow } from "./singleCallPurposes.js";
+import { settleableSingleCallBlock } from "./singleCall.js";
+import { singleCallHandler, type SingleCallRunRow } from "./singleCallPurposes.js";
 import { interruptEstimate, readStopIntent } from "./stopIntent.js";
 import { singleCallSettlementSchema, type SingleCallSettlement } from "./usageSettlement.js";
 import type { ControlStore } from "./store.js";
@@ -24,40 +23,7 @@ import type { ControlStore } from "./store.js";
  * Requirement clarify/split and estimate only; flow calls are out of scope (R1).
  */
 
-export const SINGLE_CALL_SETTLE_ACKNOWLEDGE = "charge-remaining-grant";
-
 type SingleCallRun = RunRecord & SingleCallRunRow & { purpose?: string; drive?: DriveRecord; singleCallUsageLowerBound?: { tokens: number }; singleCallSettlement?: SingleCallSettlement };
-
-/**
- * The commit the driver's Ce runs first inside the settlement's transaction (stepCSingleCall), shared with a usage
- * settlement (R2): a run with an open handoff request yields to the handoff, a run that moved off `accepted` is left alone,
- * otherwise it becomes `settled-restartable`.
- */
-export function singleCallCommitTerminal(store: ControlStore, run: { groupId: string; runId: string }): () => void {
-  return () => {
-    if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
-    const current = readRun(store, run.runId) as Omit<RunRecord, "state"> & { state: string };
-    // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.
-    if (current.state !== "accepted") throw new ControlError("start-state-conflict", "estimate-run-moved");
-    current.state = "settled-restartable";
-    saveRun(store, current as never);
-  };
-}
-
-/**
- * The block a person can settle: a requirement or estimate single call (never a flow call) blocked at C with a reason
- * that is its purpose's usageUnknownReason, alone or followed by `:` and ccloop's failure code. `failure` is that code;
- * a reason without one (the call completed but its usage is unknown) is recorded as `usage-unknown` (review S2).
- */
-export function settleableSingleCallBlock(run: { state?: unknown; drive?: { blockedAt?: string | null; blockedReason?: string | null } } & Record<string, unknown>): { handler: SingleCallHandler; failure: string } | null {
-  const purpose = singleCallPurposeOf(run as never);
-  if (purpose === null || run.state !== "blocked" || run.drive?.blockedAt !== "C") return null;
-  const handler = singleCallHandler(purpose);
-  if (handler.completeInTransaction === undefined || isFlowCallRun(run as never)) return null;
-  const reason = run.drive.blockedReason ?? "", prefix = handler.usageUnknownReason;
-  if (reason !== prefix && !reason.startsWith(`${prefix}:`)) return null;
-  return { handler, failure: reason === prefix ? "usage-unknown" : reason.slice(prefix.length + 1) };
-}
 
 /** The estimate's twin of requirementCallTargetMoved: its settlement records only a running (or start-unknown) estimate. */
 function estimateMoved(store: ControlStore, groupId: string, estimateId: string): boolean {
@@ -70,11 +36,12 @@ function estimateMoved(store: ControlStore, groupId: string, estimateId: string)
  * `evaluate` answered before the transaction for a failed call (rawOutput null), as the driver computes it (R2, review
  * S2); a purpose without `evaluate` gets null. A refusal throws, and the command's transaction rolls everything back.
  */
+export type SettleSingleCallUsage = typeof settleSingleCallUsageInTransaction;
 export function settleSingleCallUsageInTransaction(
   store: ControlStore, input: { groupId: string; runId: string; commandId: string; at: number; evaluation?: unknown },
 ): void {
   const run = readRun(store, input.runId) as SingleCallRun;
-  const block = settleableSingleCallBlock(run);
+  const block = settleableSingleCallBlock(run as never);
   if (block === null || run.groupId !== input.groupId) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");
   // As settle-unknown-usage: an authenticated owner on the Web (the route refuses anyone else first, humanOnly.ts).
   const principal = commandPrincipalFor(input.commandId);
@@ -84,7 +51,7 @@ export function settleSingleCallUsageInTransaction(
   if (group.stopped || readStopIntent(store, run.groupId) !== null) throw new ControlError("stop-mode-conflict");
   if (store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, run.highWater)) throw new ControlError("run-usage-pending");
   if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
-  const { handler, failure } = block;
+  const { failure } = block, handler = singleCallHandler(block.purpose);
   if (handler.evaluate !== undefined && input.evaluation === undefined) throw new ControlError("run-usage-not-settleable", "evaluation-missing");
   const estimate = handler.purpose === "estimate";
   const moved = estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run);

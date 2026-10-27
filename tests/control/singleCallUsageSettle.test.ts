@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { ControlError } from "../../src/control/errors.js";
 import { readDraft, writeRound } from "../../src/control/requirementRecords.js";
-import { settleableSingleCallBlock } from "../../src/control/singleCallSettlement.js";
+import { SETTLEABLE_USAGE_UNKNOWN_REASONS, settleableSingleCallBlock } from "../../src/control/singleCall.js";
+import { settleSingleCallUsageInTransaction } from "../../src/control/singleCallSettlement.js";
+import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { applyRecoveryRetry } from "../../src/control/stopIntent.js";
 import { readControlOverview } from "../../src/panel/controlOverview.js";
 import { humanOnlyRefusal, socketTier } from "../../src/panel/humanOnly.js";
@@ -201,8 +203,21 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
     try {
       await x.until(() => x.runs()[0]?.state === "blocked");
       const command = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
-      const outcome = await refusal(Promise.resolve().then(() => asOwner(command, () => applyRecoveryRetry({ store: x.store } as never, command as never))));
+      const outcome = await refusal(Promise.resolve().then(() => asOwner(command, () => applyRecoveryRetry({ store: x.store } as never, command as never, null, { settle: settleSingleCallUsageInTransaction }))));
       expect(outcome).toMatchObject({ code: "run-usage-not-settleable", message: "evaluation-missing" });
+    } finally { await x.dispose(); }
+  });
+});
+
+describe("recovery-retry with no settlement given (a caller other than the Web service)", () => {
+  it("refuses a usage-unknown block by name rather than resuming it into the same block", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
+    try {
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      const command = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
+      const outcome = await refusal(Promise.resolve().then(() => asOwner(command, () => applyRecoveryRetry({ store: x.store } as never, command as never))));
+      expect(outcome).toMatchObject({ code: "run-usage-not-settleable", message: "settlement-unavailable" });
+      expect(x.runs()[0]).toMatchObject({ state: "blocked", unknown: { work: true } });
     } finally { await x.dispose(); }
   });
 });
@@ -226,6 +241,10 @@ describe("a call whose round moved on is settled through the interrupt path (§9
 
 describe("which runs are settleable (§9 R1: flow calls are out of scope)", () => {
   const blocked = (fields: Record<string, unknown>) => ({ phase: "single-call", state: "blocked", drive: { blockedAt: "C", blockedReason: "requirement-usage-unknown:omp-stalled" }, ...fields });
+  it("names the same reason as each purpose's driver step writes", () => {
+    for (const [purpose, reason] of Object.entries(SETTLEABLE_USAGE_UNKNOWN_REASONS)) expect(singleCallHandler(purpose as never).usageUnknownReason, purpose).toBe(reason);
+    expect(Object.keys(SETTLEABLE_USAGE_UNKNOWN_REASONS).sort()).toEqual(["clarify", "estimate", "split"]);
+  });
   it("a requirement clarify call is; a flow clarify call and a flow purpose's call are not", () => {
     expect(settleableSingleCallBlock(blocked({ purpose: "clarify" }))).toMatchObject({ failure: "omp-stalled" });
     expect(settleableSingleCallBlock(blocked({ purpose: "clarify", flowCall: { executionId: "e" } }))).toBeNull();

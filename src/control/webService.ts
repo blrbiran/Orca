@@ -37,7 +37,9 @@ import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
 import { decideEstimateRetry, estimateRetryId, retryPromptRequired, writeEstimateRetry } from "./estimateRetry.js";
 import { parkEstimate } from "./estimateParking.js";
 import { scheduleStart, type StartCommand } from "./webDispatch.js";
-import { settleableSingleCallBlock } from "./singleCallSettlement.js";
+import { settleSingleCallUsageInTransaction } from "./singleCallSettlement.js";
+import { settleableSingleCallBlock } from "./singleCall.js";
+import { singleCallHandler } from "./singleCallPurposes.js";
 import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurposes.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
@@ -1375,7 +1377,8 @@ export class WebControlService {
   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
     const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
     const outputBound = command.target.kind === "group" ? await this.retryOutputBound(command.target.groupId) : null;
-    return applyRecoveryRetry(this.stopDeps(), command, outputBound, await this.settlementEvaluation(command)) as WebCommandResult;
+    const settlement = command.payload.scope === "run" ? { settle: settleSingleCallUsageInTransaction, evaluation: await this.settlementEvaluation(command) } : null;
+    return applyRecoveryRetry(this.stopDeps(), command, outputBound, settlement) as WebCommandResult;
   }
   /**
    * Spec 2026-10-27 single-call unknown usage §9 R2 (review S2): a retry that settles a single call completes it as failed,
@@ -1388,9 +1391,9 @@ export class WebControlService {
     const row = this.store.db.prepare("SELECT body FROM runs WHERE id=?").get(command.payload.runId);
     if (row === undefined) return undefined;
     const run = JSON.parse(String(row.body)) as SingleCallRunRow;
-    const block = settleableSingleCallBlock(run);
-    if (block === null || block.handler.evaluate === undefined) return undefined;
-    return block.handler.evaluate({ store: this.store } as SingleCallPrepareDeps, run, null, block.failure);
+    const block = settleableSingleCallBlock(run as never), handler = block === null ? null : singleCallHandler(block.purpose);
+    if (block === null || handler?.evaluate === undefined) return undefined;
+    return handler.evaluate({ store: this.store } as SingleCallPrepareDeps, run, null, block.failure);
   }
   /**
    * Spec 2026-10-15 ccloop error codes §4.8: for a clarifying requirement whose latest round or draft failed or was

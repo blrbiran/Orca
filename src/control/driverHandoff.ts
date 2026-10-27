@@ -58,6 +58,23 @@ export function openRequestOf(store: ControlStore, run: Pick<DriverRun, "groupId
   return request !== null && ADOPTABLE_STATES.includes(request.state) ? request : null;
 }
 
+/**
+ * The commit a single call's Ce runs first inside its settlement's transaction (executionDriver.ts stepCSingleCall), shared
+ * with a person's usage settlement (spec 2026-10-27 single-call unknown usage §9 R2, singleCallSettlement.ts): a run with
+ * an open handoff request yields to the handoff, a run that moved off `accepted` is left alone, otherwise it becomes
+ * `settled-restartable`.
+ */
+export function singleCallCommitTerminal(store: ControlStore, run: { groupId: string; runId: string }): () => void {
+  return () => {
+    if (openRequestOf(store, run) !== null) throw new ControlError("handoff-request-conflict", "estimate-yields-to-handoff");
+    const current = readRun(store, run.runId) as unknown as { state: string };
+    // As stepC: the run may have moved while this step awaited ccloop; only an `accepted` run is settled here.
+    if (current.state !== "accepted") throw new ControlError("start-state-conflict", "estimate-run-moved");
+    current.state = "settled-restartable";
+    saveRun(store, current as never);
+  };
+}
+
 /** spec §13.2 I-2: every Web work run (and estimate run) with an open request, whatever its state (blocked and settled included). */
 export function handoffRunIds(store: ControlStore): string[] {
   const ids: string[] = [];

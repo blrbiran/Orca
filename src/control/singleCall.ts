@@ -41,3 +41,29 @@ export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId:
     ? { id: `estimate:${groupId}:${workItemId}`, kind: "estimate-claim" }
     : { id: `single-call:${groupId}:${workItemId}:${runId}`, kind: "single-call-claim" };
 }
+
+/**
+ * Spec 2026-10-27 single-call unknown usage (tester #62) §9 R1: the purposes a person can settle and the block reason each
+ * one's driver step writes (its handler's usageUnknownReason, singleCallPurposes.ts -- a criterion keeps the two equal).
+ * Flow calls are out of scope. Kept here, free of the purposes' modules, so the read model and recovery-retry can ask.
+ */
+export const SETTLEABLE_USAGE_UNKNOWN_REASONS: Readonly<Partial<Record<SingleCallPurpose, string>>> = Object.freeze({
+  estimate: "estimate-usage-unknown", clarify: "requirement-usage-unknown", split: "requirement-usage-unknown",
+});
+export const SINGLE_CALL_SETTLE_ACKNOWLEDGE = "charge-remaining-grant";
+
+/**
+ * The block a person can settle: a requirement or estimate single call (never a flow call, whose run names `flowCall`)
+ * blocked at C with a reason that is its purpose's usage-unknown reason, alone or followed by `:` and ccloop's failure
+ * code. `failure` is that code; a reason without one (the call completed but its usage is unknown) is recorded as
+ * `usage-unknown` (review S2).
+ */
+export function settleableSingleCallBlock(run: { phase?: unknown; purpose?: unknown; state?: unknown; flowCall?: unknown; drive?: { blockedAt?: string | null; blockedReason?: string | null } }): { purpose: SingleCallPurpose; failure: string } | null {
+  const purpose = singleCallPurposeOf(run);
+  if (purpose === null || run.state !== "blocked" || run.drive?.blockedAt !== "C") return null;
+  const prefix = SETTLEABLE_USAGE_UNKNOWN_REASONS[purpose];
+  if (prefix === undefined || run.flowCall !== undefined) return null;
+  const reason = run.drive.blockedReason ?? "";
+  if (reason !== prefix && !reason.startsWith(`${prefix}:`)) return null;
+  return { purpose, failure: reason === prefix ? "usage-unknown" : reason.slice(prefix.length + 1) };
+}
