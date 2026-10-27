@@ -183,7 +183,9 @@ it("unresolved Agent selections give a destination before confirmation", () => {
   render(<ControlGroupView view={shown} config={boardConfig} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
   const region = screen.getByRole("tabpanel", { name: "Preparation" });
   // H6(b): the link opens the Agents category of the one Settings page. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
-  expect(within(region).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#settings/agents");
+  // The link names the page and category it opens. Ruling: human 「同意修改判据」 for the "Global settings" link label, Orca
+  // session 3cd8fb02, 2026-10-27 (this fifth criterion was found after the four named ones; same label, same assertion).
+  expect(within(region).getByRole("link", { name: "Settings › Agents" }).getAttribute("href")).toBe("#settings/agents");
   expect((within(region).getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(true);
 });
 

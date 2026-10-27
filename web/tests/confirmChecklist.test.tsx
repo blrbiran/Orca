@@ -53,9 +53,10 @@ const blockerLines = (): string[] => screen.queryByRole("list", { name: "Before 
 
 describe("the confirm checklist (C27)", () => {
   it.each([
-    ["profiles", { config: { ...config, defaults: null } }, "Choose a budget mode and agent profiles, or set the defaults in Global settings."],
+    // The settings page is one page with categories (H6), so no blocker names "Global settings" any more. Ruling: human 「同意修改判据」, Orca session 3cd8fb02, 2026-10-27
+    ["profiles", { config: { ...config, defaults: null } }, "Choose a budget mode and agent profiles, or set the defaults in Settings."],
     // Tester #7/#14: Agent selection now sits above the budget, so "below" became "above". Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
-    ["selections", { hash: null }, "Every agent slot must resolve; see Agent selection above, or check installation and defaults in Global settings"],
+    ["selections", { hash: null }, "Every agent slot must resolve; see Agent selection above, or check installation and defaults in Settings › Agents"],
     ["owner", { me: member, view: { integration } }, "This group has a delivery scheme (push or PR); only an owner can confirm it."],
     ["draft", { drafts: { "g:group-limit:tokens": "invalid" } }, "Fix the highlighted values first."],
     // Spec §21 (review I1): a limited group over its limit; the server refuses confirm until the limit is raised.
@@ -86,10 +87,11 @@ describe("the confirm checklist (C27)", () => {
     expect(confirmBlockers({ ...v, ledger: { ...v.ledger, budgetDeficit: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } } }, config, HASH, true, {}, { mode: "", profiles: { worker: "", handoff: "", goalReview: "" } })).toEqual([]);
   });
 
-  it("links the selections blocker to Global settings", () => {
+  it("links the selections blocker to Settings › Agents", () => {
     editor(draft(), { hash: null });
     // H6(b): the link opens the Agents category of the one Settings page. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
-    expect(within(checklist()).getByRole("link", { name: "Global settings" }).getAttribute("href")).toBe("#settings/agents");
+    // The link names the page and category it opens. Ruling: human 「同意修改判据」, Orca session 3cd8fb02, 2026-10-27
+    expect(within(checklist()).getByRole("link", { name: "Settings › Agents" }).getAttribute("href")).toBe("#settings/agents");
   });
 
   it("with nothing blocking a limited group: one status line, the starts note, and both buttons enabled", () => {
