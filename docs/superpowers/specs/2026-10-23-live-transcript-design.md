@@ -1037,3 +1037,22 @@ and the controller ruled that a person's stop must always have a way out.
   ends `failed` instead. A held external effect step is parked, never running, so it stays held (gaps §21). The children
   keep the flow's stop. The person starts a new run.
 - **`FlowChildPort.resume` takes `record` as a required argument** (section 13: one transaction for a resume).
+
+### 12.6 Corrections from the implementation review (session 7753e97d, 2026-10-27, branch `fix/transcript-review`)
+
+Written by the implementer of review findings 1-9 (Orca session 7753e97d). The sections above stay as written; these
+supersede them where they differ.
+
+- **10.6.2 Shapes, the assignment rule.** A JSON key/value pair is an assignment too. In a composite value (a tool input,
+  an unknown line, codex `mcp_tool_call` arguments and result, omp `args`), a string value of 8 characters or more under
+  a key whose name carries a secret word (the 10.6.2 list; `AUTH` covers `authorization`) is redacted whole, and every key
+  is redacted as a decoded string. In decoded text that keeps JSON quotes (an oversized or unparsable line), the rule
+  allows a closing quote after the name: `"API_TOKEN": "…"`.
+- **10.6.2 Shapes, bounds.** The URL scheme is `[a-z][a-z0-9+.-]{0,31}`, and the parts of an assignment name before and
+  after its secret word are `[A-Za-z0-9_]{0,64}` each. Unbounded, redaction was quadratic (35 s over 128K characters of
+  `a.`, measured by the review probe `/private/tmp/orca-7753e97d/review-transcript/probe/redos.ts`); bounded, the same
+  probe reads 8.9 ms at 128K. A longer scheme or name part is not matched (accepted).
+- **10.4.1 index cache.** A request whose size did not shrink checks the head hash, the same size included (a file
+  rewritten in place keeps its inode). Requests for one key run one at a time.
+- **10.4.1 Source / 12.3 listing.** A live call's size and its `outcome.json` are read through the same component walk
+  as the transcript itself (no symlinked directory is followed).
