@@ -81,7 +81,8 @@ describe("sessions in the account settings (CLI v2 spec §15.3)", () => {
     try {
       render(<AuthGate><AccountSettings /></AuthGate>);
       const region = await screen.findByRole("region", { name: "会话" });
-      await within(region).findByText(/命令行/);
+      // The explaining line names 命令行 too, so wait for the rows, not for the text.
+      await waitFor(() => expect(within(region).getAllByRole("listitem")).toHaveLength(2));
       // mutation: back to 「吊销」 -> red
       expect(within(region).getByRole("button", { name: "退出登录" })).toBeTruthy();
       expect(region.textContent).not.toContain("吊销");
