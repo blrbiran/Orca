@@ -6,7 +6,7 @@
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_ROWS, RunTranscript } from "../src/AgentTranscript.js";
+import { MAX_KEPT, MAX_ROWS, mergeWindow, RunTranscript } from "../src/AgentTranscript.js";
 import type { RunTranscriptsV1, TranscriptEventV1, TranscriptWindowV1 } from "../src/controlTypes.js";
 
 const RUN = "run-a";
@@ -101,3 +101,71 @@ describe("T8: the transcript list", () => {
     expect(urls).toEqual([]);
   });
 });
+
+describe("review 7753e97d: what one open call keeps, and its Earlier/Later", () => {
+  const run = (from: number, to: number): TranscriptEventV1[] => Array.from({ length: to - from }, (_, k) => message((from + k) * 10, `event ${from + k}`));
+
+  it("mergeWindow keeps MAX_KEPT events: a follow drops the oldest and moves start; an Earlier drops the newest and moves end", () => {
+    const tail = mergeWindow(null, win(run(0, MAX_KEPT), 0, MAX_KEPT * 10), "tail");
+    const followed = mergeWindow(tail, win(run(MAX_KEPT, MAX_KEPT + 100), MAX_KEPT * 10, (MAX_KEPT + 100) * 10), "after");
+    expect(followed.events).toHaveLength(MAX_KEPT);
+    expect(followed.start).toBe(1000);
+    expect(followed.events[0]!.at).toBe(followed.start);
+    const pinned = mergeWindow(null, win(run(1900, 2100), 19000, 21000, true), "tail");
+    const earlier = mergeWindow(pinned, win(run(0, 1900), 0, 19000, true), "before");
+    expect(earlier.events).toHaveLength(MAX_KEPT);
+    expect(earlier.start).toBe(0);
+    expect(earlier.end).toBe(20000);
+    expect(earlier.latest).toBe(21000);
+  });
+
+  it("Earlier past MAX_KEPT drops the newest; Later at the end reads them back", async () => {
+    vi.useFakeTimers();
+    answer = (url) => {
+      if (url.endsWith("/transcripts")) return LISTING;
+      if (url.includes("tail=1")) return win(run(1900, 2100), 19000, 21000, true);
+      if (url.includes("before=19000")) return win(run(0, 1900), 0, 19000, true);
+      if (url.includes("after=20000")) return win(run(2000, 2100), 20000, 21000, true);
+      return win([], 21000, 21000, true);
+    };
+    const { container } = render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+    await flush();
+    expect(urls.some((url) => url.includes("before=19000"))).toBe(true);
+    // The view stays next to where it was: the rows just before the previous first row.
+    expect(screen.getAllByTestId("transcript-event")[0]!.textContent).toContain("event 1800");
+    for (let k = 0; k < 3 && !urls.some((url) => url.includes("after=")); k++) {
+      fireEvent.click(screen.getByRole("button", { name: "Later" }));
+      await flush();
+    }
+    expect(urls.filter((url) => url.includes("after="))).toEqual([expect.stringContaining("after=20000")]);
+    fireEvent.click(screen.getByRole("button", { name: "Later" }));
+    await flush();
+    expect(container.textContent).toContain("event 2099");
+  });
+
+  it("an Earlier clicked while a follow poll is in flight is queued, not dropped", async () => {
+    vi.useFakeTimers();
+    let release: (() => void) | null = null;
+    const base = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+      if (String(input).includes("after=")) await new Promise<void>((resolve) => { release = resolve; });
+      return base(input);
+    }) as typeof fetch;
+    answer = (url) => (url.endsWith("/transcripts") ? LISTING : url.includes("tail=1") ? win([message(100, "newest")], 100, 200) : url.includes("before=") ? win([message(0, "oldest")], 0, 100) : win([], 200, 200));
+    const { container } = render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(release).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+    await flush();
+    release!();
+    await flush();
+    await flush();
+    expect(urls.some((url) => url.includes("before=100"))).toBe(true);
+    expect(container.textContent).toContain("oldest");
+  });
+
+});
+

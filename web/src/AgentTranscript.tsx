@@ -5,7 +5,8 @@
  *
  * - A collapsed disclosure makes no request; with `active === false` (a hidden pane) nothing is requested and nothing
  *   polls.
- * - The 1 s follow poll runs only while the document is visible, `active` is true, the call is open and not `final`.
+ * - The 1 s follow poll runs only while the document is visible, `active` is true, the call is open and not `final`, and
+ *   the view is pinned to the newest rows (Later at the end pins it again).
  * - One transcript open per tab: a single module-level slot shared by every mount (spec §10.4.4, M9).
  * - At most 200 event rows are mounted (plan D5: a paged view; Earlier/Later move it). Collapsed rows render no body.
  * - Agent text is rendered as React text nodes only; `thinking` is never asked for and never rendered (ruling 2).
@@ -14,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { controlFailureFrom, fetchRunTranscripts, fetchTranscriptPage, fetchTranscriptWindow } from "./controlApi.js";
+import { controlFailureFrom, fetchRunTranscripts, fetchTranscriptPage, fetchTranscriptWindow, type TranscriptWindowAsk } from "./controlApi.js";
 import type { RunTranscriptsV1, TranscriptCallV1, TranscriptEventV1, TranscriptWindowV1 } from "./controlTypes.js";
 
 /** Spec §6.5 / §10.7 T8: the most event rows the list keeps mounted. */
@@ -116,77 +117,131 @@ function EventRow(props: { runId: string; call: CallKey; event: TranscriptEventV
   );
 }
 
-/** One open call: its tail window, then Earlier/Later over what is loaded, and the follow poll while live. */
+/** What one open call holds: a contiguous run of lines [start, end), and the newest end any window reported. */
+export interface Loaded { events: TranscriptEventV1[]; start: number; end: number; final: boolean; source: string; latest: number }
+type Place = "tail" | "before" | "after";
+const keyOf = (event: TranscriptEventV1): string => `${event.at}:${event.i}`;
+
+/**
+ * A window merged into what is loaded, kept to MAX_KEPT events at a line boundary. Review 7753e97d: a follow (`after`)
+ * drops the oldest and moves `start` up to the cut, so Earlier re-reads exactly what was dropped; an Earlier (`before`)
+ * drops the newest and moves `end` back, so Later re-reads them (`end < latest`).
+ */
+export function mergeWindow(before: Loaded | null, window: TranscriptWindowV1, place: Place): Loaded {
+  const shown = window.events.filter((event) => event.kind !== "thinking");
+  const latest = Math.max(before?.latest ?? 0, window.indexedEnd, window.end);
+  const base = { final: window.final, source: window.source, latest };
+  if (before === null || place === "tail") return { ...base, events: shown, start: window.start, end: window.end };
+  if (place === "after") {
+    let events = [...before.events, ...shown];
+    let start = before.start;
+    if (events.length > MAX_KEPT) {
+      const cut = events[events.length - MAX_KEPT]!.at;
+      if (cut > events[0]!.at) { events = events.filter((event) => event.at >= cut); start = cut; }
+    }
+    return { ...base, events, start, end: window.end };
+  }
+  let events = [...shown, ...before.events];
+  let end = before.end;
+  if (events.length > MAX_KEPT) {
+    const cut = events[MAX_KEPT]!.at;
+    if (cut > events[0]!.at) { events = events.filter((event) => event.at < cut); end = cut; }
+  }
+  return { ...base, events, start: window.start, end };
+}
+
+/**
+ * One open call: its tail window, then Earlier/Later over what is loaded, and the follow poll while live and pinned to
+ * the newest rows. The view is anchored by an event's key, not an index, so loads that add or drop events do not move
+ * it (review 7753e97d). A request asked while another is in flight is queued, not dropped (a poll never displaces a
+ * queued Earlier or Later); its offset is read when it runs.
+ */
 function CallView(props: { runId: string; call: TranscriptCallV1; active: boolean }): JSX.Element {
   const { t } = useTranslation();
   const visible = useDocumentVisible();
-  const [events, setEvents] = useState<TranscriptEventV1[]>([]);
-  const [range, setRange] = useState<{ start: number; end: number; final: boolean; source: string } | null>(null);
-  const [anchor, setAnchor] = useState<number | null>(null); // null: pinned to the newest rows
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [anchor, setAnchor] = useState<string | null>(null); // null: pinned to the newest rows
   const [refusal, setRefusal] = useState<string | null>(null);
   const busy = useRef(false);
+  const queued = useRef<{ run: () => void; poll: boolean } | null>(null);
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
   const call = { attempt: props.call.attempt, phase: props.call.phase, seq: props.call.seq };
 
-  const take = (window: TranscriptWindowV1, place: "tail" | "before" | "after"): void => {
-    const shown = window.events.filter((event) => event.kind !== "thinking");
-    setEvents((before) => {
-      let next = place === "before" ? [...shown, ...before] : place === "after" ? [...before, ...shown] : shown;
-      if (next.length > MAX_KEPT && place !== "before") {
-        // Drop the oldest at a line boundary; Earlier reads them back from the kept start.
-        const cut = next[next.length - MAX_KEPT]!.at;
-        next = next.filter((event) => event.at >= cut);
-      }
-      return next;
-    });
-    setRange((before) => {
-      const start = place === "after" && before !== null ? before.start : window.start;
-      const end = place === "before" && before !== null ? before.end : window.end;
-      return { start, end, final: window.final, source: window.source };
-    });
-  };
-  const load = (ask: Parameters<typeof fetchTranscriptWindow>[2], place: "tail" | "before" | "after"): void => {
-    if (busy.current) return;
+  const load = (ask: (now: Loaded | null) => TranscriptWindowAsk | null, place: Place, then?: (next: Loaded) => void, poll = false): void => {
+    if (busy.current) {
+      if (!poll || queued.current === null) queued.current = { run: () => load(ask, place, then, poll), poll };
+      return;
+    }
+    const wanted = ask(loadedRef.current);
+    if (wanted === null) return;
     busy.current = true;
-    fetchTranscriptWindow(props.runId, call, ask).then(
-      (window) => { busy.current = false; setRefusal(null); take(window, place); },
-      (error: unknown) => { busy.current = false; setRefusal(controlFailureFrom(error).code); },
-    );
+    fetchTranscriptWindow(props.runId, call, wanted).then(
+      (window) => {
+        const next = mergeWindow(loadedRef.current, window, place);
+        loadedRef.current = next;
+        setLoaded(next);
+        setRefusal(null);
+        then?.(next);
+      },
+      (error: unknown) => setRefusal(controlFailureFrom(error).code),
+    ).finally(() => {
+      busy.current = false;
+      const next = queued.current;
+      queued.current = null;
+      next?.run();
+    });
   };
 
-  const rangeRef = useRef(range);
-  rangeRef.current = range;
   useEffect(() => {
-    if (!props.active || range !== null) return;
-    load({ tail: true }, "tail");
+    if (!props.active || loaded !== null) return;
+    load(() => ({ tail: true }), "tail");
   }, [props.active]);
-  const live = props.active && visible && range !== null && !range.final;
+  const live = props.active && visible && loaded !== null && !loaded.final && anchor === null;
   useEffect(() => {
     if (!live) return;
-    const timer = setInterval(() => { if (rangeRef.current !== null) load({ after: rangeRef.current.end }, "after"); }, POLL_MS);
+    const timer = setInterval(() => load((now) => (now === null ? null : { after: now.end }), "after", undefined, true), POLL_MS);
     return () => clearInterval(timer);
   }, [live]);
 
-  const first = anchor ?? Math.max(0, events.length - MAX_ROWS);
+  const events = loaded?.events ?? [];
+  const anchored = anchor === null ? -1 : events.findIndex((event) => keyOf(event) === anchor);
+  const first = anchor === null ? Math.max(0, events.length - MAX_ROWS) : Math.max(0, anchored);
   const rows = events.slice(first, first + MAX_ROWS);
   const earlier = (): void => {
-    if (first > 0) setAnchor(Math.max(0, first - MAX_ROWS / 2));
-    else if (range !== null && range.start > 0) { setAnchor(0); load({ before: range.start }, "before"); }
+    if (first > 0) { setAnchor(keyOf(events[Math.max(0, first - MAX_ROWS / 2)]!)); return; }
+    if (loaded === null || loaded.start === 0) return;
+    const oldFirst = events[0] === undefined ? null : keyOf(events[0]);
+    setAnchor(oldFirst);
+    load((now) => (now === null || now.start === 0 ? null : { before: now.start }), "before", (next) => {
+      const at = next.events.findIndex((event) => keyOf(event) === oldFirst);
+      const target = next.events[Math.max(0, (at === -1 ? 0 : at) - MAX_ROWS / 2)];
+      setAnchor(target === undefined ? null : keyOf(target));
+    });
   };
   const later = (): void => {
     const next = first + MAX_ROWS / 2;
-    setAnchor(next + MAX_ROWS >= events.length ? null : next);
+    if (next + MAX_ROWS < events.length) { setAnchor(keyOf(events[next]!)); return; }
+    if (loaded !== null && loaded.end < loaded.latest) {
+      // Newer lines were dropped by an Earlier: read them back, keeping the view where it is.
+      const kept = events[Math.min(next, events.length - 1)];
+      if (kept !== undefined) setAnchor(keyOf(kept));
+      load((now) => (now === null ? null : { after: now.end }), "after");
+      return;
+    }
+    setAnchor(null);
   };
   return (
     <div className="transcript-call" data-testid="transcript-call">
       {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
-      {range?.source === "archive" && <p className="detail-note">{t("transcript.archived")}</p>}
+      {loaded?.source === "archive" && <p className="detail-note">{t("transcript.archived")}</p>}
       <div>
-        <button type="button" disabled={first === 0 && (range === null || range.start === 0)} onClick={earlier}>{t("transcript.earlier")}</button>{" "}
+        <button type="button" disabled={first === 0 && (loaded === null || loaded.start === 0)} onClick={earlier}>{t("transcript.earlier")}</button>{" "}
         <button type="button" disabled={anchor === null} onClick={later}>{t("transcript.later")}</button>{" "}
-        {range !== null && <span>{range.final ? t("transcript.final") : t("transcript.live")}</span>}
+        {loaded !== null && <span>{loaded.final ? t("transcript.final") : t("transcript.live")}</span>}
       </div>
       <ol className="transcript-events">
-        {rows.map((event) => <EventRow key={`${event.at}:${event.i}`} runId={props.runId} call={call} event={event} />)}
+        {rows.map((event) => <EventRow key={keyOf(event)} runId={props.runId} call={call} event={event} />)}
       </ol>
     </div>
   );
