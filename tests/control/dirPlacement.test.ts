@@ -91,6 +91,21 @@ describe("not collisions (§8.3 at-to, §9.1 narrow rule)", () => {
     expect(read(w, "b.md")).toBe("B2\n");
   }));
 
+  // Review 2026-10-27 (session 7753e97d): `withheld` is the person's list ("Kept in Orca's store" on the page). Orca's own
+  // files -- each run's `.decisions/` file and the requirement document -- are never written either, but they are not
+  // the person's withholds: recorded there they grew by one per landed run and read as paths the person left out.
+  it("Orca's own files are kept out of the folder and never recorded as withheld, however many runs land", () => inWorld({ "a.md": "A\n" }, async (w) => {
+    w.land({ "a.md": "A2\n" });
+    expect(await w.place()).toBe(true);
+    const tip = w.land({ "b.md": "B\n" });
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "idle", tip });
+    expect(read(w, "b.md")).toBe("B\n");
+    expect(existsSync(join(w.folder, ".decisions"))).toBe(false);
+    expect(existsSync(join(w.folder, DOC))).toBe(false);
+    expect(w.record().withheld).toEqual([]);
+  }));
+
   it("the person's changes on paths no landing touches are left as they are; a later landing that writes one stops", () => inWorld({ "a.md": "A\n", "b.md": "B\n", "d.md": "D\n" }, async (w) => {
     w.land({ "a.md": "A2\n" });
     writeFileSync(join(w.folder, "b.md"), "mine\n");

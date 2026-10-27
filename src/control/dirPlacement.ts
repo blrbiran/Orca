@@ -741,7 +741,10 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
   const stillWithheld = personal.filter((w) => !dropped.has(w.reason === "type-change" ? rootOf(w.path) : w.path));
   const next = await nextFolderCommit(ws, { groupId: target.groupId, tip, placed, keepFromPlaced: [...target.orcaOwn, ...stillWithheld.map((w) => w.path)] });
   const byPath = new Map(stillWithheld.map((w) => [w.path, w]));
-  const withheld = next.differs.map((path) => byPath.get(path) ?? { path, reason: "orca-own", toEntry: entryAtTip(path) });
+  // Only the person's withholds are stored (review 2026-10-27, session 7753e97d): Orca-own paths are kept from `placed`
+  // every round by `target.orcaOwn` and `.decisions/`, so recording them grew the list by one per landed run and the
+  // page showed Orca's own files as the person's withheld paths.
+  const withheld = next.differs.flatMap((path) => byPath.get(path) ?? []);
   const [placedTree, nextTree] = await Promise.all([revParse(ws, `${placed}^{tree}`), revParse(ws, `${next.commit}^{tree}`)]);
   if (placedTree === nextTree) return idle({ tip, withheld });
   // Step 6: classify; anything unwritable or changed stops before any write.

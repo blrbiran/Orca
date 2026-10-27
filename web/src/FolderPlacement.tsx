@@ -25,6 +25,8 @@ export function FolderPlacementBlock(props: { view: GroupViewV1; onCommand?: (ac
   const more = (total: number): JSX.Element | null => (total > SHOWN ? <li>{t("control.placement.more", { n: total - SHOWN })}</li> : null);
   const reason = (value: string): string => (REASONS.includes(value as (typeof REASONS)[number]) ? t(`control.placement.reason.${value as (typeof REASONS)[number]}`) : value);
   const withholdable = placement.changedTotal + placement.unwritableTotal > 0;
+  // The person's withholds only: a record written before review 2026-10-27 may still list Orca's own files (`orca-own`).
+  const withheld = placement.withheld.filter((entry) => entry.reason !== "orca-own");
   return (
     <section aria-label={t("control.placement.region")}>
       <h3>{t("control.placement.region")}</h3>
@@ -42,10 +44,10 @@ export function FolderPlacementBlock(props: { view: GroupViewV1; onCommand?: (ac
           <ul>{placement.unwritable.map((entry) => <li key={entry.path}><code>{entry.path}</code> · {reason(entry.reason)}</li>)}{more(placement.unwritableTotal)}</ul>
         </>
       )}
-      {placement.withheld.length > 0 && (
+      {withheld.length > 0 && (
         <>
           <h4>{t("control.placement.withheld")}</h4>
-          <ul>{placement.withheld.map((entry) => <li key={entry.path}><code>{entry.path}</code></li>)}</ul>
+          <ul>{withheld.map((entry) => <li key={entry.path}><code>{entry.path}</code></li>)}</ul>
         </>
       )}
       {mayAct && (

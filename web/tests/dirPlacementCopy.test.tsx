@@ -82,6 +82,16 @@ describe("the copy for a dir group's placement (spec §9.3, D11)", () => {
     expect(onCommand.mock.calls.map((call) => (call[0] as { payload: { action: string } }).payload.action)).toEqual(["take-folder", "recheck", "withhold"]);
   });
 
+  // Review 2026-10-27 (session 7753e97d): the "Kept in Orca's store" list is the person's withholds; a record written
+  // before the server stopped storing them may still hold Orca's own files, which the person never left out.
+  it("never lists Orca's own files among the person's withheld paths", () => {
+    const own = [{ path: ".decisions/run-1.jsonl", reason: "orca-own", toEntry: "100644 x" }, { path: ".orca/requirements/doc.md", reason: "orca-own", toEntry: "100644 y" }];
+    render(as(owner, <ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={dirView({ withheld: own })} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />));
+    const block = screen.getByRole("region", { name: "Folder placement" });
+    expect(block.textContent).not.toContain(".decisions/run-1.jsonl");
+    expect(within(block).queryByRole("heading", { name: "Kept in Orca's store, not written to the folder" })).toBeNull();
+  });
+
   it("keeps a member's view of a stopped placement read-only", () => {
     const onCommand = vi.fn();
     const member: Me = { user: { id: "u2", name: "amy", roles: ["member"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
