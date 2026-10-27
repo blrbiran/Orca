@@ -133,3 +133,15 @@ describe("a refused requirement action's detail (#73)", () => {
     expect(screen.getByRole("alert").textContent).toContain("omp could not list its model catalog (env: bun: No such file or directory)");
   });
 });
+
+describe("the New requirement form (tester #36)", () => {
+  // With many requirements listed the form was below all of them; starting one is the page's first action, so the form
+  // comes before the first listed requirement.
+  it("is above the list of requirements", () => {
+    show(requirementView("awaiting-answers"));
+    const nav = screen.getByRole("navigation", { name: "Requirement list" });
+    const form = within(nav).getByRole("form", { name: "New requirement" });
+    const firstListed = within(nav).getAllByRole("button").find((button) => button.getAttribute("aria-current") !== null)!;
+    expect(form.compareDocumentPosition(firstListed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

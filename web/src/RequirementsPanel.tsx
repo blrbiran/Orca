@@ -679,6 +679,9 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
       {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalWords(refusal)}</p>}
       <div className="split">
         <nav aria-label={t("requirements.list")}>
+          {/* Tester #36: the form to start one sits above the list, not after however many requirements there are. */}
+          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
+            scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
           <label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.currentTarget.checked)} />{t("requirements.showArchived")}</label>
           {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 && <p>{t("requirements.none")}</p>}
           {listed.map((group) => (
@@ -690,8 +693,6 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
             </button>
             )}</GroupActionsMenu>
           ))}
-          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
-            scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
         </nav>
         {view !== undefined && <Detail view={view} onCommand={onCommand} onPrepare={props.onPrepare} {...editable} />}
       </div>
