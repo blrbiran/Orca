@@ -1043,3 +1043,16 @@ independent code review of that branch (finding I1, controller's choice). Rule 1
    SVG, `aria-hidden`; the button's name stays `shortcuts.open`) on the pages whose keys the list names: the Decisions
    header, and above an open group's view in Tasks (outside the group's region). The dialog, its heading and focus return
    are unchanged. Criteria: `web/tests/shortcutsHelp.test.tsx` (where the shortcuts button is).
+
+## 23. Correction — the preparation page's order (appended 2026-10-27, Orca session 7753e97d, branch `fix/tester-ui-rest`; earlier text unchanged)
+
+1. **The string table's `budget.blocker.selections` and `budget.blocker.ownAgent` say "above", not "below"** (zh "上方",
+   not "下方"). Tester #7/#13/#14: Agent selection now renders before the budget in the Preparation region, so the
+   confirm buttons at the budget's end are the last control. Criteria: `web/tests/agentInheritFold.test.tsx` ("puts
+   Agent selection above the budget, and confirm after both"); the two literals rewritten in
+   `web/tests/confirmChecklist.test.tsx` and `web/tests/budgetI18n.test.tsx` carry the Ruling line.
+2. **§1's out-of-scope items #7/#13, #11, #53 and #54 are now built** on that branch, each in its own commit: the order
+   above; the per-task allocation table folded in a `<details>` that opens itself on an invalid value, a token deficit or
+   an estimate's suggestions (chosen instead of #11's column hiding, so no editing path changes); a group view that
+   scrolls itself into view when opened unless a focus targets it; and board columns marked `data-drop` while a card is
+   dragged, from `boardDrop`, with the drop itself unchanged.
