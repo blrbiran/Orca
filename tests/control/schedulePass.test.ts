@@ -213,6 +213,30 @@ describe("C2 slots", () => {
     } finally { s.close(); }
   });
 
+  // Review finding 9 (session 7753e97d): the test above jumps months, so the collapse rule (§7.3) folds every slot into
+  // one fire and a double slot could never show. Here each instant of the repeated 01:30 gets its own pass.
+  it("DST 30 1 * * * in America/New_York: the repeated 01:30 is one slot, at its first instant, and never fires twice", async () => {
+    const { s, clock } = await openStore();
+    try {
+      setZone(s, "America/New_York");
+      // 2026-10-31 12:00 EDT; lastSlot = 2026-10-31 01:30 EDT (05:30Z).
+      clock.at = Date.UTC(2026, 9, 31, 16, 0);
+      createFlow(s, clock, { cron: "30 1 * * *" }, "sch-a");
+      // 2026-11-01 01:45 EDT (05:45Z): the first 01:30 (EDT, 05:30Z) is due.
+      await passAt(s, clock, Date.UTC(2026, 10, 1, 5, 45), { startFlow: flowStarter(s) });
+      // 01:45 EST (06:45Z): the second 01:30 (EST, 06:30Z) is the same wall time, not a new slot.
+      await passAt(s, clock, Date.UTC(2026, 10, 1, 6, 45), { startFlow: flowStarter(s) });
+      // 2026-11-02 01:45 EST (06:45Z): the next day's slot; nothing between it and the first counts as missed.
+      await passAt(s, clock, Date.UTC(2026, 10, 2, 6, 45), { startFlow: flowStarter(s) });
+      const fires = fireRows(s, "sch-a").map((row) => ({ slot: Number(row.slot), outcome: row.outcome, missed: JSON.parse(String(row.body)).missed }));
+      expect(fires).toEqual([
+        { slot: Date.UTC(2026, 10, 1, 5, 30), outcome: "started", missed: 0 },
+        // The first fire's run is still running, so the next day's slot is an overlap skip -- one row per slot either way.
+        { slot: Date.UTC(2026, 10, 2, 6, 30), outcome: "skipped", missed: 0 },
+      ]);
+    } finally { s.close(); }
+  });
+
   it("a zone change re-initialises without firing, then the next London slot fires", async () => {
     const { s, clock } = await openStore();
     try {
