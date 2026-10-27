@@ -109,20 +109,28 @@ export function createIndexCache(capacity = INDEX_CACHE_SIZE): IndexCache {
     while (entries.size > capacity) entries.delete(entries.keys().next().value!);
     return index;
   };
+  const refresh = async (key: string, reader: RangeReader): Promise<LineIndex> => {
+    const known = entries.get(key);
+    if (known === undefined) return remember(await build(key, reader));
+    if (reader.size === known.size) return remember(known);
+    if (reader.size < known.size) return remember(await build(key, reader));
+    // Growth: the head that was indexed must be unchanged; then only the bytes after the last complete line are read.
+    if (headDigest(await reader.read(0, known.headLength)) !== known.headHash) return remember(await build(key, reader));
+    if (known.headLength < HEAD_CHECK_BYTES && reader.size > known.headLength) {
+      known.headLength = Math.min(HEAD_CHECK_BYTES, reader.size);
+      known.headHash = headDigest(await reader.read(0, known.headLength));
+    }
+    await extend(known, reader);
+    return remember(known);
+  };
+  // Review 7753e97d: one request per key at a time. Two growth requests at once both extended the same cached index from
+  // the same `end`, appending its lines and checkpoints twice; the second now runs after the first and finds it current.
+  const inFlight = new Map<string, Promise<LineIndex>>();
   return {
     async get(key, reader) {
-      const known = entries.get(key);
-      if (known === undefined) return remember(await build(key, reader));
-      if (reader.size === known.size) return remember(known);
-      if (reader.size < known.size) return remember(await build(key, reader));
-      // Growth: the head that was indexed must be unchanged; then only the bytes after the last complete line are read.
-      if (headDigest(await reader.read(0, known.headLength)) !== known.headHash) return remember(await build(key, reader));
-      if (known.headLength < HEAD_CHECK_BYTES && reader.size > known.headLength) {
-        known.headLength = Math.min(HEAD_CHECK_BYTES, reader.size);
-        known.headHash = headDigest(await reader.read(0, known.headLength));
-      }
-      await extend(known, reader);
-      return remember(known);
+      const run = (inFlight.get(key) ?? Promise.resolve()).catch(() => undefined).then(() => refresh(key, reader));
+      inFlight.set(key, run);
+      try { return await run; } finally { if (inFlight.get(key) === run) inFlight.delete(key); }
     },
     has: (key) => entries.has(key),
     get size() { return entries.size; },

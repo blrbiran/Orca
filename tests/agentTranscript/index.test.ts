@@ -113,4 +113,20 @@ describe("T2: the index cache", () => {
     expect(cache.has("k0")).toBe(true);
     expect(cache.has("k1")).toBe(false);
   });
+
+  it("review 7753e97d: two growth requests at once extend the index once (no line or checkpoint counted twice)", async () => {
+    const line = (i: number): string => JSON.stringify(claude.text(`m${i} ` + "y".repeat(5000))) + "\n";
+    const first = Array.from({ length: 300 }, (_, i) => line(i)).join("");
+    const all = Buffer.from(first + Array.from({ length: 600 }, (_, i) => line(300 + i)).join(""));
+    // Slow reads, so the second request starts while the first is still extending.
+    const slow = (size: number) => ({ size, read: async (p: number, n: number) => { await new Promise((r) => setTimeout(r, 1)); return Buffer.from(all.subarray(p, Math.min(size, p + n))); } });
+    const cache = createIndexCache();
+    await cache.get("k", slow(Buffer.byteLength(first)));
+    const [a, b] = await Promise.all([cache.get("k", slow(all.length)), cache.get("k", slow(all.length))]);
+    const fresh = await createIndexCache().get("k", slow(all.length));
+    expect(a).toBe(b);
+    expect(fresh.lines).toBe(900);
+    expect(a.lines).toBe(fresh.lines);
+    expect(a.checkpoints).toEqual(fresh.checkpoints);
+  });
 });
