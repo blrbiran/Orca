@@ -1089,3 +1089,17 @@ recommendation and report at the end (「这一轮执行过程中如果有问题
   panel's one project scope (the sidebar switcher's state — no second, page-local selection), with a note that it
   changes the project for every page. Under "All projects" the select reads "Choose a project" and the settings below
   stay hidden; the old sentence about "the project selector" is removed.
+
+### 24.1 Correction to §24 #64 (session `3cd8fb02`, 2026-10-28)
+
+Human, verbatim: 「你先不要看我之前裁的结果，你基于问题本身看是不是问题，以及怎样做是最优的（期望做到的是UI/UX 好看、直观、好用）」; the
+other items: 「其他几项同意你的建议」. Judged on the problem itself: with the app sidebar already on the left, a second vertical
+category column stacks two navigations and takes width from short settings forms; seven short category names fit one
+row. **#64 is now a horizontal tab row** at the top of the Settings page: navigation links (each keeps
+`#settings/<category>`, `aria-current` on the active one), the active one marked by an accent underline, a bottom rule
+under the row, wrapping at narrow widths; content gets the full width. This replaces H6's left category column; the
+rest of H6 (one Settings page with categories, old hashes redirect, theme/language under Appearance) stands.
+**#65 stays CSS-only** on the merits: the closed control is what is seen and CSS makes it consistent in both themes; the
+open list staying native keeps keyboard, screen-reader and touch behaviour right, while a headless library would add a
+dependency, bundle size, its own focus/keyboard upkeep and a rewrite of every criterion that drives a native select —
+for the look of the open list only.
