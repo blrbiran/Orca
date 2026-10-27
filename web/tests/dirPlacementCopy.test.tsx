@@ -82,6 +82,18 @@ describe("the copy for a dir group's placement (spec §9.3, D11)", () => {
     expect(onCommand.mock.calls.map((call) => (call[0] as { payload: { action: string } }).payload.action)).toEqual(["take-folder", "recheck", "withhold"]);
   });
 
+  // Review 2026-10-27 (session 7753e97d): the command refuses any answer outside folder-changed, folder-unwritable and
+  // folder-missing (`folder-change-not-pending`); a button there could only fail. In folder-missing "Check again" is the
+  // one answer the server takes with nothing to withhold.
+  it.each([["idle"], ["failed"]] as const)("offers no answer while the placement is %s", (state) => {
+    render(as(owner, <ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={dirView({ state, changed: [], changedTotal: 0, unwritable: [], unwritableTotal: 0 })} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />));
+    expect(within(screen.getByRole("region", { name: "Folder placement" })).queryAllByRole("button")).toEqual([]);
+  });
+  it("offers Check again while the folder is missing", () => {
+    render(as(owner, <ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={dirView({ state: "folder-missing", changed: [], changedTotal: 0, unwritable: [], unwritableTotal: 0 })} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />));
+    expect(within(screen.getByRole("region", { name: "Folder placement" })).getAllByRole("button").map((button) => button.textContent)).toEqual(["Check again"]);
+  });
+
   // Review 2026-10-27 (session 7753e97d): the "Kept in Orca's store" list is the person's withholds; a record written
   // before the server stopped storing them may still hold Orca's own files, which the person never left out.
   it("never lists Orca's own files among the person's withheld paths", () => {

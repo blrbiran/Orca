@@ -13,6 +13,8 @@ import type { GroupViewV1 } from "./controlTypes.js";
 /** §9.3: the body carries the first 50 of each list; the total says how many the server kept. */
 const SHOWN = 50;
 const REASONS = ["symlink", "type-change", "case-clash"] as const;
+/** §9.2: the states `resolve-folder-change` accepts; in any other it refuses (`folder-change-not-pending`), so no answer is offered. */
+const ANSWERABLE = new Set(["folder-changed", "folder-unwritable", "folder-missing"]);
 
 export function FolderPlacementBlock(props: { view: GroupViewV1; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
@@ -50,7 +52,7 @@ export function FolderPlacementBlock(props: { view: GroupViewV1; onCommand?: (ac
           <ul>{withheld.map((entry) => <li key={entry.path}><code>{entry.path}</code></li>)}</ul>
         </>
       )}
-      {mayAct && (
+      {mayAct && ANSWERABLE.has(placement.state) && (
         <p>
           {placement.state === "folder-changed" && <button type="button" onClick={() => send("take-folder")}>{t("control.placement.take")}</button>}
           {" "}<button type="button" onClick={() => send("recheck")}>{t("control.placement.recheck")}</button>
