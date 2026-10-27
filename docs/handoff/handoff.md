@@ -63,7 +63,20 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.0000000000 会话 `a98b77d2`（2026-10-26／27）—— **先读这一节**
+### 3.00000000000 会话 `7753e97d`（2026-10-27）—— **先读这一节**
+
+> 唯一进度源：台账 `.superpowers/sdd/2026-10-27-session-7753e97d/progress.md`（人裁原话、接手边界、六路审阅的修复清单 A/B、O9 claude 结果）。
+> 人裁（本会话）：「同意按你的建议走」——审阅接手 agent 的**代码**提交（「主要目标是代码提交，可以不审文档提交」），在其基础上修、不 revert；外部反馈按建议改；O9 claude 付费一次「同意可以跑」；#60 按控制器方向（plan 不放开 bash，ccloop 给具名失败原因＋plan 提示写明可用工具，Orca 给下一步文案；先写 spec）。
+
+- **接手边界**（按台账 `ffec7b28` 的 Handoff state 与提交时间现测）：接手 agent 从 `perf(agentTranscript): T-F's script…`（T11）起，含 dir-requirements Task 5 起、scheduled P2 起、H7 O1–O9、F1–F6、流程暂停／留言、两次 repin、ccloop 三处修复、ccmem `forget`/`pin`、面板小缺口批。
+- **已合入 main**：`fix(systemDebug): a paused group is not escalated, and its open ladder waits`（测试者 #61：暂停后 L1 重试被 `stop-mode-conflict` 拒、拒绝行算作 L1 已做 ⇒ 下一趟开 ladder；quota 重试同样被用掉；现在 candidates 跳过 `groupStopped`，已开的 ladder 在原组暂停时不确认、不回折）。3 条新判据，变异 M1–M3 各红在自己用例、还原 0 字节；`npm test` 507 文件首跑 30 文件红**全是工作树缺 `web/dist`（`panel-dist-missing`）**，web build 后 30/30（260 条）绿。
+- **在分支上**：`fix/dir-take-folder`（`/private/tmp/orca-7753e97d/wt-dir`）——审阅 blocker：take-folder 后记录 `tip=T′`，落地里人没碰的路径永不写进文件夹而组显示完成；现在记 P 真正代表的 tip，并同一轮继续第 3–5 步（与 withhold 同路），D7 判据不改。新判据＋变异红；`npm test` 见台账。
+- **O9 claude（付费一次，已跑，未过）**：`/private/tmp/orca-7753e97d/o9-claude-1/`。链路 open→…→start 通、`--add-dir` 正确；两次 verify 被模型自拟的「alpha 只有两个文件」检查否决——Orca 导出把需求文档 `.orca/requirements/…md` 提交进主目录，而拆分提示（`src/control/requirementSplit.ts`，带版本的固定指令）从不提它 ⇒ 要升拆分指令 v2（与 #60 同批写 spec）。harness `scripts/live-multi-dir-acceptance.ts:601` 的 `--add-dir` 解析吞掉其后全部参数（`claudeAddDir` 假 false）。工具报 claude 9 次调用合计 $1.725014；`~/.orca` 未变。**再跑需人新点头。**
+- **六路审阅结论**（报告是模型输出，逐条复核后才修；清单 A/B 与复现路径在台账）：会出错／卡死的有多目录「只写非主目录且无决定」落地后任务 blocked、流程「子任务已结束后才生效的暂停」永远恢复不了、留言后暂停会重启子任务、定时任务同趟被禁用／删除仍触发、坏 fire 行让整个定时 pass 停摆（同类 4 处）、转录 JSON 键值密钥不脱敏＋两条正则平方级耗时。ccmem `forget` 直接删除（与 resurrect 的归档路径及 v0.1 §5.4 冲突，Rule 7 待人）。
+- **待人**：H6／H8／H10 的建议已报（侧栏三段＋设置合一页左侧分类、记忆指标不合并、主题语言放「外观」；仪器风格只采纳状态灯与等宽数字；multi-endpoint 结案、脚本快速通道记 goal 待议）；ccmem `forget` 归档还是保留删除；O9 claude 重跑。
+- **注意**：跑门的工作树要先 `npm run build --workspace web`；zsh 里把多个测试文件放进变量要 `${=files}`（否则成一个参数，vitest 报 No test files found）。测试用 bin：`/private/tmp/orca-7753e97d/ccloop-b97d5bd/dist/cli.js`（`/private/tmp/orca-ffec7b28/` 已不在）。
+
+### 3.0000000000 会话 `a98b77d2`（2026-10-26／27）—— 已合、已装
 
 > 接着 `ffec7b28` 的文档／skill 收尾做。计划 `docs/superpowers/plans/2026-10-26-panel-small-gaps.md`（含门与 as-built）；spec `2026-09-30-loop-plans-design.md` §16（追加的具名更正）。
 
