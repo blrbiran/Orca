@@ -197,6 +197,52 @@ describe("T4 / C8: an oversized line's pages (decoded, from checkpoints)", () =>
   });
 });
 
+describe("T4 / review 7753e97d: a secret held as a JSON key/value pair, on every composite source", () => {
+  // A §10.6.2 assignment in JSON form: its name is a key and its value another decoded string, so a rule over one string
+  // at a time never sees `NAME: value`. Each source below parses its line into a composite (or decodes it with quotes).
+  const secret = (n = 20): string => MARK + alnum(n);
+  const served = async (runtime: "claude" | "codex" | "omp", lines: unknown[]): Promise<string> => {
+    const reader = memoryReader(jsonl(lines));
+    return JSON.stringify((await windowTail(await indexOf(reader), reader, { runtime, redactor })).events);
+  };
+  const cases: Array<[string, "claude" | "codex" | "omp", unknown[]]> = [
+    ["claude tool_use input without command", "claude", [{ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t", name: "mcp__x__deploy", input: { env: { API_TOKEN: secret(), DB_PASSWORD: secret() } } }] } }]],
+    ["codex mcp_tool_call arguments", "codex", [{ type: "item.started", item: { id: "m", type: "mcp_tool_call", server: "s", tool: "t", arguments: { password: secret(), authorization: "Basic " + secret(8) } } }]],
+    ["codex mcp_tool_call result", "codex", [{ type: "item.completed", item: { id: "m", type: "mcp_tool_call", server: "s", tool: "t", result: { content: [{ session_token: secret() }] } } }]],
+    ["omp tool_execution_start args without command", "omp", [{ type: "tool_execution_start", toolCallId: "c", toolName: "deploy", args: { clientSecret: secret() } }]],
+    ["an unknown line", "claude", [{ type: "mystery", detail: { api_key: secret() } }]],
+    ["a secret in a key", "claude", [{ type: "mystery", detail: { [ghp()]: 1 } }]],
+  ];
+  it.each(cases)("%s", async (_name, runtime, lines) => {
+    expect(countMark(JSON.stringify(lines))).toBeGreaterThan(0);
+    const out = await served(runtime, lines);
+    expect(countMark(out)).toBe(0);
+    expect(out).toContain(REDACTED);
+  });
+
+  it("decoded JSON text keeps its quotes: an unparsable line and an oversized line's pages", async () => {
+    expect(redactFull(redactor, `{"API_TOKEN": "${secret()}"}`)).toBe(`{"API_TOKEN": "${REDACTED}"}`);
+    const cut = JSON.stringify({ type: "mystery", DB_PASSWORD: secret() }).slice(0, -2);
+    const unparsable = memoryReader(Buffer.from(cut + "\n"));
+    expect(countMark(cut)).toBe(1);
+    const window = await windowTail(await indexOf(unparsable), unparsable, { runtime: "claude", redactor });
+    expect(window.events.map((e) => e.kind)).toEqual(["unknown"]);
+    expect(countMark(JSON.stringify(window.events))).toBe(0);
+    const big = { type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t", name: "x", input: { pad: prose(1_100_000), SERVICE_TOKEN: secret() } }] } };
+    const reader = memoryReader(jsonl([big]));
+    const index = await indexOf(reader);
+    expect(index.long).toHaveLength(1);
+    let pages = "";
+    for (let page = 0, total = 1; page < total; page++) {
+      const p = await expandOversized(index, reader, 0, page, redactor);
+      total = p.pages;
+      pages += p.text;
+    }
+    expect(pages).toContain('"SERVICE_TOKEN":"');
+    expect(countMark(pages)).toBe(0);
+  });
+});
+
 describe("review 7753e97d: redaction is linear in its input (it runs on the panel's event loop)", () => {
   // Unbounded, the URL scheme and the assignment name rescanned the rest of a run from every word start: 1.5 s at 32K
   // characters of `a.`, 35 s at 128K. Linear, each of these takes milliseconds; the bound is generous for a loaded machine.

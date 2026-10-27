@@ -36,12 +36,13 @@ const SHAPES = [
 // (C5: the NAME match is case-insensitive; `monkey=…` is an accepted false positive).
 // Review 7753e97d (spec §12.6): the URL scheme and the parts of an assignment name around its secret word are bounded
 // ({0,31}, {0,64}); unbounded, each word start rescanned the rest of a dotted or dashed run (35 s over 128K characters
-// of `a.`, on the panel's event loop).
+// of `a.`, on the panel's event loop). The assignment name may be followed by a closing quote: decoded JSON text (an
+// oversized or unparsable line) keeps its quotes, `"API_TOKEN": "…"`.
 const INSENSITIVE = [
   String.raw`\bbearer\s+[A-Za-z0-9._~+/=-]{8,}`,
   String.raw`((?:proxy-)?authorization\s*:\s*)[^\r\n"]+`,
   String.raw`(\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:@\/]+:)[^\s@\/]+(@)`,
-  String.raw`(\b[A-Za-z0-9_]{0,64}(?:key|token|secret|password|passwd|pass|pwd|credential|auth)[A-Za-z0-9_]{0,64}\s*[=:]\s*["']?)([^\s"']{8,})`,
+  String.raw`(\b[A-Za-z0-9_]{0,64}(?:key|token|secret|password|passwd|pass|pwd|credential|auth)[A-Za-z0-9_]{0,64}["']?\s*[=:]\s*["']?)([^\s"']{8,})`,
 ].join("|");
 const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/;
 const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
@@ -141,13 +142,20 @@ export function render(redactor: Redactor, s: string, a: number, b: number): str
 /** A whole decoded value, redacted. */
 export const redactFull = (redactor: Redactor, s: string): string => (s.length < 8 ? s : render(redactor, s, 0, s.length));
 
-/** A deep copy of a decoded JSON value with every string redacted whole (F4: every decoded string, not only rendered ones). */
+/**
+ * A deep copy of a decoded JSON value with every string redacted whole (F4: every decoded string, not only rendered ones).
+ * Review 7753e97d (spec §12.6): a key/value pair is the JSON form of a §10.6.2 assignment, whose name and value are never
+ * in one decoded string -- so a string value of 8 or more characters under a key with a secret name (`AUTH` covers
+ * `authorization`) is redacted whole. Keys are redacted too: a key is a decoded string like any other.
+ */
 export function redactValue(redactor: Redactor, value: unknown): unknown {
   if (typeof value === "string") return redactFull(redactor, value);
   if (Array.isArray(value)) return value.map((item) => redactValue(redactor, item));
   if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) out[key] = redactValue(redactor, item);
+    for (const [key, item] of Object.entries(value)) {
+      out[redactFull(redactor, key)] = typeof item === "string" && item.length >= 8 && SECRET_NAME.test(key) ? REDACTED : redactValue(redactor, item);
+    }
     return out;
   }
   return value;
