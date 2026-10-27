@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { placementRefs } from "../../src/control/dirPlacement.js";
 import { prerequisiteDone } from "../../src/control/groupEdges.js";
-import type { LandingScheme } from "../../src/control/multiLandingRecord.js";
+import { reopenMultiLanding, type LandingScheme } from "../../src/control/multiLandingRecord.js";
 import { readProjectionChanges, readProjectionState } from "../../src/control/projectionJournal.js";
 import { multiLandingWorld, type MultiLandingWorld } from "./fixtures/multiLandingWorld.js";
 
@@ -128,5 +128,24 @@ describe("due and never-written directories (§9.1, M17)", () => {
     expect(w.tipOf(w.bare, "refs/heads/main")).toBe(w.remoteWork);
     expect(w.tipOf(w.vault, placementRefs("g").placed)).toBe(w.base);
     expect(readFileSync(join(w.folder, "notes", "p1.md"), "utf8")).toBe("first post\n");
+  });
+
+  // Review of H7 (Orca session 7753e97d): §9.9 wants `lastLanded` equal to the tip; the DB-only check took `landed` for
+  // that, so between a run's landing (a moved tip) and the next pass a dependent could start before the work was carried.
+  it("is not done between a landing that moved a work branch and the pass that carries it (§9.9)", async () => {
+    world = await multiLandingWorld();
+    const w = world;
+    w.store.db.prepare("INSERT INTO work_items VALUES ('g','t',1,?)").run(JSON.stringify({ kind: "task", status: "done" }));
+    await w.settle();
+    expect(prerequisiteDone(w.store, "g")).toBe(true);
+    // A later run lands on local's work branch; the landing's write reopens the record (markLanded does this).
+    const later = w.commitWith(w.repoOf(w.local), w.localWork, { "local.txt": "later\n" }, "local later");
+    w.repoOf(w.local)(["update-ref", "refs/heads/orca/g", later]);
+    reopenMultiLanding(w.store, "g");
+    expect(prerequisiteDone(w.store, "g")).toBe(false);
+    // The pass carries it; only then is the group done again.
+    await w.settle();
+    expect(w.landing()).toMatchObject({ state: "landed", lastLanded: { local: later } });
+    expect(prerequisiteDone(w.store, "g")).toBe(true);
   });
 });

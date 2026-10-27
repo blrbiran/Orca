@@ -6,6 +6,8 @@ import { z } from "zod";
 import { placementSchema } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { integrationSchemeSchema, type IntegrationScheme } from "./integrationScheme.js";
+import { multiDirOf } from "./multiGroup.js";
+import type { ControlStore } from "./store.js";
 
 /** A folder member's scheme: DIR's placement, not an integration scheme. */
 const placeScheme = z.object({ delivery: z.literal("place") }).strict();
@@ -60,3 +62,20 @@ export function initialLanding(delivery: ReadonlyArray<{ key: string; scheme: La
 
 export const isCarried = (scheme: LandingScheme): scheme is CarriedScheme =>
   scheme.delivery === "local" || scheme.delivery === "push-target" || scheme.delivery === "place";
+
+/**
+ * §9.9: done means every carried directory's `lastLanded` is its work branch's tip. prerequisiteDone reads the DB only,
+ * and a run's landing moves a tip before the next pass sees it: a `landed` record would answer done for that window
+ * (review of H7, Orca session 7753e97d). So a write that moves a multi group's work branch -- markLanded (D), the
+ * empty result's ledger commit (E) -- reopens a `landed` record as `idle` in that same transaction; the next pass finds
+ * it due (or, with nothing to carry, ends it `landed` again). Any other state already holds dependents back.
+ */
+export function reopenMultiLanding(store: ControlStore, groupId: string): void {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined) return;
+  const body = JSON.parse(String(row.body)) as Record<string, unknown>;
+  const multi = multiDirOf(body);
+  const landing = multi === null ? null : readMultiLanding(multi.landing);
+  if (multi === null || landing === null || landing.state !== "landed") return;
+  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, multiDir: { ...multi, landing: { ...landing, state: "idle" } } }), groupId);
+}

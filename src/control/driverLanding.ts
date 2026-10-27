@@ -17,6 +17,7 @@ import { ccloopEvidenceString, runEvidence, runLedgerEvents, writeRunLedger, typ
 import { flowGroupOf, isDirFlowGroup, isFlowChildGroup } from "../flow/groups.js";
 import { recordLandedTip } from "./dirGroup.js";
 import { isMultiGroup, multiDirOf, multiPrimaryRepoId } from "./multiGroup.js";
+import { reopenMultiLanding } from "./multiLandingRecord.js";
 import { appendFlowDecision } from "../flow/store.js";
 import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from "./ledgerTree.js";
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
@@ -64,6 +65,8 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
     // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move. A multi run's primary is
     // the only directory whose tip this records; the rest stay in `landedDirs`.
     if (landedCommit !== null) recordLandedTip(deps.store, run.groupId, landedCommit);
+    // Multi-dir spec §9.9: the moved tips are not yet `lastLanded`; the group is not done until the next pass carries them.
+    if (landedDirs !== null) reopenMultiLanding(deps.store, run.groupId);
     run.drive = {
       ...run.drive!, landedCommit,
       ...(run.drive!.landingPlan === null ? {} : { landingPlan: null }),
@@ -176,6 +179,7 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
     landedWithPending(store, current);
     // Dir-requirements spec §6.5: the ledger commit moved a dir group's work branch (no commit: nothing moved).
     if (ledgerCommit !== null) recordLandedTip(store, current.groupId, ledgerCommit);
+    if (ledgerCommit !== null) reopenMultiLanding(store, current.groupId);
     current.drive = { ...current.drive!, ledgerCommit };
     saveDriverRun(store, current);
   });
