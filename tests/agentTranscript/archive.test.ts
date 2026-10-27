@@ -58,10 +58,14 @@ describe("T6: the archive source", () => {
       expect(tail.body.final).toBe(true);
       expect(tail.body.events).toHaveLength(200);
       expect(tail.body.events.at(-1).fields.text.text).toBe("archived line 299");
+      // Review 7753e97d: once resolved, the archived ref is not looked up again (no manifest read per request).
+      const lookups = readArtifact.mock.calls.length;
+      expect(lookups).toBeGreaterThan(0);
       const earlier = await web.get(`/api/control/runs/${runId}/transcripts/1/plan/1?before=${tail.body.start}`);
       expect(earlier.body.events[0].fields.text.text).toBe("archived line 0");
       const expand = await web.get(`/api/control/runs/${runId}/transcripts/1/plan/1/expand?at=0&i=0&field=text`);
       expect(expand).toMatchObject({ status: 200, body: { text: "archived line 0", page: 0, pages: 1 } });
+      expect(readArtifact.mock.calls.length).toBe(lookups);
 
       // The transcript itself is never read whole: readArtifact saw at most the manifest, never the transcript's ref.
       const transcriptRef = `sha256-${(await import("node:crypto")).createHash("sha256").update(jsonl(lines)).digest("hex")}`;

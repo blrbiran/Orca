@@ -49,10 +49,32 @@ export function findEntry(listing: StoredListing, attempt: number, phase: string
   return found[0]!;
 }
 
+type ArtifactRef = { artifactId: string; hash: string };
+/**
+ * Review 7753e97d: archived refs per store, keyed by run and path, valid while the run's newest archive row is the same.
+ * Archive rows and artifacts are content-addressed and never rewritten, so only a new archive can change the answer.
+ */
+const archivedRefs = new WeakMap<ControlStore, Map<string, { newest: number; ref: ArtifactRef | null }>>();
+const ARCHIVED_REFS = 256;
+
 /** The archive manifest's ref for `<sourceDir>/run/<path>`, from the run's newest archive (archive.ts archiveRun). */
-async function archivedRef(store: ControlStore, runId: string, path: string): Promise<{ artifactId: string; hash: string } | null> {
-  const rows = store.db.prepare("SELECT body FROM outbox WHERE kind='archive'").all().map((row) => JSON.parse(String(row.body)) as { runId?: string; artifacts?: Array<{ artifactId: string; hash: string }> });
-  const mine = rows.filter((row) => row.runId === runId);
+async function archivedRef(store: ControlStore, runId: string, path: string): Promise<ArtifactRef | null> {
+  const mineOnly = "FROM outbox WHERE kind='archive' AND json_valid(body) AND json_extract(body,'$.runId')=?";
+  const newest = Number(store.db.prepare(`SELECT coalesce(max(rowid), 0) AS n ${mineOnly}`).get(runId)!.n);
+  let cache = archivedRefs.get(store);
+  if (cache === undefined) archivedRefs.set(store, cache = new Map());
+  const key = `${runId}\0${path}`;
+  const known = cache.get(key);
+  if (known !== undefined && known.newest === newest) return known.ref;
+  const ref = await manifestRef(store, runId, path, mineOnly);
+  cache.delete(key);
+  cache.set(key, { newest, ref });
+  if (cache.size > ARCHIVED_REFS) cache.delete(cache.keys().next().value!);
+  return ref;
+}
+
+async function manifestRef(store: ControlStore, runId: string, path: string, mineOnly: string): Promise<ArtifactRef | null> {
+  const mine = store.db.prepare(`SELECT body ${mineOnly} ORDER BY rowid`).all(runId).map((row) => JSON.parse(String(row.body)) as { artifacts?: ArtifactRef[] });
   for (const row of mine.reverse()) {
     const manifestRef = row.artifacts?.find((ref) => ref.artifactId.startsWith("archive-"));
     if (manifestRef === undefined) continue;
