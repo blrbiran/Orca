@@ -1056,3 +1056,36 @@ independent code review of that branch (finding I1, controller's choice). Rule 1
    an estimate's suggestions (chosen instead of #11's column hiding, so no editing path changes); a group view that
    scrolls itself into view when opened unless a focus targets it; and board columns marked `data-drop` while a card is
    dragged, from `boardDrop`, with the drop itself unchanged.
+
+## 24. Settings pages, tester #64–#69 (session `3cd8fb02`, 2026-10-28)
+
+Source: `orca_archived_files/issue-20261023.md` #64–#69. Human ruling for this round: proceed on the controller's
+recommendation and report at the end (「这一轮执行过程中如果有问题，先按你的建议执行」); criterion rewrites allowed
+(「这次批准改写所有必要的判据」).
+
+- **#64 (settings nav looks like a third nav column).** H6 (human ruling, session `7753e97d`) keeps the category list on
+  the left; horizontal tabs are not adopted. Fix the look only: the category list sits in its own panel (surface token
+  background, border, radius), its width follows its content up to ~11rem instead of a wide column, the active item is
+  marked like a tab (accent edge + weight), and at the existing narrow breakpoint the list becomes one wrapping row.
+- **#65 (form controls).** No UI library (web dependencies stay react/i18next; the bundle ruling in handoff §8). One
+  shared rule set in `styles.css` for `select`, text `input`, `textarea` and checkboxes, from the DESIGN.md tokens
+  (border, radius, padding, focus ring, both themes; `select` gets `appearance: none` plus a token-coloured chevron).
+  Native elements keep their semantics; contrast criteria must stay green.
+- **#66 (sessions list).** Server data is `{kind, createdAt, expiresAt, current}`; no last-active time is added. Each row
+  says its kind ("Browser" / "Command line"), "signed in <date>", "expires <date>", and "This browser" on the current
+  one. The action word becomes "Sign out" (zh 「退出登录」), not "Revoke"/「吊销」. One line above the list: every browser
+  or command-line login is its own session and ends by itself at its expiry date.
+- **#67 ("built-in" badge).** The source of a value is shown only when it is not the built-in default, as muted text
+  ("set in project settings" / "set in global settings"), not a badge; a built-in value shows nothing. The lock badge
+  stays (it changes what the person can do).
+- **#68 (effect classes show raw keys) — wording from flow-engine spec §9.1/§9.2, not the tester's guesses.** Classes:
+  local = "Local changes" (e.g. land to a local branch); cost = "Paid steps" (e.g. image generation, a paid model batch;
+  budget caps still apply); external = "Drafts outside Orca" (e.g. a PR, an email or WeChat draft); irreversible =
+  "Irreversible steps" (e.g. push, send email, merge to main). Levels: apply-flag = "Run, then flag for review";
+  confirm = "Ask before the step runs"; stage-only = "Prepare only, run later by hand"; follow-template = "Use the
+  template's recommendation". Each row shows the class name with its one-line example, and each option its name; the
+  raw keys appear nowhere. en + zh.
+- **#69 ("This project" with no way to pick a project).** The category shows a project select at its top, bound to the
+  panel's one project scope (the sidebar switcher's state — no second, page-local selection), with a note that it
+  changes the project for every page. Under "All projects" the select reads "Choose a project" and the settings below
+  stay hidden; the old sentence about "the project selector" is removed.
