@@ -1,6 +1,8 @@
 import { readRun, saveRun, syncWebBudget, type RunRecord } from "./budget.js";
 import { recordActivity } from "./activity.js";
-import { commandPrincipalFor } from "./commandClient.js";
+import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
+import { zero } from "./commands.js";
+import { queueRequirementCall } from "./requirementRecords.js";
 import { singleCallCommitTerminal } from "./driverHandoff.js";
 import { resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
@@ -43,24 +45,28 @@ export function settleSingleCallUsageInTransaction(
   const run = readRun(store, input.runId) as SingleCallRun;
   const block = settleableSingleCallBlock(run as never);
   if (block === null || run.groupId !== input.groupId) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");
-  // As settle-unknown-usage: an authenticated owner on the Web (the route refuses anyone else first, humanOnly.ts).
+  // As settle-unknown-usage: an authenticated owner on the Web (the route refuses anyone else first, humanOnly.ts). The
+  // socket tier of `recovery-retry.acknowledge` only gates an attempt this refuses anyway (socket principals are agents).
   const principal = commandPrincipalFor(input.commandId);
-  if (principal === null || !principal.startsWith("user:")) throw new ControlError("run-usage-not-settleable", "owner-required");
+  if (commandClientFor(input.commandId) !== "web" || principal === null || !principal.startsWith("user:")) throw new ControlError("run-usage-not-settleable", "owner-required");
   const group = readGroup(store, run.groupId);
-  // A stop owns the group's calls: it settles them (terminaliseRun) and recovery-retry lifts it first.
-  if (group.stopped || readStopIntent(store, run.groupId) !== null) throw new ControlError("stop-mode-conflict");
+  // A stop owns the group's calls in flight: it closes them (terminaliseRun) and the call is settled after (code review
+  // S1). One it already closed is no longer the stop's.
+  if (!block.closed && (group.stopped || readStopIntent(store, run.groupId) !== null)) throw new ControlError("stop-mode-conflict");
   if (store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, run.highWater)) throw new ControlError("run-usage-pending");
   if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
   const { failure } = block, handler = singleCallHandler(block.purpose);
-  if (handler.evaluate !== undefined && input.evaluation === undefined) throw new ControlError("run-usage-not-settleable", "evaluation-missing");
+  if (!block.closed && handler.evaluate !== undefined && input.evaluation === undefined) throw new ControlError("run-usage-not-settleable", "evaluation-missing");
   const estimate = handler.purpose === "estimate";
-  const moved = estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run);
+  const moved = !block.closed && (estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run));
   // A single call's grant is work-only (verifyStoppedSingleCall), so its whole remainder is the work bucket's.
   const charged = amountSchema.parse(run.remaining.work);
-  chargeRunRemainder(store, run, group, { work: charged, handoff: amountSchema.parse(run.remaining.handoff) }, { unmetered: false, releaseReserved: true, at: input.at });
+  // A stop already gave the grant back (interruptRequirementCall / releaseCommitment): the charge books `used` only.
+  chargeRunRemainder(store, run, group, { work: charged, handoff: amountSchema.parse(run.remaining.handoff) }, { unmetered: false, releaseReserved: !block.closed, at: input.at });
+  const disposition = block.closed ? "stopped" : moved ? "interrupted" : "completed";
   const marker = singleCallSettlementSchema.parse({
     method: "remaining-grant", commandId: input.commandId, principal, at: input.at, groupId: run.groupId, runId: run.runId, highWater: run.highWater,
-    charged, usageLowerBound: run.singleCallUsageLowerBound ?? null, blockedReason: run.drive!.blockedReason, disposition: moved ? "interrupted" : "completed",
+    charged, usageLowerBound: run.singleCallUsageLowerBound ?? null, blockedReason: run.drive!.blockedReason, disposition,
   });
   run.singleCallSettlement = marker;
   saveRun(store, run);
@@ -69,17 +75,23 @@ export function settleSingleCallUsageInTransaction(
   if (group.budgetVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
   group.budgetVersion += 1;
   saveGroup(store, group);
-  // Back to `accepted`, the state stepCSingleCall left the run in before it blocked it; then its Ce, as the driver runs it.
-  resumeBlockedDriverRun(store, run.runId);
-  const commitTerminal = singleCallCommitTerminal(store, run);
-  if (moved) {
-    commitTerminal();
-    const settled = readRun(store, run.runId) as SingleCallRun;
-    if (estimate) interruptEstimate(store, run.groupId, String(run.estimateId));
-    else interruptRequirementCall(store, run.groupId, settled as never);
-    store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
+  if (block.closed) {
+    // Its round or draft was interrupted by the stop; a round or draft re-queued since and parked on the flag is woken
+    // (a stopped group keeps the wake pending until the stop is lifted, claimOrWait "held").
+    if (!estimate) queueRequirementCall(store, run.groupId, `usage-settled-${run.runId}`);
   } else {
-    handler.completeInTransaction!(store, readRun(store, run.runId) as SingleCallRun, handler.evaluate === undefined ? null : input.evaluation, commitTerminal, failure);
+    // Back to `accepted`, the state stepCSingleCall left the run in before it blocked it; then its Ce, as the driver runs it.
+    resumeBlockedDriverRun(store, run.runId);
+    const commitTerminal = singleCallCommitTerminal(store, run);
+    if (moved) {
+      commitTerminal();
+      const settled = readRun(store, run.runId) as SingleCallRun;
+      if (estimate) interruptEstimate(store, run.groupId, String(run.estimateId));
+      else interruptRequirementCall(store, run.groupId, settled as never);
+      store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
+    } else {
+      handler.completeInTransaction!(store, readRun(store, run.runId) as SingleCallRun, handler.evaluate === undefined ? null : input.evaluation, commitTerminal, failure);
+    }
   }
-  recordActivity(store, { groupId: run.groupId, taskId: null, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged, principal, at: input.at, disposition: marker.disposition } });
+  recordActivity(store, { groupId: run.groupId, taskId: null, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged: { work: charged, handoff: zero() }, principal, at: input.at, disposition } });
 }

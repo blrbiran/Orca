@@ -2436,8 +2436,9 @@ export const enErrors: Record<string, string> = {
   "settle-incomplete": "The run did not finish settling. Choose \"Retry run\".",
   "requirement-call-target-moved": "The requirement moved on before this call started, so it was not sent.",
   "estimate-request-missing": "This estimate has no frozen request, so it cannot run.",
-  "requirement-usage-unknown": "This requirement call's usage is unknown, so its budget cannot be settled.",
-  "estimate-usage-unknown": "This estimate call's usage is unknown, so its budget cannot be settled.",
+  // Spec 2026-10-27 single-call unknown usage §5 O4: the call is settled by charging its grant, then it retries.
+  "requirement-usage-unknown": "This requirement call's usage is unknown; charge the call's grant to settle it, then it retries.",
+  "estimate-usage-unknown": "This estimate call's usage is unknown; charge the call's grant to settle it, then it retries.",
   "repository-path": "The group's repository path could not be resolved. Check that the repository is still registered and exists, then choose \"Retry run\".",
   // Dir-requirements spec §9.3: a dir group's A2 found no work branch in the vault.
   "dir-base-missing": "The group's starting snapshot of the folder is missing (an Orca fault), so the task was not started.",

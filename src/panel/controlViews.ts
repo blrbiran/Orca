@@ -390,18 +390,22 @@ export { BUSY_WORK } from "../control/executionPending.js";
  */
 function blockedRequirementRun(store: ControlStore, groupId: string, snapshot?: GroupReadSnapshot): Pick<RequirementSummaryV1, "blockedRun" | "blockedRunCharge"> {
   const rows = snapshot === undefined
-    ? store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)
-    : snapshot.runsByRowid.filter(row => row.active === 1);
-  for (const row of rows) {
-    const run = (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as { phase?: string; state?: string; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
-    if (run.phase !== "single-call" || run.state !== "blocked") continue;
-    // Spec 2026-10-27 single-call unknown usage §9 R1, R6: a call blocked on unknown usage is retried by charging its
-    // remaining grant; the view names that amount and ccloop's lower bound before the person confirms.
-    const charge = settleableSingleCallBlock(run as never) === null ? {}
-      : { blockedRunCharge: { tokens: run.remaining?.work?.tokens ?? 0, usageLowerBound: run.singleCallUsageLowerBound?.tokens ?? null } };
-    return { blockedRun: { runId: String(row.id), reason: run.drive?.blockedReason ?? null }, ...charge };
-  }
-  return { blockedRun: null };
+    ? store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
+    : snapshot.runsByRowid;
+  type Row = { phase?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
+  const runs = rows.map(row => ({ runId: String(row.id), active: Number(row.active) === 1,
+    run: (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as Row }));
+  // The driver's block on an active call; else (code review S1) a call a stop closed with its usage still unknown, whose
+  // stale block reason names what is left to do -- charge its grant.
+  const pick = runs.find(({ active, run }) => active && run.phase === "single-call" && run.state === "blocked")
+    ?? runs.find(({ active, run }) => !active && run.phase === "single-call" && settleableSingleCallBlock(run as never)?.closed === true);
+  if (pick === undefined) return { blockedRun: null };
+  const { runId, run } = pick;
+  // Spec 2026-10-27 single-call unknown usage §9 R1, R6: a call blocked on unknown usage is retried by charging its
+  // remaining grant; the view names that amount and ccloop's lower bound before the person confirms.
+  const charge = settleableSingleCallBlock(run as never) === null ? {}
+    : { blockedRunCharge: { tokens: run.remaining?.work?.tokens ?? 0, usageLowerBound: run.singleCallUsageLowerBound?.tokens ?? null } };
+  return { blockedRun: { runId, reason: run.drive?.blockedReason ?? null }, ...charge };
 }
 
 /** N1 spec §11.2: a requirement's state in one line (the summary); null round/draft fields before the first of each. */
@@ -1115,6 +1119,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       grant: run.grant[bucket],
       diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
+      ...(run.singleCallUsageLowerBound === undefined ? {} : { usageLowerBound: run.singleCallUsageLowerBound.tokens }),
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.

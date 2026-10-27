@@ -113,6 +113,14 @@ function retryTaskAction(view: GroupViewV1, run: RunViewV1): ControlAction {
   return { verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision, payload: { taskId: String(run.taskId), runId: run.runId } };
 }
 
+/**
+ * Spec 2026-10-27 single-call unknown usage §9 R1: an estimate run whose usage is unknown and whose block reason says so --
+ * still blocked, or (code review S1) closed by a stop with its usage still unknown (the server's settlement preview is
+ * then present and unsettled). Either is settled by charging its grant.
+ */
+const estimateUsageUnknown = (run: RunViewV1): boolean => run.estimateId !== null && /^estimate-usage-unknown(:|$)/.test(run.blockedReason ?? "")
+  && (run.state === "blocked" || (run.state.startsWith("settled-") && run.unknownUsageSettlement !== undefined && run.unknownUsageSettlement.settlement === undefined));
+
 /** A run's retry, as the Runs table offers it; the Problems row and the work item row offer this same one (feedback #56/#57). */
 function RunRetry({ view, run, archived, onCommand, active = true }: { view: GroupViewV1; run: RunViewV1; archived: boolean; onCommand: (action: ControlAction) => void; active?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
@@ -132,9 +140,9 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
     >
       {t("control.group.retryTask", { taskId: String(run.taskId) })}
     </button>
-  ) : null) : run.state === "blocked" && run.estimateId !== null && run.blockedReason && /^estimate-usage-unknown(:|$)/.test(run.blockedReason) ? (
+  ) : null) : estimateUsageUnknown(run) ? (
     // Spec 2026-10-27 single-call unknown usage §9 R1: an estimate blocked on unknown usage is retried by charging its grant.
-    <ChargeRetry charge={{ tokens: run.remaining.tokens ?? 0, usageLowerBound: null }}
+    <ChargeRetry charge={{ tokens: run.remaining.tokens ?? 0, usageLowerBound: run.usageLowerBound ?? null }}
       onCharge={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId, acknowledge: "charge-remaining-grant" } })} />
   ) : run.state === "blocked" && run.blockedReason ? (
     <button

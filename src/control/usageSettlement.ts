@@ -34,12 +34,13 @@ export const singleCallUsageLowerBoundSchema = z.object({ tokens: safeInteger.po
 /**
  * Same spec §9 R1, R4: the marker a single call's settlement leaves on its run (`singleCallSettlement`), the remaining-grant
  * method of spec 2026-10-13 §A without the task-shaped fields. `disposition`: the call was completed as failed by its
- * purpose, or interrupted because its round, draft or estimate had moved (R2).
+ * purpose, interrupted because its round, draft or estimate had moved (R2), or `stopped`: a stop had already closed it
+ * (code review S1).
  */
 export const singleCallSettlementSchema = z.object({
   method: z.literal("remaining-grant"), commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
   groupId: idSchema, runId: idSchema, highWater: safeInteger, charged: amountSchema,
-  usageLowerBound: singleCallUsageLowerBoundSchema.nullable(), blockedReason: z.string().min(1), disposition: z.enum(["completed", "interrupted"]),
+  usageLowerBound: singleCallUsageLowerBoundSchema.nullable(), blockedReason: z.string().min(1), disposition: z.enum(["completed", "interrupted", "stopped"]),
 }).strict();
 export type SingleCallSettlement = z.infer<typeof singleCallSettlementSchema>;
 export interface SettlementRun {

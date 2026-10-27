@@ -55,7 +55,8 @@ describe("settling a clarify call blocked on unknown usage (§9 R1-R4)", () => {
         singleCallSettlement: { method: "remaining-grant", principal: "user:owner", charged: GRANT, usageLowerBound: { tokens: 1_234 }, blockedReason: "requirement-usage-unknown:omp-stalled", disposition: "completed" } });
       expect(settled.drive).toMatchObject({ blockedAt: null, blockedReason: null });
       // R3: the flag is recomputed in the same transaction; the charge is booked as settled usage (spend caps read it).
-      expect(x.group()).toMatchObject({ used: { tokens: GRANT.tokens }, ledger: { usageUnknown: false } });
+      // The charge moves the grant from `reserved` to `used` (code review S3: before the retry is claimed, nothing is held).
+      expect(x.group()).toMatchObject({ used: { tokens: GRANT.tokens }, reserved: { tokens: 0 }, ledger: { usageUnknown: false } });
       expect(usageLedgerTokens(x, blocked.runId)).toBe(GRANT.tokens);
       expect(x.round(1)).toMatchObject({ state: "drafting", retries: 1, calls: [{ runId: blocked.runId, outcome: "failed", reason: "omp-stalled", usage: GRANT }] });
       expect(x.store.db.prepare("SELECT kind FROM activity WHERE run_id=? AND kind='usage-settled'").all(blocked.runId)).toHaveLength(1);
@@ -110,7 +111,8 @@ describe("settling a split call blocked on unknown usage (§9 R2: its evaluation
       const command = retry(x, blocked.runId, "charge-remaining-grant");
       expect(await asOwner(command, () => x.service.recoveryRetry(command as never))).toMatchObject({ result: { resolved: true } });
       expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", calls: [{ runId: blocked.runId, outcome: "failed", reason: "omp-stalled" }] });
-      expect(x.group().ledger.usageUnknown).toBe(false);
+      // Code review S3: the grant moved from `reserved` to `used`; the retry is not claimed yet.
+      expect(x.group()).toMatchObject({ used: { tokens: GRANT.tokens }, reserved: { tokens: 0 }, ledger: { usageUnknown: false } });
       await x.until(() => readDraft(x.store, "r", 2).state === "awaiting-review");
       expect(x.fake.calls.accept).toHaveLength(2);
     } finally { await x.dispose(); }
@@ -141,17 +143,34 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
     } finally { await x.dispose(); }
   });
 
-  it("a call a stop already closed (its stale block reason kept) is not settled again", async () => {
-    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
+  // Ruling: human 「这一轮允许改必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- code review S1: this case pinned the dead end
+  // (a call a stop closed with its usage unknown could not be settled, and the group's flag stayed set for good). It now
+  // encodes that such a call is settled by the same acknowledged retry: its grant charged to `used` only (the stop already
+  // gave the reservation back), the flag cleared, `complete` skipped (the round stays interrupted); the stop's own retry
+  // then re-queues the round and the call is sent again. A second acknowledgement finds nothing left to settle.
+  it("a call a stop closed with its usage unknown is settled by the acknowledged retry, and the stop's retry then proceeds", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }, { purpose: "clarify", output: ROUND_ONE }] });
     try {
       await x.until(() => x.runs()[0]?.state === "blocked");
       expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
       await x.until(() => x.round(1).state === "interrupted");
       const [closed] = x.runs();
-      expect(closed).toMatchObject({ active: 0, drive: { blockedReason: "requirement-usage-unknown:omp-stalled" } });
+      expect(closed).toMatchObject({ active: 0, unknown: { work: true }, drive: { blockedReason: "requirement-usage-unknown:omp-stalled" } });
       expect(closed.state).not.toBe("blocked");
+      expect(x.group()).toMatchObject({ used: { tokens: 0 }, reserved: { tokens: 0 }, ledger: { usageUnknown: true } });
+      expect(requirementSummaryOf(x.store, "r")).toMatchObject({ blockedRun: { runId: closed.runId }, blockedRunCharge: { tokens: GRANT.tokens, usageLowerBound: 1_234 } });
       const command = retry(x, closed.runId, "charge-remaining-grant");
-      expect(await refusal(asOwner(command, () => x.service.recoveryRetry(command as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "not-single-call-usage-unknown" });
+      expect(await asOwner(command, () => x.service.recoveryRetry(command as never))).toMatchObject({ result: { resolved: true } });
+      expect(x.runs()[0]).toMatchObject({ active: 0, unknown: { work: false }, cumulative: { work: GRANT }, singleCallSettlement: { disposition: "stopped", charged: GRANT } });
+      expect(x.group()).toMatchObject({ used: { tokens: GRANT.tokens }, reserved: { tokens: 0 }, ledger: { usageUnknown: false } });
+      expect(x.round(1)).toMatchObject({ state: "interrupted", calls: [{ runId: closed.runId, outcome: "interrupted" }] });
+      expect(requirementSummaryOf(x.store, "r").blockedRun).toBeNull();
+      const again = retry(x, closed.runId, "charge-remaining-grant");
+      expect(await refusal(asOwner(again, () => x.service.recoveryRetry(again as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "not-single-call-usage-unknown" });
+      const group = x.command("recovery-retry", { scope: "group", groupId: "r" }) as { commandId: string };
+      expect(await asOwner(group, () => x.service.recoveryRetry(group as never))).toMatchObject({ result: { resolved: true } });
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(x.fake.calls.accept).toHaveLength(2);
     } finally { await x.dispose(); }
   });
 
@@ -161,12 +180,19 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
       await x.until(() => x.runs()[0]?.state === "blocked");
       const command = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
       expect(await refusal(withCommandContext(command.commandId, { client: "cli", principal: "agent:cli" }, () => x.service.recoveryRetry(command as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "owner-required" });
+      // Code review m3: an owner's principal on another client than the Web is refused too (as settle-unknown-usage).
+      const socket = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
+      expect(await refusal(withCommandContext(socket.commandId, { client: "cli", principal: "user:owner" }, () => x.service.recoveryRetry(socket as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "owner-required" });
       expect(x.runs()[0]).toMatchObject({ state: "blocked", unknown: { work: true } });
     } finally { await x.dispose(); }
   });
 
-  it("a group under a stop is refused stop-mode-conflict (the stop settles its calls)", async () => {
-    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
+  // Ruling: human 「这一轮允许改必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- code review S1: the old name said the stop settles the
+  // call's usage, which it does not (it closes the call and leaves its usage unknown). It now encodes that a call still
+  // blocked under a stop is left to the stop (stop-mode-conflict), and once the stop closed it -- here after the stop's own
+  // retry re-queued the round, which then waits on the flag -- the settlement wakes the round and the call is sent again.
+  it("a call still blocked under a stop is left to the stop (stop-mode-conflict); once closed, settling it wakes the waiting round", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }, { purpose: "clarify", output: ROUND_ONE }] });
     try {
       await x.until(() => x.runs()[0]?.state === "blocked");
       expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
@@ -175,6 +201,15 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
       const command = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
       expect(await refusal(asOwner(command, () => x.service.recoveryRetry(command as never)))).toMatchObject({ code: "stop-mode-conflict" });
       expect(x.group().used.tokens).toBe(0);
+      await x.until(() => x.round(1).state === "interrupted");
+      const group = x.command("recovery-retry", { scope: "group", groupId: "r" }) as { commandId: string };
+      await asOwner(group, () => x.service.recoveryRetry(group as never));
+      await x.until(() => x.round(1).waiting !== null);
+      expect(x.round(1)).toMatchObject({ state: "drafting", waiting: "requirement-usage-unknown" });
+      const settle = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
+      expect(await asOwner(settle, () => x.service.recoveryRetry(settle as never))).toMatchObject({ result: { resolved: true } });
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(x.fake.calls.accept).toHaveLength(2);
     } finally { await x.dispose(); }
   });
 
@@ -255,23 +290,71 @@ describe("which runs are settleable (§9 R1: flow calls are out of scope)", () =
   });
 });
 
+type EstimateHarness = Awaited<ReturnType<typeof estimateHarness>>;
+const estimateCommand = (x: EstimateHarness, commandId: string) => ({ schema: "orca-raw-command-v1", commandId, actorId: "human",
+  expectedRevision: Number(x.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision), verb: "recovery-retry",
+  target: { kind: "run", groupId: "g", runId: x.runId }, payload: { scope: "run", runId: x.runId, acknowledge: "charge-remaining-grant" } });
+
 describe("settling an estimate call blocked on unknown usage (§9 R1)", () => {
   it("charges the grant's remainder, clears the plan group's flag, and fails the estimate with ccloop's code", async () => {
-    const x = await estimateHarness({ outcome: "failed", tokens: null });
+    const x = await estimateHarness({ outcome: "failed", tokens: null, recordExtra: { usageLowerBound: { tokens: 4_321 } } });
     try {
       await x.rounds(() => x.body().state === "blocked");
       expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown:single-call-output-invalid" });
+      // Code review m1: the run view carries ccloop's lower bound, for the estimate's charge to show it.
+      expect(readControlGroup(x.h.store, "epoch", "g").runs.find((run) => run.runId === x.runId)).toMatchObject({ usageLowerBound: 4_321 });
       const remaining = x.body().remaining.work;
-      const usedBefore = readControlGroup(x.h.store, "epoch", "g").ledger.used.tokens;
-      const revision = Number(x.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
-      const command = { schema: "orca-raw-command-v1", commandId: "c-settle-estimate", actorId: "human", expectedRevision: revision, verb: "recovery-retry",
-        target: { kind: "run", groupId: "g", runId: x.runId }, payload: { scope: "run", runId: x.runId, acknowledge: "charge-remaining-grant" } };
+      const { used: { tokens: usedBefore }, committedRemaining: { tokens: committedBefore } } = readControlGroup(x.h.store, "epoch", "g").ledger;
+      const command = estimateCommand(x, "c-settle-estimate");
       expect(await withCommandContext(command.commandId, OWNER, () => x.service.recoveryRetry(command as never))).toMatchObject({ result: { resolved: true } });
       expect(x.body()).toMatchObject({ state: "settled-restartable", unknown: { work: false }, singleCallSettlement: { charged: remaining, disposition: "completed" } });
       expect(x.active()).toBe(0);
       expect(x.estimate()).toMatchObject({ state: "failed", reasonCode: "estimate-call-failed:single-call-output-invalid" });
       const ledger = readControlGroup(x.h.store, "epoch", "g").ledger;
       expect(ledger).toMatchObject({ usageUnknown: false, used: { tokens: usedBefore + remaining.tokens } });
+      // Code review S3: the charge leaves the reservation; only an automatic retry's own grant may be held after it.
+      const retriedAs = x.estimate().retriedAs;
+      const retryGrant = retriedAs == null ? 0 : Number(JSON.parse(String(x.h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(retriedAs)!.body)).grant.tokens);
+      expect(ledger.committedRemaining.tokens).toBe(committedBefore - remaining.tokens + retryGrant);
+    } finally { await x.h.dispose(); }
+  });
+
+  // Code review m6: an estimate that moved on while its run was blocked is not completed again; its run is closed.
+  it("closes the run of an estimate that moved on, charging the grant and leaving the estimate as it is", async () => {
+    const x = await estimateHarness({ outcome: "failed", tokens: null });
+    try {
+      await x.rounds(() => x.body().state === "blocked");
+      const row = x.h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(x.h.estimateId)!;
+      x.h.store.db.prepare("UPDATE estimates SET state='failed',body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), state: "failed", reasonCode: "estimate-output-invalid" }), x.h.estimateId);
+      const before = x.estimate();
+      const command = estimateCommand(x, "c-settle-moved");
+      expect(await withCommandContext(command.commandId, OWNER, () => x.service.recoveryRetry(command as never))).toMatchObject({ result: { resolved: true } });
+      expect(x.body()).toMatchObject({ state: "settled-restartable", unknown: { work: false }, singleCallSettlement: { disposition: "interrupted" } });
+      expect(x.active()).toBe(0);
+      expect(x.estimate()).toEqual(before);
+      expect(readControlGroup(x.h.store, "epoch", "g").ledger.usageUnknown).toBe(false);
+    } finally { await x.h.dispose(); }
+  });
+
+  // Code review S1, the estimate's twin: a stop closes a blocked estimate (interruptEstimate, releaseCommitment) with its
+  // usage unknown; the acknowledged retry then charges its grant to `used` without releasing the reservation again.
+  it("settles an estimate a stop closed with its usage unknown, without releasing its reservation twice", async () => {
+    const x = await estimateHarness({ outcome: "failed", tokens: null });
+    try {
+      await x.rounds(() => x.body().state === "blocked");
+      const remaining = x.body().remaining.work;
+      const stopped = await x.service.handoffStop(x.h.command("handoff-stop", {}));
+      if ("error" in stopped || stopped.result.kind !== "handoff-stopped") throw new Error(JSON.stringify(stopped));
+      await x.rounds(() => x.active() === 0);
+      expect(x.estimate().state).toBe("interrupted");
+      const closed = readControlGroup(x.h.store, "epoch", "g").ledger;
+      expect(closed.usageUnknown).toBe(true);
+      const command = estimateCommand(x, "c-settle-stopped");
+      expect(await withCommandContext(command.commandId, OWNER, () => x.service.recoveryRetry(command as never))).toMatchObject({ result: { resolved: true } });
+      expect(x.body()).toMatchObject({ unknown: { work: false }, singleCallSettlement: { disposition: "stopped", charged: remaining } });
+      expect(x.estimate().state).toBe("interrupted");
+      const ledger = readControlGroup(x.h.store, "epoch", "g").ledger;
+      expect(ledger).toMatchObject({ usageUnknown: false, used: { tokens: closed.used.tokens + remaining.tokens }, committedRemaining: closed.committedRemaining });
     } finally { await x.h.dispose(); }
   });
 });

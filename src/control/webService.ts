@@ -1392,7 +1392,8 @@ export class WebControlService {
     if (row === undefined) return undefined;
     const run = JSON.parse(String(row.body)) as SingleCallRunRow;
     const block = settleableSingleCallBlock(run as never), handler = block === null ? null : singleCallHandler(block.purpose);
-    if (block === null || handler?.evaluate === undefined) return undefined;
+    // Code review S1: a call a stop closed is not completed again, so it needs no evaluation.
+    if (block === null || block.closed || handler?.evaluate === undefined) return undefined;
     return handler.evaluate({ store: this.store } as SingleCallPrepareDeps, run, null, block.failure);
   }
   /**

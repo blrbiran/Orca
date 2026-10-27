@@ -46,6 +46,25 @@ describe("an estimate run blocked on unknown usage (§9 R1)", () => {
     expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "g", expectedRevision: 6, payload: { scope: "run", runId: "run-e", acknowledge: "charge-remaining-grant" } });
   });
 
+  // Code review S1 and m1: an estimate a stop closed with its usage unknown (the server's settlement preview present and
+  // unsettled) is offered the same charge; ccloop's lower bound is shown where the run carries one.
+  it("offers the charge on an estimate a stop closed with its usage unknown, with the lower bound", () => {
+    const onCommand = vi.fn();
+    const preview = { generation: 1, highWater: 2, remaining: { work: amount(999_000), handoff: amount(0) }, allowed: false, refusalReason: "run-usage-not-settleable:current-failed-task", acknowledge: "charge-remaining-grant" as const };
+    const estimate = run({ runId: "run-e", taskId: null, estimateId: "est-1", phase: "estimate", state: "settled-restartable", blockedReason: "estimate-usage-unknown:omp-stalled", remaining: amount(999_000), usageLowerBound: 4_321, unknownUsageSettlement: preview });
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([estimate])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    expect(document.body.textContent).toContain("At least 4,321 tokens were observed");
+    fireEvent.click(screen.getAllByRole("button", { name: "Charge the call's grant (999,000 tokens) and retry" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Charge 999,000 tokens and retry" })[0]!);
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "g", expectedRevision: 6, payload: { scope: "run", runId: "run-e", acknowledge: "charge-remaining-grant" } });
+  });
+
+  it("offers nothing on a settled estimate whose usage is known", () => {
+    const estimate = run({ runId: "run-e", taskId: null, estimateId: "est-1", phase: "estimate", state: "settled-restartable", blockedReason: "estimate-usage-unknown:omp-stalled" });
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([estimate])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.queryAllByRole("button", { name: /Charge the call's grant/ })).toHaveLength(0);
+  });
+
   it("keeps the plain run retry for an estimate blocked for another reason", () => {
     const onCommand = vi.fn();
     const estimate = run({ runId: "run-e", taskId: null, estimateId: "est-1", phase: "estimate", state: "blocked", blockedReason: "single-call-record-invalid" });

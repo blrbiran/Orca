@@ -28,6 +28,8 @@ interface SingleCallOptions {
   duringCollect?: () => Promise<void>;
   /** ccloop error codes spec §4.5: the failed call's record errorCode (absent: single-call-output-invalid, as before). */
   errorCode?: string | null;
+  /** Spec 2026-10-27 single-call unknown usage C2/O1: keys added to ccloop's record as given (the lower bound). */
+  recordExtra?: Record<string, unknown>;
   /** Spec 2026-10-15 §6.2: the event's per-model breakdown (absent: none, as before). */
   byModel?: Array<{ model: string; input: number; output: number; cacheRead: number; cacheWrite: number }>;
   /** Tester round 2 §4.2.5 (review M4): the event's non-token cumulative (absent: activeMs 5, attempts 1, sessions 1, as before). */
@@ -67,6 +69,7 @@ function singleCallPort(options: SingleCallOptions, planHash: () => string) {
         promptSha256: sha(Buffer.from(options.tamper === "prompt" ? `${work.prompt} ` : work.prompt, "utf8")),
         responseSchemaSha256: sha256Canonical(work.responseSchema),
         outcome, outputRef, errorCode: outcome === "failed" ? (options.errorCode === undefined ? "single-call-output-invalid" : options.errorCode) : null,
+        ...options.recordExtra,
       };
       const executionId = `exec-${claim.runId}`;
       const candidate: Candidate = {

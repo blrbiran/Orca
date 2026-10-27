@@ -2353,8 +2353,8 @@ export const zhErrors: Record<string, string> = {
   "settle-incomplete": "运行没有结算完；请重试运行。",
   "requirement-call-target-moved": "这次调用开始前需求已经往前走了，所以没有发出。",
   "estimate-request-missing": "这份估算没有冻结的请求，所以无法运行。",
-  "requirement-usage-unknown": "这次需求调用的用量未知，所以它的预算无法结算。",
-  "estimate-usage-unknown": "这次估算调用的用量未知，所以它的预算无法结算。",
+  "requirement-usage-unknown": "这次需求调用的用量未知；按它的额度记账即可结算，之后它会重试。",
+  "estimate-usage-unknown": "这次估算调用的用量未知；按它的额度记账即可结算，之后它会重试。",
   "repository-path": "解析不到这个组的仓库路径；确认仓库仍已登记并且存在，然后重试运行。",
   // Dir-requirements spec §9.3: a dir group's A2 found no work branch in the vault.
   "dir-base-missing": "这个任务组的文件夹起始快照缺失（Orca 的故障），任务没有启动。",

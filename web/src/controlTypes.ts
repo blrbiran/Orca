@@ -404,6 +404,8 @@ export type RunViewV1 = {
   failureCode: string | null;
   diagnosis?: { phase: "estimate" | "work" | "handoff" | "single-call"; step: "planning" | "executing" | "verifying" | null; cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown"; attempt: number };
   blockedReason?: string | null;
+  /** Spec 2026-10-27 single-call unknown usage O3: ccloop's lower bound on a single call's usage, when kept. */
+  usageLowerBound?: number;
   /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
   stopReason?: string | null;
   outcome?: string | null;

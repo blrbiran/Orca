@@ -69,8 +69,9 @@ describe("each surface (spec A §4.6 table)", () => {
       `ccloop exited with an error: ${EN_CATALOG}`,
       "ccloop exited with an error: omp-new-thing: x",
       "ccloop refused to accept this run: The agent's configuration is not valid.",
-      "This estimate call's usage is unknown, so its budget cannot be settled. The model's answer was not the JSON this call asked for.",
-      "This estimate call's usage is unknown, so its budget cannot be settled.",
+      // Ruling: human 「这一轮允许改必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- spec 2026-10-27 §5 O4: the reason now says the grant is charged to settle it.
+      "This estimate call's usage is unknown; charge the call's grant to settle it, then it retries. The model's answer was not the JSON this call asked for.",
+      "This estimate call's usage is unknown; charge the call's grant to settle it, then it retries.",
     ]);
     const html = renderToStaticMarkup(<RunReason run={run({ runId: "run-x", state: "blocked", blockedReason: "control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT" })} />);
     expect(html).toContain(`ccloop exited with an error: ${EN_CATALOG} <code>control-peer-exit:2:omp-model-catalog-unavailable: spawn ENOENT</code>`);
@@ -105,7 +106,8 @@ describe("each surface (spec A §4.6 table)", () => {
     const shown = (language: "en" | "zh") => render(<RequirementsPanel config={config} summary={summaryWith(failed)} views={{ r: failed }} selected="r" agents={null} language={language} onSelect={() => {}} onCommand={vi.fn()} />).container.textContent ?? "";
     const en = shown("en");
     expect(en).toContain(`omp-single-call-cap-exceeded · ${EN_CAP}`);
-    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. · ");
+    // Ruling: human 「这一轮允许改必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- spec 2026-10-27 §5 O4: the reason now says the grant is charged to settle it.
+    expect(en).toContain("requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown; charge the call's grant to settle it, then it retries. · ");
     cleanup();
     await i18n.changeLanguage("zh");
     expect(shown("zh")).toContain(`omp-single-call-cap-exceeded · ${ZH_CAP}`);
@@ -150,7 +152,8 @@ describe("each surface (spec A §4.6 table)", () => {
     const blocked: RequirementViewV1 = { ...view, summary: { ...view.summary, requirement: { ...view.summary.requirement!, blockedRun: { runId: "run-2", reason: "requirement-usage-unknown:omp-new-thing" } } } };
     const { container } = render(<RequirementsPanel config={config} summary={summaryWith(blocked)} views={{ r: blocked }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
     expect([...container.querySelectorAll('p[role="alert"]')].map((p) => p.textContent)).toContain(
-      "requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown, so its budget cannot be settled. · This step's call is blocked; Retry this call runs the blocked step again. Retry this call");
+      // Ruling: human 「这一轮允许改必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- spec 2026-10-27 §5 O4: the reason now says the grant is charged to settle it.
+      "requirement-usage-unknown:omp-new-thing · This requirement call's usage is unknown; charge the call's grant to settle it, then it retries. · This step's call is blocked; Retry this call runs the blocked step again. Retry this call");
   });
 
   // Controller ruling on A7 (plan R3): an unknown code's explanation is the code itself, so these surfaces show it once.
