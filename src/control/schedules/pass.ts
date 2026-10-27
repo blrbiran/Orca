@@ -203,8 +203,10 @@ function groupFireWrite(store: ControlStore, fire: ScheduleFire, now: number, de
   }
   // A condition-8 waiting row waits for the success above; nothing else about the group can move it.
   if (fire.outcome === "waiting") return null;
-  // Rule 4: a person confirmed it (or it moved on) without an automatic attempt: the group's own ledger names them.
-  if (group.status !== "draft") return null;
+  // Rule 4: a person confirmed it (or it moved on) without an automatic attempt: the group's own ledger names them. The
+  // fire is settled with that fact so later passes stop re-deriving it; a later reopen is the person's own act on the
+  // group, not this fire's confirmation.
+  if (group.status !== "draft") return settledWithoutAutoConfirm(now, `group-status:${String(group.status)}`);
   // Rule 5: a finite limit is the person's one-click confirm.
   if ((group.limit as { tokens?: unknown }).tokens !== null) return { outcome: "waiting", reason: "limited" };
   // Rule 6: R2's own predicate; only condition 8 (no control-config defaults) never clears by waiting.
@@ -226,8 +228,21 @@ function groupFireWrite(store: ControlStore, fire: ScheduleFire, now: number, de
       reason: `estimate-failed:${String(estimate.state)}${typeof reasonCode === "string" && reasonCode !== "" ? `:${reasonCode}` : ""}`,
     };
   }
+  // A stop, an archive or a debug group never becomes auto-confirmable again: settle the fire with R2's own reason.
+  if (FINAL_BLOCKERS.has(blocker.condition)) return settledWithoutAutoConfirm(now, `auto-confirm-blocked:${blocker.code}`);
   // Rule 9: transient -- an estimate is still running or queued (any other blocker R2 names).
   return null;
+}
+
+/** R2 conditions that do not clear by waiting: 3 (archived, stopped, stop intent), 4 (flow child, debug), 11 (not a person's). */
+const FINAL_BLOCKERS = new Set([3, 4, 11]);
+
+/**
+ * A started fire whose group R2 will never confirm: `confirm` records that, once (the C10 move `confirm` null → value),
+ * so step 9's open-fire read no longer returns it. The outcome stays `started`; nothing waits for the person here.
+ */
+function settledWithoutAutoConfirm(now: number, code: string): GroupFireWrite {
+  return { outcome: "started", confirm: { state: "not-auto-confirmed", commandId: null, code, at: now } };
 }
 
 /** §9.2 step 9: one fire's derivation, written through the single writer only when it changes the row. */

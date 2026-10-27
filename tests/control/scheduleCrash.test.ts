@@ -11,7 +11,7 @@ import { libraryEntryId } from "../../src/control/planLibrary/commands.js";
 import { appendVersion, insertEntry } from "../../src/control/planLibrary/store.js";
 import { FIRED_GROUP_ID, firedGroupId } from "../../src/control/schedules/model.js";
 import { schedulesPass, type SchedulePassDeps } from "../../src/control/schedules/pass.js";
-import { readSchedule } from "../../src/control/schedules/store.js";
+import { listOpenGroupFires, readSchedule } from "../../src/control/schedules/store.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { FlowRefusal, uuidOf } from "../../src/flow/kernel.js";
@@ -355,6 +355,35 @@ describe("C5 crash resume", () => {
       expect(crashes.length).toBeGreaterThan(0);
       for (const line of crashes) expect(line.startsWith("sch-g"), line).toBe(true);
       expect(fireRows(s, "sch-g")[0]).toMatchObject({ outcome, body });
+    } finally { s.close(); }
+  });
+
+  // Review finding 10 (session 7753e97d): a started group fire whose group R2 will never confirm -- a person confirmed it
+  // first, or it is stopped or a flow child -- is settled once, so step 9's open-fire read stops returning it every pass.
+  it.each([
+    ["confirmed by a person", { status: "running" }, "group-status:running"],
+    ["stopped", { status: "draft", planHash: "h", stopped: true }, "auto-confirm-blocked:stopped"],
+    ["a flow child", { status: "draft", planHash: "h", flow: {} }, "auto-confirm-blocked:flow-child"],
+  ])("a started fire whose group is %s is settled not-auto-confirmed and leaves the open-fire read", async (_name, extra, code) => {
+    const { s, clock } = await openStore();
+    try {
+      createGroup(s, clock);
+      const slot = at(1, 9);
+      const groupId = firedGroupId("sch-g", slot);
+      const starter = async (fire: ScheduleFire): Promise<{ groupId: string }> => {
+        writeBookedImport(s, fire);
+        const body = { groupId, origin: { kind: "schedule", scheduleId: "sch-g", slot }, limit: { tokens: null }, ...extra };
+        s.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), groupId);
+        return { groupId };
+      };
+      expect((await passAt(s, clock, slot, { startGroup: starter })).crashes).toEqual([]);
+      const confirm = { state: "not-auto-confirmed", commandId: null, code, at: slot };
+      expect(fireRows(s, "sch-g")[0]).toMatchObject({ outcome: "started", reason: null });
+      expect(JSON.parse(String(fireRows(s, "sch-g")[0]!.body)).confirm).toEqual(confirm);
+      expect(listOpenGroupFires(s)).toEqual([]);
+      // A later pass writes nothing more: the settled confirm keeps its first time.
+      await passAt(s, clock, at(1, 10), { startGroup: starter });
+      expect(JSON.parse(String(fireRows(s, "sch-g")[0]!.body)).confirm).toEqual(confirm);
     } finally { s.close(); }
   });
 
