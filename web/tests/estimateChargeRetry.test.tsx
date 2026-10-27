@@ -54,6 +54,8 @@ describe("an estimate run blocked on unknown usage (§9 R1)", () => {
     const estimate = run({ runId: "run-e", taskId: null, estimateId: "est-1", phase: "estimate", state: "settled-restartable", blockedReason: "estimate-usage-unknown:omp-stalled", remaining: amount(999_000), usageLowerBound: 4_321, unknownUsageSettlement: preview });
     render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([estimate])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     expect(document.body.textContent).toContain("At least 4,321 tokens were observed");
+    // Re-review m-c: the task settlement's refusal is not shown beside the charge.
+    expect(document.body.textContent).not.toContain("cannot be settled");
     fireEvent.click(screen.getAllByRole("button", { name: "Charge the call's grant (999,000 tokens) and retry" })[0]!);
     fireEvent.click(screen.getAllByRole("button", { name: "Charge 999,000 tokens and retry" })[0]!);
     expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "g", expectedRevision: 6, payload: { scope: "run", runId: "run-e", acknowledge: "charge-remaining-grant" } });

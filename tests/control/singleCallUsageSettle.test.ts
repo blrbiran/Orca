@@ -247,6 +247,47 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
   });
 });
 
+describe("a call a stop closed (re-review S2', m-a, m-b)", () => {
+  const stopAndClose = async (x: Harness, closedWhen: () => boolean) => {
+    await x.until(() => x.runs()[0]?.state === "blocked");
+    expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped" } });
+    await x.until(closedWhen);
+    return x.runs()[0]!;
+  };
+
+  it("settles a split call a stop closed with no evaluation (its draft is not completed again)", async () => {
+    const x = await requirementHarness({ startAt: "split", answers: [{ purpose: "split", ...STALLED }] });
+    try {
+      const closed = await stopAndClose(x, () => readDraft(x.store, "r", 1).state === "interrupted");
+      const command = retry(x, closed.runId, "charge-remaining-grant");
+      expect(await asOwner(command, () => x.service.recoveryRetry(command as never))).toMatchObject({ result: { resolved: true } });
+      expect(x.runs()[0]).toMatchObject({ unknown: { work: false }, singleCallSettlement: { disposition: "stopped", charged: GRANT } });
+      expect(readDraft(x.store, "r", 1).state).toBe("interrupted");
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a requirement call a stop closed once its group no longer clarifies", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
+    try {
+      const closed = await stopAndClose(x, () => x.round(1).state === "interrupted");
+      const body = JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as Record<string, unknown>;
+      x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...body, status: "draft" }));
+      const command = retry(x, closed.runId, "charge-remaining-grant");
+      expect(await refusal(asOwner(command, () => x.service.recoveryRetry(command as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "group-not-clarifying" });
+      expect(x.runs()[0]).toMatchObject({ unknown: { work: true } });
+    } finally { await x.dispose(); }
+  });
+
+  it("an inactive run whose body does not decode does not break the requirement summary", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
+    try {
+      const closed = await stopAndClose(x, () => x.round(1).state === "interrupted");
+      x.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-corrupt','r','round-1',1,0,'broken body')").run();
+      expect(requirementSummaryOf(x.store, "r")).toMatchObject({ blockedRun: { runId: closed.runId }, blockedRunCharge: { tokens: GRANT.tokens } });
+    } finally { await x.dispose(); }
+  });
+});
+
 describe("recovery-retry with no settlement given (a caller other than the Web service)", () => {
   it("refuses a usage-unknown block by name rather than resuming it into the same block", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });

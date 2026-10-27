@@ -395,12 +395,15 @@ function blockedRequirementRun(store: ControlStore, groupId: string, clarifying:
   type Row = { phase?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
   const decode = (row: (typeof rows)[number]): { runId: string; run: Row } => ({ runId: String(row.id),
     run: (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as Row });
+  // Re-review m-a: an inactive run whose body does not decode is not this search's to refuse (the group view judges every
+  // run); it is skipped here, as the history reader skips one.
+  const decodeOrNull = (row: (typeof rows)[number]): { runId: string; run: Row } | null => { try { return decode(row); } catch { return null; } };
   // The driver's block on an active call; else, while the requirement is still clarifying (code review S1), a requirement
   // call a stop closed with its usage still unknown, whose stale block reason names what is left to do -- charge its grant.
   // A converted requirement's runs are not read here (its runs are judged by the group view), as before.
   const pick = rows.filter(row => Number(row.active) === 1).map(decode).find(({ run }) => run.phase === "single-call" && run.state === "blocked")
-    ?? (!clarifying ? undefined : rows.filter(row => Number(row.active) !== 1).map(decode)
-      .find(({ run }) => run.phase === "single-call" && settleableSingleCallBlock(run as never)?.closed === true));
+    ?? (!clarifying ? undefined : rows.filter(row => Number(row.active) !== 1).map(decodeOrNull)
+      .find((entry) => entry !== null && entry.run.phase === "single-call" && settleableSingleCallBlock(entry.run as never)?.closed === true) ?? undefined);
   if (pick === undefined) return { blockedRun: null };
   const { runId, run } = pick;
   // Spec 2026-10-27 single-call unknown usage §9 R1, R6: a call blocked on unknown usage is retried by charging its

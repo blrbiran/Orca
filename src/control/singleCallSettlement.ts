@@ -56,6 +56,9 @@ export function settleSingleCallUsageInTransaction(
   if (store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, run.highWater)) throw new ControlError("run-usage-pending");
   if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
   const { failure } = block, handler = singleCallHandler(block.purpose);
+  // Re-review m-b: a requirement call closed by a stop is settled only while its group still clarifies (the summary offers
+  // it only then, and the wake it queues is a clarifying group's).
+  if (block.closed && handler.purpose !== "estimate" && (group as { status?: string }).status !== "clarifying") throw new ControlError("run-usage-not-settleable", "group-not-clarifying");
   if (!block.closed && handler.evaluate !== undefined && input.evaluation === undefined) throw new ControlError("run-usage-not-settleable", "evaluation-missing");
   const estimate = handler.purpose === "estimate";
   const moved = !block.closed && (estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run));
