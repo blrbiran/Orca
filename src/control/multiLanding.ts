@@ -309,17 +309,23 @@ async function precheckPlace(
     if (error instanceof DirFolderMissing) return { kind: "blocked", state: "blocked", reason: `folder-missing:${member.key}`, failedKey: member.key, detail: error.dir };
     throw error;
   }
-  const after = io.load();
+  const stop = placementStop(io.load(), member.key);
   // A stop this preparation recorded is a `done`; a re-entry on a moved watch that classifies cleanly still carries the
-  // stale stopped state until the write clears it, so only a `done` may read it as this pass's stop.
-  if (prepared.kind === "done" && (after.state === "folder-changed" || after.state === "folder-unwritable")) {
-    return { kind: "blocked", state: after.state, reason: after.state === "folder-changed" ? `dir-folder-changed:${member.key}` : `dir-folder-unwritable:${member.key}`, failedKey: member.key, detail: after.detail };
-  }
-  if (after.state === "folder-missing" || after.state === "failed") {
-    return { kind: "blocked", state: "blocked", reason: `folder-missing:${member.key}`, failedKey: member.key, detail: after.detail };
-  }
+  // stale stopped state until the write clears it, so only a `done` may read a changed/unwritable stop as this pass's.
+  if (stop !== null && (stop.state === "blocked" || prepared.kind === "done")) return { kind: "blocked", ...stop, failedKey: member.key };
   if (prepared.kind === "done") return { kind: "carried" };
   return { kind: "entry", entry: { key: member.key, kind: "place", base: prepared.from, next: prepared.to, tip } };
+}
+
+/**
+ * §9.8: what a folder's placement record says stopped it, read the same way by the pre-check and the publish: a changed
+ * or unwritable folder by its own code, a vanished one or a failed write as `folder-missing`; null for `idle`.
+ */
+function placementStop(record: PlacementRecord, key: string): { state: "blocked" | "folder-changed" | "folder-unwritable"; reason: string; detail: string | null } | null {
+  if (record.state === "folder-changed") return { state: "folder-changed", reason: `dir-folder-changed:${key}`, detail: record.detail };
+  if (record.state === "folder-unwritable") return { state: "folder-unwritable", reason: `dir-folder-unwritable:${key}`, detail: record.detail };
+  if (record.state === "folder-missing" || record.state === "failed") return { state: "blocked", reason: `folder-missing:${key}`, detail: record.detail };
+  return null;
 }
 
 /** §9.8: the folder's record; the first one starts where the export left the folder. */
@@ -490,9 +496,11 @@ async function publishPlace(deps: MultiLandingDeps, groupId: string, multi: Froz
   const tip = (await refTip(repo, workBranchRef(groupId))) ?? current.lastLanded[member.key] ?? "";
   const initial = await folderRecord(deps, groupId, current, member, repo, tip, current.lastLanded[member.key] ?? null);
   const io = folderIo(deps, groupId, member, initial);
-  const stopOf = (after: PlacementRecord) => after.state === "folder-changed" || after.state === "folder-unwritable"
-    ? { reason: after.state === "folder-changed" ? `dir-folder-changed:${member.key}` : `dir-folder-unwritable:${member.key}`, detail: after.detail, moved: false }
-    : null;
+  // Only an `idle` record after the write is a landing; any stop (a missing folder or a failed write too) is this key's.
+  const stopOf = (after: PlacementRecord) => {
+    const stop = placementStop(after, member.key);
+    return stop === null ? null : { reason: stop.reason, detail: stop.detail, moved: false };
+  };
   try {
     return await withDirLock(member.dirWorkspace.dir, async () => {
       const prepared = await prepareFolderPlacement(target, io.load(), io);
