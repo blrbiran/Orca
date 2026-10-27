@@ -37,12 +37,12 @@
 //           | --omp <abs omp binary> --model <provider/model> --omp-config-dir <private absolute directory> | --fake-omp)
 //          [--call-usd 2] [--deadline-ms 3600000] [--max-rounds 4] [--max-drafts 4] [--context-window 1000000]
 //          [--group-tokens 3000000] [--task-tokens 1000000] [--stop-after-export] [--no-partial]
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { resolveGroupSelections } from "../src/control/agentFreeze.js";
 import { DriverCrash, type CrashPoint } from "../src/control/executionDriver.js";
 import { createMultiDirProjects } from "../src/control/multiGroup.js";
@@ -102,11 +102,13 @@ const contextWindow = Number(args["context-window"] ?? 1_000_000);
 if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0) throw new Error("--context-window must be a positive integer");
 const CLAUDE_ISOLATION = ["--permission-mode", "acceptEdits", "--no-session-persistence", "--setting-sources", "project,local", "--strict-mcp-config", "--disable-slash-commands", "--settings", '{"autoMemoryEnabled":false}', "--max-budget-usd", callUsd];
 
+// Probed once, not assumed: whether this host's sh finds a bare `python` (the checks run through sh).
+const hostHasPython = spawnSync("sh", ["-c", "command -v python"], { stdio: "ignore" }).status === 0;
 const IDEA = "Release 0.2.0 across the whole project. In alpha's package.json and in beta's package.json set the version field to 0.2.0, "
   + "and add a file VERSION at the root of the notes folder whose entire content is the characters 0.2.0 followed by one newline. "
   + "It is one release: one task changes all three directories together. Change no other file. "
   + "Every member is worked on inside a git working tree, the notes folder too, so verify a file by reading its contents "
-  + "(python3 is installed, python is not); never prove a directory's contents by listing it, since a working tree also holds .git, "
+  + (hostHasPython ? "" : "(python3 is installed, python is not); ") + "never prove a directory's contents by listing it, since a working tree also holds .git, "
   + "and never by git status or git diff, since a new file is untracked and the change is uncommitted when the checks run.";
 const FEEDBACK = "This is one release across the whole project: make it one task whose writes list all three directories (alpha, beta and notes), "
   + "one entry per directory, rather than one task per directory. Do not change the requirement's scope.";
@@ -305,8 +307,8 @@ const checksReadVcsState = (output: unknown): boolean =>
     .flatMap((task) => task.writes ?? [])
     .flatMap((write) => (write.checks ?? []).map(String))
     .some((check) => /\bgit\s+(status|diff)\b/.test(check));
-/** This machine has python3 and no python: a bare `python` check exits 127 whatever the files hold. */
-const checksUseMissingPython = (output: unknown): boolean =>
+/** On a host with no `python` (probed above), a bare `python` check exits 127 whatever the files hold. */
+const checksUseMissingPython = (output: unknown): boolean => !hostHasPython &&
   ((output as { tasks?: Array<{ writes?: Array<{ checks?: unknown[] }> }> } | null)?.tasks ?? [])
     .flatMap((task) => task.writes ?? [])
     .flatMap((write) => (write.checks ?? []).map(String))
@@ -597,15 +599,22 @@ const claudeCalls = kind === "claude" && existsSync(claudeRaw) ? readdirSync(cla
   const envelope = lines.map((line) => { try { return JSON.parse(line) as Record<string, unknown>; } catch { return null; } }).filter((value) => value?.type === "result").at(-1) ?? null;
   const argvPath = join(claudeRaw, name.replace(/\.json$/, ".argv.json"));
   const argv = existsSync(argvPath) ? JSON.parse(readFileSync(argvPath, "utf8")) as string[] : [];
-  const at = argv.lastIndexOf("--add-dir");
-  const addDirs = at < 0 ? [] : argv.slice(at + 1).filter((arg) => !arg.startsWith("-"));
+  // Each `--add-dir` takes the values up to the next option; what follows (`--model`'s value, the prompt) is not a dir.
+  const addDirs: string[] = [];
+  for (let at = argv.indexOf("--add-dir"); at >= 0; at = argv.indexOf("--add-dir", at + 1)) {
+    for (let next = at + 1; next < argv.length && !argv[next]!.startsWith("-"); next += 1) addDirs.push(argv[next]!);
+  }
   return { name, costUsd: envelope?.total_cost_usd ?? null, durationMs: envelope?.duration_ms ?? null, isError: envelope?.is_error ?? null, usage: envelope?.usage ?? null, addDirs };
 }) : [];
 if (kind === "claude") {
   summary.claudeCalls = claudeCalls;
   summary.claudeCostUsdSum = claudeCalls.reduce((sum, call) => sum + (typeof call.costUsd === "number" ? call.costUsd : 0), 0);
-  const extraWorkspaces = (summary.driveDirs as Array<{ key: string; workspacePath: string }> | undefined)?.filter((dir) => dir.key !== "alpha").map((dir) => dir.workspacePath) ?? [];
-  checks.claudeAddDir = extraWorkspaces.length > 0 && claudeCalls.some((call) => extraWorkspaces.every((path) => call.addDirs.includes(path)));
+  // ccloop grants the extras' attempt worktrees (`<run>/run/dirs/attempt-<n>/<key>`, ccloop's own layout), not Orca's
+  // prepared workspaces, and only a landed run records drive.dirs: one --add-dir under this root per extra member is
+  // what shows the agent was given every extra directory, and nothing else.
+  const extraKeys = members.filter((member) => member.key !== "alpha").map((member) => member.key);
+  checks.claudeAddDir = claudeCalls.some((call) => call.addDirs.length === extraKeys.length
+    && extraKeys.every((key) => call.addDirs.some((path) => path.startsWith(root + sep) && basename(path) === key)));
 }
 checks.orcaHomeUnchanged = JSON.stringify(snapshot(orcaHome)) === JSON.stringify(orcaHomeBefore);
 if (kind === "claude") checks.claudeProjectsUnchanged = JSON.stringify(claudeProjectsList()) === JSON.stringify(claudeProjectsBefore);
