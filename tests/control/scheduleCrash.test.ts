@@ -333,6 +333,31 @@ describe("C5 crash resume", () => {
     } finally { s.close(); }
   });
 
+  // Review findings 2 and 3 (session 7753e97d): one fire row whose body is unreadable -- bytes that do not parse, or a
+  // parsed `null` -- is that row's crash, never a throw out of the read that lists every schedule's fires.
+  it.each([
+    ["starting", "not json"],
+    ["starting", "null"],
+    ["started", "null"],
+    ["started", "[]"],
+  ])("a %s fire with body %s of one schedule: the other schedule still fires", async (outcome, body) => {
+    const { s, clock } = await openStore();
+    try {
+      createFlow(s, clock, "sch-a");
+      createGroup(s, clock);
+      s.db.prepare(`INSERT INTO schedule_fires(schedule_id,seq,slot,at,outcome,reason,flow_run_id,group_id,"by",via,body)
+        VALUES ('sch-g',1,?,?,?,NULL,NULL,NULL,'orca-auto','schedule:sch-g',?)`).run(at(0, 9), at(0, 9), outcome, body);
+      const { crashes } = await passAt(s, clock, at(1, 9), {
+        startFlow: async (fire) => writeFlowRun(s, fire), startGroup: async (fire) => writeBookedImport(s, fire),
+      });
+      expect(fireRows(s, "sch-a").map((row) => row.outcome)).toEqual(["started"]);
+      // The broken row is reported (by its schedule) and left as it is; nothing about sch-a is a crash.
+      expect(crashes.length).toBeGreaterThan(0);
+      for (const line of crashes) expect(line.startsWith("sch-g"), line).toBe(true);
+      expect(fireRows(s, "sch-g")[0]).toMatchObject({ outcome, body });
+    } finally { s.close(); }
+  });
+
   it("(c) a crash then the next slot: the old fire completes first, the new slot is skipped, never two runs", async () => {
     const { s, clock } = await openStore();
     try {

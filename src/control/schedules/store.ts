@@ -112,9 +112,24 @@ export function listActiveFires(store: ControlStore, scheduleId: string): Schedu
     .all(scheduleId).map(fireOf);
 }
 
-/** §7.2 step 0: every unsettled start, oldest first, across all schedules. */
-export function listStartingFires(store: ControlStore): ScheduleFire[] {
-  return store.db.prepare(`SELECT ${FIRE_COLUMNS} FROM schedule_fires WHERE outcome='starting' ORDER BY at, schedule_id, seq`).all().map(fireOf);
+export type FireListing = { fires: ScheduleFire[]; corrupt: Array<{ scheduleId: string; seq: number; error: ControlError }> };
+
+/**
+ * §7.2 step 0: every unsettled start, oldest first, across all schedules. A body that does not parse is a per-row fact
+ * (as `listLiveSchedules`' corrupt rows are), never a throw that ends the read for every other schedule.
+ */
+export function listStartingFires(store: ControlStore): FireListing {
+  const listing: FireListing = { fires: [], corrupt: [] };
+  for (const row of store.db.prepare(`SELECT ${FIRE_COLUMNS} FROM schedule_fires WHERE outcome='starting' ORDER BY at, schedule_id, seq`).all()) {
+    try { listing.fires.push(fireOf(row)); }
+    catch (error) {
+      listing.corrupt.push({
+        scheduleId: String(row.schedule_id), seq: Number(row.seq),
+        error: error instanceof ControlError ? error : new ControlError("recovery-blocked", "schedule-fire-body-invalid"),
+      });
+    }
+  }
+  return listing;
 }
 
 /** Both tables carry `body`, so the joined read qualifies every column of the fire. */
@@ -123,8 +138,10 @@ const GROUP_FIRE_COLUMNS = "f.schedule_id,f.seq,f.slot,f.at,f.outcome,f.reason,f
 /** §9.2 step 9: the group fires still open -- a condition-8 `waiting`, or a `started` row with no confirm recorded yet. */
 export function listOpenGroupFires(store: ControlStore): ScheduleFire[] {
   // A corrupt body is no decision for this pass; the CASE keeps json_extract away from it (SQLite may test the OR first).
+  // Valid JSON that is not an object (`null`, an array) is as corrupt as bytes that do not parse: `fireOf` refuses both.
   return store.db.prepare(`SELECT ${GROUP_FIRE_COLUMNS} FROM schedule_fires f JOIN schedules s ON s.id=f.schedule_id
-    WHERE s.kind='group' AND json_valid(f.body) AND ((f.outcome='waiting' AND f.reason='auto-confirm-ineligible:8')
+    WHERE s.kind='group' AND (CASE WHEN json_valid(f.body) THEN json_type(f.body) END)='object'
+      AND ((f.outcome='waiting' AND f.reason='auto-confirm-ineligible:8')
       OR (f.outcome='started' AND (CASE WHEN json_valid(f.body) THEN json_extract(f.body,'$.confirm') END) IS NULL))
     ORDER BY f.at, f.schedule_id, f.seq`).all().map(fireOf);
 }

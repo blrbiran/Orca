@@ -276,8 +276,11 @@ async function resumeFire(deps: SchedulePassDeps, fire: ScheduleFire): Promise<v
  * row stays `starting` and every other fire and schedule still runs.
  */
 export async function resumeStartingFires(deps: SchedulePassDeps): Promise<{ crashes: string[] }> {
-  const crashes: string[] = [];
-  for (const fire of listStartingFires(deps.store)) {
+  const listed = listStartingFires(deps.store);
+  // A body that does not parse is one crash line for that fire; its schedule's own evaluation meets the same row as
+  // active (§7.4) and crashes alone, while every other fire and schedule still runs.
+  const crashes = listed.corrupt.map(({ scheduleId, seq, error }) => crashOf(`${scheduleId}#${seq}`, error));
+  for (const fire of listed.fires) {
     try { await resumeFire(deps, fire); }
     catch (error) { crashes.push(crashOf(fire.scheduleId, error)); }
   }
