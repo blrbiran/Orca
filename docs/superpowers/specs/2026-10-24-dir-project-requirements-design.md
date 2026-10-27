@@ -801,3 +801,33 @@ findings closed and raised N1–N8; the controller's choices are applied.
 | N7 watch fail-safe | the signature only schedules a re-check; a miss delays, never writes | §8.6 | D6 (watch re-run) |
 | N8 no-progress states | `failed` and `folder-missing` report no progress; `withhold` accepted in `folder-changed` when `unwritable` (or `changed`) is non-empty | §8.5 step 2, §9.2 | D4/D13 pattern (pass reports no progress), D10 |
 
+## 21. Correction: as built after the review of 2026-10-27 (session `7753e97d`)
+
+Appended by the implementer of branch `fix/dirreq-review`, Orca session `7753e97d`, 2026-10-27, on main `ebf680ee`
+(Rule 13: the sections above stay as written; where they differ from this section, this section is what is built).
+
+1. **§9.2 `take-folder` step 5** (commit `3e5a612f`, `fix(dirPlacement): take-folder places the rest of the stopped
+   landing in the same round`). The text says `tip = landedTip = T′`. As built: `landedTip = T′`, but
+   `tip = pending?.tip ?? <the tip before the stop>` — the tip whose folder commit `P` stands for. `P` holds the last
+   placed tip (or the owed write's) plus the person's taken paths, not the rest of `T′`; recording `tip = T′` made
+   step 4 answer "nothing to place" and the rest of the stopped landing never reached the folder. The same round then
+   goes on with §8.5 steps 3–6 (as after `withhold`), which place the rest of `T′`, and any landing that came while
+   stopped, from `P`.
+2. **§9.2, every answer.** A save that consumes an answer changes `placement.resolution` only while the stored
+   resolution is still that answer (same `id`); a newer answer the person recorded while the pass ran is kept for the
+   next round. (§9.2 step 5 "`resolution` kept" holds only under that condition.)
+3. **§9.2, a recorded `take-folder` met in a state other than `folder-changed`** (the folder went missing, or the take
+   failed) is acted on as `recheck`; when that recheck stops again, `detail` is
+   `take-folder not applied: the placement was <state> when the answer was read; checked again`.
+4. **§8.2 `withheld` and §8.5 step 5.** "Paths whose entry differs between `T` and `F′` are recorded in `withheld`"
+   and the §8.2 comment "Orca-own, or withheld by the person" are replaced: `withheld` holds **only the person's
+   withholds** (the entries §9.2 `withhold` wrote, while their `to` entry is unchanged). Orca-own paths are kept from
+   `placed` every round without being recorded; recorded, they grew by one entry per landed run and showed on the page
+   as the person's. An `orca-own` entry an older record still holds is ignored by the pass and not shown by the panel.
+5. **§8.3 `case-clash`.** An added path is also `case-clash` when one of its **directory prefixes** folds to another
+   landing path's prefix (or path) spelt otherwise: `Docs/a.md` and `docs/b.md` added together are both `case-clash`.
+6. **§6.4 step 2 and §11.2.** The base import runs inside `withDirLock(frozen.dir)`: the base is `placed`'s first value,
+   so it is a read that decides a write. The overview imports of §6.2 stay outside the lock: they decide no write, and
+   `reuseUnchanged` reuses an import only when its tree equals the snapshot just taken.
+7. **§9.3 panel.** The answers are offered only in `folder-changed`, `folder-unwritable` and `folder-missing`, the
+   states `resolve-folder-change` accepts.
