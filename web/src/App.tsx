@@ -611,15 +611,18 @@ export function App(): JSX.Element {
       if (refusal.code === "agent-selection-changed" || refusal.code === "agent-selection-rejected") rereadPreview(action.groupId, 0);
     }
     if (requirementVerb) setRequirementRefusal(answer.status >= 400 ? refusalFromAnswer(answer) : null);
-    // Tester #63: an archived group leaves Task control's list, so its open detail closes with it; "Show archived" brings
-    // both back. Not after a scope change: that already closed every detail (scopeKey effect). A requirement's view stays
-    // open on its Unarchive (requirementsApp.test.tsx "routes archive response 200"), until the person rules otherwise.
+    // Tester #63: an archived group or requirement leaves the list it was opened from, so its open detail closes with it;
+    // "Show archived" brings both back. Not after a scope change: that already closed every detail (scopeKey effect).
     // The URL follows only when it names that group, so an archive from the Board or a list stays on its page.
     if (answer.status < 400 && action.verb === "archive-group" && scopeKeyNow.current === scopeAtSend) {
       const shown = routeNow.current;
       if (selectedGroupNow.current === action.groupId) {
         navigationSeq.current++; setSelectedGroup(null);
         if (shown.kind === "group" && shown.groupId === action.groupId) navigate({ kind: "section", section: "tasks" }, { replace: true });
+      }
+      if (requirementNow.current === action.groupId) {
+        navigationSeq.current++; setSelectedRequirement(null);
+        if (shown.kind === "requirement" && shown.groupId === action.groupId) navigate({ kind: "section", section: "requirements" }, { replace: true });
       }
     }
     // A refused open made no group: reading it would only replace the refusal on screen with group-not-found.

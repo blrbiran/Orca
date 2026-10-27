@@ -134,7 +134,13 @@ describe("App requirement archive routing", () => {
     };
     render(<App />); fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Archive group" }));
-    if (status === 200) expect(await screen.findByRole("button", { name: "Unarchive" })).toBeTruthy();
+    // Tester #63: a successful archive closes the requirement's open view ("Show archived" brings it back). Was: the view
+    // stayed on its Unarchive. Ruling: human 「同意修改」, Orca session 3cd8fb02, 2026-10-27. The channel this case pins is
+    // unchanged: the answer is read through the requirement read, never the group read (asserted below).
+    if (status === 200) {
+      await waitFor(() => expect(requests).toContain("POST /api/control/groups/r/archive"));
+      await waitFor(() => expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull());
+    }
     else expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
     expect(requests).not.toContain("GET /api/control/groups/r");
   });
