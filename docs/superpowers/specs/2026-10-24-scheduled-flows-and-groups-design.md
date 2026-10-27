@@ -870,3 +870,33 @@ Appended after commit `8569e88a`; the sections above stay as committed (Rule 13)
    defaults change. Mutations that must turn it red: drop the condition-8 row (the case stays open); **keep a condition-8
    `waiting` write-once** (after defaults are configured the fire still reads `waiting` although the group was confirmed:
    red); map `selections-unresolved` to `auto-confirm-refused` (red on the condition-10 case).
+
+## 23. Correction (session 7753e97d, review fixes on branch `fix/schedules-review`, 2026-10-27)
+
+Appended on top of `ebf680ee`; the sections above stay as committed (Rule 13). Where this section and §6.1, §6.2, §7.2,
+§9.2 or §22 disagree, this section holds. Each item names the commit that implements it.
+
+1. **§7.2 step 1 is checked again inside T1** (`0282b15e`). The pass lists the schedules once and awaits each start in
+   turn, so a person's disable, pause or remove can commit after the listing. T1's transaction re-reads the row and
+   refuses a removed, disabled or paused one `schedule-state-changed` (nothing written, `lastSlot` unchanged); the start
+   runs the body T1 read, not the listing's.
+2. **Step 9 leaves the fire to R2 while nothing port-free blocks it** (`b05fc6e5`). When `autoConfirmBlocker` returns
+   null, R2's pass books an attempt later in the same pump, and that booked row is the first fact of §9.2's table on the
+   next pass; step 9 records nothing. The `delivery-needs-person` and `estimate-failed` rows of §9.2 apply only when R2
+   cannot try (a non-null blocker other than condition 8). Before this, a failed estimate was recorded `waiting`
+   (write-once) ahead of R2's attempt, and R2's booked result was never copied.
+3. **A started group fire R2 will never confirm is settled** (`224befd9`). §6.2's `confirm.state` gains a third value,
+   `"not-auto-confirmed"`, with `commandId: null` and `code` one of `group-status:<status>` (the group left `draft`
+   without an automatic attempt: a person confirmed it, §9.2's last row) or `auto-confirm-blocked:<R2 code>` (R2
+   conditions 3, 4 or 11: archived, stopped, stop intent, flow child, debug, not a person's). It is written once, by the
+   C10 move `confirm` null → value, so step 9's open-fire read stops returning the row; the outcome stays `started`.
+   §9.2's "nothing more to record" for a person's confirm is replaced by this write. Not covered: a condition-8
+   `waiting` fire whose group a person confirmed stays open (C10 allows no confirm on a `waiting` row).
+4. **§6.1 `template`: a named version must be the one the build ships at write** (`76915ce3`). A write naming another
+   version is refused `flow-template-version-missing` (the kernel's code) and stores nothing. The kernel check at every
+   start (§8 step 2) still catches a pin a later build no longer ships.
+5. **Unreadable rows are per-row facts** (`f33d12a7`, `7cee96a6`, `f5cb0b47`). A `starting` fire whose body does not
+   parse is one crash line (`<scheduleId>#<seq>: …`), not a throw that stops every schedule; step 9's open-fire read
+   admits only object bodies; the plan library's `usedBy` skips a schedule body that does not parse, and an archive
+   refuses `plan-library-entry-in-use` naming `<id>:unreadable` while such a row is live; the schedules list puts a
+   schedule whose newest fire body does not parse under `corrupt`.
