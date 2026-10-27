@@ -205,3 +205,21 @@ of §2–§7 it names; the text above stays as written.
   An amount chosen by the person (review n4) is not built.
 - **Order (replaces §7).** Orca O1 (accept the record key and the two run keys) and ccloop C1/C2 in parallel; Orca R1–R4
   on top of O1; ccloop needs the human's push before the repin that brings `omp-stalled` and the bound into Orca.
+
+## 10. Revision 2 — a call a stop closed (session `3cd8fb02`, 2026-10-28; reviews `/private/tmp/orca-3cd8fb02/review62code/REVIEW.md` S1, `/private/tmp/orca-3cd8fb02/rereview62/REVIEW.md` S1')
+
+Supersedes the admission in O2 / §9 R1 ("active, blocked at C, no stop intent") and adds a disposition to R4.
+
+- **Measured:** a handoff-stop or a shutdown closes a single call blocked on usage-unknown — the run becomes inactive
+  `settled-*` with the block reason left on its drive record and `unknown.work` still true — and gives its grant back
+  (requirement: `interruptRequirementCall`; estimate: `interruptEstimate` + `releaseCommitment`). Nothing is charged, so
+  the group's usage-unknown flag stays set and every later call parks (the review's probe). A pause does not close the
+  call; it stays blocked and takes the normal path once the pause is lifted.
+- **Admission, second form:** a clarify / split / estimate run that is inactive, `settled-*`, carries a stale
+  `<usageUnknownReason>[:code]` and still has unknown work usage, in a group still `clarifying` for requirement calls, is
+  settleable by the same acknowledged `recovery-retry`, also while the completed stop is in place. A call still blocked
+  under a stop stays refused `stop-mode-conflict`.
+- **Effect:** charge the remaining grant to `used` only (`releaseReserved: false` — the stop already released it), recompute
+  the flag, skip the purpose's `complete` (the round / draft / estimate is already interrupted; no evaluation needed),
+  marker disposition **`stopped`**, and for a requirement call queue a wake so a round parked on the flag is claimed.
+  Settling first or the stop's own retry first both end with the call settled once and the round claimed.
