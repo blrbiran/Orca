@@ -133,13 +133,18 @@ describe("App requirement archive routing", () => {
       return original(input, init);
     };
     render(<App />); fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Archive group" }));
+    const archive = await screen.findByRole("button", { name: "Archive group" });
+    // Open before the archive, so the closing below is observed, not assumed.
+    expect((await requirementList()).getByRole("button", { name: /^r · clarifying/ }).getAttribute("aria-current")).toBe("true");
+    fireEvent.click(archive);
     // Tester #63: a successful archive closes the requirement's open view ("Show archived" brings it back). Was: the view
     // stayed on its Unarchive. Ruling: human 「同意修改」, Orca session 3cd8fb02, 2026-10-27. The channel this case pins is
     // unchanged: the answer is read through the requirement read, never the group read (asserted below).
+    const item = (await requirementList()).getByRole("button", { name: /^r · clarifying/ });
     if (status === 200) {
       await waitFor(() => expect(requests).toContain("POST /api/control/groups/r/archive"));
-      await waitFor(() => expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull());
+      // The list marks the open requirement (aria-current); once archived, none is open.
+      await waitFor(() => expect(item.getAttribute("aria-current")).toBe("false"));
     }
     else expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
     expect(requests).not.toContain("GET /api/control/groups/r");
