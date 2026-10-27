@@ -10,17 +10,14 @@
  *   ever sent to the browser.
  * - Without ccloop's `features.transcripts: "v1"` the listing says why and nothing is served (§10.2.4).
  */
-import { lstat } from "node:fs/promises";
-import { join } from "node:path";
 import type { Express, Request, Response } from "express";
 import type { ExecutionPort } from "../control/executionPort.js";
 import type { ControlStore } from "../control/store.js";
-import type { TranscriptEntry } from "../control/schema.js";
 import { readRun } from "../control/budget.js";
 import { sendControlError, sendMappedControlError } from "../panel/controlErrors.js";
 import type { Principal } from "../panel/permissions.js";
 import { panelIndexCache, type IndexCache } from "./lineIndex.js";
-import { findEntry, liveBytes, openEntry, runtimeOf, storedListing, type ListingRow, type StoredListing } from "./listing.js";
+import { finalNow, findEntry, liveBytes, openEntry, runtimeOf, storedListing, type ListingRow, type StoredListing } from "./listing.js";
 import { panelRedactor, type Redactor } from "./redact.js";
 import { TranscriptRefusal } from "./refusal.js";
 import { expandField, expandOversized, windowAfter, windowBefore, windowTail } from "./window.js";
@@ -59,13 +56,6 @@ function listingOf(store: ControlStore, runId: string): StoredListing | null {
 
 const queryKeys = (req: Request, allowed: readonly string[]): boolean => Object.keys(req.query).every((key) => allowed.includes(key) && typeof req.query[key] === "string");
 const intParam = (value: unknown): number | null => (typeof value === "string" && /^(0|[1-9][0-9]{0,15})$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null);
-
-/** `final` from the driver's last collect, or the call's outcome.json appearing (§10.4.3), or an archived source. */
-async function finalNow(listing: StoredListing, entry: TranscriptEntry, source: "run" | "archive"): Promise<boolean> {
-  if (entry.final || source === "archive" || entry.path === null) return true;
-  const outcome = await lstat(join(listing.sourceDir, "run", entry.path, "..", "outcome.json")).catch(() => null);
-  return outcome?.isFile() === true;
-}
 
 export function registerTranscriptRoutes(app: Express, deps: TranscriptRouteDeps, channel: "web" | "socket"): void {
   if (channel !== "web") return;

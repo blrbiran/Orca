@@ -13,7 +13,7 @@ import { readRun, saveRun } from "../control/budget.js";
 import type { TranscriptEntry } from "../control/schema.js";
 import type { ControlStore } from "../control/store.js";
 import { readArtifact } from "../control/archive.js";
-import { LISTING_PATH, openArchiveTranscript, openRunTranscript, type OpenSource } from "./reader.js";
+import { callDirOf, LISTING_PATH, openArchiveTranscript, openRunTranscript, type OpenSource } from "./reader.js";
 import { TranscriptRefusal } from "./refusal.js";
 import type { Runtime } from "./normalize.js";
 
@@ -82,6 +82,16 @@ export async function openEntry(store: ControlStore, runId: string, listing: Sto
 /** A non-final row's size read now (D1); a stored size when the file is not there. */
 export async function liveBytes(listing: StoredListing, entry: TranscriptEntry): Promise<number> {
   if (entry.final || entry.path === null || !LISTING_PATH.test(entry.path)) return entry.bytes;
-  const stat = await lstat(join(listing.sourceDir, "run", entry.path)).catch(() => null);
+  const stat = await callFile(listing, entry.path, "transcript.jsonl");
   return stat?.isFile() ? stat.size : entry.bytes;
 }
+
+/** `final` from the driver's last collect, or the call's outcome.json appearing (§10.4.3), or an archived source. */
+export async function finalNow(listing: StoredListing, entry: TranscriptEntry, source: "run" | "archive"): Promise<boolean> {
+  if (entry.final || source === "archive" || entry.path === null) return true;
+  return (await callFile(listing, entry.path, "outcome.json"))?.isFile() === true;
+}
+
+/** The `lstat` of a file in a listed call's directory, reached by the component walk; null when it is not there. */
+const callFile = async (listing: StoredListing, path: string, name: string) =>
+  callDirOf(listing.sourceDir, path).then((dir) => lstat(join(dir, name))).catch(() => null);

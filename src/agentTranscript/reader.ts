@@ -77,19 +77,27 @@ async function openRegular(path: string): Promise<{ handle: FileHandle; dev: num
 }
 
 /**
- * Open a listed transcript under the run directory. ENOENT anywhere is rethrown as is (the caller falls back to the
- * archive); a symlink or a non-directory component is `transcript-path-invalid` (never followed, never a fallback).
+ * The call directory of a listing path under `<sourceDir>/run/`, every component `lstat`-checked as a real directory
+ * (never a symlink). Everything that touches a listed call's files goes through it (review 7753e97d: the listing's live
+ * size and the `final` check once joined the path and followed a symlinked directory).
  */
-export async function openRunTranscript(sourceDir: string, listingPath: string): Promise<OpenSource> {
+export async function callDirOf(sourceDir: string, listingPath: string): Promise<string> {
   if (!LISTING_PATH.test(listingPath)) throw new TranscriptRefusal("transcript-path-invalid", "shape");
-  const parts = ["run", ...listingPath.split("/")];
   let current = sourceDir;
-  for (const part of parts.slice(0, -1)) {
+  for (const part of ["run", ...listingPath.split("/").slice(0, -1)]) {
     current = join(current, part);
     const stat = await lstat(current);
     if (stat.isSymbolicLink() || !stat.isDirectory()) throw new TranscriptRefusal("transcript-path-invalid", "component");
   }
-  const file = await openRegular(join(current, parts[parts.length - 1]!));
+  return current;
+}
+
+/**
+ * Open a listed transcript under the run directory. ENOENT anywhere is rethrown as is (the caller falls back to the
+ * archive); a symlink or a non-directory component is `transcript-path-invalid` (never followed, never a fallback).
+ */
+export async function openRunTranscript(sourceDir: string, listingPath: string): Promise<OpenSource> {
+  const file = await openRegular(join(await callDirOf(sourceDir, listingPath), "transcript.jsonl"));
   return { reader: handleReader(file.handle, file.size), key: `${file.dev}:${file.ino}`, close: () => file.handle.close() };
 }
 

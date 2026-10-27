@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { claimWork } from "../../src/control/budget.js";
+import { finalNow } from "../../src/agentTranscript/listing.js";
 import type { TranscriptEntry } from "../../src/control/schema.js";
 import { openTestStore, seedBudgetCase } from "../control/fixtures/store.js";
 import { claude, jsonl } from "./fixtures.js";
@@ -88,5 +89,36 @@ describe("T5: what is opened", () => {
       expect([400]).toContain(answer.status);
     }
     expect(await w.web.get(`/api/control/runs/${w.runId}/transcripts/1/plan/9?tail=1`)).toMatchObject({ status: 404, body: { error: { code: "transcript-not-found" } } });
+  });
+});
+
+describe("review 7753e97d: a live call's size and `final` are read now, through the component walk", () => {
+  it("the listing reports a non-final call's size on disk now (D1), and never follows a symlinked call directory", async () => {
+    const w = await world(() => [entry({ final: false, bytes: 1 }), entry({ seq: 2, path: "claude/1/plan/call-b/transcript.jsonl", final: false, bytes: 7 })]);
+    mkdirSync(callDir(w.sourceDir), { recursive: true });
+    const bytes = jsonl([claude.text("grown since the last collect")]);
+    writeFileSync(join(callDir(w.sourceDir), "transcript.jsonl"), bytes);
+    const elsewhere = mkdtempSync(join(tmpdir(), "lt-elsewhere-"));
+    cleanups.push(() => rmSync(elsewhere, { recursive: true, force: true }));
+    writeFileSync(join(elsewhere, "transcript.jsonl"), "x".repeat(5000));
+    symlinkSync(elsewhere, callDir(w.sourceDir, "call-b"));
+    const answer = await w.web.get(`/api/control/runs/${w.runId}/transcripts`);
+    expect(answer.status).toBe(200);
+    expect(answer.body.calls.map((c: { bytes: number }) => c.bytes)).toEqual([bytes.length, 7]);
+  });
+
+  it("a non-final call is served final once its outcome.json appears, and an outcome behind a symlinked directory is not", async () => {
+    const w = await world(() => [entry({ final: false })]);
+    mkdirSync(callDir(w.sourceDir), { recursive: true });
+    writeFileSync(join(callDir(w.sourceDir), "transcript.jsonl"), jsonl([claude.text("working")]));
+    expect((await tail(w.web, w.runId)).body.final).toBe(false);
+    writeFileSync(join(callDir(w.sourceDir), "outcome.json"), "{}");
+    expect((await tail(w.web, w.runId)).body.final).toBe(true);
+    const elsewhere = mkdtempSync(join(tmpdir(), "lt-elsewhere-"));
+    cleanups.push(() => rmSync(elsewhere, { recursive: true, force: true }));
+    writeFileSync(join(elsewhere, "outcome.json"), "{}");
+    symlinkSync(elsewhere, callDir(w.sourceDir, "call-b"));
+    const linked = entry({ seq: 2, path: "claude/1/plan/call-b/transcript.jsonl", final: false });
+    expect(await finalNow({ sourceDir: w.sourceDir, entries: [linked] }, linked, "run")).toBe(false);
   });
 });
