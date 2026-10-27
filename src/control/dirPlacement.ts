@@ -568,7 +568,7 @@ const dropRef = async (ws: DirWorkspace, ref: string): Promise<void> => { await 
  * one `Orca-Resolution` trailer making a replay adopt what an earlier attempt committed. The answer stays on the record
  * (Rule 13); a path that cannot be taken (a symlink, anything not a regular file) stops the group again, named.
  */
-async function takeFolder(ws: DirWorkspace, target: FolderPlacementTarget, io: FolderPlacementIo, record: PlacementRecord, resolution: NonNullable<PlacementRecord["resolution"]>): Promise<Prepared> {
+async function takeFolder(ws: DirWorkspace, target: FolderPlacementTarget, io: FolderPlacementIo, record: PlacementRecord, resolution: NonNullable<PlacementRecord["resolution"]>): Promise<{ kind: "done" } | { kind: "continue"; record: PlacementRecord }> {
   const trailer = resolutionTrailer(resolution.id);
   const lists = await stopLists(ws, record);
   const orcaOwn = new Set(target.orcaOwn);
@@ -619,10 +619,14 @@ async function takeFolder(ws: DirWorkspace, target: FolderPlacementTarget, io: F
     catch { if ((await revParse(ws, target.refs.placed).catch(() => null)) !== p) return { kind: "done" }; }
   }
   io.hook?.("after-take-placed-cas");
-  io.save((current) => ({ ...current, ...cleanStop(), tip: tprime, landedTip: tprime, pending: null, state: "idle", detail, resolution: { ...resolution } }));
+  // Review 2026-10-27 (session 7753e97d): `p` is the folder commit of the tip it was built from (the owed write's, else
+  // the last placed one) plus the person's taken paths -- not of `T′`. Recording `tip: T′` here claimed the rest of the
+  // stopped landing was in the folder, and step 4 then never wrote it. The record keeps the tip `p` stands for, and the
+  // caller goes on to steps 3–5 in this round, which place the rest of `T′` from `p`.
+  const saved = io.save((current) => ({ ...current, ...cleanStop(), tip: record.pending?.tip ?? record.tip, landedTip: tprime, pending: null, state: "idle", detail, resolution: { ...resolution } }));
   await dropRef(ws, target.refs.pending);
   await dropRef(ws, target.refs.stop);
-  if (notTaken.length === 0) return { kind: "done" };
+  if (notTaken.length === 0) return { kind: "continue", record: saved };
   // The paths that could not be taken stay changed; the answer is consumed, so the person is asked again (to withhold
   // them, or to change the folder and recheck).
   await stop(ws, target, io, { changed: notTaken, unwritable: [], to: tprime, tip: tprime, consumed: resolution.id, detail: `not taken: ${notTaken.join(", ")}` });
@@ -668,12 +672,15 @@ export async function prepareFolderPlacement(target: FolderPlacementTarget, reco
   }
   // Step 1.
   const ws = await openDirWorkspace(io.env, target.frozen);
-  // §9.2: the person's answer, under the folder lock. take-folder does its own steps and answers; withhold writes the
-  // withheld entries and lets §8.5 place the rest; recheck clears the stopped state and starts again from step 1.
+  // §9.2: the person's answer, under the folder lock. take-folder takes the person's paths and, like withhold (which
+  // writes the withheld entries), lets §8.5 place the rest; recheck clears the stopped state and starts again from step 1.
   if (record.resolution !== null) {
     const resolution = record.resolution;
-    if (resolution.action === "take-folder" && record.state === "folder-changed") return takeFolder(ws, target, io, record, resolution);
-    if (resolution.action === "withhold") record = await withholdPaths(ws, target, io, record, resolution);
+    if (resolution.action === "take-folder" && record.state === "folder-changed") {
+      const taken = await takeFolder(ws, target, io, record, resolution);
+      if (taken.kind === "done") return taken;
+      record = taken.record;
+    } else if (resolution.action === "withhold") record = await withholdPaths(ws, target, io, record, resolution);
     else {
       // recheck -- and a take-folder whose state moved (the folder went missing) since the command was recorded.
       record = io.save((current) => ({ ...current, ...cleanStop(), state: "idle", detail: null, resolution: null }));

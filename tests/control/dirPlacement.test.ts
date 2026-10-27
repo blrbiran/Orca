@@ -236,6 +236,25 @@ describe("the person's answers (§9.2)", () => {
     });
   }, 60_000);
 
+  // Review 2026-10-27 (session 7753e97d): the stopped landing's paths the person did not touch are placed by the same
+  // round. Before the fix the record claimed the folder held the whole landing (tip = the folder edit on the branch),
+  // so b.md stayed at its old bytes, n.md never appeared, and the group read idle and done.
+  it("take-folder places the rest of the stopped landing in the same round, and a landing that came while stopped too", () => inWorld({ "a.md": "A\n", "b.md": "B\n", "c.md": "C\n" }, async (w) => {
+    w.land({ "a.md": "A2\n", "b.md": "B2\n", "n.md": "N\n" });
+    writeFileSync(join(w.folder, "a.md"), "mine\n");
+    expect(await w.place()).toBe(true);
+    expect(w.record()).toMatchObject({ state: "folder-changed", changed: ["a.md"] });
+    w.land({ "c.md": "C2\n" });
+    expect(w.resolve("take-folder")).toEqual({ ok: true });
+    // mutation: record tip = T′ and answer done (the old take-folder) -> b.md "B", n.md absent, c.md "C", red
+    expect(await w.place()).toBe(true);
+    expect([read(w, "a.md"), read(w, "b.md"), read(w, "n.md"), read(w, "c.md")]).toEqual(["mine\n", "B2\n", "N\n", "C2\n"]);
+    const branch = w.ref("refs/heads/orca/g")!;
+    expect(w.record()).toMatchObject({ state: "idle", changed: [], pending: null, tip: branch, landedTip: branch });
+    expect(w.show(w.ref(PLACED)!, "b.md")).toBe("B2");
+    expect(w.show(w.ref(PLACED)!, "a.md")).toBe("mine");
+  }));
+
   it("take-folder does not take a symlink: it stays changed, the group asks again, and the answer is consumed", () => inWorld({ "a.md": "A\n", "b.md": "B\n" }, async (w) => {
     w.land({ "a.md": "A2\n", "b.md": "B2\n" });
     writeFileSync(join(w.folder, "a.md"), "mine\n");
