@@ -61,8 +61,11 @@ describe("C6v the shipped template version", () => {
     } finally { await w.dispose(); }
   });
 
+  // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. Review finding 8: a write
+  // naming an unshipped version is now refused, so the stored pin goes stale the way it does in use -- the build that
+  // fires it ships a newer version (4) than the one the schedule was written at (3, this build's).
   it("a schedule pinned to a version the build does not ship records one failed fire with that code", async () => {
-    const w = await flowWorld({ "wechat-article": WECHAT }); try {
+    const w = await flowWorld({ "wechat-article": { ...WECHAT, yaml: WECHAT.yaml.replace("version: 3", "version: 4") } }); try {
       w.store.db.prepare("INSERT INTO usage_calendar(singleton,time_zone,week_start) VALUES (1,'UTC',1)").run();
       const clock = { at: at(0, 10, 30) };
       const created = withCommandContext("create-1", ANA, () => applyScheduleCommand({
@@ -73,11 +76,11 @@ describe("C6v the shipped template version", () => {
         target: { kind: "schedule", scheduleId: "sch-a" },
         payload: {
           projectId: REPO, name: "daily", cron: "0 9 * * *", enabled: true,
-          start: { kind: "flow", template: "wechat-article@4", params: { idea: "a topic" } },
+          start: { kind: "flow", template: "wechat-article@3", params: { idea: "a topic" } },
         },
       } as ScheduleCommand)) as { error?: { code: string } };
       expect(created.error).toBeUndefined();
-      expect(readSchedule(w.store, "sch-a")!.body.start).toMatchObject({ template: "builtin/wechat-article@4" });
+      expect(readSchedule(w.store, "sch-a")!.body.start).toMatchObject({ template: "builtin/wechat-article@3" });
       const startFlow = async (fire: ScheduleFire, schedule: ScheduleBody): Promise<{ flowRunId: string }> => {
         if (schedule.start.kind !== "flow") throw new Error("not a flow schedule");
         return startFlowRun(w.deps, {

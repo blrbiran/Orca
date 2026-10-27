@@ -168,6 +168,22 @@ describe("the schedule model's write checks (§6, C1)", () => {
     } finally { s.close(); }
   });
 
+  // Review finding 8 (session 7753e97d): a named version this build does not ship would fail every fire (and pause the
+  // schedule after three); the write refuses it with the kernel's own code and stores nothing.
+  it("refuses a template named at a version the build does not ship, and stores the shipped one when named", async () => {
+    const s = await store();
+    try {
+      const shipped = Number(loadBuiltin("wechat-article").template.version);
+      const answer = refused(s, command("c1", "schedule-set",
+        flowCreate({ start: { kind: "flow", template: `builtin/wechat-article@${shipped + 96}`, params: { idea: "a topic" } } })));
+      expect(answer.code).toBe("flow-template-version-missing");
+      expect(readSchedule(s, "sch-a")).toBeNull();
+      expect(run(s, command("c2", "schedule-set",
+        flowCreate({ start: { kind: "flow", template: `wechat-article@${shipped}`, params: { idea: "a topic" } } }))).error).toBeUndefined();
+      expect(readSchedule(s, "sch-a")!.body.start).toMatchObject({ template: `builtin/wechat-article@${shipped}` });
+    } finally { s.close(); }
+  });
+
   it("refuses a group start with no sha256 (schema), an unknown entry or version, and another project's entry", async () => {
     const s = await store();
     try {

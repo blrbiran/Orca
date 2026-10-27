@@ -73,8 +73,12 @@ function validateFlowStart(deps: ScheduleValidationDeps, projectId: string, star
     try { checkParamValue(id, param, value); }
     catch (error) { throw asFlowControlError(error); }
   }
-  const version = namedVersion ?? String(loaded.template.version ?? 1);
-  return { ...start, template: `builtin/${templateId}@${version}` };
+  const shipped = String(loaded.template.version ?? 1);
+  // §6.1, §8 step 2: a named version the build does not ship would fail every fire; refuse it now, with the kernel's code.
+  if (namedVersion !== undefined && Number(namedVersion) !== Number(shipped)) {
+    throw new ControlError("flow-template-version-missing", `builtin/${templateId}@${namedVersion} was named, but version ${shipped} is installed`);
+  }
+  return { ...start, template: `builtin/${templateId}@${namedVersion ?? shipped}` };
 }
 
 function validateGroupStart(deps: ScheduleValidationDeps, projectId: string, start: Extract<ScheduleStart, { kind: "group" }>): ScheduleStart {
