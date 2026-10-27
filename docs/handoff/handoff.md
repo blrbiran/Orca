@@ -63,7 +63,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00000000000 会话 `7753e97d`（2026-10-27；中途续接的会话 id `03c89de8`）—— **先读这一节**
+### 3.000000000000 会话 `3cd8fb02`（2026-10-27 晚）—— **先读这一节**
+
+> 台账 `.superpowers/sdd/2026-10-27-session-3cd8fb02/progress.md`（人裁原话、门、变异、残余）；分诊表同目录 `tester-triage.md`。
+> 人裁：会话 `7753e97d` 的六条控制器裁定「都同意」；三仓已由人 push；「这一轮可以先做 repin」；codex 拆分「先忽略…我测试确认一下」；顺序「同意」；#62 方向「同意」（先写 spec）。
+
+- **Repin 已合入并装上**：主题行 `chore(deps): repin ccloop to ae6fb71 …`（`pin-ccloop.mjs` rc 0；真 ccloop 文件＋scheduler 524 条 518 过／6 跳；`ORCA_CONTROL_VERIFY` 两个冒烟 9/9——`ccloopProtocol.integration` 要 `ORCA_AGENTS_TABLE`，用 fake-codex `integration` 模式的表，见台账；`npm test` 676 文件 1 红 `startForm` 单跑 3/3；`~/.orca` 哈希不变）。主仓 `npm ci`＋build＋web build＋`panel restart`，7777 应答 200。⇒ #60 的 plan 工具提示与 `tool-rule-violated`、strict 投影修复、omp 单调用空停续跑现已在 Orca 生效。测试用 bin 换成 `/private/tmp/orca-3cd8fb02/ccloop-ae6fb71/dist/cli.js`（`/private/tmp/orca-7753e97d/` 可清）。
+- **测试者分诊**（两份文档全部未结条目对照 main）：48 已解决、8 不改、1 延后（#22）、4 非缺陷、只剩 #62（P0）、#63、#15 与一处新发现（两个指向 `#settings/agents` 的链接仍叫「全局设置」）。
+- **#63、#15 已合入并装上**（主题行 `fix(web): archiving a group closes the detail open on it (tester #63)`、`fix(web): a done group offers no pause or handoff stop (tester #15)`、`fix(web): leave a requirement's view open on its Unarchive …`；web 95 文件 922/922、`--ws check` 0；变异 M1–M3、M5、M6 各红在自己的用例，还原 0/0；web build＋`panel restart`，7777 200）。⚠️ #63 **只做了 Task control 一侧**：既有判据 `web/tests/requirementsApp.test.tsx:137`（归档成功后需求视图停在 Unarchive）与测试者诉求相反（Rule 7）⇒ 需求页一侧等人裁是否改该判据。done 组不再给暂停／交接停止；draft 保留（start 拒任何停止意图，暂停可挡住确认后的开跑）。
+- **「全局设置」链接文案**：改它会动既有判据（`agentInheritFold.test.tsx:96`、`confirmChecklist.test.tsx:56,58,89`）⇒ 已撤回，等人点名授权。
+- **#62 spec 已写**：`docs/superpowers/specs/2026-10-27-single-call-unknown-usage-settlement-design.md`（M0 零成本实测已并入 §3.1：omp 的 watchdog 错误在 assistant `message_end.message.errorMessage`，`stopReason:"error"`；无 usage 块时 usage 是全 0；首事件超时即使带 overlay 也发了两次请求）。**未实施**：顺序 M0 → Orca O1（接受可选键）→ ccloop C1/C2（人推）→ Orca O2–O4 → repin。
+
+### 3.00000000000 会话 `7753e97d`（2026-10-27；中途续接的会话 id `03c89de8`）
 
 > 唯一进度源：台账 `.superpowers/sdd/2026-10-27-session-7753e97d/progress.md`（两批人裁原话、接手边界、六路审阅的修复清单、各线结果、O9 两次付费）。
 > 人裁（本会话）：「同意按你的建议走」；「审阅结论 => 按你建议的修复」；「forget 同意改成归档」；H6／H8／H10「同意你的建议」（已写进 `goal.md` G12–G14）；O9 claude「同意可以跑」「同意再跑一次付费真跑」；/handoff 轮：「这个session暂时不要考虑context大小。这次批准改写所有必要的判据。这一轮允许必要的付费真跑…先按你的建议执行。执行完在最后阶段报给我审核。」⚠️ 上下文越过 T2（人豁免，已在检查点记录）。
@@ -312,8 +323,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 3. ~~实时转录 Orca 侧的 `operatorNote` 生产方~~ **已做**：spec 实时转录 §2（`live-transcript-design.md:28`）人裁「放在 web 运行页里。orca cli 现阶段不用做」，`web/src/FlowRunPage.tsx` 发 `{command:"note"}`；判据 `tests/flow/operatorNote.test.ts`。
 4. ~~登记未修~~ **本轮已清**：Orca F1–F6（计划 `docs/superpowers/plans/2026-10-26-registered-fixes.md`）与 ccloop 的 OMP empty-stop、perf L7（ccloop 计划 `2026-10-26-omp-empty-stop-and-perf-l7.md`）都已修并过门；接受的残余见各计划文末。
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
-6. 人推 ccloop main 之后：Orca repin 到 ccloop 新 main（带 #60 plan 提示与 `tool-rule-violated`、strict 投影修复、omp 单调用空停续跑），按 §3.3 的 repin 门做；之后可用真 omp 复验 #60（付费，先问人）。
-7. 残余登记（§3 本会话一节最后一条）与测试者 #22，按需排期。
+6. ~~repin 到 ccloop 新 main~~ **已做**（会话 `3cd8fb02`，pin `ae6fb71`）；可用真 omp 复验 #60（付费，先问人）。
+7. **下一件：实施 #62 spec**（`2026-10-27-single-call-unknown-usage-settlement-design.md` §7 的顺序；ccloop 部分合进 ccloop main 后等人推再 repin）。
+8. 残余登记（§3 各节最后一条）与测试者 #22，按需排期；「全局设置」链接文案等人授权改判据。
 8. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -491,7 +503,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `7753e97d` 待人审／待人做**：① push Orca／ccloop／ccmem 三仓 main（本会话合入的都只在本地）；② ccloop 推了之后 Orca repin（agent 可做，§4.2 第 6 条）；③ 审本会话的控制器裁定：流程「暂停中的 run 收到 stop 立即生效」（spec live-transcript §14）、ccmem `forget` 不再写 trash 文件（归档行即备份）、#56 快捷键按钮只在有快捷键的页面、#60 用已有的 `tool-rule-violated` 而不新增 cause 且不重试、拆分指令 v1 不保留（已发出的调用按存下的 envelope 校验）、UI 线判不改的 #20／#24／#29／#38；④ `/private/tmp/orca-7753e97d/` 清理（`ccloop-b97d5bd` 是当前测试用 bin，repin 前要留）。
+- **会话 `3cd8fb02` 待人**：① push Orca／ccloop／ccmem main（Orca：repin、#62 spec、#63／#15；ccloop／ccmem：只有 handoff 提交）；② 两处改判据的授权：「全局设置」链接文案（四处）、#63 需求页一侧（`requirementsApp.test.tsx:137`）；③ codex 拆分由人自测确认；④ `/private/tmp/orca-7753e97d/` 可清（测试用 bin 已换成 `/private/tmp/orca-3cd8fb02/ccloop-ae6fb71`）。会话 `7753e97d` 的待审裁定人已「都同意」、三仓已推、repin 已做。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。
   2. 人做：~~`branch -D feat/tester-round2-server`／`branch -D feat/scheduled`~~ **不必了**——2026-10-26 查 `branch --list` 只剩 `main`、`worktree list` 只剩主仓，没有可删的分支；`/private/tmp/orca-ffec7b28/` 的清理（人 2026-10-26 已授权，`ccloop-fe985b0` 是当前钉住的测试用 bin 要留；`ccloop-cache*` 是测试缓存）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/`。
