@@ -501,6 +501,37 @@ describe("pause and note at the edges (review 7753e97d)", () => {
     } finally { await w.dispose(); }
   });
 
+  // Finding 7 (controller ruling): a paused child whose handoff never completes held the run for good -- the flow's
+  // resume needs handoff-complete, the group verbs refuse a flow stop, and `stop` waited for a boundary that never came.
+  it("a stop on a paused run applies at once: a stuck child ends the step failed with its stop state, the run stopped", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, pause());
+      child.setStopState(childGroupId, "handoff-partial");
+      await w.advance();
+      expect((await acceptMessage(w.deps, flowRunId, resume())).reason).toBe("flow-pause-stop-incomplete:write:handoff-partial");
+      await acceptMessage(w.deps, flowRunId, note("never sent"));
+      const stopped = await acceptMessage(w.deps, flowRunId, message({ body: { command: "stop" } }));
+      expect([stopped.state, stopped.reason]).toEqual(["applied", null]);
+      expect(stateOf(w, flowRunId)).toBe("stopped");
+      const latest = w.latest(flowRunId, "write")!;
+      expect(latest.state).toBe("failed");
+      expect((latest.body as ExecutionBody).failure).toBe("flow-run-stopped:handoff-partial");
+      expect(runOf(w, flowRunId).pauseIntent).toBeUndefined();
+      expect(notesOf(w, flowRunId)[0]).toMatchObject({ text: "never sent", undelivered: "run-stopped" });
+      expect(child.resumes).toHaveLength(0);
+    } finally { await w.dispose(); }
+  });
+
+  it("a stop on a paused run whose child landed takes the child's result, then stops", async () => {
+    const { w, child, flowRunId, childGroupId } = await started(); try {
+      await acceptMessage(w.deps, flowRunId, pause());
+      child.land(childGroupId);
+      expect((await acceptMessage(w.deps, flowRunId, message({ body: { command: "stop" } }))).state).toBe("applied");
+      expect(stateOf(w, flowRunId)).toBe("stopped");
+      expect(w.latest(flowRunId, "write")!.state).toBe("done");
+    } finally { await w.dispose(); }
+  });
+
   // Finding 10: a persistent error was cleared and written again on every tick (two run-row writes per tick, forever).
   it("a persistent pump error is written once, not rewritten every tick", async () => {
     const { w, flowRunId } = await started(); try {

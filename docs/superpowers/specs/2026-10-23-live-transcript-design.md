@@ -1019,3 +1019,21 @@ This section supersedes the parts of 10.5.1 and 10.5.2 it names; their text stay
   names the state (`lastError: flow-pause-stop-incomplete:<step>:handoff-partial|handoff-unresolved`). What the flow
   should do with such a child (fail the step for a `retry`, restart it, or let `stop` end a paused run) is left to a
   person's ruling.
+
+## 14. Correction (controller ruling, review 7753e97d, session orca-dev-03c89de8, 2026-10-27)
+
+This closes the open item in section 13. The human delegated the call (「这一轮执行过程中如果有问题，先按你的建议执行」),
+and the controller ruled that a person's stop must always have a way out.
+
+- **A `stop` on a `paused` run applies at once.** It is taken in the mid-run lane with pause, resume and note. It no
+  longer waits for a boundary (this supersedes flow engine spec §8.2 for this one case). A `stop` on a `running`
+  run still waits for its boundary.
+- **Each running execution is settled first.** A child that landed or failed settles as it would at any pass. An effect
+  that happened stays recorded as applied, and the step's result is taken. Every other child ends the step `failed`
+  with `flow-run-stopped:<child stop state>` (for example `handoff-partial`, `handoff-unresolved`, or `no-stop`).
+  Its pending notes are spent with `undelivered: "run-stopped"`, and `pauseIntent` and `noteIntent` are cleared. Then
+  the run moves to `stopped`, as the boundary `stop` moves it.
+- **Nothing starts or is released.** An invalid output, a call or a dispatch from the settle is not followed; the step
+  ends `failed` instead. A held external effect step is parked, never running, so it stays held (gaps §21). The children
+  keep the flow's stop. The person starts a new run.
+- **`FlowChildPort.resume` takes `record` as a required argument** (section 13: one transaction for a resume).

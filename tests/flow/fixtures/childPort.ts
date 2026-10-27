@@ -32,7 +32,11 @@ export function fakeChildPort() {
     attemptTimeoutMs: () => null,
     stop: () => {},
     stopState: () => ({ state: "none" }),
-    resume: (children) => children.map((child) => ({ childGroupId: child.childGroupId, pendingRunId: null })),
+    resume: (children, record) => {
+      const resumed = children.map((child) => ({ childGroupId: child.childGroupId, pendingRunId: null }));
+      record(resumed);
+      return resumed;
+    },
   };
   /** Land child `id` with these files written on its base; returns the landed commit. */
   const land = (id: string, files: Record<string, string>, extra: Partial<Extract<FlowChildStatus, { state: "landed" }>> = {}): string => {

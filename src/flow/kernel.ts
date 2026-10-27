@@ -991,6 +991,42 @@ async function settleStopIntents(deps: FlowDeps, run: LoadedRun): Promise<boolea
   return issued;
 }
 
+/**
+ * Controller ruling (review 7753e97d, finding 7): a person's `stop` on a paused run applies at once -- a paused child
+ * whose handoff never completes (`handoff-partial`, `handoff-unresolved`) would otherwise hold the run for good. Every
+ * running execution is settled before the run moves to `stopped`: a child that landed or failed settles as it would at
+ * any pass (an effect that happened stays recorded as applied); any other ends the step `failed` with
+ * `flow-run-stopped:<child stop state>`. Its notes are spent (`run-stopped`) and the intents cleared. Nothing is started
+ * or retried, and no held effect is released: a held effect step is parked, never running. The children keep the
+ * flow's stop; the person starts a new run.
+ */
+export async function settlePausedForStop(deps: FlowDeps, run: LoadedRun): Promise<void> {
+  const children = deps.children;
+  for (const execution of listExecutions(deps.store, run.row.id).filter((e) => e.state === "running")) {
+    deps.store.transaction(() => dropUndeliveredNotes(deps, run, execution.stepKey, execution, "run-stopped"));
+    const current = listExecutions(deps.store, run.row.id).find((e) => e.stepKey === execution.stepKey && e.seq === execution.seq)!;
+    const kind = kindFor(deps, stepOf(run, current.stepKey));
+    const status = current.childGroupId === null || children === undefined ? null : await children.status(current.childGroupId);
+    let outcome: KindOutcome | null = null;
+    if (status !== null && status.state !== "running" && kind?.settle !== undefined) {
+      outcome = await kind.settle(contextFor(deps, run, current), status, current.baseCommit!);
+      deps.store.transaction(() => { returnUnspent(deps.store, run.row.id, current.childGroupId!, status.spentTokens); });
+    }
+    // Only an end is taken here: an invalid output would start the step again, a call or dispatch would send work.
+    if (outcome === null || !("done" in outcome || "failed" in outcome)) {
+      const paused = run.body.pauseIntent?.steps.find((step) => step.stepKey === current.stepKey && step.seq === current.seq);
+      const state = current.childGroupId === null || children === undefined || paused === undefined ? null : children.stopState(current.childGroupId, pauseMarker(run, paused));
+      const detail = state === null ? "no-stop" : state.state === "not-complete" || state.state === "foreign" ? state.stopState : state.state;
+      outcome = { failed: { reason: `flow-run-stopped:${detail}` } };
+    }
+    await applyOutcome(deps, run, current, "running", outcome);
+  }
+  deps.store.transaction(() => updateFlowRunBody(deps.store, run.row.id, (current) => {
+    const { pauseIntent: _pause, noteIntent: _note, ...rest } = current;
+    return rest;
+  }));
+}
+
 /** One pass over a run: start at most one execution; true when something moved (the caller passes again). */
 async function passRun(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
   // Gaps spec §4.2: the person's feedback intakes move first, on any run that is not stopped -- a `done` or `paused` one

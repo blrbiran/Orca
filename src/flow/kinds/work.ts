@@ -78,7 +78,7 @@ export interface FlowChildPort {
    * `record` -- the flow's own bookkeeping of the resume (notes delivered, intent cleared) -- runs inside the same
    * transaction, so a crash leaves both or neither: never a lifted stop whose note the flow would deliver again.
    */
-  resume(children: FlowChildResume[], record?: (resumed: Array<{ childGroupId: string; pendingRunId: string | null }>) => void): Array<{ childGroupId: string; pendingRunId: string | null }>;
+  resume(children: FlowChildResume[], record: (resumed: Array<{ childGroupId: string; pendingRunId: string | null }>) => void): Array<{ childGroupId: string; pendingRunId: string | null }>;
 }
 
 /** §6.2: deterministic, so a restart opens nothing twice. */

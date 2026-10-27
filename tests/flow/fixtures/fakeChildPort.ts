@@ -68,7 +68,7 @@ export function fakeChildPort(opts: { timeoutMs?: number | null } = {}) {
         if (settled(child.childGroupId)) throw new FlowRefusal("flow-pause-resume-failed", "continuation-predecessor-unrecoverable");
         return { childGroupId: child.childGroupId, pendingRunId: state.recoverable ? `run-${child.childGroupId}` : null };
       });
-      record?.(result);
+      record(result);
       for (const child of children) { stopStates.delete(child.childGroupId); markers.delete(child.childGroupId); }
       resumes.push({ children, result });
       return result;

@@ -203,7 +203,7 @@ describe("FlowChildPort.resume (spec §10.5.1, plan D8)", () => {
     const w = await world(); try {
       const childGroupId = await stoppedChild(w, "write", "settled-recoverable");
       const note = { text: "keep the draft", scope: "next-attempt" as const };
-      const result = w.port.resume([{ childGroupId, flowStop: MARKER, operatorNote: note }]);
+      const result = w.port.resume([{ childGroupId, flowStop: MARKER, operatorNote: note }], () => {});
       expect(result).toEqual([{ childGroupId, pendingRunId: expect.stringMatching(/^run-/) }]);
       expect(readStopIntent(w.h.store, childGroupId)).toBe(null);
       expect(groupOf(w.h, childGroupId).stopped).toBe(false);
@@ -213,10 +213,21 @@ describe("FlowChildPort.resume (spec §10.5.1, plan D8)", () => {
     } finally { await w.h.dispose(); }
   });
 
+  // Review 7753e97d finding 4: the flow's record of a resume commits with the lifted stop, or neither does.
+  it("runs the flow's record inside the lift: a record that throws leaves the stop and the group stopped", async () => {
+    const w = await world(); try {
+      const childGroupId = await stoppedChild(w, "write", "settled-restartable");
+      expect(() => w.port.resume([{ childGroupId, flowStop: MARKER }], () => { throw new Error("crash in the record"); })).toThrow("crash in the record");
+      expect(readStopIntent(w.h.store, childGroupId)).not.toBe(null);
+      expect(groupOf(w.h, childGroupId).stopped).toBe(true);
+      expect(w.h.store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=?").all(childGroupId)).toEqual([]);
+    } finally { await w.h.dispose(); }
+  });
+
   it("arms a start wake for a restartable child and returns no pending run", async () => {
     const w = await world(); try {
       const childGroupId = await stoppedChild(w, "write", "settled-restartable");
-      expect(w.port.resume([{ childGroupId, flowStop: MARKER }])).toEqual([{ childGroupId, pendingRunId: null }]);
+      expect(w.port.resume([{ childGroupId, flowStop: MARKER }], () => {})).toEqual([{ childGroupId, pendingRunId: null }]);
       expect(readStopIntent(w.h.store, childGroupId)).toBe(null);
       expect(groupOf(w.h, childGroupId).stopped).toBe(false);
       expect(w.h.store.db.prepare("SELECT kind FROM scheduler_wakes WHERE group_id=?").all(childGroupId).map((row) => String(row.kind))).toEqual(["start"]);
@@ -228,8 +239,8 @@ describe("FlowChildPort.resume (spec §10.5.1, plan D8)", () => {
       const childGroupId = await openChild(w);
       startRun(w.h, childGroupId);
       w.port.stop(childGroupId, { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: MARKER });
-      expect(() => w.port.resume([{ childGroupId, flowStop: MARKER }])).toThrow(expect.objectContaining({ name: "FlowRefusal", code: "flow-pause-stop-incomplete", detail: `${childGroupId}:handoff-pending` }));
-      expect(() => w.port.resume([{ childGroupId, flowStop: { ...MARKER, seq: 2 } }])).toThrow(expect.objectContaining({ name: "FlowRefusal", code: "flow-pause-stop-incomplete", detail: `${childGroupId}:foreign` }));
+      expect(() => w.port.resume([{ childGroupId, flowStop: MARKER }], () => {})).toThrow(expect.objectContaining({ name: "FlowRefusal", code: "flow-pause-stop-incomplete", detail: `${childGroupId}:handoff-pending` }));
+      expect(() => w.port.resume([{ childGroupId, flowStop: { ...MARKER, seq: 2 } }], () => {})).toThrow(expect.objectContaining({ name: "FlowRefusal", code: "flow-pause-stop-incomplete", detail: `${childGroupId}:foreign` }));
       expect(readStopIntent(w.h.store, childGroupId)!.flowStop).toEqual(MARKER);
     } finally { await w.h.dispose(); }
   });
@@ -241,7 +252,7 @@ describe("FlowChildPort.resume (spec §10.5.1, plan D8)", () => {
       startRun(w.h, second);
       w.port.stop(second, { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: stopMarkerOf("review") });
       let refusal: unknown;
-      try { w.port.resume([{ childGroupId: first, flowStop: MARKER }, { childGroupId: second, flowStop: stopMarkerOf("review") }]); }
+      try { w.port.resume([{ childGroupId: first, flowStop: MARKER }, { childGroupId: second, flowStop: stopMarkerOf("review") }], () => {}); }
       catch (error) { refusal = error; }
       expect(refusal).toBeInstanceOf(FlowRefusal);
       expect((refusal as FlowRefusal).code).toBe("flow-pause-stop-incomplete");
@@ -259,7 +270,7 @@ describe("FlowChildPort.resume (spec §10.5.1, plan D8)", () => {
       const second = await stoppedChild(w, "review", "settled-restartable");
       failControl.resumeBudgetFailureFor = second;
       let refusal: unknown;
-      try { w.port.resume([{ childGroupId: first, flowStop: MARKER }, { childGroupId: second, flowStop: stopMarkerOf("review") }]); }
+      try { w.port.resume([{ childGroupId: first, flowStop: MARKER }, { childGroupId: second, flowStop: stopMarkerOf("review") }], () => {}); }
       catch (error) { refusal = error; }
       expect(refusal).toBeInstanceOf(FlowRefusal);
       expect((refusal as FlowRefusal).code).toBe("group-budget-unavailable");
@@ -297,10 +308,10 @@ describe("the fake child port fixture", () => {
     expect(() => fake.port.stop("child", { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: { ...marker, reason: "note" } }))
       .toThrow(expect.objectContaining({ code: "stop-mode-conflict" }));
     expect(fake.stops).toHaveLength(1);
-    expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }])).toThrow(expect.objectContaining({ code: "flow-pause-stop-incomplete", detail: "child:handoff-pending" }));
+    expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }], () => {})).toThrow(expect.objectContaining({ code: "flow-pause-stop-incomplete", detail: "child:handoff-pending" }));
     fake.completeStop("child", { recoverable: false });
     fake.failResume("child", "continuation-budget-unavailable");
-    expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }])).toThrow(expect.objectContaining({ code: "continuation-budget-unavailable" }));
+    expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }], () => {})).toThrow(expect.objectContaining({ code: "continuation-budget-unavailable" }));
     fake.clearResumeFailure("child");
     // A throw in the flow's record lifts nothing.
     expect(() => fake.port.resume([{ childGroupId: "child", flowStop: marker }], () => { throw new Error("crash"); })).toThrow("crash");
@@ -316,6 +327,6 @@ describe("the fake child port fixture", () => {
     expect(await fake.port.status("other")).toEqual({ state: "landed", commit: "c".repeat(40), spentTokens: 0 });
     fake.port.stop("other", { acceptedAt: ACCEPTED_AT, deadlineAt: DEADLINE_AT, flowStop: marker });
     expect(fake.port.stopState("other", marker)).toEqual({ state: "resumable", recoverable: false });
-    expect(() => fake.port.resume([{ childGroupId: "other", flowStop: marker }])).toThrow(expect.objectContaining({ code: "flow-pause-resume-failed", detail: "continuation-predecessor-unrecoverable" }));
+    expect(() => fake.port.resume([{ childGroupId: "other", flowStop: marker }], () => {})).toThrow(expect.objectContaining({ code: "flow-pause-resume-failed", detail: "continuation-predecessor-unrecoverable" }));
   });
 });

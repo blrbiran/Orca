@@ -253,7 +253,7 @@ export function createDriverChildPort(deps: DriverChildPortDeps): FlowChildPort 
             throw new FlowRefusal("flow-pause-resume-failed", error.code);
           }
         });
-        record?.(resumed);
+        record(resumed);
         return resumed;
       });
     },

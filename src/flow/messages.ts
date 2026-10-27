@@ -34,7 +34,7 @@ import { flowHandoffDeadline } from "../control/stopIntent.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { outputHashOfCommit, outputHashOfRecord } from "./journal/fingerprint.js";
 import {
-  advanceRun, advanceWorkspace, appendQueued, childSettled, dropUndeliveredNotes, FlowRefusal, latestByStep, loadRun, pauseMarker, recordNoteDelivery, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
+  advanceRun, advanceWorkspace, appendQueued, childSettled, dropUndeliveredNotes, FlowRefusal, settlePausedForStop, latestByStep, loadRun, pauseMarker, recordNoteDelivery, recordOfExecution, recordRunError, stepOf, vaultOf, writeRecord, type FlowDeps,
 } from "./kernel.js";
 import type { ExecutionBody, FlowNoteIntent, FlowNoteStep, FlowPauseStep, LoadedRun, OperatorNoteEntry } from "./kinds/registry.js";
 import { dropFromOpenPlan, makePlan } from "./rerun.js";
@@ -266,11 +266,22 @@ export async function acceptMessage(deps: FlowDeps, flowRunId: string, input: Fl
  */
 export async function consumeInterventions(deps: FlowDeps, flowRunId: string): Promise<boolean> {
   if (loadRun(deps.store, flowRunId).row.state === "stopped") return false;
-  const pending = listMessages(deps.store, flowRunId).filter((m) =>
-    m.state === "accepted" && m.kind === "command" && INTERVENTIONS.has(String((m.body as { command?: unknown }).command)));
+  // Controller ruling (review 7753e97d, finding 7): a `stop` on a paused run is taken here too, at once.
+  const paused = loadRun(deps.store, flowRunId).row.state === "paused";
+  const pending = listMessages(deps.store, flowRunId).filter((m) => {
+    if (m.state !== "accepted" || m.kind !== "command") return false;
+    const command = String((m.body as { command?: unknown }).command);
+    return INTERVENTIONS.has(command) || (paused && command === "stop");
+  });
   for (const message of pending) {
     try {
-      await applyIntervention(deps, loadRun(deps.store, flowRunId), message);
+      const run = loadRun(deps.store, flowRunId);
+      if ((message.body as { command?: unknown }).command === "stop") {
+        // A resume taken just before ran the run again: this stop waits for its boundary, as any stop of a running run.
+        if (run.row.state !== "paused") continue;
+        await settlePausedForStop(deps, run);
+        await applyCommand(deps, loadRun(deps.store, flowRunId), message, (message.body as { target: MessageTarget }).target);
+      } else await applyIntervention(deps, run, message);
       deps.store.transaction(() => setMessageState(deps.store, flowRunId, message.seq, "accepted", "applied"));
     } catch (error) {
       if (!(error instanceof FlowRefusal)) throw error;
