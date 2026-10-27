@@ -1056,3 +1056,17 @@ supersede them where they differ.
   rewritten in place keeps its inode). Requests for one key run one at a time.
 - **10.4.1 Source / 12.3 listing.** A live call's size and its `outcome.json` are read through the same component walk
   as the transcript itself (no symlinked directory is followed).
+
+## 15. Correction to L7 (review 7753e97d, 2026-10-27; the text above is kept as written)
+
+Who: Orca session `7753e97d` (controller), from the ccloop review of commit `fix(perf): pin the young generation so L7 measures retention, not V8 slack`.
+
+L7 above says the measured process runs under `--max-old-space-size=64` and that its peak must stay ≤ 32 MiB. As built in ccloop
+`scripts/perf-stream.mjs`: the measured process (the phase process for codex and omp, the runner for claude) runs under
+`node --max-old-space-size=64 --max-semi-space-size=1` (on Node 24 the first flag alone still gives a 256 MB heap limit;
+with both, 67 MB); `heapUsed + external + arrayBuffers` is sampled every 100 ms; the gate passes when the GROWTH (peak
+minus a baseline taken after the phase module is imported, or when the runner starts) is ≤ 32 MiB and every call ran to
+its end, over a 1023 MiB stream. So L7 certifies retention under a pinned young generation, not the production process's
+RSS growth that §4.3 words. The review checked the gate is not blind: an injected retention of forty 1 MiB deltas fails
+it (growth 59.7 MiB, rc 1) while the unmodified fold passes (17.7 MiB). Production phase processes do not get the
+semi-space flag; their RSS is not measured by any gate.
