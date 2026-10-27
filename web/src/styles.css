@@ -346,7 +346,10 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 @media (prefers-reduced-motion: reduce) {
   .dep-node.dep-running rect { animation: none; }
 }
-.dep-node[aria-current="true"] rect { stroke: var(--accent); stroke-width: 3; }
+/* Issue #57: the open task is one tinted node with an accent stroke. The browser's focus ring on the <g> is off for every
+   kind of focus -- a mouse click focuses the <g> too, and its box spans the unclipped goal text across its neighbours --
+   so a keyboard focus is drawn on the node's own rect instead, dashed so it reads apart from the selection. */
+.dep-node[aria-current="true"] rect { fill: color-mix(in srgb, var(--accent) 16%, var(--card)); stroke: var(--accent); stroke-width: 3; }
 .dep-legend { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; margin: 4px 0 8px; padding: 0; font-size: var(--text-xs); color: var(--muted); }
 .dep-swatch { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; border-radius: 3px; border: 1px solid var(--border-strong); }
 .dep-swatch.dep-idle { background: var(--cat-idle); }
@@ -354,8 +357,8 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .dep-swatch.dep-waiting { background: var(--cat-waiting); }
 .dep-swatch.dep-blocked { background: var(--cat-blocked); }
 .dep-swatch.dep-done { background: var(--cat-done); }
-.dep-node:focus-visible { outline: none; }
-.dep-node:focus-visible rect { stroke: var(--accent); stroke-width: 3; }
+.dep-node:focus { outline: none; }
+.dep-node:focus-visible rect { stroke: var(--text-strong); stroke-width: 2; stroke-dasharray: 5 3; }
 .dep-edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
 .dep-arrow { fill: var(--muted); }
 

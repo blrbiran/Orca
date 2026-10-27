@@ -96,4 +96,16 @@ describe("styles.css", () => {
   it("paints the dependency graph's stall text with the per-theme --stall token", () => {
     expect(rule(".dep-node text.dep-stall")).toContain("fill: var(--stall)");
   });
+
+  // Tester issue #57 (session 7753e97d): measured in headless Chromium on a rendered graph, a mouse click focused the node's
+  // <g> and the browser drew its focus ring (outline auto) around the <g>'s box -- 667px wide, the unclipped goal text --
+  // so one frame covered T1, T2, T3 and touched T10. The ring is off for every focus; selection and keyboard focus are
+  // drawn on the node's own rect.
+  it("draws the open task and keyboard focus on one node's rect, never a focus ring around the <g>", () => {
+    // mutation: back to ":focus-visible { outline: none }" only -> a click's ring returns, red
+    expect(rule(".dep-node:focus")).toContain("outline: none");
+    const open = rule('.dep-node[aria-current="true"] rect');
+    for (const part of ["fill: color-mix(in srgb, var(--accent)", "stroke: var(--accent)", "stroke-width: 3"]) expect(open).toContain(part);
+    expect(rule(".dep-node:focus-visible rect")).toContain("stroke-dasharray");
+  });
 });
