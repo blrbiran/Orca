@@ -8,7 +8,7 @@ import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { applyRecoveryRetry } from "../../src/control/stopIntent.js";
 import { readControlOverview } from "../../src/panel/controlOverview.js";
 import { humanOnlyRefusal, socketTier } from "../../src/panel/humanOnly.js";
-import { readControlGroup, readGroupSummary, requirementSummaryOf } from "../../src/panel/controlViews.js";
+import { readControlGroup, readGroupSummary, readOverviewGroupSource, requirementSummaryOf } from "../../src/panel/controlViews.js";
 import { estimateHarness } from "./fixtures/estimateHarness.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { ROUND_ONE, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -83,15 +83,18 @@ describe("settling a clarify call blocked on unknown usage (§9 R1-R4)", () => {
     const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }, { purpose: "clarify", ...STALLED }] });
     try {
       await x.until(() => x.runs()[0]?.state === "blocked");
-      expect(readGroupSummary(x.store, "r")).toMatchObject({ groupId: "r" });
-      expect(readControlOverview(x.store, "epoch").groups ?? readControlOverview(x.store, "epoch")).toBeTruthy();
+      // The Overview's own reader parses every run of the group with the strict run schema (it throws run-invalid otherwise);
+      // the Overview catches that per group, so its output must not name it either.
+      expect(readOverviewGroupSource(x.store, "r")?.summary).toMatchObject({ groupId: "r" });
+      expect(JSON.stringify(readControlOverview(x.store, "epoch"))).not.toContain("run-invalid");
       const command = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
       await asOwner(command, () => x.service.recoveryRetry(command as never));
       // The retry blocks the same way: one settled run with a marker, one blocked run with a lower bound.
       await x.until(() => x.runs()[1]?.state === "blocked");
       expect(x.runs().map((run) => [run.singleCallSettlement !== undefined, run.singleCallUsageLowerBound !== undefined])).toEqual([[true, true], [false, true]]);
       expect(readGroupSummary(x.store, "r")).toMatchObject({ groupId: "r" });
-      expect(JSON.stringify(readControlOverview(x.store, "epoch"))).toContain("\"r\"");
+      expect(readOverviewGroupSource(x.store, "r")?.summary).toMatchObject({ groupId: "r" });
+      expect(JSON.stringify(readControlOverview(x.store, "epoch"))).not.toContain("run-invalid");
       expect(requirementSummaryOf(x.store, "r")).toMatchObject({ blockedRun: { runId: x.runs()[1]!.runId }, blockedRunCharge: { tokens: GRANT.tokens, usageLowerBound: 1_234 } });
     } finally { await x.dispose(); }
   });
