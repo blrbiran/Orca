@@ -1,6 +1,7 @@
 /**
  * Ruling H6(b) (2026-10-27, session 7753e97d; tester issues #39, #41, #59): global and project settings are one page with
- * a category nav on the left (above the content when narrow), each category its own hash (#settings/<category>). Every
+ * a category nav, each category its own hash (#settings/<category>) -- a wrapping row of tabs above the content since tester
+ * #64 (spec §24, human revision in session 3cd8fb02), still links with aria-current, not an ARIA tablist. Every
  * category stays mounted -- App-level criteria find settings controls by role -- and only styles.css hides the others.
  */
 import type { JSX } from "react";

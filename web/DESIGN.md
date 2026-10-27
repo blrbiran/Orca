@@ -33,6 +33,6 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 
 ## Settings and navigation (ruling H6, 2026-10-27)
 - The sidebar is one list in three bands (work · tools · Settings at the bottom), a thin rule above each later band.
-- Settings is one page: a category nav on the left (≥761px, sticky) or wrapped in rows above the content (≤760px); one category shows, the rest stay mounted and hidden by `.settings-category:not([data-active="true"])`.
-- The category nav is a panel of its own (`--bg-elevated`, border, radius), as wide as its labels up to ~11rem; its open item is marked like a tab (accent edge and weight, no fill) so it never reads as a second sidebar (tester #64).
+- Settings is one page: a category nav above the content; one category shows, the rest stay mounted and hidden by `.settings-category:not([data-active="true"])`.
+- The category nav is a row of tabs (tester #64, revised by the human in session 3cd8fb02): links with `aria-current`, not an ARIA tablist; inactive items quiet (`--muted`), the open one underlined in the accent over the row's bottom rule; the row wraps when narrow (no horizontal scroll) and the content takes the full width below.
 

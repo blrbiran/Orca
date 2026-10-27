@@ -109,22 +109,25 @@ describe("styles.css", () => {
     expect(rule(".dep-node:focus-visible rect")).toContain("stroke-dasharray");
   });
 
-  // Tester #64 (spec §24, session 3cd8fb02): the settings category list read as a third, 180px-wide navigation column with
-  // no edge of its own. It is a panel of its own, as wide as its labels up to ~11rem, the open item marked like a tab;
-  // narrow, it is one wrapping row whose open item is underlined. Only the sheet is pinned; how it looks is visual.
-  it("draws the settings categories as their own narrow panel with a tab-like open item", () => {
-    // mutation: back to "180px minmax(0, 1fr)" -> red
-    expect(rule(".settings-page")).toContain("grid-template-columns: fit-content(11rem) minmax(0, 1fr)");
-    const nav = rule(".settings-nav");
-    // mutation: drop the panel's background/border/radius -> red
-    for (const part of ["background: var(--bg-elevated)", "border: 1px solid var(--border)", "border-radius: var(--radius)"]) expect(nav).toContain(part);
+  // Tester #64 (spec §24, session 3cd8fb02): the settings category list read as a third navigation column beside the
+  // sidebar. Revised by the human in this session: the categories are a row of tabs across the top -- links with
+  // aria-current, not an ARIA tablist -- the open one underlined in the accent over the row's bottom rule, wrapping when
+  // narrow, the content full width below. Only the sheet is pinned here; how it looks is visual.
+  it("lays the settings categories out as a wrapping tab row above full-width content, the open one underlined", () => {
+    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- the left-column criterion this branch first added (fit-content(11rem) column, panel box, inset left edge) now pins the tab row.
+    const page = rule(".settings-page");
+    // mutation: back to a two-column grid -> red
+    expect(page).toContain("flex-direction: column");
+    expect(page).not.toContain("grid-template-columns");
+    expect(css).not.toMatch(/\.settings-nav \{[^}]*position: sticky/);
+    const row = rule(".settings-nav ul");
+    // mutation: drop the wrap -> one row that overflows when narrow, red
+    for (const part of ["display: flex", "flex-wrap: wrap", "border-bottom: 1px solid var(--border)"]) expect(row).toContain(part);
+    expect(row).not.toContain("flex-direction: column");
+    expect(rule(".settings-nav .nav-item")).toContain("color: var(--muted)");
     const open = rule('.settings-nav .nav-item[aria-current="page"]');
-    for (const part of ["background: transparent", "font-weight: 600", "box-shadow: inset 3px 0 0 var(--accent)"]) expect(open).toContain(part);
-    const at = css.indexOf("@media (max-width: 760px) {", css.indexOf(".settings-page {"));
-    expect(at).toBeGreaterThan(-1);
-    const narrow = css.slice(at, css.indexOf("\n}\n", at));
-    expect(narrow).toMatch(/\.settings-nav ul \{[^}]*flex-direction: row;[^}]*flex-wrap: wrap;/);
-    expect(narrow).toMatch(/\.settings-nav \.nav-item\[aria-current="page"\] \{[^}]*box-shadow: inset 0 -2px 0 var\(--accent\);/);
+    // mutation: drop the accent underline -> red
+    for (const part of ["border-bottom-color: var(--accent)", "font-weight: 600", "background: transparent", "box-shadow: none"]) expect(open).toContain(part);
   });
 
   // Tester #65 (spec §24, session 3cd8fb02): selects wore each platform's own arrow and fields the browser's focus ring.

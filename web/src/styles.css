@@ -451,22 +451,17 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 @media (max-width: 850px) { .overview-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
 
 /* Settings reuse the panel's forms inside its common viewport. */
-/* Ruling H6(b): one Settings page -- the category nav on the left, one category shown (the rest stay mounted, hidden here);
-   narrow, the categories wrap in rows above the content. */
-/* Tester #64 (spec §24): the category list is its own panel, as wide as its labels (at most ~11rem), its open item marked
-   like a tab -- an accent edge and weight, no sidebar fill -- so it does not read as a third navigation column. */
-.settings-page { display: grid; grid-template-columns: fit-content(11rem) minmax(0, 1fr); gap: 24px; align-items: start; }
-.settings-nav { position: sticky; top: 0; padding: 6px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); }
-.settings-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.settings-nav .nav-item[aria-current="page"] { background: transparent; font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+/* Ruling H6(b): one Settings page, one category shown (the rest stay mounted, hidden here). Tester #64 (spec §24, revised
+   by the human in session 3cd8fb02): the categories are a row of tabs across the top -- still links, one per hash --
+   quiet until hovered, the open one underlined in the accent over the row's bottom rule; they wrap onto more lines
+   when narrow (never a horizontal scroll), and the content takes the full width below. */
+.settings-page { display: flex; flex-direction: column; gap: 16px; }
+.settings-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 4px; border-bottom: 1px solid var(--border); }
+.settings-nav .nav-item { padding: 8px 12px; margin-bottom: -1px; border-radius: 0; border-bottom: 2px solid transparent; color: var(--muted); }
+.settings-nav .nav-item:hover { background: transparent; color: var(--text-strong); }
+.settings-nav .nav-item[aria-current="page"] { background: transparent; box-shadow: none; color: var(--text-strong); font-weight: 600; border-bottom-color: var(--accent); }
 .settings-body { min-width: 0; }
 .settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none; }
-@media (max-width: 760px) {
-  .settings-page { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .settings-nav { position: static; }
-  .settings-nav ul { flex-direction: row; flex-wrap: wrap; }
-  .settings-nav .nav-item[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--accent); }
-}
 .settings { min-width: 0; overflow-wrap: anywhere; }
 .settings-browser { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
 .settings-password { max-width: 420px; margin-bottom: 24px; }
