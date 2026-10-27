@@ -1167,3 +1167,15 @@ paid O9 run failed on a check asserting a directory held only certain files.
 2. §6.4's "`SPLIT_INSTRUCTION_V1` ... stay[s] byte-identical" no longer holds: the single-repository instruction is
    version 2 as well (N1 spec §16). `SPLIT_JSON_SCHEMA` and `SPLIT_JSON_SCHEMA_MULTI` are unchanged.
 3. A call started under version 1 keeps its stored envelope (N1 spec §16 item 3).
+
+### 21.3 Implementation review of H7 (Orca session `7753e97d`, 2026-10-27, branch `fix/multidir-review`): corrections
+
+Appended; the text above stays as written (Rule 13). Where this section and the text above disagree, this section wins.
+
+| # | What the text above says | Correction | Criterion |
+|---|---|---|---|
+| 1 | §8.1 step 6: `markLanded` runs "with the primary's commit" | A multi run that wrote only non-primary directories and reported no decisions has no primary commit (there is no ledger to write). It is landed all the same: a run is landed when `landedCommit` is set **or** `landedDirs` names any directory (`landedAnywhere`, `driveRecord.ts`). E writes its acceptance (with `dirs: landedDirs`) and its task settles `done`. | `multiDirLandingD.test.ts` "settles a run that landed only the extra directory …" |
+| 2 | §9.4: a pre-check that cannot run | A pre-check (or restart re-check, or `mark-resolved` reading tips) that throws records `blocked` (a `partial` stays `partial`) with reason `multi-dir-precheck-failed` and the error as `detail`; it waits for the person's answer. | `multiDirPartial.test.ts` "blocks multi-dir-precheck-failed when the pre-check throws …" |
+| 3 | §9.7: the verbs on a stopped landing | A `mark-resolved` accepted while a `retry-rest` pre-check is in flight wins: the pass's result is dropped and nothing is journaled; the next round applies `mark-resolved`. | `multiDirPartial.test.ts` "keeps a mark-resolved accepted during a retry-rest pre-check …" |
+| 4 | §9.9: done ⇔ `lastLanded[key]` equals the tip (DB only) | Realised by reopening a `landed` record as `idle` in the same write that moves a multi group's work branch (`markLanded`; E's empty-result ledger commit), so the DB-only check never answers done between a landing and the pass that carries it. | `multiDirDue.test.ts` "is not done between a landing that moved a work branch …" |
+| 5 | §11.6: result repositories at `repos/<key>` | Orca's port refuses a collect answer whose `dirs[].resultRepo` is not `repos/<key>` (`control-response-invalid`). | `multiDirCollectPort.test.ts` |
