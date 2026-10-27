@@ -131,14 +131,18 @@ describe("T2: the index cache", () => {
   });
 
   it("review 7753e97d: the same inode rewritten in place to the same size, with a changed head, rebuilds the index", async () => {
-    const before = jsonl([claude.text("aaaa " + "x".repeat(300)), claude.text("bbbb")]);
-    const after = jsonl([claude.text("cccc"), claude.text("dddd " + "y".repeat(300))]);
+    // As in the replaced-inode case: same size, other line boundaries, so the old checkpoint after line 256 falls inside a
+    // line of the new bytes. Here the key stays (the same inode), and only the content can tell.
+    const oldTexts = Array.from({ length: 300 }, (_, i) => `old ${String(i).padStart(3, "0")} ` + "x".repeat(40));
+    const newTexts = oldTexts.map((_, i) => `new ${String(i).padStart(3, "0")} ` + "y".repeat(i === 0 ? 47 : i === 299 ? 33 : 40));
+    const before = jsonl(oldTexts.map((text) => claude.text(text)));
+    const after = jsonl(newTexts.map((text) => claude.text(text)));
     expect(after.length).toBe(before.length);
     const cache = createIndexCache();
     await cache.get("same-inode", memoryReader(before));
     const reader = memoryReader(after);
     const index = await cache.get("same-inode", reader);
     const window = await windowTail(index, reader, { runtime: "claude", redactor });
-    expect(window.events.map((e) => e.fields!.text!.text.slice(0, 4))).toEqual(["cccc", "dddd"]);
+    expect(window.events.map((e) => e.fields?.text?.text ?? e.kind)).toEqual(newTexts.slice(-200));
   });
 });
