@@ -452,7 +452,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {view.summary.state === "ready" && view.summary.executionPending !== true && stopMode === null && (
             <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
           )}
-          {!handoffActive && stopMode !== "pause" && (
+          {/* Tester #15: a done group dispatches nothing more, so there is nothing to pause or hand off. A draft keeps both: a
+              pause there holds the start that confirming would otherwise bring. */}
+          {!handoffActive && stopMode !== "pause" && view.summary.state !== "done" && (
             <>
               <button type="button" onClick={() => onCommand({ verb: "pause-dispatch", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.pause")}</button>
               <button type="button" onClick={() => onCommand({ verb: "handoff-stop", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.handoffStop")}</button>
