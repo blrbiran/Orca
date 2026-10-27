@@ -503,7 +503,7 @@ function NextStepLine(props: { groupId: string; step: NextStep }): JSX.Element {
   };
   return (
     <p data-testid="requirement-next" data-tone={step.key === "waiting" ? undefined : "warn"}>
-      <strong>{t("requirements.next.label")}</strong>{t(`requirements.next.${step.key}` as const, { n: step.n })}
+      <strong>{t("requirements.next.label")}</strong>{t(`requirements.next.${step.key}` as const, { n: step.n ?? 0 })}
       {step.region !== null && <>{" "}<button type="button" onClick={go}>{t("requirements.next.go")}</button></>}
     </p>
   );
