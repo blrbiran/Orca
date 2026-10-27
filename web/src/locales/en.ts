@@ -1137,6 +1137,7 @@ export const en = {
     consensusConfirm: "Agree anyway",
     consensusCancel: "Keep discussing",
     draft: "Split draft {{n}}",
+    taskMore: "Paths, labels, loop plan, traces",
     columns: { id: "Task", title: "Title", labels: "Labels", loopPlan: "Loop plan", targetPaths: "Target paths", checks: "Checks", dependsOn: "Depends on", traces: "Traces" },
     layer: "Layer {{n}}: {{tasks}}",
     implicitEdge: "{{from}} before {{to}}: {{paths}}",

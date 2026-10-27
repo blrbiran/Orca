@@ -176,3 +176,16 @@ describe("the next step under the heading (tester #27, #33, #34)", () => {
     expect(document.activeElement).toBe(screen.getByRole("region", { name: "Rounds" }));
   });
 });
+
+describe("the split draft's table (tester #31)", () => {
+  // Eight columns crowded out the ones a review is decided by; four stay, and the rest of each task folds under its title.
+  it("shows task, title, depends on and checks, and folds the paths, labels and traces under the title", () => {
+    show(requirementView("awaiting-review"));
+    const region = screen.getByRole("region", { name: "Split draft 1" });
+    expect(within(region).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Task", "Title", "Depends on", "Checks"]);
+    const more = region.querySelector<HTMLDetailsElement>('details[data-task-more="exporter"]')!;
+    expect(more.open).toBe(false);
+    expect([...more.querySelectorAll("dt")].map((dt) => dt.textContent)).toEqual(["Target paths", "Labels", "Traces"]);
+    expect([...more.querySelectorAll("dd")].map((dd) => dd.textContent)).toEqual(["src/export.ts, answer.txt", "feature", "AC1"]);
+  });
+});

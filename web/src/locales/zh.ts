@@ -1009,6 +1009,7 @@ export const zh: Translation<typeof en> = {
     consensusConfirm: "仍然达成共识",
     consensusCancel: "继续讨论",
     draft: "拆分草案 {{n}}",
+    taskMore: "路径、标签、做法、对应标准",
     columns: { id: "任务", title: "标题", labels: "标签", loopPlan: "做法", targetPaths: "目标路径", checks: "检查", dependsOn: "依赖", traces: "对应标准" },
     layer: "第 {{n}} 层：{{tasks}}",
     implicitEdge: "{{from}} 先于 {{to}}：{{paths}}",
