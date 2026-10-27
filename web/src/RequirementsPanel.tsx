@@ -479,6 +479,9 @@ function Elapsed(props: { since: number }): JSX.Element {
   return <>{t("requirements.draftingFor", { elapsed })}</>;
 }
 
+/** Tester #35: the share of a finite token limit from which the requirement's budget line warns. */
+const NEAR_LIMIT = 0.8;
+
 type NextStep = { key: "retry" | "answer" | "consensus" | "review" | "prepare" | "waiting"; n?: number; region: "problem" | "answers" | "draft" | null };
 
 /**
@@ -573,7 +576,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           <h5>{t("requirements.openBranches")}</h5><ul>{(latest?.openBranches ?? []).map((branch) => <li key={branch}>{branch}</li>)}</ul>
         </details>
         {/* Issue #79: short figures; `reserved` is the grant held by calls in flight (requirementRecords.ts), never a cap. */}
-        <p>{t("requirements.budget", { used: short(view.ledger.used.tokens), limit: view.ledger.limit.tokens===null?t("budget.unlimited"):short(view.ledger.limit.tokens) })}
+        {/* Tester #35: at 80% of a finite limit the line turns warn, before the next call is refused for budget. */}
+        <p data-testid="requirement-budget" data-tone={view.ledger.limit.tokens !== null && view.ledger.used.tokens >= view.ledger.limit.tokens * NEAR_LIMIT ? "warn" : undefined}>{t("requirements.budget", { used: short(view.ledger.used.tokens), limit: view.ledger.limit.tokens===null?t("budget.unlimited"):short(view.ledger.limit.tokens) })}
           <span title={t("requirements.heldTip")}>{t("requirements.held", { reserved: short(view.ledger.reserved.tokens) })}</span></p>
         {view.ledger.limit.tokens!==null&&<progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />}
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}

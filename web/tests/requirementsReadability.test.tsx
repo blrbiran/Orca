@@ -189,3 +189,19 @@ describe("the split draft's table (tester #31)", () => {
     expect([...more.querySelectorAll("dd")].map((dd) => dd.textContent)).toEqual(["src/export.ts, answer.txt", "feature", "AC1"]);
   });
 });
+
+describe("the requirement's budget line (tester #35)", () => {
+  // A person should see the limit coming before a call is refused for budget: from 80% of a finite limit it warns.
+  const at = (used: number, limit: number | null): string | null => {
+    const base = requirementView("awaiting-answers");
+    show({ ...base, ledger: { ...base.ledger, used: { ...base.ledger.used, tokens: used }, limit: { ...base.ledger.limit, tokens: limit } } });
+    const tone = screen.getByTestId("requirement-budget").getAttribute("data-tone");
+    cleanup();
+    return tone;
+  };
+  it("warns from 80% of a finite limit, and never for an unlimited one", () => {
+    expect(at(799_999, 1_000_000)).toBeNull();
+    expect(at(800_000, 1_000_000)).toBe("warn");
+    expect(at(5_000_000, null)).toBeNull();
+  });
+});
