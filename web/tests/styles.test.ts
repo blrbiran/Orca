@@ -108,4 +108,22 @@ describe("styles.css", () => {
     for (const part of ["fill: color-mix(in srgb, var(--accent)", "stroke: var(--accent)", "stroke-width: 3"]) expect(open).toContain(part);
     expect(rule(".dep-node:focus-visible rect")).toContain("stroke-dasharray");
   });
+
+  // Tester #64 (spec §24, session 3cd8fb02): the settings category list read as a third, 180px-wide navigation column with
+  // no edge of its own. It is a panel of its own, as wide as its labels up to ~11rem, the open item marked like a tab;
+  // narrow, it is one wrapping row whose open item is underlined. Only the sheet is pinned; how it looks is visual.
+  it("draws the settings categories as their own narrow panel with a tab-like open item", () => {
+    // mutation: back to "180px minmax(0, 1fr)" -> red
+    expect(rule(".settings-page")).toContain("grid-template-columns: fit-content(11rem) minmax(0, 1fr)");
+    const nav = rule(".settings-nav");
+    // mutation: drop the panel's background/border/radius -> red
+    for (const part of ["background: var(--bg-elevated)", "border: 1px solid var(--border)", "border-radius: var(--radius)"]) expect(nav).toContain(part);
+    const open = rule('.settings-nav .nav-item[aria-current="page"]');
+    for (const part of ["background: transparent", "font-weight: 600", "box-shadow: inset 3px 0 0 var(--accent)"]) expect(open).toContain(part);
+    const at = css.indexOf("@media (max-width: 760px) {", css.indexOf(".settings-page {"));
+    expect(at).toBeGreaterThan(-1);
+    const narrow = css.slice(at, css.indexOf("\n}\n", at));
+    expect(narrow).toMatch(/\.settings-nav ul \{[^}]*flex-direction: row;[^}]*flex-wrap: wrap;/);
+    expect(narrow).toMatch(/\.settings-nav \.nav-item\[aria-current="page"\] \{[^}]*box-shadow: inset 0 -2px 0 var\(--accent\);/);
+  });
 });
