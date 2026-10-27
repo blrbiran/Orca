@@ -11,6 +11,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { writeArtifact } from "../../src/control/archive.js";
+import { landedUnrecorded } from "../../src/control/driverHandoff.js";
 import { DriverCrash, readDriverRun, savedReport } from "../../src/control/executionDriver.js";
 import { listFlaggedDecisions } from "../../src/control/flaggedDecisions.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
@@ -195,6 +196,8 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       ]);
       // The death came after the first swap: the second directory is still where it was.
       expect(g(w.multiRepo!, "rev-parse", "refs/heads/orca/g")).toBe(alphaAtExport);
+      // closeBlocked's probe finds the unrecorded landing in the directory that swapped (review of H7, session 7753e97d).
+      expect(await landedUnrecorded({} as never, readDriverRun(first.store, runId))).toBe(true);
       w.die(first);
       const second = await w.boot();
       await driveUntil(second, () => LANDED.includes(state(second, runId)!), 120_000, "the replay's landing");
@@ -230,6 +233,9 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       expect(drive.landedCommit).toBe(null);
       expect(drive.landedDirs).toBe(null);
       expect(drive.landingPlan).toBe(null);
+      // closeBlocked's probe: a multi run that swapped nothing has not landed (it used to answer "landed" for every multi
+      // run, since `groupRepoId` throws for one, and left the blocked run to a person as landed).
+      expect(await landedUnrecorded({} as never, readDriverRun(runtime.store, runId))).toBe(false);
       expect(g(w.repo, "rev-parse", "refs/heads/orca/g")).toBe(primaryBefore);
       expect(g(w.multiRepo!, "rev-parse", "refs/heads/orca/g")).toBe(sibling);
       for (const repo of [w.repo, w.multiRepo!]) expect(worktreesOf(repo).filter((path) => basename(path).startsWith("landing-"))).toEqual([]);

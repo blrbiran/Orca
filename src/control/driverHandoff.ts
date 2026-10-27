@@ -314,10 +314,20 @@ async function closeBlocked(deps: ExecutionDriverDeps, run: DriverRun, request: 
  * makes (`findLanding` from the run's base to the current tip). A probe that cannot answer (no repository, a
  * landing git cannot name) cannot prove the change is absent, so the run is left to a person as landed.
  */
-async function landedUnrecorded(deps: ExecutionDriverDeps, run: DriverRun): Promise<boolean> {
+export async function landedUnrecorded(deps: ExecutionDriverDeps, run: DriverRun): Promise<boolean> {
   const drive = run.drive!;
   if (drive.attemptSha === null || drive.base === null) return false;
   try {
+    // Multi-dir spec §8.1: a multi run lands one merge per written directory, each found the way its own step 1 replay
+    // finds it (`groupRepoId` throws for a multi group, which used to answer "landed" for every multi run).
+    if (drive.dirs !== undefined && drive.dirs.length > 0) {
+      for (const dir of drive.dirs) {
+        if (dir.attemptSha == null) continue;
+        const tip = await revParse(dir.targetRepo, workBranchRef(run.groupId));
+        if (await findLanding(dir.targetRepo, dir.base, tip, dir.attemptSha) !== null) return true;
+      }
+      return false;
+    }
     const targetRepo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
     const tip = await revParse(targetRepo, workBranchRef(run.groupId));
     return await findLanding(targetRepo, drive.base, tip, drive.attemptSha) !== null;
