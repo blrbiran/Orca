@@ -274,7 +274,9 @@ describe("orca panel <subcommand> (spec §4)", () => {
   });
 
   it("the agent skill says the service commands are the human's (spec §7)", () => {
-    expect(readFileSync("skills/orca-control/SKILL.md", "utf8")).toContain("`orca panel install|uninstall|start|stop|restart|status|logs` change the human's running service. Never run them; ask the human.");
+    // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. `status` and `logs`
+    // only read the service; the old wording said all seven change it (review finding 9).
+    expect(readFileSync("skills/orca-control/SKILL.md", "utf8")).toContain("`orca panel install|uninstall|start|stop|restart|status|logs` are the human's (`status` and `logs` only read it; the others change the running service). Never run them; ask the human.");
   });
 
   it("a re-install does not count the panel that answered before it (a still-running old panel has the old args)", async () => {

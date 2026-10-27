@@ -25,7 +25,7 @@ any command; `orca version` should equal this skill's version.
 
 ## Core rules
 
-1. **Never start, stop or restart the panel or its service.** `orca panel install|uninstall|start|stop|restart|status|logs` change the human's running service. Never run them; ask the human.
+1. **Never start, stop or restart the panel or its service.** `orca panel install|uninstall|start|stop|restart|status|logs` are the human's (`status` and `logs` only read it; the others change the running service). Never run them; ask the human.
    `orca user …` is a person's too. If `orca status` says the panel is not answering, report it and stop.
 2. **Read state, not command acceptance.** A 2xx answer means the panel booked the command, not that the work is done.
    Read the group (or the flow run) again and act on what it shows.
