@@ -155,13 +155,16 @@ async function unwritableOf(dir: string, landing: readonly LandingPath[]): Promi
     if (reasons.has(l.path)) continue;
     if ([...prefixes].some((prefix) => l.path === prefix || l.path.startsWith(`${prefix}/`))) reasons.set(l.path, "type-change");
   }
-  // case-clash (on every file system, plan builder's decision: NFC then toLowerCase): an added path whose name folds to
-  // another landing path's, or to a differently spelt entry of its parent directory in the folder (each segment).
-  const folded = new Map<string, string[]>();
-  for (const l of landing) folded.set(fold(l.path), [...(folded.get(fold(l.path)) ?? []), nfc(l.path)]);
+  // case-clash (on every file system, plan builder's decision: NFC then toLowerCase): an added path whose name, or the
+  // name of one of its directories, folds to another landing path's name or directory spelt otherwise (review 2026-10-27,
+  // session 7753e97d: `Docs/a.md` and `docs/b.md` share one directory on a case-insensitive folder), or to a differently
+  // spelt entry of its parent directory in the folder (each segment).
+  const folded = new Map<string, Set<string>>();
+  const prefixesOf = (path: string): string[] => [...ancestors(path), path];
+  for (const l of landing) for (const prefix of prefixesOf(l.path)) folded.set(fold(prefix), (folded.get(fold(prefix)) ?? new Set()).add(nfc(prefix)));
   for (const l of landing) {
     if (reasons.has(l.path) || l.from !== null || l.to === null) continue;
-    if ((folded.get(fold(l.path)) ?? []).some((other) => other !== nfc(l.path))) { reasons.set(l.path, "case-clash"); continue; }
+    if (prefixesOf(l.path).some((prefix) => [...folded.get(fold(prefix))!].some((other) => other !== nfc(prefix)))) { reasons.set(l.path, "case-clash"); continue; }
     const segments = l.path.split("/");
     for (let i = 0; i < segments.length; i += 1) {
       let names: string[];

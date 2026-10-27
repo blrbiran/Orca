@@ -152,6 +152,11 @@ describe("unwritable changes stop with their reason and write nothing (§8.3 ste
     (w) => mkdirSync(join(w.folder, "n"))));
   it("an added README.md beside the folder's readme.md, and two added names that differ only in case", () => expectUnwritable({ "readme.md": "r\n" }, { "README.md": "R\n", "Guide.md": "g\n", "guide.md": "g\n" },
     [{ path: "Guide.md", reason: "case-clash" }, { path: "README.md", reason: "case-clash" }, { path: "guide.md", reason: "case-clash" }]));
+  // Review 2026-10-27 (session 7753e97d): on a case-insensitive folder `Docs/a.md` and `docs/b.md` land in one directory,
+  // spelt as whichever came first, so the folder would no longer hold what the folder commit says. The paths differ as a
+  // whole; their directories clash.
+  it("two added paths whose directories differ only in case", () => expectUnwritable({ "a.md": "A\n" }, { "Docs/a.md": "a\n", "docs/b.md": "b\n", "n.md": "N\n" },
+    [{ path: "Docs/a.md", reason: "case-clash" }, { path: "docs/b.md", reason: "case-clash" }]));
 
   it("a folder replacing a file (docs, 3 files below) lists all 4; withheld together, the rest is placed; a later change of a withheld `to` entry is judged again", () => inWorld({ docs: "a file\n", "a.md": "A\n" }, async (w) => {
     const tip = w.land({ docs: null, "docs/a.md": "a\n", "docs/b.md": "b\n", "docs/c.md": "c\n", "other.md": "O\n" });
