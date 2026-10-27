@@ -17,6 +17,7 @@ import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.
 import { exportPendingRequirements, exportRequirementDocument } from "../../src/control/requirementExport.js";
 import { readDraft, readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
+import { withDirLock } from "../../src/flow/vault/dirLock.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
 import { digestTree, dirRequirementHarness } from "./fixtures/dirRequirement.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -137,6 +138,30 @@ describe("exporting a dir group's requirement document into the vault (D4)", () 
       expect(exportOf(x)).toEqual(recorded);
       expect(placementOf(x)).toEqual({ ...(placement as object), at: expect.any(Number) });
       expect(placement).toMatchObject({ state: "idle", tip: earlier, landedTip: tip });
+    } finally { await x.dispose(); }
+  });
+
+  // Review 2026-10-27 (session 7753e97d), spec §11.2: the base is `placed`'s first value, so the folder read that makes it
+  // decides what placement later writes. Taken outside the folder lock it could capture another writer's half-done work
+  // (a flow copy-back, another group's placement, its `.orca-<hex>` temporaries). While another holder has the lock, the
+  // export waits, and the base is the folder as that holder left it.
+  it("takes the base import under the folder lock: it waits for the holder and sees the folder as the holder left it", async () => {
+    const { x, v, ref } = await accepted();
+    try {
+      const real = realpathSync(x.folder).normalize("NFC");
+      let exported: Promise<boolean> | undefined;
+      await withDirLock(real, async () => {
+        exported = exportPendingRequirements(deps(x));
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        // Still waiting on the lock: no base, the export not recorded.
+        expect(ref("refs/orca/group/r/base")).toBeNull();
+        expect(exportOf(x).state).toBe("pending");
+        // The holder's write, finished before it releases.
+        writeFileSync(join(x.folder, "answer.txt"), "written under the lock\n");
+      });
+      expect(await exported).toBe(true);
+      const base = ref("refs/orca/group/r/base")!;
+      expect(v("show", `${base}:answer.txt`)).toBe("written under the lock");
     } finally { await x.dispose(); }
   });
 

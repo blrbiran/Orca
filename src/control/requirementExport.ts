@@ -12,6 +12,7 @@ import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 import { QUIET_GIT, unsetInheritedGitEnv, workBranchRef } from "./workspace.js";
 import { git, gitBytes, type GitOptions } from "../scheduler/gitExec.js";
+import { withDirLock } from "../flow/vault/dirLock.js";
 
 const TRAILER = "Orca-Document-Sha256";
 /** The two reasons an export is blocked (state "conflict"); each is the prefix of the export's detail. */
@@ -68,7 +69,10 @@ function recordMulti(deps: ExportDeps, groupId: string, exported: RequirementBlo
 async function dirBaseOf(deps: ExportDeps, groupId: string, run: ExportGit, frozen: NonNullable<ReturnType<typeof dirWorkspaceOf>>): Promise<string> {
   if (deps.env === undefined) throw new Error("orca: a dir group's export needs the driver's env ($ORCA_VAULT_DIR)");
   const baseRef = `refs/orca/group/${groupId}/base`, placedRef = `refs/orca/group/${groupId}/placed`;
-  const base = await tipOf(run, baseRef) ?? (await importFolder(await openDirWorkspace(deps.env, frozen), { reuseUnchanged: true, baseRef })).commit;
+  // §11.2: the base decides what placement later writes (it is `placed`'s first value), so the folder is read under the
+  // folder lock -- never in the middle of another group's placement or a flow copy-back on the same folder.
+  const env = deps.env;
+  const base = await tipOf(run, baseRef) ?? (await withDirLock(frozen.dir, async () => importFolder(await openDirWorkspace(env, frozen), { reuseUnchanged: true, baseRef }))).commit;
   if (await tipOf(run, placedRef) === null) {
     try { await run(["update-ref", placedRef, base, ""]); }
     catch (error) { if (await tipOf(run, placedRef) === null) throw error; }
