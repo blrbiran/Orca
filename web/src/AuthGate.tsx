@@ -284,6 +284,7 @@ function Sessions(): JSX.Element {
   return (
     <section className="account-sessions" aria-label={t("auth.sessionsTitle")}>
       <h4>{t("auth.sessionsTitle")}</h4>
+      <p>{t("auth.sessionsExplain")}</p>
       <ul>
         {sessions.map((session) => (
           <li key={session.sid}>

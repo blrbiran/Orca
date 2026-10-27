@@ -1681,10 +1681,12 @@ export const en = {
     dismissAll: "Dismiss all",
     sessionsTitle: "Sessions",
     sessionsUnlisted: "This panel did not list the sessions (an older panel?).",
-    sessionLine: "{{kind}} · since {{since}} · until {{until}}",
-    sessionKind: { browser: "Browser", cli: "Terminal (orca login)" },
-    thisSession: "this session",
-    revokeSession: "Revoke",
+    // Tester #66 (spec §24): a session is a login; the server sends kind, start, expiry and "current" only.
+    sessionsExplain: "Every browser or command-line login is its own session and ends by itself at its expiry date.",
+    sessionLine: "{{kind}} · signed in {{since}} · expires {{until}}",
+    sessionKind: { browser: "Browser", cli: "Command line" },
+    thisSession: "This browser",
+    revokeSession: "Sign out",
   },
   usage: {
     title: "Usage",
