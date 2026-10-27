@@ -5,7 +5,8 @@
  * - Cache key: the file's `(dev, ino)` (an archive source's own key). One LRU of at most 8 per panel process, shared by
  *   every viewer.
  * - Growth is a larger size with the first indexed bytes unchanged (their hash is kept): the index extends from its last
- *   complete line. A shrink or a changed head means a rebuild; a new inode is a new key.
+ *   complete line. A shrink or a changed head (at any size, the same one included) means a rebuild; a new inode is a new
+ *   key.
  * - A checkpoint falls every 256 lines or every 1 MiB, whichever comes first. A line over 1 MiB (never parsed, §10.4.2)
  *   is kept in `long`, so a window reads only its scanned prefix.
  * - A trailing partial line (no `\n` yet) is never indexed or served.
@@ -112,10 +113,11 @@ export function createIndexCache(capacity = INDEX_CACHE_SIZE): IndexCache {
   const refresh = async (key: string, reader: RangeReader): Promise<LineIndex> => {
     const known = entries.get(key);
     if (known === undefined) return remember(await build(key, reader));
-    if (reader.size === known.size) return remember(known);
     if (reader.size < known.size) return remember(await build(key, reader));
-    // Growth: the head that was indexed must be unchanged; then only the bytes after the last complete line are read.
+    // Growth, or the same size: the head that was indexed must be unchanged (review 7753e97d: a file rewritten in place to
+    // the same size keeps its inode); then only the bytes after the last complete line are read.
     if (headDigest(await reader.read(0, known.headLength)) !== known.headHash) return remember(await build(key, reader));
+    if (reader.size === known.size) return remember(known);
     if (known.headLength < HEAD_CHECK_BYTES && reader.size > known.headLength) {
       known.headLength = Math.min(HEAD_CHECK_BYTES, reader.size);
       known.headHash = headDigest(await reader.read(0, known.headLength));

@@ -129,4 +129,16 @@ describe("T2: the index cache", () => {
     expect(a.lines).toBe(fresh.lines);
     expect(a.checkpoints).toEqual(fresh.checkpoints);
   });
+
+  it("review 7753e97d: the same inode rewritten in place to the same size, with a changed head, rebuilds the index", async () => {
+    const before = jsonl([claude.text("aaaa " + "x".repeat(300)), claude.text("bbbb")]);
+    const after = jsonl([claude.text("cccc"), claude.text("dddd " + "y".repeat(300))]);
+    expect(after.length).toBe(before.length);
+    const cache = createIndexCache();
+    await cache.get("same-inode", memoryReader(before));
+    const reader = memoryReader(after);
+    const index = await cache.get("same-inode", reader);
+    const window = await windowTail(index, reader, { runtime: "claude", redactor });
+    expect(window.events.map((e) => e.fields!.text!.text.slice(0, 4))).toEqual(["cccc", "dddd"]);
+  });
 });
