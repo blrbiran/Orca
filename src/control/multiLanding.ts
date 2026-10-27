@@ -125,18 +125,33 @@ function write<T>(deps: MultiLandingDeps, action: () => T): T {
 }
 
 /** The landing record's save: the group body is read again inside the transaction (another writer may have moved it). */
-function saveLanding(deps: MultiLandingDeps, groupId: string, update: (current: MultiLanding) => MultiLanding): MultiLanding {
+/** Writes the update in one transaction; an update that answers `current` itself writes nothing (answers false). */
+function saveLanding(deps: MultiLandingDeps, groupId: string, update: (current: MultiLanding) => MultiLanding): boolean {
   return write(deps, () => {
     const body = bodyOf(deps.store, groupId);
     const multi = multiDirOf(body);
     if (multi === null) throw new ControlError("multi-dir-invalid", `not-multi:${groupId}`);
     const current = readMultiLanding(multi.landing);
     if (current === null) throw new ControlError("recovery-blocked", `multi-landing-missing:${groupId}`);
-    const next = readMultiLanding({ ...update(current), at: deps.store.now() })!;
+    const updated = update(current);
+    if (updated === current) return false;
+    const next = readMultiLanding({ ...updated, at: deps.store.now() })!;
     deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, multiDir: { ...multi, landing: next } }), groupId);
     recordProjectionChange(deps.store, [groupId]);
-    return next;
+    return true;
   });
+}
+
+/**
+ * §9.7: the person's answer that started a pass. A `mark-resolved` accepted while the pass awaited git (the command is
+ * accepted in every pending state) is theirs: the pass's result is dropped and nothing is journaled, so the next round
+ * reads the new answer. Null: the pass did not start from a pending state, and no command can land during it.
+ */
+type StartedWith = { resolution: MultiLanding["resolution"] } | null;
+function answeredSince(current: MultiLanding, started: StartedWith): boolean {
+  if (started === null) return false;
+  const a = current.resolution, b = started.resolution;
+  return a === null || b === null ? a !== b : a.action !== b.action || a.by !== b.by || a.at !== b.at;
 }
 
 /** The projection progress is judged by (§9.5): the time alone and the placement `at`s are not a move. */
@@ -552,10 +567,10 @@ async function anyFolderStopMoved(deps: MultiLandingDeps, groupId: string, multi
 }
 
 /** §9.4/§9.5: one pre-check's result either journals the plan or records why nothing landed. */
-function recordPrecheck(deps: MultiLandingDeps, groupId: string, result: PrecheckResult, carriedBefore: Readonly<Record<string, string>>): boolean {
+function recordPrecheck(deps: MultiLandingDeps, groupId: string, result: PrecheckResult, carriedBefore: Readonly<Record<string, string>>, started: StartedWith = null): boolean {
   if (result.kind === "aborted") return false;
   if (result.kind === "blocked") {
-    saveLanding(deps, groupId, (current) => ({
+    saveLanding(deps, groupId, (current) => answeredSince(current, started) ? current : ({
       ...current, state: result.state,
       pending: null, failedKey: result.failedKey, reason: result.reason, detail: result.detail, resolution: null, movedBeforeAny: 0,
       lastLanded: { ...current.lastLanded, ...carriedBefore },
@@ -564,26 +579,26 @@ function recordPrecheck(deps: MultiLandingDeps, groupId: string, result: Prechec
   }
   const { plan, carried } = result.prechecked;
   if (plan.length === 0) {
-    saveLanding(deps, groupId, (current) => ({
+    saveLanding(deps, groupId, (current) => answeredSince(current, started) ? current : ({
       ...current, state: "landed", pending: null, movedBeforeAny: 0, failedKey: null, reason: null, detail: null, resolution: null,
       lastLanded: { ...current.lastLanded, ...carried },
     }));
     return true;
   }
-  saveLanding(deps, groupId, (current) => ({
+  if (!saveLanding(deps, groupId, (current) => answeredSince(current, started) ? current : ({
     ...current, state: "landing", pending: { plan, landed: [], startedAt: deps.store.now() }, lastLanded: { ...current.lastLanded, ...carried },
     failedKey: null, reason: null, detail: null, resolution: null,
-  }));
+  }))) return true;
   try { deps.crash?.("multi-land-after-journal"); } catch (error) { throw new Crashed(error); }
   return true;
 }
 
 /** Starts the opt-in checks off the round, under state `prechecking`, and answers the journal's result asynchronously. */
-function startChecks(deps: MultiLandingDeps, groupId: string, prechecked: Prechecked): void {
-  saveLanding(deps, groupId, (current) => ({
+function startChecks(deps: MultiLandingDeps, groupId: string, prechecked: Prechecked, started: StartedWith): void {
+  if (!saveLanding(deps, groupId, (current) => answeredSince(current, started) ? current : ({
     ...current, state: "prechecking", pending: null, failedKey: null, reason: null, detail: null, resolution: null,
     lastLanded: { ...current.lastLanded, ...prechecked.carried },
-  }));
+  }))) return;
   const entry: MultiPrecheck = { settled: null };
   deps.prechecks.set(groupId, entry);
   void runPrecheckChecks(deps, prechecked.checks).then(async ({ failures }) => {
@@ -594,9 +609,9 @@ function startChecks(deps: MultiLandingDeps, groupId: string, prechecked: Preche
 }
 
 /** §9.4→§9.5: journal the plan, or run the checks that must pass first. */
-function journalOrChecks(deps: MultiLandingDeps, groupId: string, prechecked: Prechecked): void {
-  if (prechecked.checks.length > 0) { startChecks(deps, groupId, prechecked); return; }
-  recordPrecheck(deps, groupId, { kind: "ready", prechecked }, prechecked.carried);
+function journalOrChecks(deps: MultiLandingDeps, groupId: string, prechecked: Prechecked, started: StartedWith = null): void {
+  if (prechecked.checks.length > 0) { startChecks(deps, groupId, prechecked, started); return; }
+  recordPrecheck(deps, groupId, { kind: "ready", prechecked }, prechecked.carried, started);
 }
 
 /** §9.3: a group that is due. One group's whole turn: replay, a waiting state, a pre-check, or the sequence. */
@@ -631,10 +646,11 @@ async function landOne(deps: MultiLandingDeps, groupId: string, multi: FrozenMul
     const folderAnswer = Object.values(landing.placement ?? {}).some((record) =>
       (record.state === "folder-changed" || record.state === "folder-unwritable") && record.resolution !== null);
     if (!retry && !folderAnswer && !await anyFolderStopMoved(deps, groupId, multi, landing)) return false;
+    const started: StartedWith = { resolution: landing.resolution };
     const prechecked = await precheckGroup(deps, groupId, multi, landing, retry ? skippedAfterRetry(landing) : new Set(landing.pending?.landed ?? []));
     if (prechecked.kind === "aborted") return false;
-    if (prechecked.kind === "blocked") { recordPrecheck(deps, groupId, prechecked, {}); return true; }
-    journalOrChecks(deps, groupId, prechecked.prechecked);
+    if (prechecked.kind === "blocked") { recordPrecheck(deps, groupId, prechecked, {}, started); return true; }
+    journalOrChecks(deps, groupId, prechecked.prechecked, started);
     return true;
   }
   // `idle` / `landed`: due only when a carried directory's tip moved.

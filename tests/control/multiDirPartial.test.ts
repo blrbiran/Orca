@@ -136,4 +136,27 @@ describe("a partial landing and the person's verbs (§9.5, §9.7, M11)", () => {
     // The overview asks the person.
     expect(w.answer("retry-rest")).toEqual({ ok: true, result: expect.objectContaining({ action: "retry-rest" }) });
   });
+
+  // Review of H7 (Orca session 7753e97d): `mark-resolved` is accepted while a `retry-rest` pre-check awaits git; the
+  // pre-check's journal wrote `resolution: null` over it and the rest landed although the person said they had done it.
+  it("keeps a mark-resolved accepted during a retry-rest pre-check and publishes nothing more", async () => {
+    world = await multiLandingWorld();
+    const w = world;
+    const seam = moveRemoteOnce(w);
+    await w.settle({ beforePublish: seam.hook });
+    expect(w.landing()).toMatchObject({ state: "partial", failedKey: "remote" });
+    expect(w.answer("retry-rest")).toEqual({ ok: true, result: expect.objectContaining({ action: "retry-rest" }) });
+    let answered: unknown = null;
+    const repoPathOf = (id: string): string => {
+      if (id === "remote" && answered === null) answered = w.answer("mark-resolved");
+      return id === "local" ? w.local : id === "remote" ? w.remote : w.vault;
+    };
+    await w.pass({ repoPathOf });
+    expect(answered).toEqual({ ok: true, result: expect.objectContaining({ action: "mark-resolved" }) });
+    // The pass that started from `retry-rest` journaled nothing: the person's later answer is still the record's.
+    expect(w.landing()).toMatchObject({ state: "partial", pending: { landed: ["local"] }, resolution: { action: "mark-resolved" } });
+    await w.settle();
+    expect(w.landing()).toMatchObject({ state: "landed", pending: null, resolution: { action: "mark-resolved", unlanded: ["remote", "posts"] } });
+    expect(w.tipOf(w.bare, "refs/heads/main")).toBe(seam.moved());
+  });
 });
