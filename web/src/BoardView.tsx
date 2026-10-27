@@ -85,7 +85,7 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
           aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />
       )}
       {group.debug !== undefined && <span className="badge" data-tone="info">{t("board.card.debug", { correctionId: group.debug.correctionId })}</span>}
-      {group.systemDebug !== undefined && <span className="badge" data-tone="info">{t("board.card.systemDebug", { groupId: "groupId" in group.systemDebug.source ? group.systemDebug.source.groupId : group.systemDebug.source.kind === "model-review" ? group.systemDebug.source.target : group.systemDebug.source.reviewGroupId, kind: group.systemDebug.source.kind })}</span>}
+      {group.systemDebug !== undefined && <span className="badge" data-tone="info" data-testid="board-card-system-debug">{t("board.card.systemDebug", { groupId: "groupId" in group.systemDebug.source ? group.systemDebug.source.groupId : group.systemDebug.source.kind === "model-review" ? group.systemDebug.source.target : group.systemDebug.source.reviewGroupId, kind: t(`board.card.systemDebugKind.${group.systemDebug.source.kind}` as const) })}</span>}
       {(group.escalation ?? []).map((entry) => (
         <p key={entry.taskId} className="detail-note" data-testid="board-card-escalation">
           {entry.state === "debugging" ? t("board.card.escalating", { taskId: entry.taskId, debugGroupId: entry.debugGroupId })

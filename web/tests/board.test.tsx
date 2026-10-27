@@ -9,6 +9,10 @@ import { BoardView } from "../src/BoardView.js";
 import type { ControlAction } from "../src/controlApi.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
 import { boardColumn, boardDrop } from "../src/groupCategory.js";
+import i18n from "../src/i18n.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 afterEach(cleanup);
 
@@ -107,5 +111,41 @@ describe("the board tab (kanban spec §4)", () => {
       [{ verb: "remove-group-dependency", groupId: "a", expectedRevision: 7, payload: { dependsOn: "b" } }],
       [{ verb: "add-group-dependency", groupId: "b", expectedRevision: 3, payload: { dependsOn: "a" } }],
     ]);
+  });
+});
+
+// Tester issue #58 (ruling 2026-10-27, session 7753e97d): a system-debug card names why Orca opened it in the reader's
+// language -- the raw source kind ("ladder") means nothing to a person -- and its badge wraps inside its own border.
+describe("the system-debug badge (#58)", () => {
+  afterEach(async () => { await i18n.changeLanguage("en"); });
+  const sources: Array<[NonNullable<GroupSummaryV1["systemDebug"]>["source"], string, string]> = [
+    [{ kind: "ladder", groupId: "a", taskId: "t", runId: null }, "automatic fix", "自动修复"],
+    [{ kind: "integration-check", groupId: "a", taskId: null, runId: null }, "integration check", "集成检查"],
+    [{ kind: "criteria-review", groupId: "a", taskId: null, runId: null }, "criteria review", "判据审查"],
+    [{ kind: "model-review", repoId: "r", target: "main", from: "x", to: "y", runSeq: 1 }, "model review", "模型审阅"],
+    [{ kind: "model-review-finding", repoId: "r", reviewGroupId: "rv", findingId: "f" }, "review finding fix", "审阅发现的修复"],
+  ];
+  const board = () => render(<BoardView groups={sources.map(([source], i) => g({ groupId: `s${i}`, state: "running", systemDebug: { source, stackOn: null, settled: null } }))}
+    scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+  const badges = () => sources.map((_, i) => within(screen.getByTestId(`board-card-s${i}`)).getByTestId("board-card-system-debug").textContent);
+
+  it("words each source kind in English and in Chinese, never as the raw kind", async () => {
+    board();
+    // mutation: pass source.kind raw again -> "(ladder)", red
+    expect(badges()).toEqual(sources.map(([source, word]) => `Orca's fix for ${"groupId" in source ? source.groupId : source.kind === "model-review" ? source.target : source.reviewGroupId} (${word})`));
+    cleanup();
+    await i18n.changeLanguage("zh");
+    board();
+    const zh = badges();
+    sources.forEach(([source, , word], i) => { expect(zh[i]).toContain(`（${word}）`); expect(zh[i]).not.toContain(source.kind); });
+  });
+
+  it("boxes a board card's badge so a second line stays inside its border", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
+    const at = css.indexOf(".board-card .badge {");
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
+    // mutation: drop the rule -> the 999px pill clips a two-line badge, red
+    for (const part of ["border-radius: 6px", "max-width: 100%", "overflow-wrap: anywhere"]) expect(rule).toContain(part);
   });
 });

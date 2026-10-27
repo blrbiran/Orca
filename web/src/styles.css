@@ -459,6 +459,8 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .board-card { border: 1px solid var(--border); border-radius: 6px; padding: 8px; cursor: grab; }
 .board-card-open { all: unset; cursor: pointer; font-weight: 600; }
 .board-card-goal { margin: 4px 0; }
+/* Issue #58: a card is narrow, so a badge may take two lines; a pill radius would clip them, so it wraps inside a box. */
+.board-card .badge { border-radius: 6px; max-width: 100%; overflow-wrap: anywhere; }
 .group-graph-layers { display: flex; gap: 24px; overflow-x: auto; }
 /* Gaps spec §5.3, §10 (plan Task 10-A): a deadline that ticks and token counts sit in rows; digits keep their width. */
 .flow-remaining, .flow-spend { font-variant-numeric: tabular-nums; }

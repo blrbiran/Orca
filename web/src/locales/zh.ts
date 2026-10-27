@@ -126,6 +126,7 @@ export const zh: Translation<typeof en> = {
       held: "只确认，未开跑",
       debug: "{{correctionId}} 的修复",
       systemDebug: "Orca 为 {{groupId}} 开的修复（{{kind}}）",
+      systemDebugKind: { ladder: "自动修复", "integration-check": "集成检查", "criteria-review": "判据审查", "model-review": "模型审阅", "model-review-finding": "审阅发现的修复" },
       findingsMajor_one: "{{count}} 条重要审查发现",
       findingsMajor_other: "{{count}} 条重要审查发现",
       findingsMinor_one: "{{count}} 条次要审查发现",

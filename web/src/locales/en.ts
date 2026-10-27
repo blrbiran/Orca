@@ -257,6 +257,7 @@ export const en = {
       held: "confirmed only, not started",
       debug: "fix for {{correctionId}}",
       systemDebug: "Orca's fix for {{groupId}} ({{kind}})",
+      systemDebugKind: { ladder: "automatic fix", "integration-check": "integration check", "criteria-review": "criteria review", "model-review": "model review", "model-review-finding": "review finding fix" },
       findingsMajor_one: "{{count}} major review finding",
       findingsMajor_other: "{{count}} major review findings",
       findingsMinor_one: "{{count}} minor review finding",
