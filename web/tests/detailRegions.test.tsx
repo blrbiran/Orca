@@ -104,3 +104,21 @@ it("completed Results with missing explanation opens its exact existing evidence
  fireEvent.click(screen.getByRole("button",{name:"Open run controls and evidence · result-run"}));expect(selected()).toBe("Runs and evidence");expect(document.activeElement?.getAttribute("data-run-id")).toBe("result-run");
  expect(screen.getByRole("button",{name:"evidence"})).toBeTruthy();
 });
+// Tester #53: a group opened from the Board or a list card sits below the card grid; it scrolls its own heading into view
+// once when it opens (not on each poll), and leaves the scrolling to the focus path when an Overview focus targets it.
+it("an opened group scrolls itself into view once, unless a focus on it does the scrolling", () => {
+ const scrolled: Element[] = [];
+ const original = Element.prototype.scrollIntoView;
+ Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
+ try {
+  const value = view([workItem({ taskId: "a" })]);
+  const app = mount(value);
+  const section = screen.getByRole("region", { name: "Control group g" });
+  expect(scrolled).toEqual([section]);
+  app.rerender(<ControlGroupView view={{ ...value, changeSeq: 5 }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  expect(scrolled).toEqual([section]);
+  cleanup(); scrolled.length = 0;
+  mount(value, { kind: "group", groupId: "g", region: "problem", taskId: null, runId: null });
+  expect(scrolled.filter((element) => element.matches("section[aria-label=\x27Control group g\x27]"))).toEqual([]);
+ } finally { Element.prototype.scrollIntoView = original; }
+});

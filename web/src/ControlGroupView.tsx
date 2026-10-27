@@ -396,6 +396,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   // Issue #57: `r` retries the open task's current run where the task detail offers its Retry task button (retryRunOpen),
   // like Decisions' keys only from the page body or inside this group, and never from a hidden pane.
   const sectionRef = useRef<HTMLElement>(null);
+  // Tester #53: a group opened from the Board or a list card is mounted below the card grid, out of view; it scrolls its
+  // own heading in. An Overview or route focus on this group scrolls to its own target instead (App's focus effect).
+  useEffect(() => { if (props.focus?.groupId !== groupId) sectionRef.current?.scrollIntoView?.({ block: "start" }); }, [groupId]);
   useEffect(() => {
     if (props.active === false) return;
     const onKey = (event: KeyboardEvent): void => {
