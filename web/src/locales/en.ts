@@ -1066,6 +1066,7 @@ export const en = {
   // N1 spec §11.2: the Requirements section.
   requirements: {
     goToPreparation: "Go to task preparation",
+    next: { label: "Next: ", retry: "a step stopped or failed; retry it.", answer: "answer round {{n}}.", consensus: "say \"We agree\", or ask for one more round.", review: "review split draft {{n}}: send it back or accept it.", prepare: "go to task preparation.", waiting: "nothing for you; Orca is working on the next step.", go: "Go there" },
     ownerRaisesLimit: "Only an owner can raise this limit; ask one to.",
     title: "Requirements",
     list: "Requirement list",

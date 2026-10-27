@@ -145,3 +145,34 @@ describe("the New requirement form (tester #36)", () => {
     expect(form.compareDocumentPosition(firstListed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+describe("the next step under the heading (tester #27, #33, #34)", () => {
+  // The state was spread over the alert, the open round, Consensus at the end of the rounds and the drafts below; one
+  // line under the heading names the single next step and jumps to where it is done.
+  const next = (): string => screen.getByTestId("requirement-next").textContent ?? "";
+  it.each([
+    ["awaiting-answers", "Next: answer round 1. Go there"],
+    ["answered", "Next: say \"We agree\", or ask for one more round. Go there"],
+    ["awaiting-review", "Next: review split draft 1: send it back or accept it. Go there"],
+  ] as const)("for %s is %s", (state, line) => {
+    show(requirementView(state));
+    expect(next()).toBe(line);
+  });
+
+  it("goes to preparation once a split is accepted, with no jump (the button sits right under it)", () => {
+    const base = requirementView("awaiting-review");
+    show({ ...base, summary: { ...base.summary, state: "draft" }, requirement: { ...base.requirement, acceptedDraftNo: 1 }, drafts: base.drafts.map((d) => ({ ...d, state: "accepted" as const })) });
+    expect(next()).toBe("Next: go to task preparation.");
+  });
+
+  it("names Retry first when a step failed", () => {
+    show(requirementView("failed"));
+    expect(next()).toBe("Next: a step stopped or failed; retry it. Go there");
+  });
+
+  it("jumps to the region where the step is done", () => {
+    show(requirementView("awaiting-answers"));
+    within(screen.getByTestId("requirement-next")).getByRole("button", { name: "Go there" }).click();
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Rounds" }));
+  });
+});

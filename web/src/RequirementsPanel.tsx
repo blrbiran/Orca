@@ -472,6 +472,28 @@ function Elapsed(props: { since: number }): JSX.Element {
   return <>{t("requirements.draftingFor", { elapsed })}</>;
 }
 
+type NextStep = { key: "retry" | "answer" | "consensus" | "review" | "prepare" | "waiting"; n?: number; region: "problem" | "answers" | "draft" | null };
+
+/**
+ * Tester #27, #33, #34: the one next step, said under the heading, from the facts the page already shows further down.
+ * Earlier entries win: something failed or stopped, then the person's answers, the split to review, consensus, preparation.
+ */
+function NextStepLine(props: { groupId: string; step: NextStep }): JSX.Element {
+  const { t } = useTranslation();
+  const { step } = props;
+  const go = (): void => {
+    if (step.region === null) return;
+    const element = document.getElementById(overviewRegionId("requirement", props.groupId, step.region));
+    element?.focus(); element?.scrollIntoView?.({ block: "start" });
+  };
+  return (
+    <p data-testid="requirement-next" data-tone={step.key === "waiting" ? undefined : "warn"}>
+      <strong>{t("requirements.next.label")}</strong>{t(`requirements.next.${step.key}` as const, { n: step.n })}
+      {step.region !== null && <>{" "}<button type="button" onClick={go}>{t("requirements.next.go")}</button></>}
+    </p>
+  );
+}
+
 function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
@@ -507,9 +529,20 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const archiveAllowed = view.summary.state === "clarifying" && !drafting && blockedRun === null
     && (view.summary.stopMode === null || view.summary.stopMode === "pause"
       || view.summary.stopState === "handoff-complete" || view.summary.stopState === "handoff-partial");
+  const lastEntry = chainOf(view).at(-1) ?? null;
+  const nextStep: NextStep | null = archived ? null
+    : blockedRun !== null || retryable || stopUnresolved ? { key: "retry", region: "problem" }
+    : drafting ? { key: "waiting", region: null }
+    : lastEntry !== null && lastEntry.round.state === "awaiting-answers" && lastEntry.round.result !== null && view.requirement.consensus === null
+      ? { key: "answer", n: lastEntry.position, region: "answers" }
+    : draft !== null && draft.state === "awaiting-review" ? { key: "review", n: draft.draftNo, region: "draft" }
+    : view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" ? { key: "prepare", region: null }
+    : view.requirement.consensus === null && round !== null && round.state === "answered" && valid.length > 0 ? { key: "consensus", region: "answers" }
+    : null;
   return (
     <article aria-label={view.requirement.slug ?? groupId}>
       <h3>{view.requirement.slug ?? groupId} · {enumText("groupState", view.summary.state)}</h3>
+      {nextStep !== null && <NextStepLine groupId={groupId} step={nextStep} />}
       {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" &&
         <button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button>}
       {archived ? <section aria-label={t("control.group.archivedRegion")}>
