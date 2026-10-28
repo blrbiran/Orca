@@ -46,6 +46,8 @@ of type, radius or shadow.
 
 ## 2. Layers and what stays in CSS
 
+> Sections 2 and 3 describe the batches' state (legacy layer, no preflight). The final pass changed it; see the note at the end of §7.
+
 `index.css`: `@layer theme, legacy, utilities`. `styles.css` is imported **into `legacy`**, so any utility beats any
 legacy rule regardless of selector specificity. There is no preflight yet: `styles.css`'s element rules (`button`,
 `input/select/textarea`, `label`, `table`, `h1–h3`, `p`, `a`, `fieldset`, `kbd`, `hr`, `[role=…]`, `[data-tone]`) are
@@ -175,3 +177,17 @@ Two cross-batch couplings to coordinate rather than race: the tab component (`.d
 `App` in batch 1 and `GroupDetailRegions` in batch 3 — migrate both to `tabRow/tabItem` in batch 3 and touch
 `App`'s tab markup there only if batch 1 has not started, else leave the rule to the final pass) and `.led` (batches
 3 and 4 — the second one deletes it).
+
+**Final pass done** (branch `ui/final-pass`, controller session a9f9d6de, 2026-10-29). Layers are now `theme, base,
+utilities`: Tailwind's preflight, then `styles.css`, both in `base` (no `legacy` layer is left: the rules still in
+`styles.css` keep their mutual cascade, so no specificity battle changed). `styles.css` holds the theme blocks, the
+browser defaults the look keeps after preflight (`revert` on lists, h4–h6, `a` decoration, `small`, `pre`, media
+display, `progress`), the element base, the `role` / `data-tone` rules, and the rules on hooks (`.section-pane`,
+`.settings-category`, the 760px table rules, `.dep-*`, the pane and category hides). The shared classes are `@utility`
+blocks in `index.css` with their old declarations: `section-meta`, `count`, `empty`, `caveat`, `kbd-hint`, `num`,
+`nav-count`, `btn-primary`, `btn-quiet`, `pill`, `badge`, `callout`, `split`, `split-list`, `split-detail`,
+`detail-block`, `detail-note`, `led` (a neutral edge or fill applies only without a `data-tone`, as the old source order
+did). The region and corrections tabs wear `tabButtonRow` / `tabButton` (`ui/classes.ts`); `.detail-region-tabs` is gone.
+Deleted as unused: `.btn`, `.btn-danger`, `[role="tabpanel"][hidden]` (preflight's `[hidden]` rule covers it), and
+`.callout` / `.chain-banner` left the role rule (every chain banner has a role). Read a class's declarations in
+`index.css`; a criterion reads them with `utility()` in `web/tests/sourceClasses.ts`.

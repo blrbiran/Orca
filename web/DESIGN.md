@@ -30,21 +30,22 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 ## Type
 - Body 14px. h3 14px/600. h2 18px. h1 22px (Decisions' title is sized as an h2 so every page title matches).
 - Numbers that change (counts, rates, ids) use `font-variant-numeric: tabular-nums` where they sit in rows.
-- Key figures (tokens, durations, attempts) take the `.num` utility class (tabular digits), so a polled line or a column does not jitter (ruling H8).
+- Key figures (tokens, durations, attempts) take the `num` utility class (tabular digits; `@utility num` in `src/index.css`), so a polled line or a column does not jitter (ruling H8).
 
 ## Components (session e236bbe4)
 - Scale tokens (in the first `:root` block; the default pair uses them as is, a candidate theme may override them — see Themes): space 4/8/12/16/24, radius 4 (xs) / 6 (controls) / 10 (cards), control height 32 (26 small), motion 120ms ease-out. Colour comes only from the theme tokens.
-- Buttons: secondary by default (elevated fill, strong edge, small shadow); one primary per view: only `.btn-primary` is filled with the accent (hover `--accent-hover`). `type="submit"` alone is a secondary button. `.btn-quiet` drops the chrome (cancel, dismiss); `.btn-danger` tints an irreversible action. Every button has hover, a 1px press, a 2px accent focus ring (offset 2), disabled at 50%, `aria-busy` shows progress. Two adjacent buttons get 8px apart unless their row spaces itself.
+- Buttons: secondary by default (elevated fill, strong edge, small shadow); one primary per view: only `.btn-primary` is filled with the accent (hover `--accent-hover`). `type="submit"` alone is a secondary button. `.btn-quiet` drops the chrome (cancel, dismiss). Both are `@utility` classes in `src/index.css` (the final pass of the Tailwind migration dropped `.btn-danger`: no view used it). Every button has hover, a 1px press, a 2px accent focus ring (offset 2), disabled at 50%, `aria-busy` shows progress. Two adjacent buttons get 8px apart unless their row spaces itself.
 - Fields: inputs, selects and textareas share one look (`--field`, strong edge, 32px, accent caret, accent ring on focus, muted placeholder, `aria-invalid` edge in danger); selects carry the token chevron; checkboxes and radios stay native at 16px, tinted with the accent.
-- Tabs: ONE component — the Settings category row, the group detail's region tabs and the corrections tabs: a row over a bottom rule, quiet medium-weight items, the open one bold over a 2px accent underline; it wraps when narrow.
-- Pills and badges: 12px, medium weight, hairline edge; a badge's colour is its `data-tone` (none = neutral).
+- Tabs: ONE component (`tabRow` / `tabItem` in `src/ui/classes.ts`; a tab that is a button adds `tabButton`, its row `tabButtonRow`) — the Settings category row, the group detail's region tabs and the corrections tabs: a row over a bottom rule, quiet medium-weight items, the open one bold over a 2px accent underline; it wraps when narrow.
+- Pills and badges: 12px, medium weight, hairline edge; a badge's colour is its `data-tone` (none = neutral). `pill` / `badge` are `@utility` classes in `src/index.css`.
 - Tables: uppercase 12px headers over a strong rule, 8×10 cells, row hover tint, no rule under the last row. On ≤760px a table's box scrolls sideways and a headed table keeps 40rem, so the page never scrolls sideways.
 - Confirmations: an inline `role="dialog"` box is a well with a strong edge; a confirm group (`.confirm-inline`, e.g. the #62 charge retry) is an inline box toned `warn`; the modal dialog (`src/ui/Dialog.tsx`, Radix) floats on `--shadow-pop` over a dimmed page. Menus (`src/ui/Menu.tsx`, Radix) float on `--shadow-pop` too; they are the only menu and dialog implementations.
 - The browser's own surfaces follow the theme: text selection, caret, scrollbars, link underline offset, summary markers.
 - Motion is limited to colour/edge/shadow transitions and the press; under `prefers-reduced-motion` they and the running pulse stop.
 
 ## Styling (tester round 2026-10-28)
-- Tailwind v4 utilities over the tokens above (`src/index.css` maps them; Tailwind's own palette is cleared); the theme blocks in `styles.css` stay the only theme source. How to write and migrate a component: `web/TAILWIND-MIGRATION.md`.
+- Tailwind v4 utilities over the tokens above (`src/index.css` maps them; Tailwind's own palette is cleared); the theme blocks in `styles.css` stay the only theme source.
+- Layers (final pass of the migration): theme, base, utilities. The base is Tailwind's preflight, then `styles.css` — the theme blocks, the browser defaults the look keeps (list bullets and indents, h4–h6, link underlines, `small`, `pre`, inline media), the element base, the `role` / `data-tone` rules and the few rules on hooks (panes, Settings categories, the dependency graph). The shared component classes (`pill`, `badge`, `btn-primary`, `callout`, `split*`, `detail-block`, `led`, …) are `@utility` blocks in `src/index.css`, so an element's own utilities still override them. How to write and migrate a component: `web/TAILWIND-MIGRATION.md`.
 - Inter and JetBrains Mono are bundled (woff2) as `--font-sans` / `--font-mono`; the default look keeps the system stack (`--font`); a candidate theme chooses them by setting `--font` / `--mono` (see Themes).
 
 ## Layout
@@ -53,7 +54,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Panes stay mounted; only `.section-pane:not([data-active="true"])` hides one.
 
 ## Status light (ruling H8, 2026-10-27)
-- A group card in the Tasks list and on the Board starts with a 7px dot, `.led[data-led]`, from `groupLed` (`groupCategory.ts`): running = `--ok` with a soft glow, failed/blocked (needs you) = `--danger`, waiting (started or queued, nothing going) = `--warn`, not started or settled = `--muted`, dimmed. Tone tokens only, so both themes follow.
+- A group card in the Tasks list and on the Board starts with a 7px dot, the `led` utility with `data-led` (`@utility led`, `src/index.css`), from `groupLed` (`groupCategory.ts`): running = `--ok` with a soft glow, failed/blocked (needs you) = `--danger`, waiting (started or queued, nothing going) = `--warn`, not started or settled = `--muted`, dimmed. Tone tokens only, so both themes follow.
 - It is decorative (`aria-hidden`): the card's text already states the state. Nothing else of an "instrument console" look is adopted.
 
 ## Settings and navigation (ruling H6, 2026-10-27)
