@@ -147,7 +147,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca recovery`
 
 - `orca recovery list` — what blocks dispatch: global, group and run blockers
-- `orca recovery retry [--run <run>] [--group <group>]` — resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure
+- `orca recovery retry [--run <run>] [--group <group>] [--acknowledge <acknowledge>]` — resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure
 
 ### `orca command`
 
