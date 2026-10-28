@@ -44,7 +44,7 @@ function FlowCard(props: { run: FlowRun; onOpen: () => void }): JSX.Element {
   const { run } = props;
   return (
     <li className="board-card" data-testid={`board-flow-${run.flowRunId}`}>
-      <button type="button" className="board-card-open" onClick={props.onOpen}>{run.flowRunId} · {t(`flow.state.${run.state}`, { defaultValue: run.state })}</button>
+      <button type="button" className="board-card-open" title={t("board.card.openFlow")} onClick={props.onOpen}>{run.flowRunId} · {t(`flow.state.${run.state}`, { defaultValue: run.state })}</button>
       <span className="badge" data-tone="info" data-testid="board-flow-badge">{t("board.card.flowTemplate", { template: templateOf(run.templateRef) })}</span>
       {run.scheduled != null && <span className="badge" data-tone="info" data-testid="board-flow-scheduled">{t("board.card.scheduled", { name: run.scheduled.name })}</span>}
       {run.dir !== null && <p className="board-card-goal">{run.dir}</p>}
@@ -76,7 +76,8 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; onOpen: () 
   const onDragStart = (event: DragEvent<HTMLElement>): void => { event.dataTransfer.setData("text/plain", group.groupId); props.onDragging?.(group); };
   return (
     <li className="board-card" draggable onDragStart={onDragStart} onDragEnd={() => props.onDragging?.(null)} data-testid={`board-card-${group.groupId}`}>
-      <button type="button" className="board-card-open" onClick={props.onOpen}>
+      {/* Tester #49: the card's title says where it leads -- a clarifying group opens its requirement (App's onOpen). */}
+      <button type="button" className="board-card-open" title={t(group.state === "clarifying" ? "board.card.openRequirement" : "board.card.openGroup")} onClick={props.onOpen}>
         {/* Ruling H8: the status light; decorative, the state is in this text. */}
         <span className="led" data-led={groupLed(group)} aria-hidden="true" />
         {group.groupId} · {enumText("groupState", group.state)}{props.repoText}

@@ -218,3 +218,26 @@ describe("the status light (H8)", () => {
     expect(screen.getByTestId("board-card-budget").classList.contains("num")).toBe(true);
   });
 });
+
+// Tester #49 (session e236bbe4): the card's open control gave no hint where it leads. Its title names the destination App's
+// onOpen takes it to -- a clarifying group opens its requirement, any other group its detail -- in the reader's language.
+describe("the board card's open control says where it leads (tester #49)", () => {
+  it("titles a clarifying card as opening its requirement and any other card as opening the group, in English and Chinese", async () => {
+    const open = (groupId: string) =>
+      within(screen.getByTestId(`board-card-${groupId}`)).getByRole("button", { name: new RegExp(groupId) });
+    render(<BoardView groups={[g({ groupId: "req", state: "clarifying" }), g({ groupId: "grp", state: "running" })]}
+      scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    // mutation: drop the clarifying branch -> the requirement card says "group", red
+    expect(open("req").getAttribute("title")).toBe("Open this requirement");
+    // mutation: drop the title attribute -> null, red
+    expect(open("grp").getAttribute("title")).toBe("Open this group's detail");
+    await i18n.changeLanguage("zh");
+    try {
+      cleanup();
+      render(<BoardView groups={[g({ groupId: "req", state: "clarifying" })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      expect(open("req").getAttribute("title")).toBe("打开这个需求");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+});

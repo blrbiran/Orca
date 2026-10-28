@@ -251,6 +251,9 @@ export const en = {
     dropRefused: "{{groupId}} cannot be moved to {{column}}: only pause, resume, archive and unarchive can be done by dragging.",
     column: { clarifying: "Clarifying", "awaiting-confirmation": "Awaiting confirmation", queued: "Queued", running: "Running", "needs-you": "Needs you", done: "Done", archived: "Archived" },
     card: {
+      openRequirement: "Open this requirement",
+      openGroup: "Open this group's detail",
+      openFlow: "Open this flow run",
       flowTemplate: "flow: {{template}}",
       scheduled: "scheduled · {{name}}",
       flowNeedsYou_one: "{{count}} step waits for you",

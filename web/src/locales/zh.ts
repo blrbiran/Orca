@@ -117,6 +117,9 @@ export const zh: Translation<typeof en> = {
     dropRefused: "{{groupId}} 不能拖到“{{column}}”：拖拽只能暂停、恢复、归档和取消归档。",
     column: { clarifying: "澄清中", "awaiting-confirmation": "待确认", queued: "排队中", running: "运行中", "needs-you": "需要你", done: "已完成", archived: "已归档" },
     card: {
+      openRequirement: "打开这个需求",
+      openGroup: "打开这个任务组的详情",
+      openFlow: "打开这次流程运行",
       flowTemplate: "流程：{{template}}",
       scheduled: "定时 · {{name}}",
       flowNeedsYou_one: "{{count}} 个步骤等你处理",
