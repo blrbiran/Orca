@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { inlinePick, tabItem, tabRow } from "../src/ui/classes.js";
+import { inlinePick, kindDot, tabItem, tabRow } from "../src/ui/classes.js";
 import { carrying } from "./sourceClasses.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -25,9 +25,11 @@ describe("styles.css", () => {
   });
 
   it("wraps a question with no break opportunity and clamps it to two lines (Review Focus 1)", () => {
-    const q = rule(".row-question");
-    expect(q).toContain("overflow-wrap: anywhere");
-    expect(q).toContain("-webkit-line-clamp: 2");
+// Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of batch 2 (Decisions): the row's question is utility classes now (DecisionList.tsx), read off its class string.
+    // mutation: drop line-clamp-2 (or wrap-anywhere) from the question span -> red
+    const q = /<span className="row-question ([^"]+)">/.exec(src("DecisionList.tsx"))?.[1]?.split(" ") ?? [];
+    expect(q).toContain("wrap-anywhere");
+    expect(q).toContain("line-clamp-2");
   });
 
   // Flow gaps Task 10a: a card's title or goal summary never runs past two lines (CardGoal.tsx, web/tests/cardGoal.test.tsx).
@@ -59,9 +61,16 @@ describe("styles.css", () => {
 
   // Human ruling (session f8281a60): each importance level paints the kind pill's dot its own colour.
   it("gives each kind importance level its own dot colour", () => {
+// Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of batch 2 (Decisions): the kind pill's dot is the kindDot class string (DecisionList.tsx) over the --color-kind-N map in index.css.
+    // mutation: drop data-[level=2]:before:bg-kind-2 from kindDot -> red
+    const dot = kindDot.split(" ");
+    const entry = src("index.css");
     for (const level of [1, 2, 3]) {
-      expect(rule(`.field-kind[data-level="${level}"]::before`)).toContain(`background: var(--kind-${level})`);
+      expect(dot, `level ${level}`).toContain(`data-[level=${level}]:before:bg-kind-${level}`);
+      expect(entry).toContain(`--color-kind-${level}: var(--kind-${level});`);
     }
+    // The dot itself appears only on a pill that has a level: a size, a round shape and an empty content box.
+    for (const part of ["data-[level]:before:content-['']", "data-[level]:before:size-1.75", "data-[level]:before:rounded-full"]) expect(dot).toContain(part);
   });
 
   // Task 11 acceptance (session ffec7b28): the menu's sr-only owner line showed and squeezed a group card.

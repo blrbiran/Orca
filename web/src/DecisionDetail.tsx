@@ -33,6 +33,7 @@ import type { CorrectionForm, DecisionReviewState } from "./api.js";
 import { enumText } from "./i18n.js";
 import { en } from "./locales/en.js";
 import { WEB_CORRECTION_KINDS } from "./types.js";
+import { actionsBox, detailHelp, withdrawnItem } from "./ui/classes.js";
 import type { CorrectionKind } from "./types.js";
 
 export interface DecisionAlternative {
@@ -96,8 +97,8 @@ export function DecisionDetail({
   const canWithdrawReview = reviewed && !review.corrections.some((c) => c.mine && c.state === "open");
   return (
     <article className="decision-detail">
-      <p className="row-id">{decision.id}</p>
-      <h2 data-testid="decision-question">{decision.question}</h2>
+      <p className="row-id font-data text-xs text-muted">{decision.id}</p>
+      <h2 className="wrap-anywhere" data-testid="decision-question">{decision.question}</h2>
       <div className="detail-block">
         <h3>{t("decisions.chose")}</h3>
         <p className="chose" data-testid="decision-chose">
@@ -113,13 +114,13 @@ export function DecisionDetail({
       {decision.alternatives.length > 0 && (
         <div className="detail-block">
           <h3>{t("decisions.rejected")}</h3>
-          <ul className="alternatives">
+          <ul className="alternatives m-0 pl-4.5">
             {decision.alternatives.map((alt) => (
-              <li key={alt.option}>
-                <span className="option" data-testid="alternative-option">
+              <li key={alt.option} className="wrap-anywhere">
+                <span className="option block text-fg-strong" data-testid="alternative-option">
                   {alt.option}
                 </span>
-                <span className="why-not" data-testid="alternative-why-not">
+                <span className="why-not block text-sm text-muted" data-testid="alternative-why-not">
                   {alt.why_not}
                 </span>
               </li>
@@ -130,7 +131,7 @@ export function DecisionDetail({
       {review !== undefined && review.reviewers.length > 0 && (
         <div className="detail-block" data-tone="ok" data-testid="decision-reviewers">
           <h3>{t("decisions.reviewersTitle")}</h3>
-          <ul className="reviewers">
+          <ul className="reviewers m-0 pl-4.5">
             {review.reviewers.map((r) => (
               <li key={r.by}>
                 {r.by} · <time dateTime={r.at}>{r.at}</time>
@@ -147,12 +148,12 @@ export function DecisionDetail({
       {review !== undefined && review.corrections.length > 0 && (
         <div className="detail-block" data-testid="decision-corrections">
           <h3>{t("decisions.correctionsTitle")}</h3>
-          <ul className="corrections">
+          <ul className="corrections m-0 pl-4.5 [&_li]:wrap-anywhere">
             {review.corrections.map((c) => (
               <li
                 key={c.id}
                 data-correction-id={c.id}
-                className={c.state === "withdrawn" ? "correction-withdrawn" : undefined}
+                className={c.state === "withdrawn" ? withdrawnItem : undefined}
                 data-tone={c.state === "closed" ? "ok" : undefined}
               >
                 {enumText("correctionKind", c.kind)} · {c.because} · {c.by} · <time dateTime={c.at}>{c.at}</time> ·{" "}
@@ -167,20 +168,20 @@ export function DecisionDetail({
           </ul>
         </div>
       )}
-      <div className="actions">
+      <div className={`actions ${actionsBox}`}>
         <button type="button" className="btn-primary" onClick={onAgree} disabled={reviewed}>
           {reviewed ? t("decisions.agreeDone") : t("decisions.agree")}
         </button>
-        <p className="detail-help">{t("decisions.agreeHelp")}</p>
+        <p className={`detail-help ${detailHelp}`}>{t("decisions.agreeHelp")}</p>
         <form
-          className="correction-form"
+          className="correction-form mt-4 border-0 border-t border-dashed border-line pt-3"
           onSubmit={(event) => {
             event.preventDefault();
             onCorrect?.(form);
           }}
         >
           {/* Taste refinement P1-3. Not an <h3>: the detail's h3s are its reading blocks (pinned by decisionsI18n.test.tsx). */}
-          <p className="correction-title" role="heading" aria-level={3}>{t("decisions.correctionTitle")}</p>
+          <p className="text-sm text-muted" role="heading" aria-level={3}>{t("decisions.correctionTitle")}</p>
           <label>
             {t("decisions.kind")}
             <select name="kind" value={form.kind} onChange={(e) => edit({ kind: e.currentTarget.value as CorrectionKind })}>
@@ -200,7 +201,7 @@ export function DecisionDetail({
             <input name="chose_instead" type="text" value={form.chose_instead} onChange={(e) => edit({ chose_instead: e.currentTarget.value })} />
           </label>
           <button type="submit">{t("decisions.correct")}</button>
-          <p className="detail-help">{t("decisions.correctNote")}</p>
+          <p className={`detail-help ${detailHelp}`}>{t("decisions.correctNote")}</p>
         </form>
       </div>
     </article>

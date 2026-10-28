@@ -14,7 +14,10 @@ describe("page template (P2-6)", () => {
     expect(css).toMatch(/h3 \{ font-size: var\(--text-md\); font-weight: 600; \}/);
   });
   it("sizes the Decisions page title like every other page title", () => {
-    expect(rule(".decisions .section-head h1")).toContain("font-size: 18px");
+// Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of batch 2 (Decisions): the title is the utility text-xl (18px, index.css) on the h1 in DecisionsView.tsx.
+    // mutation: a bare <h1> in DecisionsView -> 22px like the others, red
+    const view = readFileSync(fileURLToPath(new URL("../src/DecisionsView.tsx", import.meta.url)), "utf8");
+    expect(view).toContain('<h1 className="text-xl">{t(heading.title)}</h1>');
   });
   it("fills only .btn-primary with the accent; a bare submit is secondary", () => {
     expect(css).not.toMatch(/button\[type="submit"\][^{]*\{[^}]*var\(--accent\)/);

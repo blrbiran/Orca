@@ -29,7 +29,7 @@ describe("the Tailwind entry (index.css)", () => {
     const inline = entry.slice(at("@theme inline {"), entry.indexOf("\n}\n", at("@theme inline {")));
     // mutation: drop the palette reset -> bg-blue-500 and friends exist beside the tokens, red
     expect(inline).toContain("--color-*: initial;");
-    const colours = [...inline.matchAll(/^\s*(--color-[a-z-]+): ([^;]+);/gm)].map((m) => [m[1]!, m[2]!] as const);
+    const colours = [...inline.matchAll(/^\s*(--color-[a-z0-9-]+): ([^;]+);/gm)].map((m) => [m[1]!, m[2]!] as const);
     expect(colours.length).toBeGreaterThan(20);
     // Every colour but the scrim (a fixed dimming over any theme) is a var() of a styles.css token.
     for (const [name, value] of colours) if (name !== "--color-scrim") expect(value, name).toMatch(/^var\(--[a-z0-9-]+\)$/);
