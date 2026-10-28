@@ -10,6 +10,7 @@
 import { ChargeRetry } from "./ChargeRetry.js";
 import type { JSX } from "react";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { taskGoal } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { scheduleIdFor, type ControlAction } from "./controlApi.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -643,7 +644,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                   {item.taskId}
                 </button>
                 {/* Tester round 2 §8.2 (H5): what the task is for, one line; the whole goal in the title. */}
-                {item.objective !== undefined && <> <span className="task-goal" title={item.objective.goal}>{goalSummary(item.objective.goal)}</span></>}
+                {item.objective !== undefined && <> <span className={`task-goal ${taskGoal}`} title={item.objective.goal}>{goalSummary(item.objective.goal)}</span></>}
                 {taskNeedsHuman(item.taskId) && <> <NeedsHumanBadge /></>}
               </td>
               <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
@@ -737,7 +738,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
             <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
               <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
               <td>{enumText("runPhase", run.phase)}</td>
-              <td className="run-state">
+              <td className="run-state [&>div]:mb-1">
                 <div>{enumText("runState", run.state)}</div>
                 <div><RunReason run={run} /></div>
                 <DebugRepro run={run} />

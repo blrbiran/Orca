@@ -12,13 +12,17 @@ import { useTranslation } from "react-i18next";
 import { useClock } from "./clock.js";
 import { goalSummary } from "./CardGoal.js";
 import { WEB_WORK_ITEM_CATEGORIES } from "./controlTypes.js";
-import type { RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
+import type { RunViewV1, WorkItemCategoryV1, WorkItemViewV1 } from "./controlTypes.js";
+import { depSwatch } from "./ui/classes.js";
 import { layoutDependencies } from "./dependencyLayout.js";
 import i18n, { enumText } from "./i18n.js";
 import { lineageRunNumber } from "./runFacts.js";
 
 // Tester round 2 §8.2 (D10): one height for every node, with room for the goal line under the id.
 const NODE_W = 180, NODE_H = 104, GAP_X = 56, GAP_Y = 16, PAD = 8;
+const SWATCH_FILL: Record<WorkItemCategoryV1, string> = {
+  idle: "bg-cat-idle", running: "bg-cat-running", waiting: "bg-cat-waiting", blocked: "bg-cat-blocked", done: "bg-cat-done",
+};
 /** Spec §6.5: a current run quiet for longer than this is shown as making no progress. */
 const STALL_MS = 10 * 60_000;
 
@@ -72,12 +76,12 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
   return (
     <figure className="dep-graph" aria-label={t("control.graph.region")}>
       <figcaption>{t("control.graph.caption")}</figcaption>
-      <ul className="dep-legend" aria-label={t("control.graph.legend")}>
+      <ul className="dep-legend mt-1 mb-2 flex list-none flex-wrap gap-3 p-0 text-xs text-muted" aria-label={t("control.graph.legend")}>
         {WEB_WORK_ITEM_CATEGORIES.map((category) => (
-          <li key={category}><span className={["dep-swatch", `dep-${category}`].join(" ")} aria-hidden="true" />{t(`control.graph.category.${category}` as const)}</li>
+          <li key={category}><span className={["dep-swatch", `dep-${category}`, depSwatch, SWATCH_FILL[category]].join(" ")} aria-hidden="true" />{t(`control.graph.category.${category}` as const)}</li>
         ))}
       </ul>
-      <div className="dep-scroll">
+      <div className="dep-scroll max-w-full overflow-x-auto">
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           <defs>
             <marker id="dep-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto">

@@ -123,20 +123,16 @@ it("an opened group scrolls itself into view once, unless a focus on it does the
  } finally { Element.prototype.scrollIntoView = original; }
 });
 // Tester #21: an open task's detail had nothing setting it apart from the table and graph around it. It carries
-// .task-detail, whose lift is declared after the generic nested-section rules it must out-rank.
+// .task-detail and the lift's utility string (ui/classes.ts taskDetail), which wins over the generic nested-section rules.
 // Ruling: session e236bbe4 blanket authorization -- this now encodes the lift (card colour, firm edge, pop shadow) that
 // replaced the 3px accent side stripe impeccable's detector bans; the separation #21 asked for is what stays pinned.
-it("an open task's detail is lifted as a card, declared after the nested-section rules", async () => {
- const { readFileSync } = await import("node:fs"); const { fileURLToPath } = await import("node:url"); const { dirname, join } = await import("node:path");
- const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
+// Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the lift is read off the class string, not the deleted .section-pane section.task-detail rule.
+// mutation: drop shadow-float, then bg-elevated, then border-line-strong from taskDetail; or TaskDetail stops wearing it -> red
+it("an open task's detail is lifted as a card by its own utility classes", () => {
  mount(view([workItem({ taskId: "a" })]));
  fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
- expect(screen.getByRole("region", { name: "Task a" }).classList.contains("task-detail")).toBe(true);
- const rule = css.indexOf(".section-pane section.task-detail {");
- expect(rule).toBeGreaterThan(css.indexOf(".section-pane section section {"));
- const body = css.slice(rule, css.indexOf("}", rule));
- expect(body).toContain("background: var(--bg-elevated)");
- expect(body).toContain("border: 1px solid var(--border-strong)");
- expect(body).toContain("box-shadow: var(--shadow-pop)");
- expect(body).not.toContain("border-left");
+ const region = screen.getByRole("region", { name: "Task a" });
+ expect(region.classList.contains("task-detail")).toBe(true);
+ for (const lift of ["bg-elevated", "border-line-strong", "shadow-float"]) expect(region.classList.contains(lift), lift).toBe(true);
+ expect(region.className).not.toMatch(/border-l-/);
 });

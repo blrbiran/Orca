@@ -440,7 +440,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {/* Tester #7, #11, #13: the per-task allocation table is long and wide and seldom changed, so it folds; it opens by
           itself when something in it needs the person -- an invalid value, a deficit, or an estimate's suggestions. */}
       <details className="budget-allocations" open={hasBadDraft(drafts) || view.ledger.budgetDeficit.tokens > 0 || (allSuggested.length > 0 && !archived)}>
-      <summary>{t("budget.allocations", { count: view.allocations.length })}</summary>
+      <summary className="my-[6px] cursor-pointer">{t("budget.allocations", { count: view.allocations.length })}</summary>
       <table className="num">
         <thead>
           <tr><th>{t("budget.th.owner")}</th><th>{t("budget.th.bucket")}</th><th>{t("budget.th.state")}</th>{DIMENSIONS.map((dimension) => <th key={dimension}>{enumText("dimension", dimension)}</th>)}{advice !== null && <th>{t("budget.th.suggestion")}</th>}</tr>

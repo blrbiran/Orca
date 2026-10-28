@@ -178,3 +178,50 @@ describe("review 7753e97d: what one open call keeps, and its Earlier/Later", () 
   });
 });
 
+
+// Tester #74 (round 2026-10-28): the transcript had no live feel -- rows were appended below the fold and nothing said
+// whether the reader was on the newest ones. The row list follows the newest rows while the reader is at its bottom,
+// stops following when the reader scrolls up, and "Follow latest" brings it back. jsdom lays nothing out, so the box's
+// geometry is stubbed: 20px per row, a 100px viewport, a scrollTop the test can read and set.
+describe("tester #74: the row list follows the newest rows", () => {
+  const ROW = 20, VIEW = 100;
+  function stubBox(container: HTMLElement): { top: () => number; setTop: (px: number) => void; bottom: () => number } {
+    const ol = container.querySelector("ol.transcript-events") as HTMLOListElement;
+    let scrollTop = 0;
+    Object.defineProperty(ol, "scrollTop", { configurable: true, get: () => scrollTop, set: (value: number) => { scrollTop = value; } });
+    Object.defineProperty(ol, "scrollHeight", { configurable: true, get: () => ol.children.length * ROW });
+    Object.defineProperty(ol, "clientHeight", { configurable: true, get: () => VIEW });
+    return { top: () => scrollTop, setTop: (px) => { scrollTop = px; fireEvent.scroll(ol); }, bottom: () => ol.children.length * ROW };
+  }
+
+  it("keeps the bottom in view, lets go when the reader scrolls up, and takes the bottom back on Follow latest", async () => {
+    vi.useFakeTimers();
+    let next = 0;
+    answer = (url) => {
+      if (url.endsWith("/transcripts")) return LISTING;
+      const first = next;
+      next += url.includes("tail=1") ? 10 : 1;
+      return win(Array.from({ length: next - first }, (_, k) => message((first + k) * 10, `event ${first + k}`)), url.includes("tail=1") ? 0 : first * 10, next * 10, false);
+    };
+    const { container } = render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    const box = stubBox(container);
+    expect(screen.getByRole("status").textContent).toBe("following the newest lines");
+    // At the bottom: a new row arrives and the bottom stays in view.
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(container.querySelectorAll("li[data-testid='transcript-event']").length).toBe(11);
+    expect(box.top()).toBe(box.bottom());
+    // The reader scrolls up: the following stops, says so, and a new row does not move the view.
+    box.setTop(0);
+    expect(screen.queryByRole("status")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(container.querySelectorAll("li[data-testid='transcript-event']").length).toBe(12);
+    expect(box.top()).toBe(0);
+    // The way back: Follow latest brings the bottom into view and the note returns.
+    fireEvent.click(screen.getByRole("button", { name: "Follow latest" }));
+    expect(box.top()).toBe(box.bottom());
+    expect(screen.queryByRole("button", { name: "Follow latest" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("following the newest lines");
+    // A finished call is not followed: there is nothing newer to follow.
+  });
+});

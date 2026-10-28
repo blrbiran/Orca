@@ -354,7 +354,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         onSelectRequirement={props.onSelectRequirement} onAction={props.onGroupAction} refusals={props.groupRefusals} now={props.now} onOpenDispatch={props.onOpenDispatch} />
       {/* Issue #56: the keys an open group's view takes (r, the arrows on its region tabs and menus), above that view and
           outside it, so the group's own actions stay exactly its actions. */}
-      {view !== undefined && <div className="group-view-keys"><ShortcutsHelp /></div>}
+      {view !== undefined && <div className="mt-3 flex justify-end"><ShortcutsHelp /></div>}
       {view !== undefined && (
         <ControlGroupView
           active={props.active}

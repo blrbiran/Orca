@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import type { ControlRefusal } from "./controlState.js";
 import { RefusalNotice } from "./RefusalNotice.js";
+import { groupCardRow, groupMore } from "./ui/classes.js";
 import { Menu, MenuItem } from "./ui/Menu.js";
 
 export function cardArchivePending(group: GroupSummaryV1): boolean {
@@ -28,11 +29,11 @@ export function GroupActionsMenu(props: {
   const archivePending = cardArchivePending(props.group);
   const archiveBlocked = props.onAction === undefined || archivePending;
   const context = (event: MouseEvent<HTMLElement>): void => { event.preventDefault(); setOpen(true); };
-  return <div className="group-card-row">
+  return <div className={`group-card-row ${groupCardRow}`}>
     {props.children(context)}
     <span id={ownerDescriptionId} className="sr-only">{t("control.groupMenu.owner", { groupId: props.group.groupId })}</span>
     <Menu open={open} onOpenChange={setOpen}
-      trigger={<button type="button" className="group-more" aria-label={t("control.groupMenu.more")} aria-describedby={ownerDescriptionId}>⋯</button>}>
+      trigger={<button type="button" className={`group-more ${groupMore}`} aria-label={t("control.groupMenu.more")} aria-describedby={ownerDescriptionId}>⋯</button>}>
       <MenuItem onSelect={props.onOpen}>{t("control.groupMenu.open")}</MenuItem>
       <MenuItem disabled={archiveBlocked} describedBy={archiveBlocked ? `archive-reason-${props.group.groupId}` : undefined}
         onSelect={() => props.onAction?.(props.group.groupId, props.group.archived ? "unarchive-group" : "archive-group", props.group.repoId)}>
@@ -42,6 +43,6 @@ export function GroupActionsMenu(props: {
       <MenuItem onSelect={() => { void navigator.clipboard?.writeText(props.group.groupId); }}>{t("control.groupMenu.copyId")}</MenuItem>
     </Menu>
     {props.refusal && <RefusalNotice refusal={props.refusal} testId={`card-refusal-${props.group.groupId}`} />}
-    {props.refusal?.code === "archive-run-active" && props.onOpenDispatch && <button type="button" onClick={props.onOpenDispatch}>{t("control.groupMenu.openDispatch")}</button>}
+    {props.refusal?.code === "archive-run-active" && props.onOpenDispatch && <button type="button" className="ms-0" onClick={props.onOpenDispatch}>{t("control.groupMenu.openDispatch")}</button>}
   </div>;
 }

@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { labelCustomClass, labelSystemClass, taskDetail } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
@@ -38,7 +39,7 @@ export function LabelChips(props: { labels: string[] | undefined }): JSX.Element
   return (
     <>
       {labels.map((label) => (
-        <span key={label} className={label.startsWith(CUSTOM_LABEL_PREFIX) ? "label label-custom" : "label label-system"}>{label}</span>
+        <span key={label} className={label.startsWith(CUSTOM_LABEL_PREFIX) ? labelCustomClass : labelSystemClass}>{label}</span>
       ))}
     </>
   );
@@ -235,8 +236,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
   const runNumber = taskRunNumber(view, item.taskId);
   return (
-    // Tester #21: the open task is set apart from the table and graph around it by an accent edge (styles.css .task-detail).
-    <section tabIndex={-1} className="task-detail" data-task-id={item.taskId} aria-label={t("control.task.region", { taskId: item.taskId })}>
+    // Tester #21: the open task is set apart from the table and graph around it by an accent edge (ui/classes.ts taskDetail).
+    <section tabIndex={-1} className={`task-detail ${taskDetail}`} data-task-id={item.taskId} aria-label={t("control.task.region", { taskId: item.taskId })}>
       <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
       <p>
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}

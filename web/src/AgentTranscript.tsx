@@ -8,10 +8,13 @@
  * - The 1 s follow poll runs only while the document is visible, `active` is true, the call is open and not `final`, and
  *   the view is pinned to the newest rows (Later at the end pins it again).
  * - One transcript open per tab: a single module-level slot shared by every mount (spec §10.4.4, M9).
+ * - Tester #74: the row list is a scroll box that follows the newest rows -- while the reader is at its bottom each new row
+ *   keeps the bottom in view; scrolling up stops the following ("Follow latest" brings it back). No smooth scrolling, so
+ *   `prefers-reduced-motion` has nothing to turn off.
  * - At most 200 event rows are mounted (plan D5: a paged view; Earlier/Later move it). Collapsed rows render no body.
  * - Agent text is rendered as React text nodes only; `thinking` is never asked for and never rendered (ruling 2).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -44,6 +47,11 @@ function useDocumentVisible(): boolean {
   }, []);
   return visible;
 }
+
+/** How close to the bottom (px) still counts as "at the bottom": a fractional scroll position never reads as scrolled up. */
+export const BOTTOM_SLACK = 8;
+/** Tester #74: is the reader looking at the newest rows? (jsdom reports all three as 0, so it is always at the bottom.) */
+export const atBottom = (box: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">): boolean => box.scrollHeight - box.scrollTop - box.clientHeight <= BOTTOM_SLACK;
 
 const firstLine = (text: string | undefined): string => {
   if (text === undefined) return "";
@@ -171,6 +179,8 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [anchor, setAnchor] = useState<string | null>(null); // null: pinned to the newest rows
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [follow, setFollow] = useState(true); // tester #74: keep the newest rows in view while the reader is at the bottom
+  const box = useRef<HTMLOListElement>(null);
   const busy = useRef(false);
   const queued = useRef<{ run: () => void; poll: boolean } | null>(null);
   const loadedRef = useRef(loaded);
@@ -217,6 +227,12 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
   const anchored = anchor === null ? -1 : events.findIndex((event) => keyOf(event) === anchor);
   const first = anchor === null ? Math.max(0, events.length - MAX_ROWS) : Math.max(0, anchored);
   const rows = events.slice(first, first + MAX_ROWS);
+  const newest = rows.length === 0 ? "" : keyOf(rows[rows.length - 1]!);
+  // A new newest row (or a return to following) puts the bottom in view before paint; a reader who scrolled up is left alone.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (el !== null && follow && anchor === null) el.scrollTop = el.scrollHeight;
+  }, [newest, follow, anchor]);
   const earlier = (): void => {
     if (first > 0) { setAnchor(keyOf(events[Math.max(0, first - MAX_ROWS / 2)]!)); return; }
     if (loaded === null || loaded.start === 0) return;
@@ -239,7 +255,9 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
       return;
     }
     setAnchor(null);
+    setFollow(true);
   };
+  const tracking = loaded !== null && !loaded.final && anchor === null;
   return (
     <div className="transcript-call" data-testid="transcript-call">
       {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
@@ -248,8 +266,10 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
         <button type="button" disabled={first === 0 && (loaded === null || loaded.start === 0)} onClick={earlier}>{t("transcript.earlier")}</button>{" "}
         <button type="button" disabled={anchor === null} onClick={later}>{t("transcript.later")}</button>{" "}
         {loaded !== null && <span>{loaded.final ? t("transcript.final") : t("transcript.live")}</span>}
+        {tracking && follow && <span role="status" className="ms-2 text-xs text-muted">{t("transcript.following")}</span>}
+        {tracking && !follow && <button type="button" className="ms-2" onClick={() => setFollow(true)}>{t("transcript.follow")}</button>}
       </div>
-      <ol className="transcript-events">
+      <ol ref={box} className="transcript-events max-h-[24rem] overflow-y-auto" onScroll={(event) => setFollow(atBottom(event.currentTarget))}>
         {rows.map((event) => <EventRow key={keyOf(event)} runId={props.runId} call={call} event={event} />)}
       </ol>
     </div>

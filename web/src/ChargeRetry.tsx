@@ -1,4 +1,5 @@
 import { useContext, useState, type JSX } from "react";
+import { confirmInline } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 
@@ -18,7 +19,7 @@ export function ChargeRetry(props: { charge: { tokens: number; usageLowerBound: 
     {!mayCharge ? <span role="note">{t("chargeRetry.owner")}</span>
       : !open ? <button type="button" onClick={() => setOpen(true)}>{t("chargeRetry.open", { tokens })}</button>
       // Session e236bbe4: the confirm is an inline box toned warn (it spends a grant: "needs action", DESIGN.md).
-      : <span role="group" className="confirm-inline" data-tone="warn" aria-label={t("chargeRetry.open", { tokens })}>{t("chargeRetry.confirmText", { tokens })}{" "}
+      : <span role="group" className={`confirm-inline ${confirmInline}`} data-tone="warn" aria-label={t("chargeRetry.open", { tokens })}>{t("chargeRetry.confirmText", { tokens })}{" "}
         <button type="button" onClick={() => { setOpen(false); props.onCharge(); }}>{t("chargeRetry.confirm", { tokens })}</button>{" "}
         <button type="button" className="btn-quiet" onClick={() => setOpen(false)}>{t("chargeRetry.cancel")}</button></span>}
   </>;
