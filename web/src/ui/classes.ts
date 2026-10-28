@@ -132,7 +132,9 @@ export const boardCardBadge = "max-w-full rounded-control wrap-anywhere";
 export const boardCardOpen = "inline min-h-0 cursor-pointer rounded-none border-0 bg-transparent p-0 text-start text-base leading-[inherit] font-semibold text-inherit shadow-none transition-none hover:bg-hover";
 /** Tester #54: a dragged card's refusing columns dim. Padding, edge and fill come from the legacy labelled-section card rule, which out-ranks the old
  *  `.board-column` rule -- and so also its `[data-drop="allowed"]` accent outline, which never painted. Kept as it was (the migration does not change the look). */
-export const boardColumnBox = "min-h-[120px] shrink-0 basis-[240px] data-[drop=refused]:opacity-55";
+// Tester #54: while a card is dragged, a column that takes it shows a dashed accent edge (the legacy rule never painted:
+// `.section-pane section[aria-label]` out-ranked it); one that refuses it dims.
+export const boardColumnBox = "min-h-[120px] shrink-0 basis-[240px] data-[drop=allowed]:border-dashed data-[drop=allowed]:border-accent data-[drop=refused]:opacity-55";
 
 /** Overview: buttons wrap and align left (a goal can be long); each column is bare, not a card inside the Overview card (it out-ranks the
  *  labelled-section card rule); a row is a rule-separated list item. */

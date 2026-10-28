@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { compile } from "tailwindcss";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -15,6 +16,16 @@ const at = (needle: string): number => {
 };
 
 describe("the Tailwind entry (index.css)", () => {
+  it("keeps both halves of the narrow variant: a narrow OR a short screen", async () => {
+    // Final pass (session a9f9d6de): the shorthand `@custom-variant narrow (@media a, b);` compiled to one media rule plus a
+    // broken `.narrow\:x (max-height: 560px)` selector, so a short wide screen kept the desktop shell. Compiled here for real.
+    // mutation: back to the shorthand form -> the short-screen half is no media query, red
+    const variant = entry.slice(at("@custom-variant narrow"), entry.indexOf("\n}\n", at("@custom-variant narrow")) + 2);
+    const built = (await compile(`@layer utilities { @tailwind utilities; }\n${variant}`)).build(["narrow:hidden"]);
+    expect(built).toMatch(/@media \(max-width: 760px\), \(max-height: 560px\) \{\s*\.narrow\\:hidden \{/);
+    expect(built).not.toMatch(/\.narrow\\:hidden \(/);
+  });
+
   it("layers the hand-written sheet under the utilities, so a utility class beats any legacy selector", () => {
     // mutation: import styles.css unlayered -> its element rules (button, label) beat every utility, red
     expect(entry).toContain('@layer theme, legacy, utilities;');

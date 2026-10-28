@@ -90,7 +90,10 @@
 }
 
 /* The shell's narrow layout: the page scrolls as a whole on a narrow OR a short screen (taste refinement P1-2). */
-@custom-variant narrow (@media (max-width: 760px), (max-height: 560px));
+/* Block form: the shorthand splits a media list at its comma and drops the short-screen half (final pass, session a9f9d6de). */
+@custom-variant narrow {
+  @media (max-width: 760px), (max-height: 560px) { @slot; }
+}
 
 /* The bundled fonts as variables (and font-sans / font-mono utilities); static so they exist even while unused. */
 @theme static {

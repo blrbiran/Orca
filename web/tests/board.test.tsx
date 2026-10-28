@@ -100,6 +100,9 @@ describe("the board tab (kanban spec §4)", () => {
     expect(screen.getByTestId("board-drop-hint-queued").textContent).toBe("Drop to pause");
     expect(column("Done").getAttribute("data-drop")).toBe("refused");
     expect(column("Running").getAttribute("data-drop")).toBeNull();
+    // Final pass (session a9f9d6de): the allowed mark is drawn by utilities (layer above the legacy sheet), not by a
+    // `.board-column[data-drop]` rule the section rule out-ranked. mutation: drop either utility from boardColumnBox, red
+    for (const part of ["data-[drop=allowed]:border-dashed", "data-[drop=allowed]:border-accent", "data-[drop=refused]:opacity-55"]) expect(column("Queued").classList.contains(part), part).toBe(true);
     fireEvent.dragEnd(screen.getByTestId("board-card-run1"));
     expect(column("Queued").getAttribute("data-drop")).toBeNull();
     expect(screen.queryByTestId("board-drop-hint-queued")).toBeNull();
