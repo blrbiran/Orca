@@ -678,6 +678,8 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 /* Issue 96: a document section rendered from its markdown subset keeps its text's line breaks too. */
 .requirement-markdown { white-space: pre-wrap; overflow-wrap: anywhere; }
 .requirement-markdown h6 { font-size: inherit; margin: 12px 0 4px; }
+/* QA walk (session e236bbe4): the document's front matter, apart from its title -- small, secondary, wrapping. */
+.requirement-front-matter { margin: 0 0 8px; font-size: 0.85em; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Kanban spec 2026-10-20 §4: the board tab -- columns side by side, scrolling sideways on a narrow screen. */
 /* Plan Task 10-B: the board's top-left flow start button and the start dialog it opens (an inset box, DESIGN.md). */

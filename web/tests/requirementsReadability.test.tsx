@@ -107,12 +107,30 @@ describe("the requirement document (#77)", () => {
     expect(region.textContent).not.toMatch(/(^|\n)## /);
     expect(within(region).getByRole("region", { name: "Statement" }).textContent).toContain("A note <b>exports</b>.");
     expect(region.querySelector("b")).toBeNull();
-    expect(region.textContent).toContain("# markdown-export");
+    // Ruling: session e236bbe4 blanket authorization -- the lead's title is a heading without its hash (QA walk; was: the
+    // lead keeps "# markdown-export" as text).
+    expect(region.textContent).not.toContain("# markdown-export");
+    expect(within(region).getAllByRole("heading", { level: 6 }).map((h) => h.textContent)).toContain("markdown-export");
     // Issue 96 (rewritten under 0e13a9b7's ruling; was: the body keeps "### R1.ADR1 One output" as text): a section's
     // markdown subset is rendered, so the ADR heading is a heading without its hashes.
     const decisions = within(region).getByRole("region", { name: "Decisions" });
     expect(within(decisions).getByRole("heading", { level: 6 }).textContent).toBe("R1.ADR1 One output");
     expect(decisions.textContent).not.toContain("###");
+  });
+
+  // QA walk (session e236bbe4): the lead -- front matter, then "# <slug>" -- was one plain paragraph, so the title showed
+  // a literal "#" and the front matter ran into it. The front matter is its own small preformatted block (its lines as
+  // written, without the --- fences), and the rest of the lead is the same markdown subset as a section's body.
+  it("shows the lead's front matter apart and its title as a heading", () => {
+    const view = requirementView("answered");
+    show({ ...view, document: "---\norcaRequirementId: r-1\nrepo: repo-a\n---\n# markdown-export\n\nPeople can **export**.\n\n## Statement\n\nA note.\n" });
+    const region = documentRegion();
+    const front = region.querySelector("pre.requirement-front-matter");
+    // mutation: render the lead as one plain paragraph again -> red
+    expect(front?.textContent).toBe("orcaRequirementId: r-1\nrepo: repo-a");
+    expect(within(region).getAllByRole("heading", { level: 6 }).map((h) => h.textContent)).toEqual(["markdown-export"]);
+    expect(region.querySelector("strong")?.textContent).toBe("export");
+    expect(region.textContent).not.toMatch(/#|---|\*\*/);
   });
 
   it("stays one preformatted block when it has no ## heading", () => {

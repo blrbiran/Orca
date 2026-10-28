@@ -281,6 +281,22 @@ function RaiseLimit(props: { view: View; onCommand: OnCommand } & EditableDrafts
 }
 
 /**
+ * QA walk (session e236bbe4): the text above the first section -- front matter between `---` fences, then `# <slug>`.
+ * The front matter is its own small preformatted block, its lines as written; the rest is the same markdown subset as a
+ * section's body, so the title is a heading rather than a literal "#".
+ */
+function DocumentLead(props: { text: string }): JSX.Element {
+  const front = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(props.text.replace(/\r\n?/g, "\n"));
+  const rest = front === null ? props.text : props.text.replace(/\r\n?/g, "\n").slice(front[0].length).trim();
+  return (
+    <>
+      {front !== null && <pre className="requirement-front-matter">{front[1]}</pre>}
+      {rest !== "" && <RequirementMarkdown text={rest} />}
+    </>
+  );
+}
+
+/**
  * Issue #77: the document read as sections at its `## ` headings (src/control/requirementDocument.ts writes them), each
  * heading and body as plain text nodes -- no markdown is interpreted and nothing is injected. Text before the first
  * heading stays above the sections; a document without one stays a single preformatted block.
@@ -291,7 +307,7 @@ function DocumentText(props: { text: string }): JSX.Element {
   const [lead, ...sections] = parts;
   return (
     <>
-      {lead!.trim() !== "" && <p className="requirement-text">{lead!.trim()}</p>}
+      {lead!.trim() !== "" && <DocumentLead text={lead!.trim()} />}
       {sections.map((section, index) => {
         const cut = section.indexOf("\n");
         const title = (cut === -1 ? section : section.slice(0, cut)).trim(), body = cut === -1 ? "" : section.slice(cut + 1).trim();
