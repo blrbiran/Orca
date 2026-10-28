@@ -53,9 +53,12 @@ export function renderRequirementDocument(input: RequirementDocumentInput): stri
   section(w.decisions, adrs.flatMap((adr) => [`### ${adr.id} ${oneLine(adr.title)}`, "", item(w.context, adr.context), item(w.decision, adr.decision), item(w.consequences, adr.consequences), ""]).slice(0, -1));
   out.push(`## ${w.rounds}`, "");
   if (valid.length === 0) out.push(w.none, "");
+  // Human ruling (tester feedback round 2026-10-28): rounds are numbered by their position on the chain the caller passes
+  // (chainRounds), as the panel does and as the ids of rounds drafted since are; the stored roundNo is not shown.
+  const positionOf = (roundNo: number): number => { const i = input.rounds.findIndex((round) => round.roundNo === roundNo); return i === -1 ? roundNo : i + 1; };
   for (const round of valid) {
     const answers = new Map((round.answers ?? []).map((answer) => [answer.id, answer]));
-    out.push(`### ${w.round} ${round.roundNo}`, "");
+    out.push(`### ${w.round} ${positionOf(round.roundNo)}`, "");
     if (round.result!.questions.length === 0) out.push(w.noQuestions);
     for (const q of round.result!.questions) {
       const answer = answers.get(q.id);
@@ -68,7 +71,7 @@ export function renderRequirementDocument(input: RequirementDocumentInput): stri
   }
   const consensus = input.requirement.consensus;
   section(w.consensus, consensus === null ? [] : [
-    `${w.roundLine}${consensus.roundNo}`, `${w.atLine}${consensus.at}`,
+    `${w.roundLine}${positionOf(consensus.roundNo)}`, `${w.atLine}${consensus.at}`,
     ...(consensus.openBranches.length === 0 ? [] : [w.openBranches, ...consensus.openBranches.map((branch) => item("  - ", branch))]),
     ...(consensus.openQuestions.length === 0 ? [] : [w.openQuestions, ...consensus.openQuestions.map((question) => `  - ${question}`)]),
   ]);

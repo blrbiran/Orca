@@ -46,3 +46,18 @@ codex single call only for a catalog row it found (`singleCallExecution` "v1-sof
 
 Known limit: an omp row with no `maxTokens` has no single call, so its null window is still `context-unavailable`
 although omp resolution only succeeds for a listed model. Out of #105's scope (codex); not changed.
+
+## 4. Rounds numbered by chain position (human ruling 2026-10-28)
+
+One numbering for a requirement's rounds: the position on the active chain (`activeChain`), as the panel and the
+clarify prompt's limits line already used.
+
+- Ids: `recordClarify` passes the drafting round's chain position to `classifyClarifyOutput`, so a round drafted after
+  a revision gets `R<position>.Q/G/ADR<n>`. A revision row copies round k's result and takes k's position, so its ids
+  agree too. Position 1 is always round 1 or a revision row (never classified), so the round-1-only rules (class,
+  slug) are unchanged.
+- Document: `### Round <position>` and the consensus line's round are the position on the chain the caller passes.
+- Validator: its known decision ids are the chain rounds' accepted ADR ids (unchanged), now in the same numbering.
+- Not changed: stored ids of rounds written before this change (history; their answers name them), the panel's
+  "superseded" label (stored number), and the flow host's clarify step (`src/flow/kinds/clarify.ts`), which still
+  numbers ids by its stored round number -- outside the ruling's scope (requirement documents); flagged for a decision.

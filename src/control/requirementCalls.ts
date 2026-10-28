@@ -274,8 +274,12 @@ export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: 
 function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null): void {
   const round = readRound(store, group.groupId, target.no);
   if (round.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-round-moved");
-  const earlierQuestionIds = readRounds(store, group.groupId).filter((r) => r.roundNo < round.roundNo).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
-  const classified = classifyClarifyOutput(rawOutput, { roundNo: round.roundNo, requirementId: group.requirement.requirementId, earlierQuestionIds, classification: clarifyLimits(store, group).effective });
+  const rounds = readRounds(store, group.groupId);
+  const earlierQuestionIds = rounds.filter((r) => r.roundNo < round.roundNo).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
+  // Human ruling (tester feedback round 2026-10-28): code numbers a round's ids by its chain position, as the prompt's
+  // limits line (CLARIFY_HANDLER.prepare) and the document do -- one numbering; a drafting round is always on the chain.
+  const position = activeChain(rounds).chain.indexOf(round.roundNo);
+  const classified = classifyClarifyOutput(rawOutput, { roundNo: position === -1 ? round.roundNo : position + 1, requirementId: group.requirement.requirementId, earlierQuestionIds, classification: clarifyLimits(store, group).effective });
   round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
   if (classified.ok) {
     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
