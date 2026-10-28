@@ -21,6 +21,7 @@ import type { AccountSession, Me, Notice, Role } from "./auth.js";
 import i18n from "./i18n.js";
 import { en } from "./locales/en.js";
 import { Refusal } from "./Refusal.js";
+import { passwordInSettings } from "./ui/classes.js";
 
 /** The logged-in person, for the parts of the page that differ by role (web/src/UsagePanel.tsx). */
 export const AccountContext = createContext<Me | null>(null);
@@ -161,9 +162,6 @@ function passwordProblem(next: string, again: string): PanelRefusal | null {
   if (next !== again) return localRefusal("password-mismatch", i18n.t("auth.mismatch"));
   return null;
 }
-
-/** The change-password form inside Settings (Tailwind migration, tester round 2026-10-28): one column, 420px at most. */
-const passwordInSettings = "mb-6 max-w-[420px]";
 
 function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChanged: () => void; initial?: boolean }): JSX.Element {
   const { t } = useTranslation();
