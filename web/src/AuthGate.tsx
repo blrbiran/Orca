@@ -195,7 +195,7 @@ function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChang
   );
 }
 
-{ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): JSX.Element {
+function AccountBar({ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): JSX.Element {
   const { t } = useTranslation();
   const owner = isOwner(me);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
