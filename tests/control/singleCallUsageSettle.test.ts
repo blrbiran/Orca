@@ -337,6 +337,20 @@ const estimateCommand = (x: EstimateHarness, commandId: string) => ({ schema: "o
   target: { kind: "run", groupId: "g", runId: x.runId }, payload: { scope: "run", runId: x.runId, acknowledge: "charge-remaining-grant" } });
 
 describe("settling an estimate call blocked on unknown usage (§9 R1)", () => {
+  // Spec §4 C2: ccloop puts the lower bound on any record whose outcome is not complete -- an aborted one included (code
+  // review m5, session 3cd8fb02; kept by the human's ruling in session e236bbe4). The run keeps it for the view, as for a
+  // failed call, and it is still never booked.
+  it("keeps an aborted call's lower bound on the blocked run for the view, never as usage", async () => {
+    const x = await estimateHarness({ outcome: "aborted", tokens: null, recordExtra: { usageLowerBound: { tokens: 777 } } });
+    try {
+      await x.rounds(() => x.body().state === "blocked");
+      expect(x.body().drive).toMatchObject({ blockedAt: "C", blockedReason: "estimate-usage-unknown" });
+      expect(readControlGroup(x.h.store, "epoch", "g").runs.find((run) => run.runId === x.runId)).toMatchObject({ usageLowerBound: 777 });
+      expect(x.body().unknown.work).toBe(true);
+      expect(readControlGroup(x.h.store, "epoch", "g").ledger.used.tokens).toBe(0);
+    } finally { await x.h.dispose(); }
+  });
+
   it("charges the grant's remainder, clears the plan group's flag, and fails the estimate with ccloop's code", async () => {
     const x = await estimateHarness({ outcome: "failed", tokens: null, recordExtra: { usageLowerBound: { tokens: 4_321 } } });
     try {

@@ -223,3 +223,18 @@ Supersedes the admission in O2 / §9 R1 ("active, blocked at C, no stop intent")
   the flag, skip the purpose's `complete` (the round / draft / estimate is already interrupted; no evaluation needed),
   marker disposition **`stopped`**, and for a requirement call queue a wake so a round parked on the flag is claimed.
   Settling first or the stop's own retry first both end with the call settled once and the round claimed.
+
+## 11. Correction — the lower bound on an aborted call (session `e236bbe4`, 2026-10-28)
+
+Appended; the text above is unchanged (Rule 13).
+
+- The code review's m5 (`/private/tmp/orca-3cd8fb02/review62code/REVIEW.md`) said C2 names failed calls only and that
+  ccloop's aborted path attaching the bound (`ccloop/src/control/singleCall.ts`, the `hooks.signal.aborted` branch) went
+  beyond it. C2 reads "present only when the outcome is not `complete`", so an aborted record carrying the bound is
+  inside C2. Only the criteria were missing.
+- Human ruling (session `e236bbe4`, verbatim: 「同意按你的建议走」 on the recommendation "keep ccloop's behaviour; add
+  the criteria"): kept. The bound on a call a stop or handoff request ended is the useful number when a person settles a
+  call a stop closed (§10); it is still shown, never charged (D3).
+- Criteria: ccloop `tests/control/singleCall.test.ts` W10 (an aborted record keeps the adapter's bound, work usage null);
+  Orca `tests/control/singleCallUsageSettle.test.ts` "keeps an aborted call's lower bound on the blocked run for the
+  view, never as usage".
