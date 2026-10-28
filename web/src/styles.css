@@ -257,7 +257,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 .project-control form { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 .project-control p { margin: 0; }
 .content { padding: 24px; min-width: 0; }
-.section-pane:not([data-active="true"]) { display: none; }
+/* !important since the Tailwind migration (index.css layers this sheet under the utilities): no utility on a pane may
+   un-hide it -- an important declaration in an earlier layer beats every later one (handoff §5.2 item 6). */
+.section-pane:not([data-active="true"]) { display: none !important; }
 .chain-banners:empty { display: none; }
 .chain-banners { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
 .uncertain-operations { border: 1px solid color-mix(in srgb, var(--warn) 55%, var(--border)); background: var(--warn-subtle); border-radius: var(--radius); padding: 10px 12px; min-width: 0; }
@@ -644,7 +646,7 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .detail-region-tabs > button:focus-visible, .settings-nav .nav-item:focus-visible { outline-offset: -2px; border-radius: var(--radius-xs) var(--radius-xs) 0 0; }
 .detail-region-tabs > [aria-selected="true"], .detail-region-tabs > [aria-pressed="true"], .detail-region-tabs > [aria-selected="true"]:hover:not(:disabled), .detail-region-tabs > [aria-pressed="true"]:hover:not(:disabled), .settings-nav .nav-item[aria-current="page"] { background: transparent; box-shadow: none; color: var(--text-strong); font-weight: 600; border-bottom-color: var(--accent); }
 .settings-body { min-width: 0; }
-.settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none; }
+.settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none !important; }
 .settings { min-width: 0; overflow-wrap: anywhere; }
 .settings-browser { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
 .settings-password { max-width: 420px; margin-bottom: 24px; }

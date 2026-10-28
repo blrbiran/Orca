@@ -1,0 +1,10 @@
+/* Tester round 2026-10-28 (human ruling 3, "(b) bundle two or three woff2 fonts into the web package"): Inter and
+   JetBrains Mono, latin subset, woff2 only (the panel's static server types .woff2 and nothing else of the kind).
+   Exposed as --font-sans / --font-mono (index.css); the default look keeps the system stack (--font) until a theme
+   picks these. */
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 400; src: url("@fontsource/inter/files/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 500; src: url("@fontsource/inter/files/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 600; src: url("@fontsource/inter/files/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 700; src: url("@fontsource/inter/files/inter-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 400; src: url("@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 600; src: url("@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }

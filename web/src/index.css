@@ -1,0 +1,80 @@
+/* Tester round 2026-10-28 (human rulings: Tailwind v4 via @tailwindcss/vite, CSS variables the ONLY theme source).
+   The panel's stylesheet entry. Layer order: Tailwind's theme variables, then the hand-written sheet (styles.css: the
+   theme blocks, the element base and every component not yet migrated) in its own layer, then the utilities -- so a
+   utility class always wins over a legacy rule, whatever the legacy selector's specificity. No preflight yet: styles.css
+   is the base until the last migration batch (web/TAILWIND-MIGRATION.md). */
+@layer theme, legacy, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "./fonts.css";
+@import "./styles.css" layer(legacy);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Every colour utility reads a theme token (inline: the utility carries var(--token), so a theme switch repaints it).
+   The default palette is cleared, so `bg-blue-500` does not exist. Mapping: web/TAILWIND-MIGRATION.md §1. */
+@theme inline {
+  --color-*: initial;
+  --color-page: var(--bg);
+  --color-card: var(--card);
+  --color-elevated: var(--bg-elevated);
+  --color-well: var(--well);
+  --color-field: var(--field);
+  --color-hover: var(--bg-hover);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-fg-strong: var(--text-strong);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-subtle: var(--ok-subtle);
+  --color-warn: var(--warn);
+  --color-warn-subtle: var(--warn-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-stall: var(--stall);
+  --color-scrim: rgb(0 0 0 / 0.45);
+
+  /* Spacing: one step is --space-1 (4px), so p-1 p-2 p-3 p-4 p-6 are the scale's 4 8 12 16 24. */
+  --spacing: var(--space-1);
+  --spacing-control: var(--control-h);
+  --spacing-control-sm: var(--control-h-sm);
+
+  --radius-*: initial;
+  --radius-inset: var(--radius-xs);
+  --radius-control: var(--radius-sm);
+  --radius-card: var(--radius);
+  --radius-full: 9999px;
+
+  --shadow-*: initial;
+  --shadow-raise: var(--shadow);
+  --shadow-float: var(--shadow-pop);
+
+  --default-transition-duration: var(--dur);
+  --default-transition-timing-function: var(--ease);
+}
+
+/* DESIGN.md type: 12 (pills, meta), 13 (controls), 14 body, 16, h2 18, h1 22. */
+@theme {
+  --text-*: initial;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  /* One breakpoint, the sheet's: md: is >= 761px, max-md: is <= 760px (DESIGN.md "Layout"). */
+  --breakpoint-*: initial;
+  --breakpoint-md: 761px;
+}
+
+/* The bundled fonts as variables (and font-sans / font-mono utilities); static so they exist even while unused. */
+@theme static {
+  --font-*: initial;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.js";
 import { AuthGate } from "./AuthGate.js";
 import { initI18n } from "./i18n.js";
-import "./styles.css";
+import "./index.css";
 import { applyTheme, readTheme } from "./theme.js";
 
 const host = document.getElementById("root");

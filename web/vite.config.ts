@@ -1,8 +1,9 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     // Flat names, no hashed subdirectories: staticFiles.ts serves by exact
     // filename out of a Map and never joins a path, so every emitted asset has
