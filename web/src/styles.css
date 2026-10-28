@@ -324,7 +324,7 @@ button[aria-busy="true"] { cursor: progress; opacity: 0.75; }
 /* Two buttons side by side never touch (many forms put them in plain flow), nor a button after an inline link (the group
    header's source-requirement link); rows that space their own items reset it. */
 :where(button, .btn, a) + :where(button, .btn) { margin-inline-start: var(--space-2); }
-:where(.group-filter, .project-actions, .detail-region-tabs, .group-actions-menu, .confirm-inline, .overview-heading > div, .group-card-row) > :where(button, .btn) { margin-inline-start: 0; }
+:where(.group-filter, .project-actions, .detail-region-tabs, .confirm-inline, .overview-heading > div, .group-card-row) > :where(button, .btn) { margin-inline-start: 0; }
 /* Issue #56: a button that is only an icon (its name is its aria-label); square, the icon centred, pushed to the row's end. */
 .icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; line-height: 0; min-width: var(--control-h); }
 .section-head > .icon-button { margin-left: auto; align-self: center; }
@@ -366,13 +366,11 @@ th, td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-ali
 thead th { border-bottom-color: var(--border-strong); white-space: nowrap; }
 tbody tr:last-child > td { border-bottom: 0; }
 tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transparent); }
-/* Confirmations: an inline confirm (a role="dialog" box or a confirm group) is an inset well with a firm edge; the
-   native <dialog> floats on the pop shadow over a dimmed page. */
+/* Confirmations: an inline confirm (a role="dialog" box or a confirm group) is an inset well with a firm edge. The modal
+   dialog (ui/Dialog.tsx, Radix) floats on the pop shadow over a dimmed page; its utilities override this rule. */
 [role="dialog"]:not(dialog) {
   background: var(--well); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: var(--space-3) var(--space-4); margin: var(--space-2) 0;
 }
-dialog { background: var(--card); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); padding: 20px; max-width: min(560px, calc(100vw - 32px)); }
-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .confirm-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 6px 10px; border-width: 1px; border-style: solid; border-radius: var(--radius-sm); }
 
 /* Pills */
@@ -452,9 +450,6 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .group-card-row { position: relative; display: flex; flex-wrap: wrap; min-width: 0; }
 .group-card-row > .group-card { flex: 1; min-width: 0; padding-right: 48px; }
 .group-more { position: absolute; top: 8px; right: 8px; min-width: 32px; min-height: 32px; z-index: 1; }
-.group-actions-menu { position: absolute; right: 8px; top: 43px; z-index: 10; display: grid; gap: 2px; min-width: 170px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-elevated); box-shadow: var(--shadow-pop); }
-.group-actions-menu button { text-align: left; justify-content: flex-start; background: transparent; border-color: transparent; box-shadow: none; }
-.group-actions-menu button:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; }
 .group-card-row > .refusal { flex-basis: 100%; }
 .group-card:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .group-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

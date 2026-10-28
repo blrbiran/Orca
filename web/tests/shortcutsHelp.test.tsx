@@ -2,23 +2,18 @@
 /**
  * Tester round 2 spec §10 (ruling H12, C36, C37; tester #55): no new single-key binding -- not even `?` (WCAG 2.1.4, and
  * Vimium's own help key) -- and a visible footer button that opens the list of the keys Orca uses in a native modal
- * <dialog> named by its heading, returning focus to the button on close. The list is a constant next to the functions
+ * <dialog> named by its heading, returning focus to the button on close. Since the tester round of 2026-10-28 the modal
+ * is the panel's Radix dialog (ui/Dialog.tsx), not a native <dialog>; the promises are the same. The list is a constant next to the functions
  * that decide the keys, and names exactly the letters they act on.
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { SHORTCUTS, isRetryKey, reviewKeyAction } from "../src/reviewKeys.js";
 import { Shell } from "../src/Shell.js";
 import { installFakePanel } from "./fixtures/twoProjects.js";
 import { ALPHA, groupSummary, planGroupView } from "./fixtures/twoProjects.js";
 
-// jsdom may not implement the modal dialog; stand-ins that keep the open state and fire "close" like a browser.
-beforeAll(() => {
-  const proto = HTMLDialogElement.prototype as HTMLDialogElement & { showModal?: () => void; close?: () => void };
-  if (typeof proto.showModal !== "function") proto.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
-  if (typeof proto.close !== "function") proto.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); this.dispatchEvent(new Event("close")); };
-});
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.localStorage.clear(); });
 
 /** The App with one group open in Tasks; resolves to the open group's region. */
@@ -38,30 +33,32 @@ describe("no ? binding; a button opens the list (C36)", () => {
     installFakePanel();
     render(<App />);
     await screen.findByRole("button", { name: "Keyboard shortcuts" });
-    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");
     const event = new KeyboardEvent("keydown", { key: "?", bubbles: true, cancelable: true });
     document.body.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
-    expect(showModal).not.toHaveBeenCalled();
-    expect(document.querySelector("dialog[open]")).toBeNull();
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): no dialog of any kind opened (was: showModal never called, no dialog[open]).
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   // Rewritten for tester issue #56: the button is on the group view (and Decisions), not in the sidebar footer. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
   it("the button opens a modal dialog named by its heading; closing it returns focus to the button", async () => {
     await groupOpen();
-    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");
     const button = inTasks();
     button.focus();
     fireEvent.click(button);
-    expect(showModal).toHaveBeenCalledTimes(1);
-    const dialog = button.nextElementSibling as HTMLDialogElement;
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): the Radix dialog (was: a native <dialog> after the button, opened by showModal).
+    const dialog = screen.getByRole("dialog", { name: "Keys Orca uses" });
     const heading = document.getElementById(dialog.getAttribute("aria-labelledby")!)!;
     expect(heading.tagName).toBe("H2");
     expect(heading.textContent).toBe("Keys Orca uses");
     expect(dialog.textContent).toContain("r: retry the open task's run");
-    const close = [...dialog.querySelectorAll("button")].find((candidate) => candidate.textContent === "Close")!;
+    // Modal: the page behind it is hidden from assistive technology while it is open. mutation: modal={false} -> red
+    expect(button.closest('[aria-hidden="true"]')).not.toBeNull();
+    const close = within(dialog).getByRole("button", { name: "Close" });
     close.focus();
     fireEvent.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // mutation: onCloseAutoFocus={(event) => event.preventDefault()} on the dialog -> focus is not returned, red
     expect(document.activeElement).toBe(button);
   });
 });

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { GroupList } from "../src/GroupList.js";
 import { Shell } from "../src/Shell.js";
@@ -18,6 +18,9 @@ const group = (over: Partial<GroupSummaryV1> = {}): GroupSummaryV1 => ({
   archived: false, ...over,
 });
 afterEach(() => { cleanup(); window.localStorage.clear(); });
+// The Radix menu (ui/Menu.tsx) starts listening for a press outside it one task after it opens, so the press that opened
+// it can never close it, and moves focus between items one task after an arrow key; the criteria below wait that task.
+const tick = (): Promise<void> => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
 it("the visible and context affordances open the same owner menu without nesting buttons", () => {
   const onSelect = vi.fn(), onAction = vi.fn();
@@ -37,10 +40,12 @@ it("the visible and context affordances open the same owner menu without nesting
 
 // Issue #81: a menu left open covers the list; it closes on a press outside it and on Escape wherever focus is, as the
 // requirement list's menus do (the same GroupActionsMenu), while a press inside it keeps it open for its item.
-it("closes an open menu on a press outside it or Escape anywhere, and keeps it open for a press inside", () => {
+it("closes an open menu on a press outside it or Escape anywhere, and keeps it open for a press inside", async () => {
   render(<><p>elsewhere</p><GroupList groups={[group()]} selected={null} onSelect={vi.fn()} onAction={vi.fn()} /></>);
   const more = screen.getByRole("button", { name: "More actions" });
   fireEvent.click(more);
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): the presses below come one task after the open, as a person's do (Radix ignores a press in the opening task).
+  await tick();
   fireEvent.pointerDown(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Copy group ID" }));
   expect(screen.getByRole("menu")).toBeTruthy();
   fireEvent.pointerDown(screen.getByText("elsewhere"));
@@ -53,15 +58,19 @@ it("closes an open menu on a press outside it or Escape anywhere, and keeps it o
   fireEvent.pointerDown(more);
   fireEvent.click(more);
   expect(screen.getByRole("menu")).toBeTruthy();
+  await tick();
+  // mutation: drop the Menu's onPointerDownOutside trigger check -> this press closes it and the click reopens it, red
   fireEvent.pointerDown(more);
   fireEvent.click(more);
   expect(screen.queryByRole("menu")).toBeNull();
 });
 
-it("closes the requirement list's menu on a press outside it", () => {
+it("closes the requirement list's menu on a press outside it", async () => {
   render(<RequirementsPanel config={requirementConfig} summary={summaryWith(requirementView("awaiting-answers"))} views={{}} selected={null} agents={null} language="en" onSelect={vi.fn()} onCommand={vi.fn()} />);
   fireEvent.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
   expect(screen.getByRole("menu")).toBeTruthy();
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): the outside press comes one task after the open.
+  await tick();
   fireEvent.pointerDown(screen.getByRole("heading", { name: "Requirements" }));
   expect(screen.queryByRole("menu")).toBeNull();
 });
@@ -85,7 +94,7 @@ it("pending requirement work disables archive with a reason", () => {
   expect(archive.getAttribute("aria-describedby")).toBeTruthy();
 });
 
-it("each More actions trigger describes its own group and supports menu arrow navigation", () => {
+it("each More actions trigger describes its own group and supports menu arrow navigation", async () => {
   render(<GroupList groups={[group({ groupId: "g" }), group({ groupId: "h" })]} selected={null} onSelect={vi.fn()} onAction={vi.fn()} />);
   const triggers = screen.getAllByRole("button", { name: "More actions" });
   expect(triggers).toHaveLength(2);
@@ -94,16 +103,23 @@ it("each More actions trigger describes its own group and supports menu arrow na
   fireEvent.click(triggers[0]!);
   const menu = screen.getByRole("menu");
   const items = within(menu).getAllByRole("menuitem");
+  // mutation: drop the Menu's first-item focus (the content ref) -> Radix focuses the box, red
   expect(document.activeElement).toBe(items[0]);
-  fireEvent.keyDown(menu, { key: "ArrowDown" });
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): a key goes to the focused item, as a keyboard sends it (the hand-rolled menu read keys on the box; Radix's
+  // roving focus reads them on the item and moves focus one task later).
+  const key = async (name: string): Promise<void> => { fireEvent.keyDown(document.activeElement!, { key: name }); await tick(); };
+  await key("ArrowDown");
   expect(document.activeElement).toBe(items[1]);
-  fireEvent.keyDown(menu, { key: "End" });
+  await key("End");
   expect(document.activeElement).toBe(items[2]);
-  fireEvent.keyDown(menu, { key: "Home" });
+  await key("Home");
   expect(document.activeElement).toBe(items[0]);
-  fireEvent.keyDown(menu, { key: "ArrowUp" });
+  // mutation: drop `loop` from the Menu -> ArrowUp on the first item stays there, red
+  await key("ArrowUp");
   expect(document.activeElement).toBe(items[2]);
-  fireEvent.keyDown(menu, { key: "Escape" });
+  expect(menu.isConnected).toBe(true);
+  await key("Escape");
+  expect(screen.queryByRole("menu")).toBeNull();
   expect(document.activeElement).toBe(triggers[0]);
 });
 
