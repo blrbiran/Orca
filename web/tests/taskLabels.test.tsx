@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
+import { labelCustom, labelCustomClass, labelSystem, labelSystemClass } from "../src/ui/classes.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { ControlPanel } from "../src/ControlPanel.js";
@@ -67,7 +68,9 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
   it("shows a system label and a custom label with different classes", () => {
     render(<Stateful view={view([workItem({ labels: ["bug", "custom:前端"] })])} onCommand={vi.fn()} />);
     const chips = [...document.querySelectorAll("td span.label")].map((chip) => [chip.textContent, chip.className]);
-    expect(chips).toEqual([["bug", "label label-system"], ["custom:前端", "label label-custom"]]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the two kinds keep their hook class and add the utility strings of ui/classes.ts.
+    // mutation: both kinds wear labelSystem -> red
+    expect(chips).toEqual([["bug", labelSystemClass], ["custom:前端", labelCustomClass]]);
   });
 
   it("filters work items by label, any of the checked ones", () => {
@@ -173,16 +176,13 @@ describe("the group nav's completion (spec §4.2)", () => {
   });
 });
 
-describe("styles.css tells the two label kinds apart (spec §4.2)", () => {
-  it("gives system and custom labels different rules", () => {
-    // Resolved without the global URL: this file runs under jsdom, whose URL node's fileURLToPath refuses.
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
-    const rule = (selector: string): string => {
-      const at = css.indexOf(`${selector} {`);
-      if (at === -1) throw new Error(`no rule for ${selector}`);
-      return css.slice(at, css.indexOf("}", at));
-    };
-    expect(rule(".label-system")).toContain("background: var(--accent-subtle)");
-    expect(rule(".label-custom")).toContain("border: 1px dashed var(--border-strong)");
+describe("the label classes tell the two label kinds apart (spec §4.2)", () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the two looks are the utility strings of ui/classes.ts (were the .label-system / .label-custom rules).
+  // mutation: labelCustom loses its dashed edge, then labelSystem loses its tint -> red
+  it("gives system and custom labels different looks", () => {
+    expect(labelSystem.split(" ")).toContain("bg-accent-subtle");
+    expect(labelCustom.split(" ")).toEqual(expect.arrayContaining(["border", "border-dashed", "border-line-strong"]));
+    expect(labelSystem).not.toBe(labelCustom);
   });
 });
+

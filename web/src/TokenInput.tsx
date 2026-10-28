@@ -5,6 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { tokenField } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { currentLanguage } from "./i18n.js";
 
@@ -93,5 +94,5 @@ export function TokenInput({ value, onChange, onInvalid, onReset, allowEmpty, on
     ? <small role="alert" style={{ color: "red" }}>{t("tokens.invalid", { min: formatTokens(min, lang) })}</small>
     : blank&&allowEmpty&&emptyLabel?<small>{emptyLabel}</small>: parsed !== null && parsed >= 1000 && <small>{t("tokens.hint", { short: shortTokens(parsed) })}</small>;
   if (label === undefined) return <>{input}{note}</>;
-  return <div className="token-field"><label>{label}{input}</label>{note}</div>;
+  return <div className={`token-field ${tokenField}`}><label>{label}{input}</label>{note}</div>;
 }

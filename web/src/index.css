@@ -41,6 +41,12 @@
   --color-kind-1: var(--kind-1);
   --color-kind-2: var(--kind-2);
   --color-kind-3: var(--kind-3);
+  /* A work item's category fill (the dependency graph's legend swatches). */
+  --color-cat-idle: var(--cat-idle);
+  --color-cat-running: var(--cat-running);
+  --color-cat-waiting: var(--cat-waiting);
+  --color-cat-blocked: var(--cat-blocked);
+  --color-cat-done: var(--cat-done);
   --color-scrim: rgb(0 0 0 / 0.45);
 
   /* Spacing: one step is --space-1 (4px), so p-1 p-2 p-3 p-4 p-6 are the scale's 4 8 12 16 24. */

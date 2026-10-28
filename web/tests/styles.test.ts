@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { inlinePick, kindDot, tabItem, tabRow } from "../src/ui/classes.js";
+import { cardGoal, groupCard, inlinePick, kindDot, tabItem, tabRow } from "../src/ui/classes.js";
 import { carrying } from "./sourceClasses.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -34,8 +34,10 @@ describe("styles.css", () => {
 
   // Flow gaps Task 10a: a card's title or goal summary never runs past two lines (CardGoal.tsx, web/tests/cardGoal.test.tsx).
   it("clamps a card's goal to two lines with an ellipsis, wrapping unbroken text", () => {
-    const r = rule(".card-goal");
-    for (const part of ["-webkit-line-clamp: 2", "line-clamp: 2", "-webkit-box-orient: vertical", "overflow: hidden", "overflow-wrap: anywhere"]) expect(r).toContain(part);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the clamp is the utility string ui/classes.ts cardGoal (was the .card-goal rule), worn by CardGoal.tsx.
+    // mutation: drop line-clamp-2 from cardGoal -> red; mutation: CardGoal stops wearing cardGoal -> red
+    expect(cardGoal.split(" ")).toEqual(expect.arrayContaining(["line-clamp-2", "wrap-anywhere"]));
+    expect(src("CardGoal.tsx")).toMatch(/\["card-goal", cardGoal, props\.className\]/);
   });
 
   it("hides inactive panes by class, the only thing allowed to hide one (spec §5.1)", () => {
@@ -56,7 +58,10 @@ describe("styles.css", () => {
   // Deferred final-review Minor (human go-ahead, session f8281a60): the open control group carries
   // aria-current like the open decision row does, and gets the same selected look.
   it("marks the open control group the way it marks the open decision", () => {
-    expect(rule('nav[aria-label="Control groups"] button[aria-current="true"]')).toContain("background: var(--accent-subtle)");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the selected look is on the card's own class string (was the nav[aria-label] button[aria-current] rule).
+    // mutation: drop the aria-[current=true]:bg-accent-subtle class from groupCard -> red
+    expect(groupCard.split(" ")).toEqual(expect.arrayContaining(["aria-[current=true]:bg-accent-subtle", "aria-[current=true]:border-accent"]));
+    expect(src("GroupList.tsx")).toContain("aria-current={props.selected}");
   });
 
   // Human ruling (session f8281a60): each importance level paints the kind pill's dot its own colour.
@@ -76,16 +81,18 @@ describe("styles.css", () => {
   // Task 11 acceptance (session ffec7b28): the menu's sr-only owner line showed and squeezed a group card.
   // Mutation "drop the .sr-only rule": rule() throws.
   it("hides sr-only text from sight but not from assistive technology", () => {
-    const r = rule(".sr-only");
-    for (const part of ["position: absolute", "width: 1px", "height: 1px", "overflow: hidden", "clip: rect(0, 0, 0, 0)"]) expect(r).toContain(part);
-    expect(r).not.toContain("display: none");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the hiding is Tailwind's own sr-only utility (was the .sr-only rule); the criterion pins that the menu's owner line wears it and that no sheet re-declares the class.
+    // mutation: rename the menu's class to "sr" -> red; mutation: declare ".sr-only { display: none }" in styles.css -> red
+    expect(src("GroupActionsMenu.tsx")).toMatch(/className="sr-only">\{t\("control\.groupMenu\.owner"/);
+    expect(css).not.toMatch(/\.sr-only\s*\{/);
   });
 
   // Issue-fixes spec §6.4: the whole card is the button, with a border, a hover and a focus style of its own.
   it("gives a group card a border, a hover and a visible focus", () => {
-    expect(rule(".group-card")).toContain("border: 1px solid var(--border)");
-    expect(rule(".group-card:hover")).toContain("background: var(--bg-hover)");
-    expect(rule(".group-card:focus-visible")).toContain("outline: 2px solid var(--accent)");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the card's look is the utility string ui/classes.ts groupCard (was the .group-card rules).
+    // mutation: drop hover:bg-hover, then focus-visible:outline-2, then border-line, each from groupCard -> red
+    const parts = groupCard.split(" ");
+    expect(parts).toEqual(expect.arrayContaining(["border", "border-line", "hover:bg-hover", "focus-visible:outline-2", "focus-visible:outline-accent"]));
   });
 
   // Issue-fixes spec §6.5, plan Review Focus 5: every category colour exists in the dark theme and in both light blocks.

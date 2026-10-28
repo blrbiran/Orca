@@ -341,7 +341,7 @@ export const en = {
     callLine: "{{phase}} · call {{seq}} · {{runtime}} · {{size}}", notRecorded: "not recorded", live: "live", final: "finished",
     truncatedAt: "recording stopped at {{bytes}} bytes", lineDropped: "a line of {{bytes}} bytes was not recorded",
     oversized: "oversized line · {{bytes}} bytes · {{type}}", archived: "read from the run's archive",
-    earlier: "Earlier", later: "Later", more: "Load more of {{name}}", toolDone: "done:", toolError: "error:",
+    earlier: "Earlier", later: "Later", follow: "Follow latest", following: "following the newest lines", more: "Load more of {{name}}", toolDone: "done:", toolError: "error:",
     kind: { message: "message", tool_call: "tool", tool_result: "tool result", file_change: "file", thinking: "thinking", result: "result", notice: "notice", unknown: "line" },
   },
   common: { none: "none", na: "n/a", unknown: "unknown", dispatchBlocked: "dispatch blocked", dispatchLive: "dispatch live" },

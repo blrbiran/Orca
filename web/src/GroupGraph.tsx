@@ -25,7 +25,7 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
   return (
     <figure className="group-graph" aria-label={t("board.graph.region")}>
       <figcaption>{t("board.graph.caption")}</figcaption>
-      <div className="group-graph-layers">
+      <div className="group-graph-layers flex gap-6 overflow-x-auto">
         {layers.map((ids, layer) => (
           <ol key={layer} aria-label={t("board.graph.layer", { n: layer + 1 })}>
             {ids.map((id) => <li key={id}>{id}{byId.get(id)?.goal !== undefined ? ` · ${byId.get(id)!.goal}` : ""}</li>)}

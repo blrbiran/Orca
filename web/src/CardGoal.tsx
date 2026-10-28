@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { GroupSummaryV1 } from "./controlTypes.js";
+import { cardGoal } from "./ui/classes.js";
 
 /** Task 10a: past this many characters a goal is cut for a card (the CSS clamp then holds it to two lines). */
 export const CARD_SUMMARY_MAX = 120;
@@ -33,5 +34,5 @@ export function CardGoal(props: { group: Pick<GroupSummaryV1, "goal" | "requirem
   if (text === "" && props.fallback !== undefined) return <>{props.fallback}</>;
   if (text === "") return null;
   const Tag = props.as ?? "span";
-  return <Tag className={["card-goal", props.className].filter(Boolean).join(" ")} title={goal}>{text}</Tag>;
+  return <Tag className={["card-goal", cardGoal, props.className].filter(Boolean).join(" ")} title={goal}>{text}</Tag>;
 }
