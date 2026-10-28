@@ -27,9 +27,13 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Tabs: ONE component — the Settings category row, the group detail's region tabs and the corrections tabs: a row over a bottom rule, quiet medium-weight items, the open one bold over a 2px accent underline; it wraps when narrow.
 - Pills and badges: 12px, medium weight, hairline edge; a badge's colour is its `data-tone` (none = neutral).
 - Tables: uppercase 12px headers over a strong rule, 8×10 cells, row hover tint, no rule under the last row. On ≤760px a table's box scrolls sideways and a headed table keeps 40rem, so the page never scrolls sideways.
-- Confirmations: an inline `role="dialog"` box is a well with a strong edge; a confirm group (`.confirm-inline`, e.g. the #62 charge retry) is an inline box toned `warn`; a native `<dialog>` floats on `--shadow-pop` over a dimmed page. Menus float on `--shadow-pop` too.
+- Confirmations: an inline `role="dialog"` box is a well with a strong edge; a confirm group (`.confirm-inline`, e.g. the #62 charge retry) is an inline box toned `warn`; the modal dialog (`src/ui/Dialog.tsx`, Radix) floats on `--shadow-pop` over a dimmed page. Menus (`src/ui/Menu.tsx`, Radix) float on `--shadow-pop` too; they are the only menu and dialog implementations.
 - The browser's own surfaces follow the theme: text selection, caret, scrollbars, link underline offset, summary markers.
 - Motion is limited to colour/edge/shadow transitions and the press; under `prefers-reduced-motion` they and the running pulse stop.
+
+## Styling (tester round 2026-10-28)
+- Tailwind v4 utilities over the tokens above (`src/index.css` maps them; Tailwind's own palette is cleared); the theme blocks in `styles.css` stay the only theme source. How to write and migrate a component: `web/TAILWIND-MIGRATION.md`.
+- Inter and JetBrains Mono are bundled (woff2) as `--font-sans` / `--font-mono`; the default look keeps the system stack (`--font`) until a theme chooses them.
 
 ## Layout
 - ≥761px: fixed shell, sidebar and content scroll independently. ≤760px wide or ≤560px tall: the page scrolls as a whole; nav is one horizontally scrolling row; the footer hides. The project caption stays (it explains the hidden Add/Rename).
