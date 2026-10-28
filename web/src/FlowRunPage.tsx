@@ -87,7 +87,7 @@ export function spendReason(reason: string, t: TFunction): string {
 
 function SpendLine(props: { spend: FlowSpendV1 }): JSX.Element {
   const { t } = useTranslation();
-  return <p className="flow-spend" data-testid="flow-spend">{spendText(props.spend, t)}</p>;
+  return <p className="tabular-nums" data-testid="flow-spend">{spendText(props.spend, t)}</p>;
 }
 
 /** Gaps spec §4.1: a quote, and a heading and/or paragraph number -- each part one anchor, as the CLI builds them. */
@@ -441,7 +441,7 @@ function Remaining(props: { deadline: number }): JSX.Element {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
   const left = Math.max(0, Math.ceil((props.deadline - now) / 1000));
-  return <span data-testid="flow-remaining" className="flow-remaining">{t("flow.plan.left", { left: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</span>;
+  return <span data-testid="flow-remaining" className="tabular-nums">{t("flow.plan.left", { left: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` })}</span>;
 }
 
 /**

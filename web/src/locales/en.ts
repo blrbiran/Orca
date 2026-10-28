@@ -259,6 +259,7 @@ export const en = {
       flowNeedsYou_one: "{{count}} step waits for you",
       flowNeedsYou_other: "{{count}} steps wait for you",
       flowPool: "{{drawn}} of {{pool}} tokens drawn",
+      tasksDone: "{{done}}/{{total}} tasks done",
       waitingFor: "waiting for {{groups}}",
       waitingSlot: "waiting for a slot",
       held: "confirmed only, not started",

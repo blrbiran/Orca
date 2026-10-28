@@ -124,3 +124,19 @@ export const tokenField = "mb-[10px] flex flex-col gap-1 text-xs text-muted [&>l
 export const depSwatch = "mr-1 inline-block size-3 rounded-[3px] border border-line-strong align-middle";
 /** An inline confirm (a confirm group): an inset well with a firm edge, inline. Tone comes from data-tone. */
 export const confirmInline = "inline-flex flex-wrap items-center gap-2 rounded-control border px-[10px] py-[6px] [&>button]:ms-0";
+
+/** Board (tester round 2026-10-28): a card is an inset box; its badges are boxed (not pills) so a second line stays inside the border (issue #58). */
+export const boardCard = "cursor-grab rounded-control border border-line bg-well px-2.5 py-2 transition-colors hover:border-line-strong";
+export const boardCardBadge = "max-w-full rounded-control wrap-anywhere";
+/** The card's open control is a bare button (it was `all: unset`): no chrome, inherited type, no min height. */
+export const boardCardOpen = "inline min-h-0 cursor-pointer rounded-none border-0 bg-transparent p-0 text-start text-base leading-[inherit] font-semibold text-inherit shadow-none transition-none hover:bg-hover";
+/** Tester #54: a dragged card's refusing columns dim. Padding, edge and fill come from the legacy labelled-section card rule, which out-ranks the old
+ *  `.board-column` rule -- and so also its `[data-drop="allowed"]` accent outline, which never painted. Kept as it was (the migration does not change the look). */
+export const boardColumnBox = "min-h-[120px] shrink-0 basis-[240px] data-[drop=refused]:opacity-55";
+
+/** Overview: buttons wrap and align left (a goal can be long); each column is bare, not a card inside the Overview card (it out-ranks the
+ *  labelled-section card rule); a row is a rule-separated list item. */
+export const overviewRowButton = "max-w-full justify-start text-left whitespace-normal";
+export const overviewColumn = "m-0 min-w-0 border-0 bg-transparent p-0 shadow-none";
+export const overviewRowList = "m-0 list-none p-0";
+export const overviewRowItem = "border-b border-line py-4 wrap-anywhere";

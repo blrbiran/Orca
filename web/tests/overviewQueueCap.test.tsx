@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Overview, OVERVIEW_DECISION_LIMIT, visibleQueue } from "../src/Overview.js";
@@ -31,15 +29,18 @@ describe("Overview decision rows (P1-4)", () => {
   });
 
   it("aligns the two columns at the top and draws no card inside the Overview card", () => {
-    const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
-    const at = css.indexOf(".overview-layout {");
-    expect(css.slice(at, css.indexOf("}", at))).toContain("align-items: start");
-    // Must out-rank `.section-pane section[aria-label]` (card) and `.section-pane section section` (inner bg).
-    const inner = css.indexOf(".section-pane .overview-layout > section[aria-label] {");
-    expect(inner).toBeGreaterThan(-1);
-    const r = css.slice(inner, css.indexOf("}", inner));
-    expect(r).toContain("border: 0");
-    expect(r).toContain("box-shadow: none");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the `.overview-layout` rules became
+    // utilities in Overview.tsx, so the criterion reads the rendered classes instead of styles.css). Utilities out-rank the
+    // `.section-pane section[aria-label]` card rule and `.section-pane section section` fill, whatever their selectors.
+    const html = render([decision("a")]);
+    const layout = /<div class="([^"]*)"><section class="([^"]*)" aria-label="[^"]*"><h3>/.exec(html);
+    expect(layout).not.toBeNull();
+    // mutation: drop items-start from the grid -> the shorter column stretches to the taller one, red
+    expect(layout![1]!.split(" ")).toEqual(expect.arrayContaining(["grid", "items-start"]));
+    const columns = [...html.matchAll(/<section class="([^"]*)" aria-label="[^"]*"><h3>/g)].map((m) => m[1]!.split(" "));
+    expect(columns).toHaveLength(2);
+    // mutation: drop border-0 or shadow-none from the column -> a card inside the card, red
+    for (const column of columns) expect(column).toEqual(expect.arrayContaining(["border-0", "shadow-none", "bg-transparent", "p-0", "m-0"]));
   });
 });
 
@@ -47,7 +48,7 @@ describe("Overview decision rows (P1-4)", () => {
 describe("Overview next step and empty state (tester #25, #23)", () => {
   it("marks only the first queue row as Next", () => {
     const html = render([budget, decision("a")]);
-    expect(html.match(/class="overview-next"/g)?.length).toBe(1);
+    expect(html.match(/class="overview-next[ "]/g)?.length).toBe(1);
     expect(html.indexOf("Next</span>")).toBeLessThan(html.indexOf("question a"));
     expect(html.indexOf("Next</span>")).toBeGreaterThan(-1);
     expect(render([])).not.toContain("overview-next");

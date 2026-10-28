@@ -260,7 +260,7 @@ button[aria-busy="true"] { cursor: progress; opacity: 0.75; }
 /* Two buttons side by side never touch (many forms put them in plain flow), nor a button after an inline link (the group
    header's source-requirement link); rows that space their own items reset it. */
 :where(button, .btn, a) + :where(button, .btn) { margin-inline-start: var(--space-2); }
-:where(.detail-region-tabs, .overview-heading > div) > :where(button, .btn) { margin-inline-start: 0; }
+:where(.detail-region-tabs) > :where(button, .btn) { margin-inline-start: 0; }
 input, select, textarea {
   font: inherit; font-size: var(--text-sm); color: var(--text-strong); background: var(--field);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 10px;
@@ -401,20 +401,8 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
   .kbd-hint { display: none; }
 }
 
-/* Progress spec layout B: primary progress first, queue beside it when space allows. */
-.overview-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.overview-heading > div { display: flex; gap: .5rem; flex-wrap: wrap; }
-.overview-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 2rem; align-items: start; }
-.section-pane .overview-layout > section[aria-label] { min-width: 0; border: 0; box-shadow: none; background: transparent; padding: 0; margin: 0; }
-.overview-progress, .overview-queue { list-style: none; margin: 0; padding: 0; }
-.overview-progress > li, .overview-queue > li { border-bottom: 1px solid var(--border); padding: 1rem 0; overflow-wrap: anywhere; }
-.overview-progress > li > div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
-.overview-progress p, .overview-queue p { margin: .5rem 0; }
-.overview-counts { display: flex; gap: .75rem; flex-wrap: wrap; }
-.overview button { white-space: normal; text-align: left; max-width: 100%; justify-content: flex-start; }
-.overview progress { max-width: 100%; width: 100%; }
+/* Progress spec layout B (Overview.tsx, utilities): a focused Overview region (a deep link's target) shows the accent ring. */
 [data-overview-region]:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
-@media (max-width: 850px) { .overview-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
 
 /* Ruling H6(b): one Settings page, one category shown (the rest stay mounted, hidden by the rule below). The Settings page
    itself is in Tailwind utilities since the tester round of 2026-10-28 (ui/classes.ts, web/TAILWIND-MIGRATION.md). */
@@ -456,24 +444,6 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 /* QA walk (session e236bbe4): the document's front matter, apart from its title -- small, secondary, wrapping. */
 .requirement-front-matter { margin: 0 0 8px; font-size: 0.85em; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Kanban spec 2026-10-20 §4: the board tab -- columns side by side, scrolling sideways on a narrow screen. */
-/* Plan Task 10-B: the board's top-left flow start button and the start dialog it opens (an inset box, DESIGN.md). */
-.board-toolbar { margin: 0 0 12px; }
-.flow-start-dialog { background: var(--well); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 12px 16px; margin-top: 8px; max-width: 640px; }
-.flow-start-dialog fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin: 0 0 10px; }
-.board-columns { display: flex; gap: 12px; overflow-x: auto; align-items: flex-start; }
-.board-column { flex: 0 0 240px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; min-height: 120px; }
-/* Tester #54: while a card is dragged, the columns that take it are outlined in the accent; the rest dim. */
-.board-column[data-drop="allowed"] { border-color: var(--accent); border-style: dashed; }
-.board-column[data-drop="refused"] { opacity: 0.55; }
-/* Tester #25: the Overview queue's first row, the next step. */
-.overview-next { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; }
-.board-drop-hint { margin: 0 0 6px; color: var(--accent); font-size: 12px; }
-.board-column ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.board-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; cursor: grab; background: var(--well); transition: border-color var(--dur) var(--ease); }
-.board-card:hover { border-color: var(--border-strong); }
-.board-card-open { all: unset; cursor: pointer; font-weight: 600; }
-.board-card-goal { margin: 4px 0; }
 /* Ruling H8: a group's status light, 7px, coloured by groupLed from the theme's tone tokens (DESIGN.md); decorative. */
 .led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--muted); opacity: 0.45; }
 .led[data-led="running"] { background: var(--ok); opacity: 1; box-shadow: 0 0 6px var(--ok); }
@@ -481,8 +451,4 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 .led[data-led="waiting"] { background: var(--warn); opacity: 1; }
 /* Ruling H8: key figures (tokens, durations, attempts) in equal-width digits, so a column or a polled line does not jitter. */
 .num { font-variant-numeric: tabular-nums; }
-/* Issue #58: a card is narrow, so a badge may take two lines; a pill radius would clip them, so it wraps inside a box. */
-.board-card .badge { border-radius: 6px; max-width: 100%; overflow-wrap: anywhere; }
-/* Gaps spec §5.3, §10 (plan Task 10-A): a deadline that ticks and token counts sit in rows; digits keep their width. */
-.flow-remaining, .flow-spend { font-variant-numeric: tabular-nums; }
 

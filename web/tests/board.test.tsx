@@ -3,14 +3,14 @@
  * Kanban spec 2026-10-20 §4 (session 9ec98639): the board tab. Columns come from the summary only; a drag sends exactly
  * one existing command or is refused on the page; the group graph adds and removes a person's edges.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardView } from "../src/BoardView.js";
 import type { ControlAction } from "../src/controlApi.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
 import { boardColumn, boardDrop, groupLed } from "../src/groupCategory.js";
 import { GroupList } from "../src/GroupList.js";
-import i18n from "../src/i18n.js";
+import i18n, { currentLanguage } from "../src/i18n.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -158,12 +158,14 @@ describe("the system-debug badge (#58)", () => {
   });
 
   it("boxes a board card's badge so a second line stays inside its border", () => {
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
-    const at = css.indexOf(".board-card .badge {");
-    expect(at).toBeGreaterThan(-1);
-    const rule = css.slice(at, css.indexOf("}", at));
-    // mutation: drop the rule -> the 999px pill clips a two-line badge, red
-    for (const part of ["border-radius: 6px", "max-width: 100%", "overflow-wrap: anywhere"]) expect(rule).toContain(part);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the `.board-card .badge` rule became
+    // utilities on each badge in BoardView.tsx, so the criterion reads the rendered badges instead of styles.css)
+    const groups = [g({ groupId: "stopped", stopState: "paused", card: { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure: null, reviewFindings: { major: 1, minor: 2 } } })];
+    render(<BoardView groups={groups} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const badges = [...screen.getByTestId("board-card-stopped").querySelectorAll<HTMLElement>(".badge")];
+    expect(badges.length).toBe(3);
+    // mutation: drop one of the three utilities from cardBadge -> the 999px pill clips a two-line badge, red
+    for (const badge of badges) for (const part of ["rounded-control", "max-w-full", "wrap-anywhere"]) expect(badge.classList.contains(part), `${badge.textContent}: ${part}`).toBe(true);
   });
 });
 
@@ -238,6 +240,57 @@ describe("the board card's open control says where it leads (tester #49)", () =>
       expect(open("req").getAttribute("title")).toBe("打开这个需求");
     } finally {
       await i18n.changeLanguage("en");
+    }
+  });
+});
+
+// Tester #73/#90 (session a9f9d6de): a board card says how far its group is and when it last did anything, from the summary alone
+// (completion, updatedAt) -- the way the Tasks list card does. The absolute time is the element's title; the card's own title (#49) stays.
+describe("the board card's progress and last activity (tester #73, #90)", () => {
+  const NOW = Date.UTC(2026, 9, 28, 12, 0, 0);
+  const cards = () => [
+    g({ groupId: "fresh", state: "running", completion: { done: 3, total: 5 }, updatedAt: NOW - 5 * 60_000 }),
+    g({ groupId: "empty", completion: { done: 0, total: 0 }, updatedAt: null }),
+    g({ groupId: "old", state: "running", completion: { done: 1, total: 2 }, updatedAt: NOW - 3 * 3_600_000 }),
+  ];
+  const meta = (groupId: string) => within(screen.getByTestId(`board-card-${groupId}`));
+
+  it("shows done/total tasks and a relative last-activity time whose title is the absolute time, in English and Chinese", async () => {
+    render(<BoardView groups={cards()} scope={{ kind: "all" }} now={NOW} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    // mutation: drop the tasks span -> null, red
+    expect(meta("fresh").getByTestId("board-card-tasks").textContent).toBe("3/5 tasks done");
+    // mutation: drop the <time> element -> null, red
+    const time = meta("fresh").getByTestId("board-card-updated");
+    expect(time.textContent).toBe("updated 5 min ago");
+    // mutation: title the element with the relative text again -> not the absolute time, red
+    expect(time.getAttribute("title")).toBe(new Date(NOW - 5 * 60_000).toLocaleString(currentLanguage()));
+    expect(meta("old").getByTestId("board-card-updated").textContent).toBe("updated 3 h ago");
+    // A group with no task and no activity row has nothing to say, so no empty line is drawn.
+    expect(meta("empty").queryByTestId("board-card-meta")).toBeNull();
+    // Tester #49: the open control keeps its title.
+    expect(meta("fresh").getByRole("button", { name: /fresh/ }).getAttribute("title")).toBe("Open this group's detail");
+    await i18n.changeLanguage("zh");
+    try {
+      cleanup();
+      render(<BoardView groups={cards()} scope={{ kind: "all" }} now={NOW} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      expect(meta("fresh").getByTestId("board-card-tasks").textContent).toBe("已完成 3/5 个任务");
+      expect(meta("fresh").getByTestId("board-card-updated").textContent).toBe("5 分钟前更新");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
+  it("reads the clock itself when none is given, so the line moves while nothing else does", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(NOW);
+      render(<BoardView groups={[cards()[0]!]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+      expect(meta("fresh").getByTestId("board-card-updated").textContent).toBe("updated 5 min ago");
+      // mutation: read Date.now() once per render instead of useClock -> the line never moves, red
+      act(() => { vi.advanceTimersByTime(30_000 * 3); });
+      expect(meta("fresh").getByTestId("board-card-updated").textContent).toBe("updated 6 min ago");
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

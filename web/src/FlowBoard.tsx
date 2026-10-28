@@ -166,8 +166,9 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
     })();
   };
   const title = (entry: Template): string => entry.title?.[currentLanguage()] ?? entry.title?.en ?? entry.id;
+  // The inline-dialog box (well, strong edge, 10px radius, 12/16 padding) is the element rule for role="dialog"; only its width is this form's.
   return (
-    <div role="dialog" aria-label={t("flow.start.title")} className="flow-start-dialog">
+    <div role="dialog" aria-label={t("flow.start.title")} className="max-w-[640px]">
       <form aria-label={t("flow.start.title")} onSubmit={(event) => { event.preventDefault(); if (ready) start(); }}>
         <h3>{t("flow.start.title")}</h3>
         {refusal !== null && <Refusal refusal={refusal} />}
@@ -182,7 +183,7 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
         )}
         <label>{t("flow.start.dir")}<input type="text" value={dir} onChange={(event) => setDir(event.currentTarget.value)} /></label>
         {template !== null && template.params.length > 0 && (
-          <fieldset>
+          <fieldset className="mb-2.5 rounded-card">
             <legend>{t("flow.start.params")}</legend>
             {template.params.map((param) => (
               <ParamField key={`${template.id}.${param.id}`} param={param} value={values[param.id]} fallback={effectiveDefault(param, presets === "unread" ? "unread" : presets[template.id])} dir={dir} template={template.id}
