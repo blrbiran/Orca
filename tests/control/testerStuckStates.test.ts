@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { recoverControl } from "../../src/control/recovery.js";
+import { pendingRequirementCall } from "../../src/control/requirementCalls.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { requirementSummaryOf } from "../../src/panel/controlViews.js";
 import { routedCommandContext } from "../../src/panel/controlApi.js";
@@ -60,8 +61,8 @@ describe("#100: archiving a requirement whose next call is parked", () => {
       expect(readDraft(x.store, "r", 2)).toMatchObject({ state: "interrupted", waiting: null });
       // The usage stays unknown: archiving books nothing and pretends nothing was spent.
       expect(x.group().ledger.usageUnknown).toBe(true);
-      for (let i = 0; i < 5; i += 1) { await x.deliver(); await x.driver.round(); }
-      expect(x.fake.calls.accept).toHaveLength(1);
+      // Review findings 2-3: measured directly -- the archived group has no pending call left (spec §6.3).
+      expect(pendingRequirementCall(x.store, "r")).toBeNull();
     } finally { await x.dispose(); }
   });
 });
@@ -76,7 +77,7 @@ describe("#100: archiving a requirement whose next call a stop holds", () => {
       const archive = x.command("archive-group", {}) as { commandId: string };
       expect(await asOwner(archive, () => x.service.archiveGroup(archive as never))).toMatchObject({ result: { kind: "archived", groupId: "r" } });
       expect(x.round(1)).toMatchObject({ state: "interrupted", waiting: null });
-      expect(x.fake.calls.accept).toHaveLength(0);
+      expect(pendingRequirementCall(x.store, "r")).toBeNull();
     } finally { await x.dispose(); }
   });
 });
@@ -97,9 +98,9 @@ describe("#102: a requirement call blocked on unknown usage across a restart", (
   });
 });
 
-// #103: the recovery CLI's settlement goes over the control socket. The two settlements were an owner's act on the Web
-// only, so `orca task settle-usage` (token tier) could never succeed; an owner's person token now carries it, booked to
-// that owner's account. A run Orca dispatched never has person authority (permissions.ts hasPersonAuthority).
+// #103: the recovery CLI's settlement goes over the control socket. A single call's charge-and-retry was an owner's act on
+// the Web only; an owner's person token now carries it, booked to that owner's account. A run Orca dispatched never has
+// person authority (permissions.ts hasPersonAuthority). A task run's settle-unknown-usage stays the Web's (below).
 const TOKEN = { client: "cli", principal: "agent:cli", personAuthority: true, personPrincipal: "user:u-owner" };
 const DISPATCHED = { client: "cli", principal: "agent:cli", personAuthority: false, personPrincipal: "user:u-owner" };
 
@@ -120,15 +121,15 @@ describe("#103: settling over the socket with an owner's person token", () => {
     } finally { await x.dispose(); }
   });
 
-  it("a task run's settle-unknown-usage is booked to the token's owner; without person authority it is refused", async () => {
+  // Review finding 1 (session a9f9d6de): a task run's marker is checked against a Web ledger row, so a socket settlement
+  // would book the charge and leave a marker every reader refuses; it stays the Web owner's, refused here before any write.
+  it("a task run's settle-unknown-usage stays the Web owner's: a person token is refused and nothing is charged", async () => {
     const { t, runId } = await unknownFailure();
     try {
-      const command = (id: string) => ({ ...t.h.command("settle-unknown-usage" as never, { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" }), commandId: id });
-      const refused = command("settle-dispatched");
-      await expect(withCommandContext(refused.commandId, DISPATCHED, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<unknown> }).settleUnknownUsage(refused))).rejects.toThrow("control-verb-human-only");
-      const accepted = command("settle-token");
-      expect(await withCommandContext(accepted.commandId, TOKEN, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<unknown> }).settleUnknownUsage(accepted))).not.toHaveProperty("error");
-      expect(t.body(runId)).toMatchObject({ unknown: { work: false, handoff: false }, usageSettlement: { principal: "user:u-owner" } });
+      const before = t.body(runId);
+      const command = { ...(t.h.command as (verb: string, payload: unknown) => Record<string, unknown>)("settle-unknown-usage", { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" }), commandId: "settle-token" };
+      await expect(withCommandContext(command.commandId, TOKEN, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<unknown> }).settleUnknownUsage(command))).rejects.toThrow("control-verb-human-only");
+      expect(t.body(runId)).toEqual(before);
     } finally { await t.h.dispose(); }
   });
 
