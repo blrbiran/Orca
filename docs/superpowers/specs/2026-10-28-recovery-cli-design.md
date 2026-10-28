@@ -56,3 +56,19 @@ a `git clone --local` copy and were restored to 0-byte `git diff` / `git diff --
 (log `/private/tmp/orca-a9f9d6de/p0-mutations.log`). In that clone one unrelated `writesMore.test.ts` case
 ("project set-workspace-mode reads the repository revision") is red at baseline and green in the worktree (clone
 environment); it is not counted.
+
+## 4. Correction after review (same session, a9f9d6de)
+
+§2 "Authority" is narrowed. An independent review found that a task run's `settle-unknown-usage` marker is validated
+against its command's ledger row (`hasValidUsageSettlement`, `src/control/usageSettlement.ts`: the row must be
+`client === "web"` with the marker's principal), and a socket row records `agent:<client>`. A socket settlement would
+have booked the charge and left a marker every reader refuses (`run-usage-settlement:<run>`, `retry-settlement`). So:
+
+- `settle-unknown-usage` stays the Web owner's act (as before this round). `orca task settle-usage` remains a token-tier
+  row the service refuses; making it work needs the command ledger to record the person token's account beside the
+  socket principal (a schema change, not done this round — registered for the human).
+- The single call's charge-and-retry keeps the person-token path: its marker (`singleCallSettlement`) is parsed by
+  schema only and never checked against the ledger row. Criterion "a task run's settle-unknown-usage stays the Web
+  owner's" and mutation M10 (the Web check removed → red) pin the narrowing.
+- The two #100 criteria now assert `pendingRequirementCall(...) === null` after the archive (review: counting sends
+  could not go red while the usage flag or the stop still held the call).
