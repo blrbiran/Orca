@@ -103,16 +103,20 @@ describe("the sidebar's three bands (H6a)", () => {
     expect(NAV_BANDS.flat()).toEqual([...SECTIONS]);
   });
 
-  it("draws a rule above the first item of each later band and puts Settings last", () => {
+  // Rewritten for tester #79 (human ruling 「可以先收进 更多 里」): band 1 now sits under a "More" toggle, which draws that band's rule; its
+  // entries are plain items. Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; band 1's rule moved to the toggle)
+  it("draws a rule above the first item of each later band, folds band 1 under a More toggle, and puts Settings last", () => {
     const html = renderToStaticMarkup(
       <Shell active="settings" badges={{ unreviewed: 0, chainRunning: false, controlAlert: false }} footer={[]} showAdvanced><p /></Shell>,
     );
-    const items = [...html.matchAll(/<li data-band="(\d)"( class="nav-band-start")?><a class="nav-item" href="#([a-z-]+)"/g)].map((m) => [m[3], m[1], m[2] !== undefined]);
+    const items = [...html.matchAll(/<li data-band="(\d)"(?: class="([^"]*)")?><a class="[^"]*\bnav-item\b[^"]*" href="#([a-z-]+)"/g)].map((m) => [m[3], m[1], (m[2] ?? "").split(/\s+/).includes("nav-band-start")]);
     // mutation: render SECTIONS in one flat run (no data-band / band-start) -> no item matches, red
     expect(items).toEqual([
       ["overview", "0", false], ["requirements", "0", false], ["tasks", "0", false], ["board", "0", false], ["decisions", "0", false],
-      ["memory", "1", true], ["metrics", "1", false], ["chains", "1", false], ["settings", "2", true],
+      ["memory", "1", false], ["metrics", "1", false], ["chains", "1", false], ["settings", "2", true],
     ]);
+    // mutation: drop nav-band-start from the toggle's li -> band 1 loses its rule, red
+    expect(html).toMatch(/<li data-band="1" class="nav-band-start[^"]*"><button type="button" class="nav-more[^"]*" aria-expanded="false"><span>More<\/span>/);
     expect(html).toMatch(/href="#settings"[^>]*aria-current="page"><span>Settings<\/span>/);
   });
 });

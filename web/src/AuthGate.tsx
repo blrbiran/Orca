@@ -21,7 +21,8 @@ import type { AccountSession, Me, Notice, Role } from "./auth.js";
 import i18n from "./i18n.js";
 import { en } from "./locales/en.js";
 import { Refusal } from "./Refusal.js";
-import { passwordInSettings } from "./ui/classes.js";
+import { authPage, noticeButton, passwordInSettings } from "./ui/classes.js";
+
 
 /** The logged-in person, for the parts of the page that differ by role (web/src/UsagePanel.tsx). */
 export const AccountContext = createContext<Me | null>(null);
@@ -105,10 +106,10 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [me]);
 
-  if (state.kind === "loading") return <main className="auth-page"><p>{t("auth.loading")}</p></main>;
+  if (state.kind === "loading") return <main className={authPage}><p>{t("auth.loading")}</p></main>;
   if (state.kind === "failed") {
     return (
-      <main className="auth-page">
+      <main className={authPage}>
         <Refusal refusal={state.refusal} />
         <button type="button" onClick={() => { setState({ kind: "loading" }); void readSession(); }}>{t("auth.retry")}</button>
       </main>
@@ -120,7 +121,7 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   return (
     <AccountContext.Provider value={state.me}>
       <AccountSettingsContext.Provider value={{ me: state.me, onPasswordChanged: () => setState({ kind: "login", ended: false, changed: true }) }}>
-        <div className="authenticated-shell">
+        <div className="authenticated-shell flex h-dvh flex-col overflow-hidden narrow:h-auto narrow:min-h-dvh narrow:overflow-visible">
           <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
           {children}
         </div>
@@ -141,8 +142,8 @@ function LoginForm({ ended, changed, onLoggedIn }: { ended: boolean; changed: bo
     setRefusal(answer);
   };
   return (
-    <main className="auth-page">
-      <form className="auth-form" aria-label={t("auth.loginTitle")} onSubmit={(event) => void submit(event)}>
+    <main className={authPage}>
+      <form className="auth-form flex flex-col gap-3" aria-label={t("auth.loginTitle")} onSubmit={(event) => void submit(event)}>
         <h1>{t("auth.loginTitle")}</h1>
         {ended && <p role="status">{t("auth.sessionEnded")}</p>}
         {changed && <p role="status">{t("auth.passwordChanged")}</p>}
@@ -150,7 +151,7 @@ function LoginForm({ ended, changed, onLoggedIn }: { ended: boolean; changed: bo
         <label>{t("auth.password")}<input name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.currentTarget.value)} /></label>
         <button type="submit" className="btn-primary">{t("auth.logIn")}</button>
         {refusal !== null && <Refusal refusal={refusal} />}
-        <p className="auth-hint">{t("auth.loginHint")}</p>
+        <p className="auth-hint text-xs text-muted">{t("auth.loginHint")}</p>
       </form>
     </main>
   );
@@ -179,8 +180,8 @@ function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChang
   };
   const Frame = initial ? "main" : "div";
   return (
-    <Frame className={initial ? "auth-page" : passwordInSettings}>
-      <form className="auth-form" aria-label={t("auth.changeTitle")} onSubmit={(event) => void submit(event)}>
+    <Frame className={initial ? authPage : passwordInSettings}>
+      <form className="auth-form flex flex-col gap-3" aria-label={t("auth.changeTitle")} onSubmit={(event) => void submit(event)}>
         {initial ? <h1>{t("auth.changeTitle")}</h1> : <h4>{t("auth.changeTitle")}</h4>}
         <p>{t(initial ? "auth.changeLede" : "auth.passwordLede", { name: me.user.name, n: MIN_PASSWORD_LENGTH })}</p>
         <label>{t("auth.currentPassword")}<input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.currentTarget.value)} /></label>
@@ -205,9 +206,9 @@ function AccountBar({ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): J
   };
   return (
     <>
-      <header className="account-bar">
-        <span className="account-name">{me.user.name}</span>
-        <span className="account-role">{me.user.roles.map((role) => t(`auth.role.${role}` as const)).join(", ")}</span>
+      <header className="account-bar flex shrink-0 flex-wrap items-center justify-end gap-3 border-b border-line bg-elevated px-6 py-2">
+        <span className="account-name font-semibold text-fg-strong">{me.user.name}</span>
+        <span className="account-role text-xs text-muted">{me.user.roles.map((role) => t(`auth.role.${role}` as const)).join(", ")}</span>
         <button type="button" onClick={() => void doLogout()}>{t("auth.logOut")}</button>
         {refusal !== null && <Refusal refusal={refusal} />}
       </header>
@@ -351,21 +352,21 @@ function Notices(): JSX.Element | null {
   };
   if (notices.length === 0 && refusal === null) return null;
   return (
-    <section className="notices" aria-label={t("auth.noticesTitle")}>
-      <ul>
+    <section className="notices max-h-[40dvh] shrink-0 overflow-y-auto border-b border-line bg-warn-subtle px-6 py-1.5 text-sm narrow:max-h-none" aria-label={t("auth.noticesTitle")}>
+      <ul className="m-0 pl-4">
         {notices.map((notice) => (
-          <li key={notice.seq}>
+          <li key={notice.seq} className="flex flex-wrap items-center gap-2">
             {t("auth.noticeLine", {
               kind: i18nKind(notice.kind),
               subject: noticeSubject(notice.body, names),
               at: new Date(notice.at).toLocaleString(),
             })}
-            <button type="button" disabled={dismissing} onClick={() => void dismiss(notice.seq)}>{t("auth.dismiss")}</button>
+            <button type="button" className={noticeButton} disabled={dismissing} onClick={() => void dismiss(notice.seq)}>{t("auth.dismiss")}</button>
           </li>
         ))}
       </ul>
       {notices.length > 1 && (
-        <button type="button" disabled={dismissing} onClick={() => void dismissAll()}>{t("auth.dismissAll")}</button>
+        <button type="button" className={noticeButton} disabled={dismissing} onClick={() => void dismissAll()}>{t("auth.dismissAll")}</button>
       )}
       {refusal !== null && <Refusal refusal={refusal} />}
     </section>

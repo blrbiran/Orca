@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { inlinePick, tabItem, tabRow } from "../src/ui/classes.js";
+import { carrying } from "./sourceClasses.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
 const src = (file: string): string => readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");
@@ -13,12 +14,14 @@ const rule = (selector: string): string => {
 
 /** jsdom never applies this sheet, so the two visual promises the spec makes are pinned on the sheet itself. */
 describe("styles.css", () => {
+  // Rewritten for the shell's Tailwind migration (batch 1): the rules left the sheet for the class strings of AuthGate.tsx and
+  // Shell.tsx. Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; .authenticated-shell* are utilities now)
   it("shares the viewport with variable-height account content and scrolls inside each pane", () => {
-    expect(rule(".authenticated-shell")).toContain("height: 100dvh");
-    expect(rule(".authenticated-shell > .shell")).toContain("min-height: 0");
-    expect(rule(".authenticated-shell .sidebar")).toContain("height: 100%");
-    expect(rule(".authenticated-shell .sidebar")).toContain("overflow-y: auto");
-    expect(rule(".authenticated-shell .content")).toContain("overflow-y: auto");
+    // mutation: delete h-dvh from the frame -> the page grows past the viewport and the panes stop scrolling inside it, red
+    expect(carrying("AuthGate.tsx", "authenticated-shell").split(/\s+/)).toContain("h-dvh");
+    expect(carrying("Shell.tsx", "shell").split(/\s+/)).toContain("min-h-0");
+    expect(carrying("Shell.tsx", "sidebar").split(/\s+/)).toEqual(expect.arrayContaining(["h-full", "overflow-y-auto"]));
+    expect(carrying("Shell.tsx", "content").split(/\s+/)).toContain("overflow-y-auto");
   });
 
   it("wraps a question with no break opportunity and clamps it to two lines (Review Focus 1)", () => {

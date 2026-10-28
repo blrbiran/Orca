@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import type { PanelRefusal, PostResult } from "./api.js";
 import { refusalText } from "./i18n.js";
 import { projectName, type ProjectsAnswerV1 } from "./project.js";
+import { projectAction } from "./ui/classes.js";
 import { ALL_PROJECTS, allowsAll, type ProjectView } from "./projectScope.js";
 
 export interface ProjectControlProps {
@@ -135,7 +136,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
   const saveDisabled = dirs.length < 2 || dirs.length > 8 || (open === "multi" && name.trim() === "");
 
   return (
-    <div className="project-control">
+    <div className="project-control flex flex-col gap-2 rounded-card border border-line bg-well p-[10px] text-xs max-md:w-full [&>label]:mb-0 [&_form]:m-0 [&_form]:flex [&_form]:flex-col [&_form]:gap-1.5 [&_p]:m-0 [&_select]:w-full">
       {projects.length === 0 ? (
         <p className="project-none">{t("project.none")}</p>
       ) : (
@@ -152,18 +153,18 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
           </select>
         </label>
       )}
-      <div className="project-actions">
-        <button type="button" className="project-action" data-icon="add" disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={() => { setRefusal(null); setOpen("add"); }}>
+      <div className="project-actions flex flex-wrap gap-1.5">
+        <button type="button" className={projectAction} data-icon="add" disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={() => { setRefusal(null); setOpen("add"); }}>
           {t("project.add")}
         </button>
-        <button type="button" className="project-action" data-icon="rename" disabled={!editable || current === undefined} title={editable ? undefined : t("project.fromCommandLine")}
+        <button type="button" className={projectAction} data-icon="rename" disabled={!editable || current === undefined} title={editable ? undefined : t("project.fromCommandLine")}
           onClick={() => { setRefusal(null); setName(current ? projectName(current) : ""); setOpen("rename"); }}>
           {t("project.rename")}
         </button>
-        <button type="button" className="project-action" disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={openMultiCreate}>
+        <button type="button" className={projectAction} disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={openMultiCreate}>
           {t("project.multi")}
         </button>
-        <button type="button" className="project-action" disabled={!editable || current?.kind !== "multi"} onClick={openMultiEdit}>
+        <button type="button" className={projectAction} disabled={!editable || current?.kind !== "multi"} onClick={openMultiEdit}>
           {t("project.multiEdit")}
         </button>
       </div>

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { carrying } from "./sourceClasses.js";
 
 /**
  * Human visual review (session f8281a60, 2026-09-27): dark mode reads poorly, worst on #decisions.
@@ -96,7 +97,11 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
       if (at === -1) throw new Error(`no rule ${selector}`);
       return css.slice(at, css.indexOf("}", at));
     };
-    for (const selector of [".project-control", ".section-pane section section", ".detail-block", ".metric-tile", '[role="alert"], [role="note"], [role="status"], .callout, .chain-banner']) {
+    // Rewritten for the shell's Tailwind migration (batch 1): the project control is a utility-class well now, read from its source.
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; .project-control left the sheet)
+    // mutation: write bg-card instead of bg-well on the project control -> it no longer lifts above its card, red
+    expect(carrying("ProjectControl.tsx", "project-control").split(/\s+/)).toContain("bg-well");
+    for (const selector of [".section-pane section section", ".detail-block", ".metric-tile", '[role="alert"], [role="note"], [role="status"], .callout, .chain-banner']) {
       expect(wellRule(selector), selector).toMatch(/background:\s*var\(--well\);/);
     }
     const bgUsers = [...css.matchAll(/([^{}]+)\{[^}]*background(?:-color)?:\s*var\(--bg\)/g)].map((m) => m[1]!.trim());
