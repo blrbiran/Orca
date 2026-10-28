@@ -145,4 +145,10 @@ describe("styles.css", () => {
     expect(rule("input:focus-visible, select:focus-visible, textarea:focus-visible")).toContain("outline: 2px solid var(--accent)");
     expect(rule('input[type="checkbox"], input[type="radio"]')).toContain("accent-color: var(--accent)");
   });
+
+  // Session e236bbe4: the group header's source-requirement link sat flush against the next button; the adjacent-control
+  // gap now counts an inline link as the left neighbour. Mutation: drop `a` from the first list -> red.
+  it("keeps the 8px gap after a button, or after an inline link, before the next button", () => {
+    expect(rule(":where(button, .btn, a) + :where(button, .btn)")).toContain("margin-inline-start: var(--space-2)");
+  });
 });
