@@ -123,8 +123,10 @@ it("an opened group scrolls itself into view once, unless a focus on it does the
  } finally { Element.prototype.scrollIntoView = original; }
 });
 // Tester #21: an open task's detail had nothing setting it apart from the table and graph around it. It carries
-// .task-detail, whose accent edge is declared after the generic nested-section rules it must out-rank.
-it("an open task's detail carries the accent edge, declared after the nested-section rules", async () => {
+// .task-detail, whose lift is declared after the generic nested-section rules it must out-rank.
+// Ruling: session e236bbe4 blanket authorization -- this now encodes the lift (card colour, firm edge, pop shadow) that
+// replaced the 3px accent side stripe impeccable's detector bans; the separation #21 asked for is what stays pinned.
+it("an open task's detail is lifted as a card, declared after the nested-section rules", async () => {
  const { readFileSync } = await import("node:fs"); const { fileURLToPath } = await import("node:url"); const { dirname, join } = await import("node:path");
  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
  mount(view([workItem({ taskId: "a" })]));
@@ -132,5 +134,9 @@ it("an open task's detail carries the accent edge, declared after the nested-sec
  expect(screen.getByRole("region", { name: "Task a" }).classList.contains("task-detail")).toBe(true);
  const rule = css.indexOf(".section-pane section.task-detail {");
  expect(rule).toBeGreaterThan(css.indexOf(".section-pane section section {"));
- expect(css.slice(rule, css.indexOf("}", rule))).toContain("border-left: 3px solid var(--accent)");
+ const body = css.slice(rule, css.indexOf("}", rule));
+ expect(body).toContain("background: var(--bg-elevated)");
+ expect(body).toContain("border: 1px solid var(--border-strong)");
+ expect(body).toContain("box-shadow: var(--shadow-pop)");
+ expect(body).not.toContain("border-left");
 });

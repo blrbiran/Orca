@@ -278,8 +278,10 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 .section-pane section section { background: var(--well); box-shadow: none; }
 /* Tester #11: the budget's folded allocation table. */
 .budget-allocations > summary { cursor: pointer; margin: 6px 0; }
-/* Tester #21: an open task's detail stands apart from the group's table and graph. */
-.section-pane section.task-detail { border-left: 3px solid var(--accent); }
+/* Tester #21: an open task's detail stands apart from the group's table and graph. Session e236bbe4: it is lifted as a
+   whole card -- the card colour over the wells around it, a firm edge and the pop shadow -- instead of the accent side
+   stripe, which impeccable's detector bans (side-tab). */
+.section-pane section.task-detail { background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); }
 .section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
 .section-lede { color: var(--muted); font-size: var(--text-sm); margin-bottom: 12px; }
 .count { color: var(--muted); font-size: var(--text-sm); font-family: var(--mono); }
