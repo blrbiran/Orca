@@ -53,6 +53,11 @@
   --shadow-*: initial;
   --shadow-raise: var(--shadow);
   --shadow-float: var(--shadow-pop);
+  /* The active nav item's accent bar (a side bar in the sidebar, an underline in the narrow row) and the status dots' glow. */
+  --shadow-nav-bar: inset 3px 0 0 var(--accent);
+  --shadow-nav-bar-narrow: inset 0 -2px 0 var(--accent);
+  --shadow-glow-ok: 0 0 8px var(--ok);
+  --shadow-glow-danger: 0 0 8px var(--danger);
 
   --default-transition-duration: var(--dur);
   --default-transition-timing-function: var(--ease);
@@ -71,6 +76,9 @@
   --breakpoint-*: initial;
   --breakpoint-md: 761px;
 }
+
+/* The shell's narrow layout: the page scrolls as a whole on a narrow OR a short screen (taste refinement P1-2). */
+@custom-variant narrow (@media (max-width: 760px), (max-height: 560px));
 
 /* The bundled fonts as variables (and font-sans / font-mono utilities); static so they exist even while unused. */
 @theme static {

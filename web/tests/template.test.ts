@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { carrying } from "./sourceClasses.js";
 
 /** Taste refinement P2-6 (detector: flat-type-hierarchy 14/14/16; one primary per view). */
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -20,7 +21,10 @@ describe("page template (P2-6)", () => {
     expect(rule(".btn-primary")).toContain("background: var(--accent)");
   });
   it("hides a project action that this panel can never enable (its reason stays in the caption)", () => {
-    expect(rule(".project-action:disabled")).toContain("display: none");
+    // Rewritten for the shell's Tailwind migration (batch 1): the rule is the `disabled:hidden` utility on the button's class string.
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; .project-action left the sheet)
+    // mutation: delete disabled:hidden from projectAction -> a never-enabled Add/Rename shows greyed out, red
+    expect(carrying("ProjectControl.tsx", "project-action").split(/\s+/)).toContain("disabled:hidden");
   });
   it("shows the control plane's session line as metadata", () => {
     const r = rule(".section-meta");
