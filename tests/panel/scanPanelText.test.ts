@@ -90,8 +90,7 @@ describe("the panel text scan (spec §3, §8)", () => {
  */
 const ALLOWED = [
   "web/src/Shell.tsx\tOrca",
-  'web/src/TaskDetail.tsx\t"label label-custom"',
-  'web/src/TaskDetail.tsx\t"label label-system"',
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind batch 3): the two label class lists moved to web/src/ui/classes.ts (a non-component file the scan does not read), so TaskDetail.tsx no longer holds the two literals.
   "web/src/api.ts\t`GET ${path}`",
   "web/src/api.ts\t`POST ${path}`",
   "web/src/controlApi.ts\t`GET ${entry.downloadUrl}`",
