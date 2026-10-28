@@ -105,7 +105,8 @@ describe("the split instruction names Orca's own files in the target (version 2)
     it(multi ? "several directories: in the primary directory" : "one repository", () => {
       const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], ...(multi ? { multi: true } : {}) });
       const instruction = prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
-      expect(instruction.split("\n", 1)[0]).toMatch(/instruction version 2\.$/);
+      // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); these lines are unchanged in version 3, so the criterion now pins that version 3 kept them.
+      expect(instruction.split("\n", 1)[0]).toMatch(/instruction version 3\.$/);
       expect(instruction).toContain(`Orca commits the agreed requirement document to the ${multi ? "primary directory" : "repository"} at \`${exportDir}<date>-<slug>.md\``);
       expect(instruction).toContain("`.decisions/` when present");
       expect(instruction).toContain("A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist");

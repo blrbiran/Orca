@@ -324,8 +324,11 @@ export function expandLoopTask(taskId: string, repoPath: string, input: LoopPlan
   return expandLoopPlan(taskId, repoPath, planId, normalizeLoopInputs(input), input.plan === undefined ? "labels" : "explicit", input.skills);
 }
 
-/** Spec §2.4 (D6), highest priority first. `custom:` labels never match: no vocabulary word starts with the prefix. */
-const LABEL_PRIORITY: ReadonlyArray<{ labels: readonly string[]; planId: LoopPlanId }> = [
+/**
+ * Spec §2.4 (D6), highest priority first. `custom:` labels never match: no vocabulary word starts with the prefix.
+ * Exported for the split instruction (version 3, requirementSplit.ts), which states this table to the model.
+ */
+export const LABEL_PRIORITY: ReadonlyArray<{ labels: readonly string[]; planId: LoopPlanId }> = [
   { labels: ["investigate"], planId: "investigate" },
   { labels: ["design", "doc"], planId: "design" },
   { labels: ["bug"], planId: "bugfix" },

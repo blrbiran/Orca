@@ -37,7 +37,8 @@ export interface QueuedAnswer {
 // A multi-dir group's split prompt has the multi instruction's head; a single-repository group's has V1's (M5).
 const HEADS = { clarify: ["Orca requirement clarification, instruction version 3."],
   // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (split version 1 -> 2)
-  split: ["Orca requirement split, instruction version 2.", "Orca requirement split (several directories), instruction version 2."],
+  // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); the fake still tells a split prompt by its head.
+  split: ["Orca requirement split, instruction version 3.", "Orca requirement split (several directories), instruction version 3."],
   estimate: ["You are estimating the budget"] } as const;
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 

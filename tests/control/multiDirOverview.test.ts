@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V2, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V3, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -33,7 +33,8 @@ const PINNED = {
   clarifyPrompt: "082285a1b2a23f21335bf704699b5e5decbf20fdcb24b29d9d1551513e93e4fc",
   // Split instruction version 2 (the requirement document and Orca's files are in the repository): the pin moves with it.
   // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
-  splitPrompt: "cfe027bc99a0fa77a999619d5379cc1208f9a671831d307607f9461f7582a263",
+  // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); the pin is version 3's bytes and still encodes: a single-repository prompt is built by the single instruction only.
+  splitPrompt: "7c04f453f588ae291fcff2c4f6acbfe534d48ed6fadb5b74ed245281353d64be",
   splitSchema: "0e8a8113c3a739af427bd6b730ef7995c2bcdcf41ea808d2ba526b1e66ecf728",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
@@ -160,8 +161,9 @@ describe("the split prompt across directories (M5, §6.4)", () => {
       expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_MULTI);
       const prompt = envelope.work.prompt;
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
-      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 2.")).toBe(true);
-      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V2.split("\n", 1)[0]!);
+      // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a multi group gets the multi instruction.
+      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 3.")).toBe(true);
+      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V3.split("\n", 1)[0]!);
       expect(prompt).toContain("`writes[].targetPaths` are paths relative to that directory's root");
       expect(prompt).toContain("`writes[].checks` are shell commands, run in that directory");
       expect(prompt).toContain("`dir` is a directory's `key`");
@@ -243,7 +245,8 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
       const envelope = split.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
       expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA);
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 2.")).toBe(true);
+      // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a single-repository group is sent the single instruction.
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 3.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");
