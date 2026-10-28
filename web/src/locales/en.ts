@@ -1493,6 +1493,8 @@ export const en = {
       locks: {
         title: "Locks",
         explain: "A locked field may only be tightened in a project; a looser project value is ignored while the lock stands.",
+        // QA walk (session e236bbe4): the non-effect locks in the words their fields use above, never the raw key.
+        path: { allowedSkillSources: "Allowed skill sources", "budgets.tokensPerRun": "Token pool per run" },
         save: "Save locks",
       },
     },

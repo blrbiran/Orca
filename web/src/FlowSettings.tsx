@@ -16,6 +16,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
 import { WEB_FLOW_EFFECT_CLASSES, WEB_FLOW_LOCKABLE_PATHS } from "./controlTypes.js";
 import type { FlowEffectClassV1, FlowLevelSettingV1, FlowLockablePathV1, FlowSettingsReadV1, FlowSourcedV1, FlowTemplateParamV1, FlowTemplatesV1 } from "./controlTypes.js";
+import { refusalDetail } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
 
 export type FlowSettingsScope = "global" | { repoId: string };
@@ -125,6 +126,19 @@ function presetRows(templates: FlowTemplatesV1["templates"], read: FlowSettingsR
   return rows;
 }
 
+type T = ReturnType<typeof useTranslation>["t"];
+/** A lockable field in words, never its raw key: an effect class by its name (tester #68), the others by their field's label (QA walk, session e236bbe4). */
+function lockLabel(t: T, path: FlowLockablePathV1): string {
+  const key = path.startsWith("effects.") ? `settings.flows.effectClass.${path.slice("effects.".length)}.name` : `settings.flows.locks.path.${path}`;
+  return String((t as (k: string) => unknown)(key));
+}
+/** A lock refusal names the lock by its key (the server's detail); it is shown by the lock's words. */
+function namedLock(t: T, refusal: PanelRefusal): PanelRefusal {
+  const detail = refusalDetail(refusal);
+  if (refusal.code !== "flow-setting-locked" || !(WEB_FLOW_LOCKABLE_PATHS as readonly string[]).includes(detail)) return refusal;
+  return { ...refusal, message: `${refusal.code}:${lockLabel(t, detail as FlowLockablePathV1)}` };
+}
+
 function Locks(props: { locks: FlowLockablePathV1[]; send: Send }): JSX.Element {
   const { t } = useTranslation();
   const initial = WEB_FLOW_LOCKABLE_PATHS.filter((path) => props.locks.includes(path));
@@ -137,8 +151,7 @@ function Locks(props: { locks: FlowLockablePathV1[]; send: Send }): JSX.Element 
         <label key={path}>
           <input type="checkbox" checked={draft.includes(path)}
             onChange={(event) => { const on = event.currentTarget.checked; setDraft(WEB_FLOW_LOCKABLE_PATHS.filter((other) => (other === path ? on : draft.includes(other)))); }} />
-          {/* Tester #68: an effect class's lock reads as the class's name, never its raw key. */}
-          {path.startsWith("effects.") ? t(`settings.flows.effectClass.${path.slice("effects.".length) as FlowEffectClassV1}.name`) : path}
+          {lockLabel(t, path)}
         </label>
       ))}
       <button type="button" disabled={same(draft, initial)} onClick={() => props.send("locks", { locks: draft })}>{t("settings.flows.locks.save")}</button>
@@ -204,7 +217,7 @@ export function FlowSettings(props: { scope: FlowSettingsScope; /** Gaps spec §
     <section aria-label={props.projectName === undefined ? t("settings.flows.region") : t("settings.flows.regionFor", { project: props.projectName })}>
       <h3>{t("settings.flows.region")}</h3>
       <p>{t("settings.flows.explain")}</p>
-      {refusal !== null && <Refusal refusal={refusal} />}
+      {refusal !== null && <Refusal refusal={namedLock(t, refusal)} />}
       {unread && <p data-testid="flow-settings-unread">{t("settings.flows.unread")}</p>}
       {!may && <p role="note">{t("settings.flows.ownerOnly")}</p>}
       {view !== null && (

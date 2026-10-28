@@ -1357,6 +1357,7 @@ export const zh: Translation<typeof en> = {
       locks: {
         title: "锁",
         explain: "锁定的字段在项目里只能收紧；锁存在期间，比全局更宽松的项目值不生效。",
+        path: { allowedSkillSources: "允许的技能来源", "budgets.tokensPerRun": "每次运行的 token 预算池" },
         save: "保存锁",
       },
     },

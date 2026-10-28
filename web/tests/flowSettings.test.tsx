@@ -109,7 +109,8 @@ describe("flow settings with source and lock (§11.2)", () => {
     await mount(owner, "global");
     expect(reads).toContain("/api/control/flows/settings");
     const locks = screen.getByRole("region", { name: "Locks" });
-    fireEvent.click(within(locks).getByRole("checkbox", { name: "budgets.tokensPerRun" }));
+    // Ruling: session e236bbe4 blanket authorization -- the token pool's lock is found by its words, not its raw key (QA walk).
+    fireEvent.click(within(locks).getByRole("checkbox", { name: "Token pool per run" }));
     fireEvent.click(within(locks).getByRole("button", { name: "Save locks" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(posts[0]).toEqual({ url: "/api/control/operator/flows/locks", body: expect.objectContaining({ expectedRevision: 4, payload: { locks: ["effects.external", "budgets.tokensPerRun"] } }) });
@@ -164,6 +165,42 @@ describe("effect classes and levels in words (tester #68)", () => {
     // mutation: label the lock with the raw path -> red
     expect(within(locks).getByRole("checkbox", { name: "Drafts outside Orca" })).toBeTruthy();
     expect(locks.textContent).not.toMatch(/effects\./);
+  });
+
+  // QA walk (session e236bbe4): the skill-source and token-pool locks still read as raw keys, and a refusal named the lock
+  // by its key ("effects.cost"). Every lock and a lock refusal read as the field's own words, in both languages.
+  it("labels every lock by the field's words, in both languages", async () => {
+    const LABELS = {
+      en: ["Local changes", "Paid steps", "Drafts outside Orca", "Irreversible steps", "Allowed skill sources", "Token pool per run"],
+      zh: ["本地改动", "付费步骤", "Orca 之外的草稿", "不可逆步骤", "允许的技能来源", "每次运行的 token 预算池"],
+    };
+    for (const lang of ["en", "zh"] as const) {
+      await i18n.changeLanguage(lang);
+      try {
+        serve();
+        await mount(owner, "global");
+        const locks = screen.getByRole("region", { name: lang === "en" ? "Locks" : "锁" });
+        // mutation: label the two non-effect locks with their raw path -> red
+        expect([...locks.querySelectorAll("label")].map((label) => label.textContent)).toEqual(LABELS[lang]);
+        cleanup();
+      } finally { await i18n.changeLanguage("en"); }
+    }
+  });
+
+  it("names the lock a refusal points at by its words, not its key", async () => {
+    for (const [lang, detail, words] of [["en", "effects.cost", "Paid steps"], ["en", "allowedSkillSources", "Allowed skill sources"], ["zh", "budgets.tokensPerRun", "每次运行的 token 预算池"]] as const) {
+      await i18n.changeLanguage(lang);
+      try {
+        serve({ status: 409, body: { error: { code: "flow-setting-locked", message: `flow-setting-locked:${detail}`, retryable: false, commandRevision: 4 } } });
+        await mount(owner, { repoId: "repo" });
+        fireEvent.click(within(field("effects.local")).getByRole("button", { name: lang === "en" ? "Override here" : "在这里覆盖" }));
+        const message = await screen.findByTestId("refusal-message");
+        // mutation: fill the refusal with the raw detail -> red
+        expect(message.textContent).toContain(words);
+        expect(message.textContent).not.toContain(detail);
+        cleanup();
+      } finally { await i18n.changeLanguage("en"); }
+    }
   });
 
   it("reads the classes and levels in Chinese", async () => {
