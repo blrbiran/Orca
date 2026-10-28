@@ -174,7 +174,7 @@ export function DecisionDetail({
         </button>
         <p className={`detail-help ${detailHelp}`}>{t("decisions.agreeHelp")}</p>
         <form
-          className="correction-form mt-4 border-t border-dashed border-line pt-3"
+          className="correction-form mt-4 border-0 border-t border-dashed border-line pt-3"
           onSubmit={(event) => {
             event.preventDefault();
             onCorrect?.(form);
