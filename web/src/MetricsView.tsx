@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "./i18n.js";
 import { en } from "./locales/en.js";
 import type { MetricsReport, PanelCoverage } from "./types.js";
+import { metricCaveats, metricHealth, metricLabel, metricNotes, metricTile, metricValue } from "./ui/classes.js";
 
 /** The one literal the null-rate branch prints (task 8 ruling K4), in English; the render uses the reader's language. */
 export const UNKNOWN_RATE = en.metrics.unknownRate;
@@ -33,15 +34,6 @@ function noteText(sentence: string, code: string | undefined): string {
   const key = `metrics.note.${code ?? ""}`;
   return code !== undefined && i18n.exists(key) ? (i18n.t(key as never) as string) : sentence;
 }
-
-/** The small muted heading over a figure (a tile's, and the data-health row's by descendant selector below). */
-const metricLabel = "m-0 mb-1 text-xs font-semibold text-muted";
-const metricTile = "metric-tile rounded-card border border-line bg-well px-[14px] py-3";
-const metricValue = "m-0 text-figure font-bold tracking-[-0.02em] text-fg-strong tabular-nums";
-const metricNotes = "mt-[6px] text-xs text-muted";
-const metricCaveats = "m-0 pl-4 text-xs text-muted";
-const metricHealth = "metric-health flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 [&>div]:flex [&>div]:flex-col"
-  + " [&_h2]:m-0 [&_h2]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-muted [&_p]:m-0 [&_p]:text-sm [&_p]:tabular-nums";
 
 export function MetricsView({ report, coverage }: { report: MetricsReport; coverage: PanelCoverage }): JSX.Element {
   const { t } = useTranslation();

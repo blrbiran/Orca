@@ -19,14 +19,7 @@ import type {
 import i18n, { currentLanguage } from "./i18n.js";
 import { TokenInput, Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { Refusal } from "./Refusal.js";
-
-/** A row of labelled controls (the pickers, the new-cap form, the calendar form), bottoms aligned. */
-const controlRow = "my-3 flex flex-wrap items-end gap-3";
-/** DESIGN.md "Tables": a table that may be wider than the page scrolls inside its own box. From 761px a headed table keeps
- * 520px; below it the sheet's own `.section-pane table:has(> thead)` rule keeps 40rem (a utility here would override it). */
-const tableScroll = "max-w-full overflow-x-auto md:[&_table]:min-w-[520px]";
-/** The two-column groups table has no width to defend: no minimum at any width, so it never scrolls on its own. */
-const tableScrollNarrow = "max-w-full overflow-x-auto [&_table]:min-w-0";
+import { controlRow, tableScroll, tableScrollNarrow } from "./ui/classes.js";
 
 const SPEND_SCOPE = "@spend";
 const SPEND_PATHS = {

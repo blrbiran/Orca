@@ -85,14 +85,14 @@ describe("Metrics layout (P2-5)", () => {
       expect(html).toContain(`<h2>${title}</h2><p data-testid="${id}">${n}</p>`);
   });
   // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the .table-scroll rules became
-  // utility strings in UsagePanel.tsx, so the promise is read from those strings instead of styles.css).
+  // utility strings in ui/classes.ts, used by UsagePanel.tsx, so the promise is read from those strings instead of styles.css).
   // The two class hooks of the tiles and the health row (metric-tile, metric-health) stay on the markup and are pinned above.
   it("lets wide usage tables scroll inside their own box", () => {
     const usage = src("../src/UsagePanel.tsx");
     // by-model table and caps table scroll in the wide box, the two-column groups table in the narrow one: three boxes.
     expect(usage.match(/<div className=\{tableScroll\}>/g)?.length).toBe(2);
     expect(usage.match(/<div className=\{tableScrollNarrow\}>/g)?.length).toBe(1);
-    const wide = /const tableScroll = "([^"]*)"/.exec(usage)?.[1];
+    const wide = /const tableScroll = "([^"]*)"/.exec(src("../src/ui/classes.ts"))?.[1];
     expect(wide).toBeDefined();
     expect(wide).toContain("overflow-x-auto");
     expect(wide).toContain("max-w-full");
@@ -101,7 +101,7 @@ describe("Metrics layout (P2-5)", () => {
   it("does not force the two-column groups table to scroll", () => {
     const usage = src("../src/UsagePanel.tsx");
     expect(usage).toContain('<div className={tableScrollNarrow}><table data-testid="usage-groups">');
-    const narrow = /const tableScrollNarrow = "([^"]*)"/.exec(usage)?.[1];
+    const narrow = /const tableScrollNarrow = "([^"]*)"/.exec(src("../src/ui/classes.ts"))?.[1];
     expect(narrow).toBeDefined();
     expect(narrow).toContain("overflow-x-auto"); // still its own box, so it can never widen the page
     expect(narrow).toContain("[&_table]:min-w-0"); // but no minimum width, which also beats the headed-table 40rem: two short columns fit a phone

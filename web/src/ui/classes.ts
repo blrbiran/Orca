@@ -21,3 +21,22 @@ export const settingsRegion = "min-w-0 wrap-anywhere [&_input]:min-w-0 [&_input]
   + " [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto";
 /** The change-password form inside Settings (AuthGate): one column, 420px at most. */
 export const passwordInSettings = "mb-6 max-w-[420px]";
+
+// Metrics (MetricsView): the three rate tiles and the data-health row under them.
+/** The small muted heading over a figure (a tile's, and the data-health row's by descendant selector below). */
+export const metricLabel = "m-0 mb-1 text-xs font-semibold text-muted";
+export const metricTile = "metric-tile rounded-card border border-line bg-well px-[14px] py-3";
+export const metricValue = "m-0 text-figure font-bold tracking-[-0.02em] text-fg-strong tabular-nums";
+export const metricNotes = "mt-[6px] text-xs text-muted";
+export const metricCaveats = "m-0 pl-4 text-xs text-muted";
+export const metricHealth = "metric-health flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 [&>div]:flex [&>div]:flex-col"
+  + " [&_h2]:m-0 [&_h2]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-muted [&_p]:m-0 [&_p]:text-sm [&_p]:tabular-nums";
+
+// Usage (UsagePanel).
+/** A row of labelled controls (the pickers, the new-cap form, the calendar form), bottoms aligned. */
+export const controlRow = "my-3 flex flex-wrap items-end gap-3";
+/** DESIGN.md "Tables": a table that may be wider than the page scrolls inside its own box. From 761px a headed table keeps
+ * 520px; below it the sheet's own `.section-pane table:has(> thead)` rule keeps 40rem (a utility here would override it). */
+export const tableScroll = "max-w-full overflow-x-auto md:[&_table]:min-w-[520px]";
+/** The two-column groups table has no width to defend: no minimum at any width, so it never scrolls on its own. */
+export const tableScrollNarrow = "max-w-full overflow-x-auto [&_table]:min-w-0";
