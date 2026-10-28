@@ -8,6 +8,15 @@
  */
 import type { JSX, ReactNode } from "react";
 
+/**
+ * Tester #83, #86: the document's heading ladder, all below the page's h3 (the requirement) and the "Document" h4 fold:
+ * the title (`# `) is the top heading (h4, DESIGN.md h3 size), the `## ` sections (DocumentText in RequirementsPanel) are
+ * h5, and what a section body writes at `### ` or deeper is h6.
+ */
+export const documentTitle = "mt-3 mb-1 text-base font-semibold";
+export const documentSectionTitle = "mt-3 mb-1 text-sm font-semibold";
+export const documentSubTitle = "mt-3 mb-1 text-sm font-medium";
+
 const indentOf = (line: string): number => line.length - line.trimStart().length;
 const BULLET = /^( *)[-*] (.*)$/;
 const TABLE_RULE = /^\s*\|(\s*:?-+:?\s*\|)+\s*$/;
@@ -66,7 +75,13 @@ export function RequirementMarkdown(props: { text: string }): JSX.Element {
     const line = lines[i]!;
     if (line.trim() === "") { i++; continue; }
     const heading = /^#{1,6} +(.*)$/.exec(line);
-    if (heading !== null) { blocks.push(<h6 key={i}>{inline(heading[1]!)}</h6>); i++; continue; }
+    if (heading !== null) {
+      const depth = /^#+/.exec(line)![0].length;
+      blocks.push(depth === 1 ? <h4 key={i} className={documentTitle}>{inline(heading[1]!)}</h4>
+        : depth === 2 ? <h5 key={i} className={documentSectionTitle}>{inline(heading[1]!)}</h5>
+        : <h6 key={i} className={documentSubTitle}>{inline(heading[1]!)}</h6>);
+      i++; continue;
+    }
     const bullet = BULLET.exec(line);
     if (bullet !== null) { const parsed = list(lines, i, bullet[1]!.length); blocks.push(parsed.node); i = parsed.next; continue; }
     // A block's key is the index of its first line: the index after its last line is the next block's key.
@@ -90,5 +105,5 @@ export function RequirementMarkdown(props: { text: string }): JSX.Element {
     while (i < lines.length && lines[i]!.trim() !== "" && !/^#{1,6} /.test(lines[i]!) && !BULLET.test(lines[i]!) && !lines[i]!.trimStart().startsWith("|")) paragraph.push(lines[i++]!);
     blocks.push(<p key={start}>{inline(paragraph.join("\n"))}</p>);
   }
-  return <div className="requirement-markdown">{blocks}</div>;
+  return <div className="requirement-markdown whitespace-pre-wrap wrap-anywhere">{blocks}</div>;
 }

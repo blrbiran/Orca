@@ -637,29 +637,6 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .detail-region-tabs { margin-block: var(--space-4) var(--space-3); }
 [role="tabpanel"][hidden] { display: none; }
 
-/* Issue #83: each clarification round is a box; the one waiting on the person wears data-tone="warn" (DESIGN.md). */
-.requirement-round { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; margin: 0 0 8px; }
-.requirement-round > summary { cursor: pointer; font-weight: 600; }
-.requirement-round ul { margin: 6px 0; }
-/* Tester #31: a split task's secondary facts, folded under its title. */
-.split-draft dl { margin: 4px 0 0; }
-.split-draft dl > div { display: flex; gap: 6px; }
-.split-draft dt { color: var(--muted); }
-.split-draft dd { margin: 0; overflow-wrap: anywhere; }
-.requirement-document > summary, .requirement-idea > summary { cursor: pointer; }
-.requirement-document > summary > h4, .requirement-idea > summary > h4 { display: inline; }
-
-/* Issue convergence W1 (#74, #77): a requirement's idea and document sections are shown as written, line breaks kept. */
-.requirement-text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-/* Issue 96: a document section rendered from its markdown subset keeps its text's line breaks too. */
-.requirement-markdown { white-space: pre-wrap; overflow-wrap: anywhere; }
-.requirement-markdown h6 { font-size: inherit; margin: 12px 0 4px; }
-/* QA walk (session e236bbe4): the document's front matter, apart from its title -- small, secondary, wrapping. */
-.requirement-front-matter { margin: 0 0 8px; font-size: 0.85em; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
-
 /* Kanban spec 2026-10-20 §4: the board tab -- columns side by side, scrolling sideways on a narrow screen. */
 /* Plan Task 10-B: the board's top-left flow start button and the start dialog it opens (an inset box, DESIGN.md). */
 .board-toolbar { margin: 0 0 12px; }

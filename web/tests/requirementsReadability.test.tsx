@@ -110,7 +110,9 @@ describe("the requirement document (#77)", () => {
     // Ruling: session e236bbe4 blanket authorization -- the lead's title is a heading without its hash (QA walk; was: the
     // lead keeps "# markdown-export" as text).
     expect(region.textContent).not.toContain("# markdown-export");
-    expect(within(region).getAllByRole("heading", { level: 6 }).map((h) => h.textContent)).toContain("markdown-export");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; #83/#86: the title is the
+    // document's top heading, h4, above the h5 sections -- was h6, below them).
+    expect(within(region).getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toContain("markdown-export");
     // Issue 96 (rewritten under 0e13a9b7's ruling; was: the body keeps "### R1.ADR1 One output" as text): a section's
     // markdown subset is rendered, so the ADR heading is a heading without its hashes.
     const decisions = within(region).getByRole("region", { name: "Decisions" });
@@ -128,7 +130,9 @@ describe("the requirement document (#77)", () => {
     const front = region.querySelector("pre.requirement-front-matter");
     // mutation: render the lead as one plain paragraph again -> red
     expect(front?.textContent).toBe("orcaRequirementId: r-1\nrepo: repo-a");
-    expect(within(region).getAllByRole("heading", { level: 6 }).map((h) => h.textContent)).toEqual(["markdown-export"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; #83/#86: h4, was h6).
+    expect(within(region).getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toContain("markdown-export");
+    expect(within(region).queryAllByRole("heading", { level: 6 })).toEqual([]);
     expect(region.querySelector("strong")?.textContent).toBe("export");
     expect(region.textContent).not.toMatch(/#|---|\*\*/);
   });

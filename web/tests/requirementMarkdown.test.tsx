@@ -10,16 +10,25 @@ import { RequirementMarkdown } from "../src/RequirementMarkdown.js";
  * pipe tables -- rendered as React elements. Everything else stays text: no HTML from the document ever becomes markup,
  * and a link or code span is shown as the characters it is.
  */
+// Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the container's class is now the
+// hook plus the utilities that hold its line breaks, so the expected markup names it once).
+const BOX = '<div class="requirement-markdown whitespace-pre-wrap wrap-anywhere">';
 const html = (text: string): string => renderToStaticMarkup(<RequirementMarkdown text={text} />);
 
 describe("the requirement document's markdown subset (issue 96)", () => {
   it("renders a heading without its hashes", () => {
-    expect(html("### R1.ADR1 One output\n\n- context: Notes are independent.")).toContain("<h6>R1.ADR1 One output</h6>");
+    expect(html("### R1.ADR1 One output\n\n- context: Notes are independent.")).toMatch(/<h6[^>]*>R1\.ADR1 One output<\/h6>/);
+  });
+
+  // Tester #83, #86: the title is the top heading of the document, its sections sit below it, a section's own headings below those.
+  it("ranks the title above the sections above a section's own headings", () => {
+    const out = html("# title\n\n## section\n\n### detail\n\n#### deeper");
+    expect(out).toMatch(/<h4[^>]*>title<\/h4><h5[^>]*>section<\/h5><h6[^>]*>detail<\/h6><h6[^>]*>deeper<\/h6>/);
   });
 
   it("renders bullet lists, nested by indentation, as the rounds and consensus sections write them", () => {
     const text = ["- R1.Q1: Which Markdown flavour?", "  - answer: CommonMark (recommended)", "- R1.Q2: Are images exported?", "  - recommended: As links", "  - answer: As links"].join("\n");
-    expect(html(text)).toBe('<div class="requirement-markdown"><ul>'
+    expect(html(text)).toBe(BOX + '<ul>'
       + "<li>R1.Q1: Which Markdown flavour?<ul><li>answer: CommonMark (recommended)</li></ul></li>"
       + "<li>R1.Q2: Are images exported?<ul><li>recommended: As links</li><li>answer: As links</li></ul></li>"
       + "</ul></div>");
@@ -27,7 +36,7 @@ describe("the requirement document's markdown subset (issue 96)", () => {
 
   it("keeps an item's later lines inside it, the blank line between them included", () => {
     expect(html("- context: Notes are independent.\n\n  Even nested ones.\n- decision: Export each note."))
-      .toBe('<div class="requirement-markdown"><ul><li>context: Notes are independent.\n\nEven nested ones.</li><li>decision: Export each note.</li></ul></div>');
+      .toBe(BOX + '<ul><li>context: Notes are independent.\n\nEven nested ones.</li><li>decision: Export each note.</li></ul></div>');
   });
 
   it("renders bold, as the glossary writes its terms", () => {
@@ -42,7 +51,7 @@ describe("the requirement document's markdown subset (issue 96)", () => {
   it("keeps every other construct as escaped text: HTML, links, images, code and an unclosed bold", () => {
     const text = "A <b>note</b> <script>x()</script> [link](javascript:alert(1)) ![i](http://e/x.png) `code` **open";
     const out = html(text);
-    expect(out).toBe(`<div class="requirement-markdown"><p>A &lt;b&gt;note&lt;/b&gt; &lt;script&gt;x()&lt;/script&gt; [link](javascript:alert(1)) ![i](http://e/x.png) \`code\` **open</p></div>`);
+    expect(out).toBe(`${BOX}<p>A &lt;b&gt;note&lt;/b&gt; &lt;script&gt;x()&lt;/script&gt; [link](javascript:alert(1)) ![i](http://e/x.png) \`code\` **open</p></div>`);
   });
 
   // Review fix (minor 5): a paragraph's or a table's key was the index after its last line -- the next block's start --
