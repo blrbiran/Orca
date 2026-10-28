@@ -39,3 +39,25 @@ together by the controller, not split across agents (human's instruction).
   between drafts, the shared prefix with the provider's cache ends after the instruction text.
 
 ## Log
+- Correction (same session, controller): the fence nonce is `input.overview.hash.slice(0, 16)`
+  (`src/control/requirementSplit.ts:325`, `requirementClarify.ts:220`) -- stable across drafts of one requirement at one
+  commit, so it does not break the provider's prefix cache. Step 3 of the agreed token plan ("fix the nonce") is void;
+  the prompt prefix is already cache-stable. The 280-297 k tokens per draft stay unexplained until measured.
+- Human 2026-10-28: token plan 「同意先这样做，看下效果」 (#107 → measure → [nonce void] → repair-mode retry → explicit
+  exploration notes only if still needed). Radix first, Tailwind v4 with CSS variables as the only theme source, spec
+  first, after P0: 「同意你的建议，如果 Tailwind 有收益，我倾向于直接全量迁移。Tailwind 迁移部分，你可以打个样，并给我prompt，我去拿一个便宜的 agent 做，你再复核，或者你直接起一个便宜模型的subagent做完，你再复核。」
+  Context: 「这个session暂时不要考虑context大小。先把该定的定好，我们再做handoff。」
+- Human 2026-10-28, on the controller's six open points (verbatim):
+  1. 「同意用 codex gpt-6-luna 跑一个中等需求」 -- one paid clarify+split run to measure per-call token make-up.
+  2. 「同意你的建议。允许改必要的判据」 -- Tailwind v4 (`@tailwindcss/vite`, CSS variables via `@theme` the only theme
+     source): controller samples one page (Settings) and writes the migration rules; then a sonnet subagent migrates in
+     file batches, controller reviews each; acceptance = before/after shots at 390/1280 px in three themes, impeccable
+     detector empty, `npm test`, zero horizontal overflow; criteria that read `styles.css` may be rewritten (Ruling line
+     + own mutation each). Order: Radix (menus, dialogs, selects) first, then Tailwind; both after P0.
+  3. 「(b) 把两三种字体（woff2）打进 web 包」 -- bundle Inter and JetBrains Mono woff2.
+  4. 「同意你的建议，之前的主题都不好看，你可以都整体再优化一遍」 -- 4-6 new themes varying palette, typography, radius and
+     density (Hermes presets, Linear-style violet as references); existing candidate themes may be reworked too.
+  5. 「同意你的建议」 -- recovery CLI exposes only existing invariant-keeping commands; no force-archive, no
+     reset-dispatch, no raw-store edits.
+  6. 「同意你的建议」 -- split retry in revision mode (earlier draft + hand-back reasons, fix only what is named); handed-back
+     and person-feedback drafts treated alike; split instruction version bump, calls already started keep their version.
