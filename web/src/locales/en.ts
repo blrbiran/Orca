@@ -2112,7 +2112,7 @@ export const enErrors: Record<string, string> = {
   "group-edge-repository-mismatch": "Both groups must work on the same project.",
   "group-edge-stack-ambiguous": "A group can stack on only one group that is not delivered locally ({{detail}}).",
   "group-edge-self": "A group cannot wait for itself.",
-  "control-argument-invalid": "A check setting is not valid (a trigger or a schedule); the detail names which part.",
+  "control-argument-invalid": "A value this command was given is not valid: {{detail}}",
   "check-schedule-too-frequent": "A schedule may run at most once an hour.",
   "check-schedule-limit": "There are already 8 scheduled checks here; remove one first.",
   "check-setting-locked": "A global lock allows only a tighter value here: {{detail}}",

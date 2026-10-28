@@ -2026,7 +2026,7 @@ export const zhErrors: Record<string, string> = {
   "group-edge-repository-mismatch": "两个组必须是同一个项目。",
   "group-edge-stack-ambiguous": "一个组只能叠在一个非本地交付的组上（{{detail}}）。",
   "group-edge-self": "组不能等它自己。",
-  "control-argument-invalid": "检查设置无效（触发条件或定时）；详情里写明是哪一处。",
+  "control-argument-invalid": "这条命令收到的值无效：{{detail}}",
   "check-schedule-too-frequent": "定时检查最多每小时一次。",
   "check-schedule-limit": "这里已经有 8 个定时检查；先删掉一个。",
   "check-setting-locked": "全局锁定只允许这里设得更严：{{detail}}",

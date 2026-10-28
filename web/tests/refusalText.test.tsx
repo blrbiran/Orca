@@ -14,6 +14,7 @@ import { ErrorPage } from "../src/ErrorPage.js";
 import i18n, { fillEntry, refusalText } from "../src/i18n.js";
 import { enErrors } from "../src/locales/en.js";
 import { Refusal } from "../src/Refusal.js";
+import { RefusalNotice } from "../src/RefusalNotice.js";
 import type { CommandEnvelopeV1, ControlConfigV1, ControlSummaryV1, EvidenceManifestV1, RecoveryViewV1 } from "../src/controlTypes.js";
 import type { ControlRefusal } from "../src/controlState.js";
 
@@ -158,5 +159,29 @@ describe("refusals in the reader's language (spec §3.2, §6.4)", () => {
     const answer = await sendControlCommand("/api/control/x", envelope);
     if (answer.kind !== "uncertain") throw new Error(`expected an uncertain answer, got ${answer.kind}`);
     expect(controlLine(answer.refusal)).toBe("http-502 · HTTP 502 · 面板返回了 HTTP 502，没有给出错误码：POST /api/control/x: 面板可能没有提交这条命令");
+  });
+});
+
+// QA walk (session e236bbe4): an invalid cron in Settings > Checks, or "Run now" on a project with no local target branch,
+// was refused with control-argument-invalid and only the code showed -- the person could not tell which part was wrong.
+// The server's detail is the only place that says so, so its words carry it, wherever a refusal is shown.
+describe("an invalid-argument refusal shows the server's detail", () => {
+  it("shows the detail in the refusal's words, in both languages, in the settings refusal and the refusal notice", async () => {
+    const DETAIL = "the project has no local target branch to check";
+    const refusal = { status: 400, code: "control-argument-invalid", message: `control-argument-invalid:${DETAIL}`, commandRevision: 2 };
+    const shown = () => {
+      render(<Refusal refusal={refusal} />);
+      const settings = screen.getByTestId("refusal-message").textContent ?? "";
+      cleanup();
+      const { container } = render(<RefusalNotice refusal={refusal} testId="n" />);
+      const notice = container.querySelector("p")?.textContent ?? "";
+      cleanup();
+      return [settings, notice];
+    };
+    await i18n.changeLanguage("en");
+    for (const words of shown()) expect(words).toContain(DETAIL);
+    await i18n.changeLanguage("zh");
+    for (const words of shown()) expect(words).toContain(DETAIL);
+    await i18n.changeLanguage("en");
   });
 });
