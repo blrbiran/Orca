@@ -64,17 +64,17 @@ const COVERAGE: PanelCoverage = {
 describe("Metrics layout (P2-5)", () => {
   it("lays the three rates out as tiles, each number first and its notes visible right under it", () => {
     const html = renderToStaticMarkup(<MetricsView report={REPORT} coverage={COVERAGE} />);
-    expect(html.match(/class="metric-tile"/g)?.length).toBe(3);
+    expect(html.match(/class="metric-tile[ "]/g)?.length).toBe(3);
     expect(html).not.toContain("<details");
     // The coverage tile is the third tile.
-    const tile = html.slice(html.lastIndexOf('class="metric-tile"'));
+    const tile = html.slice(html.lastIndexOf('class="metric-tile'));
     expect(tile).toContain("Review coverage");
     expect(tile.indexOf('data-testid="panel-coverage-rate"')).toBeGreaterThan(-1);
     expect(tile.indexOf('data-testid="panel-coverage-rate"')).toBeLessThan(tile.indexOf('data-testid="review-coverage-reason"'));
   });
   it("gathers the three data-health counts into one row", () => {
     const html = renderToStaticMarkup(<MetricsView report={REPORT} coverage={COVERAGE} />);
-    const row = html.slice(html.indexOf('class="metric-health"'));
+    const row = html.slice(html.indexOf('class="metric-health '));
     expect(row.length).toBeGreaterThan(0);
     for (const id of ["unresolved-count", "malformed-count", "excluded-as-future"]) expect(row).toContain(`data-testid="${id}"`);
   });
@@ -84,18 +84,27 @@ describe("Metrics layout (P2-5)", () => {
     for (const [title, id, n] of [["Unresolved decisions", "unresolved-count", "2"], ["Malformed lines", "malformed-count", "1"], [en.metrics.futureTitle, "excluded-as-future", "3"]] as const)
       expect(html).toContain(`<h2>${title}</h2><p data-testid="${id}">${n}</p>`);
   });
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the .table-scroll rules became
+  // utility strings in ui/classes.ts, used by UsagePanel.tsx, so the promise is read from those strings instead of styles.css).
+  // The two class hooks of the tiles and the health row (metric-tile, metric-health) stay on the markup and are pinned above.
   it("lets wide usage tables scroll inside their own box", () => {
     const usage = src("../src/UsagePanel.tsx");
-    expect(usage.match(/<div className="table-scroll">/g)?.length).toBe(3);
-    const css = src("../src/styles.css");
-    const at = css.indexOf(".table-scroll {");
-    expect(at).toBeGreaterThan(-1);
-    expect(css.slice(at, css.indexOf("}", at))).toContain("overflow-x: auto");
+    // by-model table and caps table scroll in the wide box, the two-column groups table in the narrow one: three boxes.
+    expect(usage.match(/<div className=\{tableScroll\}>/g)?.length).toBe(2);
+    expect(usage.match(/<div className=\{tableScrollNarrow\}>/g)?.length).toBe(1);
+    const wide = /const tableScroll = "([^"]*)"/.exec(src("../src/ui/classes.ts"))?.[1];
+    expect(wide).toBeDefined();
+    expect(wide).toContain("overflow-x-auto");
+    expect(wide).toContain("max-w-full");
+    expect(wide).toContain("md:[&_table]:min-w-[520px]"); // below md the sheet's headed-table rule keeps 40rem
   });
   it("does not force the two-column groups table to scroll", () => {
-    expect(src("../src/UsagePanel.tsx")).toContain('<table data-testid="usage-groups" className="table-narrow">');
-    const css = src("../src/styles.css");
-    expect(css).toMatch(/\.table-scroll \.table-narrow \{ min-width: 0;/);
+    const usage = src("../src/UsagePanel.tsx");
+    expect(usage).toContain('<div className={tableScrollNarrow}><table data-testid="usage-groups">');
+    const narrow = /const tableScrollNarrow = "([^"]*)"/.exec(src("../src/ui/classes.ts"))?.[1];
+    expect(narrow).toBeDefined();
+    expect(narrow).toContain("overflow-x-auto"); // still its own box, so it can never widen the page
+    expect(narrow).toContain("[&_table]:min-w-0"); // but no minimum width, which also beats the headed-table 40rem: two short columns fit a phone
   });
   it("speaks to the reader, not in spec citations (zh only)", () => {
     // en mirrors the server's sentences byte for byte; tests/metrics/noteCodes.test.ts pins that neither carries a citation.

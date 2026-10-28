@@ -19,6 +19,7 @@ import type {
 import i18n, { currentLanguage } from "./i18n.js";
 import { TokenInput, Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { Refusal } from "./Refusal.js";
+import { controlRow, tableScroll, tableScrollNarrow } from "./ui/classes.js";
 
 const SPEND_SCOPE = "@spend";
 const SPEND_PATHS = {
@@ -113,7 +114,7 @@ export function UsagePanel({ project, active = true }: { project: string | null;
   return (
     <section className="usage-panel" aria-label={t("usage.title")}>
       <h2>{t("usage.title")}</h2>
-      <div className="usage-pickers">
+      <div className={controlRow}>
         <label>
           {t("usage.scope")}
           <select value={project === null ? "all" : scopeKind} onChange={(e) => setScopeKind(e.currentTarget.value as "all" | "project")}>
@@ -156,11 +157,11 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
   const label = (key: string | null): string => key ?? t("usage.unattributed");
   return (
     <>
-      <dl className="usage-headline">
+      <dl className="flex gap-6">
         {/* Issue #84: every token figure short (K/M/B), its exact number in the title. */}
-        <div><dt>{t("usage.headline.total")}</dt><dd data-testid="usage-total"><Tokens n={view.headline.total} /></dd></div>
-        <div><dt>{t("usage.headline.week")}</dt><dd data-testid="usage-week"><Tokens n={view.headline.week} /></dd></div>
-        <div><dt>{t("usage.headline.month")}</dt><dd data-testid="usage-month"><Tokens n={view.headline.month} /></dd></div>
+        <div><dt>{t("usage.headline.total")}</dt><dd className="m-0 text-lg font-semibold" data-testid="usage-total"><Tokens n={view.headline.total} /></dd></div>
+        <div><dt>{t("usage.headline.week")}</dt><dd className="m-0 text-lg font-semibold" data-testid="usage-week"><Tokens n={view.headline.week} /></dd></div>
+        <div><dt>{t("usage.headline.month")}</dt><dd className="m-0 text-lg font-semibold" data-testid="usage-month"><Tokens n={view.headline.month} /></dd></div>
       </dl>
       <p data-testid="usage-range" title={exact(view.range.tokens)}>{t("usage.rangeTokens", { n: shortTokens(view.range.tokens) })}</p>
       {/* Spec §14: pre-ledger rows count in the total and in all-time caps but in no range, so with no range bounds the
@@ -170,7 +171,7 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
       )}
 
       <h3>{t("usage.byModel")}</h3>
-      <div className="table-scroll">
+      <div className={tableScroll}>
       <table>
         <thead>
           <tr>
@@ -189,14 +190,14 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
       </table>
       </div>
       {grouped && (
-        <div className="table-scroll"><table data-testid="usage-groups" className="table-narrow">
+        <div className={tableScrollNarrow}><table data-testid="usage-groups">
           <thead><tr><th>{t("usage.th.group")}</th><th>{t("usage.th.total")}</th></tr></thead>
           <tbody>
             {view.range.groups.map((group) => <tr key={group.key ?? "\u0000unattributed"}><td>{label(group.key)}</td><td><Tokens n={group.tokens} /></td></tr>)}
           </tbody>
         </table></div>
       )}
-      <ul className="caveats">
+      <ul className="text-xs text-muted">
         <li data-testid="usage-unattributed">{t("usage.counts.unattributed", { n: view.counts.unattributedRows })}</li>
         <li data-testid="usage-mismatch">{t("usage.counts.mismatch", { n: view.counts.breakdownMismatchRows })}</li>
         <li data-testid="usage-unknown">{t("usage.counts.unknownRuns", { n: view.counts.unknownUsageRuns })}</li>
@@ -227,7 +228,7 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
       {view.caps.length === 0 ? (
         <p data-testid="usage-no-caps">{t("usage.noCaps")}</p>
       ) : (
-        <div className="table-scroll">
+        <div className={tableScroll}>
         <table>
           <thead>
             <tr>
@@ -265,7 +266,7 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
       )}
       {owner && (
         <form
-          className="usage-new-cap" aria-label={t("usage.newCap")}
+          className={controlRow} aria-label={t("usage.newCap")}
           onSubmit={(event) => {
             event.preventDefault();
             if (newTokens !== null) onSend(SPEND_PATHS.set, { scope: newScope, period: newPeriod, tokens: newTokens });
@@ -305,7 +306,7 @@ function Calendar({ view, owner, onSend }: { view: UsageViewV1; owner: boolean; 
   }
   return (
     <form
-      className="usage-calendar" aria-label={t("usage.calendar")}
+      className={controlRow} aria-label={t("usage.calendar")}
       onSubmit={(event) => { event.preventDefault(); onSend(SPEND_PATHS.calendar, { timeZone: timeZone.trim(), weekStart }); }}
     >
       <label>{t("usage.timeZone")}<input value={timeZone} onChange={(e) => setTimeZone(e.currentTarget.value)} /></label>

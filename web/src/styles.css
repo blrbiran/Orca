@@ -293,7 +293,6 @@ h1 { font-size: 22px; } h2 { font-size: 18px; } h3 { font-size: var(--text-md); 
 .section-meta { color: var(--muted); font-size: var(--text-xs); font-family: var(--mono); overflow-wrap: anywhere; }
 p { margin: 0 0 8px; }
 code { font-family: var(--mono); }
-.refusal-code { font-size: 0.85em; }
 a { color: var(--accent); text-underline-offset: 2px; text-decoration-thickness: from-font; }
 a:hover { text-decoration-thickness: 2px; }
 /* Session e236bbe4: the browser's own surfaces wear the theme too -- selection, caret, scrollbars, focus, summaries. */
@@ -420,20 +419,7 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 .kbd-hint { color: var(--muted); font-size: var(--text-xs); margin: -6px 0 12px; }
 
 
-/* Metrics (existing MetricsView markup) */
-.metric-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.metric-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--well); }
-.metric-tile h2, .metric-health h2 { font-size: var(--text-xs); font-weight: 600; color: var(--muted); margin: 0 0 4px; }
-.metric-value { font-size: 28px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
-.metric-notes { margin-top: 6px; color: var(--muted); font-size: var(--text-xs); }
-.metric-notes ul { margin: 0; padding-left: 16px; }
-.metric-health { display: flex; flex-wrap: wrap; gap: 8px 24px; border-top: 1px solid var(--border); padding-top: 12px; }
-.metric-health > div { display: flex; flex-direction: column; }
-.metric-health p { font-size: var(--text-sm); font-variant-numeric: tabular-nums; margin: 0; }
-.table-scroll { overflow-x: auto; max-width: 100%; }
-.table-scroll table { min-width: 520px; }
-.table-scroll .table-narrow { min-width: 0; }
-.caveats, .caveat, .stale-bias { color: var(--muted); font-size: var(--text-xs); }
+.caveat { color: var(--muted); font-size: var(--text-xs); }
 
 @media (max-width: 760px) {
   .split { grid-template-columns: 1fr; }
@@ -445,19 +431,6 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
   .section-pane > section { padding: var(--space-4); }
 }
 
-
-/* Memory tab spec §5.2: a memory is shown as written, line breaks kept, long words wrapped. */
-.memory-content {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.memory-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  text-align: left;
-  width: 100%;
-}
 
 /* Board spec 2026-10-03 D2: the dependency graph. The status word is in each node's text; the stroke only repeats it. */
 .dep-node { cursor: pointer; }
@@ -487,10 +460,6 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 .dep-edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
 .dep-arrow { fill: var(--muted); }
 
-/* Accounts spec §7: the Usage panel (the login, account bar and notices are utilities in AuthGate.tsx). */
-.usage-pickers, .usage-new-cap, .usage-calendar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 12px 0; }
-.usage-headline { display: flex; gap: 24px; }
-.usage-headline dd { margin: 0; font-size: var(--text-lg); font-weight: 600; }
 
 @media (pointer: coarse) {
   button, select, input { min-height: 44px; }
