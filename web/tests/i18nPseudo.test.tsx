@@ -363,7 +363,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Reported-decisions spec 2026-10-20 §6 (session grant 3831d12f): the decisionKind `implementation` adds one: 184 + 1.
     // Spec correction 2026-10-20: estimateState `withdrawn` and the three estimateWithdrawnReason values: 185 + 4.
     // Clarify caps spec 2026-10-21 §3.6: requirementScope (3) and requirementClarity (3): 189 + 6.
-    expect(ENUM_VALUES.length).toBe(195);
+    // Ruling: session e236bbe4 blanket authorization — the theme family gains six candidate themes (frost, contrast, navy, ember, dusk, terminal): 195 + 6.
+    expect(ENUM_VALUES.length).toBe(201);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
