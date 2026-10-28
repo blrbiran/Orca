@@ -74,3 +74,17 @@ Folded into version 3 (not yet released when it landed), so the round has one ve
 - Order: instruction -> document -> overview -> `earlier-draft`, and no block for draft 1, so every draft of one
   requirement at one commit shares the prefix up to the draft block; the nonce stays `overview.hash.slice(0, 16)`.
 - Trade-off: drafts older than the latest are no longer sent; a reason fixed two drafts ago is not repeated to the model.
+
+## 6. Corrections after review (controller session a9f9d6de, 2026-10-28)
+
+- §4 (round numbering): chain-position ids are not unique across a requirement's rows — a superseded row keeps its
+  stored ids (e.g. `R3.Q1`) and a later chain round at that position gets the same. A clarify round may therefore depend
+  only on the chain's earlier rounds' questions (`recordClarify`, `earlierQuestionIds`); a dependency on a superseded
+  round's question is refused `unknown-dependency`. Superseded rounds are still shown to the model as context.
+- §5 (revision mode): the block revises the latest earlier draft **that has tasks**, with the person's feedback on it; a
+  later draft without tasks (schema-invalid) no longer replaces it — its reasons are added as `draft <n>: <reason>`. Only
+  when no earlier draft has tasks is `tasks` null. The instruction text is unchanged.
+- Known limits registered, not changed: the flow host's clarify (`src/flow/kinds/clarify.ts`) still numbers ids by stored
+  round; the panel still lists hand-back reasons as bare codes (the plain-language meanings reach the model only); an
+  omp row without `maxTokens` (or an openrouter row with no window) still reads `context-unavailable`; only the primary
+  `writes` entry's paths are shape-checked in a multi split (predates v3, which now states the rule for every entry).
