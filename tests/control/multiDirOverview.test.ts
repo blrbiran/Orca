@@ -33,8 +33,8 @@ const PINNED = {
   clarifyPrompt: "082285a1b2a23f21335bf704699b5e5decbf20fdcb24b29d9d1551513e93e4fc",
   // Split instruction version 2 (the requirement document and Orca's files are in the repository): the pin moves with it.
   // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
-  // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); the pin is version 3's bytes and still encodes: a single-repository prompt is built by the single instruction only.
-  splitPrompt: "7c04f453f588ae291fcff2c4f6acbfe534d48ed6fadb5b74ed245281353d64be",
+  // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); the pin is version 3's bytes (with revision mode, same ruling and round) and still encodes: a single-repository prompt is built by the single instruction only.
+  splitPrompt: "f9b880bd6badc30050377380c7dc9398049f17f1cf33941d6c0d3bb51e0b65ef",
   splitSchema: "0e8a8113c3a739af427bd6b730ef7995c2bcdcf41ea808d2ba526b1e66ecf728",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };

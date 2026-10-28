@@ -104,3 +104,61 @@ describe("a hand-back reason carries its meaning beside its code (#107)", () => 
     expect(prompt).toContain(JSON.stringify(["expand:t1:investigate-target -- an investigate task (loopPlan investigate, or no loopPlan and the label investigate) must name exactly one target path, an exact path with no `*`", "import:missing-goal"]));
   });
 });
+
+// Human ruling (round ledger, 2026-10-28, 「同意你的建议」): a split retry runs in revision mode -- the model gets the
+// earlier draft and why it went back, and fixes only what is named; a draft handed back by code and one the person sent
+// back with feedback are treated alike. The per-draft block comes last so every draft of one requirement at one commit
+// shares the prefix instruction -> document -> overview (the fence nonce is the overview hash's, the same each draft).
+describe("split retry in revision mode (version 3)", () => {
+  const tasks = [{ taskId: "a", title: "A", labels: [], goal: "g", successCondition: "s", targetPaths: ["README.md"], checks: ["true"], dependsOn: [], traces: ["AC1"] }];
+  const body = (draftNo: number, patch: Partial<DraftBody>): DraftBody => ({
+    draftNo, state: "invalid", autoRetry: 0, waiting: null, output: null, plan: null, draftHash: null, feedback: null, reasonCode: null, calls: [],
+    reasons: [], layers: null, implicitEdges: null, ...patch,
+  } as DraftBody);
+  const handedBack = body(1, { output: { tasks, notes: "" }, reasons: ["trace:a:R1.Q3"] });
+  const sentBack = body(2, { state: "rejected", output: { tasks, notes: "n" }, feedback: "Split README work in two." });
+  const prompt = (earlierDrafts: DraftBody[], multi = false) => buildSplitPrompt({ document: "D.", overview, earlierDrafts, ...(multi ? { multi: true } : {}) });
+  const fenceOf = (text: string): unknown => {
+    const match = /<<<ORCA-DATA earlier-draft ([0-9a-f]{16})\n([^]*?)\nORCA-DATA earlier-draft \1>>>\n$/.exec(text);
+    return match === null ? null : JSON.parse(match[2]!);
+  };
+
+  for (const multi of [false, true]) {
+    it(`tells the model to revise the earlier draft, changing only what is named${multi ? " (several directories)" : ""}`, () => {
+      const instruction = instructionOf(multi);
+      expect(instruction).toContain("- `earlier-draft`, when present: JSON, the latest earlier draft of this split (its `tasks`, null when it had none) with the person's feedback on it or the reasons code handed it back with (each reason is a code, then ` -- ` and what it means when the code alone does not say).");
+      expect(instruction).toContain("When `earlier-draft` is present, revise that draft: change only what its feedback or reasons name and keep every other task as it is; when its `tasks` is null, write the split afresh, avoiding what the reasons name.");
+      expect(instruction).not.toContain("earlier-drafts");
+    });
+  }
+
+  it("sends no draft block for the first draft", () => {
+    expect(prompt([])).not.toContain("ORCA-DATA earlier-draft");
+    expect(prompt([]).endsWith("ORCA-DATA repository-overview bbbbbbbbbbbbbbbb>>>\n")).toBe(true);
+  });
+
+  it("sends only the latest earlier draft, a handed-back one with its reasons and its meaning", () => {
+    expect(fenceOf(prompt([handedBack]))).toEqual({ draftNo: 1, tasks, feedback: null,
+      handedBackFor: ["trace:a:R1.Q3 -- this id is neither an acceptance criterion's id nor an accepted decision's id in the requirement document"] });
+  });
+
+  it("treats a draft the person sent back like a handed-back one: the latest, with its feedback, in the same block", () => {
+    expect(fenceOf(prompt([handedBack, sentBack]))).toEqual({ draftNo: 2, tasks, feedback: "Split README work in two.", handedBackFor: [] });
+  });
+
+  it("skips a draft with neither tasks nor reasons (a failed call), and sends a schema-invalid one with null tasks", () => {
+    const failed = body(3, { state: "invalid" });
+    const schemaInvalid = body(3, { reasons: ["schema:tasks.0.title:Required"] });
+    expect(fenceOf(prompt([handedBack, failed]))).toMatchObject({ draftNo: 1 });
+    expect(fenceOf(prompt([handedBack, schemaInvalid]))).toEqual({ draftNo: 3, tasks: null, feedback: null, handedBackFor: ["schema:tasks.0.title:Required"] });
+  });
+
+  for (const multi of [false, true]) {
+    it(`keeps every draft's prompt one prefix: the draft block last, the nonce the overview's${multi ? " (several directories)" : ""}`, () => {
+      const first = prompt([], multi), second = prompt([handedBack], multi), third = prompt([handedBack, sentBack], multi);
+      const prefix = first.slice(0, -1);
+      expect(second.startsWith(`${prefix}\n\n<<<ORCA-DATA earlier-draft bbbbbbbbbbbbbbbb\n`)).toBe(true);
+      expect(third.startsWith(`${prefix}\n\n<<<ORCA-DATA earlier-draft bbbbbbbbbbbbbbbb\n`)).toBe(true);
+    });
+  }
+});

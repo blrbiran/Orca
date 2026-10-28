@@ -27,7 +27,12 @@ const PLAN_RULES = [
 ];
 const TRACE_RULE = "- `traces` names the acceptance criteria (and decisions) each task serves, by the ids the requirement document gives them: an acceptance criterion's id as its list of acceptance criteria writes it (such as AC1), or an accepted decision's id as its heading under decisions starts (such as R1.ADR1). Nothing else can be traced: not a question's id (such as R1.Q1), a glossary entry's (such as R1.G1) or a round. Every acceptance criterion must be traced by at least one task.";
 const PATH_SHAPES = "each one of: an exact path (no leading `/`, no `*`, no empty, `.` or `..` segment) naming an existing file or a new file in an existing directory; `<directory>/**` for a directory that exists in the overview's commit; or `**`. Name every path a task may write.";
-const EARLIER_DRAFTS = "- `earlier-drafts`: JSON, every earlier draft of this split, with the person's feedback on it or the reasons code handed it back with (each reason is a code, then ` -- ` and what it means when the code alone does not say). Fix what they name.";
+/**
+ * Version 3, revision mode (human ruling 2026-10-28, round ledger): a retry gets the latest earlier draft and why it went
+ * back -- code's reasons or the person's feedback, alike -- and fixes only what is named. buildSplitPrompt sends it last.
+ */
+const EARLIER_DRAFTS = "- `earlier-draft`, when present: JSON, the latest earlier draft of this split (its `tasks`, null when it had none) with the person's feedback on it or the reasons code handed it back with (each reason is a code, then ` -- ` and what it means when the code alone does not say).";
+const REVISION_RULE = "- When `earlier-draft` is present, revise that draft: change only what its feedback or reasons name and keep every other task as it is; when its `tasks` is null, write the split afresh, avoiding what the reasons name.";
 
 /**
  * N1 spec §8.1: the fixed instruction. The two word lists come from the code that reads them. Version 2 (N1 spec §16,
@@ -52,6 +57,7 @@ const SPLIT_INSTRUCTION_V3 = [
   "",
   "## Rules",
   "",
+  REVISION_RULE,
   "- Each task changes a small, coherent part of the repository and can be checked by commands.",
   `- \`targetPaths\` are paths relative to the repository root, ${PATH_SHAPES}`,
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
@@ -93,6 +99,7 @@ export const SPLIT_INSTRUCTION_MULTI_V3 = [
   "",
   "## Rules",
   "",
+  REVISION_RULE,
   "- Each task changes a small, coherent part of the project and can be checked by commands.",
   "- `writes` names the directories the task changes: one entry `{ \"dir\": <key>, \"targetPaths\": [ ], \"checks\": [ ] }` per directory. `dir` is a directory's `key` (as `project-overview` lists them), not its name or path. Name only the directories the task changes.",
   `- \`writes[].targetPaths\` are paths relative to that directory's root, ${PATH_SHAPES}`,
@@ -341,17 +348,20 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
 
 /**
  * Spec §8.1: the rendered document, the overview, and every earlier draft with its feedback or hand-back reasons.
+ * Version 3 (revision mode): only the latest earlier draft that has tasks or reasons, fenced as `earlier-draft` after the
+ * overview, and no block for draft 1 -- so drafts of one requirement at one commit share the prefix up to it (the
+ * nonce is the overview hash's).
  * Multi-directory projects spec §6.4: `multi` uses the multi instruction and fences the composed overview as
  * `project-overview`; absent, the bytes are the single-repository ones.
  */
 export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean }): string {
   const nonce = input.overview.hash.slice(0, 16);
-  const earlier = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0)
-    .map((draft) => ({ draftNo: draft.draftNo, tasks: draft.output?.tasks ?? null, feedback: draft.feedback, handedBackFor: draft.reasons.map(withMeaning) }));
+  const latest = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0).at(-1);
   const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V3 : SPLIT_INSTRUCTION_V3;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
-  return `${[instruction, fence("requirement-document", nonce, input.document), fence(contextName, nonce, input.overview.canonicalJson),
-    fence("earlier-drafts", nonce, JSON.stringify(earlier))].join("\n\n")}\n`;
+  const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
+    draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback, handedBackFor: latest.reasons.map(withMeaning) }))];
+  return `${[instruction, fence("requirement-document", nonce, input.document), fence(contextName, nonce, input.overview.canonicalJson), ...revision].join("\n\n")}\n`;
 }
 
 const PATH_MEANING = "this target path does not exist in the overview's commit: an exact path must be an existing file or a new file in an existing directory, and `<directory>/**` needs an existing directory";

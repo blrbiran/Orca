@@ -61,3 +61,16 @@ clarify prompt's limits line already used.
 - Not changed: stored ids of rounds written before this change (history; their answers name them), the panel's
   "superseded" label (stored number), and the flow host's clarify step (`src/flow/kinds/clarify.ts`), which still
   numbers ids by its stored round number -- outside the ruling's scope (requirement documents); flagged for a decision.
+
+## 5. Split retry in revision mode (human ruling 2026-10-28)
+
+Folded into version 3 (not yet released when it landed), so the round has one version bump.
+
+- The prompt carries only the latest earlier draft that has tasks or reasons, as `earlier-draft`
+  (`{draftNo, tasks|null, feedback, handedBackFor}`), each reason with its meaning (§2). A draft code handed back and one
+  the person sent back with feedback are the same block and the same rule. A failed call with neither is skipped.
+- The instruction: revise that draft, change only what its feedback or reasons name, keep every other task; with null
+  tasks, write afresh avoiding what the reasons name.
+- Order: instruction -> document -> overview -> `earlier-draft`, and no block for draft 1, so every draft of one
+  requirement at one commit shares the prefix up to the draft block; the nonce stays `overview.hash.slice(0, 16)`.
+- Trade-off: drafts older than the latest are no longer sent; a reason fixed two drafts ago is not repeated to the model.
