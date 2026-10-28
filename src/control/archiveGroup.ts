@@ -3,7 +3,8 @@ import { archivedMarkOf } from "./archivedMark.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { ControlError } from "./errors.js";
 import { readGroupIntegration } from "./integrationScheme.js";
-import { pendingRequirementCall } from "./requirementCalls.js";
+import { pendingRequirementCall, type RequirementTarget } from "./requirementCalls.js";
+import { readDraft, readRound, writeDraft, writeRound } from "./requirementRecords.js";
 import { deriveStopState, readStopIntent } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -34,13 +35,16 @@ function groupBody(store: ControlStore, groupId: string): Record<string, unknown
  * nothing in motion, and no exit leads from it to handoff-complete).
  * The stop state is derived the way groupStopState derives it (the stored body's state can lag the requests it summarises).
  */
-function refuseArchive(store: ControlStore, groupId: string, group: Record<string, unknown>): void {
+function refuseArchive(store: ControlStore, groupId: string, group: Record<string, unknown>): RequirementTarget | null {
   for (const row of store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(groupId)) {
     if (["running", "start-unknown"].includes(String(row.state))) throw new ControlError("archive-call-in-flight", "estimate");
   }
   // Spec §6.3: this guard is what keeps requirement calls off an archived group -- no call is pending when it is archived,
   // and the ledger gate refuses every requirement command that would queue another.
-  if (group.status === "clarifying" && pendingRequirementCall(store, groupId) !== null) throw new ControlError("archive-call-in-flight", "requirement");
+  // Tester #100 (2026-10-28): a pending round or draft that would not be sent -- parked on `waiting` (unknown usage, the
+  // budget) or held by a stop -- is not in flight; it is returned and the archive interrupts it (applyArchiveGroup).
+  const pending = group.status === "clarifying" ? pendingRequirementCall(store, groupId) : null;
+  if (pending !== null && !parkedRequirementCall(store, groupId, group, pending)) throw new ControlError("archive-call-in-flight", "requirement");
   const intent = readStopIntent(store, groupId);
   if (intent !== null && intent.mode !== "pause") {
     const state = deriveStopState(store, groupId, intent.frozenRunIds);
@@ -48,6 +52,19 @@ function refuseArchive(store: ControlStore, groupId: string, group: Record<strin
   }
   if (readGroupIntegration(group)?.state === "resolving") throw new ControlError("archive-integration-resolving");
   if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId)) throw new ControlError("archive-run-active");
+  return pending;
+}
+
+/** A pending call with no run is parked when the claim would not send it: it waits on a reason, or a stop holds the group. */
+function parkedRequirementCall(store: ControlStore, groupId: string, group: Record<string, unknown>, target: RequirementTarget): boolean {
+  const waiting = target.kind === "round" ? readRound(store, groupId, target.no).waiting : readDraft(store, groupId, target.no).waiting;
+  return waiting !== null || group.stopped === true || readStopIntent(store, groupId) !== null;
+}
+
+/** Tester #100: the parked round or draft ends interrupted, so the archived group has no pending call (spec §6.3). */
+function interruptParkedCall(store: ControlStore, groupId: string, target: RequirementTarget): void {
+  if (target.kind === "round") writeRound(store, groupId, { ...readRound(store, groupId, target.no), state: "interrupted", waiting: null });
+  else writeDraft(store, groupId, { ...readDraft(store, groupId, target.no), state: "interrupted", waiting: null });
 }
 
 /** Spec §6.3: marks the body `archived: { at, actor }` and writes an `archived` activity row in the same transaction. */
@@ -58,7 +75,8 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
     apply: (context) => {
       const groupId = command.target.groupId;
       const group = groupBody(deps.store, groupId);
-      refuseArchive(deps.store, groupId, group);
+      const parked = refuseArchive(deps.store, groupId, group);
+      if (parked !== null) interruptParkedCall(deps.store, groupId, parked);
       const at = deps.store.now();
       group.archived = { at, actor: context.rawCommand.actorId };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);

@@ -1,6 +1,6 @@
 import { readRun, saveRun, syncWebBudget, type RunRecord } from "./budget.js";
 import { recordActivity } from "./activity.js";
-import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
+import { settlingPersonFor } from "./commandClient.js";
 import { zero } from "./commands.js";
 import { queueRequirementCall } from "./requirementRecords.js";
 import { singleCallCommitTerminal } from "./driverHandoff.js";
@@ -45,10 +45,10 @@ export function settleSingleCallUsageInTransaction(
   const run = readRun(store, input.runId) as SingleCallRun;
   const block = settleableSingleCallBlock(run as never);
   if (block === null || run.groupId !== input.groupId) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");
-  // As settle-unknown-usage: an authenticated owner on the Web (the route refuses anyone else first, humanOnly.ts). The
-  // socket tier of `recovery-retry.acknowledge` only gates an attempt this refuses anyway (socket principals are agents).
-  const principal = commandPrincipalFor(input.commandId);
-  if (commandClientFor(input.commandId) !== "web" || principal === null || !principal.startsWith("user:")) throw new ControlError("run-usage-not-settleable", "owner-required");
+  // As settle-unknown-usage: an authenticated owner on the Web (the route refuses anyone else first, humanOnly.ts), or --
+  // tester #103, the recovery CLI -- an owner's person token on the socket (`recovery-retry.acknowledge` is token-tier).
+  const principal = settlingPersonFor(input.commandId);
+  if (principal === null) throw new ControlError("run-usage-not-settleable", "owner-required");
   const group = readGroup(store, run.groupId);
   // A stop owns the group's calls in flight: it closes them (terminaliseRun) and the call is settled after (code review
   // S1). One it already closed is no longer the stop's.

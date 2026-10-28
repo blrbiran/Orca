@@ -5,7 +5,7 @@ import { hasTokenPolicy } from "./fundedAllowance.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
+import { settlingPersonFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
@@ -96,8 +96,9 @@ export function chargeRunRemainder(
 const stoppedWorking = (run: SettlementRun): boolean => run.drive?.outcome === null && run.state === "settled-unrecoverable";
 export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, command: SettleUnknownUsageCommand): Promise<CommandSuccessV1 | CommandErrorBodyV1> {
   const { store } = deps;
-  const principal = commandPrincipalFor(command.commandId);
-  if (commandClientFor(command.commandId) !== "web" || principal === null || !principal.startsWith("user:")) throw new Error("control-verb-human-only: authenticated owner Web context required");
+  // Tester #103 (2026-10-28): or an owner's person token on the socket (`settle-unknown-usage` is token-tier, humanOnly.ts).
+  const principal = settlingPersonFor(command.commandId);
+  if (principal === null) throw new Error("control-verb-human-only: authenticated owner Web context required");
   const release = deps.admissionGate?.enter();
   try {
     // Evidence read before authority transaction. Its exact run/report/checkpoint snapshot is rechecked inside it.

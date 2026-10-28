@@ -75,6 +75,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
     { maxRunningGroups: 2, criteriaReview: false, quotaWait: ["claude-main"] }],
   [["recovery", "retry", "--run", "run-1"], "recovery/retry", 5, { scope: "run", runId: "run-1" }],
   [["recovery", "retry", "--group", "g-al"], "recovery/retry", 5, { scope: "group", groupId: "g-alpha" }],
+  // Tester #103 (2026-10-28): the panel's charge-and-retry of a single call blocked on unknown usage, from the CLI.
+  [["recovery", "retry", "--run", "run-1", "--acknowledge", "charge-remaining-grant"], "recovery/retry", 5, { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" }],
 ];
 
 describe("project, decision, correction, agent, usage, orchestration, recovery writes (spec §4)", () => {
@@ -85,6 +87,15 @@ describe("project, decision, correction, agent, usage, orchestration, recovery w
     expect(out.code, out.stdout + out.stderr).toBe(0);
     const posts = w.posts();
     expect(posts.map((p) => ({ path: p.path, expectedRevision: p.expectedRevision, payload: p.payload }))).toEqual([{ path, expectedRevision: revision, payload }]);
+  });
+
+  it("--acknowledge goes only with --run and only as charge-remaining-grant, refused before anything is sent (tester #103)", async () => {
+    for (const argv of [["recovery", "retry", "--group", "g-al", "--acknowledge", "charge-remaining-grant"], ["recovery", "retry", "--run", "run-1", "--acknowledge", "release-unmetered"]]) {
+      const w = await world();
+      const out = await cli([...argv, "--json"], w.dir);
+      expect(out.code, JSON.stringify(argv)).not.toBe(0);
+      expect(w.posts(), JSON.stringify(argv)).toEqual([]);
+    }
   });
 
   it("the token-tier rows say so in their help (spec §15.1)", async () => {

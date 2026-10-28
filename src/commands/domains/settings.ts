@@ -195,7 +195,15 @@ export const SETTINGS_ROWS: CommandDef[] = [
 
   // --- recovery (the group it acts on)
   verb({ domain: "recovery", action: "retry", summary: "resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure", verb: "recovery-retry",
-    flags: [{ name: "run", type: "string", summary: "a blocked run" }, { name: "group", type: "string", summary: "a blocked group" }],
+    flags: [{ name: "run", type: "string", summary: "a blocked run" }, { name: "group", type: "string", summary: "a blocked group" },
+      // Tester #103 (2026-10-28): the panel's "charge and retry" for a clarify, split or estimate call blocked on unknown usage.
+      { name: "acknowledge", type: "string", summary: "charge-remaining-grant: settle a single call's unknown usage by charging its remaining grant, then retry (--run only; needs a person token)" }],
     scopeId: async (c) => { const target = await recoveryTarget(c); return target.scope === "group" ? target.groupId : groupOfRunId(c, target.runId); },
-    route: () => "recovery/retry", payload: (c) => recoveryTarget(c) }),
+    route: () => "recovery/retry", payload: async (c) => {
+      const target = await recoveryTarget(c), acknowledge = str(c, "acknowledge");
+      if (acknowledge === undefined) return target;
+      if (target.scope !== "run") throw invalid("--acknowledge goes with --run <run>");
+      if (acknowledge !== "charge-remaining-grant") throw invalid("--acknowledge wants charge-remaining-grant");
+      return { ...target, acknowledge };
+    } }),
 ];

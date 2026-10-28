@@ -19,7 +19,7 @@ import { readArtifact } from "../control/archive.js";
 import { ZodError } from "zod";
 import { lookupCommandResult } from "../control/commandLedger.js";
 import { ControlError } from "../control/errors.js";
-import { withCommandContext } from "../control/commandClient.js";
+import { withCommandContext, type Attribution } from "../control/commandClient.js";
 import { attributionOf, hasPauseAuthority, hasPersonAuthority, may, permissionRefusal, principalLabel, type Principal } from "./permissions.js";
 import { readVersions } from "../control/queries.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -849,7 +849,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
       // CLI v2 spec §16: the owner is the panel's --by (what corrections are recorded by); the operator id when unconfigured.
       const attribution = attributionOf(principal, service.deps.correctionsBy ?? actorId);
-      await withCommandContext(command.commandId, { client, principal: principalLabel(principal), attribution, personAuthority: hasPersonAuthority(principal), pauseAuthority: hasPauseAuthority(principal) }, async () => {
+      await withCommandContext(command.commandId, routedCommandContext(client, principal, attribution), async () => {
         switch (command.verb) {
           case "import-plan": await service.importPlan(command); break;
           case "proposal-edit": service.editProposal(command); break;
@@ -967,4 +967,13 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       res.json({ schema: "orca-flow-attachment-v1", id: `${stored.sha256}.${stored.ext}`, sha256: stored.sha256, ext: stored.ext });
     } catch (error) { sendMappedControlError(res, asFlowControlError(error)); }
   }), tooLarge);
+}
+
+/**
+ * What a routed command carries beside it (withCommandContext). Tester #103 (2026-10-28): a socket request with a person
+ * token also names that account (`personPrincipal`), which a usage settlement is booked to (settlingPersonFor).
+ */
+export function routedCommandContext(client: string, principal: Principal, attribution: Attribution): Parameters<typeof withCommandContext>[1] {
+  return { client, principal: principalLabel(principal), attribution, personAuthority: hasPersonAuthority(principal), pauseAuthority: hasPauseAuthority(principal),
+    ...(principal.kind === "agent" && principal.person !== undefined ? { personPrincipal: `user:${principal.person.userId}` } : {}) };
 }
