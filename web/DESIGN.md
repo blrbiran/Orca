@@ -19,8 +19,16 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Numbers that change (counts, rates, ids) use `font-variant-numeric: tabular-nums` where they sit in rows.
 - Key figures (tokens, durations, attempts) take the `.num` utility class (tabular digits), so a polled line or a column does not jitter (ruling H8).
 
-## Buttons
-- One primary per view: only `.btn-primary` is filled with the accent. `type="submit"` alone is a secondary button.
+## Components (session e236bbe4)
+- Scale tokens (in the first `:root` block, shared by every theme): space 4/8/12/16/24, radius 4 (xs) / 6 (controls) / 10 (cards), control height 32 (26 small), motion 120ms ease-out. Colour comes only from the theme tokens.
+- Buttons: secondary by default (elevated fill, strong edge, small shadow); one primary per view: only `.btn-primary` is filled with the accent (hover `--accent-hover`). `type="submit"` alone is a secondary button. `.btn-quiet` drops the chrome (cancel, dismiss); `.btn-danger` tints an irreversible action. Every button has hover, a 1px press, a 2px accent focus ring (offset 2), disabled at 50%, `aria-busy` shows progress. Two adjacent buttons get 8px apart unless their row spaces itself.
+- Fields: inputs, selects and textareas share one look (`--field`, strong edge, 32px, accent caret, accent ring on focus, muted placeholder, `aria-invalid` edge in danger); selects carry the token chevron; checkboxes and radios stay native at 16px, tinted with the accent.
+- Tabs: ONE component — the Settings category row, the group detail's region tabs and the corrections tabs: a row over a bottom rule, quiet medium-weight items, the open one bold over a 2px accent underline; it wraps when narrow.
+- Pills and badges: 12px, medium weight, hairline edge; a badge's colour is its `data-tone` (none = neutral).
+- Tables: uppercase 12px headers over a strong rule, 8×10 cells, row hover tint, no rule under the last row. On ≤760px a table's box scrolls sideways and a headed table keeps 40rem, so the page never scrolls sideways.
+- Confirmations: an inline `role="dialog"` box is a well with a strong edge; a confirm group (`.confirm-inline`, e.g. the #62 charge retry) is an inline box toned `warn`; a native `<dialog>` floats on `--shadow-pop` over a dimmed page. Menus float on `--shadow-pop` too.
+- The browser's own surfaces follow the theme: text selection, caret, scrollbars, link underline offset, summary markers.
+- Motion is limited to colour/edge/shadow transitions and the press; under `prefers-reduced-motion` they and the running pulse stop.
 
 ## Layout
 - ≥761px: fixed shell, sidebar and content scroll independently. ≤760px wide or ≤560px tall: the page scrolls as a whole; nav is one horizontally scrolling row; the footer hides. The project caption stays (it explains the hidden Add/Rename).
