@@ -155,7 +155,7 @@ export function MemoryView({ active, project, onProject }: {
           <ul className="memory-list">
             {page.page.records.map((r) => (
               <li key={r.ref}>
-                <button type="button" className="memory-row" onClick={() => { void open(r.ref); }}>
+                <button type="button" className="memory-row flex w-full flex-wrap gap-2 text-left" onClick={() => { void open(r.ref); }}>
                   <span className="memory-scope">{t(SCOPE_KEY[r.scope])}</span>
                   <span className="memory-kind">{r.kind}</span>
                   {r.pinned && <span className="memory-pinned">{t("memory.pinned")}</span>}
@@ -173,7 +173,7 @@ export function MemoryView({ active, project, onProject }: {
       {record === null && refusal === null && <p className="empty">{t("memory.select")}</p>}
       {record !== null && (
         <article className="memory-detail">
-          <pre className="memory-content" data-testid="memory-content">{record.content}</pre>
+          <pre className="whitespace-pre-wrap wrap-anywhere" data-testid="memory-content">{record.content}</pre>
           <dl>
             <dt>{t("memory.field.ref")}</dt><dd>{record.ref}</dd>
             <dt>{t("memory.field.scope")}</dt><dd>{t(SCOPE_KEY[record.scope])}</dd>

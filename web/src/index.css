@@ -67,6 +67,9 @@
   --text-lg: 16px;
   --text-xl: 18px;
   --text-2xl: 22px;
+  /* The Metrics tiles' figure, and a refusal's code (a little under the text around it). */
+  --text-figure: 28px;
+  --text-code: 0.85em;
   /* One breakpoint, the sheet's: md: is >= 761px, max-md: is <= 760px (DESIGN.md "Layout"). */
   --breakpoint-*: initial;
   --breakpoint-md: 761px;

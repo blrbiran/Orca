@@ -96,9 +96,13 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
       if (at === -1) throw new Error(`no rule ${selector}`);
       return css.slice(at, css.indexOf("}", at));
     };
-    for (const selector of [".project-control", ".section-pane section section", ".detail-block", ".metric-tile", '[role="alert"], [role="note"], [role="status"], .callout, .chain-banner']) {
+    for (const selector of [".project-control", ".section-pane section section", ".detail-block", '[role="alert"], [role="note"], [role="status"], .callout, .chain-banner']) {
       expect(wellRule(selector), selector).toMatch(/background:\s*var\(--well\);/);
     }
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the metric tile's rule became a
+    // utility string in MetricsView.tsx: `bg-well` is `var(--well)` through index.css, so the tile is read there).
+    const tile = /const metricTile = "([^"]*)"/.exec(readFileSync(fileURLToPath(new URL("../src/MetricsView.tsx", import.meta.url)), "utf8"))?.[1];
+    expect(tile, "metric tile classes").toMatch(/(^| )bg-well( |$)/);
     const bgUsers = [...css.matchAll(/([^{}]+)\{[^}]*background(?:-color)?:\s*var\(--bg\)/g)].map((m) => m[1]!.trim());
     expect(bgUsers).toEqual(["body"]);
     const resolve = (name: string): Rgb => {

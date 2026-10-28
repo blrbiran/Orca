@@ -19,7 +19,7 @@ export function RefusalNotice({ refusal, testId }: { refusal: ControlRefusal; te
         </ul>
       )}
       {/* ccloop error codes spec (2026-10-15) §4.6, human ruling 2: a ccloop failure shows ccloop's code and its detail (the server cut it to 512). */}
-      <p><code className="refusal-code">{refusal.code === "ccloop-failed" ? refusal.message : refusal.code}</code></p>
+      <p><code className="text-code">{refusal.code === "ccloop-failed" ? refusal.message : refusal.code}</code></p>
     </div>
   );
 }

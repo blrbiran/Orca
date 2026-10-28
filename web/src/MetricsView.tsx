@@ -34,40 +34,49 @@ function noteText(sentence: string, code: string | undefined): string {
   return code !== undefined && i18n.exists(key) ? (i18n.t(key as never) as string) : sentence;
 }
 
+/** The small muted heading over a figure (a tile's, and the data-health row's by descendant selector below). */
+const metricLabel = "m-0 mb-1 text-xs font-semibold text-muted";
+const metricTile = "metric-tile rounded-card border border-line bg-well px-[14px] py-3";
+const metricValue = "m-0 text-figure font-bold tracking-[-0.02em] text-fg-strong tabular-nums";
+const metricNotes = "mt-[6px] text-xs text-muted";
+const metricCaveats = "m-0 pl-4 text-xs text-muted";
+const metricHealth = "metric-health flex flex-wrap gap-x-6 gap-y-2 border-t border-line pt-3 [&>div]:flex [&>div]:flex-col"
+  + " [&_h2]:m-0 [&_h2]:mb-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-muted [&_p]:m-0 [&_p]:text-sm [&_p]:tabular-nums";
+
 export function MetricsView({ report, coverage }: { report: MetricsReport; coverage: PanelCoverage }): JSX.Element {
   const { t } = useTranslation();
   return (
     <section className="metrics">
-      <div className="metric-tiles">
-        <div className="metric-tile">
-          <h2>{t("metrics.correctionRate")}</h2>
-          <p className="metric-value" data-testid="correction-rate">{formatRate(report.correction_rate.rate_excluding_stale)}</p>
-          <div className="metric-notes">
-            <ul className="caveats" data-testid="correction-rate-caveats">
+      <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+        <div className={metricTile}>
+          <h2 className={metricLabel}>{t("metrics.correctionRate")}</h2>
+          <p className={metricValue} data-testid="correction-rate">{formatRate(report.correction_rate.rate_excluding_stale)}</p>
+          <div className={metricNotes}>
+            <ul className={metricCaveats} data-testid="correction-rate-caveats">
               {report.correction_rate.caveats.map((caveat, index) => (
                 <li key={caveat}>{noteText(caveat, report.correction_rate.caveatCodes?.[index])}</li>
               ))}
             </ul>
           </div>
         </div>
-        <div className="metric-tile">
-          <h2>{t("metrics.repairRate")}</h2>
-          <p className="metric-value" data-testid="repair-rate">{formatRate(report.repair_rate.rate)}</p>
-          <div className="metric-notes">
-            <ul className="caveats" data-testid="repair-rate-caveats">
+        <div className={metricTile}>
+          <h2 className={metricLabel}>{t("metrics.repairRate")}</h2>
+          <p className={metricValue} data-testid="repair-rate">{formatRate(report.repair_rate.rate)}</p>
+          <div className={metricNotes}>
+            <ul className={metricCaveats} data-testid="repair-rate-caveats">
               {report.repair_rate.caveats.map((caveat, index) => (
                 <li key={caveat}>{noteText(caveat, report.repair_rate.caveatCodes?.[index])}</li>
               ))}
             </ul>
-            <p className="stale-bias" data-testid="stale-bias">
+            <p className="text-xs text-muted" data-testid="stale-bias">
               {noteText(report.repair_rate.stale_only.known_bias, report.repair_rate.stale_only.knownBiasCode)}
             </p>
           </div>
         </div>
-        <div className="metric-tile">
-          <h2>{t("metrics.reviewCoverage")}</h2>
-          <p className="metric-value" data-testid="panel-coverage-rate">{formatRate(coverage.rate)}</p>
-          <div className="metric-notes">
+        <div className={metricTile}>
+          <h2 className={metricLabel}>{t("metrics.reviewCoverage")}</h2>
+          <p className={metricValue} data-testid="panel-coverage-rate">{formatRate(coverage.rate)}</p>
+          <div className={metricNotes}>
             <p className="caveat" data-testid="review-coverage-reason">
               {noteText(report.review_coverage.reason, report.review_coverage.reasonCode)}
             </p>
@@ -77,7 +86,7 @@ export function MetricsView({ report, coverage }: { report: MetricsReport; cover
           </div>
         </div>
       </div>
-      <div className="metric-health">
+      <div className={metricHealth}>
         <div><h2>{t("metrics.unresolvedTitle")}</h2><p data-testid="unresolved-count">{report.unresolved_decisions.length}</p></div>
         <div><h2>{t("metrics.malformedTitle")}</h2><p data-testid="malformed-count">{report.malformed_lines.length}</p></div>
         <div><h2>{t("metrics.futureTitle")}</h2><p data-testid="excluded-as-future">{report.excluded_as_future}</p></div>
