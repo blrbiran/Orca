@@ -32,7 +32,7 @@ not exist (`web/tests/tailwind.test.ts` fails on a default-palette class anywher
 
 | Scale | Utilities | Value |
 |---|---|---|
-| spacing (`--spacing: var(--space-1)`) | `p-1 p-2 p-3 p-4 p-6`, `gap-*`, `m*-*`, `w-*`… | 4 8 12 16 24 px — use only these steps (plus `0.5`, `px`, `-mb-px`) |
+| spacing (`--spacing: var(--space-1)`) | `p-1 p-2 p-3 p-4 p-6`, `gap-*`, `m*-*`, `w-*`… | 4 8 12 16 24 px by default (a candidate theme rescales the step, DESIGN.md "Themes") — use only these steps (plus `0.5`, `px`, `-mb-px`) |
 | control height | `h-control` / `min-h-control`, `h-control-sm` | 32 / 26 px |
 | radius | `rounded-inset` `rounded-control` `rounded-card` `rounded-full` | 4 / 6 / 10 px / pill |
 | shadow | `shadow-raise` `shadow-float` | `--shadow` / `--shadow-pop` |

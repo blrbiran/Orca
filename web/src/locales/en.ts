@@ -15,7 +15,8 @@ export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Tr
 
 const theme = {
   system: "system", light: "light", dark: "dark",
-  frost: "frost (cool light)", contrast: "high contrast (light)", navy: "navy (deep blue dark)", ember: "ember (warm dark)", dusk: "dusk (soft dark)", terminal: "terminal (green dark)",
+  frost: "frost (crisp light)", rose: "rose (soft light)", ink: "ink (monochrome light)", contrast: "high contrast (light)",
+  violet: "violet (compact dark)", navy: "navy (deep blue dark)", lagoon: "lagoon (teal dark)", dusk: "dusk (soft dark)", ember: "ember (warm dark)", terminal: "terminal (green, monospaced)",
 } as const satisfies Record<ThemePref, string>;
 const decisionKind = {
   dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile", implementation: "implementation",
