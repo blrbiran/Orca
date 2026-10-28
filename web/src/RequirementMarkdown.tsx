@@ -7,15 +7,7 @@
  * to merge once one of them is changed for its own reasons.
  */
 import type { JSX, ReactNode } from "react";
-
-/**
- * Tester #83, #86: the document's heading ladder, all below the page's h3 (the requirement) and the "Document" h4 fold:
- * the title (`# `) is the top heading (h4, DESIGN.md h3 size), the `## ` sections (DocumentText in RequirementsPanel) are
- * h5, and what a section body writes at `### ` or deeper is h6.
- */
-export const documentTitle = "mt-3 mb-1 text-base font-semibold";
-export const documentSectionTitle = "mt-3 mb-1 text-sm font-semibold";
-export const documentSubTitle = "mt-3 mb-1 text-sm font-medium";
+import { documentSectionTitle, documentSubTitle, documentTitle } from "./ui/requirementClasses.js";
 
 const indentOf = (line: string): number => line.length - line.trimStart().length;
 const BULLET = /^( *)[-*] (.*)$/;

@@ -3,7 +3,8 @@
  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
  * go through t.
  */
-import { RequirementMarkdown, documentSectionTitle } from "./RequirementMarkdown.js";
+import { RequirementMarkdown } from "./RequirementMarkdown.js";
+import { actionRow, documentSectionTitle, roundBox, roundSummary } from "./ui/requirementClasses.js";
 import { overviewRegionId } from "./overviewNavigation.js";
 import { goalSummary } from "./CardGoal.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
@@ -40,12 +41,6 @@ const RETRYABLE: readonly string[] = ["clarify-output-invalid", "split-output-in
 const BUDGET_EXHAUSTED = "requirement-budget-exhausted";
 const EXPORT_PENDING = "requirement-export-pending";
 const isReason = (code: string): code is Reason => (REASONS as readonly string[]).includes(code);
-
-/** Tester #106: a row of buttons sits on one line, wraps (never overlaps) when narrow, and spaces itself with its gap. */
-const actionRow = "flex flex-wrap items-center gap-2 [&>button]:ms-0";
-/** A clarification round's box (Issue #83); the one waiting on the person wears data-tone="warn", which paints its fill. */
-const roundBox = "requirement-round mb-2 rounded-control border border-line px-3 py-2 [&_ul]:my-[6px]";
-const roundSummary = "cursor-pointer font-semibold";
 
 function revisionOf(view: View): number { return view.summary.commandRevision; }
 
