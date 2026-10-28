@@ -7,6 +7,7 @@
 > ✅ 第二轮与 §七.三 已由人视觉验收、合并并 push（会话 `fb98aa31`）。
 > ✅ §七.四 已由人复验、合并并 push（之后人删了分支与 worktree）。
 > ✅ §七.五（深色框过暗；j/k 是 Vimium 吞键）已由人复验、合并并 push（会话 `9b012714`，2026-10-16 现测：`git merge-base --is-ancestor ui/panel-taste main` RC 0，`origin/main` 与本地 main 一致）。
+> ✅ §七.六（组件层重做＋六个候选主题，会话 `e236bbe4`，2026-10-28）已由 agent `--ff-only` 合入 main 并装上；**等人看完全部主题说留哪些**。
 > ⚪ **当前没有在飞的 UI 工作、没有待合并的 UI 提交。** 下一轮从 §〇.一 开始。（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
@@ -317,3 +318,20 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 **awaitingHuman**
 - ✅ 人已复验（会话 `9b012714`）：深色框「没问题了」；把面板地址加入 Vimium 排除列表后 j/k 正常 —— Vimium 吞键得到确认。
 - ✅ 人已合并进 main 并 push，并删了本会话的 clone 与改道环境。分支 `ui/panel-taste` 与 worktree 人保留着；之后已在 worktree 里 `--ff-only` 跟上 main，再提交本次 handoff 更新。
+
+## 七.六、组件层重做＋六个候选主题（会话 `e236bbe4`，2026-10-28；已合入 main 并装上）
+
+**人裁**：「我相信你的判断，风格要统一。你直接按你的判断改。改完之后我统一看。」；「可以多加几个主题让我可选（主题下拉框中可以选，默认随浏览器切换的还是默认 light 和 dark主题），新的主题中动基调」。参考：`/Users/biran/code/skills/UI/library/{primer-css,radix-ui-themes,shadcn-ui-ui,ant-design,mantine,spectrum-css,carbon}`（只读）、impeccable（主）、taste-skill（辅）。台账 `.superpowers/sdd/2026-10-28-session-e236bbe4/progress.md`。
+
+**做了什么**（按主题行找）：
+- `feat(web): redo the panel's component layer on one scale`：刻度 token（间距 4/8/12/16/24、圆角 4/6/10、控件高 32／小 26、120 ms 过渡，`prefers-reduced-motion` 关掉）；按钮四态＋焦点环＋`aria-busy`，`.btn-quiet`（charge-retry 的取消），`.btn-danger` 已定义**未接**；表单控件统一（复选／单选保留原生 16px＋accent，强制颜色模式可用）；三处 tab 同一组件；无 tone 的 badge 改中性；表格表头强线、行 hover；内联确认框是 well＋实边，`ChargeRetry` 用 `.confirm-inline data-tone="warn"`；原生 `<dialog>`／菜单浮在 `--shadow-pop` 上；滚动条、选区、光标随主题。390px：组详情工作项表在自己的框里横滚（改前整页溢出 392px），带表头的表最小 40rem（用了 `:has()`）。
+- `feat(web): add six selectable candidate themes`：`frost`、`contrast`、`navy`、`ember`、`dusk`、`terminal`。每个主题一个 `:root[data-theme="<id>"]` 块，放在 system-light 块**之后**（钉住的主题压过浏览器偏好），定义浅色块的全部 token 并设 `color-scheme`；`THEME_PREFS` 与 en／zh 名字。`web/tests/themes.test.ts` 对每个主题（含默认两套）循环钉：正文 ≥7、次要文字 ≥4.5（七种表面）、链接、主按钮静止与 hover、焦点环 ≥3、各 tone 与 tone 底上的强文字 ≥4.5、类目色、侧栏计数徽标、层级方向；`contrast` 全 ≥7。默认两套的 `contrast.test.ts`／`lightTheme.test.ts` 阈值没动。
+- `feat(web): title the board card's open control with where it leads (tester #49)`。
+- 控制器补的两笔：`fix(web): lift an open task's detail as a card instead of an accent side stripe (tester #21)`（impeccable 检测器 `skill/scripts/impeccable detect --json web/src` 唯一一条 `side-tab`；改后 `[]`）；`fix(web): a button after an inline link keeps the 8px gap (group header)`。
+
+**现测**：截图 `/private/tmp/orca-e236bbe4/ui/shots/{before,after}/`（改前 68、改后 116；量值 `measure-*.json`；改后 390px 横向溢出全 0、无 pageerror）；隔离面板脚本 `/private/tmp/orca-e236bbe4/ui/scripts/panel.sh`（端口 7795、HOME 与 `ORCA_*` 改道、fake claude／codex）。门见台账。
+
+**待人**：逐个看主题说留哪些（之后删掉不要的主题块、`THEME_PREFS` 项、locale 名字，并改 `themes.test.ts` 的主题清单与 `i18nPseudo.test.tsx` 的枚举计数）。
+
+**残余**：`requirement-next`（`<p data-tone>`）无内边距／圆角；通知条在每个主题都是 `--warn-subtle`（按设计）；`.btn-danger` 未用；没有逐页读 `/UI/library` 源码（刻度取 Radix／Primer 一类的常见值）。
+

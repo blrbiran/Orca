@@ -118,6 +118,7 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
   - **2026-10-20 会话 `3831d12f`**（ccloop `orca-dev/reported-decisions` 合入前的镜像目录跑：`tests/runtime tests/control tests/controller` 118 文件，1187 过／1 红，日志 Orca 会话 scratchpad `logs/ccloop-rd/mirror.json`）：`skillsController`「preserves plan skill cleanup failure across handoff-abort」又红，同形 `fixture marker missing … marker.closed`（5348 ms）、单跑 3/3 绿 ⇒ **这条断言形状候选现在 n＝2**，仍未进名单（下次再红先在 clone 里按 `systematic-debugging` 查 fixture marker 的写入时序）。
   - run 1（负载到 184，陈旧 tip）不计：7 红＋`verify:control` 32 红＋tmpleak 1 项，每个红文件单跑 3/3 绿（其中 2 个要等负载降到 12 再跑）。
   - 各 Task 实施期间见到、单跑绿：`updates`「replays… unreadable current table」5037 ms 超时（单跑 15/15）、`command`「validate」5005 ms（单跑 510 ms）、`ompPhase` ready-file 轮询 1000 ms＋afterEach 删目录后才写 `outcome.json` 的 ENOENT（`ompPhase.test.ts:156-168` 既有 teardown 竞态）、`agentsControl`「accepts a claim frozen before the CLI was upgraded」（单跑 2/2）、`runCodexPhase` TERM-ignoring（上表已有的 n＝1）。
+- **2026-10-28 会话 `3cd8fb02`**（ccloop main 全量 2429 条，负载 39）：`ompPhase`「keeps a stopped phase's completed-message tokens diagnostic」1 s 轮询超时，单跑 21/21，phase 路径那轮未动 ⇒ 判负载，与上面 `02f047f6` 的「stopped phase」同一族（会话 `e236bbe4` 按 ccloop handoff 的建议登记在此；未进 `check-known-reds.mjs`，进名单要在 ccloop 仓另行决定）。
 - `ompUpdates` › "preserves the unavailable reason…"：单跑 3.1–3.3 s，负载下超时一次；**未改写**（不在人的授权内），改写要人点名。
 - 2026-10-12 OMP 一轮：一条 5 s 更新判据全量与整文件都超时、单例 4.3 s 过；四条 saved-result worker 全量里未及时封口、整文件 28/28。
 - 更早：`codexWatchdog` 在负载 33 下红过（ccloop 人裁 139：负载下 1.5 s 太紧）；`runLoop.integration.test.ts` 里 19 条 `perAttemptTimeoutMs: 20` 的真 plan／verify 判据

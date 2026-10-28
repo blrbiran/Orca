@@ -63,7 +63,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.000000000000 会话 `3cd8fb02`（2026-10-27 晚 → 10-28）—— **先读这一节**
+### 3.0000000000000 会话 `e236bbe4`（2026-10-28）—— **先读这一节**
+
+> 台账 `.superpowers/sdd/2026-10-28-session-e236bbe4/progress.md`（人裁原话、每道门、变异、子代理报告要点）。
+> 人裁：拆 import 环「同意修」；m5「同意按你的建议走」；组件「你直接按你的判断改…改完之后我统一看」；主题「可以多加几个主题让我可选…新的主题中动基调」；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」（本轮实际零付费）；测试者 issue 文件不改（测试者自己改）；flow call 结算「这一轮先不做」。
+
+- **已合入 Orca main 并装上**（都 `--ff-only`；面板重启三次，最后 7777 应答 200；schema 不变）：
+  - **import 环（m4）**：主题行 `refactor(control): move the estimate settlement out of webService to break the import cycle`。估算结算与它写穿的组／提案 helper 逐字节搬到 `src/control/estimateSettlement.ts`，`webService.ts` 原样转出，调用方零改动；判据 `tests/control/singleCallImportCycle.test.ts`（从 `singleCallPurposes.ts` 走值 import 不得到达 `webService.ts`）。
+  - **m5（ccloop 对中止的单调用也带下限）**：spec §4 C2 原文就是「outcome 不是 complete 即带」，审阅员读窄了 ⇒ 行为保留，只补判据：ccloop W10（`tests/control/singleCall.test.ts`，已 ff 进 ccloop main）、Orca `singleCallUsageSettle.test.ts`「keeps an aborted call's lower bound…」；spec 追加 §11 更正。**无需 repin**（ccloop 只加了测试）。
+  - **组件层重做＋六个候选主题**（子代理实施、控制器审）：统一间距／圆角／控件高度刻度，按钮（主／次／`.btn-quiet`／`.btn-danger` 已定义未使用）、表单控件、tab（设置分类、组详情、纠正三处同一组件）、pill／badge、表格、确认框、浏览器表面全部重做；默认 `system`／`light`／`dark` 基调不变。新主题 `frost`（冷中性浅）、`contrast`（高对比浅，全 ≥7:1）、`navy`（深蓝暗）、`ember`（暖暗）、`dusk`（柔暗）、`terminal`（绿黑等宽），在「设置 › 外观」下拉里选；`web/tests/themes.test.ts` 对每个主题循环钉对比度／token 全集／块顺序／`color-scheme`。390px 横向溢出改前组详情 392px、改后全 0。#49 看板卡片 `title`。控制器复核：impeccable 检测器唯一一条 `side-tab`（#21 的 3px 强调色左边条）⇒ 改为整卡浮起（Rule 7：#21 要的是分离不是竖条），检测器后 `[]`；组头链接与按钮贴边 ⇒ 补间距。截图 `/private/tmp/orca-e236bbe4/ui/shots/{before,after}/`。`web/DESIGN.md` 已更新。
+  - **「待测试的功能」走查**（真浏览器、隔离面板、fake-codex、零付费；`/private/tmp/orca-e236bbe4/qa/NOTES.md`）：#76 revise、#95、#96、flow 看板卡／开跑对话框／运行页暂停恢复／设置与锁、checks 定时与 model review「Run now」都正常；**model review findings 与 dismiss 没测到**（要两个已落地组＋一次 findings run）。顺手修了三处：`control-argument-invalid` 的拒绝现在显示服务端 detail；flow 锁与锁拒绝用字段的话而不是原始键；需求文档开头的 front matter 分开显示、`# slug` 成标题。
+  - 改写过的既有判据都带 `Ruling:` 行（清单在台账）：`i18nPseudo.test.tsx:366-367`、`detailRegions.test.tsx` #21、`flowSettings.test.tsx`「sets the global locks…」、`requirementsReadability.test.tsx` #77。
+- **门**：每条线 `npm test` 0 跳过；唯一红是拆环那次的 `startForm`（已登记，单跑 3/3）。根 `scanPanelText`＋`noteCodes` 另跑全绿。
+- **残余（登记未修）**：需求文档按存储序号编轮次（revise 后「Round 3/4」「Consensus round: 4」），面板按链上位置（「Round 1, revised」）——**设计选择，待人定**（`src/control/requirementDocument.ts:58`）；项目设置刚保存后「Run now」报 `revision-conflict` 且文案说「this group」；QA 环境里面板重启后驱动在 `captureSnapshot → archiveFile` 归档一个整 clone 工作区耗时数分钟、且 SIGTERM 80 s 停不下（只在隔离环境见过一次，未复现）；`requirement-next` 那条 `<p data-tone>` 没有内边距／圆角；文档开头标题是 h6、低于 h5 小节标题；`.btn-danger` 未接到任何危险操作上。
+
+### 3.000000000000 会话 `3cd8fb02`（2026-10-27 晚 → 10-28）
 
 > 台账 `.superpowers/sdd/2026-10-27-session-3cd8fb02/progress.md`（人裁原话、每道门、变异、审阅、残余）；测试者分诊表同目录 `tester-triage.md`。
 > 人裁（原话在台账）：会话 `7753e97d` 的六条控制器裁定「都同意」；#63 需求页一侧「同意修改」；「全局设置」链接文案「同意修改判据」；「这一轮允许改必要的判据」／「这次批准改写所有必要的判据」；#62 方向「同意」、「本会话做完」（Rule 6 预算本会话豁免）；#64／#65「基于问题本身看…怎样做是最优的」；付费 omp「这一轮可以做」。
@@ -75,7 +89,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - 改写过的既有判据都带 `Ruling:` 行，清单在台账（含一条人点名范围之外、同一文案的 `followupControls.test.tsx:186`）。
 - **付费 omp 验收**（人批）：`/private/tmp/orca-3cd8fb02/o9-omp-e25/`（`local-litellm/deepseek-flash`，main 的 `e25381f` pin，ccloop `e25381f` build）**20/20 checks 全真**：open→clarify→consensus→跨目录 split→accept→估算（第 1 版 `single-call-output-invalid`，自动重试的第 2 版 ready——已登记的 omp 单调用答案质量）→导出→开跑→驱动崩溃→partial→retry-rest→三成员落地；plan／execute／verify 全程无 `tool-rule-violated`（#60 提示生效）。工具报用量 54386 token（omp 不报 USD）。崩溃点后三行 `orca-control: … pass failed: database is not open` 是脚本模拟崩溃时后台轮次撞上已关的库，不影响结果。真实 stall 无法稳定触发，#62 的结算路径以零成本实测与判据为证。
 - **测试者分诊**：两份文档所有未结条目对照 main 判过（`tester-triage.md`，含可直接转给测试者的中文清单）；本轮之后 issue-20261023 只剩 #22（延后）。
-- **残余（登记未修）**：flow call 的用量未知结算；`webService` ↔ `singleCallPurposes` 静态 import 环（目前只在函数体内引用，无害）；ccloop 对 aborted 单调用也会带 `usageLowerBound`（审阅 m5）；#64／#65 的观感只钉了样式表文本，未在真浏览器里看；codex 需求拆分人自测中。
+- **残余**：flow call 的用量未知结算（仍未做，见 §4.2 第 7 条）；codex 需求拆分人自测中。~~import 环~~、~~m5~~、~~#64／#65 未在真浏览器看~~ 已在会话 `e236bbe4` 处理（见上一节）。
 
 ### 3.00000000000 会话 `7753e97d`（2026-10-27；中途续接的会话 id `03c89de8`）
 
@@ -327,8 +341,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 4. ~~登记未修~~ **本轮已清**：Orca F1–F6（计划 `docs/superpowers/plans/2026-10-26-registered-fixes.md`）与 ccloop 的 OMP empty-stop、perf L7（ccloop 计划 `2026-10-26-omp-empty-stop-and-perf-l7.md`）都已修并过门；接受的残余见各计划文末。
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
-7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）。下一件可选：flow call 的用量未知结算（要先给 flow 设计入口，并让 flow 父组重算用量）；拆掉 `webService` ↔ `singleCallPurposes` 的 import 环。
-8. 测试者 #22（与 run 实时转录详情页重叠）与各节残余，按需排期；#64／#65 在真浏览器里看一眼深浅两套主题。
+7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
+8. 人看完全部主题后告诉保留哪些（§八）；再按人的选择删减主题与 `themes.test.ts`。测试者 #22（与 run 实时转录详情页重叠）与各节残余按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -506,7 +520,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `3cd8fb02` 待人审／待人做**：① push Orca／ccloop／ccmem main（人说本轮结束后推）；② 审本会话控制器裁定（台账逐条）：#62 结算只给所有者且只走 Web；被 stop 关掉的调用先结算或先重试两种顺序都允许；`ccloopCodes` 的 run 原因句改成「结算后重试」；#64 改顶部 tab（取代 H6 左侧分类列）、#65 不引 UI 库；#66 日期带时间、#69 页内选择框单独命名；③ codex 需求拆分人自测结果。会话 `7753e97d` 的待审项人已「都同意」，已结清。
+- **会话 `e236bbe4` 待人看／待人定**：① 在「设置 › 外观」里逐个看主题（`frost`、`contrast`、`navy`、`ember`、`dusk`、`terminal`，加默认深浅），说保留哪些；顺带看组件重做后的整体观感（#64／#65 的目检也在这里）；② 需求文档的轮次编号：按链上位置（与面板一致）还是保留存储序号；③ 审本会话控制器裁定（台账逐条）：#21 的强调色竖条换成整卡浮起（impeccable 禁 side-tab）；m5 不改 ccloop 行为只补判据；`control-argument-invalid` 的通用文案改写为「这条命令收到的值无效：<detail>」；④ codex 需求拆分人自测结果（会话 `3cd8fb02` 带来的，仍待）。会话 `3cd8fb02` 的裁定人已「其他同意」、push 已做，已结清。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。
   2. 人做：~~`branch -D feat/tester-round2-server`／`branch -D feat/scheduled`~~ **不必了**——2026-10-26 查 `branch --list` 只剩 `main`、`worktree list` 只剩主仓，没有可删的分支；`/private/tmp/orca-ffec7b28/` 的清理（人 2026-10-26 已授权，`ccloop-fe985b0` 是当前钉住的测试用 bin 要留；`ccloop-cache*` 是测试缓存）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/`。
