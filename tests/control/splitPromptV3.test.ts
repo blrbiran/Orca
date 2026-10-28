@@ -146,11 +146,15 @@ describe("split retry in revision mode (version 3)", () => {
     expect(fenceOf(prompt([handedBack, sentBack]))).toEqual({ draftNo: 2, tasks, feedback: "Split README work in two.", handedBackFor: [] });
   });
 
-  it("skips a draft with neither tasks nor reasons (a failed call), and sends a schema-invalid one with null tasks", () => {
+  // Ruling: 「这次批准改写所有必要的判据」 (human, session a9f9d6de, 2026-10-28) -- review I2: a schema-invalid draft after
+  // one with tasks used to replace it, dropping its tasks and the person's feedback; the block now keeps the draft with
+  // tasks and adds the later draft's reasons by draft number. A first draft that is schema-invalid still sends null tasks.
+  it("skips a draft with neither tasks nor reasons (a failed call); a schema-invalid later draft keeps the earlier tasks and feedback", () => {
     const failed = body(3, { state: "invalid" });
     const schemaInvalid = body(3, { reasons: ["schema:tasks.0.title:Required"] });
     expect(fenceOf(prompt([handedBack, failed]))).toMatchObject({ draftNo: 1 });
-    expect(fenceOf(prompt([handedBack, schemaInvalid]))).toEqual({ draftNo: 3, tasks: null, feedback: null, handedBackFor: ["schema:tasks.0.title:Required"] });
+    expect(fenceOf(prompt([sentBack, schemaInvalid]))).toEqual({ draftNo: 2, tasks, feedback: "Split README work in two.", handedBackFor: ["draft 3: schema:tasks.0.title:Required"] });
+    expect(fenceOf(prompt([body(1, { reasons: ["schema:tasks.0.title:Required"] })]))).toEqual({ draftNo: 1, tasks: null, feedback: null, handedBackFor: ["schema:tasks.0.title:Required"] });
   });
 
   for (const multi of [false, true]) {

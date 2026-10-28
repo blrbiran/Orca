@@ -49,4 +49,30 @@ describe("rounds numbered by chain position (ruling 2026-10-28)", () => {
       expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", reasons: [] });
     } finally { await x.dispose(); }
   });
+
+  // Review I1 (session a9f9d6de): chain-position ids repeat a superseded row's (row 3 kept R3.*; row 6 is at position 3),
+  // so a later round may depend only on the chain's own earlier questions -- one id, one question.
+  it("refuses a dependency on a superseded round's question: only the chain's earlier ids are known", async () => {
+    const DEP = { ...LATER, questions: LATER.questions.map((q, i) => (i === 0 ? { ...q, dependsOn: ["R3.Q1"] } : q)) };
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }, { purpose: "clarify", output: LATER }, { purpose: "clarify", output: LATER }, { purpose: "clarify", output: LATER }, { purpose: "clarify", output: DEP }, { purpose: "clarify", output: LATER }] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      x.service.requirementClassify(x.command("requirement-classify", { scope: "large", clarity: "fair" }));
+      const answers = (roundNo: number, typed?: string) => {
+        const result = x.round(roundNo).result!;
+        return { roundNo, answers: result.questions.map((q, i) => (i === 0 && typed !== undefined ? { id: q.id, kind: "text", text: typed } : { id: q.id, kind: "recommended" })),
+          glossaryDecisions: result.glossary.map((e) => ({ id: e.id, accept: true })), adrDecisions: result.adrs.map((a) => ({ id: a.id, accept: true })) };
+      };
+      x.service.answerRequirement(x.command("requirement-answer", answers(1)));
+      await x.until(() => x.round(2).state === "awaiting-answers");
+      x.service.answerRequirement(x.command("requirement-answer", answers(2)));
+      await x.until(() => x.round(3).state === "awaiting-answers");
+      expect(x.round(3).result!.questions[0]!.id).toBe("R3.Q1");
+      x.service.requirementRevise(x.command("requirement-revise", answers(1, "GitHub-flavoured")));
+      await x.until(() => x.round(5).state === "awaiting-answers");
+      x.service.answerRequirement(x.command("requirement-answer", answers(5)));
+      await x.until(() => x.round(6).state === "awaiting-answers");
+      expect(x.round(6).calls[0]).toMatchObject({ outcome: "invalid", reason: "unknown-dependency:format:R3.Q1" });
+    } finally { await x.dispose(); }
+  });
 });

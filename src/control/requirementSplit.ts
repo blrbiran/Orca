@@ -356,11 +356,17 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  */
 export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean }): string {
   const nonce = input.overview.hash.slice(0, 16);
-  const latest = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0).at(-1);
+  const sent = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0);
+  // Review I2 (session a9f9d6de): the block revises the latest draft that has tasks -- its tasks and the person's feedback
+  // on it are never dropped for a later draft that had none (schema-invalid); such later drafts add their reasons, by draft.
+  const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
+  const latest = withTasks ?? sent.at(-1);
+  const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
   const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V3 : SPLIT_INSTRUCTION_V3;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
-    draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback, handedBackFor: latest.reasons.map(withMeaning) }))];
+    draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback,
+    handedBackFor: [...latest.reasons.map(withMeaning), ...later.flatMap((draft) => draft.reasons.map((reason) => `draft ${draft.draftNo}: ${withMeaning(reason)}`))] }))];
   return `${[instruction, fence("requirement-document", nonce, input.document), fence(contextName, nonce, input.overview.canonicalJson), ...revision].join("\n\n")}\n`;
 }
 
