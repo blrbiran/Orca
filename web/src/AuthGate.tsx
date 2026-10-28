@@ -162,6 +162,9 @@ function passwordProblem(next: string, again: string): PanelRefusal | null {
   return null;
 }
 
+/** The change-password form inside Settings (Tailwind migration, tester round 2026-10-28): one column, 420px at most. */
+const passwordInSettings = "mb-6 max-w-[420px]";
+
 function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChanged: () => void; initial?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const [current, setCurrent] = useState("");
@@ -178,7 +181,7 @@ function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChang
   };
   const Frame = initial ? "main" : "div";
   return (
-    <Frame className={initial ? "auth-page" : "mb-6 max-w-[420px]"}>
+    <Frame className={initial ? "auth-page" : passwordInSettings}>
       <form className="auth-form" aria-label={t("auth.changeTitle")} onSubmit={(event) => void submit(event)}>
         {initial ? <h1>{t("auth.changeTitle")}</h1> : <h4>{t("auth.changeTitle")}</h4>}
         <p>{t(initial ? "auth.changeLede" : "auth.passwordLede", { name: me.user.name, n: MIN_PASSWORD_LENGTH })}</p>
@@ -192,7 +195,7 @@ function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChang
   );
 }
 
-function AccountBar({ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): JSX.Element {
+{ me, onLoggedOut }: { me: Me; onLoggedOut: () => void }): JSX.Element {
   const { t } = useTranslation();
   const owner = isOwner(me);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);

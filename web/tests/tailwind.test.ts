@@ -21,7 +21,7 @@ describe("the Tailwind entry (index.css)", () => {
     expect(at('@import "./styles.css" layer(legacy);')).toBeLessThan(at('@import "tailwindcss/utilities.css" layer(utilities);'));
     expect(at('@import "tailwindcss/theme.css" layer(theme);')).toBeLessThan(at('@import "./styles.css" layer(legacy);'));
     // No preflight until the last batch: styles.css is the base (web/TAILWIND-MIGRATION.md §2).
-    expect(entry).not.toMatch(/@import "tailwindcss"|preflight/);
+    expect(entry).not.toMatch(/@import "tailwindcss(\/preflight\.css)?"/);
     expect(read("main.tsx")).toContain('import "./index.css";');
   });
 

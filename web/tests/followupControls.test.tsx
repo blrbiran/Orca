@@ -19,10 +19,11 @@ const group = (over: Partial<GroupSummaryV1> = {}): GroupSummaryV1 => ({
 });
 afterEach(() => { cleanup(); window.localStorage.clear(); });
 // The Radix menu (ui/Menu.tsx) starts listening for a press outside it one task after it opens, so the press that opened
-// it can never close it, and moves focus between items one task after an arrow key; the criteria below wait that task.
+// it can never close it, moves focus between items one task after an arrow key, and returns focus to its button one task
+// after it closes; the criteria below wait that task where they read what follows it.
 const tick = (): Promise<void> => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
-it("the visible and context affordances open the same owner menu without nesting buttons", () => {
+it("the visible and context affordances open the same owner menu without nesting buttons", async () => {
   const onSelect = vi.fn(), onAction = vi.fn();
   render(<GroupList groups={[group()]} selected={null} onSelect={onSelect} onAction={onAction} />);
   const more = screen.getByRole("button", { name: "More actions" });
@@ -35,6 +36,8 @@ it("the visible and context affordances open the same owner menu without nesting
   expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Copy group ID" })).toBeTruthy();
   fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
   expect(screen.queryByRole("menu")).toBeNull();
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): focus comes back one task after the close.
+  await tick();
   expect(document.activeElement).toBe(more);
 });
 
@@ -54,6 +57,8 @@ it("closes an open menu on a press outside it or Escape anywhere, and keeps it o
   (document.activeElement as HTMLElement).blur();
   fireEvent.keyDown(document.body, { key: "Escape" });
   expect(screen.queryByRole("menu")).toBeNull();
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): the focus return after a close lands one task later; a person's next press comes after it.
+  await tick();
   // Its own button still toggles it: the press on the button is not "outside".
   fireEvent.pointerDown(more);
   fireEvent.click(more);

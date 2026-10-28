@@ -6,7 +6,7 @@
  * is the panel's Radix dialog (ui/Dialog.tsx), not a native <dialog>; the promises are the same. The list is a constant next to the functions
  * that decide the keys, and names exactly the letters they act on.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { SHORTCUTS, isRetryKey, reviewKeyAction } from "../src/reviewKeys.js";
@@ -58,6 +58,8 @@ describe("no ? binding; a button opens the list (C36)", () => {
     close.focus();
     fireEvent.click(close);
     expect(screen.queryByRole("dialog")).toBeNull();
+    // The dialog returns focus one task after it closes (Radix's focus scope).
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     // mutation: onCloseAutoFocus={(event) => event.preventDefault()} on the dialog -> focus is not returned, red
     expect(document.activeElement).toBe(button);
   });
