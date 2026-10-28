@@ -178,7 +178,7 @@ function ChangePasswordForm({ me, onChanged, initial = true }: { me: Me; onChang
   };
   const Frame = initial ? "main" : "div";
   return (
-    <Frame className={initial ? "auth-page" : "settings-password"}>
+    <Frame className={initial ? "auth-page" : "mb-6 max-w-[420px]"}>
       <form className="auth-form" aria-label={t("auth.changeTitle")} onSubmit={(event) => void submit(event)}>
         {initial ? <h1>{t("auth.changeTitle")}</h1> : <h4>{t("auth.changeTitle")}</h4>}
         <p>{t(initial ? "auth.changeLede" : "auth.passwordLede", { name: me.user.name, n: MIN_PASSWORD_LENGTH })}</p>
@@ -235,7 +235,7 @@ function AddUserForm(): JSX.Element {
     setName(""); setPassword(""); setAgain("");
   };
   return (
-    <form className="account-menu" aria-label={t("auth.addUser")} onSubmit={(event) => void submit(event)}>
+    <form className="flex flex-wrap items-end gap-3 border-b border-line [&>label]:min-w-0 [&>label]:max-w-full" aria-label={t("auth.addUser")} onSubmit={(event) => void submit(event)}>
       <label>{t("auth.userName")}<input value={name} onChange={(e) => setName(e.currentTarget.value)} /></label>
       <label>
         {t("auth.roleLabel")}

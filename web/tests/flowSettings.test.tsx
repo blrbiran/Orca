@@ -75,8 +75,9 @@ describe("flow settings with source and lock (§11.2)", () => {
   it("shows a set value's source as muted text, nothing for a built-in one, and keeps the lock a badge", async () => {
     serve();
     await mount(owner, { repoId: "repo" });
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of Settings): muted text is now the utility classes ui/classes.ts settingSource carries (was the .setting-source rule).
     // mutation: keep the badge class -> red
-    expect(within(field("effects.cost")).getByTestId("flow-setting-source").className).toBe("setting-source");
+    expect(within(field("effects.cost")).getByTestId("flow-setting-source").className).toBe("text-xs text-muted");
     // mutation: show the built-in source again -> red
     expect(within(field("effects.local")).queryByTestId("flow-setting-source")).toBeNull();
     expect(field("effects.local").textContent).not.toMatch(/built-in/i);

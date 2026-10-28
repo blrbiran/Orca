@@ -100,7 +100,7 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
   const selected = updatePreview && accepted.previewId === updatePreview.previewId ? accepted.ids : [];
   return (
     <details open={open} onToggle={(event) => { const next = event.currentTarget.open; setOpen(next); writeOpen(next); }}>
-    <summary><h3 className="agents-summary">{t("agents.title")}</h3></summary>
+    <summary><h3 className="inline">{t("agents.title")}</h3></summary>
     <section aria-label={t("agents.settings.region")}>
       <p>
         {t("agents.settings.operatorLine", { operatorId: preferences.operatorId, revision: preferences.revision })}

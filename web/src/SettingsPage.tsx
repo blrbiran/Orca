@@ -10,6 +10,7 @@ import { GlobalSettings, SettingsCategoryPane } from "./GlobalSettings.js";
 import { ProjectSettings } from "./ProjectSettings.js";
 import { SETTINGS_CATEGORIES, formatRoute, type SettingsCategory } from "./sections.js";
 import { projectName, type ProjectV1 } from "./project.js";
+import { inlinePick, settingHint, tabItem, tabRow } from "./ui/classes.js";
 
 type GlobalProps = Omit<Parameters<typeof GlobalSettings>[0], "category">;
 type ProjectProps = Parameters<typeof ProjectSettings>[0];
@@ -24,14 +25,14 @@ function ProjectPicker(props: ProjectPick): JSX.Element | null {
   const { t } = useTranslation();
   if (props.projects === null) return null;
   return (
-    <div className="settings-project-pick">
-      <label className="theme-pick">{t("settings.projectPick.label")}
+    <div>
+      <label className={inlinePick}>{t("settings.projectPick.label")}
         <select name="settings-project" value={props.project ?? ""} onChange={(e) => props.onProject(e.currentTarget.value)}>
           {props.project === null && <option value="" disabled>{t("settings.projectPick.choose")}</option>}
           {props.projects.map((p) => <option key={p.projectKey} value={p.projectKey}>{projectName(p)}</option>)}
         </select>
       </label>
-      <p className="setting-hint">{t("settings.projectPick.note")}</p>
+      <p className={settingHint}>{t("settings.projectPick.note")}</p>
     </div>
   );
 }
@@ -40,18 +41,18 @@ function ProjectPicker(props: ProjectPick): JSX.Element | null {
 export function SettingsPage(props: { category: SettingsCategory; global: GlobalProps; project: ProjectProps; projectKey: string; pick: ProjectPick }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <div className="settings-page">
-      <nav className="settings-nav" aria-label={t("settings.categories")}>
-        <ul>
+    <div className="flex flex-col gap-4">
+      <nav aria-label={t("settings.categories")}>
+        <ul className={tabRow}>
           {SETTINGS_CATEGORIES.map((category) => (
             <li key={category}>
-              <a className="nav-item" href={formatRoute({ kind: "settings", section: "settings", category })}
+              <a className={tabItem} href={formatRoute({ kind: "settings", section: "settings", category })}
                 aria-current={category === props.category ? "page" : undefined}>{t(`settings.category.${category}` as const)}</a>
             </li>
           ))}
         </ul>
       </nav>
-      <div className="settings-body">
+      <div className="min-w-0">
         <GlobalSettings {...props.global} category={props.category} />
         {/* The project's own heading names it (gaps spec §11), so this category adds none. */}
         <SettingsCategoryPane category="project" active={props.category} title={false}>

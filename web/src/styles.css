@@ -231,7 +231,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 .nav { flex: 1 0 auto; }
 .nav-band-start { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
 .nav > li[data-band="2"] { margin-top: auto; }
-.theme-pick { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 /* Section tabs are navigation (a selected row with an accent bar); the project control is a grouped
    card whose Add/Rename are compact secondary buttons, so the two never read as the same kind of control. */
 .nav-item[aria-current="page"] { box-shadow: inset 3px 0 0 var(--accent); }
@@ -352,7 +351,7 @@ select {
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); padding: 0; margin: 0; width: 16px; height: 16px; min-height: 0; flex: none; cursor: pointer; }
 input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline-offset: 2px; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); font-weight: 500; color: var(--muted); margin-bottom: 10px; }
-label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .theme-pick { flex-direction: row; align-items: center; gap: 8px; }
+label:has(> input[type="radio"]), label:has(> input[type="checkbox"]) { flex-direction: row; align-items: center; gap: 8px; }
 label:has(> input[type="radio"]), label:has(> input[type="checkbox"]) { font-size: var(--text-sm); color: var(--text); cursor: pointer; }
 fieldset { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3) var(--space-1); margin: 0 0 var(--space-3); min-width: 0; }
 legend { padding: 0 4px; font-size: var(--text-xs); font-weight: 600; color: var(--muted); }
@@ -384,10 +383,6 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 /* Control run decisions Task 11: a badge's shape only; its colours come from its data-tone (DESIGN.md). */
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; border-width: 1px; border-style: solid; font-size: var(--text-xs); font-weight: 500; line-height: 1.5; color: var(--text-strong); }
 .badge:not([data-tone]) { border-color: var(--border-strong); background: var(--bg-elevated); }
-/* Tester #67: where a setting's value was set is a quiet aside, not a badge. */
-.setting-source { color: var(--muted); font-size: var(--text-xs); }
-/* Tester #68: a setting's one-line example sits muted under its name. */
-.setting-hint { display: block; color: var(--muted); font-size: var(--text-xs); }
 
 /* Decisions */
 .filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
@@ -572,7 +567,6 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .account-bar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
 .account-name { font-weight: 600; color: var(--text-strong); }
 .account-role { color: var(--muted); font-size: var(--text-xs); }
-.account-menu { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); }
 .notices { padding: 6px 24px; border-bottom: 1px solid var(--border); background: var(--warn-subtle); font-size: var(--text-sm); }
 .notices ul { margin: 0; padding-left: 16px; }
 .notices li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -580,13 +574,12 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 .usage-pickers, .usage-new-cap, .usage-calendar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 12px 0; }
 .usage-headline { display: flex; gap: 24px; }
 .usage-headline dd { margin: 0; font-size: var(--text-lg); font-weight: 600; }
-.agents-summary { display: inline; }
 
 /* Share the viewport with account content without guessing its wrapped height. */
 .authenticated-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .authenticated-shell > .shell { flex: 1; min-height: 0; overflow: hidden; }
 .authenticated-shell > .account-bar { flex-shrink: 0; flex-wrap: wrap; }
-.authenticated-shell > .account-menu, .authenticated-shell > .notices { max-height: 40dvh; overflow-y: auto; flex-shrink: 0; }
+.authenticated-shell > .notices { max-height: 40dvh; overflow-y: auto; flex-shrink: 0; }
 .authenticated-shell .sidebar { position: static; height: 100%; min-height: 0; overflow-y: auto; }
 .authenticated-shell .content { min-height: 0; overflow-y: auto; }
 .run-state > div { margin-bottom: 4px; }
@@ -627,28 +620,17 @@ nav[aria-label="Control groups"] button[aria-current="true"] { background: var(-
 [data-overview-region]:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 850px) { .overview-layout { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
 
-/* Settings reuse the panel's forms inside its common viewport. */
-/* Ruling H6(b): one Settings page, one category shown (the rest stay mounted, hidden here). Tester #64 (spec §24, revised
-   by the human in session 3cd8fb02): the categories are a row of tabs across the top -- still links, one per hash --
-   quiet until hovered, the open one underlined in the accent over the row's bottom rule; they wrap onto more lines
-   when narrow (never a horizontal scroll), and the content takes the full width below. */
-.settings-page { display: flex; flex-direction: column; gap: 16px; }
-/* Session e236bbe4: ONE tab component -- this row, the group detail's region tabs and the corrections view's tabs share
-   these rules: a row over a bottom rule, quiet items, the open one in the accent underline; it wraps when narrow. */
-.detail-region-tabs, .settings-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 4px; border-bottom: 1px solid var(--border); }
-.detail-region-tabs > button, .settings-nav .nav-item { padding: 8px 12px; margin-bottom: -1px; border-radius: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; box-shadow: none; font-size: var(--text-sm); font-weight: 500; color: var(--muted); }
-.detail-region-tabs > button:hover:not(:disabled), .settings-nav .nav-item:hover { background: transparent; color: var(--text-strong); border-bottom-color: var(--border-strong); }
-.detail-region-tabs > button:focus-visible, .settings-nav .nav-item:focus-visible { outline-offset: -2px; border-radius: var(--radius-xs) var(--radius-xs) 0 0; }
-.detail-region-tabs > [aria-selected="true"], .detail-region-tabs > [aria-pressed="true"], .detail-region-tabs > [aria-selected="true"]:hover:not(:disabled), .detail-region-tabs > [aria-pressed="true"]:hover:not(:disabled), .settings-nav .nav-item[aria-current="page"] { background: transparent; box-shadow: none; color: var(--text-strong); font-weight: 600; border-bottom-color: var(--accent); }
-.settings-body { min-width: 0; }
+/* Ruling H6(b): one Settings page, one category shown (the rest stay mounted, hidden by the rule below). The Settings page
+   itself is in Tailwind utilities since the tester round of 2026-10-28 (ui/classes.ts, web/TAILWIND-MIGRATION.md). */
+/* Session e236bbe4: ONE tab component -- the Settings category row (now ui/classes.ts tabRow/tabItem, the same look), the
+   group detail's region tabs and the corrections view's tabs: a row over a bottom rule, quiet items, the open one in the
+   accent underline; it wraps when narrow. These rules go when the region and corrections tabs move to tabRow/tabItem. */
+.detail-region-tabs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 4px; border-bottom: 1px solid var(--border); }
+.detail-region-tabs > button { padding: 8px 12px; margin-bottom: -1px; border-radius: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; box-shadow: none; font-size: var(--text-sm); font-weight: 500; color: var(--muted); }
+.detail-region-tabs > button:hover:not(:disabled) { background: transparent; color: var(--text-strong); border-bottom-color: var(--border-strong); }
+.detail-region-tabs > button:focus-visible { outline-offset: -2px; border-radius: var(--radius-xs) var(--radius-xs) 0 0; }
+.detail-region-tabs > [aria-selected="true"], .detail-region-tabs > [aria-pressed="true"], .detail-region-tabs > [aria-selected="true"]:hover:not(:disabled), .detail-region-tabs > [aria-pressed="true"]:hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--text-strong); font-weight: 600; border-bottom-color: var(--accent); }
 .settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none !important; }
-.settings { min-width: 0; overflow-wrap: anywhere; }
-.settings-browser { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
-.settings-password { max-width: 420px; margin-bottom: 24px; }
-.settings input, .settings select { max-width: 100%; min-width: 0; }
-.settings .account-menu { padding: 0; }
-.settings .account-menu label { min-width: 0; max-width: 100%; }
-.settings table { display: block; max-width: 100%; overflow-x: auto; }
 
 /* Region composition uses the existing controls and palette. */
 /* The region tabs are the shared tab component (see .settings-nav above); only their spacing is theirs. */

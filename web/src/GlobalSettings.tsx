@@ -17,6 +17,7 @@ import type { PanelLanguage } from "./i18n.js";
 import { THEME_PREFS } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import type { SettingsCategory } from "./sections.js";
+import { inlinePick, settingsRegion } from "./ui/classes.js";
 
 /** One category's content, under its own page title; only the active one shows. */
 export function SettingsCategoryPane(props: { category: SettingsCategory; active: SettingsCategory; title?: boolean; children: ReactNode }): JSX.Element {
@@ -39,22 +40,22 @@ export function GlobalSettings(props: {
 }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <section className="settings" aria-label={t("nav.globalSettings")} data-active={props.category === "project" ? "false" : "true"}>
+    <section className={`settings ${settingsRegion}`} aria-label={t("nav.globalSettings")} data-active={props.category === "project" ? "false" : "true"}>
       {props.refusal && <RefusalNotice refusal={props.refusal} testId="global-settings-refusal" />}
       <SettingsCategoryPane category="appearance" active={props.category}>
         <p>{t("settings.browserScope")}</p>
-        <div className="settings-browser">
-          <label className="theme-pick">{t("shell.theme")}
+        <div className="mb-4 flex flex-wrap gap-4">
+          <label className={inlinePick}>{t("shell.theme")}
             <select name="theme" value={props.theme} onChange={(e) => props.onTheme(e.currentTarget.value as ThemePref)}>
               {THEME_PREFS.map((pref) => <option key={pref} value={pref}>{enumText("theme", pref)}</option>)}
             </select>
           </label>
-          <label className="theme-pick">{t("shell.language")}
+          <label className={inlinePick}>{t("shell.language")}
             <select name="language" value={props.language} onChange={(e) => props.onLanguage(e.currentTarget.value as PanelLanguage)}>
               {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}
             </select>
           </label>
-          <label className="theme-pick"><input type="checkbox" checked={props.showAdvanced ?? false}
+          <label className={inlinePick}><input type="checkbox" checked={props.showAdvanced ?? false}
             onChange={(event) => props.onAdvanced?.(event.currentTarget.checked)} />{t("settings.showAdvanced")}</label>
         </div>
       </SettingsCategoryPane>

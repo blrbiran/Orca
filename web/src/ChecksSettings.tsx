@@ -16,6 +16,7 @@ import { checksCommandPath, checksReadPath, controlGet, nextCommandId, refusalFr
 import type { CheckConditionV1, CheckKindV1, CheckLockV1, CheckSourcedV1, CheckStateV1, CheckTriggerV1, ChecksReadV1, ScheduledCheckV1 } from "./controlTypes.js";
 import { Refusal } from "./Refusal.js";
 import { ReviewDetail } from "./ReviewDetail.js";
+import { settingSource } from "./ui/classes.js";
 
 type CheckVerb = Parameters<typeof checksCommandPath>[1];
 type Send = (verb: CheckVerb, payload: unknown) => void;
@@ -51,7 +52,7 @@ function SourceBadges(props: { sourced: Pick<CheckSourcedV1<unknown>, "source" |
   return (
     <>
       {/* Tester #67 (spec §24): the source is muted text, shown only when it is not the built-in default; the lock stays a badge. */}
-      {source !== "builtin" && <span className="setting-source" data-testid="check-source">{t(`settings.checks.source.${source}` as const)}</span>}
+      {source !== "builtin" && <span className={settingSource} data-testid="check-source">{t(`settings.checks.source.${source}` as const)}</span>}
       {props.sourced.lockedBy !== null && <> <span className="badge" data-tone="warn" data-testid="check-locked">{t("settings.checks.locked")}</span></>}
     </>
   );

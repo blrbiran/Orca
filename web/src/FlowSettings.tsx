@@ -18,6 +18,7 @@ import { WEB_FLOW_EFFECT_CLASSES, WEB_FLOW_LOCKABLE_PATHS } from "./controlTypes
 import type { FlowEffectClassV1, FlowLevelSettingV1, FlowLockablePathV1, FlowSettingsReadV1, FlowSourcedV1, FlowTemplateParamV1, FlowTemplatesV1 } from "./controlTypes.js";
 import { refusalDetail } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
+import { settingHint, settingSource } from "./ui/classes.js";
 
 export type FlowSettingsScope = "global" | { repoId: string };
 type Layer = "project" | "global";
@@ -32,7 +33,7 @@ function Badges(props: { sourced: FlowSourcedV1<unknown> }): JSX.Element {
   return (
     <>
       {/* Tester #67 (spec §24): the source is muted text, shown only when it is not the built-in default; the lock stays a badge. */}
-      {source !== "builtin" && <span className="setting-source" data-testid="flow-setting-source">{t(`settings.flows.source.${source}`)}</span>}
+      {source !== "builtin" && <span className={settingSource} data-testid="flow-setting-source">{t(`settings.flows.source.${source}`)}</span>}
       {props.sourced.lockedBy !== null && <> <span className="badge" data-tone="warn" data-testid="flow-setting-locked">{t("settings.flows.locked")}</span></>}
     </>
   );
@@ -53,7 +54,7 @@ function Field<T>(props: {
     <div className="check-field" data-testid={`flow-setting-${props.name}`}>
       <span>{props.label}: {props.show(props.sourced.value)}</span> <Badges sourced={props.sourced} />
       {ignored !== undefined && <> <s data-testid="flow-setting-overridden">{props.show(ignored)}</s> {t("settings.flows.overriddenByLock")}</>}
-      {props.hint !== undefined && <span className="setting-hint" data-testid="flow-setting-hint">{props.hint}</span>}
+      {props.hint !== undefined && <span className={settingHint} data-testid="flow-setting-hint">{props.hint}</span>}
       {props.may && (
         <div>
           {props.edit(draft, setDraft)}

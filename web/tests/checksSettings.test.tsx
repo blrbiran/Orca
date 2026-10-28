@@ -90,8 +90,9 @@ describe("the check settings' source layer (spec §4.3, criterion 11)", () => {
     render(as(owner, <ChecksSettings scope={{ repoId: "repo" }} />));
     await shown();
     const source = within(field("model-review", "enabled")).getByTestId("check-source");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of Settings): muted text is now the utility classes ui/classes.ts settingSource carries (was the .setting-source rule).
     // mutation: keep the badge class -> red
-    expect(source.className).toBe("setting-source");
+    expect(source.className).toBe("text-xs text-muted");
     // mutation: show the built-in source again -> a check-source in a built-in field, red
     expect(within(field("model-review", "budgetTokens")).queryByTestId("check-source")).toBeNull();
     expect(field("model-review", "budgetTokens").textContent).not.toMatch(/built-in/i);

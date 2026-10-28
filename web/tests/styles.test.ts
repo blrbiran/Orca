@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { inlinePick, tabItem, tabRow } from "../src/ui/classes.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
+const src = (file: string): string => readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");
 const rule = (selector: string): string => {
   const at = css.indexOf(`${selector} {`);
   if (at === -1) throw new Error(`no rule for ${selector}`);
@@ -38,8 +40,12 @@ describe("styles.css", () => {
   // Final review Important 2: the global label rule stacks its children, which put every radio and
   // checkbox above its own text (WorkspaceModeSelector, AgentFields) and "Theme" above its select.
   it("keeps a radio's or a checkbox's label, and the theme picker, on one row", () => {
-    const r = rule('label:has(> input[type="radio"]), label:has(> input[type="checkbox"]), .theme-pick');
+    const r = rule('label:has(> input[type="radio"]), label:has(> input[type="checkbox"])');
     expect(r).toContain("flex-direction: row");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of Settings): the theme picker's row is the utility string ui/classes.ts inlinePick (was the .theme-pick rule).
+    // mutation: drop flex-row from inlinePick -> red
+    expect(inlinePick.split(" ")).toEqual(expect.arrayContaining(["flex-row", "items-center"]));
+    expect(src("GlobalSettings.tsx").match(/<label className=\{inlinePick\}>/g)?.length).toBe(3);
   });
 
   // Deferred final-review Minor (human go-ahead, session f8281a60): the open control group carries
@@ -115,19 +121,23 @@ describe("styles.css", () => {
   // narrow, the content full width below. Only the sheet is pinned here; how it looks is visual.
   it("lays the settings categories out as a wrapping tab row above full-width content, the open one underlined", () => {
     // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- the left-column criterion this branch first added (fit-content(11rem) column, panel box, inset left edge) now pins the tab row.
-    const page = rule(".settings-page");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of Settings): the page and its tab row are utility classes now (SettingsPage.tsx, ui/classes.ts tabRow/tabItem); the
+    // same promises are read off the class strings, each class one CSS declaration (index.css maps them to the tokens).
+    const page = src("SettingsPage.tsx");
     // mutation: back to a two-column grid -> red
-    expect(page).toContain("flex-direction: column");
-    expect(page).not.toContain("grid-template-columns");
-    expect(css).not.toMatch(/\.settings-nav \{[^}]*position: sticky/);
-    const row = rule(".settings-nav ul");
+    expect(page).toContain('<div className="flex flex-col gap-4">');
+    expect(page).not.toMatch(/grid-cols|sticky/);
+    expect(page).toContain("<ul className={tabRow}>");
+    expect(page).toContain("<a className={tabItem} href=");
+    const row = tabRow.split(" ");
     // mutation: drop the wrap -> one row that overflows when narrow, red
-    for (const part of ["display: flex", "flex-wrap: wrap", "border-bottom: 1px solid var(--border)"]) expect(row).toContain(part);
-    expect(row).not.toContain("flex-direction: column");
-    expect(rule(".settings-nav .nav-item")).toContain("color: var(--muted)");
-    const open = rule('.settings-nav .nav-item[aria-current="page"]');
+    for (const part of ["flex", "flex-wrap", "border-b", "border-line"]) expect(row).toContain(part);
+    expect(row).not.toContain("flex-col");
+    const item = tabItem.split(" ");
+    expect(item).toContain("text-muted");
     // mutation: drop the accent underline -> red
-    for (const part of ["border-bottom-color: var(--accent)", "font-weight: 600", "background: transparent", "box-shadow: none"]) expect(open).toContain(part);
+    for (const part of ["aria-[current=page]:border-accent", "aria-[current=page]:font-semibold", "border-b-2"]) expect(item).toContain(part);
+    expect(item.some((c) => /^(bg-|shadow-)/.test(c))).toBe(false);
   });
 
   // Tester #65 (spec §24, session 3cd8fb02): selects wore each platform's own arrow and fields the browser's focus ring.

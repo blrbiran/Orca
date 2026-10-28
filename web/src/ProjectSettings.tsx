@@ -9,6 +9,7 @@ import { ChecksSettings } from "./ChecksSettings.js";
 import { FlowSettings } from "./FlowSettings.js";
 import { ScheduleSettings } from "./ScheduleSettings.js";
 import { PlanLibraryView } from "./PlanLibraryView.js";
+import { settingsRegion } from "./ui/classes.js";
 import type { IntegrationSchemeV1, RepositoryIntegrationV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 
 export function ProjectSettings(props: {
@@ -26,7 +27,7 @@ export function ProjectSettings(props: {
 }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <section className="settings" aria-label={t("nav.projectSettings")}>
+    <section className={`settings ${settingsRegion}`} aria-label={t("nav.projectSettings")}>
       {/* Gaps spec §11: the heading names the project it sets; its path sits muted under it. */}
       <h2>{props.repoId === null ? t("nav.projectSettings") : t("settings.projectHeading", { project: props.repoLabel ?? props.repoId })}</h2>
       {props.repoId !== null && props.repoPath != null && <p className="section-meta" data-testid="project-settings-path">{props.repoPath}</p>}
