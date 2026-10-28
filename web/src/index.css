@@ -1,12 +1,13 @@
 /* Tester round 2026-10-28 (human rulings: Tailwind v4 via @tailwindcss/vite, CSS variables the ONLY theme source).
-   The panel's stylesheet entry. Layer order: Tailwind's theme variables, then the hand-written sheet (styles.css: the
-   theme blocks, the element base and every component not yet migrated) in its own layer, then the utilities -- so a
-   utility class always wins over a legacy rule, whatever the legacy selector's specificity. No preflight yet: styles.css
-   is the base until the last migration batch (web/TAILWIND-MIGRATION.md). */
-@layer theme, legacy, utilities;
+   The panel's stylesheet entry. Layer order: Tailwind's theme variables, then the base -- Tailwind's preflight and the
+   hand-written sheet (styles.css: the theme blocks, what the look keeps of the browser defaults, the element base, the
+   role/tone rules and the few context rules on hooks), then the utilities, so a utility class always wins over a base
+   rule, whatever the base selector's specificity. The shared component classes are the @utility blocks at the end. */
+@layer theme, base, utilities;
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "./fonts.css";
-@import "./styles.css" layer(legacy);
+@import "./styles.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
 
 /* Every colour utility reads a theme token (inline: the utility carries var(--token), so a theme switch repaints it).
@@ -105,4 +106,84 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* The sheet's own monospace (--mono) for ids and dates in rows; the default look does not use the bundled mono. */
   --font-data: var(--mono);
+}
+
+/* The shared component classes (final pass of the Tailwind migration, controller session a9f9d6de): each is one @utility,
+   so it sits in the utilities layer and the element's own utilities still override it (Tailwind sorts a single-property
+   utility after a many-property one). Their declarations are the old sheet rules, word for word; state colour still
+   comes only from data-tone (the base tone rules), so a box's neutral edge and fill apply only without a tone. */
+
+/* Page furniture: metadata, counts, an empty state, asides, the review loop's key hint. */
+@utility section-meta { color: var(--muted); font-size: var(--text-xs); font-family: var(--mono); overflow-wrap: anywhere; }
+@utility count { color: var(--muted); font-size: var(--text-sm); font-family: var(--mono); }
+@utility empty { color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 20px; text-align: center; margin: 12px; font-size: var(--text-sm); }
+@utility caveat { color: var(--muted); font-size: var(--text-xs); }
+@utility kbd-hint {
+  color: var(--muted); font-size: var(--text-xs); margin: -6px 0 12px;
+  @media (pointer: coarse) { display: none; }
+}
+/* Ruling H8: key figures (tokens, durations, attempts) in equal-width digits, so a column or a polled line does not jitter. */
+@utility num { font-variant-numeric: tabular-nums; }
+/* The sidebar's count chip, also on the Board's column heads. */
+@utility nav-count {
+  min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--border-strong); color: var(--text-strong); font-size: var(--text-xs); font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums;
+  /* The count sits on --border-strong; the high-contrast theme's edge is near-black, so there the count inverts. */
+  :root[data-theme="contrast"] & { background: var(--text-strong); color: var(--card); }
+}
+
+/* Buttons (DESIGN.md "Components"): the <button> element base is the secondary button; .btn-primary is the one filled
+   control per view; .btn-quiet drops the chrome for low-stakes actions (cancel, dismiss). */
+@utility btn-primary {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600;
+  &:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+}
+@utility btn-quiet {
+  background: transparent; border-color: transparent; box-shadow: none; color: var(--text);
+  &:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; color: var(--text-strong); }
+}
+
+/* Session e236bbe4: a pill and a badge are one shape -- 12px, medium weight, a hairline edge; a badge's colour is its tone. */
+@utility pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: var(--text-xs); font-weight: 500; line-height: 1.5; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text); white-space: nowrap; }
+@utility badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; border-width: 1px; border-style: solid; font-size: var(--text-xs); font-weight: 500; line-height: 1.5; color: var(--text-strong);
+  &:not([data-tone]) { border-color: var(--border-strong); background: var(--bg-elevated); }
+}
+
+/* Taste refinement P1-1: a callout (the decision operations notice) is the neutral notice box of the role rules. */
+@utility callout {
+  border-width: 1px; border-style: solid; color: var(--text-strong);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere;
+  &:not([data-tone]) { border-color: var(--border); background: var(--well); }
+}
+
+/* The list-and-detail split (Decisions, Memory, a requirement): two cards side by side, one column on a narrow screen. */
+@utility split {
+  display: grid; grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); gap: 16px; align-items: start;
+  & > * { min-width: 0; } /* a grid item's min-content (a long select) must not widen a 390px page (measured 23px) */
+  @media (max-width: 760px) { grid-template-columns: 1fr; }
+}
+@utility split-list {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  max-height: calc(100vh - 180px); overflow-y: auto;
+}
+@utility split-detail {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 20px; position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto;
+  @media (max-width: 760px) { position: static; max-height: none; }
+}
+/* An inset block of a detail (a decision's choice, reasons, reviewers): a well; a toned one keeps its tone's edge. */
+@utility detail-block {
+  background: var(--well); border-width: 1px; border-style: solid; border-radius: var(--radius); box-shadow: none; padding: 12px 14px; margin: 12px 0;
+  &:not([data-tone]) { border-color: var(--border); }
+  & h3 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  & p { overflow-wrap: anywhere; }
+}
+@utility detail-note { color: var(--warn); background: var(--warn-subtle); padding: 6px 10px; border-radius: var(--radius-sm); font-size: var(--text-xs); margin: 0 0 12px; }
+
+/* Ruling H8: a group's status light, 7px, coloured by groupLed from the theme's tone tokens (DESIGN.md); decorative. */
+@utility led {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--muted); opacity: 0.45;
+  &[data-led="running"] { background: var(--ok); opacity: 1; box-shadow: 0 0 6px var(--ok); }
+  &[data-led="failed"] { background: var(--danger); opacity: 1; }
+  &[data-led="waiting"] { background: var(--warn); opacity: 1; }
 }

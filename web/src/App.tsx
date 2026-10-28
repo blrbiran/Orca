@@ -139,6 +139,7 @@ import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
 import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
+import { tabButton, tabButtonRow } from "./ui/classes.js";
 import { DEFAULT_SECTION, DEFAULT_SETTINGS_CATEGORY, consumeOwnHash, formatRoute, parseRoute, rememberOwnHash } from "./sections.js";
 import type { Route } from "./sections.js";
 import { DETAIL_REGIONS, focusedDetailRegion, type DetailRegion } from "./detailRegion.js";
@@ -1888,9 +1889,9 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="decisions" active={section}>
         {/* Toggle buttons, not ARIA tabs: the group view's region tabs are the page's one tablist. */}
-        <div role="group" aria-label={t("corrections.tabs")} className="detail-region-tabs">
+        <div role="group" aria-label={t("corrections.tabs")} className={tabButtonRow}>
           {(["decisions", "corrections"] as const).map((tab) => (
-            <button key={tab} type="button" aria-pressed={decisionsTab === tab} onClick={() => navigate(tab === "corrections" ? { kind: "corrections", section: "decisions" } : { kind: "section", section: "decisions" }, { replace: true })}>
+            <button key={tab} type="button" className={tabButton} aria-pressed={decisionsTab === tab} onClick={() => navigate(tab === "corrections" ? { kind: "corrections", section: "decisions" } : { kind: "section", section: "decisions" }, { replace: true })}>
               {t(tab === "decisions" ? "corrections.tabDecisions" : "corrections.tabCorrections")}
             </button>
           ))}

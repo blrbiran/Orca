@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { carrying } from "./sourceClasses.js";
+import { carrying, utility } from "./sourceClasses.js";
 
 /** Taste refinement P2-6 (detector: flat-type-hierarchy 14/14/16; one primary per view). */
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -21,7 +21,9 @@ describe("page template (P2-6)", () => {
   });
   it("fills only .btn-primary with the accent; a bare submit is secondary", () => {
     expect(css).not.toMatch(/button\[type="submit"\][^{]*\{[^}]*var\(--accent\)/);
-    expect(rule(".btn-primary")).toContain("background: var(--accent)");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: .btn-primary is an @utility block in index.css, read there).
+    // mutation: fill the primary with --bg-elevated -> red
+    expect(utility("btn-primary")).toMatch(/^@utility btn-primary \{\s*background: var\(--accent\);/);
   });
   it("hides a project action that this panel can never enable (its reason stays in the caption)", () => {
     // Rewritten for the shell's Tailwind migration (batch 1): the rule is the `disabled:hidden` utility on the button's class string.
@@ -30,7 +32,9 @@ describe("page template (P2-6)", () => {
     expect(carrying("ProjectControl.tsx", "project-action").split(/\s+/)).toContain("disabled:hidden");
   });
   it("shows the control plane's session line as metadata", () => {
-    const r = rule(".section-meta");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: .section-meta is an @utility block in index.css, read there).
+    // mutation: drop the muted colour from the section-meta utility -> red
+    const r = utility("section-meta");
     expect(r).toContain("var(--muted)");
     expect(r).toContain("var(--text-xs)");
   });
@@ -43,7 +47,10 @@ describe("page template (P2-6)", () => {
     }
   });
   it("does not recolour a disabled primary on hover (final review M1)", () => {
-    expect(css).toContain(".btn-primary:hover:not(:disabled) {");
-    expect(css).not.toMatch(/\.btn-primary:hover \{/);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the primary's hover is nested in its @utility block in index.css).
+    // mutation: nest the hover as "&:hover {" -> a disabled primary recolours on hover, red
+    const primary = utility("btn-primary");
+    expect(primary).toContain("&:hover:not(:disabled) { background: var(--accent-hover);");
+    expect(primary).not.toMatch(/&:hover \{/);
   });
 });

@@ -286,14 +286,26 @@
   --control-h: 28px; --control-h-sm: 22px;
 }
 
-* { box-sizing: border-box; }
+/* Final pass of the Tailwind migration (controller session a9f9d6de): this sheet is the BASE layer (index.css), after
+   Tailwind's preflight. Preflight zeroes every margin, padding and border, unstyles lists, headings and links, and makes
+   media blocks; the look was built on the browser's own defaults for these elements, so they get them back (revert = the
+   browser's value). Everything else the look needs is set below from the tokens. */
+ul, ol, menu, dl, dd, blockquote, figure, pre, h4, h5, h6 { margin: revert; padding: revert; }
+ul, ol, menu { list-style: revert; }
+h1, h2, h4, h5, h6 { font-weight: revert; }
+h4, h5, h6 { font-size: revert; }
+pre { font-family: revert; font-size: revert; }
+small { font-size: revert; }
+img, svg, video, canvas, audio, iframe, embed, object { display: revert; vertical-align: revert; }
+img, video { max-width: revert; height: revert; }
+progress { vertical-align: revert; }
+
 body { margin: 0; background: var(--bg); color: var(--text); font: var(--text-md)/1.55 var(--font); }
 h1, h2, h3 { color: var(--text-strong); margin: 0 0 8px; line-height: 1.3; }
 h1 { font-size: 22px; } h2 { font-size: 18px; } h3 { font-size: var(--text-md); font-weight: 600; }
-.section-meta { color: var(--muted); font-size: var(--text-xs); font-family: var(--mono); overflow-wrap: anywhere; }
 p { margin: 0 0 8px; }
 code { font-family: var(--mono); }
-a { color: var(--accent); text-underline-offset: 2px; text-decoration-thickness: from-font; }
+a { color: var(--accent); text-decoration: revert; text-underline-offset: 2px; text-decoration-thickness: from-font; }
 a:hover { text-decoration-thickness: 2px; }
 /* Session e236bbe4: the browser's own surfaces wear the theme too -- selection, caret, scrollbars, focus, summaries. */
 html { scrollbar-color: var(--border-strong) transparent; }
@@ -304,27 +316,22 @@ a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px 
 kbd { font-family: var(--mono); font-size: var(--text-xs); padding: 0 5px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--radius-xs); background: var(--bg-elevated); color: var(--text-strong); }
 hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 
-/* Shell (the shell itself is Tailwind utilities in Shell.tsx; the Board still wears the sidebar's count chip) */
-.nav-count { min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--border-strong); color: var(--text-strong); font-size: var(--text-xs); font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
-/* The count sits on --border-strong; the high-contrast theme's edge is near-black, so there the count inverts. */
-:root[data-theme="contrast"] .nav-count { background: var(--text-strong); color: var(--card); }
 /* !important since the Tailwind migration (index.css layers this sheet under the utilities): no utility on a pane may
    un-hide it -- an important declaration in an earlier layer beats every later one (handoff §5.2 item 6). */
 .section-pane:not([data-active="true"]) { display: none !important; }
 
 /* Generic surfaces inside panes: styles existing components without editing them */
-.section-pane > section, .section-pane section[aria-label], .detail-block, .split-list, .split-detail {
+.section-pane > section, .section-pane section[aria-label] {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
 }
 .section-pane section { padding: var(--space-4); margin-bottom: var(--space-4); }
 .section-pane > section { padding: 20px; }
 .section-pane section > h2:first-child, .section-pane section > h3:first-child { margin-bottom: var(--space-3); }
 .section-pane section section { background: var(--well); box-shadow: none; }
-.count { color: var(--muted); font-size: var(--text-sm); font-family: var(--mono); }
-.empty { color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 20px; text-align: center; margin: 12px; font-size: var(--text-sm); }
 
-/* Taste refinement spec P1-1/§7: role is semantics; status and note are neutral, an alert with no stated tone is an error. */
-[role="alert"], [role="note"], [role="status"], .callout, .chain-banner {
+/* Taste refinement spec P1-1/§7: role is semantics; status and note are neutral, an alert with no stated tone is an error.
+   (A chain banner always carries a role; the callout class is an @utility in index.css.) */
+[role="alert"], [role="note"], [role="status"] {
   border: 1px solid var(--border); background: var(--well); color: var(--text-strong);
   border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere;
 }
@@ -334,10 +341,10 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 [data-tone="warn"] { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-subtle); }
 [data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-subtle); }
 
-/* Controls (session e236bbe4): one button, one field, one tab, from the scale tokens. A button is secondary unless it is
-   .btn-primary (the one filled control per view, DESIGN.md); .btn-quiet drops the chrome for low-stakes actions (cancel,
-   dismiss); .btn-danger tints an action that cannot be taken back. Every control shows hover, press, focus and disabled. */
-button, .btn {
+/* Controls (session e236bbe4): one button, one field, from the scale tokens. A button is secondary unless it wears the
+   .btn-primary utility (the one filled control per view, DESIGN.md) or .btn-quiet (index.css). Every control shows hover,
+   press, focus and disabled. */
+button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-h);
   font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: 1.35; padding: 5px 12px; border-radius: var(--radius-sm); cursor: pointer;
   background: var(--bg-elevated); color: var(--text-strong); border: 1px solid var(--border-strong); box-shadow: var(--shadow);
@@ -346,19 +353,12 @@ button, .btn {
 }
 button:hover:not(:disabled) { background: var(--bg-hover); border-color: color-mix(in srgb, var(--muted) 50%, var(--border-strong)); }
 button:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
-button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-.btn-quiet { background: transparent; border-color: transparent; box-shadow: none; color: var(--text); }
-.btn-quiet:hover:not(:disabled) { background: var(--bg-hover); border-color: transparent; color: var(--text-strong); }
-.btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong)); }
-.btn-danger:hover:not(:disabled) { background: var(--danger-subtle); border-color: var(--danger); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 button[aria-busy="true"] { cursor: progress; opacity: 0.75; }
 /* Two buttons side by side never touch (many forms put them in plain flow), nor a button after an inline link (the group
    header's source-requirement link); rows that space their own items reset it. */
-:where(button, .btn, a) + :where(button, .btn) { margin-inline-start: var(--space-2); }
-:where(.detail-region-tabs) > :where(button, .btn) { margin-inline-start: 0; }
+:where(button, a) + :where(button) { margin-inline-start: var(--space-2); }
 input, select, textarea {
   font: inherit; font-size: var(--text-sm); color: var(--text-strong); background: var(--field);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 10px;
@@ -399,31 +399,7 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
   background: var(--well); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: var(--space-3) var(--space-4); margin: var(--space-2) 0;
 }
 
-/* Pills */
-/* Session e236bbe4: a pill and a badge are one shape -- 12px, medium weight, a hairline edge; a badge's colour is its tone. */
-.pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: var(--text-xs); font-weight: 500; line-height: 1.5; border: 1px solid var(--border-strong); background: var(--bg-elevated); color: var(--text); white-space: nowrap; }
-/* Control run decisions Task 11: a badge's shape only; its colours come from its data-tone (DESIGN.md). */
-.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; border-width: 1px; border-style: solid; font-size: var(--text-xs); font-weight: 500; line-height: 1.5; color: var(--text-strong); }
-.badge:not([data-tone]) { border-color: var(--border-strong); background: var(--bg-elevated); }
-
-/* Decisions */
-.split { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); gap: 16px; align-items: start; }
-.split > * { min-width: 0; } /* a grid item's min-content (a long select) must not widen a 390px page (measured 23px) */
-.split-list { max-height: calc(100vh - 180px); overflow-y: auto; }
-.split-detail { padding: 20px; position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; }
-.detail-block { padding: 12px 14px; margin: 12px 0; background: var(--well); box-shadow: none; }
-.detail-block h3 { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.detail-block p { overflow-wrap: anywhere; }
-.detail-note { color: var(--warn); background: var(--warn-subtle); padding: 6px 10px; border-radius: var(--radius-sm); font-size: var(--text-xs); margin: 0 0 12px; }
-/* Taste refinement P1-3: the review loop's key hint. */
-.kbd-hint { color: var(--muted); font-size: var(--text-xs); margin: -6px 0 12px; }
-
-
-.caveat { color: var(--muted); font-size: var(--text-xs); }
-
 @media (max-width: 760px) {
-  .split { grid-template-columns: 1fr; }
-  .split-detail { position: static; max-height: none; }
   /* Session e236bbe4, measured at 390px: a group's work-item table (731px) pushed the page 392px wide. On a narrow screen a
      table's own box scrolls sideways instead, and a table with a header keeps columns wide enough to read. */
   .section-pane :has(> table) { overflow-x: auto; max-width: 100%; }
@@ -466,7 +442,6 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 }
 @media (pointer: coarse) {
   input[type="checkbox"], input[type="radio"] { min-height: 0; }
-  .kbd-hint { display: none; }
 }
 
 /* Progress spec layout B (Overview.tsx, utilities): a focused Overview region (a deep link's target) shows the accent ring. */
@@ -474,26 +449,4 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 
 /* Ruling H6(b): one Settings page, one category shown (the rest stay mounted, hidden by the rule below). The Settings page
    itself is in Tailwind utilities since the tester round of 2026-10-28 (ui/classes.ts, web/TAILWIND-MIGRATION.md). */
-/* Session e236bbe4: ONE tab component -- the Settings category row (now ui/classes.ts tabRow/tabItem, the same look), the
-   group detail's region tabs and the corrections view's tabs: a row over a bottom rule, quiet items, the open one in the
-   accent underline; it wraps when narrow. These rules go when the region and corrections tabs move to tabRow/tabItem. */
-.detail-region-tabs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 4px; border-bottom: 1px solid var(--border); }
-.detail-region-tabs > button { padding: 8px 12px; margin-bottom: -1px; border-radius: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; box-shadow: none; font-size: var(--text-sm); font-weight: 500; color: var(--muted); }
-.detail-region-tabs > button:hover:not(:disabled) { background: transparent; color: var(--text-strong); border-bottom-color: var(--border-strong); }
-.detail-region-tabs > button:focus-visible { outline-offset: -2px; border-radius: var(--radius-xs) var(--radius-xs) 0 0; }
-.detail-region-tabs > [aria-selected="true"], .detail-region-tabs > [aria-pressed="true"], .detail-region-tabs > [aria-selected="true"]:hover:not(:disabled), .detail-region-tabs > [aria-pressed="true"]:hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--text-strong); font-weight: 600; border-bottom-color: var(--accent); }
 .settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none !important; }
-
-/* Region composition uses the existing controls and palette. */
-/* The region tabs are the shared tab component (see .settings-nav above); only their spacing is theirs. */
-.detail-region-tabs { margin-block: var(--space-4) var(--space-3); }
-[role="tabpanel"][hidden] { display: none; }
-
-/* Ruling H8: a group's status light, 7px, coloured by groupLed from the theme's tone tokens (DESIGN.md); decorative. */
-.led { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--muted); opacity: 0.45; }
-.led[data-led="running"] { background: var(--ok); opacity: 1; box-shadow: 0 0 6px var(--ok); }
-.led[data-led="failed"] { background: var(--danger); opacity: 1; }
-.led[data-led="waiting"] { background: var(--warn); opacity: 1; }
-/* Ruling H8: key figures (tokens, durations, attempts) in equal-width digits, so a column or a polled line does not jitter. */
-.num { font-variant-numeric: tabular-nums; }
-

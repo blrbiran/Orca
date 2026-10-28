@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { cardGoal, groupCard, inlinePick, kindDot, tabItem, tabRow } from "../src/ui/classes.js";
+import { cardGoal, groupCard, inlinePick, kindDot, tabButton, tabButtonRow, tabItem, tabRow } from "../src/ui/classes.js";
 import { carrying } from "./sourceClasses.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -178,6 +178,27 @@ describe("styles.css", () => {
   // Session e236bbe4: the group header's source-requirement link sat flush against the next button; the adjacent-control
   // gap now counts an inline link as the left neighbour. Mutation: drop `a` from the first list -> red.
   it("keeps the 8px gap after a button, or after an inline link, before the next button", () => {
-    expect(rule(":where(button, .btn, a) + :where(button, .btn)")).toContain("margin-inline-start: var(--space-2)");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: no file wears the .btn class, so it left the selector).
+    expect(rule(":where(button, a) + :where(button)")).toContain("margin-inline-start: var(--space-2)");
+  });
+
+  // DESIGN.md "Tabs": ONE component. The final pass moved the group detail's region tabs and the corrections tabs (buttons)
+  // off their own sheet rules onto the Settings row's tabRow/tabItem, opened by aria-selected / aria-pressed.
+  it("draws the region tabs and the corrections tabs with the one tab component, the open one underlined", () => {
+    // mutation: drop aria-[selected=true]:border-accent from tabItem -> the open region tab loses its underline, red
+    // mutation: drop aria-[pressed=true]:font-semibold from tabItem -> red
+    const item = tabItem.split(" ");
+    for (const open of ["selected", "pressed"]) {
+      for (const part of [`aria-[${open}=true]:border-accent`, `aria-[${open}=true]:font-semibold`, `aria-[${open}=true]:text-fg-strong`]) expect(item).toContain(part);
+    }
+    // mutation: drop bg-transparent from tabButton -> a tab wears the button fill, red
+    expect(tabButton.split(" ")).toEqual(expect.arrayContaining([...item, "ms-0", "rounded-none", "border-x-0", "border-t-0", "bg-transparent", "shadow-none"]));
+    expect(tabButtonRow.split(" ")).toEqual(expect.arrayContaining([...tabRow.split(" "), "mt-4", "mb-3"]));
+    // mutation: GroupDetailRegions back on className="detail-region-tabs" -> red
+    expect(src("GroupDetailRegions.tsx")).toContain('role="tablist" aria-label={t("detail.regions")} className={tabButtonRow}');
+    expect(src("GroupDetailRegions.tsx")).toContain('role="tab" className={tabButton}');
+    expect(src("App.tsx")).toContain('aria-label={t("corrections.tabs")} className={tabButtonRow}');
+    expect(src("App.tsx")).toContain('type="button" className={tabButton} aria-pressed=');
+    expect(css).not.toContain("detail-region-tabs");
   });
 });

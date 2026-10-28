@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { carrying } from "./sourceClasses.js";
+import { carrying, utility } from "./sourceClasses.js";
 
 /**
  * Taste refinement P1-2 (audit C, measured): at 390x844 the content area was 278px, at 320x256 32px, because the
@@ -69,6 +69,8 @@ describe("narrow shell (P1-2)", () => {
     expect(second).toBeGreaterThan(first); // a second block, after the pinned first one
     const block = css.slice(second, css.indexOf("\n}", second));
     expect(block).toMatch(/input\[type="checkbox"\], input\[type="radio"\] \{ min-height: 0;/);
-    expect(block).toMatch(/\.kbd-hint \{ display: none;/);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the key hint is the kbd-hint @utility in index.css, its touch rule nested in it).
+    // mutation: drop the nested pointer: coarse rule from kbd-hint -> red
+    expect(utility("kbd-hint")).toMatch(/@media \(pointer: coarse\) \{ display: none; \}/);
   });
 });

@@ -3,11 +3,12 @@ import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DETAIL_REGIONS, type DetailRegion } from "./detailRegion.js";
 import { overviewRegionId } from "./overviewNavigation.js";
+import { tabButton, tabButtonRow } from "./ui/classes.js";
 export function GroupDetailRegions(props: { groupId: string; selected: DetailRegion; onSelect: (region: DetailRegion) => void; regions: Record<DetailRegion, ReactNode> }): JSX.Element {
  const { t } = useTranslation();
  return <>
-  <div role="tablist" aria-label={t("detail.regions")} className="detail-region-tabs">
-   {DETAIL_REGIONS.map(region => <button key={region} type="button" role="tab" id={`${overviewRegionId("group", props.groupId, region)}-tab`} aria-controls={overviewRegionId("group", props.groupId, region)} aria-selected={props.selected === region} tabIndex={props.selected === region ? 0 : -1} onKeyDown={event => {
+  <div role="tablist" aria-label={t("detail.regions")} className={tabButtonRow}>
+   {DETAIL_REGIONS.map(region => <button key={region} type="button" role="tab" className={tabButton} id={`${overviewRegionId("group", props.groupId, region)}-tab`} aria-controls={overviewRegionId("group", props.groupId, region)} aria-selected={props.selected === region} tabIndex={props.selected === region ? 0 : -1} onKeyDown={event => {
      const index = DETAIL_REGIONS.indexOf(region);
      const next = event.key === "Home" ? 0 : event.key === "End" ? DETAIL_REGIONS.length - 1 : event.key === "ArrowRight" ? (index + 1) % DETAIL_REGIONS.length : event.key === "ArrowLeft" ? (index + DETAIL_REGIONS.length - 1) % DETAIL_REGIONS.length : null;
      if (next === null) return;

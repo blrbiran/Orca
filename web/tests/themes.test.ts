@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { THEME_PREFS } from "../src/theme.js";
 import { en } from "../src/locales/en.js";
 import { zh } from "../src/locales/zh.js";
+import { utility } from "./sourceClasses.js";
 
 /**
  * Session e236bbe4 (human, away: "add selectable themes ... each must still pass WCAG AA"): every theme the Settings
@@ -190,8 +191,10 @@ describe.each(PINNED)("theme %s stays readable (WCAG AA)", (theme) => {
   // Seen on the first contrast-theme screenshot: the sidebar's count (text-strong on --border-strong) read 115 as black on black.
   it("keeps the sidebar count readable on its chip", () => {
     if (theme === "contrast") {
-      // that theme inverts the chip (styles.css): its card colour on its strongest text
-      expect(css).toMatch(/:root\[data-theme="contrast"\] \.nav-count \{ background: var\(--text-strong\); color: var\(--card\); \}/);
+      // that theme inverts the chip: its card colour on its strongest text
+      // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the chip is the nav-count @utility in index.css, its contrast-theme inversion nested in it).
+      // mutation: drop the nested inversion -> red
+      expect(utility("nav-count")).toMatch(/:root\[data-theme="contrast"\] & \{ background: var\(--text-strong\); color: var\(--card\); \}/);
       expect(ratio(c("card"), c("text-strong"))).toBeGreaterThanOrEqual(4.5);
     } else {
       expect(ratio(c("text-strong"), c("border-strong"))).toBeGreaterThanOrEqual(4.5);

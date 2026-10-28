@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BANNER_TONE, ChainBanners } from "../src/ChainPanel.js";
 import { Refusal } from "../src/Refusal.js";
+import { utility } from "./sourceClasses.js";
 
 /** Taste refinement spec §3 P1-1: role is semantics; colour comes only from data-tone. */
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -15,8 +16,14 @@ const rule = (selector: string): string => {
 
 describe("tone, not role (P1-1)", () => {
   it("paints status and note boxes neutral: no status colour in the shared rule, no green for role=status", () => {
-    const r = rule('[role="alert"], [role="note"], [role="status"], .callout, .chain-banner');
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the callout left the shared role rule for an @utility in index.css, whose neutral edge and fill apply only
+    // without a tone; a chain banner always carries a role, so the class left the selector).
+    // mutation: give the role rule border-color var(--info) -> red; mutation: drop :not([data-tone]) from the callout -> a toned callout loses its tone, red
+    const r = rule('[role="alert"], [role="note"], [role="status"]');
     for (const t of ["--danger", "--ok", "--info", "--warn"]) expect(r).not.toContain(t);
+    const callout = utility("callout");
+    for (const t of ["--danger", "--ok", "--info", "--warn"]) expect(callout).not.toContain(t);
+    expect(callout).toMatch(/&:not\(\[data-tone\]\) \{ border-color: var\(--border\); background: var\(--well\); \}/);
     expect(css).not.toMatch(/\[role="status"\]\s*\{[^}]*--ok/);
     expect(css).not.toMatch(/\[role="note"\][^{]*\{[^}]*--info/);
   });
@@ -42,6 +49,9 @@ describe("tone, not role (P1-1)", () => {
       <ChainBanners banners={[{ chainId: "c1", category: "done", text: "done", repoKey: "r", reason: "ok", awaitingHuman: [] }]} />,
     );
     expect(html).toContain('data-tone="ok"');
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the banner's neutral box comes from its role now, the chain-banner class left the role rule).
+    // mutation: drop role="alert" from ChainBanners -> red
+    expect(html).toMatch(/role="alert"[^>]*class="chain-banner/);
   });
 });
 

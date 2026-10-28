@@ -11,9 +11,7 @@ import type { GroupSummaryV1 } from "../src/controlTypes.js";
 import { boardColumn, boardDrop, groupLed } from "../src/groupCategory.js";
 import { GroupList } from "../src/GroupList.js";
 import i18n, { currentLanguage } from "../src/i18n.js";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { utility } from "./sourceClasses.js";
 
 afterEach(cleanup);
 
@@ -210,13 +208,14 @@ describe("the status light (H8)", () => {
   });
 
   it("colours the light from the theme's tone tokens, glowing only while running, and sets key figures in tabular digits", () => {
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8");
-    const rule = (selector: string): string => { const at = css.indexOf(`${selector} {`); expect(at, selector).toBeGreaterThan(-1); return css.slice(at, css.indexOf("}", at)); };
-    expect(rule(".led")).toContain("width: 7px");
-    expect(rule('.led[data-led="running"]')).toContain("box-shadow: 0 0 6px var(--ok)");
-    expect(rule('.led[data-led="failed"]')).toContain("background: var(--danger)");
-    expect(rule('.led[data-led="waiting"]')).toContain("background: var(--warn)");
-    expect(rule(".num")).toContain("font-variant-numeric: tabular-nums");
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: .led and .num are @utility blocks in index.css, the light's states nested in it).
+    // mutation: drop the running glow from the led utility -> red; mutation: drop tabular-nums from the num utility -> red
+    const led = utility("led");
+    expect(led).toContain("width: 7px");
+    expect(led).toMatch(/&\[data-led="running"\] \{[^}]*box-shadow: 0 0 6px var\(--ok\)/);
+    expect(led).toMatch(/&\[data-led="failed"\] \{[^}]*background: var\(--danger\)/);
+    expect(led).toMatch(/&\[data-led="waiting"\] \{[^}]*background: var\(--warn\)/);
+    expect(utility("num")).toContain("font-variant-numeric: tabular-nums");
     render(<BoardView groups={[g({ groupId: "b", state: "running", card: { budget: { usedTokens: 1200, limitTokens: 5000 }, pendingDecisions: 0, firstFailure: null } })]}
       scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     // mutation: drop "num" from the board card's budget line -> its figures jitter as they poll, red

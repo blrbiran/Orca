@@ -26,13 +26,15 @@ describe("the Tailwind entry (index.css)", () => {
     expect(built).not.toMatch(/\.narrow\\:hidden \(/);
   });
 
-  it("layers the hand-written sheet under the utilities, so a utility class beats any legacy selector", () => {
+  it("layers preflight and the hand-written sheet as the base under the utilities, so a utility class beats any base selector", () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: preflight is on and styles.css is the base layer, so the order pins theme, base, utilities and preflight before the sheet).
     // mutation: import styles.css unlayered -> its element rules (button, label) beat every utility, red
-    expect(entry).toContain('@layer theme, legacy, utilities;');
-    expect(at('@import "./styles.css" layer(legacy);')).toBeLessThan(at('@import "tailwindcss/utilities.css" layer(utilities);'));
-    expect(at('@import "tailwindcss/theme.css" layer(theme);')).toBeLessThan(at('@import "./styles.css" layer(legacy);'));
-    // No preflight until the last batch: styles.css is the base (web/TAILWIND-MIGRATION.md §2).
-    expect(entry).not.toMatch(/@import "tailwindcss(\/preflight\.css)?"/);
+    // mutation: drop the preflight import -> the browser defaults come back unreset, red
+    // mutation: import preflight after styles.css -> its resets (margin, list-style, heading sizes) beat the sheet's own rules, red
+    expect(entry).toContain('@layer theme, base, utilities;');
+    expect(at('@import "./styles.css" layer(base);')).toBeLessThan(at('@import "tailwindcss/utilities.css" layer(utilities);'));
+    expect(at('@import "tailwindcss/theme.css" layer(theme);')).toBeLessThan(at('@import "tailwindcss/preflight.css" layer(base);'));
+    expect(at('@import "tailwindcss/preflight.css" layer(base);')).toBeLessThan(at('@import "./styles.css" layer(base);'));
     expect(read("main.tsx")).toContain('import "./index.css";');
   });
 

@@ -8,7 +8,14 @@ export const tabRow = "m-0 flex list-none flex-wrap gap-x-1 border-b border-line
 /** A tab: quiet medium-weight, the open one (aria-current="page") bold over a 2px accent underline. */
 export const tabItem = "-mb-px flex items-center border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted no-underline transition-colors"
   + " hover:border-line-strong hover:text-fg-strong focus-visible:rounded-t-inset focus-visible:outline-offset-[-2px]"
-  + " aria-[current=page]:border-accent aria-[current=page]:font-semibold aria-[current=page]:text-fg-strong hover:aria-[current=page]:border-accent";
+  + " aria-[current=page]:border-accent aria-[current=page]:font-semibold aria-[current=page]:text-fg-strong hover:aria-[current=page]:border-accent"
+  // The group detail's region tabs (aria-selected) and the corrections tabs (aria-pressed) are buttons, open the same way.
+  + " aria-[selected=true]:border-accent aria-[selected=true]:font-semibold aria-[selected=true]:text-fg-strong hover:aria-[selected=true]:border-accent"
+  + " aria-[pressed=true]:border-accent aria-[pressed=true]:font-semibold aria-[pressed=true]:text-fg-strong hover:aria-[pressed=true]:border-accent";
+/** A row of button tabs (the region and corrections tabs): the tab row with its air above and below. */
+export const tabButtonRow = `${tabRow} mt-4 mb-3`;
+/** A tab that is a button drops the button chrome -- fill, side and top edges, corners, shadow, the gap after a button. */
+export const tabButton = `${tabItem} ms-0 rounded-none border-x-0 border-t-0 bg-transparent shadow-none`;
 
 /** A label that sits beside its control on one row (the theme and language pickers), not above it. */
 export const inlinePick = "mt-2 flex-row items-center gap-2";
@@ -105,7 +112,6 @@ export const groupFilter = "my-2 flex flex-wrap gap-[6px] [&>button]:ms-0 [&>but
 export const groupList = "mt-2 mb-4 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3 [&>p]:col-span-full";
 /** Task 10a: a card's title or goal summary never runs past two lines; the whole goal is in its tooltip. */
 export const cardGoal = "line-clamp-2 wrap-anywhere";
-/** The status light (Ruling H8). The `led` hook keeps its colour rules in styles.css until the final pass (Board uses it too). */
 
 /** Spec §4.2: a task's label chip; the system kind is tinted, the custom kind has a dashed edge, so the two read apart. */
 export const labelChip = "mr-1 inline-block rounded-control px-1.5 text-xs";

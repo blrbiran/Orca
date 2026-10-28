@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { carrying } from "./sourceClasses.js";
+import { carrying, source, utility } from "./sourceClasses.js";
 
 /**
  * Human visual review (session f8281a60, 2026-09-27): dark mode reads poorly, worst on #decisions.
@@ -101,15 +101,21 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; .project-control left the sheet)
     // mutation: write bg-card instead of bg-well on the project control -> it no longer lifts above its card, red
     expect(carrying("ProjectControl.tsx", "project-control").split(/\s+/)).toContain("bg-well");
-    for (const selector of [".section-pane section section", ".detail-block", '[role="alert"], [role="note"], [role="status"], .callout, .chain-banner']) {
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the detail block and the callout are @utility blocks in index.css, read there; the role rule lost
+    // the two classes, so it is read by its new selector).
+    // mutation: paint the detail-block utility var(--card) -> red; mutation: paint the callout's untoned fill var(--bg) -> red
+    for (const selector of [".section-pane section section", '[role="alert"], [role="note"], [role="status"]']) {
       expect(wellRule(selector), selector).toMatch(/background:\s*var\(--well\);/);
     }
+    for (const name of ["detail-block", "callout"]) expect(utility(name), name).toMatch(/background:\s*var\(--well\);/);
     // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the metric tile's rule became a
     // utility string in ui/classes.ts: `bg-well` is `var(--well)` through index.css, so the tile is read there).
     const tile = /const metricTile = "([^"]*)"/.exec(readFileSync(fileURLToPath(new URL("../src/ui/classes.ts", import.meta.url)), "utf8"))?.[1];
     expect(tile, "metric tile classes").toMatch(/(^| )bg-well( |$)/);
     const bgUsers = [...css.matchAll(/([^{}]+)\{[^}]*background(?:-color)?:\s*var\(--bg\)/g)].map((m) => m[1]!.trim());
     expect(bgUsers).toEqual(["body"]);
+    // The shared classes in index.css (final pass) paint no box with the page colour either.
+    expect(source("index.css")).not.toMatch(/background(?:-color)?:\s*var\(--bg\)/);
     const resolve = (name: string): Rgb => {
       const raw = token(name);
       const via = /^var\(--([a-z-]+)\)$/.exec(raw);
