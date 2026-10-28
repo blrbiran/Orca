@@ -19,8 +19,10 @@ const has = (classes: string, ...wanted: string[]): void => {
 
 describe("narrow shell (P1-2)", () => {
   it("names the narrow screen once: narrow OR short, so the sidebar cannot take the viewport on either", () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de, final pass): the shorthand this
+    // pinned compiled its max-height half to a broken selector; the block form is pinned here and compiled in tailwind.test.ts.
     // mutation: drop the max-height half of the variant -> a short, wide screen keeps the locked shell, red
-    expect(entry).toContain("@custom-variant narrow (@media (max-width: 760px), (max-height: 560px));");
+    expect(entry).toContain("@custom-variant narrow {\n  @media (max-width: 760px), (max-height: 560px) { @slot; }\n}");
   });
   it("unlocks the viewport height and lets the page scroll, on narrow AND on short screens", () => {
     // mutation: delete narrow:overflow-visible from the content -> the pane stays a scroller, red
