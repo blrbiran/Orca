@@ -319,8 +319,9 @@ button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); out
 .btn-danger:hover:not(:disabled) { background: var(--danger-subtle); border-color: var(--danger); }
 button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 button[aria-busy="true"] { cursor: progress; opacity: 0.75; }
-/* Two buttons side by side never touch (many forms put them in plain flow); rows that space their own items reset it. */
-:where(button, .btn) + :where(button, .btn) { margin-inline-start: var(--space-2); }
+/* Two buttons side by side never touch (many forms put them in plain flow), nor a button after an inline link (the group
+   header's source-requirement link); rows that space their own items reset it. */
+:where(button, .btn, a) + :where(button, .btn) { margin-inline-start: var(--space-2); }
 :where(.group-filter, .project-actions, .detail-region-tabs, .group-actions-menu, .confirm-inline, .overview-heading > div, .group-card-row) > :where(button, .btn) { margin-inline-start: 0; }
 /* Issue #56: a button that is only an icon (its name is its aria-label); square, the icon centred, pushed to the row's end. */
 .icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; line-height: 0; min-width: var(--control-h); }
