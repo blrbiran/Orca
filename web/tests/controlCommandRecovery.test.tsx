@@ -223,7 +223,10 @@ describe("App's recovery of an uncertain command", () => {
     const first = render(<App />);
     await screen.findByText(/The task group no longer exists; this operation's outcome cannot be confirmed/);
     expect(lookups).toEqual([LOOKUP_PATH]);
-    expect(readUncertainCommands(window.sessionStorage)).toEqual([{ groupId: GROUP, commandId: COMMAND, parked: true, dismissed: false, reason: "group-missing" }]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de, final pass): App writes the ids in an
+    // effect after the render (App.tsx writeUncertainCommands), so these reads wait for it, as the other cases here already do;
+    // asserting right after the text raced the effect under a loaded run. mutation: drop the effect's write -> never parked, red
+    await waitFor(() => expect(readUncertainCommands(window.sessionStorage)).toEqual([{ groupId: GROUP, commandId: COMMAND, parked: true, dismissed: false, reason: "group-missing" }]));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     await waitFor(() => expect(readUncertainCommands(window.sessionStorage)[0]?.dismissed).toBe(true));
     expect(screen.queryByText(/The task group no longer exists; this operation's outcome cannot be confirmed/)).toBeNull();
@@ -286,7 +289,7 @@ describe("App's recovery of an uncertain command", () => {
     lookupGate.release(jsonResponse({ error: { code: "command-result-not-found", message: "No retained command result was found.", commandRevision: 6, evidenceIds: [], retryable: false } }, 404));
 
     await waitFor(() => expect(pendingLine()).toBeNull());
-    expect(storedIds()).toEqual([]);
+    await waitFor(() => expect(storedIds()).toEqual([])); // the write effect's race (Ruling line above)
   });
 
   it("drops the id when the lookup returns the command's retained result", async () => {
@@ -298,7 +301,7 @@ describe("App's recovery of an uncertain command", () => {
     } }));
 
     await waitFor(() => expect(pendingLine()).toBeNull());
-    expect(storedIds()).toEqual([]);
+    await waitFor(() => expect(storedIds()).toEqual([])); // the write effect's race (Ruling line above)
   });
 });
 
