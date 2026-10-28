@@ -4,6 +4,7 @@
  * go through t.
  */
 import { RequirementMarkdown } from "./RequirementMarkdown.js";
+import { actionRow, documentSectionTitle, roundBox, roundSummary } from "./ui/requirementClasses.js";
 import { overviewRegionId } from "./overviewNavigation.js";
 import { goalSummary } from "./CardGoal.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
@@ -12,7 +13,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import { ChargeRetry } from "./ChargeRetry.js";
-import { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText } from "./i18n.js";
+import i18n, { LANGUAGE_NAMES, PANEL_LANGUAGES, enumText } from "./i18n.js";
 import { explainBesideCode, explainEstimateReason, explainEstimatorCheck } from "./ccloopCodes.js";
 import { explainRefusal, explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
@@ -173,8 +174,10 @@ function RoundForm(props: { view: View; round: Round; onCommand: OnCommand } & E
         );
       })}
       {[...result.glossary.map((entry) => decision(entry.id, entry.term)), ...result.adrs.map((adr) => decision(adr.id, adr.title))]}
-      <button type="button" onClick={() => send(true)}>{t("requirements.acceptAll")}</button>
-      <button type="submit" disabled={result.questions.some((q) => { const c = choiceOf(q.id); return c.kind === "text" && c.text.trim() === ""; })}>{t("requirements.sendAnswers")}</button>
+      <div className={actionRow}>
+        <button type="button" onClick={() => send(true)}>{t("requirements.acceptAll")}</button>
+        <button type="submit" disabled={result.questions.some((q) => { const c = choiceOf(q.id); return c.kind === "text" && c.text.trim() === ""; })}>{t("requirements.sendAnswers")}</button>
+      </div>
     </form>
   );
 }
@@ -197,8 +200,10 @@ function Consensus(props: { view: View; round: Round; onCommand: (a: ControlActi
           {unanswered > 0 && <><p>{unansweredTitle}</p><p>{t("requirements.consensusUnanswered")}</p></>}
           {branches.length > 0 && <><p>{t("requirements.consensusTitle")}</p>
           <ul>{branches.map((branch) => <li key={branch}>{branch}</li>)}</ul></>}
-          <button type="button" onClick={() => { setAsking(false); send(); }}>{t("requirements.consensusConfirm")}</button>
-          <button type="button" onClick={() => setAsking(false)}>{t("requirements.consensusCancel")}</button>
+          <div className={actionRow}>
+            <button type="button" onClick={() => { setAsking(false); send(); }}>{t("requirements.consensusConfirm")}</button>
+            <button type="button" onClick={() => setAsking(false)}>{t("requirements.consensusCancel")}</button>
+          </div>
         </div>
       )}
     </>
@@ -231,26 +236,28 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
             <tr key={task.taskId}><td>{task.taskId}</td>
               <td>{task.title}
                 {more.length > 0 && <details data-task-more={task.taskId}><summary>{t("requirements.taskMore")}</summary>
-                  <dl>{more.map(([column, value]) => <div key={column}><dt>{t(`requirements.columns.${column}`)}</dt><dd>{value}</dd></div>)}</dl></details>}</td>
+                  <dl className="mx-0 mb-0 mt-1">{more.map(([column, value]) => <div key={column} className="flex gap-[6px]"><dt className="text-muted">{t(`requirements.columns.${column}`)}</dt><dd className="m-0 wrap-anywhere">{value}</dd></div>)}</dl></details>}</td>
               <td>{task.dependsOn.join(", ")}</td><td>{writes.flatMap((write) => write.checks).join(" ; ")}</td></tr>);
           })}</tbody></table>
       )}
       {draft.layers?.map((layer, index) => <p key={index}>{t("requirements.layer", { n: index + 1, tasks: layer.join(", ") })}</p>)}
       {draft.implicitEdges?.map((edge) => <p key={`${edge.from}>${edge.to}`}>{t("requirements.implicitEdge", { from: edge.from, to: edge.to, paths: [...new Set(edge.conflicts.map((c) => `${c.a} ∩ ${c.b}`))].join(", ") })}</p>)}
-      {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></>}
+      {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>
           <label>{t("requirements.feedback")}<textarea value={feedback} onChange={(e) => props.onDraft("feedback", key, e.currentTarget.value)} /></label>
+          <div className={actionRow}>
           <button type="button" disabled={feedback.trim() === ""} onClick={() => props.onCommand({ verb: "requirement-draft-feedback", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, feedback } },
             { slot: "feedback", key, value: feedback })}>{t("requirements.sendBack")}</button>
           <button type="button" onClick={() => props.onCommand({ verb: "requirement-draft-accept", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash! } })}>{t("requirements.acceptSplit")}</button>
+          </div>
         </>
       )}
       {maySave && (
-        <button type="button" onClick={() => props.onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: {
+        <div className={actionRow}><button type="button" onClick={() => props.onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: {
           source: { kind: "requirement-draft", groupId, draftNo: draft.draftNo, draftHash: draft.draftHash! },
           name: (props.view.requirement.slug ?? props.view.requirement.idea).slice(0, 200),
-        } })}>{t("requirements.saveSplit")}</button>
+        } })}>{t("requirements.saveSplit")}</button></div>
       )}
     </section>
   );
@@ -290,7 +297,7 @@ function DocumentLead(props: { text: string }): JSX.Element {
   const rest = front === null ? props.text : props.text.replace(/\r\n?/g, "\n").slice(front[0].length).trim();
   return (
     <>
-      {front !== null && <pre className="requirement-front-matter">{front[1]}</pre>}
+      {front !== null && <pre className="requirement-front-matter m-0 mb-2 text-xs whitespace-pre-wrap wrap-anywhere text-muted">{front[1]}</pre>}
       {rest !== "" && <RequirementMarkdown text={rest} />}
     </>
   );
@@ -313,7 +320,7 @@ function DocumentText(props: { text: string }): JSX.Element {
         const title = (cut === -1 ? section : section.slice(0, cut)).trim(), body = cut === -1 ? "" : section.slice(cut + 1).trim();
         return (
           <section key={index} aria-label={title}>
-            <h5>{title}</h5>
+            <h5 className={documentSectionTitle}>{title}</h5>
             {/* Issue 96: the body's markdown subset is rendered; every other construct stays text. */}
             {body !== "" && <RequirementMarkdown text={body} />}
           </section>
@@ -478,13 +485,17 @@ export function ReviseRound(props: { round: Round; position: number; later: Arra
           onChange={(e) => { const on = e.currentTarget.checked; setExclude(on ? [...exclude, roundNo].sort((a, b) => a - b) : exclude.filter((n) => n !== roundNo)); }} />
           {t("requirements.reviseExclude", { n: position })}</label>
       ))}
-      <button type="submit" disabled={result.questions.some((q) => { const c = choice[q.id]; return c?.kind === "text" && c.text.trim() === ""; })}>{t("requirements.reviseSend")}</button>
-      <button type="button" onClick={() => setOpen(false)}>{t("requirements.reviseCancel")}</button>
+      <div className={actionRow}>
+        <button type="submit" disabled={result.questions.some((q) => { const c = choice[q.id]; return c?.kind === "text" && c.text.trim() === ""; })}>{t("requirements.reviseSend")}</button>
+        <button type="button" onClick={() => setOpen(false)}>{t("requirements.reviseCancel")}</button>
+      </div>
       {asking && (
         <div role="dialog" aria-label={t("requirements.reviseConfirmTitle", { n: props.position })}>
           <p>{t("requirements.reviseCost")}</p>
-          <button type="button" onClick={send}>{t("requirements.reviseConfirm")}</button>
-          <button type="button" onClick={() => setAsking(false)}>{t("requirements.reviseKeep")}</button>
+          <div className={actionRow}>
+            <button type="button" onClick={send}>{t("requirements.reviseConfirm")}</button>
+            <button type="button" onClick={() => setAsking(false)}>{t("requirements.reviseKeep")}</button>
+          </div>
         </div>
       )}
     </form>
@@ -519,10 +530,57 @@ function NextStepLine(props: { groupId: string; step: NextStep }): JSX.Element {
     element?.focus(); element?.scrollIntoView?.({ block: "start" });
   };
   return (
-    <p data-testid="requirement-next" data-tone={step.key === "waiting" ? undefined : "warn"}>
-      <strong>{t("requirements.next.label")}</strong>{t(`requirements.next.${step.key}` as const, { n: step.n ?? 0 })}
-      {step.region !== null && <>{" "}<button type="button" onClick={go}>{t("requirements.next.go")}</button></>}
+    // Tester #76: a note like the panel's others (role=note: the well, radius and padding), its button on the same line.
+    <p role="note" data-testid="requirement-next" data-tone={step.key === "waiting" ? undefined : "warn"} className={actionRow}>
+      <span><strong>{t("requirements.next.label")}</strong>{t(`requirements.next.${step.key}` as const, { n: step.n ?? 0 })}{step.region !== null && " "}</span>
+      {step.region !== null && <button type="button" onClick={go}>{t("requirements.next.go")}</button>}
     </p>
+  );
+}
+
+/**
+ * Tester #107: a hand-back reason's meaning in the reader's words, beside the code (which stays). One entry per code family
+ * the server's explainSplitReason (src/control/requirementSplit.ts) covers; null for a reason that carries its checker's own
+ * message (`plan:`, other `import:` items, `graph:`, `schema:`) or a code this panel does not know.
+ */
+const EXPAND_REFUSALS: readonly string[] = ["investigate-target", "design-target", "path-shape", "unknown-plan", "investigate-max-files", "skills-shape"];
+const IMPORT_ITEMS: readonly string[] = ["duplicate-dependency", "dangling-dependency", "duplicate-success-condition"];
+export function explainSplitReason(reason: string): string | null {
+  const parts = reason.split(":");
+  const key = parts[0] === "expand" ? (EXPAND_REFUSALS.includes(parts.at(-1)!) ? `expand.${parts.at(-1)}` : null)
+    : parts[0] === "import" ? (IMPORT_ITEMS.includes(parts[1] ?? "") ? `import.${parts[1]}` : null)
+    : parts[0] === "checks-primary" ? "checksPrimary" : parts[0] === "ledger-path" ? "ledgerPath"
+    : ["path", "trace", "untraced", "dir"].includes(parts[0]!) ? parts[0]! : null;
+  return key === null ? null : (i18n.t as (key: string) => string)(`requirements.splitReason.${key}`);
+}
+
+/** Tester #76: the stages of a requirement's flow, each done, current or ahead -- derived from what the view already holds. */
+export type FlowStage = "clarify" | "consensus" | "split" | "accepted" | "exported";
+export function flowSteps(view: View): Array<{ stage: FlowStage; state: "done" | "current" | "ahead" }> {
+  const consensus = view.requirement.consensus !== null, accepted = view.requirement.acceptedDraftNo !== null;
+  const exported = view.requirement.export.state === "done";
+  // Clarifying is over once every round is answered (the person can then say "We agree", or ask for one more round, which
+  // makes this stage current again) and, of course, once consensus is recorded.
+  const clarified = consensus || view.rounds.at(-1)?.state === "answered";
+  const stages: Array<[FlowStage, boolean]> = [["clarify", clarified], ["consensus", consensus], ["split", accepted], ["accepted", accepted], ["exported", exported]];
+  // A directory group's document stays in Orca's store (dir-requirements spec §9.3): it has no export stage.
+  const listed = view.summary.placement !== undefined ? stages.filter(([stage]) => stage !== "exported") : stages;
+  const firstOpen = listed.findIndex(([, done]) => !done);
+  return listed.map(([stage, done], index) => ({ stage, state: done ? "done" : index === firstOpen ? "current" : "ahead" }));
+}
+
+function FlowSteps(props: { view: View }): JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <ol aria-label={t("requirements.steps.label")} className="m-0 mb-3 flex list-none flex-wrap gap-2 p-0">
+      {flowSteps(props.view).map(({ stage, state }, index) => (
+        <li key={stage} data-step={stage} data-state={state} aria-current={state === "current" ? "step" : undefined}>
+          <span className="badge" data-tone={state === "done" ? "ok" : state === "current" ? "info" : undefined}>
+            {index + 1}. {t(`requirements.steps.${stage}`)}<span className="sr-only"> ({t(`requirements.steps.${state}`)})</span>
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -579,22 +637,23 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
     <article aria-label={view.requirement.slug ?? groupId}>
       <h3>{view.requirement.slug ?? groupId} · {enumText("groupState", view.summary.state)}</h3>
       {nextStep !== null && <NextStepLine groupId={groupId} step={nextStep} />}
+      <FlowSteps view={view} />
       {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" &&
-        <button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button>}
+        <div className={`${actionRow} mb-2`}><button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button></div>}
       {archived ? <section aria-label={t("control.group.archivedRegion")}>
         <p>{t("control.group.archivedBanner")}</p>
         <button type="button" onClick={() => props.onCommand({ verb: "unarchive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unarchive")}</button>
-      </section> : archiveAllowed && <button type="button" onClick={() => props.onCommand({ verb: "archive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.archive")}</button>}
+      </section> : archiveAllowed && <div className={`${actionRow} mb-2`}><button type="button" onClick={() => props.onCommand({ verb: "archive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.archive")}</button></div>}
       {/* Issue #74: the idea as the person wrote it, in every state, so each round can be read against it. */}
       {/* Tester #28: once a round is answered the current understanding leads, so the idea folds -- its summary keeps the
           idea's start on screen, so a round can still be read against it (#74). */}
       <section aria-label={t("requirements.originalIdea")}>
         {view.rounds.some((r) => r.state === "answered") ? (
           <details className="requirement-idea">
-            <summary><h4>{t("requirements.originalIdea")}</h4> <span>{goalSummary(view.requirement.idea)}</span></summary>
-            <p className="requirement-text">{view.requirement.idea}</p>
+            <summary><h4 className="inline">{t("requirements.originalIdea")}</h4> <span>{goalSummary(view.requirement.idea)}</span></summary>
+            <p className="requirement-text whitespace-pre-wrap wrap-anywhere">{view.requirement.idea}</p>
           </details>
-        ) : <><h4>{t("requirements.originalIdea")}</h4><p className="requirement-text">{view.requirement.idea}</p></>}
+        ) : <><h4>{t("requirements.originalIdea")}</h4><p className="requirement-text whitespace-pre-wrap wrap-anywhere">{view.requirement.idea}</p></>}
       </section>
       <section aria-label={t("requirements.understanding")}>
         <h4>{t("requirements.understanding")}</h4>
@@ -643,16 +702,16 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           const revisable = !archived && r.state === "answered" && r.result !== null && r.answers !== null && view.requirement.acceptedDraftNo === null && view.summary.stopState === null;
           const later = chainOf(view).filter((entry) => entry.position > position).map((entry) => ({ roundNo: entry.round.roundNo, position: entry.position }));
           return (
-            <details key={r.roundNo} className="requirement-round" open={pending || (!answered && r === round)} data-tone={pending ? "warn" : undefined}>
-              <summary>{t(r.revises === undefined ? "requirements.round" : "requirements.roundRevised", { n: position })} · {enumText("roundState", r.state)}{r.result !== null ? ` · ${t("requirements.questionCount", { n: r.result.questions.length })}` : ""}</summary>
+            <details key={r.roundNo} className={roundBox} open={pending || (!answered && r === round)} data-tone={pending ? "warn" : undefined}>
+              <summary className={roundSummary}>{t(r.revises === undefined ? "requirements.round" : "requirements.roundRevised", { n: position })} · {enumText("roundState", r.state)}{r.result !== null ? ` · ${t("requirements.questionCount", { n: r.result.questions.length })}` : ""}</summary>
               {r.reason !== undefined && <p>{t("requirements.revisedBecause", { reason: r.reason })}</p>}
               {pending && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
               {answered ? <AnsweredRound round={r} /> : !pending && r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
               {revisable && <ReviseRound round={r} position={position} later={later}
                 onRevise={(payload) => props.onCommand({ verb: "requirement-revise", groupId: view.summary.groupId, expectedRevision: revisionOf(view), payload })} />}
               {superseded.map((s) => (
-                <details key={s.roundNo} className="requirement-round">
-                  <summary>{t("requirements.superseded", { n: s.roundNo })} · {enumText("roundState", s.state)}</summary>
+                <details key={s.roundNo} className={roundBox}>
+                  <summary className={roundSummary}>{t("requirements.superseded", { n: s.roundNo })} · {enumText("roundState", s.state)}</summary>
                   {s.state === "answered" && s.result !== null && s.answers !== null ? <AnsweredRound round={s} /> : s.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
                 </details>
               ))}
@@ -677,7 +736,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
         {/* Tester #32: while clarifying the document is only the idea's stub, so it folds; from consensus on it is the
             requirement's real product and is open. */}
         <details className="requirement-document" open={view.requirement.consensus !== null}>
-          <summary><h4>{t("requirements.document")}</h4></summary>
+          <summary><h4 className="inline">{t("requirements.document")}</h4></summary>
           <DocumentText text={view.document} />
         </details>
         {/* Dir-requirements spec §9.3: a dir group's document stays in Orca's store, never in the folder. */}
@@ -773,7 +832,7 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
           {listed.map((group) => (
             <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelect(group.groupId)} onAction={props.onGroupAction}
               refusal={group.groupId === props.selected ? null : props.groupRefusals?.[group.groupId]}>{(onContextMenu) => (
-            <button type="button" title={listName(group) === null ? undefined : group.groupId} aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)} onContextMenu={onContextMenu}>
+            <button type="button" className="mb-2 min-w-0 flex-1 pr-[48px]" title={listName(group) === null ? undefined : group.groupId} aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)} onContextMenu={onContextMenu}>
               {listName(group) ?? group.groupId} · {enumText("groupState", group.state)}
               {scope?.kind === "all" ? ` · ${props.repoLabel?.(group.repoId) ?? group.repoId}` : ""}
             </button>
