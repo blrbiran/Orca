@@ -6,7 +6,19 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Light = warm paper (`--bg #f6f4ef`, cards `#fffdf9`, warm grey text). Dark = neutral graphite (channels within 10, blue ≥ red); never warm.
 - Layers separate by stepping LIGHTER in dark, DARKER-edged in light. Values are pinned by `tests/contrast.test.ts` and `tests/lightTheme.test.ts` — re-run both before changing any token.
 - The two light blocks are identical by rule (`lightTheme.test.ts`).
-- Selectable themes (session e236bbe4, candidates the human keeps or drops): `system` (follows the browser) · `light` · `dark` are the default pair above; `frost` (cool-neutral light, petrol accent), `contrast` (high-contrast light, every text pair ≥7:1), `navy` (deep blue dark, periwinkle accent), `ember` (warm brown dark, copper accent), `dusk` (soft slate dark, lavender accent), `terminal` (green-black, green accent, monospaced type). Each is one `:root[data-theme="<id>"]` block placed after the system-light block, defining every colour token the light block does, with the right `color-scheme`. `web/tests/themes.test.ts` holds every theme to the same bar: text ≥7 and secondary ≥4.5 on every surface, accent links ≥4.5, labels on the accent (resting and hover) ≥4.5, tones ≥4.5, focus ring ≥3, and dark themes step lighter (page < card < well < field).
+- Selectable themes (session e236bbe4; reworked and extended in the tester round 2026-10-28, controller session a9f9d6de, human: 「之前的主题都不好看，你可以都整体再优化一遍」): `system` (follows the browser) · `light` · `dark` stay the defaults above and keep the shared scale. The candidates (the human keeps or drops) each set palette, type, corners and density together — light ones first:
+  - `frost` — crisp cool daylight, ocean-blue accent; Inter; radii 5/8/12; roomier controls (34/28).
+  - `rose` — warm ivory, rose accent; Inter; radii 6/10/16; spacious (5 px step, controls 36/30).
+  - `ink` — editorial monochrome, black primary, colour only for tones; Inter; square; compact (3 px step, 28/24).
+  - `contrast` — high-contrast daylight, every text pair ≥7:1; system type; radii 2/3/4; taller controls (34/28).
+  - `violet` — Linear-style near-black with a violet cast, lilac accent; Inter; radii 4/6/8; compact.
+  - `navy` — deep blue-violet midnight, periwinkle accent; Inter; radii 6/8/14; roomier controls.
+  - `lagoon` — deep teal, cream text, amber accent (after Hermes Teal); system type; radii 5/8/12; roomier controls.
+  - `dusk` — soft low-glare slate, lavender accent; system type; radii 6/10/16; spacious.
+  - `ember` — forge-at-night brown-black, bronze accent; system type; radii 2/3/4; tighter controls (30/24).
+  - `terminal` — phosphor green on green-black; JetBrains Mono throughout; square; compact (controls 28/22).
+- Each candidate is one `:root[data-theme="<id>"]` block placed after the system-light block, defining every colour token the light block does, with the right `color-scheme`. A theme changes the look beyond colour ONLY through the scale tokens: `--font` / `--mono` (the bundled `var(--font-sans)` / `var(--font-mono)`, or left to the system stack), `--radius-xs` / `--radius-sm` / `--radius`, and density as a whole scale (`--space-1..5` on the 1-2-3-4-6 ratio, `--control-h`, `--control-h-sm`). `index.css` hands these to the utilities (`--spacing` is `--space-1`, `rounded-*` the radii, `h-control` the heights), so migrated and legacy components follow one switch; px literals in the legacy sheet do not, until they migrate.
+- `web/tests/themes.test.ts` holds every theme to the same bar: text ≥7 and secondary ≥4.5 on every surface, accent links ≥4.5, labels on the accent (resting and hover) ≥4.5, tones ≥4.5, focus ring ≥3, dark themes step lighter (page < card < well < field); and every candidate sets its radii plus its type or density, density as a whole scale, fonts only from the bundle. No earlier id was dropped, so a stored choice still applies.
 - Inset boxes (metric tiles, the project control, notices, detail blocks, nested sections) paint `--well`; form fields paint `--field`. In dark: card < well < field, each one step lighter, and no box ever wears the page colour `--bg`. In light both are the paper well (`--bg`).
 
 ## Tone, not role
@@ -21,7 +33,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Key figures (tokens, durations, attempts) take the `.num` utility class (tabular digits), so a polled line or a column does not jitter (ruling H8).
 
 ## Components (session e236bbe4)
-- Scale tokens (in the first `:root` block, shared by every theme): space 4/8/12/16/24, radius 4 (xs) / 6 (controls) / 10 (cards), control height 32 (26 small), motion 120ms ease-out. Colour comes only from the theme tokens.
+- Scale tokens (in the first `:root` block; the default pair uses them as is, a candidate theme may override them — see Themes): space 4/8/12/16/24, radius 4 (xs) / 6 (controls) / 10 (cards), control height 32 (26 small), motion 120ms ease-out. Colour comes only from the theme tokens.
 - Buttons: secondary by default (elevated fill, strong edge, small shadow); one primary per view: only `.btn-primary` is filled with the accent (hover `--accent-hover`). `type="submit"` alone is a secondary button. `.btn-quiet` drops the chrome (cancel, dismiss); `.btn-danger` tints an irreversible action. Every button has hover, a 1px press, a 2px accent focus ring (offset 2), disabled at 50%, `aria-busy` shows progress. Two adjacent buttons get 8px apart unless their row spaces itself.
 - Fields: inputs, selects and textareas share one look (`--field`, strong edge, 32px, accent caret, accent ring on focus, muted placeholder, `aria-invalid` edge in danger); selects carry the token chevron; checkboxes and radios stay native at 16px, tinted with the accent.
 - Tabs: ONE component — the Settings category row, the group detail's region tabs and the corrections tabs: a row over a bottom rule, quiet medium-weight items, the open one bold over a 2px accent underline; it wraps when narrow.
@@ -33,7 +45,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 
 ## Styling (tester round 2026-10-28)
 - Tailwind v4 utilities over the tokens above (`src/index.css` maps them; Tailwind's own palette is cleared); the theme blocks in `styles.css` stay the only theme source. How to write and migrate a component: `web/TAILWIND-MIGRATION.md`.
-- Inter and JetBrains Mono are bundled (woff2) as `--font-sans` / `--font-mono`; the default look keeps the system stack (`--font`) until a theme chooses them.
+- Inter and JetBrains Mono are bundled (woff2) as `--font-sans` / `--font-mono`; the default look keeps the system stack (`--font`); a candidate theme chooses them by setting `--font` / `--mono` (see Themes).
 
 ## Layout
 - ≥761px: fixed shell, sidebar and content scroll independently. ≤760px wide or ≤560px tall: the page scrolls as a whole; nav is one horizontally scrolling row; the footer hides. The project caption stays (it explains the hidden Add/Rename).

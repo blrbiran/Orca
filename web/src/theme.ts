@@ -4,9 +4,16 @@
  * is wrapped: a private window or blocked site data must leave the page working.
  * Session e236bbe4 (human: "add selectable themes"): light and dark are the default pair; the six after them are
  * candidates the human will keep or drop. Each one is a `:root[data-theme="<id>"]` block in styles.css.
+ * Tester round 2026-10-28 (controller session a9f9d6de; human: 「之前的主题都不好看，你可以都整体再优化一遍」): the six reworked
+ * (each now sets type, radius and density as well as colour) and four added (rose, ink, violet, lagoon); light themes
+ * first, then dark. No id was dropped, so a stored choice of any earlier name still applies.
  */
 export const THEME_KEY = "orca.panel.theme";
-export const THEME_PREFS = ["system", "light", "dark", "frost", "contrast", "navy", "ember", "dusk", "terminal"] as const;
+export const THEME_PREFS = [
+  "system", "light", "dark",
+  "frost", "rose", "ink", "contrast",
+  "violet", "navy", "lagoon", "dusk", "ember", "terminal",
+] as const;
 export type ThemePref = (typeof THEME_PREFS)[number];
 
 export function readTheme(storage: Pick<Storage, "getItem"> | undefined): ThemePref {

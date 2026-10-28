@@ -1852,7 +1852,7 @@ export const zh: Translation<typeof en> = {
     },
   },
   enums: {
-    theme: { system: "跟随系统", light: "浅色", dark: "深色", frost: "霜白（冷色浅色）", contrast: "高对比（浅色）", navy: "藏青（深蓝深色）", ember: "余烬（暖色深色）", dusk: "暮色（柔和深色）", terminal: "终端（绿色深色）" },
+    theme: { system: "跟随系统", light: "浅色", dark: "深色", frost: "霜白（清爽浅色）", rose: "蔷薇（柔和浅色）", ink: "墨白（黑白浅色）", contrast: "高对比（浅色）", violet: "紫夜（紧凑深色）", navy: "藏青（深蓝深色）", lagoon: "潟湖（青绿深色）", dusk: "暮色（柔和深色）", ember: "余烬（暖色深色）", terminal: "终端（绿色等宽）" },
     decisionKind: { dependency: "依赖", interface: "接口", scheduling: "调度", abandon: "放弃", criteria: "判据", boundary: "边界", reconcile: "协调", implementation: "实现" },
     decisionScope: { file: "文件", task: "任务", repo: "仓库", "cross-repo": "跨仓库" },
     decisionVerdict: { ok: "正常", downgraded: "已降级" },

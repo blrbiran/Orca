@@ -60,8 +60,15 @@ function palette(theme: string) {
 }
 
 describe("the theme list (session e236bbe4)", () => {
-  it("offers system, the default pair, then six candidate themes, in that order", () => {
-    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "contrast", "navy", "ember", "dusk", "terminal"]);
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the human asked for the
+  // candidates to be reworked and 4-6 new themes added: rose, ink, violet, lagoon join, light candidates before dark ones,
+  // and no earlier id is dropped, so a stored choice of any of them still applies).
+  it("offers system, the default pair, then the light candidates and the dark candidates, in that order", () => {
+    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "ink", "contrast", "violet", "navy", "lagoon", "dusk", "ember", "terminal"]);
+  });
+
+  it("keeps every id an earlier panel could have stored, so nobody's choice silently falls back to system", () => {
+    for (const earlier of ["system", "light", "dark", "frost", "contrast", "navy", "ember", "dusk", "terminal"]) expect(THEME_PREFS, earlier).toContain(earlier);
   });
 
   it("has a stylesheet block for every pinned theme and no block the picker cannot reach", () => {
@@ -95,6 +102,66 @@ describe("the theme list (session e236bbe4)", () => {
       const { t, c } = palette(theme);
       const dark = lum(c("bg")) < 0.2;
       expect(t.get("color-scheme"), theme).toBe(dark ? "dark" : "light");
+    }
+  });
+});
+
+/**
+ * Tester round 2026-10-28 (controller session a9f9d6de; human: 「之前的主题都不好看，你可以都整体再优化一遍」, 4-6 new themes
+ * that vary palette, typography, radius and density together, not just colour). A theme changes the look only through
+ * the scale tokens, which index.css hands to the Tailwind utilities (--spacing is --space-1, rounded-* are the radii,
+ * h-control is --control-h) and the legacy rules read directly -- so both follow one switch.
+ */
+const SPACE = ["--space-1", "--space-2", "--space-3", "--space-4", "--space-5"];
+const RADII = ["--radius-xs", "--radius-sm", "--radius"];
+const SCALE = [...SPACE, ...RADII, "--control-h", "--control-h-sm", "--font", "--mono"];
+const px = (v: string): number => {
+  const m = /^(\d+(?:\.\d+)?)(px)?$/.exec(v);
+  if (!m || (m[2] === undefined && m[1] !== "0")) throw new Error(`not a px length: ${v}`);
+  return Number(m[1]);
+};
+describe("each candidate theme is more than a palette", () => {
+  it("leaves the default look's scale alone: the light block sets no scale token, only :root does", () => {
+    for (const name of SCALE) expect(tokens("light").has(name), name).toBe(false);
+    for (const name of SCALE) expect(tokens("dark").has(name), name).toBe(true);
+  });
+
+  it("sets its own corners (all three radii, small <= control <= card) and at least its type or its density", () => {
+    for (const theme of NEW) {
+      const t = tokens(theme);
+      for (const name of RADII) expect(t.has(name), `${theme} ${name}`).toBe(true);
+      const [xs, sm, card] = RADII.map((name) => px(t.get(name)!));
+      expect(xs, theme).toBeLessThanOrEqual(sm!);
+      expect(sm, theme).toBeLessThanOrEqual(card!);
+      expect(t.has("--font") || t.has("--control-h"), `${theme} type or density`).toBe(true);
+    }
+  });
+
+  // The Tailwind scale is N x --space-1 (p-6 is 6 steps); the legacy sheet reads --space-2..5 by name. A theme that set
+  // only some steps, or steps off the 1-2-3-4-6 ratio, would space a migrated component unlike its legacy neighbour.
+  it("sets density as a whole scale: all five steps on the 1-2-3-4-6 ratio, both control heights, the small one smaller", () => {
+    for (const theme of NEW) {
+      const t = tokens(theme);
+      if (SPACE.some((name) => t.has(name))) {
+        const unit = px(t.get("--space-1")!);
+        SPACE.forEach((name, i) => expect(px(t.get(name) ?? "NaN"), `${theme} ${name}`).toBe(unit * [1, 2, 3, 4, 6][i]!));
+        expect(t.has("--control-h"), `${theme} control height`).toBe(true);
+      }
+      if (t.has("--control-h") || t.has("--control-h-sm")) {
+        expect(px(t.get("--control-h-sm") ?? "NaN"), theme).toBeLessThan(px(t.get("--control-h") ?? "NaN"));
+        // the 1-step comfortable-to-compact band the 390 px layout was measured in (no horizontal overflow)
+        expect(px(t.get("--control-h")!), theme).toBeGreaterThanOrEqual(28);
+        expect(px(t.get("--control-h")!), theme).toBeLessThanOrEqual(36);
+      }
+    }
+  });
+
+  // Only the bundled faces (fonts.css, woff2) or the system stack: a family named here that the panel does not ship
+  // would fall back silently on every machine without it.
+  it("chooses its type only from the bundled fonts", () => {
+    for (const theme of NEW) {
+      const t = tokens(theme);
+      for (const name of ["--font", "--mono"]) if (t.has(name)) expect(t.get(name), `${theme} ${name}`).toMatch(/^var\(--font-(sans|mono)\)$/);
     }
   });
 });
