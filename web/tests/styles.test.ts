@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { kindDot } from "../src/DecisionList.js";
-import { inlinePick, tabItem, tabRow } from "../src/ui/classes.js";
+import { inlinePick, kindDot, tabItem, tabRow } from "../src/ui/classes.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
 const src = (file: string): string => readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");

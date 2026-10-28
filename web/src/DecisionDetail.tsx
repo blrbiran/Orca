@@ -33,7 +33,7 @@ import type { CorrectionForm, DecisionReviewState } from "./api.js";
 import { enumText } from "./i18n.js";
 import { en } from "./locales/en.js";
 import { WEB_CORRECTION_KINDS } from "./types.js";
-import { actionsBox, detailHelp } from "./ui/classes.js";
+import { actionsBox, detailHelp, withdrawnItem } from "./ui/classes.js";
 import type { CorrectionKind } from "./types.js";
 
 export interface DecisionAlternative {
@@ -153,7 +153,7 @@ export function DecisionDetail({
               <li
                 key={c.id}
                 data-correction-id={c.id}
-                className={c.state === "withdrawn" ? "correction-withdrawn line-through" : undefined}
+                className={c.state === "withdrawn" ? withdrawnItem : undefined}
                 data-tone={c.state === "closed" ? "ok" : undefined}
               >
                 {enumText("correctionKind", c.kind)} · {c.because} · {c.by} · <time dateTime={c.at}>{c.at}</time> ·{" "}

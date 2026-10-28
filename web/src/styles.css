@@ -286,7 +286,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 .empty { color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 20px; text-align: center; margin: 12px; font-size: var(--text-sm); }
 
 /* Taste refinement spec P1-1/§7: role is semantics; status and note are neutral, an alert with no stated tone is an error. */
-[role="alert"], [role="note"], [role="status"], .chain-banner {
+[role="alert"], [role="note"], [role="status"], .callout, .chain-banner {
   border: 1px solid var(--border); background: var(--well); color: var(--text-strong);
   border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere;
 }

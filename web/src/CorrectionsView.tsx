@@ -21,7 +21,7 @@ import type { CommandSuccessV1, CorrectionListItemV1, DebugClosingV1 } from "./c
 import type { ControlRefusal } from "./controlState.js";
 import i18n, { enumText, refusalDetail } from "./i18n.js";
 import { RefusalNotice } from "./RefusalNotice.js";
-import { actionsBox, detailHelp, sectionHead, sectionLede } from "./ui/classes.js";
+import { actionsBox, detailHelp, sectionHead, sectionLede, withdrawnItem } from "./ui/classes.js";
 
 type CorrectionAction = Extract<ControlAction, { verb: "correction-debug-open" | "correction-close" }>;
 /** One sent command and what came of it; `uncertain` is a lost answer (sendControlCommand), `refused` a booked one. */
@@ -163,7 +163,7 @@ function CorrectionRow(props: {
   return (
     <li
       data-correction-id={correction.id}
-      className={item.withdrawn !== null ? "correction-withdrawn line-through" : undefined}
+      className={item.withdrawn !== null ? withdrawnItem : undefined}
       data-tone={item.withdrawn === null && item.closed.state === "closed" ? "ok" : undefined}
     >
       <p>

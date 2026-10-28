@@ -30,3 +30,16 @@ export const sectionLede = "mb-3 text-sm text-muted";
 export const actionsBox = "mt-4 border-t border-line pt-4";
 /** The muted help line under a button or a form (12px). */
 export const detailHelp = "mt-1.5 mb-3.5 text-xs text-muted";
+
+/**
+ * A decision row is one button that is the whole row: flat, full width, a column of its lines. The open one (aria-current)
+ * is tinted with an accent bar on its start edge; hover tints it too, the open one included.
+ */
+export const decisionRow = "decision-row flex w-full flex-col items-stretch gap-1.5 rounded-none border-0 bg-transparent px-3.5 py-3 text-left font-normal text-fg shadow-none"
+  + " hover:bg-hover active:transform-none aria-[current=true]:bg-accent-subtle aria-[current=true]:shadow-bar-start hover:aria-[current=true]:bg-hover";
+/** The kind pill's dot, coloured by the kind's importance level (data-level, from kindRank); no level, no dot. */
+export const kindDot = "data-[level]:before:mr-1.5 data-[level]:before:size-1.75 data-[level]:before:rounded-full data-[level]:before:content-['']"
+  + " data-[level=1]:before:bg-kind-1 data-[level=2]:before:bg-kind-2 data-[level=3]:before:bg-kind-3";
+
+/** A correction that was withdrawn stays listed, struck through (its tone stays none). */
+export const withdrawnItem = "correction-withdrawn line-through";
