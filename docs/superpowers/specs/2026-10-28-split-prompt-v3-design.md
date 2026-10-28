@@ -32,3 +32,17 @@ Reasons stay codes (stored on the draft, shown, asserted). `explainSplitReason` 
 codes whose words are not already in the reason (`expand:*`, `path:`, `trace:`, `untraced:`, `dir:`, `checks-primary:`,
 `ledger-path:`, three `import:` items); `plan:`, other `import:` items, `graph:` and `schema:` already carry their
 checker's message. The prompt sends each reason as `<code> -- <meaning>`.
+
+## 3. A model with no context window: two refusals (#105)
+
+`estimatorCompatibility` names a null context window by what ccloop's resolution shows of the catalog. ccloop answers a
+codex single call only for a catalog row it found (`singleCallExecution` "v1-soft", else null; ccloop
+`src/agents/codex.ts`). So:
+
+- null window **with** a single call ⇒ new reason `context-unreported`: the catalog lists the model but gives no window.
+  The panel's words point to the installation field `declaredContextWindow` (ccloop spec
+  `2026-10-21-declared-context-window-design.md`; Orca's pinned ccloop has it, commit `ed2e0d7`).
+- null window **without** a single call ⇒ `context-unavailable`, words unchanged (not in the catalog, or not read).
+
+Known limit: an omp row with no `maxTokens` has no single call, so its null window is still `context-unavailable`
+although omp resolution only succeeds for a listed model. Out of #105's scope (codex); not changed.

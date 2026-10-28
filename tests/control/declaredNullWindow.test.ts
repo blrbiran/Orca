@@ -25,6 +25,10 @@ describe("a declared-null window (R7)", () => {
     const snapshot = profileSnapshot(); snapshot.profile.capabilities = declared(null);
     const profile = resolveProfile(snapshot);
     const at = (window: number | null) => estimatorCompatibility({ profile, observed: observed(window), probeFailureCode: null, resolution: fixtureResolutionFor(observed(window)) }, "soft").reasonCodes;
-    expect([at(272000).includes("context-unavailable"), at(null).includes("context-unavailable")]).toEqual([false, true]);
+    // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): #105 splits the
+    // refusal; this fixture's resolution answers a single call (a catalog row was found), so ccloop's null window is now
+    // `context-unreported`. It still encodes R7: a reported window clears the refusal, a null one is refused.
+    const context = (codes: string[]) => codes.filter((code) => code.startsWith("context-"));
+    expect([context(at(272000)), context(at(null))]).toEqual([[], ["context-unreported"]]);
   });
 });

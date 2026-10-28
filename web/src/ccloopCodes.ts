@@ -57,7 +57,7 @@ export function explainEstimateReason(reasonCode: string): string | null {
 
 /** src/control/estimatorCompatibility.ts EstimatorCompatibilityReason: the codes Orca's own estimator check refuses with. */
 const ESTIMATOR_CHECK_REASONS = new Set(["selection-unavailable", "single-call-unavailable", "preflight-unavailable", "instruction-unknown",
-  "context-unavailable", "usage-unavailable", "budget-unavailable", "handoff-unavailable", "request-bound-unavailable"]);
+  "context-unavailable", "context-unreported", "usage-unavailable", "budget-unavailable", "handoff-unavailable", "request-bound-unavailable"]);
 /**
  * Issues #70, #73, #58: requirement open's `agent-selection-rejected:estimator:<a>,<b>` names Orca's estimator compatibility
  * check, not ccloop. Its refusal in words, each reason code explained; null when any code is not one of that check's.

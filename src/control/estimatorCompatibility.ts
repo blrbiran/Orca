@@ -4,7 +4,7 @@ import { intersectCapabilities, type ObservedProfile } from "./profiles.js";
 export type EstimatorMode = "strict" | "soft";
 export type EstimatorCompatibilityReason =
   | "selection-unavailable" | "single-call-unavailable" | "preflight-unavailable" | "instruction-unknown"
-  | "context-unavailable" | "usage-unavailable" | "budget-unavailable" | "handoff-unavailable" | "request-bound-unavailable";
+  | "context-unavailable" | "context-unreported" | "usage-unavailable" | "budget-unavailable" | "handoff-unavailable" | "request-bound-unavailable";
 
 /** One predicate for every required single-call action, evaluated against the chosen resolution only. */
 export function estimatorCompatibility(
@@ -20,7 +20,10 @@ export function estimatorCompatibility(
   if (!preflight) reasons.push("preflight-unavailable");
   else if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, preflight.instructionVersion)) reasons.push("instruction-unknown");
   const capabilities = intersectCapabilities(resolution.profile.snapshot.profile.capabilities, resolution.observed);
-  if (capabilities.contextWindowTokens === null) reasons.push("context-unavailable");
+  // #105: ccloop answers a codex single call only for a catalog row it found (ccloop src/agents/codex.ts), so a null window
+  // beside a single call is a listed model the catalog gives no window for -- what an installation's declaredContextWindow
+  // fills (ccloop spec 2026-10-21) -- and a null window without one is a model the catalog does not list (or not read).
+  if (capabilities.contextWindowTokens === null) reasons.push((resolution.resolution?.singleCallExecution ?? null) === null ? "context-unavailable" : "context-unreported");
   if (capabilities.usageObservation === "unavailable") reasons.push("usage-unavailable");
   if (capabilities.budgetEnforcement === "unavailable" || (mode === "strict" && capabilities.budgetEnforcement !== "bounded")) reasons.push("budget-unavailable");
   if (capabilities.handoffControl !== "durable" || capabilities.handoffExecution === null) reasons.push("handoff-unavailable");
