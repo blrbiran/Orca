@@ -55,6 +55,16 @@ export function localDay(at: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/**
+ * A decision row is one button that is the whole row: flat, full width, a column of its lines. The open one (aria-current)
+ * is tinted with an accent bar on its start edge; hover tints it too, the open one included.
+ */
+const decisionRow = "decision-row flex w-full flex-col items-stretch gap-1.5 rounded-none border-0 bg-transparent px-3.5 py-3 text-left font-normal text-fg shadow-none"
+  + " hover:bg-hover active:transform-none aria-[current=true]:bg-accent-subtle aria-[current=true]:shadow-bar-start hover:aria-[current=true]:bg-hover";
+/** The kind pill's dot, coloured by the kind's importance level (data-level, from kindRank); no level, no dot. */
+export const kindDot = "data-[level]:before:mr-1.5 data-[level]:before:size-1.75 data-[level]:before:rounded-full data-[level]:before:content-['']"
+  + " data-[level=1]:before:bg-kind-1 data-[level=2]:before:bg-kind-2 data-[level=3]:before:bg-kind-3";
+
 export function DecisionList({
   rows,
   selected,
@@ -68,22 +78,22 @@ export function DecisionList({
   const name = useProjectName();
   const selectedKey = selected ? rowKey(selected) : null;
   return (
-    <ul className="decision-list">
+    <ul className="decision-list m-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-line">
       {rows.map((row) => {
         const key = rowKey(row);
         return (
           <li key={key}>
-            <button type="button" className="decision-row" aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
-              <span className="row-meta">
+            <button type="button" className={decisionRow} aria-current={key === selectedKey ? "true" : undefined} onClick={() => onOpen?.(row)}>
+              <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                 <MinorTag entry={row} copy="decisions" />
-                <span className="pill field-kind" data-level={kindLevel(String(row.kind))}>{enumText("decisionKind", String(row.kind))}</span>
+                <span className={`pill field-kind ${kindDot}`} data-level={kindLevel(String(row.kind))}>{enumText("decisionKind", String(row.kind))}</span>
                 <span className="pill field-scope">{enumText("decisionScope", String(row.scope))}</span>
-                {row.verdict !== "ok" && <span className="pill pill-warn field-verdict">{enumText("decisionVerdict", String(row.verdict))}</span>}
-                <span className="row-project field-projectKey">{name(String(row.projectKey))}</span>
-                <time className="row-at field-at" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
+                {row.verdict !== "ok" && <span className="badge field-verdict whitespace-nowrap text-warn" data-tone="warn">{enumText("decisionVerdict", String(row.verdict))}</span>}
+                <span className="field-projectKey font-semibold">{name(String(row.projectKey))}</span>
+                <time className="field-at font-data" dateTime={String(row.at)}>{localDay(String(row.at))}</time>
               </span>
-              <span className="row-question">{row.question ?? t("decisions.noQuestion")}</span>
-              <span className="row-id field-id">{String(row.id)}</span>
+              <span className="row-question wrap-anywhere line-clamp-2 text-sm text-fg-strong">{row.question ?? t("decisions.noQuestion")}</span>
+              <span className="row-id field-id font-data text-xs text-muted">{String(row.id)}</span>
             </button>
           </li>
         );

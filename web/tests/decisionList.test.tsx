@@ -57,9 +57,12 @@ describe("DecisionList (task 8 ruling K6)", () => {
   it("marks the kind pill with its importance level", () => {
     const one = (kind: string): string =>
       renderToStaticMarkup(<DecisionList rows={[{ projectKey: "p", id: "r/1", at: "2026-09-01T00:00:00.000Z", kind, scope: "repo", verdict: "ok", question: "q" } as DecisionListRow]} />);
-    expect(one("abandon")).toContain('<span class="pill field-kind" data-level="1">abandon</span>');
-    expect(one("criteria")).toContain('<span class="pill field-kind" data-level="3">criteria</span>');
-    expect(one("zzz-unknown")).toContain('<span class="pill field-kind">zzz-unknown</span>');
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Tailwind migration of batch 2): the pill's class string now carries the dot utilities (kindDot, pinned in styles.test.ts); the markup is matched with the data-level attribute.
+    // mutation: drop data-level from the span of a known kind -> red
+    // (the class string holds quotes, which the markup escapes, so the span is matched, not the string)
+    expect(one("abandon")).toMatch(/<span class="pill field-kind [^"]+" data-level="1">abandon<\/span>/);
+    expect(one("criteria")).toMatch(/<span class="pill field-kind [^"]+" data-level="3">criteria<\/span>/);
+    expect(one("zzz-unknown")).toMatch(/<span class="pill field-kind [^"]+">zzz-unknown<\/span>/);
   });
 
   /**

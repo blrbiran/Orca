@@ -13,6 +13,7 @@ import type { CommandSuccessV1 } from "./controlTypes.js";
 import type { ControlRefusal } from "./controlState.js";
 import { enumText } from "./i18n.js";
 import { RefusalNotice } from "./RefusalNotice.js";
+import { actionsBox } from "./ui/classes.js";
 
 type Kind = "wrong" | "not_my_taste" | "stale";
 type Outcome = { kind: "idle" } | { kind: "pending" } | { kind: "done"; correctionId: string } | { kind: "refused"; refusal: ControlRefusal };
@@ -76,7 +77,7 @@ export function CoarseCorrectionForm(props: {
           <input value={choseInstead} onChange={(event) => setChoseInstead(event.target.value)} />
         </label>
       )}
-      <div className="actions">
+      <div className={`actions ${actionsBox}`}>
         <button type="submit" disabled={!ready}>{t("corrections.coarse.submit")}</button>
         <button type="button" onClick={props.onCancel}>{t("corrections.cancel")}</button>
       </div>

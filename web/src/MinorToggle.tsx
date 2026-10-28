@@ -40,7 +40,7 @@ export function MinorToggle(props: { entries: readonly Graded[]; showMinor: bool
   const name = props.list === undefined ? undefined
     : props.showMinor ? t(`control.decisions.minorName.${props.list}.hide`) : t(`control.decisions.minorName.${props.list}.show`, { count: minor });
   return (
-    <button type="button" className="minor-toggle" aria-expanded={props.showMinor} aria-label={name} onClick={() => props.onToggle(!props.showMinor)}>
+    <button type="button" className="minor-toggle mx-3.5 my-2" aria-expanded={props.showMinor} aria-label={name} onClick={() => props.onToggle(!props.showMinor)}>
       {props.showMinor ? t(`${props.copy}.hideMinor`) : t(`${props.copy}.showMinor`, { n: minor })}
     </button>
   );

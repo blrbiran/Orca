@@ -32,7 +32,7 @@ export function DecisionOperations({
   const { t } = useTranslation();
   if (requests.length === 0) return null;
   return (
-    <section className="callout decision-operations" aria-label={t("decisions.operations")} aria-live="polite">
+    <section className="decision-operations mb-2 rounded-control border border-line bg-well px-3 py-2.5 text-sm leading-normal wrap-anywhere text-fg-strong" aria-label={t("decisions.operations")} aria-live="polite">
       <ul>
         {requests.map((record) => {
           const names = { project: projectName(record.owner.projectKey), decision: record.owner.decisionId };

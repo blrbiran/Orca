@@ -5,6 +5,7 @@
  * section, so the first screen is still the work a person owes.
  */
 import { ShortcutsHelp } from "./ShortcutsHelp.js";
+import { sectionHead, sectionLede } from "./ui/classes.js";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -135,19 +136,19 @@ export function DecisionsView(props: {
     : null;
   return (
     <div className="decisions">
-      <div className="section-head">
-        <h1>{t(heading.title)}</h1>
+      <div className={sectionHead}>
+        <h1 className="text-xl">{t(heading.title)}</h1>
         <span className="count" data-testid="decision-count">{props.sourceStatus !== undefined && props.sourceStatus !== "available" ? "—" : t("decisions.count", { shown: shown.length, total: props.rows.length })}</span>
         {props.reviewedCount !== undefined && props.reviewedCount > 0 && (
           <span className="count" data-testid="reviewed-count">{t("decisions.reviewedThisSession", { n: props.reviewedCount })}</span>
         )}
         <ShortcutsHelp />
       </div>
-      <p className="section-lede">
+      <p className={`section-lede ${sectionLede}`}>
         {t(heading.lede)}
       </p>
       <p className="kbd-hint">{t("decisions.keyHint")}</p>
-      <div className="filters">
+      <div className="filters flex flex-wrap gap-3 mb-3 [&_label]:m-0 [&_label]:flex-row [&_label]:items-center">
         {props.status !== undefined && (
           <label>
             {t("decisions.filterStatus")}

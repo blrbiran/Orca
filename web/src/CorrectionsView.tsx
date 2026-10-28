@@ -21,6 +21,7 @@ import type { CommandSuccessV1, CorrectionListItemV1, DebugClosingV1 } from "./c
 import type { ControlRefusal } from "./controlState.js";
 import i18n, { enumText, refusalDetail } from "./i18n.js";
 import { RefusalNotice } from "./RefusalNotice.js";
+import { actionsBox, detailHelp, sectionHead, sectionLede } from "./ui/classes.js";
 
 type CorrectionAction = Extract<ControlAction, { verb: "correction-debug-open" | "correction-close" }>;
 /** One sent command and what came of it; `uncertain` is a lost answer (sendControlCommand), `refused` a booked one. */
@@ -84,7 +85,7 @@ export function AttemptNotice(props: {
             {t("corrections.checksTitle")}
             <textarea name="checks" required value={checks} onChange={(event) => setChecks(event.currentTarget.value)} />
           </label>
-          <p className="detail-help">{t("corrections.checksHelp")}</p>
+          <p className={`detail-help ${detailHelp}`}>{t("corrections.checksHelp")}</p>
           <button type="submit" disabled={named.length === 0}>{t("corrections.openWithChecks")}</button>
         </form>
       ) : (
@@ -162,7 +163,7 @@ function CorrectionRow(props: {
   return (
     <li
       data-correction-id={correction.id}
-      className={item.withdrawn !== null ? "correction-withdrawn" : undefined}
+      className={item.withdrawn !== null ? "correction-withdrawn line-through" : undefined}
       data-tone={item.withdrawn === null && item.closed.state === "closed" ? "ok" : undefined}
     >
       <p>
@@ -193,7 +194,7 @@ function CorrectionRow(props: {
       )}
       {item.closing !== null && <p data-testid="correction-closing">{closingText(item.closing)}</p>}
       {!settled && !props.withdrawal.done && (
-        <div className="actions">
+        <div className={`actions ${actionsBox}`}>
           {item.debugGroups.length === 0 && (
             <button type="button" disabled={busy} onClick={() => props.onSend(debugOpenAction(correction.id), nextCommandId())}>{t("corrections.open")}</button>
           )}
@@ -280,9 +281,9 @@ export function CorrectionsView(props: { active: boolean }): JSX.Element {
     await load();
   };
   return (
-    <div className="corrections" data-testid="corrections-view">
-      <div className="section-head"><h1>{t("corrections.title")}</h1></div>
-      <p className="section-lede">{t("corrections.lede")}</p>
+    <div className="corrections m-0 pl-4.5 [&_li]:wrap-anywhere" data-testid="corrections-view">
+      <div className={sectionHead}><h1>{t("corrections.title")}</h1></div>
+      <p className={`section-lede ${sectionLede}`}>{t("corrections.lede")}</p>
       {!correcting && <button type="button" onClick={() => { void startCorrecting(); }}>{t("corrections.coarse.correct")}</button>}
       {correcting && repositories !== null && (
         repositories.length === 0 ? <p className="empty">{t("corrections.coarse.noRepository")}</p>

@@ -21,3 +21,12 @@ export const settingsRegion = "min-w-0 wrap-anywhere [&_input]:min-w-0 [&_input]
   + " [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto";
 /** The change-password form inside Settings (AuthGate): one column, 420px at most. */
 export const passwordInSettings = "mb-6 max-w-[420px]";
+
+/** A page's head row: the title (and its counts) on one baseline. */
+export const sectionHead = "flex items-baseline gap-3 mb-1";
+/** The muted one-line lede under a page title. */
+export const sectionLede = "mb-3 text-sm text-muted";
+/** A set-apart action area under a detail or a row: a rule above, 16px of air on each side of it. */
+export const actionsBox = "mt-4 border-t border-line pt-4";
+/** The muted help line under a button or a form (12px). */
+export const detailHelp = "mt-1.5 mb-3.5 text-xs text-muted";

@@ -13,7 +13,7 @@ import { Dialog } from "./ui/Dialog.js";
 export function ShortcutsHelp(): JSX.Element {
   const { t } = useTranslation();
   const trigger = (
-    <button type="button" className="icon-button" aria-label={t("shortcuts.open")} title={t("shortcuts.open")}>
+    <button type="button" className="icon-button ms-auto min-w-control self-center p-1 leading-0" aria-label={t("shortcuts.open")} title={t("shortcuts.open")}>
       {/* A keyboard (the lucide "keyboard" outline), drawn in the button's text colour. */}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
         <rect x="2" y="4" width="20" height="16" rx="2" />
