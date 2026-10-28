@@ -65,7 +65,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 3.00000000000000 测试者反馈轮（2026-10-28，接 `e236bbe4` 之后的规划会话）—— **先读这一节**
 
-> 台账 `.superpowers/sdd/2026-10-28-tester-feedback-round/progress.md`（人裁原话、已现核的事实）。本会话**只做了规划，没改代码**；因上下文超 Rule 6 的单任务预算而交接。
+> 台账 `.superpowers/sdd/2026-10-28-tester-feedback-round/progress.md`（人裁原话、已现核的事实）。本会话**只做了规划与人裁，没改代码**；人说「先把该定的定好，我们再做 handoff」，定完即交接（上下文已超 Rule 6 单任务预算，人当轮豁免）。
 > 输入：`/Users/biran/code/skills/orca/orca_archived_files/` 的 issue-20261023.md（#70–#109）与十份分析文档，要放在一起看。
 
 - **人已批的顺序**：① P0 卡死类 #98–#104：先用判据复现文档里的库状态，分清真缺陷与手改损坏；方案是把已有的恢复命令（剩余额度结算后重试、settle-unknown-usage、需求撤回）暴露成 `orca recovery …` CLI、给 #100 的 drafting＋usage-unknown 状态一个结算后撤回/归档的出口，**不做** force-archive／reset-dispatch（先写 spec）；② P0 #107：拆分提示补 loop plan 约束（`investigate` 单一精确路径、`design` 非 `**`）与 trace id 格式（AC／ADR，不是 R?.Q?），退回原因附人话说明，提示升 version 3；③ P1 #105 报错区分「不在目录」与「在目录但没报窗口」并指向 ccloop 的 `declaredContextWindow`；④ P1 #106 需求页按钮布局；⑤ P1 先量清拆分每稿 28–30 万 token 的构成（见台账：提示上限远小于此；nonce 几稿之间稳定，不是成因）；⑥ P2 UI：卡片相对时间＋N/M（#73/#90）、需求流程阶段指示（#76，并修「Next:」条样式）、标题层级（#83/#86，并修文档标题 h6）、transcript 跟随最新（#74 先核）；导航把 chains、memory、metrics 收进「更多」（#79，人裁）；⑦ 主题：人对现有 8 个都不满意，新一批要同时拉开字体／圆角／密度，参考 Hermes 预设（源码 `/Users/biran/code/skills/agent/hermes-agent`，人授权读）。
@@ -353,7 +353,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. 人看完全部主题后告诉保留哪些（§八）；再按人的选择删减主题与 `themes.test.ts`。测试者 #22（与 run 实时转录详情页重叠）与各节残余按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
+8. **测试者反馈轮（下一件，按 §3 最新一节的顺序）**：P0 卡死类＋恢复 CLI → #107 → 付费量 token（codex `gpt-6-luna`，人已批）→ 修订模式重试 → Radix → Tailwind v4 全量迁移 → 主题整体重做（人：现有主题都不满意，`themes.test.ts`／`i18nPseudo` 枚举计数随之改）。测试者 #22（与 run 实时转录详情页重叠）按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -531,7 +531,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `e236bbe4` 待人看／待人定**：① 在「设置 › 外观」里逐个看主题（`frost`、`contrast`、`navy`、`ember`、`dusk`、`terminal`，加默认深浅），说保留哪些；顺带看组件重做后的整体观感（#64／#65 的目检也在这里）；② 需求文档的轮次编号：按链上位置（与面板一致）还是保留存储序号；③ 审本会话控制器裁定（台账逐条）：#21 的强调色竖条换成整卡浮起（impeccable 禁 side-tab）；m5 不改 ccloop 行为只补判据；`control-argument-invalid` 的通用文案改写为「这条命令收到的值无效：<detail>」；④ codex 需求拆分人自测结果（会话 `3cd8fb02` 带来的，仍待）。会话 `3cd8fb02` 的裁定人已「其他同意」、push 已做，已结清。
+- ~~会话 `e236bbe4` 待人看／待人定~~ **人已全部回复**（测试者反馈轮台账）：控制器三条裁定「同意」；轮次编号按链上位置；主题「都不太满意」⇒ 整体重做；codex 拆分自测的结果就是测试者 #105／#107。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。
   2. 人做：~~`branch -D feat/tester-round2-server`／`branch -D feat/scheduled`~~ **不必了**——2026-10-26 查 `branch --list` 只剩 `main`、`worktree list` 只剩主仓，没有可删的分支；`/private/tmp/orca-ffec7b28/` 的清理（人 2026-10-26 已授权，`ccloop-fe985b0` 是当前钉住的测试用 bin 要留；`ccloop-cache*` 是测试缓存）、`/private/tmp/orca-0e13a9b7/`、`/private/tmp/orca-b37f7ce9/`。
@@ -602,4 +602,4 @@ c=$(/usr/bin/git log --format=%H -n1 --grep='docs(handoff): condense Orca handof
 
 `superpowers:verification-before-completion`（每次说「做完了／绿了」之前）、`superpowers:brainstorming`（开新能力之前）、`superpowers:writing-plans`、
 `superpowers:subagent-driven-development`（值这个钱，但是主要开销）、`superpowers:systematic-debugging`（出现红先用它）、`superpowers:receiving-code-review`
-（评审员的承重主张自己复核）。skill 与 `CLAUDE.md` 冲突时 `CLAUDE.md` 优先。
+（评审员的承重主张自己复核）；UI 轮先读 `web/DESIGN.md`、跑 impeccable 检测器，可用 `frontend-design`、`playwright`（截图对比）；P0 修复先 `superpowers:test-driven-development`。skill 与 `CLAUDE.md` 冲突时 `CLAUDE.md` 优先。
