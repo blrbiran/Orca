@@ -8,7 +8,7 @@ import type { MultiDirProjectOf } from "./multiGroup.js";
 import type { SingleCallPurpose } from "./singleCall.js";
 import type { ControlStore } from "./store.js";
 import type { WorkspaceRoots } from "./workspace.js";
-import { completeEstimateInStore, completeEstimateInTransaction } from "./webService.js";
+import { completeEstimateInStore, completeEstimateInTransaction } from "./estimateSettlement.js";
 import { ControlError } from "./errors.js";
 import { CLARIFY_HANDLER, SPLIT_HANDLER } from "./requirementCalls.js";
 
