@@ -16,6 +16,7 @@ import { currentLanguage, enumText } from "./i18n.js";
 import { useClock } from "./clock.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 import { inScope, type GroupScope } from "./projectScope.js";
+import { boardCard as card, boardCardBadge as cardBadge, boardCardOpen as cardOpen, boardColumnBox as columnBox } from "./ui/classes.js";
 import { minutesSince, updatedText } from "./relativeTime.js";
 import { KNOWN_FAILURE_CAUSES, knownCause } from "./RunReason.js";
 
@@ -34,16 +35,7 @@ export interface BoardViewProps {
   now?: number;
 }
 
-// Tester round 2026-10-28 (Tailwind migration): the board's look, once. A card is an inset box; its badges are boxed (not
-// pills) so a second line stays inside the border (issue #58); its open control is a bare button (the old `all: unset`).
-const card = "cursor-grab rounded-control border border-line bg-well px-2.5 py-2 transition-colors hover:border-line-strong";
-const cardBadge = "max-w-full rounded-control wrap-anywhere";
-const cardOpen = "inline min-h-0 cursor-pointer rounded-none border-0 bg-transparent p-0 text-start text-base leading-[inherit] font-semibold text-inherit shadow-none transition-none hover:bg-hover";
 const cardGoal = "my-1";
-// Tester #54: while a card is dragged, the columns that refuse it dim. (Padding, edge and fill come from the legacy labelled-section
-// card rule, which out-ranks the old `.board-column` rule -- and so also its `[data-drop="allowed"]` accent outline, which never
-// painted before this migration either. Kept as it was: the migration does not change the look; see the batch 4b report.)
-const columnBox = "min-h-[120px] shrink-0 basis-[240px] data-[drop=refused]:opacity-55";
 
 type FlowRun = FlowListV1["runs"][number];
 /** A flow run's column: waiting on the person, running, or finished (stopped runs end there too, with their state). */

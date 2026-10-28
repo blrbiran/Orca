@@ -6,13 +6,8 @@ import { explainRunReason } from "./refusalExplain.js";
 import { reasonCode } from "./runFacts.js";
 import type { WorkItemCategoryV1 } from "./controlTypes.js";
 import type { OverviewModel, OverviewQueueRow } from "./overviewModel.js";
+import { overviewColumn as column, overviewRowButton as rowButton, overviewRowItem as rowItem, overviewRowList as rowList } from "./ui/classes.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
-// Tester round 2026-10-28 (Tailwind migration). Buttons wrap and align left (a goal can be long); each column is bare, not a
-// card inside the Overview card (it out-ranks the labelled-section card rule); a row is a rule-separated list item.
-const rowButton = "max-w-full justify-start text-left whitespace-normal";
-const column = "m-0 min-w-0 border-0 bg-transparent p-0 shadow-none";
-const rowList = "m-0 list-none p-0";
-const rowItem = "border-b border-line py-4 wrap-anywhere";
 const rowText = "my-2";
 /** Taste refinement P1-4: the queue keeps every step that is not a decision review, and at most this many reviews. */
 export const OVERVIEW_DECISION_LIMIT = 3;
