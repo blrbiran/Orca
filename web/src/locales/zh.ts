@@ -125,6 +125,7 @@ export const zh: Translation<typeof en> = {
       flowNeedsYou_one: "{{count}} 个步骤等你处理",
       flowNeedsYou_other: "{{count}} 个步骤等你处理",
       flowPool: "已提取 {{drawn}}，共 {{pool}} token",
+      tasksDone: "已完成 {{done}}/{{total}} 个任务",
       waitingFor: "等待 {{groups}}",
       waitingSlot: "等待空位",
       held: "只确认，未开跑",
