@@ -35,7 +35,7 @@ describe("the sidebar's More group (tester #79)", () => {
     render1("tasks");
     fireEvent.click(toggle());
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    // mutation: render the folded entries only while open without their href -> a destination loses its route, red
+    // mutation: href="#" instead of hashFor(section) on the nav link -> a destination loses its route, red
     expect(link("Memory").getAttribute("href")).toBe("#memory");
     expect(link("Metrics").getAttribute("href")).toBe("#metrics");
     expect(link("Continuous improvement").getAttribute("href")).toBe("#chains");
