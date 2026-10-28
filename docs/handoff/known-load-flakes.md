@@ -169,3 +169,12 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/control/taskResultCollector.test.ts` › 「core usage and terminal settle independently during a blocked optional RPC」 | **断言形状**（不是超时）：`expected 'metadata-gated' to be 'core-progress'`（`:197`）。用例用 `node:timers/promises` 的 1500 ms **实时**竞速（fake timers 只接管全局 `setTimeout`），全量负载 30.9／46.7／51.4 时红；同 env 单跑 3/3（30/30，负载 19–31）。观测树为 H7 O6 未提交工作树，O6 的 `executionDriver` 改动只在 multi 分支，单仓路径不变 ⇒ 判负载，但断言形状**未豁免**，下次再见先按 `systematic-debugging` 查 |
 
 **`a98b77d2`（2026-10-26／27，panel small-gaps 门；Node 22.13.1；负载 19–25）**：最终门根 578 文件 1 红（`startForm` ECONNRESET）、web 159 文件 1 红（`memoryLayout` scroll 时序），都是上表已登记的同形状；单文件各连跑 3 次 3/3 绿（负载 14–17）。同门前几轮还红过三条，都不是负载：`web/tests/schedules.test.tsx` 的导入用例**单跑必红**（jsdom 的 `File.arrayBuffer()` 给另一个 realm 的 `ArrayBuffer`，Node 的 `SubtleCrypto` brand check 拒收；`sha256Hex` 改喂本 realm 视图后 39/39）；`tests/service/command.test.ts` 的 skill 字面量停在 75f17f14 之前（skill 已把 `status|logs` 并入同一句，改断言）；`projectSwitcher` C（上表已登记的时序）在 Requirements 表单挂载前就读 select，初始断言改为 `waitFor`。
+
+## 会话 `a9f9d6de`（2026-10-28／29，测试者反馈轮；七条 UI 线并跑、门串行、负载约 20–30）新见形状（**下次红先对照，不豁免**）
+
+| 文件 › 测试 | 现象与观测 |
+|---|---|
+| Orca › `tests/control/correctionCoarseDebug.test.ts` | **挂住**（不是超时）：两次门里 worker 卡在一个 `git hash-object -w` 子进程上 22–35 分钟、0% CPU，占着门锁；杀掉该 git 子进程后门继续（报 1 error）。单跑 3/3 绿、各约 19 s。根因未查。再见时：先 `ps` 找 `git hash-object`，杀的只能是本会话起的那个 |
+| Orca › `tests/flow/startForm.test.ts` › 「answers the templates…」 | 上表那条，本轮更频繁：**基线分支单跑也 3/4 红**（负载约 25，`fetch failed`／ECONNRESET 或 hook 10 s 超时），负载降下来后的单跑 9/9 绿。不是本轮改动带来的 |
+| Orca › `progressE2E`、`dispatchedRunMarkerE2E`（`checkpoint-usage-high-water`）、`multiDirCollect`（`control-peer-exit … Unexpected end of JSON input`）、`agentUpgradeE2E`（`timed out waiting for b to land`，负载 29.5） | 各在一次全量里红一次，其余门里绿；`progressE2E`、`agentUpgradeE2E` 单跑 3/3 绿，另两条未单跑 |
+| ~~Orca › web `tests/controlCommandRecovery.test.tsx`~~ | **已修，不再是 flake**：三处在文字出现后立刻读 sessionStorage，与 App 的写入 effect 竞速；改为 `waitFor`（主题行 `test(web): the uncertain-command reads wait for App's storage effect…`）。上面几行旧登记里的这个文件以此为准 |

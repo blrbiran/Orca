@@ -63,16 +63,19 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00000000000000 测试者反馈轮（2026-10-28，接 `e236bbe4` 之后的规划会话）—— **先读这一节**
+### 3.00000000000000 测试者反馈轮（2026-10-28 规划 → 会话 `a9f9d6de` 2026-10-28／29 实施）—— **先读这一节**
 
-> 台账 `.superpowers/sdd/2026-10-28-tester-feedback-round/progress.md`（人裁原话、已现核的事实）。本会话**只做了规划与人裁，没改代码**；人说「先把该定的定好，我们再做 handoff」，定完即交接（上下文已超 Rule 6 单任务预算，人当轮豁免）。
-> 输入：`/Users/biran/code/skills/orca/orca_archived_files/` 的 issue-20261023.md（#70–#109）与十份分析文档，要放在一起看。
+> 台账 `.superpowers/sdd/2026-10-28-tester-feedback-round/progress.md`（人裁原话、每道门、变异、测量命令与原始数）。UI 细节在 `docs/handoff/handoff_ui.md` §七.七。
+> 人裁（实施会话）：「尽量将这些要做的task都完整做完」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「遇到卡住必须等人的事情，请继续做不必等人的部分」「执行完在最后阶段报给我审核」；ccloop 若需 repin 临时允许 push ccloop（**本轮 ccloop 没动，没 repin、没推**）。规划会话的人裁（顺序、#69/#70 不改、不做跨调用 session 复用、Board 不加批量／触摸／列／WebSocket）照旧有效。
 
-- **人已批的顺序**：① P0 卡死类 #98–#104：先用判据复现文档里的库状态，分清真缺陷与手改损坏；方案是把已有的恢复命令（剩余额度结算后重试、settle-unknown-usage、需求撤回）暴露成 `orca recovery …` CLI、给 #100 的 drafting＋usage-unknown 状态一个结算后撤回/归档的出口，**不做** force-archive／reset-dispatch（先写 spec）；② P0 #107：拆分提示补 loop plan 约束（`investigate` 单一精确路径、`design` 非 `**`）与 trace id 格式（AC／ADR，不是 R?.Q?），退回原因附人话说明，提示升 version 3；③ P1 #105 报错区分「不在目录」与「在目录但没报窗口」并指向 ccloop 的 `declaredContextWindow`；④ P1 #106 需求页按钮布局；⑤ P1 先量清拆分每稿 28–30 万 token 的构成（见台账：提示上限远小于此；nonce 几稿之间稳定，不是成因）；⑥ P2 UI：卡片相对时间＋N/M（#73/#90）、需求流程阶段指示（#76，并修「Next:」条样式）、标题层级（#83/#86，并修文档标题 h6）、transcript 跟随最新（#74 先核）；导航把 chains、memory、metrics 收进「更多」（#79，人裁）；⑦ 主题：人对现有 8 个都不满意，新一批要同时拉开字体／圆角／密度，参考 Hermes 预设（源码 `/Users/biran/code/skills/agent/hermes-agent`，人授权读）。
-- **人裁**（原话在台账）：#69/#70 两处项目选择器「先不改」；需求文档轮次按链上位置编（文档、ADR id、校验器已知 id 集合三处一起改，先核 ADR id 现用哪套）；可用真实库副本诊断（本机没有测试者的数据）；恢复 CLI 只暴露守不变量的已有命令（无 force-archive／reset-dispatch）。
-- **token 计划**（人「同意先这样做，看下效果」）：#107 → 付费量一次（人批：codex `gpt-6-luna`、一个中等需求、澄清＋拆分，读每次调用 input/cached/output/轮数）→ 拆分重试改「修订模式」（上一稿＋退回原因、只改点名的；被退回与人 feedback 一视同仁；提示升 version 3，已开始的调用保持旧版）→ 仍不够才加显式、计入哈希的「探索笔记」。**不做跨调用 session 复用**（审计／恢复／三家语义不一；ccloop #50 已否）。原计划的「修 nonce」作废：nonce＝概览哈希前 16 位，几稿之间稳定。
-- **UI 栈**（人批，排在 P0 之后）：先 Radix（菜单、对话框、选择框），再 **Tailwind v4 全量迁移**（`@tailwindcss/vite`；CSS 变量经 `@theme` 仍是主题唯一来源）：控制器先在设置页打样并写迁移规约，再派 sonnet 子代理按文件分批迁、控制器逐批复核；验收＝390／1280 px × 三个代表主题前后截图、impeccable 检测器为空、`npm test`、横向溢出 0；读 `styles.css` 的判据允许改写（每条 Ruling 行＋自己的变异）。字体：打包 Inter＋JetBrains Mono woff2。主题：新增 4–6 个，同时拉开配色／字体／圆角／密度，旧候选主题也可整体重做（人：「之前的主题都不好看」）。
-- **不做**：Board 的批量操作、触摸拖拽、加列、WebSocket（#89 说「手动刷新」不成立，面板 2 s 轮询）；声明式 UI 协议、多平台、学习循环。
+- **全部已 `--ff-only` 合入 Orca main 并装上**（`npm install` 只加包、`package-lock.json` 0 字节差；`npm run build`＋web build；`launchctl kickstart -k …/dev.orca.panel`，7777 应答 200；schema 不变）。按主题行找：
+  - **P0 #98–#104**（spec `docs/superpowers/specs/2026-10-28-recovery-cli-design.md`，**§4 更正优先于 §2**）：判据 `tests/control/testerStuckStates.test.ts` 用真代码路径重建测试者的库状态。结论：#98 不是缺陷（Retry 起草的下一稿等在旧调用的未知用量上，面板给了结算出口）；#99 复现不了（C22 已钉住；要测试者的 commands 行）；**#100 是缺陷，已修**（停住／挂起的需求调用不再挡归档，归档同事务把它置 `interrupted`）；#101 是设计路径；#102、#104 是测试者手改库造成的（代码到不了）；#103 新 CLI `orca recovery retry --run <run> --acknowledge charge-remaining-grant`，单调用结算接受所有者的 person token（记到该账号）。**`settle-unknown-usage` 仍只限 Web**——审阅发现 socket 路径会留下读方都拒的标记；要让 `orca task settle-usage` 能用需要命令台账记 person token 的账号（schema 变更，待人）。没做 force-archive／reset-dispatch。
+  - **拆分线**：split 指令 v3（#107：loop plan 约束、trace id 规则、退回原因附人话）；#105 新原因 `context-unreported`（在目录但没报窗口）；轮次按链上位置编（id、文档、校验器三处）；拆分重试改**修订模式**（上一份有任务的稿＋点名的原因，只改点名的）。设计记录 `docs/superpowers/specs/2026-10-28-split-prompt-v3-design.md`（§6 是审阅后的更正与登记的 5 条 Minor）。
+  - **付费量 token**（人批，codex `gpt-6-luna`，中等需求）：2 轮澄清 → 共识 → 第 1 稿一次过；3 次调用各一轮、无工具；input 约 12.6–13.0 k／次，组共 42335 token；codex 不报 USD（测量命令与逐次数字在台账）。**测试者每稿 28–30 万没复现**，要测试者那次拆分 run 的 `…/single-call/call-*/events.jsonl` 才能往下查；「探索笔记」按此证据不需要。
+  - **UI**：Radix＋Tailwind v4 全量迁移（preflight 开、共享类成 `@utility`）、测试者 #73/#74/#76/#79/#83/#86/#90/#106/#107(面板)/#54、10 个候选主题重做／新增——详见 `handoff_ui.md` §七.七。
+- **门**（`npm test`，最终提交）：865 文件（682 根、183 web），web 全绿，根 1 红 `startForm`（已登记，单跑 9/9）；37 跳过（固定 10 个文件）。本轮见到的负载红与一条**会挂住**的测试（`correctionCoarseDebug`，卡在 `git hash-object -w` 子进程）已登记进 `known-load-flakes.md`；`controlCommandRecovery` 的竞速已修。
+- `~/.orca` 非面板树 326 个文件 `shasum -c` 全 OK（真库只用过 `.backup` 副本诊断，副本是干净的）。
+- **残余（登记未修）**：flow 宿主的 clarify 轮次编号未跟随链上位置；omp／openrouter 走 `context-unavailable` 的边角；多目录拆分非主仓的路径形状只按主仓规则核；`correctionCoarseDebug` 挂住的根因；见 split 设计记录 §6 与恢复 spec §4。
 
 ### 3.0000000000000 会话 `e236bbe4`（2026-10-28）
 
@@ -353,7 +356,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. **测试者反馈轮（下一件，按 §3 最新一节的顺序）**：P0 卡死类＋恢复 CLI → #107 → 付费量 token（codex `gpt-6-luna`，人已批）→ 修订模式重试 → Radix → Tailwind v4 全量迁移 → 主题整体重做（人：现有主题都不满意，`themes.test.ts`／`i18nPseudo` 枚举计数随之改）。测试者 #22（与 run 实时转录详情页重叠）按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
+8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`，§3 最新一节）。下一件候选：人看完 UI 与主题后的删改（`handoff_ui.md` §七.七 待人项）；拿到测试者的 `events.jsonl`／commands 行后再查 token 构成与 #99；`orca task settle-usage` 走 socket 要的台账 schema 变更（先写设计、等人点头）；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -531,6 +534,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
+- **会话 `a9f9d6de` 待人审／待人给**（测试者反馈轮；原委在台账与 `handoff_ui.md` §七.七）：
+  1. 审：UI 全部（真浏览器、逐主题），留哪些主题；替人定的可逆项（原生 select 不换 Radix Select、两处 warn 边框混色 → 45%、terminal 主题 tab 随密度矮 4px、删 `.btn`／`.btn-danger`、主题块不拆文件）；检测器留着的两条 Inter `overused-font`（人裁用 Inter）。
+  2. 给（转测试者）：#99 那个组的 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组的 `status`；拆分 run 的 `<control>.runs/<run>/run/<kind>/1/single-call/call-*/events.jsonl`。
+  3. 定：`orca task settle-usage` 走 socket 需要命令台账记 person token 的账号（schema 变更）——做不做。
+  4. push：Orca 本地 main 领先远端（本轮 UI 与收尾提交）；ccloop／ccmem 本轮无改动。
 - ~~会话 `e236bbe4` 待人看／待人定~~ **人已全部回复**（测试者反馈轮台账）：控制器三条裁定「同意」；轮次编号按链上位置；主题「都不太满意」⇒ 整体重做；codex 拆分自测的结果就是测试者 #105／#107。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。

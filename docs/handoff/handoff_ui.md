@@ -8,6 +8,7 @@
 > ✅ §七.四 已由人复验、合并并 push（之后人删了分支与 worktree）。
 > ✅ §七.五（深色框过暗；j/k 是 Vimium 吞键）已由人复验、合并并 push（会话 `9b012714`，2026-10-16 现测：`git merge-base --is-ancestor ui/panel-taste main` RC 0，`origin/main` 与本地 main 一致）。
 > ✅ §七.六（组件层重做＋六个候选主题，会话 `e236bbe4`，2026-10-28）已由 agent `--ff-only` 合入 main 并装上；**等人看完全部主题说留哪些**。
+> ✅ §七.七（Radix＋Tailwind v4 全量迁移＋主题重做＋测试者 UI 项，会话 `a9f9d6de`，2026-10-28／29）已由 agent `--ff-only` 合入 main 并装上；**等人看**（待人项见该节末）。§七.六 的「等人选主题」被本节的主题重做取代。
 > ⚪ **当前没有在飞的 UI 工作、没有待合并的 UI 提交。** 下一轮从 §〇.一 开始。（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
@@ -335,3 +336,21 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 **残余**：`requirement-next`（`<p data-tone>`）无内边距／圆角；通知条在每个主题都是 `--warn-subtle`（按设计）；`.btn-danger` 未用；没有逐页读 `/UI/library` 源码（刻度取 Radix／Primer 一类的常见值）。
 
+
+## 七.七、Radix＋Tailwind v4 全量迁移、主题重做、测试者 UI 项（会话 `a9f9d6de`，2026-10-28／29；已合入 main 并装上）
+
+**人裁**（原话在 `.superpowers/sdd/2026-10-28-tester-feedback-round/progress.md`）：先 Radix 再 Tailwind v4 全量迁移，控制器设置页打样、sonnet 子代理分批、控制器逐批复核；字体打包 Inter＋JetBrains Mono；主题新增 4–6 个并同时拉开配色／字体／圆角／密度；「这次批准改写所有必要的判据」。规约 `web/TAILWIND-MIGRATION.md`（§7 末有「done」注）、外观 `web/DESIGN.md`。
+
+**现在的样子**（按主题行找；台账同一节有每批的门、变异、截图路径）：
+- 栈：Tailwind v4.3.3 经 `@tailwindcss/vite`；`@layer theme, base, utilities`，preflight 开（`tailwindcss/preflight.css` 与 `styles.css` 都在 `base`，样式表用 `revert` 还原外观依赖的浏览器默认）；颜色／间距／圆角工具类全部读 CSS 变量（`@theme inline`，默认调色板清空），主题块仍是唯一来源；共享类（`badge`、`pill`、`callout`、`detail-block`、`btn-primary`、`btn-quiet`、`led`、`num` 等）是 `index.css` 的 `@utility`；组件的类串在 `web/src/ui/classes.ts`（`scanPanelText` 把组件里的多词字面量当待译文本，所以集中放）；Radix dropdown-menu／dialog 在 `web/src/ui/{Menu,Dialog}.tsx`；**原生 `<select>` 保留**（未换 Radix Select，理由在迁移规约 §3）。
+- 自定义变体 `narrow`（窄或矮屏）必须用**块形式**：简写 `@custom-variant narrow (@media a, b);` 会把逗号后半段编成坏选择器（构建 12 条警告、矮宽屏保持桌面布局）。判据 `web/tests/tailwind.test.ts` 真编译一次。
+- 测试者项：#79 侧栏「更多」收起 Chains／Memory／Metrics；#74 转录跟随最新（不在底部时出「Follow latest」）；#73/#90 看板卡片 done/total 与相对时间（`title` 是绝对时间）；#76 需求流程阶段指示与「Next」条；#83/#86 文档标题层级（标题 h4 > 小节 h5）；#106 需求页按钮布局（列表的「更多操作」不再压字）；#107 退回原因在面板显示人话说明；#54 拖拽时可放的列虚线强调边（旧规则从没画出来过，被 `.section-pane section[aria-label]` 压住）。
+- 主题（`web/src/theme.ts` `THEME_PREFS`；`system`／`light`／`dark` 三块逐字节未动）：新 `rose`、`ink`、`violet`、`lagoon`（仿 Hermes Teal）；重做 `frost`、`navy`、`ember`、`terminal`（全等宽）；`contrast`、`dusk` 保留配色。每个候选同时设字体（打包的 Inter／JetBrains Mono 或系统栈）、三档圆角、密度（`--space-1..5` 整套按 1-2-3-4-6 比例＋控件高 28–36）。没删任何 id（存过的选择不会退回 `system`）。
+- 门：最终提交 `npm test` 865 文件（682 根、183 web），web 全绿，根 1 红 `startForm`（已登记，单跑 9/9）；37 个跳过（同样 10 个文件）。构建 0 条 CSS 警告；impeccable 检测器只剩 `fonts.css` 两条 Inter `overused-font`（人裁用 Inter，保留）。截图：`/private/tmp/orca-a9f9d6de/ui/final/shots-after2/`（light／dark／navy／frost／terminal × 390／1280 × 15 视图；390px 横向溢出全 0）；13 个主题 × 4 页的截图在 `/private/tmp/orca-a9f9d6de/ui/themes/shots1/`。
+
+**待人看／待人定**：
+1. 真浏览器里逐页、逐主题看一遍；留哪些主题（不要的：删主题块、`THEME_PREFS` 项、locale 名字，并改 `themes.test.ts` 清单与 `i18nPseudo.test.tsx` 的枚举计数）。
+2. 控制器／子代理替人定的、可逆的：原生 select 不换 Radix Select；不确定操作框与降级判定 pill 改用 `data-tone="warn"`（边框 warn 混色 55%/34% → 45%）；terminal 主题的 Decisions／Corrections tab 矮 4px（随该主题密度，与设置页 tab 一致）；`.btn`／`.btn-danger` 删除（无人用）；主题块没拆到 `src/themes.css`（可选步，未做）。
+3. 口味：`lagoon` 的选中行（琥珀叠青）偏橄榄色，过了选区对比度 ≥1.4。
+
+**残余**：遗留的 px 字面量（`px-[10px]` 一类）不随主题密度变；组详情的 region tab 在种子世界里截不到图（与纠正页 tab 同一串类，那边 0 diff）；`GroupList.tsx` 与 `src/relativeTime.ts` 各有一份「N 分钟前」措辞。
