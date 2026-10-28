@@ -1,10 +1,12 @@
 /**
  * Panel UI redesign spec §5.1 (ruling U3). "system" follows prefers-color-scheme; the
- * other two pin a theme. The choice lives in this browser only, so every storage call
+ * others pin a theme. The choice lives in this browser only, so every storage call
  * is wrapped: a private window or blocked site data must leave the page working.
+ * Session e236bbe4 (human: "add selectable themes"): light and dark are the default pair; the six after them are
+ * candidates the human will keep or drop. Each one is a `:root[data-theme="<id>"]` block in styles.css.
  */
 export const THEME_KEY = "orca.panel.theme";
-export const THEME_PREFS = ["system", "light", "dark"] as const;
+export const THEME_PREFS = ["system", "light", "dark", "frost", "contrast", "navy", "ember", "dusk", "terminal"] as const;
 export type ThemePref = (typeof THEME_PREFS)[number];
 
 export function readTheme(storage: Pick<Storage, "getItem"> | undefined): ThemePref {

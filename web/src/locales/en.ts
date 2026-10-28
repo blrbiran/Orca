@@ -13,7 +13,10 @@ import type {
 /** The Chinese resource's type: the same key set, every value widened to string (spec §2). */
 export type Translation<T> = { [K in keyof T]: T[K] extends string ? string : Translation<T[K]> };
 
-const theme = { system: "system", light: "light", dark: "dark" } as const satisfies Record<ThemePref, string>;
+const theme = {
+  system: "system", light: "light", dark: "dark",
+  frost: "frost (cool light)", contrast: "high contrast (light)", navy: "navy (deep blue dark)", ember: "ember (warm dark)", dusk: "dusk (soft dark)", terminal: "terminal (green dark)",
+} as const satisfies Record<ThemePref, string>;
 const decisionKind = {
   dependency: "dependency", interface: "interface", scheduling: "scheduling", abandon: "abandon", criteria: "criteria", boundary: "boundary", reconcile: "reconcile", implementation: "implementation",
 } as const satisfies Record<DecisionKind, string>;
