@@ -11,6 +11,7 @@ import { ProjectSettings } from "../src/ProjectSettings.js";
 import { projectKindForRepo, type ProjectsAnswerV1 } from "../src/project.js";
 import type { RepositoryIntegrationV1 } from "../src/controlTypes.js";
 import "../src/i18n.js";
+import { optionsOf } from "./selectControl.js";
 
 afterEach(cleanup);
 
@@ -24,9 +25,10 @@ const answer: ProjectsAnswerV1 = {
 const integration: RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1", repoId: "articles-11111111", integration: { delivery: "keep" }, revision: 1, suggestedTarget: null };
 
 describe("dir projects in the panel (flow spec §5.1)", () => {
-  it("D1: the project select badges a dir project and leaves a repository's label as it was", () => {
+  it("D1: the project select badges a dir project and leaves a repository's label as it was", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker offers a dir project with its folder badge and a repository as named
     render(<ProjectControl answer={answer} project="articles" onProject={vi.fn()} onAdd={vi.fn()} onRename={vi.fn()} onAddMulti={vi.fn()} onSetDirs={vi.fn()} />);
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Articles (folder)", "Orca"]);
+    expect(await optionsOf(screen.getByRole("combobox", { name: "Project" }))).toEqual([["Articles (folder)", false], ["Orca", false]]);
   });
 
   it("D2: the kind of the project a control repository belongs to; repo when absent or unknown", () => {

@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
+import { optionsOf, shownText } from "./selectControl.js";
 import type { ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -67,11 +68,12 @@ afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.
 
 describe("project registry control", () => {
   it("P1: one project shows the control with its name; Add and Rename are offered", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker shows and offers the one project by its name
     projectsAnswer = { status: 200, body: FILE([{ projectKey: "alpha", name: "Alpha App" }]) };
     render(<App />);
-    const select = await screen.findByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-    expect(select.value).toBe("alpha");
-    expect(within(select).getByRole("option", { name: "Alpha App" })).toBeTruthy();
+    const select = await screen.findByRole("combobox", { name: "Project" });
+    expect(shownText(select)).toBe("Alpha App");
+    expect(await optionsOf(select)).toEqual([["Alpha App", false]]);
     expect(screen.getByRole("button", { name: "Add project" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Rename project" })).toBeTruthy();
   });
@@ -85,6 +87,7 @@ describe("project registry control", () => {
   });
 
   it("P3: adding posts path and name, re-reads, and selects the new project", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the added project becomes the sidebar picker's choice
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Add project" }));
     const form = screen.getByRole("form", { name: "Add project" });
@@ -94,7 +97,7 @@ describe("project registry control", () => {
     const configReadsBefore = configReads;
     fireEvent.click(within(form).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(posts).toEqual([{ name: "beta-svc", path: "/r/beta-svc" }]));
-    await waitFor(() => expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).value).toBe("beta-svc"));
+    await waitFor(() => expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("beta-svc"));
     expect(configReads).toBeGreaterThan(configReadsBefore);
   });
 
@@ -119,9 +122,10 @@ describe("project registry control", () => {
     projectsAfterRename = FILE([{ projectKey: "alpha", name: "Alpha Web" }]);
     fireEvent.click(within(form).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(patches).toEqual([{ id: "alpha", name: "Alpha Web" }]));
-    const select = await screen.findByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-    await waitFor(() => expect(within(select).getByRole("option", { name: "Alpha Web" })).toBeTruthy());
-    expect(select.value).toBe("alpha");
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the renamed project stays chosen and shows its new name
+    await screen.findByRole("combobox", { name: "Project" });
+    await waitFor(() => expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Alpha Web"));
+    expect(await optionsOf(screen.getByRole("combobox", { name: "Project" }))).toEqual([["Alpha Web", false]]);
   });
 
   it("P6: command-line projects disable Add and Rename and say why", async () => {

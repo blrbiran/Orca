@@ -16,6 +16,7 @@ import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import type { GroupSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
 import { view as boardView, workItem } from "./fixtures/board.js";
 import { requirementView } from "./fixtures/requirement.js";
+import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import { ALPHA, BETA, TWO_PROJECTS, decisionRow, groupSummary, installFakePanel, planGroupView, twoConfig } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
 
@@ -24,10 +25,10 @@ beforeEach(() => { panel = installFakePanel(); });
 // Tester round 2 §9.3: an opened decision is now in the URL and a remounted App opens it again, so each test starts at "/".
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); });
 
-const projectSelect = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-const optionNames = (): string[] => Array.from(projectSelect().options).map((option) => option.textContent ?? "");
-const selectedText = (): string | undefined => projectSelect().selectedOptions[0]?.textContent ?? undefined;
-const chooseAll = (): void => { fireEvent.change(projectSelect(), { target: { value: projectSelect().options[0]!.value } }); };
+// Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker is driven by keyboard, read by its shown text.
+const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
+const optionNames = async (): Promise<string[]> => (await offered(projectSelect())).map(([name]) => name);
+const chooseAll = (): Promise<void> => pickOption(projectSelect(), "All projects");
 const ready = async (): Promise<void> => { await screen.findByRole("combobox", { name: "Project" }); };
 
 /** One group per project, plus a requirement of alpha, one decision per project; every one of them openable. */
@@ -61,50 +62,54 @@ const openDecision = async (id: string): Promise<void> => {
 
 describe("view mode and persistence", () => {
   it("1: two projects offer All projects first; choosing it stores the view and keeps the project", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     render(<App />);
     await ready();
-    expect(optionNames()).toEqual(["All projects", "Alpha", "Beta"]);
-    expect(selectedText()).toBe("Alpha");
+    expect(await optionNames()).toEqual(["All projects", "Alpha", "Beta"]);
+    expect(shownText(projectSelect())).toBe("Alpha");
     // The project is stored when the person picks one (a first start stores nothing); All must leave that choice alone.
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
-    chooseAll();
-    await waitFor(() => expect(selectedText()).toBe("All projects"));
+    await pickOption(projectSelect(), "Beta");
+    await pickOption(projectSelect(), "Alpha");
+    await chooseAll();
+    await waitFor(() => expect(shownText(projectSelect())).toBe("All projects"));
     expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("all");
     expect(window.localStorage.getItem(PROJECT_KEY)).toBe("alpha");
   });
 
   it("2: a stored All survives a reload; choosing a project leaves All and survives a reload too", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
     window.localStorage.setItem(PROJECT_KEY, "beta");
     const first = render(<App />);
     await ready();
-    expect(selectedText()).toBe("All projects");
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    await waitFor(() => expect(selectedText()).toBe("Beta"));
+    expect(shownText(projectSelect())).toBe("All projects");
+    await pickOption(projectSelect(), "Beta");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
     expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("project");
     expect(window.localStorage.getItem(PROJECT_KEY)).toBe("beta");
     first.unmount();
     render(<App />);
     await ready();
-    expect(selectedText()).toBe("Beta");
+    expect(shownText(projectSelect())).toBe("Beta");
   });
 
   it("3: with one project there is no All option, and a stored All is normalised to project", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.projects = { status: 200, body: { projects: [TWO_PROJECTS[0]] } };
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
     render(<App />);
     await ready();
-    expect(optionNames()).toEqual(["Alpha"]);
-    expect(selectedText()).toBe("Alpha");
+    expect(await optionNames()).toEqual(["Alpha"]);
+    expect(shownText(projectSelect())).toBe("Alpha");
     await waitFor(() => expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("project"));
   });
 
   it("4: a bogus stored view means project; storage that throws still renders and switches", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     window.localStorage.setItem(PROJECT_VIEW_KEY, "bogus");
     const first = render(<App />);
     await ready();
-    expect(selectedText()).toBe("Alpha");
+    expect(shownText(projectSelect())).toBe("Alpha");
     first.unmount();
     window.localStorage.clear();
 
@@ -112,32 +117,34 @@ describe("view mode and persistence", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
     render(<App />);
     await ready();
-    expect(optionNames()).toEqual(["All projects", "Alpha", "Beta"]);
-    chooseAll();
-    await waitFor(() => expect(selectedText()).toBe("All projects"));
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    await waitFor(() => expect(selectedText()).toBe("Beta"));
+    expect(await optionNames()).toEqual(["All projects", "Alpha", "Beta"]);
+    await chooseAll();
+    await waitFor(() => expect(shownText(projectSelect())).toBe("All projects"));
+    await pickOption(projectSelect(), "Beta");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
   });
 });
 
 describe("selection lifecycle", () => {
   it("5: a project that disappears from the list falls back to the first, and its open group and decision close", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedOpenables();
     render(<App />);
     await ready();
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "Beta");
     await openGroup("gb");
     await openDecision("run-b/1");
 
     panel.projects = { status: 200, body: { projects: [TWO_PROJECTS[0]] } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     await waitFor(() => expect(screen.queryByRole("region", { name: /Control group/ })).toBeNull());
     expect(screen.queryByTestId("decision-question")).toBeNull();
     expect(screen.getByText("Select a decision to read it.")).toBeTruthy();
   });
 
   it("7: a decision opened before the project list answers stays open when the list resolves", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedOpenables();
     let release!: () => void;
     panel.holdProjects = new Promise<void>((resolve) => { release = resolve; });
@@ -146,11 +153,12 @@ describe("selection lifecycle", () => {
     expect(screen.queryByRole("combobox", { name: "Project" })).toBeNull();
     release();
     await ready();
-    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     expect(screen.getByTestId("decision-question").textContent).toBe("question of run-a/1");
   });
 
   it("8: a failed project re-read neither closes the open group nor counts as a scope change when the list returns", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedOpenables();
     render(<App />);
     await ready();
@@ -164,13 +172,14 @@ describe("selection lifecycle", () => {
     panel.projects = good;
     await focus();
     await ready();
-    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
   });
 
   // Final fix wave (spec §9 "clear drafts on switch"): a task draft is the person's own data; a scope change closes the
   // detail, never the draft, and reopening the group shows it again.
   it("9: an unsaved task label draft survives a switch to Beta and back", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     const ga = groupSummary("ga", ALPHA);
     panel.summary = { ...panel.summary, groups: [ga] };
     const base = boardView([workItem({ taskId: "t" })]);
@@ -181,17 +190,18 @@ describe("selection lifecycle", () => {
     fireEvent.click(await screen.findByRole("button", { name: "t" }));
     fireEvent.click(await screen.findByRole("button", { name: "Add system label" }));
     expect(screen.getByText(/unsaved draft/)).toBeTruthy();
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    await waitFor(() => expect(selectedText()).toBe("Beta"));
+    await pickOption(projectSelect(), "Beta");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull());
-    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
-    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    await pickOption(projectSelect(), "Alpha");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     await openGroup("ga");
     fireEvent.click(await screen.findByRole("button", { name: "t" }));
     expect(await screen.findByText(/unsaved draft/)).toBeTruthy();
   });
 
   it("6: changing the scope closes the open group, requirement and decision; the initial resolution closes nothing", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedOpenables();
     render(<App />);
     await ready();
@@ -201,7 +211,7 @@ describe("selection lifecycle", () => {
     await openDecision("run-a/1");
     expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
 
-    chooseAll();
+    await chooseAll();
     await waitFor(() => expect(screen.queryByRole("region", { name: /Control group/ })).toBeNull());
     expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull();
     expect(screen.queryByTestId("decision-question")).toBeNull();
@@ -238,27 +248,29 @@ describe("two-project lists", () => {
   };
   const importRegion = (): HTMLElement => screen.getByRole("region", { name: "Import plan" });
   const newRequirement = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
-  const repositorySelect = (scope: HTMLElement): HTMLSelectElement => within(scope).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+  const repositorySelect = (scope: HTMLElement): HTMLElement => within(scope).getByRole("combobox", { name: "Repository" });
   const storeUncertain = (groupId: string, commandId: string): void => {
     window.sessionStorage.setItem(UNCERTAIN_COMMANDS_KEY, JSON.stringify([{ groupId, commandId }]));
   };
 
   it("1: Alpha lists only alpha's groups and requirements; Beta only beta's", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedLists();
     render(<App />);
     await listsReady();
     expect(rowIds(controlNav())).toEqual(["a1", "ra"]);
     expect(rowIds(requirementNav())).toEqual(["ra"]);
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "Beta");
     await waitFor(() => expect(rowIds(controlNav())).toEqual(["b1", "rb"]));
     expect(rowIds(requirementNav())).toEqual(["rb"]);
   });
 
   it("2: All projects lists every row, each ending with its project's name", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedLists();
     render(<App />);
     await listsReady();
-    chooseAll();
+    await chooseAll();
     await waitFor(() => expect(rowIds(controlNav())).toEqual(["a1", "b1", "ra", "rb"]));
     const control = rows(controlNav());
     expect(control[0]).toMatch(/^a1 · ready.* · Alpha$/);
@@ -269,11 +281,12 @@ describe("two-project lists", () => {
   });
 
   it("3: a repository no project names is labelled by config's display name, else by its raw repoId", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.config = { ...twoConfig, repositories: [...twoConfig.repositories, { repoId: "gamma-3", displayName: "Gamma" }] };
     seedLists([groupSummary("c1", "gamma-3"), groupSummary("z1", "zeta-9")]);
     render(<App />);
     await listsReady();
-    chooseAll();
+    await chooseAll();
     await waitFor(() => expect(rowIds(controlNav())).toContain("z1"));
     const byId = Object.fromEntries(rows(controlNav()).map((text) => [text.split(" · ")[0]!, text]));
     expect(byId["c1"]).toMatch(/ · Gamma$/);
@@ -282,11 +295,12 @@ describe("two-project lists", () => {
   });
 
   it("4: a project the control plane does not hold lists no groups and says it is not under task control", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true }] } };
     seedLists();
     render(<App />);
     await listsReady();
-    fireEvent.change(projectSelect(), { target: { value: "gamma" } });
+    await pickOption(projectSelect(), "Gamma");
     await waitFor(() => expect(rows(controlNav())).toEqual([]));
     expect(rows(requirementNav())).toEqual([]);
     expect(within(importRegion()).getByText(/not under task control/)).toBeTruthy();
@@ -313,82 +327,86 @@ describe("two-project lists", () => {
   });
 
   it("6: in All projects the import needs a chosen repository, lists only its plans, imports there and stays in All", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     // gamma-3 is configured but no registered project holds it: not a target.
     panel.config = { ...twoConfig, repositories: [...twoConfig.repositories, { repoId: "gamma-3", displayName: "Gamma" }], plans: [...twoConfig.plans, { planId: "pa2", repoId: ALPHA, displayName: "Alpha plan 2" }, { planId: "pb2", repoId: BETA, displayName: "Beta plan 2" }] };
     seedLists();
     render(<App />);
     await listsReady();
-    chooseAll();
-    await waitFor(() => expect(repositorySelect(importRegion()).value).toBe(""));
-    expect(repositorySelect(importRegion()).selectedOptions[0]!.textContent).toBe("Choose a repository");
-    expect(Array.from(repositorySelect(importRegion()).options).map((option) => [option.value, option.textContent])).toEqual([["", "Choose a repository"], [ALPHA, "Alpha"], [BETA, "Beta"]]);
+    await chooseAll();
+    await waitFor(() => expect(shownText(repositorySelect(importRegion()))).toBe("Choose a repository"));
+    expect(shownText(repositorySelect(importRegion()))).toBe("Choose a repository");
+    expect(await offered(repositorySelect(importRegion()))).toEqual([["Choose a repository", true], ["Alpha", false], ["Beta", false]]);
     expect((within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(repositorySelect(importRegion()), { target: { value: BETA } });
-    const plan = within(importRegion()).getByRole("combobox", { name: "Plan" }) as HTMLSelectElement;
-    expect(Array.from(plan.options).map((option) => option.value)).toEqual(["pb", "pb2"]);
+    await pickOption(repositorySelect(importRegion()), "Beta");
+    const plan = within(importRegion()).getByRole("combobox", { name: "Plan" });
+    expect(await offered(plan)).toEqual([["Beta plan", false], ["Beta plan 2", false]]);
     const button = within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
     await waitFor(() => expect(panel.posts.some((post) => post.url === "/api/control/groups/import-plan")).toBe(true));
     const sent = panel.posts.find((post) => post.url === "/api/control/groups/import-plan")!.body as { payload: { repoId: string; planId: string } };
     expect(sent.payload).toMatchObject({ repoId: BETA, planId: "pb" });
-    expect(selectedText()).toBe("All projects");
+    expect(shownText(projectSelect())).toBe("All projects");
   });
 
   it("7: in All projects a new requirement needs a chosen repository and stays in All; in project mode the select moves the project", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.config = { ...twoConfig, repositories: [...twoConfig.repositories, { repoId: "gamma-3", displayName: "Gamma" }] };
     seedLists();
     render(<App />);
     await listsReady();
     // Project mode: today's select, which moves the global project.
-    expect(repositorySelect(newRequirement()).value).toBe(ALPHA);
-    fireEvent.change(repositorySelect(newRequirement()), { target: { value: BETA } });
-    await waitFor(() => expect(selectedText()).toBe("Beta"));
+    expect(shownText(repositorySelect(newRequirement()))).toBe("alpha");
+    await pickOption(repositorySelect(newRequirement()), "beta");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
 
-    chooseAll();
-    await waitFor(() => expect(repositorySelect(newRequirement()).value).toBe(""));
-    expect(Array.from(repositorySelect(newRequirement()).options).map((option) => [option.value, option.textContent])).toEqual([["", "Choose a repository"], [ALPHA, "Alpha"], [BETA, "Beta"]]);
+    await chooseAll();
+    await waitFor(() => expect(shownText(repositorySelect(newRequirement()))).toBe("Choose a repository"));
+    expect(await offered(repositorySelect(newRequirement()))).toEqual([["Choose a repository", true], ["Alpha", false], ["Beta", false]]);
     // A target chosen in All is forgotten when the person leaves All and comes back (no silent reuse, spec §6).
-    fireEvent.change(repositorySelect(newRequirement()), { target: { value: ALPHA } });
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    await waitFor(() => expect(selectedText()).toBe("Beta"));
-    chooseAll();
-    await waitFor(() => expect(selectedText()).toBe("All projects"));
-    await waitFor(() => expect(repositorySelect(newRequirement()).value).toBe(""));
+    await pickOption(repositorySelect(newRequirement()), "Alpha");
+    await pickOption(projectSelect(), "Beta");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
+    await chooseAll();
+    await waitFor(() => expect(shownText(projectSelect())).toBe("All projects"));
+    await waitFor(() => expect(shownText(repositorySelect(newRequirement()))).toBe("Choose a repository"));
     fireEvent.change(within(newRequirement()).getByRole("textbox", { name: "Idea" }), { target: { value: "export notes" } });
     const start = within(newRequirement()).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement;
     expect(start.disabled).toBe(true);
-    fireEvent.change(repositorySelect(newRequirement()), { target: { value: BETA } });
-    expect(selectedText()).toBe("All projects");
+    await pickOption(repositorySelect(newRequirement()), "Beta");
+    expect(shownText(projectSelect())).toBe("All projects");
     expect(start.disabled).toBe(false);
     fireEvent.click(start);
     await waitFor(() => expect(panel.posts.some((post) => post.url === "/api/control/requirements")).toBe(true));
     const sent = panel.posts.find((post) => post.url === "/api/control/requirements")!.body as { payload: { repoId: string; idea: string } };
     expect(sent.payload).toMatchObject({ repoId: BETA, idea: "export notes" });
-    expect(selectedText()).toBe("All projects");
+    expect(shownText(projectSelect())).toBe("All projects");
   });
 
   // Final review I2: All mode shows what will be imported, as project mode does, and a target without a plan imports nothing.
   it("11: in All projects a chosen target shows the repository, plan and estimate mode before the button enables", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedLists();
     render(<App />);
     await listsReady();
-    chooseAll();
-    await waitFor(() => expect(repositorySelect(importRegion()).value).toBe(""));
+    await chooseAll();
+    await waitFor(() => expect(shownText(repositorySelect(importRegion()))).toBe("Choose a repository"));
     expect(within(importRegion()).queryByText(/estimate mode/)).toBeNull();
-    fireEvent.change(repositorySelect(importRegion()), { target: { value: BETA } });
+    await pickOption(repositorySelect(importRegion()), "Beta");
     expect(within(importRegion()).getByText(/^beta · Beta plan · estimate mode /)).toBeTruthy();
     expect((within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("12: in All projects a chosen target without a plan says so and keeps the button disabled", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.config = { ...twoConfig, plans: twoConfig.plans.filter((entry) => entry.repoId === ALPHA) };
     seedLists();
     render(<App />);
     await listsReady();
-    chooseAll();
-    await waitFor(() => expect(repositorySelect(importRegion()).value).toBe(""));
-    fireEvent.change(repositorySelect(importRegion()), { target: { value: BETA } });
+    await chooseAll();
+    await waitFor(() => expect(shownText(repositorySelect(importRegion()))).toBe("Choose a repository"));
+    await pickOption(repositorySelect(importRegion()), "Beta");
     expect(within(importRegion()).getByRole("note").textContent).toBe("No plan is configured for this repository, so nothing can be imported into it.");
     expect(within(importRegion()).queryByText(/estimate mode/)).toBeNull();
     const button = within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
@@ -409,6 +427,7 @@ describe("two-project lists", () => {
   });
 
   it("8: a partial summary that moves another project's group reads nothing whole again, and All then shows it moved", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       seedLists();
@@ -424,7 +443,7 @@ describe("two-project lists", () => {
       expect(partial()).toBeGreaterThanOrEqual(partialBefore + 3);
       expect(complete()).toBe(before);
       expect(rowIds(controlNav())).toEqual(["a1", "ra"]);
-      chooseAll();
+      await chooseAll();
       await waitFor(() => expect(rows(controlNav()).find((text) => text.startsWith("b1 · "))).toMatch(/^b1 · done.* · Beta$/));
       expect(screen.queryByText(/projection refetch required/)).toBeNull();
       expect(complete()).toBe(before);
@@ -444,6 +463,7 @@ describe("two-project lists", () => {
   });
 
   it("10: a requirement opened before a project switch does not open its detail when its answer arrives after", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedLists();
     let release!: () => void;
     const held = new Promise<void>((resolve) => { release = resolve; });
@@ -462,8 +482,8 @@ describe("two-project lists", () => {
     fireEvent.change(within(newRequirement()).getByRole("textbox", { name: "Idea" }), { target: { value: "export notes" } });
     fireEvent.click(within(newRequirement()).getByRole("button", { name: "Start clarifying" }));
     await waitFor(() => expect(panel.posts.some((post) => post.url === "/api/control/requirements")).toBe(true));
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    await waitFor(() => expect(selectedText()).toBe("Beta"));
+    await pickOption(projectSelect(), "Beta");
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
     await act(async () => { release(); });
     const groupId = (panel.posts.find((post) => post.url === "/api/control/requirements")!.body as { payload: { groupId: string } }).payload.groupId;
     await waitFor(() => expect(panel.requests).toContain(`GET /api/control/groups/${groupId}/requirement`));
@@ -489,14 +509,15 @@ describe("decision identity and count", () => {
   const settled = async (text: string): Promise<void> => { await waitFor(() => expect(count()).toBe(text)); };
 
   it("1: the pane lists only the chosen project's rows, counted within it; All lists every row of both, d1 twice", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
     render(<App />);
     await ready();
     await settled("1 of 1");
     expect(listRows()).toHaveLength(1);
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "Beta");
     await settled("2 of 2");
-    chooseAll();
+    await chooseAll();
     await settled("3 of 3");
     expect(listRows().filter((text) => text.includes("d1"))).toHaveLength(2);
   });
@@ -516,29 +537,31 @@ describe("decision identity and count", () => {
   });
 
   it("3: a project with no rows shows Nothing to review and none of the others' rows", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true }] } };
     render(<App />);
     await ready();
-    fireEvent.change(projectSelect(), { target: { value: "gamma" } });
+    await pickOption(projectSelect(), "Gamma");
     await settled("0 of 0");
     expect(within(pane()).getByText(/^Nothing to review/)).toBeTruthy();
     expect(listRows()).toEqual([]);
   });
 
   it("4: the Decisions repository select and the sidebar selector are one state, in both directions", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
     render(<App />);
     await ready();
-    expect(optionsOf(decisionsSelect())).toEqual(optionsOf(projectSelect()));
+    expect(optionsOf(decisionsSelect())).toEqual(await optionNames());
     fireEvent.change(decisionsSelect(), { target: { value: decisionsSelect().options[0]!.value } });
-    await waitFor(() => expect(selectedText()).toBe("All projects"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("All projects"));
     expect(decisionsSelect().selectedOptions[0]?.textContent).toBe("All projects");
     expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("all");
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "Beta");
     await waitFor(() => expect(decisionsSelect().selectedOptions[0]?.textContent).toBe("Beta"));
     fireEvent.change(decisionsSelect(), { target: { value: "alpha" } });
-    await waitFor(() => expect(selectedText()).toBe("Alpha"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("project");
   });
 
@@ -557,6 +580,7 @@ describe("decision identity and count", () => {
   });
 
   it("6: the kind filter survives a project switch, and the pane never keeps a repository filter of its own", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
     window.localStorage.setItem(PROJECT_KEY, "beta");
     render(<App />);
@@ -564,7 +588,7 @@ describe("decision identity and count", () => {
     await settled("2 of 2");
     fireEvent.change(kindSelect(), { target: { value: "boundary" } });
     await settled("1 of 2");
-    chooseAll();
+    await chooseAll();
     await settled("1 of 3");
   });
 
@@ -615,23 +639,25 @@ describe("group workspace", () => {
   const workspaceRegion = (): HTMLElement | null => screen.queryByRole("region", { name: "Workspace mode" });
 
   it("1: an open group of another repository shows its own workspace mode, read from its own repository", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
     render(<App />);
     await ready();
     await waitFor(() => expect(panel.requests).toContain(`GET /api/control/repositories/${ALPHA}/workspace`));
-    chooseAll();
+    await chooseAll();
     await openGroup("b1");
     await waitFor(() => expect(gitRegion().textContent).toContain("New runs use a private clone"));
     expect(panel.requests).toContain(`GET /api/control/repositories/${BETA}/workspace`);
   });
 
   it("2: a late reply for another repository does not overwrite the open group's workspace mode", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
     panel.workspaces[ALPHA] = { mode: "worktree", delayMs: 300 };
     render(<App />);
     await ready();
     // Alpha is the chosen project, so its slow read is in flight; All and b1 follow at once.
-    chooseAll();
+    await chooseAll();
     await openGroup("b1");
     await waitFor(() => expect(gitRegion().textContent).toContain("New runs use a private clone"));
     // Let alpha's late reply land: it belongs to alpha's entry and must not be shown for b1.
@@ -640,27 +666,29 @@ describe("group workspace", () => {
   });
 
   it("2b: two reads of one repository: only the newest answer is applied", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
     panel.workspaces[BETA] = { mode: "worktree", delayMs: 300 };
     render(<App />);
     await ready();
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "Beta");
     // The first beta read is in flight (slow, worktree); the setting changes and the next read is quick.
     await waitFor(() => expect(panel.requests.filter((r) => r === `GET /api/control/repositories/${BETA}/workspace`)).toHaveLength(1));
     panel.workspaces[BETA] = { mode: "clone" };
-    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "Alpha");
+    await pickOption(projectSelect(), "Beta");
     await waitFor(() => expect(workspaceRegion()?.textContent).toContain("a private clone"));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
     expect(workspaceRegion()?.textContent).toContain("a private clone");
   });
 
   it("3: the panel-level workspace selector shows in project mode only", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
     render(<App />);
     await ready();
     await waitFor(() => expect(workspaceRegion()?.textContent).toContain("alpha-11111111"));
-    chooseAll();
+    await chooseAll();
     await waitFor(() => expect(workspaceRegion()).toBeNull());
   });
 });

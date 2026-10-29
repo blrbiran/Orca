@@ -18,6 +18,7 @@ import { explainBesideCode, explainEstimateReason, explainEstimatorCheck } from 
 import { explainRefusal, explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
 import { TokenInput, shortTokens } from "./TokenInput.js";
+import { Select } from "./ui/Select.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
@@ -113,16 +114,16 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       { slot: "newRequirement", key: repoId, value: draft });
     }}>
       <h3>{t("requirements.newTitle")}</h3>
-      <label>{t("requirements.repository")}<select value={repoId} onChange={(e) => setRepoId(e.currentTarget.value)}>
-        {all && <option value="" disabled>{t("project.chooseTarget")}</option>}
-        {choices.map((repo) => <option key={repo.repoId} value={repo.repoId}>{all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName}</option>)}</select></label>
+      <label>{t("requirements.repository")}<Select value={repoId} onValueChange={setRepoId} placeholder={t("project.chooseTarget")}
+        options={[...(all ? [{ value: "", label: t("project.chooseTarget"), disabled: true }] : []),
+          ...choices.map((repo) => ({ value: repo.repoId, label: all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName }))]} /></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => edit({ idea: e.currentTarget.value })} required /></label>
       {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);edit({tokens:null});}} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
-      <label>{t("requirements.contentLanguage")}<select value={language} onChange={(e) => edit({ language: e.currentTarget.value as PanelLanguage })}>
-        {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}</select></label>
-      <label>{t("requirements.agent")}<select value={agent} onChange={(e) => edit({ agent: e.currentTarget.value })}>
-        <option value="">{t("requirements.agentDefault")}</option>
-        {(props.agents?.installations ?? []).map((installation) => <option key={installation.id} value={installation.id}>{installation.id}</option>)}</select></label>
+      <label>{t("requirements.contentLanguage")}<Select value={language} onValueChange={(value) => edit({ language: value as PanelLanguage })}
+        options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} /></label>
+      <label>{t("requirements.agent")}<Select value={agent} onValueChange={(value) => edit({ agent: value })}
+        options={[{ value: "", label: t("requirements.agentDefault") },
+          ...(props.agents?.installations ?? []).map((installation) => ({ value: installation.id, label: installation.id }))]} /></label>
       <p role="note">{t("requirements.capabilityNote")}</p>
       <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
@@ -363,10 +364,10 @@ function ClarifySize(props: { view: View; onCommand: OnCommand; editable: boolea
           event.preventDefault();
           props.onCommand({ verb: "requirement-classify", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { scope, clarity } });
         }}>
-          <label>{t("requirements.scope")}<select value={scope} onChange={(e) => setScope(e.currentTarget.value as (typeof SCOPES)[number])}>
-            {SCOPES.map((value) => <option key={value} value={value}>{enumText("requirementScope", value)}</option>)}</select></label>
-          <label>{t("requirements.clarity")}<select value={clarity} onChange={(e) => setClarity(e.currentTarget.value as (typeof CLARITIES)[number])}>
-            {CLARITIES.map((value) => <option key={value} value={value}>{enumText("requirementClarity", value)}</option>)}</select></label>
+          <label>{t("requirements.scope")}<Select value={scope} onValueChange={setScope}
+            options={SCOPES.map((value) => ({ value, label: enumText("requirementScope", value) }))} /></label>
+          <label>{t("requirements.clarity")}<Select value={clarity} onValueChange={setClarity}
+            options={CLARITIES.map((value) => ({ value, label: enumText("requirementClarity", value) }))} /></label>
           <button type="submit" disabled={effective !== null && effective.scope === scope && effective.clarity === clarity}>{t("requirements.setSize")}</button>
         </form>
         </details>

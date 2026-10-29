@@ -10,6 +10,7 @@ import type { RunResultsV1 } from "../src/controlTypes.js";
 import { ALPHA, groupSummary, installFakePanel, planGroupView } from "./fixtures/twoProjects.js";
 import { run, workItem } from "./fixtures/board.js";
 import { savedGroup, savedRun } from "./fixtures/results.js";
+import { pickOption } from "./selectControl.js";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const me = (id: string): Me => ({ user: { id, name: id, roles: ["member"], mustChangePassword: false }, expiresAt: Date.now()+100000000, sessionDays: 1 });
 const flush = async () => { await act(async () => { await vi.advanceTimersByTimeAsync(1); }); };
@@ -41,6 +42,7 @@ it("real App completed missing results retain actual success and independent sou
  expect(screen.getByRole("tab",{selected:true}).textContent).toBe("Results");const current=screen.getByRole("region",{name:"Current result · run-a"});expect(current.textContent).toContain("succeeded");expect(current.textContent).toContain("missing");expect(screen.getByText(/Source: unsupported/)).toBeTruthy();expect(s.reads.map(r=>r.path)).toEqual(["/api/control/groups/g/results"]);expect(s.panel.posts).toHaveLength(0);
 });
 it("real App opens the task route and preserves mounted local drafts and focus across refresh and hidden sections",async()=>{
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops held reads and owners
  const s=setup();render(<App/>);await open();await openTask();expect(s.reads.some(r=>r.path==="/api/control/runs/run-a/results")).toBe(true);expect(task().getByRole("region",{name:"Current result · run-a"}).textContent).toContain("Saved work");
  const draft=task().getByRole("textbox",{name:"Custom label"});fireEvent.change(draft,{target:{value:"pending draft"}});draft.focus();await act(async()=>{await vi.advanceTimersByTimeAsync(6000);});expect(document.activeElement).toBe(draft);expect((draft as HTMLInputElement).value).toBe("pending draft");
  fireEvent.click(screen.getByRole("link",{name:"Memory"}));await flush();const count=s.reads.length;await act(async()=>{await vi.advanceTimersByTimeAsync(10000);});expect(s.reads).toHaveLength(count);
@@ -49,7 +51,7 @@ it("real App opens the task route and preserves mounted local drafts and focus a
 });
 it.each(["scope","auth","epoch","owner"])("real App cancels held task reads across %s and keeps navigation focus",async(kind)=>{
  const s=setup();const rendered=render(<AccountContext.Provider value={me("one")}><App/></AccountContext.Provider>);await open();await openTask();let release!:(r:Response)=>void;s.hold(new Promise(r=>release=r));await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});const held=s.reads.at(-1)!;
- if(kind==="scope")fireEvent.change(screen.getByRole("combobox",{name:"Project"}),{target:{value:"beta"}});
+ if(kind==="scope")await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
  if(kind==="auth")rendered.rerender(<AccountContext.Provider value={me("two")}><App/></AccountContext.Provider>);
  if(kind==="epoch"){s.panel.summary.epoch="epoch-b";s.panel.recovery.epoch="epoch-b";s.group.epoch="epoch-b";s.group.changeSeq=5;s.panel.summary.changeSeq=5;await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});}
  if(kind==="owner"){s.group.workItems[0]!.currentRunId="run-b";s.group.workItems[0]!.lineageRunIds=["run-a","run-b"];s.group.runs.push(run({runId:"run-b"}));s.group.changeSeq=5;s.panel.summary.changeSeq=5;await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});}
@@ -75,13 +77,14 @@ it("auth notification synchronously retires held result requests before App rere
 });
 
 it("real App saved attachment carries exact binary bytes through the owned route without commands",async()=>{
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops held reads and owners
  const s=setup();s.result.attempts[0]!.outputs[0]!.byteLength=4;let blob:Blob|null=null;let attachment="";Object.defineProperty(URL,"createObjectURL",{configurable:true,value:vi.fn((value:Blob)=>{blob=value;return "blob:saved";})});Object.defineProperty(URL,"revokeObjectURL",{configurable:true,value:vi.fn()});vi.spyOn(HTMLAnchorElement.prototype,"click").mockImplementation(function(this:HTMLAnchorElement){attachment=this.download;});let count=0;
  s.output(async()=>++count===1?json({schema:"orca-result-output-v1",runId:"run-a",groupId:"g",attempt:1,outputId:"owned-output",path:"a.html",status:"binary",byteLength:4,content:null,downloadUrl:"/api/control/runs/run-a/results/outputs/owned-output?download=1"}):new Response(new Uint8Array([0,255,13,10])));
  render(<App/>);await open();const current=within(screen.getByRole("region",{name:"Current result · run-a"}));fireEvent.click(current.getByRole("button",{name:"Preview saved output · Saved HTML"}));await flush();expect(current.getByRole("region",{name:"Saved output · a.html"}).textContent).toContain("binary");fireEvent.click(current.getByRole("button",{name:"Download saved output · a.html"}));await flush();expect(Array.from(new Uint8Array(await blob!.arrayBuffer()))).toEqual([0,255,13,10]);expect(attachment).toBe("owned-output");expect(s.reads.map(r=>r.path)).toEqual(["/api/control/groups/g/results","/api/control/runs/run-a/results/outputs/owned-output","/api/control/runs/run-a/results/outputs/owned-output?download=1"]);expect(s.panel.posts).toHaveLength(0);
 });
 it.each(["scope","auth","epoch","hide"])("real App drops held output previews across %s ownership",async(kind)=>{
  const s=setup();const rendered=render(<AccountContext.Provider value={me("one")}><App/></AccountContext.Provider>);await open();let release!:(r:Response)=>void;s.output(()=>new Promise(r=>release=r));fireEvent.click(within(screen.getByRole("region",{name:"Current result · run-a"})).getByRole("button",{name:"Preview saved output · Saved HTML"}));await flush();const held=s.reads.at(-1)!;
- if(kind==="scope")fireEvent.change(screen.getByRole("combobox",{name:"Project"}),{target:{value:"beta"}});
+ if(kind==="scope")await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
  if(kind==="auth")rendered.rerender(<AccountContext.Provider value={me("two")}><App/></AccountContext.Provider>);
  if(kind==="epoch"){s.panel.summary.epoch="epoch-b";s.panel.recovery.epoch="epoch-b";s.group.epoch="epoch-b";s.group.changeSeq=5;s.panel.summary.changeSeq=5;await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});}
  if(kind==="hide")fireEvent.click(screen.getByRole("link",{name:"Memory"}));await flush();expect(held.signal?.aborted).toBe(true);await act(async()=>{release(json({schema:"orca-result-output-v1",runId:"run-a",groupId:"g",attempt:1,outputId:"owned-output",path:"a.html",status:"available",byteLength:13,content:"obsolete preview",downloadUrl:null}));});expect(screen.queryByText("obsolete preview")).toBeNull();expect(s.panel.posts).toHaveLength(0);
@@ -91,6 +94,7 @@ it("real App group rejects nested stale changeSeq and foreign generation indepen
 });
 
 it("real App retry or continuation predecessor remains saved history while the new current run has no capture",async()=>{
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops held reads and owners
  const s=setup();s.group.summary.state="running";s.group.workItems[0]!.status="active";s.group.workItems[0]!.currentRunId="run-b";s.group.workItems[0]!.lineageRunIds=["run-a","run-b"];s.group.runs.push(run({runId:"run-b"}));const predecessor=savedRun();s.result=savedRun({runId:"run-b",executionId:null,currentAttempt:1,captureRevision:0,attempts:[],availability:"missing",source:{status:"missing",reason:null},currentExplanation:{status:"missing",reason:null,content:null},run:{...run({runId:"run-b"}),blockedReason:null,continuable:false}});
  const base=globalThis.fetch;globalThis.fetch=(async(input,init)=>String(input)==="/api/control/runs/run-a/results"?json(predecessor):base(input,init)) as typeof fetch;render(<App/>);await open();await openTask();const current=task().getByRole("region",{name:"Current result · run-b"});expect(current.textContent).toContain("missing");expect(current.textContent).not.toContain("Saved work");expect(task().queryByRole("region",{name:"Current result · run-a"})).toBeNull();expect(task().getByRole("region",{name:"Saved attempt 1 · run-a",hidden:true}).textContent).toContain("Saved work");expect(s.panel.posts).toHaveLength(0);
 });
@@ -161,9 +165,9 @@ it.each(["task", "group"] as const)("real App %s resets capture authority for ac
  const raise = async () => { s.result = { ...capture(8, "capture eight before reset"), epoch: s.group.epoch, changeSeq: s.group.changeSeq }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); expect(resultOwner(consumer).getByRole("region", { name: "Current result · run-a" }).textContent).toContain("capture 8"); };
  s.result = capture(7, "lower capture in new owner"); app.rerender(<AccountContext.Provider value={me("two")}><App/></AccountContext.Provider>); await flush(); admitted();
  await raise(); s.result = capture(7, "lower capture in new owner");
- fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } }); await flush();
+ await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta"); await flush();
  expect(screen.queryByRole("region", { name: "Control group g" })).toBeNull();
- fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "alpha" } }); await flush(); await openResults(consumer); admitted();
+ await pickOption(screen.getByRole("combobox", { name: "Project" }), "Alpha"); await flush(); await openResults(consumer); admitted();
  await raise(); s.group.epoch = "epoch-b"; s.panel.summary.epoch = "epoch-b"; s.panel.recovery.epoch = "epoch-b"; s.group.changeSeq = 5; s.panel.summary.changeSeq = 5;
  s.result = { ...capture(7, "lower capture in new owner"), epoch: "epoch-b", changeSeq: 5 }; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); await flush(); if (consumer === "task") await openTask(true); admitted();
  await raise(); s.group.changeSeq = 6; s.panel.summary.changeSeq = 6; s.group.runs = [run({ runId: "run-b" })]; s.group.workItems[0]!.currentRunId = "run-b"; s.group.workItems[0]!.lineageRunIds = ["run-b"];

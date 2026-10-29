@@ -12,6 +12,7 @@ import { createHash, webcrypto } from "node:crypto";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
+import { optionsOf as offered, pickOption } from "./selectControl.js";
 import type { Me } from "../src/auth.js";
 import type {
   Amount, ControlConfigV1, ControlSummaryV1, FlowExecutionViewV1, FlowListV1, FlowRunViewV1, FlowSpendV1,
@@ -721,14 +722,14 @@ describe("the import form reads the plan library beside registered plans (spec �
   });
 
   it("disables Import for a selected entry with no head and does not fall back to the registered plan", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the headless entry chosen in the library picker disables Import and sends nothing
     const withPlan: ControlConfigV1 = { ...importConfig(), plans: [{ planId: "plan-1", repoId: "orca", displayName: "Registered plan" }] };
     const headless = entry({ entryId: "lib-empty", projectId: "orca", name: "Headless plan", usedBy: [], head: null, versionCount: 0, versions: [] });
     serve((url) => url.startsWith("/api/control/plan-library?") ? libraryList([headless]) : {});
     const onCommand = vi.fn();
     render(panel(onCommand, withPlan));
     const select = await screen.findByTestId("import-library");
-    const option = within(select).getByRole("option", { name: "Headless plan" }) as HTMLOptionElement;
-    fireEvent.change(select, { target: { value: option.value } });
+    await pickOption(select, "Headless plan");
     const button = screen.getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
     // mutation: fall back to the registered plan -> enabled and an import dispatched
     expect(button.disabled).toBe(true);
@@ -737,13 +738,14 @@ describe("the import form reads the plan library beside registered plans (spec �
   });
 
   it("lists a library entry with its short sha and imports it instead of a registered plan", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the library picker offers the entry (with its short sha) and the chosen entry is what Import sends or refuses
     const one = entry({ entryId: "lib-9", projectId: "orca", name: "Plan nine", usedBy: [], head: version({ version: 1, sha256: NEW_SHA }), versions: [] });
     serve((url) => url.startsWith("/api/control/plan-library?") ? libraryList([one]) : {});
     const onCommand = vi.fn();
     render(panel(onCommand));
     const select = await screen.findByTestId("import-library");
-    expect(within(select).getByRole("option", { name: `Plan nine · ${NEW_SHA.slice(0, 10)}` })).toBeTruthy();
-    fireEvent.change(select, { target: { value: "lib-9" } });
+    expect(await offered(select)).toEqual([["Plan library", false], [`Plan nine · ${NEW_SHA.slice(0, 10)}`, false]]);
+    await pickOption(select, `Plan nine · ${NEW_SHA.slice(0, 10)}`);
     const button = screen.getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.click(button);

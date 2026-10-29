@@ -27,6 +27,7 @@ import {
 import type { DecisionRequests } from "../src/decisionRequests.js";
 import { decisionRow, installFakePanel } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 interface Held { url: string; body: unknown; resolve: (answer: Response) => void; reject: (err: Error) => void }
 let panel: FakePanel;
@@ -60,11 +61,12 @@ function seed(): void {
   }
 }
 
-const projectSelect = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
+// Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the switch goes through the sidebar picker by keyboard and is read from its shown text.
+const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
 const ready = async (): Promise<void> => { await screen.findByRole("combobox", { name: "Project" }); };
-const switchTo = async (projectKey: string, name: string): Promise<void> => {
-  fireEvent.change(projectSelect(), { target: { value: projectKey } });
-  await waitFor(() => expect(projectSelect().selectedOptions[0]?.textContent).toBe(name));
+const switchTo = async (_projectKey: string, name: string): Promise<void> => {
+  await pickOption(projectSelect(), name);
+  await waitFor(() => expect(shownText(projectSelect())).toBe(name));
   await waitFor(() => expect(screen.queryByTestId("decision-question")).toBeNull());
 };
 const openDecision = async (projectKey: string): Promise<HTMLElement> => {

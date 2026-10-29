@@ -5,6 +5,7 @@ import { App } from "../src/App.js";
 import { AccountContext } from "../src/AuthGate.js";
 import { decisionRow, installFakePanel } from "./fixtures/twoProjects.js";
 import type { Me } from "../src/auth.js";
+import { pickOption } from "./selectControl.js";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 beforeEach(() => { window.location.hash = ""; vi.useFakeTimers(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); window.localStorage.clear(); window.sessionStorage.clear(); });
@@ -41,6 +42,7 @@ it("a failed todo refresh retains explicitly stale rows and an unavailable badge
  expect(page.queryByText("Nothing needs your attention.")).toBeNull();
 });
 it("an initial todo failure exposes unavailable, without inventing a zero count", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops late todo replies
  const source = setup(); source.fail(); render(<App />); await flush();
  expect(screen.getByTestId("nav-count-decisions").textContent).toBe("—");
  expect(within(screen.getByRole("region", { name: "Overview" })).getByText(/Decisions.*unavailable/)).toBeTruthy();
@@ -54,7 +56,7 @@ it.each(["scope", "epoch", "auth"])("drops late todo replies across %s identity"
  let release!: (value: Response) => void; source.hold(new Promise((resolve) => { release = resolve; }));
  await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
  source.hold(null); source.panel.todo = [decisionRow(kind === "scope" ? "beta" : "alpha", "current")];
- if (kind === "scope") fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
+ if (kind === "scope") await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
  if (kind === "epoch") { source.panel.summary.epoch = "epoch-b"; source.panel.recovery.epoch = "epoch-b"; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); }
  if (kind === "auth") rendered.rerender(<AccountContext.Provider value={me("two")}><App /></AccountContext.Provider>);
  await flush();

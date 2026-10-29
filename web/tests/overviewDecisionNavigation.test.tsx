@@ -7,6 +7,7 @@ import {installFakePanel,decisionRow} from "./fixtures/twoProjects.js";
 import { AccountContext } from "../src/AuthGate.js";
 import type { Me } from "../src/auth.js";
 import {rowKey} from "../src/DecisionList.js";
+import { pickOption } from "./selectControl.js";
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status});
 beforeEach(()=>{window.location.hash="";});
 afterEach(()=>{cleanup();window.localStorage.clear();window.sessionStorage.clear();vi.restoreAllMocks();});
@@ -40,6 +41,7 @@ it("a late refused Overview decision read cannot replace a newer accepted decisi
 });
 
 it("an older successful Overview decision read cannot reopen after a newer section navigation", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops the old decision owner reply
  const panel = setup(); render(<App />); await within(screen.getByRole("region", { name: "Overview" })).findByRole("button", { name: "Review decision · a" });
  const base = globalThis.fetch; let release!: (value: Response) => void; const held = new Promise<Response>((resolve) => { release = resolve; });
  globalThis.fetch = (async (input, init) => String(input).includes("decisionId=a") ? held : base(input, init)) as typeof fetch;
@@ -58,7 +60,7 @@ it.each(["auth", "scope", "epoch"] as const)("an Overview decision owner respons
  globalThis.fetch = (async (input, init) => String(input).includes("decisionId=a") ? held : base(input, init)) as typeof fetch;
  fireEvent.click(within(screen.getByRole("region", { name: "Overview" })).getByRole("button", { name: "Review decision · a" }));
  if (context === "auth") app.rerender(<AccountContext.Provider value={me("two")}><App /></AccountContext.Provider>);
- if (context === "scope") fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
+ if (context === "scope") await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
  if (context === "epoch") { panel.summary.epoch = "epoch-b"; panel.recovery.epoch = "epoch-b"; await screen.findByText("epoch epoch-b", {}, { timeout: 3000 }); }
  await act(async () => { release(json({ decision: panel.decisions[rowKey(panel.todo[0]!)] })); });
  expect(document.querySelector('[data-section="overview"]')?.getAttribute("data-active")).toBe("true");

@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import type { RequirementViewV1 } from "../src/controlTypes.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
+import { pickOption } from "./selectControl.js";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const mount = (view: RequirementViewV1, onCommand = vi.fn()) => {
@@ -72,7 +73,8 @@ describe("what the model is drafting, and for how long (#87)", () => {
 });
 
 describe("the clarification size (#86)", () => {
-  it("shows the model's judgement with its reasons and the caps, and sends the person's own size", () => {
+  it("shows the model's judgement with its reasons and the caps, and sends the person's own size", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the size chosen in the picker is the scope the classify command sends
     const onCommand = mount({ ...requirementView("awaiting-answers"), clarify: { ...CLARIFY, stoppedAtCap: false } });
     const size = screen.getByRole("region", { name: "Clarification size" });
     // Tester #37: "scope"/"clarity" read as the requirement's size and how clear it is. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
@@ -80,7 +82,7 @@ describe("the clarification size (#86)", () => {
     expect(size.textContent).toContain("Limits: up to 1 rounds; per round at most 3 questions, 2 glossary entries and 1 decisions.");
     const set = within(size).getByRole("button", { name: "Set the size" }) as HTMLButtonElement;
     expect(set.disabled).toBe(true);
-    fireEvent.change(within(size).getByRole("combobox", { name: "Size of the requirement" }), { target: { value: "large" } });
+    await pickOption(within(size).getByRole("combobox", { name: "Size of the requirement" }), "large");
     fireEvent.click(set);
     expect(onCommand).toHaveBeenCalledWith({ verb: "requirement-classify", groupId: "r", expectedRevision: 3, payload: { scope: "large", clarity: "clear" } });
   });

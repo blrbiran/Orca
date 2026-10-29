@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import type { AgentsViewV1, RequirementViewV1 } from "../src/controlTypes.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
+import { pickOption } from "./selectControl.js";
 afterEach(cleanup);
 const agents: AgentsViewV1 = { schema: "orca-agents-view-v1", installations: [
   { id: "my-coder", kind: "codex", defaults: { model: "local", contextWindow: "agent-default" }, contextOptions: ["agent-default"], version: "1" },
@@ -15,13 +16,14 @@ function mount(view = requirementView("failed"), table: AgentsViewV1 | null = ag
   return onCommand;
 }
 describe("feedback requirement affordances", () => {
-  it("submits the chosen installation for server-side single-call capability validation", () => {
+  it("submits the chosen installation for server-side single-call capability validation", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the installation chosen in the Agent picker is the one the command carries
     const send = mount(); const form = screen.getByRole("form", { name: "New requirement" });
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Investigate" } });
-    fireEvent.change(within(form).getByRole("combobox", { name: "Agent" }), { target: { value: "my-coder" } });
+    await pickOption(within(form).getByRole("combobox", { name: "Agent" }), "my-coder");
     expect((within(form).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.submit(form); expect(send.mock.calls[0]![0]).toMatchObject({ verb: "requirement-open", payload: { agent: { agent: "my-coder" } } });
-    fireEvent.change(within(form).getByRole("combobox", { name: "Agent" }), { target: { value: "my-claude" } });
+    await pickOption(within(form).getByRole("combobox", { name: "Agent" }), "my-claude");
     fireEvent.submit(form); expect(send.mock.calls[1]![0]).toMatchObject({ verb: "requirement-open", payload: { agent: { agent: "my-claude" } } });
   });
   it("leaves a default selection to the server even when the table is unavailable", () => {

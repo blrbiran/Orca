@@ -13,6 +13,7 @@ import type { GroupDecisionsViewV1, OverviewV1 } from "../src/controlTypes.js";
 import { requirementView } from "./fixtures/requirement.js";
 import { run, workItem } from "./fixtures/board.js";
 import { ALPHA, BETA, groupSummary, installFakePanel, planGroupView, type FakePanel } from "./fixtures/twoProjects.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 // A route waits for three reads (projects, control epoch, overview) before it opens; a loaded machine needs more than 1 s.
 configure({ asyncUtilTimeout: 5000 });
@@ -109,15 +110,16 @@ describe("a flow run is in the route (C32)", () => {
 
 describe("another project's group (C33)", () => {
   it("leaves the project unchanged, shows the line and the switch button; the button switches and opens the group", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker shows, and a switch made through it
     const panel = setup(); at("#tasks/gb");
     render(<App />);
     const notice = await screen.findByTestId("route-notice");
     expect(notice.textContent).toContain("gb belongs to project Beta.");
-    expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).value).toBe("alpha");
+    expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Alpha");
     expect(panel.requests).not.toContain("GET /api/control/groups/gb");
     fireEvent.click(within(notice).getByRole("button", { name: "Switch to Beta" }));
     await groupRegion("gb");
-    expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).value).toBe("beta");
+    expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Beta");
   });
 });
 
@@ -265,6 +267,7 @@ describe("the back line and the correction's origin (C34)", () => {
   });
 
   it("disappears after Back to another hash and after a project switch", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker shows, and a switch made through it
     setup(); await openTaskA();
     await correctFromRun();
     window.location.hash = "#memory";
@@ -275,7 +278,7 @@ describe("the back line and the correction's origin (C34)", () => {
     cleanup(); setup(); await openTaskA();
     await correctFromRun();
     expect(screen.getByRole("button", { name: "← Back to Task control" })).toBeTruthy();
-    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
+    await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
     await waitFor(() => expect(screen.queryByRole("button", { name: /^← Back to/ })).toBeNull());
   });
 });

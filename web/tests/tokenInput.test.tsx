@@ -18,6 +18,7 @@ import type { ControlAction } from "../src/controlApi.js";
 import type { GroupViewV1 } from "../src/controlTypes.js";
 import { amount, config as boardConfig, view as boardView, workItem } from "./fixtures/board.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
+import { pickOption } from "./selectControl.js";
 
 const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
@@ -178,7 +179,8 @@ describe("RequirementsPanel limits", () => {
 });
 
 describe("a refusal flag never outlives the text it was about (review I1)", () => {
-  it("new requirement: the repository switch replaces the limit text and frees the button", () => {
+  it("new requirement: the repository switch replaces the limit text and frees the button", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a repository chosen in the target picker swaps in that repository's limit draft
     const two = { ...config, repositories: [{ repoId: "repo", displayName: "Repo R" }, { repoId: "other", displayName: "Repo O" }] };
     render(<AccountContext.Provider value={owner}><RequirementsPanel config={two} summary={summaryWith(requirementView("answered"))} views={{}} selected={null} agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} /></AccountContext.Provider>);
     const form = screen.getByRole("form", { name: "New requirement" });
@@ -186,10 +188,10 @@ describe("a refusal flag never outlives the text it was about (review I1)", () =
     const start = (): HTMLButtonElement => within(form).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement;
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Print a page." } });
     fireEvent.change(limit(), { target: { value: "5,000,000" } });
-    fireEvent.change(within(form).getByRole("combobox", { name: "Repository" }), { target: { value: "other" } });
+    await pickOption(within(form).getByRole("combobox", { name: "Repository" }), "Repo O");
     fireEvent.change(limit(), { target: { value: "12x" } });
     expect(start().disabled).toBe(true);
-    fireEvent.change(within(form).getByRole("combobox", { name: "Repository" }), { target: { value: "repo" } });
+    await pickOption(within(form).getByRole("combobox", { name: "Repository" }), "Repo R");
     expect(limit().value).toBe("5,000,000");
     expect(within(form).queryByRole("alert")).toBeNull();
     expect(start().disabled).toBe(false);

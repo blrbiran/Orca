@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
+import { pickOption, shownText } from "./selectControl.js";
 import type { ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -71,21 +72,23 @@ const openCreate = async (): Promise<HTMLElement> => {
   fireEvent.click(await screen.findByRole("button", { name: "Group several projects" }));
   return screen.getByRole("form", { name: "Group several projects" });
 };
-const choose = (form: HTMLElement, key: string): void => {
-  fireEvent.change(within(form).getByRole("combobox", { name: "Project to add" }), { target: { value: key } });
+// Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the member is chosen in the "Project to add" picker by keyboard.
+const choose = async (form: HTMLElement, name: string): Promise<void> => {
+  await pickOption(within(form).getByRole("combobox", { name: "Project to add" }), name);
   fireEvent.click(within(form).getByRole("button", { name: "Add to group" }));
 };
 
 describe("grouping several projects", () => {
   it("D1: the form titles itself, hints at the primary, orders with up/down arrows and posts dirs", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): members are chosen in the "Project to add" picker, in the order the dirs post
     render(<App />);
     const form = await openCreate();
     expect(within(form).getByText("The first is the primary: it keeps the group's decisions.")).toBeTruthy();
     const save = within(form).getByRole("button", { name: "Save" }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
-    choose(form, "beta");
+    await choose(form, "Beta");
     expect(save.disabled).toBe(true);
-    choose(form, "alpha");
+    await choose(form, "Alpha");
     expect(save.disabled).toBe(true);
     fireEvent.click(within(form).getByRole("button", { name: "Move up Alpha" }));
     fireEvent.change(within(form).getByRole("textbox", { name: "Name" }), { target: { value: "Shop" } });
@@ -93,17 +96,18 @@ describe("grouping several projects", () => {
     projectsAfterAdd = FILE([...SINGLES, MULTI], { multiDirProjects: [{ id: "shop", name: "Shop", dirs: ["alpha", "beta"] }] });
     fireEvent.click(save);
     await waitFor(() => expect(posts).toEqual([{ name: "Shop", dirs: ["alpha", "beta"] }]));
-    const select = await screen.findByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe("shop"));
-    expect(within(select).getByRole("option", { name: "Shop (2 projects)" })).toBeTruthy();
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the new multi project becomes the sidebar's choice, shown with its member count
+    await screen.findByRole("combobox", { name: "Project" });
+    await waitFor(() => expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Shop (2 projects)"));
   });
 
   it("D2: a multi row shows its member count; it can be renamed and its order edited", async () => {
     projectsAnswer = { status: 200, body: FILE([...SINGLES, MULTI], { multiDirProjects: [{ id: "shop", name: "Shop", dirs: ["alpha", "beta"] }] }) };
     render(<App />);
-    const select = await screen.findByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "shop" } });
-    expect(within(select).getByRole("option", { name: "Shop (2 projects)" })).toBeTruthy();
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the multi row is offered with its member count and chosen in the sidebar picker
+    const select = await screen.findByRole("combobox", { name: "Project" });
+    await pickOption(select, "Shop (2 projects)");
+    expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Shop (2 projects)");
 
     fireEvent.click(screen.getByRole("button", { name: "Rename project" }));
     const rename = screen.getByRole("form", { name: "Rename project" });
@@ -127,11 +131,12 @@ describe("grouping several projects", () => {
   });
 
   it("D3: the downgrade notice is shown once, the first time a multi project is created", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): members are chosen in the "Project to add" picker, in the order the dirs post
     render(<App />);
     const first = await openCreate();
     expect(within(first).getByRole("note").textContent).toMatch(/older Orca/);
-    choose(first, "alpha");
-    choose(first, "beta");
+    await choose(first, "Alpha");
+    await choose(first, "Beta");
     fireEvent.change(within(first).getByRole("textbox", { name: "Name" }), { target: { value: "Shop" } });
     projectsAfterAdd = FILE([...SINGLES, MULTI], { multiDirProjects: [{ id: "shop", name: "Shop", dirs: ["alpha", "beta"] }] });
     fireEvent.click(within(first).getByRole("button", { name: "Save" }));
@@ -144,9 +149,10 @@ describe("grouping several projects", () => {
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     expect((screen.getByRole("button", { name: "Edit order" }) as HTMLButtonElement).disabled).toBe(true);
-    const select = screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-    expect(select.value).toBe("alpha");
-    fireEvent.change(select, { target: { value: "beta" } });
-    expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).value).toBe("beta");
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker still shows and switches single projects
+    const select = screen.getByRole("combobox", { name: "Project" });
+    expect(shownText(select)).toBe("Alpha");
+    await pickOption(select, "Beta");
+    expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Beta");
   });
 });

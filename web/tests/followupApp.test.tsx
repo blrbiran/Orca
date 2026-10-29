@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { App } from "../src/App.js";
 import { ALPHA, BETA, groupSummary, installFakePanel, planGroupView, type FakePanel } from "./fixtures/twoProjects.js";
 import { requirementView } from "./fixtures/requirement.js";
+import { pickOption } from "./selectControl.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
@@ -40,6 +41,7 @@ it("a fresh read owned by another repository cannot archive the old card", async
 });
 
 it("a project switch during the archive GET cancels the POST for the old scope", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker cancels the old scope's POST
   const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
   panel.summary = { ...panel.summary, groups: [summary] };
   panel.groupViews.g = planGroupView({ ...summary, commandRevision: 9 });
@@ -51,7 +53,7 @@ it("a project switch during the archive GET cancels the POST for the old scope",
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
   await waitFor(() => expect(release).toBeDefined());
-  fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
+  await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
   await act(async () => { release!(new Response(JSON.stringify(panel.groupViews.g), { status: 200, headers: { "content-type": "application/json" } })); });
   expect(panel.posts).toHaveLength(0);
 });

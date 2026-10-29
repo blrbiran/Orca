@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { PROJECT_KEY } from "../src/project.js";
+import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import type { ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
 // Fixtures copied from web/tests/controlPollSettles.test.tsx, with three repositories and their plans.
@@ -76,95 +77,101 @@ beforeEach(() => {
 
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
 
-const projectSelect = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
+const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
 const importRegion = async (): Promise<HTMLElement> => screen.findByRole("region", { name: "Import plan" });
 
 describe("the project switcher", () => {
   it("A: imports into the chosen project's repository with one of that repository's plans", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    expect(projectSelect().value).toBe("alpha");
+    expect(shownText(projectSelect())).toBe("alpha");
     fireEvent.click(within(await importRegion()).getByRole("button", { name: "Import plan" }));
     await waitFor(() => expect(imports).toHaveLength(1));
     expect(imports[0]).toEqual({ repoId: "alpha-11111111", planId: "pa" });
 
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "beta");
     const region = await importRegion();
-    const plan = within(region).getByRole("combobox", { name: "Plan" }) as HTMLSelectElement;
-    expect(plan.value).toBe("pb1");
-    fireEvent.change(plan, { target: { value: "pb2" } });
+    const plan = within(region).getByRole("combobox", { name: "Plan" });
+    expect(shownText(plan)).toBe("Beta plan one");
+    await pickOption(plan, "Beta plan two");
     fireEvent.click(within(region).getByRole("button", { name: "Import plan" }));
     await waitFor(() => expect(imports).toHaveLength(2));
     expect(imports[1]).toEqual({ repoId: "beta-22222222", planId: "pb2" });
 
     // Back to alpha and on to beta again: the plan is beta's first again, not the one chosen before.
-    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    expect((within(await importRegion()).getByRole("combobox", { name: "Plan" }) as HTMLSelectElement).value).toBe("pb1");
+    await pickOption(projectSelect(), "alpha");
+    await pickOption(projectSelect(), "beta");
+    expect(shownText(within(await importRegion()).getByRole("combobox", { name: "Plan" }))).toBe("Beta plan one");
   });
 
   it("A2: says a project is not under task control instead of importing into another repository", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    fireEvent.change(projectSelect(), { target: { value: "gamma" } });
+    await pickOption(projectSelect(), "gamma");
     const region = await importRegion();
     expect(within(region).getByText(/not under task control/)).toBeTruthy();
     expect(within(region).queryByRole("button", { name: "Import plan" })).toBeNull();
   });
 
   it("B: reads the workspace mode of the chosen project's repository", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     await waitFor(() => expect(workspaceReads).toContain("alpha-11111111"));
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "beta");
     await waitFor(() => expect(workspaceReads.at(-1)).toBe("beta-22222222"));
   });
 
   it("D: keeps the choice across a reload, and falls back to the first project when the stored one is gone", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     const first = render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
+    await pickOption(projectSelect(), "beta");
     first.unmount();
     render(<App />);
-    await waitFor(() => expect(projectSelect().value).toBe("beta"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("beta"));
     cleanup();
 
     window.localStorage.setItem(PROJECT_KEY, "removed-since");
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    await waitFor(() => expect(projectSelect().value).toBe("alpha"));
+    await waitFor(() => expect(shownText(projectSelect())).toBe("alpha"));
   });
 
   it("D2: still renders and starts at the first project when the browser refuses storage", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    expect(projectSelect().value).toBe("alpha");
-    fireEvent.change(projectSelect(), { target: { value: "beta" } });
-    expect(projectSelect().value).toBe("beta");
+    expect(shownText(projectSelect())).toBe("alpha");
+    await pickOption(projectSelect(), "beta");
+    expect(shownText(projectSelect())).toBe("beta");
   });
 
   it("C: the Requirements, Chains and Memory selects are views of the one selection, both ways", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     chainRepos = ["alpha", "beta", "gamma"].map((repoKey) => ({ repoKey, defaultSessionTimeoutMin: null, chain: null, problem: null }));
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     const chainSelect = (): HTMLSelectElement => document.querySelector('select[name="repoKey"]') as HTMLSelectElement;
-    const requirementSelect = (): HTMLSelectElement =>
-      within(screen.getByRole("form", { name: "New requirement" })).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    const requirementSelect = (): HTMLElement =>
+      within(screen.getByRole("form", { name: "New requirement" })).getByRole("combobox", { name: "Repository" });
     await waitFor(() => expect(chainSelect().value).toBe("alpha"));
-    await waitFor(() => expect(requirementSelect().value).toBe("alpha-11111111"));
+    await waitFor(() => expect(shownText(requirementSelect())).toBe("alpha"));
 
     // Chains moves the selection: the sidebar and Requirements follow.
     fireEvent.change(chainSelect(), { target: { value: "beta" } });
-    expect(projectSelect().value).toBe("beta");
-    expect(requirementSelect().value).toBe("beta-22222222");
+    expect(shownText(projectSelect())).toBe("beta");
+    expect(shownText(requirementSelect())).toBe("beta");
     // Requirements moves it back.
-    fireEvent.change(requirementSelect(), { target: { value: "alpha-11111111" } });
-    expect(projectSelect().value).toBe("alpha");
+    await pickOption(requirementSelect(), "alpha");
+    expect(shownText(projectSelect())).toBe("alpha");
     expect(chainSelect().value).toBe("alpha");
     // The sidebar moves it; Memory, opened afterwards, reads that project.
-    fireEvent.change(projectSelect(), { target: { value: "gamma" } });
+    await pickOption(projectSelect(), "gamma");
     expect(chainSelect().value).toBe("gamma");
     window.location.hash = "#memory";
     await waitFor(() => expect(memoryLists).toContain("gamma"));
@@ -173,8 +180,8 @@ describe("the project switcher", () => {
     const memorySelect = (): HTMLSelectElement => document.querySelector('select[name="memory-repo"]') as HTMLSelectElement;
     await waitFor(() => expect(memorySelect()).not.toBeNull());
     fireEvent.change(memorySelect(), { target: { value: "beta" } });
-    expect(projectSelect().value).toBe("beta");
-    fireEvent.change(projectSelect(), { target: { value: "alpha" } });
+    expect(shownText(projectSelect())).toBe("beta");
+    await pickOption(projectSelect(), "alpha");
     await waitFor(() => expect(memoryLists.at(-1)).toBe("alpha"));
     expect(memorySelect().value).toBe("alpha");
     window.location.hash = "";
@@ -183,12 +190,13 @@ describe("the project switcher", () => {
   // Rewritten for the project registry (spec 2026-10-04-panel-project-registry-design.md §12 C5, human ruling P6): with
   // one project the control is shown -- it is where the person sees which project the panel works on.
   it("E: shows the project select with its one project when the panel has one project", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     projectsAnswer = { status: 200, body: { projects: [PROJECTS.projects[0]] } };
     render(<App />);
     await importRegion();
     await waitFor(() => expect(workspaceReads).toContain("alpha-11111111"));
-    expect(projectSelect().value).toBe("alpha");
-    expect(projectSelect().options).toHaveLength(1);
+    expect(shownText(projectSelect())).toBe("alpha");
+    expect(await offered(projectSelect())).toEqual([["alpha", false]]);
   });
 
   // Replaces the switcher spec D2 fallback ("behaves as before": import into the first repository) per

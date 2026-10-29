@@ -15,6 +15,7 @@ import { PROJECT_VIEW_KEY } from "../src/projectScope.js";
 import type { RequirementViewV1 } from "../src/controlTypes.js";
 import { answerKey, clearIfUnchanged, correctionKey, EMPTY_DRAFTS, feedbackKey, limitKey, setDraft } from "../src/detailDrafts.js";
 import { requirementView } from "./fixtures/requirement.js";
+import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import type { RequirementFixtureState } from "./fixtures/requirement.js";
 import { ALPHA, BETA, TWO_PROJECTS, decisionRow, installFakePanel } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
@@ -24,15 +25,17 @@ beforeEach(() => { panel = installFakePanel(); });
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const projectSelect = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
-const selectedText = (): string | undefined => projectSelect().selectedOptions[0]?.textContent ?? undefined;
+// Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker is driven by keyboard, read by its shown text.
+const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
+const selectedText = (): string => shownText(projectSelect());
+const names = async (trigger: HTMLElement): Promise<string[]> => (await offered(trigger)).map(([name]) => name);
 const ready = async (): Promise<void> => { await screen.findByRole("combobox", { name: "Project" }); };
-const switchTo = async (projectKey: string, name: string): Promise<void> => {
-  fireEvent.change(projectSelect(), { target: { value: projectKey } });
+const switchTo = async (_projectKey: string, name: string): Promise<void> => {
+  await pickOption(projectSelect(), name);
   await waitFor(() => expect(selectedText()).toBe(name));
 };
 const chooseAll = async (): Promise<void> => {
-  fireEvent.change(projectSelect(), { target: { value: projectSelect().options[0]!.value } });
+  await pickOption(projectSelect(), "All projects");
   await waitFor(() => expect(selectedText()).toBe("All projects"));
 };
 
@@ -228,38 +231,40 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
   });
 
   it("4: in All projects a new requirement's text belongs to its target, and survives leaving All and coming back", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses, which targets the All-projects pickers offer, and whose draft follows the chosen target
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
     seed();
     render(<App />);
     await ready();
     await waitFor(() => expect(selectedText()).toBe("All projects"));
     const form = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
-    const target = (): HTMLSelectElement => within(form()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    const target = (): HTMLElement => within(form()).getByRole("combobox", { name: "Repository" });
     const idea = (): HTMLTextAreaElement => within(form()).getByRole("textbox", { name: "Idea" }) as HTMLTextAreaElement;
-    await waitFor(() => expect(target().value).toBe(""));
-    fireEvent.change(target(), { target: { value: ALPHA } });
+    await waitFor(() => expect(shownText(target())).toBe("Choose a repository"));
+    await pickOption(target(), "Alpha");
     fireEvent.change(idea(), { target: { value: "idea A" } });
-    fireEvent.change(target(), { target: { value: BETA } });
+    await pickOption(target(), "Beta");
     expect(idea().value).toBe("");
     fireEvent.change(idea(), { target: { value: "idea B" } });
-    fireEvent.change(target(), { target: { value: ALPHA } });
+    await pickOption(target(), "Alpha");
     expect(idea().value).toBe("idea A");
 
     // Project Alpha's form is alpha's draft; back in All the target is unchosen again and shows no project's text.
     await switchTo("alpha", "Alpha");
     await waitFor(() => expect(idea().value).toBe("idea A"));
     await chooseAll();
-    await waitFor(() => expect(target().value).toBe(""));
+    await waitFor(() => expect(shownText(target())).toBe("Choose a repository"));
     expect(idea().value).toBe("");
-    fireEvent.change(target(), { target: { value: ALPHA } });
+    await pickOption(target(), "Alpha");
     expect(idea().value).toBe("idea A");
-    fireEvent.change(target(), { target: { value: BETA } });
+    await pickOption(target(), "Beta");
     expect(idea().value).toBe("idea B");
   });
 });
 
 describe("text typed in All before a target is chosen (fix round 1, I1 and ruling M2)", () => {
   it("4b: the next explicit choice takes it only into a draft-less target and drops it either way; it never resurfaces", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses, which targets the All-projects pickers offer, and whose draft follows the chosen target
     const GAMMA = "gamma-33333333";
     panel.config = { ...panel.config, repositories: [...panel.config.repositories, { repoId: GAMMA, displayName: "gamma" }] };
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: GAMMA, editable: true }] } };
@@ -268,42 +273,43 @@ describe("text typed in All before a target is chosen (fix round 1, I1 and rulin
     await ready();
     await waitFor(() => expect(selectedText()).toBe("All projects"));
     const form = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
-    const target = (): HTMLSelectElement => within(form()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    const target = (): HTMLElement => within(form()).getByRole("combobox", { name: "Repository" });
     const idea = (): HTMLTextAreaElement => within(form()).getByRole("textbox", { name: "Idea" }) as HTMLTextAreaElement;
-    await waitFor(() => expect(Array.from(target().options).map((option) => option.value)).toEqual(["", ALPHA, BETA, GAMMA]));
-    expect(target().value).toBe("");
+    await waitFor(async () => expect(await names(target())).toEqual(["Choose a repository", "Alpha", "Beta", "Gamma"]));
+    expect(shownText(target())).toBe("Choose a repository");
 
     fireEvent.change(idea(), { target: { value: "loose" } });
-    fireEvent.change(target(), { target: { value: ALPHA } });
+    await pickOption(target(), "Alpha");
     expect(idea().value).toBe("loose");
     fireEvent.change(idea(), { target: { value: "alpha idea" } });
     // Alpha took the loose text; it is gone, so Beta starts empty.
-    fireEvent.change(target(), { target: { value: BETA } });
+    await pickOption(target(), "Beta");
     expect(idea().value).toBe("");
     fireEvent.change(idea(), { target: { value: "beta idea" } });
 
     await switchTo("alpha", "Alpha");
     await chooseAll();
-    await waitFor(() => expect(target().value).toBe(""));
+    await waitFor(() => expect(shownText(target())).toBe("Choose a repository"));
     expect(idea().value).toBe("");
     // Beta has its own draft: the loose text does not overwrite it, and is dropped.
     fireEvent.change(idea(), { target: { value: "loose2" } });
-    fireEvent.change(target(), { target: { value: BETA } });
+    await pickOption(target(), "Beta");
     expect(idea().value).toBe("beta idea");
     // A fresh target shows neither loose text nor another target's draft.
-    fireEvent.change(target(), { target: { value: GAMMA } });
+    await pickOption(target(), "Gamma");
     expect(idea().value).toBe("");
-    fireEvent.change(target(), { target: { value: ALPHA } });
+    await pickOption(target(), "Alpha");
     expect(idea().value).toBe("alpha idea");
     await switchTo("alpha", "Alpha");
     await chooseAll();
-    await waitFor(() => expect(target().value).toBe(""));
+    await waitFor(() => expect(shownText(target())).toBe("Choose a repository"));
     expect(idea().value).toBe("");
   });
 });
 
 describe("an All-projects target that is no longer held is unchosen (Task 4 review M1, spec §8)", () => {
   it("5: Beta chosen in both forms, then the project re-read drops beta: neither form can submit, and nothing is posted", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses, which targets the All-projects pickers offer, and whose draft follows the chosen target
     const gamma = { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true };
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, gamma] } };
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
@@ -312,22 +318,22 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     await waitFor(() => expect(selectedText()).toBe("All projects"));
     const importRegion = (): HTMLElement => screen.getByRole("region", { name: "Import plan" });
     const form = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
-    const targetIn = (scope: HTMLElement): HTMLSelectElement => within(scope).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
+    const targetIn = (scope: HTMLElement): HTMLElement => within(scope).getByRole("combobox", { name: "Repository" });
     const importButton = (): HTMLButtonElement => within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
     const startButton = (): HTMLButtonElement => within(form()).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement;
-    await waitFor(() => expect(targetIn(importRegion()).value).toBe(""));
-    fireEvent.change(targetIn(importRegion()), { target: { value: BETA } });
-    fireEvent.change(targetIn(form()), { target: { value: BETA } });
+    await waitFor(() => expect(shownText(targetIn(importRegion()))).toBe("Choose a repository"));
+    await pickOption(targetIn(importRegion()), "Beta");
+    await pickOption(targetIn(form()), "Beta");
     fireEvent.change(within(form()).getByRole("textbox", { name: "Idea" }), { target: { value: "export notes" } });
     expect(importButton().disabled).toBe(false);
     expect(startButton().disabled).toBe(false);
 
     panel.projects = { status: 200, body: { projects: [TWO_PROJECTS[0]!, gamma] } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await waitFor(() => expect(Array.from(targetIn(form()).options).map((option) => option.value)).toEqual(["", ALPHA]));
+    await waitFor(async () => expect(await names(targetIn(form()))).toEqual(["Choose a repository", "Alpha"]));
     expect(selectedText()).toBe("All projects");
-    expect(targetIn(importRegion()).value).toBe("");
-    expect(targetIn(form()).value).toBe("");
+    expect(shownText(targetIn(importRegion()))).toBe("Choose a repository");
+    expect(shownText(targetIn(form()))).toBe("Choose a repository");
     expect(importButton().disabled).toBe(true);
     expect(startButton().disabled).toBe(true);
     fireEvent.click(importButton());
@@ -339,10 +345,10 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     // Fix round 1, ruling M1: a target seen unheld is forgotten -- beta listed again is not chosen again without a choice.
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, gamma] } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await waitFor(() => expect(Array.from(targetIn(form()).options).map((option) => option.value)).toEqual(["", ALPHA, BETA]));
-    await waitFor(() => expect(Array.from(targetIn(importRegion()).options).map((option) => option.value)).toEqual(["", ALPHA, BETA]));
-    expect(targetIn(importRegion()).value).toBe("");
-    expect(targetIn(form()).value).toBe("");
+    await waitFor(async () => expect(await names(targetIn(form()))).toEqual(["Choose a repository", "Alpha", "Beta"]));
+    await waitFor(async () => expect(await names(targetIn(importRegion()))).toEqual(["Choose a repository", "Alpha", "Beta"]));
+    expect(shownText(targetIn(importRegion()))).toBe("Choose a repository");
+    expect(shownText(targetIn(form()))).toBe("Choose a repository");
     expect(importButton().disabled).toBe(true);
     expect(startButton().disabled).toBe(true);
     fireEvent.click(importButton());

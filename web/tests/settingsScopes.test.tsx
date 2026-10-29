@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PLAN } from "./fixtures/board.js";
 import { App } from "../src/App.js";
-import { ALL_PROJECTS } from "../src/projectScope.js";
+import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import { ALPHA, BETA, installFakePanel, groupSummary, planGroupView } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
 import type { AgentPreferencesViewV1 } from "../src/controlTypes.js";
@@ -31,14 +31,15 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); localStorage.clear(); sessionStorage.clear(); window.location.hash = ""; });
-const project = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
+const project = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
 const globalRegion = (): HTMLElement => screen.getByRole("region", { name: "Global settings" });
 const projectRegion = (): HTMLElement => screen.getByRole("region", { name: "Project settings" });
-const settingsPick = (): HTMLSelectElement => screen.getByRole("combobox", { name: "Settings for project" }) as HTMLSelectElement;
+const settingsPick = (): HTMLElement => screen.getByRole("combobox", { name: "Settings for project" });
 async function open(section: string): Promise<void> { await act(async () => { window.location.hash = section; window.dispatchEvent(new Event("hashchange")); }); }
 
 describe("settings scopes", () => {
   it("offers separate deep links with browser controls and shared Agent defaults only in global settings; import stays in Tasks", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
     render(<App />);
     // Rewritten for ruling H6(b): one Settings page whose categories are the deep links; the old hash still opens it. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
     await screen.findByRole("link", { name: "Settings" });
@@ -54,7 +55,7 @@ describe("settings scopes", () => {
     expect(within(globalRegion()).queryByRole("region", { name: "Workspace mode" })).toBeNull();
     expect(within(globalRegion()).queryByRole("region", { name: "Integration" })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Sections" }).querySelector('select[name="theme"]')).toBeNull();
-    expect(project().value).toBe("alpha");
+    expect(shownText(project())).toBe("Alpha");
     const task = screen.getByRole("region", { name: "Task control" });
     expect(within(task).getByRole("button", { name: "Import plan" })).toBeTruthy();
     expect(within(task).queryByRole("button", { name: "Save agent preferences" })).toBeNull();
@@ -62,6 +63,7 @@ describe("settings scopes", () => {
   });
 
   it("saves shared defaults with the read revision then displays the returned operator identity/revision without changing project", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
     panel.onPost = async () => { prefs = { ...prefs, operatorId: "returned-panel-operator", revision: 8 }; return json({ schema: "orca-command-success-v1", commandRevision: 8 }); };
     render(<App />);
     await waitFor(() => expect(globalRegion().textContent).toContain("shared-panel-operator"));
@@ -69,18 +71,19 @@ describe("settings scopes", () => {
     await waitFor(() => expect(globalRegion().textContent).toContain("returned-panel-operator"));
     expect(globalRegion().textContent).toContain("preferences revision 8");
     expect(panel.posts).toEqual([{ url: "/api/control/operator/agent-preferences", body: { commandId: expect.any(String), expectedRevision: 7, payload: { preferences: { defaultAgent: "claude", perAgent: {} } } } }]);
-    expect(project().value).toBe("alpha");
+    expect(shownText(project())).toBe("Alpha");
     expect(preferenceCsrf).toBe("settings-token");
   });
 
   it("requires deliberate concrete selection after All and after an unresolved registry, never the prior repository", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
-    fireEvent.change(project(), { target: { value: ALL_PROJECTS } });
+    await pickOption(project(), "All projects");
     await open("project-settings");
     // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #69: the old "choose in the project picker" sentence is gone; under All the page's own select asks for a project.
-    expect(settingsPick().value).toBe("");
+    expect(shownText(settingsPick())).toBe("Choose a project");
     expect(projectRegion().textContent).not.toContain(ALPHA);
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     expect(within(projectRegion()).queryByRole("button", { name: "Save integration" })).toBeNull();
@@ -97,28 +100,29 @@ describe("settings scopes", () => {
   // "choose in the project picker". Its own select is bound to the panel's one project scope: it shows the sidebar's
   // choice, a pick there switches every page, and under All it reads "Choose a project" with the settings hidden.
   it("picks the project on the page itself, bound to the sidebar's scope, and asks for one under All", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
     render(<App />);
     await open("settings/project");
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
     // mutation: drop the picker -> not found, red
-    expect(settingsPick().value).toBe("alpha");
-    expect([...settingsPick().options].map((o) => o.value)).toEqual(["alpha", "beta"]);
+    expect(shownText(settingsPick())).toBe("Alpha");
+    expect(await offered(settingsPick())).toEqual([["Alpha", false], ["Beta", false]]);
     expect(document.querySelector('[data-category="project"]')!.textContent).toContain("Changing it changes the project for every page.");
     // mutation: keep a page-local selection instead of the panel's scope -> the sidebar stays on alpha, red
-    fireEvent.change(settingsPick(), { target: { value: "beta" } });
+    await pickOption(settingsPick(), "Beta");
     await waitFor(() => expect(projectRegion().textContent).toContain(BETA));
-    expect(project().value).toBe("beta");
+    expect(shownText(project())).toBe("Beta");
     // The sidebar's All empties it: "Choose a project", the settings hidden, no old sentence.
-    fireEvent.change(project(), { target: { value: ALL_PROJECTS } });
-    await waitFor(() => expect(settingsPick().value).toBe(""));
-    expect(settingsPick().selectedOptions[0]!.textContent).toBe("Choose a project");
+    await pickOption(project(), "All projects");
+    await waitFor(() => expect(shownText(settingsPick())).toBe("Choose a project"));
+    expect(settingsPick().hasAttribute("data-placeholder")).toBe(false); // the disabled "Choose a project" option, not the placeholder
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     expect(projectRegion().textContent).not.toContain(BETA);
     expect(document.body.textContent).not.toContain("project picker");
     // A pick from the settings page leaves All for that project everywhere.
-    fireEvent.change(settingsPick(), { target: { value: "alpha" } });
+    await pickOption(settingsPick(), "Alpha");
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
-    expect(project().value).toBe("alpha");
+    expect(shownText(project())).toBe("Alpha");
   });
 
   it("keeps preparation unresolved and a failed concrete registry from exposing prior settings", async () => {
@@ -156,17 +160,18 @@ describe("settings scopes", () => {
   });
 
   it("keeps late repository refusals with their target and a later success clears only that target", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
     let answer!: (r: Response) => void;
     panel.onPost = async () => new Promise(resolve => { answer = resolve; });
     render(<App />);
     await open("project-settings");
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
     fireEvent.click(within(projectRegion()).getByRole("button", { name: "Save integration" }));
-    fireEvent.change(project(), { target: { value: "beta" } });
+    await pickOption(project(), "Beta");
     await waitFor(() => expect(projectRegion().textContent).toContain(BETA));
     await act(async () => { answer(new Response(JSON.stringify({ error: { code: "revision-conflict", message: "alpha moved", commandRevision: 8, evidenceIds: [], retryable: false } }), { status: 409, headers: { "content-type": "application/json" } })); });
     expect(within(projectRegion()).queryByRole("alert")).toBeNull();
-    fireEvent.change(project(), { target: { value: "alpha" } });
+    await pickOption(project(), "Alpha");
     await waitFor(() => expect(within(projectRegion()).getByRole("alert").textContent).toContain("revision-conflict"));
     panel.onPost = async () => json({ schema: "orca-command-success-v1", commandRevision: 9 });
     fireEvent.click(within(projectRegion()).getByRole("button", { name: "Save integration" }));
@@ -235,9 +240,10 @@ describe("settings scopes", () => {
   });
 
   it("saves workspace and integration only for the selected repository and its revisions", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    fireEvent.change(project(), { target: { value: "beta" } });
+    await pickOption(project(), "Beta");
     await open("project-settings");
     await waitFor(() => expect(projectRegion().textContent).toContain(BETA));
     fireEvent.click(within(projectRegion()).getByRole("radio", { name: "private clone" }));

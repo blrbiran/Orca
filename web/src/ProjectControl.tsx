@@ -11,6 +11,7 @@ import type { PanelRefusal, PostResult } from "./api.js";
 import { refusalText } from "./i18n.js";
 import { projectName, type ProjectsAnswerV1 } from "./project.js";
 import { projectAction } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 import { ALL_PROJECTS, allowsAll, type ProjectView } from "./projectScope.js";
 
 export interface ProjectControlProps {
@@ -125,9 +126,8 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
         })}
       </ol>
       <label>{t("project.multiPick")}
-        <select name="project-multi-pick" value={pickValue} onChange={(e) => setPick(e.currentTarget.value)}>
-          {available.map((p) => <option key={p.projectKey} value={p.projectKey}>{projectName(p)}</option>)}
-        </select>
+        <Select value={pickValue} onValueChange={setPick}
+          options={available.map((p) => ({ value: p.projectKey, label: projectName(p) }))} />
       </label>
       <button type="button" disabled={pickValue === "" || dirs.length >= 8} title={dirs.length >= 8 ? t("project.multiFull") : undefined}
         onClick={() => { setDirs([...dirs, pickValue]); setPick(""); }}>{t("project.multiAdd")}</button>
@@ -136,21 +136,20 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
   const saveDisabled = dirs.length < 2 || dirs.length > 8 || (open === "multi" && name.trim() === "");
 
   return (
-    <div className="project-control flex flex-col gap-2 rounded-card border border-line bg-well p-[10px] text-xs max-md:w-full [&>label]:mb-0 [&_form]:m-0 [&_form]:flex [&_form]:flex-col [&_form]:gap-1.5 [&_p]:m-0 [&_select]:w-full">
+    <div className="project-control flex flex-col gap-2 rounded-card border border-line bg-well p-[10px] text-xs max-md:w-full [&>label]:mb-0 [&_form]:m-0 [&_form]:flex [&_form]:flex-col [&_form]:gap-1.5 [&_p]:m-0 [&_[data-select-trigger]]:w-full">
       {projects.length === 0 ? (
         <p className="project-none">{t("project.none")}</p>
       ) : (
         <label>
           {t("shell.project")}
-          <select name="project" value={withAll && props.view === "all" ? ALL_PROJECTS : props.project ?? ""}
-            onChange={(e) => (e.currentTarget.value === ALL_PROJECTS ? props.onAll?.() : props.onProject(e.currentTarget.value))}>
-            {withAll && <option value={ALL_PROJECTS}>{t("project.all")}</option>}
-            {projects.map((p) => <option key={p.projectKey} value={p.projectKey}>
-              {p.kind === "dir" ? t("project.dirLabel", { name: projectName(p) })
+          <Select value={withAll && props.view === "all" ? ALL_PROJECTS : props.project ?? ""} placeholder={t("settings.projectPick.choose")}
+            onValueChange={(value) => (value === ALL_PROJECTS ? props.onAll?.() : props.onProject(value))}
+            options={[
+              ...(withAll ? [{ value: ALL_PROJECTS, label: t("project.all") }] : []),
+              ...projects.map((p) => ({ value: p.projectKey, label: p.kind === "dir" ? t("project.dirLabel", { name: projectName(p) })
                 : p.kind === "multi" ? t("project.multiLabel", { name: projectName(p), count: p.dirs?.length ?? 0 })
-                : projectName(p)}
-            </option>)}
-          </select>
+                : projectName(p) })),
+            ]} />
         </label>
       )}
       <div className="project-actions flex flex-wrap gap-1.5">

@@ -7,6 +7,7 @@ import { act } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { ALPHA, BETA, decisionRow, groupSummary, installFakePanel, planGroupView } from "./fixtures/twoProjects.js";
+import { pickOption, shownText } from "./selectControl.js";
 import type { OverviewV1 } from "../src/controlTypes.js";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 let overview: OverviewV1;
@@ -60,6 +61,7 @@ it("counts and queues only non-minor to-do rows, and the Unreviewed list still r
  expect(await screen.findByText("owed-minor")).toBeTruthy();
 });
 it("All queue navigation reads the live owner and focuses its requested region without posting", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker shows, and a switch made through it, while owner reads are pending
  window.localStorage.setItem("orca.projectView", "all");
  const panel = setup(); const ga = groupSummary("ga", ALPHA); const gb = groupSummary("gb", BETA);
  panel.summary.groups = [ga, gb]; panel.groupViews.ga = planGroupView(ga); panel.groupViews.gb = planGroupView(gb);
@@ -72,7 +74,7 @@ it("All queue navigation reads the live owner and focuses its requested region w
  expect(panel.requests).toContain("GET /api/control/groups/gb");
  expect(panel.requests).not.toContain("GET /api/control/groups/ga");
  expect(panel.posts).toHaveLength(0);
- expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("All projects");
+ expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("All projects");
 });
 
 it.each(["answers", "draft", "problem"] as const)("opens exact requirement owner at %s region without group GET or POST", async (region) => {
@@ -153,12 +155,13 @@ it.each(["task", "run"])("a disappeared requested %s rejects navigation to a mis
  expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull(); expect(panel.posts).toHaveLength(0);
 });
 it("leaving scope while an owner GET is pending cannot reopen its old detail", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker shows, and a switch made through it, while owner reads are pending
  const panel = setup(); groupQueue(panel); const base = globalThis.fetch; let release!: (value: Response) => void;
  const held = new Promise<Response>((resolve) => { release = resolve; });
  globalThis.fetch = (async (input, init) => String(input) === "/api/control/groups/ga" ? held : base(input, init)) as typeof fetch;
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  fireEvent.click(await within(page).findByRole("button", { name: "Review budget · ga" }));
- fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "beta" } });
+ await pickOption(screen.getByRole("combobox", { name: "Project" }), "Beta");
  await act(async () => { release(json(panel.groupViews.ga)); });
  expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull(); expect(panel.posts).toHaveLength(0);
 });
@@ -175,11 +178,12 @@ it("a task/run attention destination opens the requested task before focusing it
 });
 
 it("a concrete project keeps an unknown registry owner visibly unavailable rather than borrowing its prior project context", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker shows, and a switch made through it, while owner reads are pending
  const panel = setup(); const unknown = groupSummary("unknown-owner", "not-in-registry"); panel.summary.groups = [unknown]; panel.groupViews[unknown.groupId] = planGroupView(unknown); overview.groups = [unknown];
  overview.steps = [{ key: "unknown-budget", groupId: unknown.groupId, repoId: unknown.repoId, taskId: null, runId: null, kind: "budget-review", reason: "editable", ownerRequired: false, destination: { kind: "group", groupId: unknown.groupId, region: "preparation", taskId: null, runId: null } }];
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  const button = await within(page).findByRole("button", { name: "Review budget · unknown-owner" });
- await waitFor(() => expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("Alpha"));
+ await waitFor(() => expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Alpha"));
  expect(within(page).getAllByText(/owner not in registry/).length).toBeGreaterThan(0);
  const registryReads = panel.requests.filter((r) => r === "GET /api/projects").length;
  fireEvent.click(button);
@@ -188,9 +192,10 @@ it("a concrete project keeps an unknown registry owner visibly unavailable rathe
  expect(document.querySelector('[data-section="overview"]')?.getAttribute("data-active")).toBe("true");
  expect(screen.queryByRole("region", { name: "Control group unknown-owner" })).toBeNull();
  expect(panel.requests.some((r) => r === "GET /api/control/groups/unknown-owner")).toBe(false);
- expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("Alpha"); expect(panel.posts).toHaveLength(0);
+ expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Alpha"); expect(panel.posts).toHaveLength(0);
 });
 it("All may inspect an unknown registry owner through its exact live group GET without changing or guessing project context", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker shows, and a switch made through it, while owner reads are pending
  window.localStorage.setItem("orca.projectView", "all"); const panel = setup(); const unknown = groupSummary("unknown-all", "not-in-registry"); panel.summary.groups = [unknown]; panel.groupViews[unknown.groupId] = planGroupView(unknown); overview.groups = [unknown];
  overview.steps = [{ key: "unknown-all-budget", groupId: unknown.groupId, repoId: unknown.repoId, taskId: null, runId: null, kind: "budget-review", reason: "editable", ownerRequired: false, destination: { kind: "group", groupId: unknown.groupId, region: "preparation", taskId: null, runId: null } }];
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
@@ -198,14 +203,15 @@ it("All may inspect an unknown registry owner through its exact live group GET w
  await screen.findByRole("region", { name: "Control group unknown-all" });
  await waitFor(() => expect(document.activeElement?.getAttribute("data-overview-region")).toBe("preparation"));
  expect(panel.requests).toContain("GET /api/control/groups/unknown-all");
- expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("All projects"); expect(panel.posts).toHaveLength(0);
+ expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("All projects"); expect(panel.posts).toHaveLength(0);
 });
 
 it("an unknown decision project in concrete scope rereads registry and sources without using the prior project owner", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker shows, and a switch made through it, while owner reads are pending
  const panel = setup(); panel.todo = [decisionRow("unmapped-project", "unknown-decision")]; panel.decisions[rowKey(panel.todo[0]!)] = { id: "unknown-decision", question: "unknown owner's question", chose: "c", because: "b", alternatives: [] };
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  const button = await within(page).findByRole("button", { name: "Review decision · unknown-decision" });
- await waitFor(() => expect((screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("Alpha"));
+ await waitFor(() => expect(shownText(screen.getByRole("combobox", { name: "Project" }))).toBe("Alpha"));
  const registryReads = panel.requests.filter((r) => r === "GET /api/projects").length;
  fireEvent.click(button); expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("no longer available"));
  await waitFor(() => expect(panel.requests.filter((r) => r === "GET /api/projects").length).toBeGreaterThan(registryReads));

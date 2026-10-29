@@ -20,6 +20,7 @@ import { RecoveryView } from "./RecoveryView.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { enumText, refusalText } from "./i18n.js";
 import { GroupList } from "./GroupList.js";
+import { Select } from "./ui/Select.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
@@ -199,13 +200,10 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   const librarySelect = library !== null && library.length > 0 ? (
     <label>
       {t("planLibrary.title")}
-      <select data-testid="import-library" aria-label={t("planLibrary.title")} value={libraryId}
-        onChange={(event) => { setLibraryId(event.currentTarget.value); setPlanId(null); }}>
-        <option value="">{t("planLibrary.title")}</option>
-        {library.map((entry) => (
-          <option key={entry.entryId} value={entry.entryId}>{entry.head === null ? entry.name : `${entry.name} · ${entry.head.sha256.slice(0, 10)}`}</option>
-        ))}
-      </select>
+      <Select data-testid="import-library" aria-label={t("planLibrary.title")} value={libraryId}
+        onValueChange={(value) => { setLibraryId(value); setPlanId(null); }}
+        options={[{ value: "", label: t("planLibrary.title") },
+          ...library.map((entry) => ({ value: entry.entryId, label: entry.head === null ? entry.name : `${entry.name} · ${entry.head.sha256.slice(0, 10)}` }))]} />
     </label>
   ) : null;
   const ready = libraryId !== "" ? chosen !== null : plan !== undefined;
@@ -224,10 +222,9 @@ function ImportForm(props: ImportFormProps): JSX.Element {
         <>
           <label>
             {t("control.import.repository")}
-            <select value={repository?.repoId ?? ""} onChange={(e) => { setTarget(e.currentTarget.value); setPlanId(null); }}>
-              <option value="" disabled>{t("project.chooseTarget")}</option>
-              {choices.map((entry) => <option key={entry.repoId} value={entry.repoId}>{props.repoLabel?.(entry.repoId) ?? entry.displayName}</option>)}
-            </select>
+            <Select value={repository?.repoId ?? ""} onValueChange={(value) => { setTarget(value); setPlanId(null); }}
+              options={[{ value: "", label: t("project.chooseTarget"), disabled: true },
+                ...choices.map((entry) => ({ value: entry.repoId, label: props.repoLabel?.(entry.repoId) ?? entry.displayName }))]} />
           </label>
           {repository !== undefined && plan === undefined && (library === null || library.length === 0) && <p role="note">{t("control.import.noPlan")}</p>}
           {repository !== undefined && plan !== undefined && !chosen && (
@@ -242,9 +239,8 @@ function ImportForm(props: ImportFormProps): JSX.Element {
           {plans.length > 1 && plan !== undefined && (
             <label>
               {t("control.import.plan")}
-              <select value={plan.planId} onChange={(e) => { setPlanId(e.currentTarget.value); setLibraryId(""); }}>
-                {plans.map((entry) => <option key={entry.planId} value={entry.planId}>{entry.displayName}</option>)}
-              </select>
+              <Select value={plan.planId} onValueChange={(value) => { setPlanId(value); setLibraryId(""); }}
+                options={plans.map((entry) => ({ value: entry.planId, label: entry.displayName }))} />
             </label>
           )}
           {librarySelect}
@@ -269,9 +265,8 @@ function ImportForm(props: ImportFormProps): JSX.Element {
           {plans.length > 1 && plan !== undefined && (
             <label>
               {t("control.import.plan")}
-              <select value={plan.planId} onChange={(e) => { setPlanId(e.currentTarget.value); setLibraryId(""); }}>
-                {plans.map((entry) => <option key={entry.planId} value={entry.planId}>{entry.displayName}</option>)}
-              </select>
+              <Select value={plan.planId} onValueChange={(value) => { setPlanId(value); setLibraryId(""); }}
+                options={plans.map((entry) => ({ value: entry.planId, label: entry.displayName }))} />
             </label>
           )}
           {librarySelect}

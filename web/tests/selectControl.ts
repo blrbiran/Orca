@@ -18,20 +18,26 @@ function optionName(option: HTMLElement): string {
   return (text ?? option.textContent ?? "").trim();
 }
 
+/*
+ * Radix opens and closes the list synchronously inside fireEvent's act, so the helpers look first and only wait when
+ * the list is not there yet: RTL's findBy/waitFor end with a setTimeout(0) that never fires under vi.useFakeTimers(),
+ * and several App criteria switch the project with fake timers installed (batch 1, session b999cc81).
+ */
 async function open(trigger: HTMLElement): Promise<HTMLElement> {
   trigger.focus();
   fireEvent.keyDown(trigger, { key: "Enter" });
-  return screen.findByRole("listbox");
+  return screen.queryByRole("listbox") ?? screen.findByRole("listbox");
 }
 
 async function closed(): Promise<void> {
+  if (screen.queryByRole("listbox") === null) return;
   await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
 }
 
 /** Focus `trigger`, open its list by keyboard, choose the option named `name` with Enter, and wait for the list to close. */
 export async function pickOption(trigger: HTMLElement, name: string | RegExp): Promise<void> {
   await open(trigger);
-  const option = await screen.findByRole("option", { name });
+  const option = screen.queryByRole("option", { name }) ?? await screen.findByRole("option", { name });
   fireEvent.keyDown(option, { key: "Enter" });
   await closed();
 }
@@ -43,4 +49,9 @@ export async function optionsOf(trigger: HTMLElement): Promise<Array<[string, bo
   fireEvent.keyDown(list, { key: "Escape" });
   await closed();
   return offered;
+}
+
+/** The text the closed trigger shows -- the chosen option's label, or the placeholder -- without the ▾ beside it. */
+export function shownText(trigger: HTMLElement): string {
+  return (trigger.firstElementChild?.textContent ?? "").trim();
 }

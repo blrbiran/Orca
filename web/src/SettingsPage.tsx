@@ -11,6 +11,7 @@ import { ProjectSettings } from "./ProjectSettings.js";
 import { SETTINGS_CATEGORIES, formatRoute, type SettingsCategory } from "./sections.js";
 import { projectName, type ProjectV1 } from "./project.js";
 import { inlinePick, settingHint, tabItem, tabRow } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 type GlobalProps = Omit<Parameters<typeof GlobalSettings>[0], "category">;
 type ProjectProps = Parameters<typeof ProjectSettings>[0];
@@ -27,10 +28,11 @@ function ProjectPicker(props: ProjectPick): JSX.Element | null {
   return (
     <div>
       <label className={inlinePick}>{t("settings.projectPick.label")}
-        <select name="settings-project" value={props.project ?? ""} onChange={(e) => props.onProject(e.currentTarget.value)}>
-          {props.project === null && <option value="" disabled>{t("settings.projectPick.choose")}</option>}
-          {props.projects.map((p) => <option key={p.projectKey} value={p.projectKey}>{projectName(p)}</option>)}
-        </select>
+        <Select value={props.project ?? ""} onValueChange={props.onProject} placeholder={t("settings.projectPick.choose")}
+          options={[
+            ...(props.project === null ? [{ value: "", label: t("settings.projectPick.choose"), disabled: true }] : []),
+            ...props.projects.map((p) => ({ value: p.projectKey, label: projectName(p) })),
+          ]} />
       </label>
       <p className={settingHint}>{t("settings.projectPick.note")}</p>
     </div>
