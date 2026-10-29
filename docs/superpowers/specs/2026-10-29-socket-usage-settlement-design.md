@@ -49,3 +49,16 @@ everything but an authenticated Web owner (`applySettleUnknownUsage`), and `orca
 
 The criterion "a task run's settle-unknown-usage stays the Web owner's" (`tests/control/testerStuckStates.test.ts`) is
 rewritten to the new behaviour under the human's 「这次批准改写所有必要的判据」 (session 2026-10-29).
+
+## 5. Correction to §3 (session b999cc81, 2026-10-29)
+
+§3 registered the saved-result receipt as cosmetic. It is not: ccloop validates the receipt strictly
+(`ccloop src/control/savedResultRecovery.ts`, `client: z.literal("web")`, `.strict()`, `marker.principal ===
+receipt.principal`), so a run settled over the socket could never pass saved-result recovery (reproduced red at the
+ccloop boundary before the fix). Human: 「同意，按你的建议走」. Now:
+- Orca: `settlementReceipt` (`src/control/savedResultRecovery.ts`) adds `personPrincipal` when the row records one; a Web
+  receipt's bytes are unchanged (criterion `tests/control/socketSettlementReceipt.test.ts`).
+- ccloop (`fix(control): a socket settlement's receipt backs the marker by its personPrincipal …`): a Web row backs the
+  marker by its `principal`, any other row by `personPrincipal`.
+- Not covered by a criterion: `savedRecoveryAccounting` calling `settlementReceipt` (its preconditions need a real stop
+  proof; Orca's paired end-to-end is env-gated and its fixture still expects schema 14).
