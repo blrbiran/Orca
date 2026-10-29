@@ -63,13 +63,25 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00000000000000 测试者反馈轮（2026-10-28 规划 → 会话 `a9f9d6de` 2026-10-28／29 实施）—— **先读这一节**
+### 3.000000000000000 会话 `3ea8a21e`（2026-10-29）：测试者反馈轮的三件后续 —— **先读这一节**
+
+> 人裁（本会话）：主题「霜白，深色，浅色，蔷薇，紫夜，暮色，余烬。这几个配色还行，其他可以删掉」「terminal 主题不好看」；Radix Select「是不是可以换成 Radix Select 看下效果」；settle-usage 的 schema 变更「同意」；其余替人定的可逆项「没特别说明的部分都同意」；测试者数据「我去问问，不一定能拿到」；「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」（**本轮没有付费真跑**）；收尾临时授权 push 三仓（handoff 提交之后）。
+
+- **已 `--ff-only` 合入 main 并装上**（按主题行找）：
+  - `feat(web): keep the seven themes the human picked; drop ink, contrast, navy, lagoon and terminal`：`THEME_PREFS` 现为 system／light／dark／frost／rose／violet／dusk／ember；存过被删 id 的浏览器读成 `system`。判据改写：`themes.test.ts`（清单、被删 id 回落、侧栏计数徽标、删 high-contrast 块）、`i18nPseudo` 枚举 205 → 200。变异（`readTheme` 不校验）见红。门 `npm test` 172 文件（4 根、168 web）全绿、0 跳过。
+  - `feat(control): orca task settle-usage works with a person token -- schema 20 -> 21 records the token's account`（spec `docs/superpowers/specs/2026-10-29-socket-usage-settlement-design.md`；恢复 spec 追加 §5 指过来）：`commands.person_principal`（可空）；socket 上有 person 权限的命令记 token 账号，Web 行为 NULL；`applySettleUnknownUsage` 用 `settlingPersonFor`；`hasValidUsageSettlement` 接受 socket 行的 `person_principal`。新判据 `tests/control/socketUsageSettlement.test.ts`；改写 `testerStuckStates`「stays the Web owner's」→ person token 能结算且读方认；`scheduleMigration` 前驱钉 "19"；12 个文件的当前版本 "20" → "21"、「未来版本」21 → 22（逐条在提交里）。变异 M1–M4（读方 socket 分支、写方写 NULL、服务回到只认 Web、20 路径不迁移）在 clone 里各打红、0 字节还原。门 `npm test` 571 根文件：541 过＋30 个 `panel-dist-missing`（worktree 没 build web，非业务）→ build web 后这 30 个单跑 262/262 绿；35 跳过（固定的 8 个真依赖文件）。
+  - **装**：真库先 `sqlite3 .backup` 到 `~/.orca/backups/pre-schema21-20261029-135742/`（integrity ok、v20、61 行 commands），`npm run build`＋web build、`launchctl kickstart -k …/dev.orca.panel`；启动时自动迁移（另有 `control.sqlite.pre-v20-*`），现测 `schemaVersion=21`、7777 应答 200。⚠️ 旧版 Orca 不能再开这个库，回退用该备份。
+- **未合入，等人看**：分支 `ui/radix-select-trial`（worktree `.worktrees/radix-select`，基于主题删减那笔、**不含** schema 21）——`web/src/ui/Select.tsx` 包 `@radix-ui/react-select` 2.4.1（exact），只换了设置 › 外观的主题与语言两个下拉，其余仍原生，便于同页对比。详见 `handoff_ui.md` §七.八。
+- **事故（已恢复）**：worktree 里 `npm ci` 穿过软链清空了主仓 `node_modules`（§6.7 新增一条）；已在主仓 `npm ci`（锁文件 0 字节差、ccloop 仍解析到 `e25381f`）、重启面板 200；`git status` 干净。
+- **残余**：saved-result 收据工件对 socket 结算仍记行的 `principal`（`agent:cli`），旁边的 marker 记用户（spec §3，登记未改）；Radix 试样的判据只跑了 web 全套（183 文件，改写 `i18nSwitch` 后全绿），没做变异。
+
+### 3.00000000000000 测试者反馈轮（2026-10-28 规划 → 会话 `a9f9d6de` 2026-10-28／29 实施）
 
 > 台账 `.superpowers/sdd/2026-10-28-tester-feedback-round/progress.md`（人裁原话、每道门、变异、测量命令与原始数）。UI 细节在 `docs/handoff/handoff_ui.md` §七.七。
 > 人裁（实施会话）：「尽量将这些要做的task都完整做完」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「遇到卡住必须等人的事情，请继续做不必等人的部分」「执行完在最后阶段报给我审核」；ccloop 若需 repin 临时允许 push ccloop（**本轮 ccloop 没动，没 repin、没推**）。规划会话的人裁（顺序、#69/#70 不改、不做跨调用 session 复用、Board 不加批量／触摸／列／WebSocket）照旧有效。
 
 - **全部已 `--ff-only` 合入 Orca main 并装上**（`npm install` 只加包、`package-lock.json` 0 字节差；`npm run build`＋web build；`launchctl kickstart -k …/dev.orca.panel`，7777 应答 200；schema 不变）。按主题行找：
-  - **P0 #98–#104**（spec `docs/superpowers/specs/2026-10-28-recovery-cli-design.md`，**§4 更正优先于 §2**）：判据 `tests/control/testerStuckStates.test.ts` 用真代码路径重建测试者的库状态。结论：#98 不是缺陷（Retry 起草的下一稿等在旧调用的未知用量上，面板给了结算出口）；#99 复现不了（C22 已钉住；要测试者的 commands 行）；**#100 是缺陷，已修**（停住／挂起的需求调用不再挡归档，归档同事务把它置 `interrupted`）；#101 是设计路径；#102、#104 是测试者手改库造成的（代码到不了）；#103 新 CLI `orca recovery retry --run <run> --acknowledge charge-remaining-grant`，单调用结算接受所有者的 person token（记到该账号）。**`settle-unknown-usage` 仍只限 Web**——审阅发现 socket 路径会留下读方都拒的标记；要让 `orca task settle-usage` 能用需要命令台账记 person token 的账号（schema 变更，待人）。没做 force-archive／reset-dispatch。
+  - **P0 #98–#104**（spec `docs/superpowers/specs/2026-10-28-recovery-cli-design.md`，**§4 更正优先于 §2**）：判据 `tests/control/testerStuckStates.test.ts` 用真代码路径重建测试者的库状态。结论：#98 不是缺陷（Retry 起草的下一稿等在旧调用的未知用量上，面板给了结算出口）；#99 复现不了（C22 已钉住；要测试者的 commands 行）；**#100 是缺陷，已修**（停住／挂起的需求调用不再挡归档，归档同事务把它置 `interrupted`）；#101 是设计路径；#102、#104 是测试者手改库造成的（代码到不了）；#103 新 CLI `orca recovery retry --run <run> --acknowledge charge-remaining-grant`，单调用结算接受所有者的 person token（记到该账号）。**`settle-unknown-usage` 仍只限 Web**——审阅发现 socket 路径会留下读方都拒的标记；要让 `orca task settle-usage` 能用需要命令台账记 person token 的账号（schema 变更）——**会话 `3ea8a21e` 已做（schema 21）**。没做 force-archive／reset-dispatch。
   - **拆分线**：split 指令 v3（#107：loop plan 约束、trace id 规则、退回原因附人话）；#105 新原因 `context-unreported`（在目录但没报窗口）；轮次按链上位置编（id、文档、校验器三处）；拆分重试改**修订模式**（上一份有任务的稿＋点名的原因，只改点名的）。设计记录 `docs/superpowers/specs/2026-10-28-split-prompt-v3-design.md`（§6 是审阅后的更正与登记的 5 条 Minor）。
   - **付费量 token**（人批，codex `gpt-6-luna`，中等需求）：2 轮澄清 → 共识 → 第 1 稿一次过；3 次调用各一轮、无工具；input 约 12.6–13.0 k／次，组共 42335 token；codex 不报 USD（测量命令与逐次数字在台账）。**测试者每稿 28–30 万没复现**，要测试者那次拆分 run 的 `…/single-call/call-*/events.jsonl` 才能往下查；「探索笔记」按此证据不需要。
   - **UI**：Radix＋Tailwind v4 全量迁移（preflight 开、共享类成 `@utility`）、测试者 #73/#74/#76/#79/#83/#86/#90/#106/#107(面板)/#54、10 个候选主题重做／新增——详见 `handoff_ui.md` §七.七。
@@ -356,7 +368,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`，§3 最新一节）。下一件候选：人看完 UI 与主题后的删改（`handoff_ui.md` §七.七 待人项）；拿到测试者的 `events.jsonl`／commands 行后再查 token 构成与 #99；`orca task settle-usage` 走 socket 要的台账 schema 变更（先写设计、等人点头）；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
+8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。下一件候选：**人看 Radix Select 试样后定全量换还是删分支**（`handoff_ui.md` §七.八）；测试者数据（#99 commands 行、拆分 run 的 `events.jsonl`）**可选**——人说「不一定能拿到」，拿到再查；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -461,6 +473,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - 全新 clone／worktree 跑 `tests/panel` 前先 `npm run build --workspace web`，否则 `panel-dist-missing` 假红；改了 web 要重 build 再重起面板（旧进程服务旧 `web/dist`）。
 - *** **worktree 的软链 `node_modules` 永远不要 `git add -A`。** *** 并行时收工前看一眼 `git status`（后台进程曾往工作树写重复行）。
+- 🔴 *** **软链着主仓 `node_modules` 的 worktree 里绝不能跑 `npm ci`：它会穿过软链清空主仓的 `node_modules`**（会话 `3ea8a21e` 实测：主仓只剩空目录，钩子的 `tsx` 消失、面板服务靠已加载模块撑着），之后才删软链、往 worktree 自己装。⚠️ 那次的 `unlink` 本来写在同一条命令里，但闸门因为子 shell／分组**整条拒掉**，`unlink` 根本没跑——**被闸门拒的复合命令里每一步都没执行**，重发前先核前置状态。恢复：主仓 `npm ci`（锁文件相同即可复现）＋重启面板。worktree 要真依赖：`/bin/cp -Rc <主仓>/node_modules <wt>/node_modules`（APFS 克隆，秒级），再 `npm install <包> --prefer-offline`（不加 `--prefer-offline` 时 npm 卡住 >10 分钟无子进程）。
 - **临时目录泄漏护栏**：每个测试文件一个临时根（`tests/setup/scopeTmpdir.ts`），`node scripts/check-tmp-leak.mjs`（两仓都有）要 0 残留；`TMPDIR` 要**短、真目录**（如 `mktemp -d /private/tmp/cl-XXXX`）——放 scratchpad 下 tsx socket 超 104 字节、用软链则路径判据红。
 - `verify:control` 必须配**只指向 fake** 的 `ORCA_AGENTS_TABLE`，fake codex 用 `integration` 模式（`ok`／`script` 会让 `ccloopProtocol.integration` 红）。
 - `npm run verify` 是 `&&` 链：有预期红时**逐段单跑各取 RC**；它打印多档计数，别混着比；跨 Task 比红集合要同一套 env（skip 变 run 不是新红）。
@@ -534,11 +547,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `a9f9d6de` 待人审／待人给**（测试者反馈轮；原委在台账与 `handoff_ui.md` §七.七）：
-  1. 审：UI 全部（真浏览器、逐主题），留哪些主题；替人定的可逆项（原生 select 不换 Radix Select、两处 warn 边框混色 → 45%、terminal 主题 tab 随密度矮 4px、删 `.btn`／`.btn-danger`、主题块不拆文件）；检测器留着的两条 Inter `overused-font`（人裁用 Inter）。
-  2. 给（转测试者）：#99 那个组的 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组的 `status`；拆分 run 的 `<control>.runs/<run>/run/<kind>/1/single-call/call-*/events.jsonl`。
-  3. 定：`orca task settle-usage` 走 socket 需要命令台账记 person token 的账号（schema 变更）——做不做。
-  4. push：Orca 本地 main 领先远端（本轮 UI 与收尾提交）；ccloop／ccmem 本轮无改动。
+- **会话 `3ea8a21e` 待人看／待人定**：
+  1. 看 Radix Select 试样（`handoff_ui.md` §七.八 有起面板的命令与截图路径），定：全量换（56 个原生下拉、32 个测试文件、项目选择器 #69/#70 冻结要不要放开）还是删分支 `ui/radix-select-trial`。
+  2. 审替人定的：settle-usage 的设计（spec `2026-10-29-socket-usage-settlement-design.md`，尤其 §3 没改的收据工件）；被删主题的已存选择回落 `system`（没做旧 id → 新主题映射）。
+  3. 测试者数据（可选，人说不一定拿得到）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
+- ~~会话 `a9f9d6de` 待人审／待人给~~ **人已全部回复**（会话 `3ea8a21e` 开头）：主题留七个、其余删（已做）；可逆项同意，原生 select 改为试 Radix（试样待看）、terminal 删；settle-usage schema「同意」（已做）；push 人已做；测试者数据去问。
 - ~~会话 `e236bbe4` 待人看／待人定~~ **人已全部回复**（测试者反馈轮台账）：控制器三条裁定「同意」；轮次编号按链上位置；主题「都不太满意」⇒ 整体重做；codex 拆分自测的结果就是测试者 #105／#107。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：
   1. 审控制器裁定：已完成的 run 不给 skip/defer；转录 C2（窗口 4 MiB）、C3（展开前只脱敏头部＋4096）、赋值名大小写不敏感、超大行展开显示解码文本；计划库放控制库而不是文件；dir 需求 D3 窄碰撞规则；R2 D7（自动确认即开跑）、D11（估算超额时非 token 维度上限随之增长）、M5（修复迁移后的旧不限 token 草稿组会被自动确认开跑）；H7 W1–W15。

@@ -9,7 +9,8 @@
 > ✅ §七.五（深色框过暗；j/k 是 Vimium 吞键）已由人复验、合并并 push（会话 `9b012714`，2026-10-16 现测：`git merge-base --is-ancestor ui/panel-taste main` RC 0，`origin/main` 与本地 main 一致）。
 > ✅ §七.六（组件层重做＋六个候选主题，会话 `e236bbe4`，2026-10-28）已由 agent `--ff-only` 合入 main 并装上；**等人看完全部主题说留哪些**。
 > ✅ §七.七（Radix＋Tailwind v4 全量迁移＋主题重做＋测试者 UI 项，会话 `a9f9d6de`，2026-10-28／29）已由 agent `--ff-only` 合入 main 并装上；**等人看**（待人项见该节末）。§七.六 的「等人选主题」被本节的主题重做取代。
-> ⚪ **当前没有在飞的 UI 工作、没有待合并的 UI 提交。** 下一轮从 §〇.一 开始。（人要求后续问题继续追加在本文）
+> ✅ §七.七 的待人项人已回复（会话 `3ea8a21e`，2026-10-29）：主题删减已合入并装上；Radix Select 试样见 §七.八。
+> 🟡 **在飞：分支 `ui/radix-select-trial`（§七.八）等人看，未合入。** 下一轮从 §七.八「待人」开始。（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -349,8 +350,26 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 - 门：最终提交 `npm test` 865 文件（682 根、183 web），web 全绿，根 1 红 `startForm`（已登记，单跑 9/9）；37 个跳过（同样 10 个文件）。构建 0 条 CSS 警告；impeccable 检测器只剩 `fonts.css` 两条 Inter `overused-font`（人裁用 Inter，保留）。截图：`/private/tmp/orca-a9f9d6de/ui/final/shots-after2/`（light／dark／navy／frost／terminal × 390／1280 × 15 视图；390px 横向溢出全 0）；13 个主题 × 4 页的截图在 `/private/tmp/orca-a9f9d6de/ui/themes/shots1/`。
 
 **待人看／待人定**：
+> 人已回复（会话 `3ea8a21e`）：1 留 霜白／深色／浅色／蔷薇／紫夜／暮色／余烬，其余删（已做，含 terminal）；2 除下面两处外都同意——原生 select「是不是可以换成 Radix Select 看下效果」（§七.八）、「terminal 主题不好看」（已删）；3 lagoon 已删。原文保留如下。
+
 1. 真浏览器里逐页、逐主题看一遍；留哪些主题（不要的：删主题块、`THEME_PREFS` 项、locale 名字，并改 `themes.test.ts` 清单与 `i18nPseudo.test.tsx` 的枚举计数）。
 2. 控制器／子代理替人定的、可逆的：原生 select 不换 Radix Select；不确定操作框与降级判定 pill 改用 `data-tone="warn"`（边框 warn 混色 55%/34% → 45%）；terminal 主题的 Decisions／Corrections tab 矮 4px（随该主题密度，与设置页 tab 一致）；`.btn`／`.btn-danger` 删除（无人用）；主题块没拆到 `src/themes.css`（可选步，未做）。
 3. 口味：`lagoon` 的选中行（琥珀叠青）偏橄榄色，过了选区对比度 ≥1.4。
 
 **残余**：遗留的 px 字面量（`px-[10px]` 一类）不随主题密度变；组详情的 region tab 在种子世界里截不到图（与纠正页 tab 同一串类，那边 0 diff）；`GroupList.tsx` 与 `src/relativeTime.ts` 各有一份「N 分钟前」措辞。
+
+
+## 七.八、主题删减与 Radix Select 试样（会话 `3ea8a21e`，2026-10-29）
+
+**主题（已合入 main 并装上）**：主题行 `feat(web): keep the seven themes the human picked; drop ink, contrast, navy, lagoon and terminal`。`THEME_PREFS` = system／light／dark／frost／rose／violet／dusk／ember；删了五个主题块、`nav-count` 的高对比反色、两份 locale 名字，`DESIGN.md` 主题清单同步；已存被删 id 的浏览器读成 `system`。
+
+**Radix Select 试样（未合入）**：分支 `ui/radix-select-trial`，worktree `/Users/biran/code/skills/orca/Orca/.worktrees/radix-select`（自带真 `node_modules`，APFS 克隆自主仓再加包；**不是软链**）。
+- `web/src/ui/Select.tsx`：包 `@radix-ui/react-select` 2.4.1（exact，2026-10-12 发布）；触发器是字段高度的按钮（字段底色与边框），列表像菜单一样浮在 portal 里，选中项 ✓＋加粗；Radix 不许空串值，内部用占位映射；给了 `name` 时 Radix 仍渲染隐藏的原生 select。
+- 只换了设置 › 外观的**主题**与**语言**两个下拉；同页侧栏的「项目」仍是原生，可直接对比。判据改写：`web/tests/i18nSwitch.test.tsx` 改为键盘打开触发器、Enter 选项（jsdom 补了 `scrollIntoView`／`hasPointerCapture`）。web 全套 183 文件全绿；没做变异（试样）。bundle +19.5 kB（gzip +7 kB），chunk 体积警告 main 上本来就有。
+- 截图：`/private/tmp/orca-s29/shots/{light,dark,rose,violet}-{1280,390}-{closed,open}.png`（390 px 横向溢出 0、无 pageerror）。
+- 看真浏览器：`/private/tmp/orca-s29/radix-panel.sh`（端口 7796，复用会话 `e236bbe4` 的隔离世界，HOME／ORCA 目录都改道，**不碰真面板**）；登录名 `tester`，密码在 `/private/tmp/orca-e236bbe4/ui/password.txt`。
+
+**待人**：看完定——(a) 全量换：56 个原生下拉、25 个组件、约 32 个测试文件靠 `selectOptions`／`combobox`，项目选择器（#69/#70 裁定冻结）要不要一起换要人说；迁移规约 `web/TAILWIND-MIGRATION.md` 的「不换原生 select」那句随之改；(b) 不换：删分支与 worktree（`git worktree remove` 后 `git branch -D` 归人，因为分支未合并）。
+
+**残余**：Radix 的箭头用字符 ▾，和原生下拉的 CSS 箭头略有不同；触屏上失去原生滚轮选择器。
+
