@@ -76,6 +76,13 @@ export function settlingPersonFor(commandId: string): string | null {
   if (c.client === "web") return c.principal.startsWith("user:") ? c.principal : null;
   return c.personAuthority === true && c.personPrincipal !== undefined && c.personPrincipal.startsWith("user:") ? c.personPrincipal : null;
 }
+/**
+ * Socket usage settlement spec 2026-10-29 §2: the ledger row's `person_principal` -- the person token's account for a
+ * socket command with person authority, null for a Web row (its principal already names the account) and for anyone else.
+ */
+export function ledgerPersonFor(commandId: string): string | null {
+  return commandClientFor(commandId) === "web" ? null : settlingPersonFor(commandId);
+}
 /** Live transcript spec §10.5.3: whether the routed principal of this command may pause; false when none was routed. */
 export function routedPauseAuthorityFor(commandId: string): boolean { return forCommand(commandId)?.pauseAuthority === true; }
 /** CLI v2 spec §16: the attribution where a store holds one line of text. */

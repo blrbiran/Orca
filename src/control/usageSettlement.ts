@@ -163,8 +163,9 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     }
     const proof = settlementProof(store, run);
     if (!settlementSame(proof.report, m.report) || !settlementSame(proof.stopProof, m.stopProof)) return false;
-    const row = store.db.prepare("SELECT principal,client,verb,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, m.commandId);
-    if (!row || row.principal !== m.principal || row.client !== "web" || row.verb !== "settle-unknown-usage") return false;
+    const row = store.db.prepare("SELECT principal,client,person_principal,verb,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, m.commandId);
+    // A Web owner's row names the account as its principal; a socket row (spec 2026-10-29 §2) names it as person_principal.
+    if (!row || row.verb !== "settle-unknown-usage" || (row.client === "web" ? row.principal !== m.principal : row.person_principal !== m.principal)) return false;
     const receipt = JSON.parse(String(row.body_json)).result;
     if (receipt?.kind !== "usage-settled" || receipt.runId !== run.runId || receipt.taskId !== run.taskId || receipt.generation !== run.generation
       || receipt.method !== m.method || receipt.at !== m.at || !settlementSame(receipt.charged, m.charged)) return false;

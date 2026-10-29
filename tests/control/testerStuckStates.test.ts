@@ -5,6 +5,7 @@ import { pendingRequirementCall } from "../../src/control/requirementCalls.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { requirementSummaryOf } from "../../src/panel/controlViews.js";
 import { routedCommandContext } from "../../src/panel/controlApi.js";
+import { hasValidUsageSettlement } from "../../src/control/usageSettlement.js";
 import { unknownFailure } from "./fixtures/unknownFailure.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -100,7 +101,8 @@ describe("#102: a requirement call blocked on unknown usage across a restart", (
 
 // #103: the recovery CLI's settlement goes over the control socket. A single call's charge-and-retry was an owner's act on
 // the Web only; an owner's person token now carries it, booked to that owner's account. A run Orca dispatched never has
-// person authority (permissions.ts hasPersonAuthority). A task run's settle-unknown-usage stays the Web's (below).
+// person authority (permissions.ts hasPersonAuthority). A task run's settle-unknown-usage too since session 2026-10-29
+// (spec 2026-10-29-socket-usage-settlement-design.md; below).
 const TOKEN = { client: "cli", principal: "agent:cli", personAuthority: true, personPrincipal: "user:u-owner" };
 const DISPATCHED = { client: "cli", principal: "agent:cli", personAuthority: false, personPrincipal: "user:u-owner" };
 
@@ -121,15 +123,25 @@ describe("#103: settling over the socket with an owner's person token", () => {
     } finally { await x.dispose(); }
   });
 
-  // Review finding 1 (session a9f9d6de): a task run's marker is checked against a Web ledger row, so a socket settlement
-  // would book the charge and leave a marker every reader refuses; it stays the Web owner's, refused here before any write.
-  it("a task run's settle-unknown-usage stays the Web owner's: a person token is refused and nothing is charged", async () => {
+  // Review finding 1 (session a9f9d6de) kept this the Web owner's: the marker is checked against its ledger row, and a
+  // socket row named only `agent:cli`, so every reader would have refused the marker. Ruling: human 「这次批准改写所有必要的判据」
+  // (session 2026-10-29, the schema change 「同意」): the row now records the token's account, so the settlement is booked
+  // to it and the readers accept it; without person authority it is still refused before any write.
+  it("a task run's settle-unknown-usage over the socket: a person token settles it, booked to that owner and valid to readers; no person authority is refused", async () => {
     const { t, runId } = await unknownFailure();
     try {
       const before = t.body(runId);
-      const command = { ...(t.h.command as (verb: string, payload: unknown) => Record<string, unknown>)("settle-unknown-usage", { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" }), commandId: "settle-token" };
-      await expect(withCommandContext(command.commandId, TOKEN, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<unknown> }).settleUnknownUsage(command))).rejects.toThrow("control-verb-human-only");
+      const send = (id: string, context: typeof TOKEN) => {
+        const command = { ...(t.h.command as (verb: string, payload: unknown) => Record<string, unknown>)("settle-unknown-usage", { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" }), commandId: id };
+        return withCommandContext(id, context, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<unknown> }).settleUnknownUsage(command));
+      };
+      await expect(send("settle-dispatched", DISPATCHED)).rejects.toThrow("control-verb-human-only");
       expect(t.body(runId)).toEqual(before);
+      expect(await send("settle-token", TOKEN)).not.toHaveProperty("error");
+      const after = t.body(runId);
+      expect(after.usageSettlement).toMatchObject({ principal: "user:u-owner", commandId: "settle-token" });
+      expect(t.h.store.db.prepare("SELECT client,principal,person_principal FROM commands WHERE id='settle-token'").get()).toEqual({ client: "cli", principal: "agent:cli", person_principal: "user:u-owner" });
+      expect(hasValidUsageSettlement(t.h.store, after)).toBe(true);
     } finally { await t.h.dispose(); }
   });
 

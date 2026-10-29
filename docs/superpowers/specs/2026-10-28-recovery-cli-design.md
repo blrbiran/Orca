@@ -72,3 +72,9 @@ have booked the charge and left a marker every reader refuses (`run-usage-settle
   owner's" and mutation M10 (the Web check removed → red) pin the narrowing.
 - The two #100 criteria now assert `pendingRequirementCall(...) === null` after the archive (review: counting sends
   could not go red while the usage flag or the stop still held the call).
+
+## 5. Follow-up (session 2026-10-29)
+
+The human approved the schema change §4 registered (「同意」). `orca task settle-usage` now settles a task run's unknown
+usage with an owner's person token: spec `2026-10-29-socket-usage-settlement-design.md` (schema 20 → 21,
+`commands.person_principal`). §4's first bullet describes this spec's round and stays as written.

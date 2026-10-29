@@ -1,6 +1,6 @@
 import {revokeRecoveryFence} from "./savedResultRecoveryPackage.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
+import { commandClientFor, commandPrincipalFor, ledgerPersonFor } from "./commandClient.js";
 import { ControlError, durableCommandErrorStatus } from "./errors.js";
 import { appendActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
@@ -298,14 +298,14 @@ function persistCommandOutcome(
   store.db.prepare(`INSERT INTO commands(
     group_id,id,payload_hash,result,ledger_version,scope_kind,scope_id,actor_id,verb,target_json,expected_revision,
     raw_request_json,raw_request_hash,effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash,
-    original_status,body_json,response_bytes,command_revision,projection_seq,client,principal
-  ) VALUES (?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    original_status,body_json,response_bytes,command_revision,projection_seq,client,principal,person_principal
+  ) VALUES (?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     commandScope.key, rawCommand.commandId, rawRequestHash, bodyJson, commandScope.kind, commandScope.id, rawCommand.actorId,
     rawCommand.verb, canonicalBytes(rawCommand.target).toString("utf8"), rawCommand.expectedRevision, rawRequestJson, rawRequestHash,
     effectiveIdentity?.effectivePayloadJson ?? null, effectiveIdentity?.effectivePayloadHash ?? null,
     effectiveIdentity?.authorityCommandJson ?? null, effectiveIdentity?.authorityCommandHash ?? null,
     outcome.status, bodyJson, responseBytes, commandRevision, projectionSeq,
-    commandClientFor(rawCommand.commandId), commandPrincipalFor(rawCommand.commandId),
+    commandClientFor(rawCommand.commandId), commandPrincipalFor(rawCommand.commandId), ledgerPersonFor(rawCommand.commandId),
   );
 }
 

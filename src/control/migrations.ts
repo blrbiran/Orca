@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 
-export const schemaVersion = "20";
+export const schemaVersion = "21";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -226,6 +226,16 @@ CREATE INDEX IF NOT EXISTS schedules_by_project ON schedules(project_id);
 CREATE INDEX IF NOT EXISTS plan_library_by_project ON plan_library(project_id);
 `;
 
+// Socket usage settlement spec 2026-10-29 §2: the person token's account beside a socket command's principal, so a
+// settlement marker booked to that account is backed by its ledger row. Nullable; existing rows read NULL.
+export const schema20To21 = `ALTER TABLE commands ADD COLUMN person_principal TEXT;
+`;
+
+/** 20 → 21: idempotent, so a store a criterion downgraded by dropping only the marker keeps working. */
+function migrate20To21(store: DatabaseSync): void {
+  if (!store.prepare("PRAGMA table_info(commands)").all().some((row) => row.name === "person_principal")) store.exec(schema20To21);
+}
+
 /** Re-keys `requirement_rounds` once: a store whose table already has `step_key` (a fresh one, or a re-run step) is left as it is. */
 function rekeyRequirementRounds(store: DatabaseSync): void {
   if (store.prepare("PRAGMA table_info(requirement_rounds)").all().some((row) => row.name === "step_key")) return;
@@ -234,7 +244,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -331,7 +341,7 @@ function repairOf(store: DatabaseSync, groupId: string, group: Body, now: () => 
   return writes;
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, then the version marker. */
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, then the version marker. */
 function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
@@ -339,6 +349,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   migrate17To18(store);
   repairEstimateBreachedGroups(store, now);
   store.exec(schema19To20);
+  migrate20To21(store);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -358,14 +369,21 @@ function migrate7To8(store: DatabaseSync): void {
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
+  if (fromVersion === "20") {
+    migrate20To21(store);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "19") {
     store.exec(schema19To20);
+    migrate20To21(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "18") {
     repairEstimateBreachedGroups(store, now);
     store.exec(schema19To20);
+    migrate20To21(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -373,6 +391,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate17To18(store);
     repairEstimateBreachedGroups(store, now);
     store.exec(schema19To20);
+    migrate20To21(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -381,6 +400,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate17To18(store);
     repairEstimateBreachedGroups(store, now);
     store.exec(schema19To20);
+    migrate20To21(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

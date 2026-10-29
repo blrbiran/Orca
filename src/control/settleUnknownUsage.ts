@@ -5,7 +5,7 @@ import { hasTokenPolicy } from "./fundedAllowance.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { commandClientFor, commandPrincipalFor } from "./commandClient.js";
+import { settlingPersonFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
@@ -96,11 +96,11 @@ export function chargeRunRemainder(
 const stoppedWorking = (run: SettlementRun): boolean => run.drive?.outcome === null && run.state === "settled-unrecoverable";
 export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, command: SettleUnknownUsageCommand): Promise<CommandSuccessV1 | CommandErrorBodyV1> {
   const { store } = deps;
-  // Tester #103 review (2026-10-28): stays an owner's act on the Web. Its marker is checked against this command's ledger
-  // row (hasValidUsageSettlement wants `client === "web"` and the same principal), and a socket row records `agent:<c>`,
-  // so a socket settlement would book the charge and leave a marker every reader refuses. The CLI row stays token-tier.
-  const principal = commandPrincipalFor(command.commandId);
-  if (commandClientFor(command.commandId) !== "web" || principal === null || !principal.startsWith("user:")) throw new Error("control-verb-human-only: authenticated owner Web context required");
+  // Tester #103 review (2026-10-28) kept this the Web owner's: the marker is checked against this command's ledger row,
+  // and a socket row recorded only `agent:<c>`. Socket usage settlement spec 2026-10-29: the row now also records the
+  // person token's account (`person_principal`, ledgerPersonFor), so an owner's person token settles too, booked to it.
+  const principal = settlingPersonFor(command.commandId);
+  if (principal === null) throw new Error("control-verb-human-only: an owner (Web account or person token) required");
   const release = deps.admissionGate?.enter();
   try {
     // Evidence read before authority transaction. Its exact run/report/checkpoint snapshot is rechecked inside it.

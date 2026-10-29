@@ -15,7 +15,9 @@ const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof
  */
 const NEW_TABLES = ["plan_library", "plan_library_versions", "schedule_fires", "schedules"];
 const NEW_INDEXES = ["plan_library_by_project", "schedules_by_project"];
-const predecessor = String(Number(schemaVersion) - 1);
+// Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29): the step this criterion measures is 19 -> 20; once a
+// later step exists, "current - 1" names that step's predecessor, whose stores already have the four tables.
+const predecessor = "19";
 
 type Db = InstanceType<typeof DatabaseSync>;
 const tableSql = (db: Db) =>
