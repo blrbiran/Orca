@@ -18,6 +18,7 @@ import { THEME_PREFS } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import type { SettingsCategory } from "./sections.js";
 import { inlinePick, settingsRegion } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 /** One category's content, under its own page title; only the active one shows. */
 export function SettingsCategoryPane(props: { category: SettingsCategory; active: SettingsCategory; title?: boolean; children: ReactNode }): JSX.Element {
@@ -46,14 +47,13 @@ export function GlobalSettings(props: {
         <p>{t("settings.browserScope")}</p>
         <div className="mb-4 flex flex-wrap gap-4">
           <label className={inlinePick}>{t("shell.theme")}
-            <select name="theme" value={props.theme} onChange={(e) => props.onTheme(e.currentTarget.value as ThemePref)}>
-              {THEME_PREFS.map((pref) => <option key={pref} value={pref}>{enumText("theme", pref)}</option>)}
-            </select>
+            {/* Trial (session 2026-10-29): Radix Select here and for the language, native everywhere else, to compare. */}
+            <Select name="theme" value={props.theme} onValueChange={(value) => props.onTheme(value as ThemePref)}
+              options={THEME_PREFS.map((pref) => ({ value: pref, label: enumText("theme", pref) }))} />
           </label>
           <label className={inlinePick}>{t("shell.language")}
-            <select name="language" value={props.language} onChange={(e) => props.onLanguage(e.currentTarget.value as PanelLanguage)}>
-              {PANEL_LANGUAGES.map((lang) => <option key={lang} value={lang}>{LANGUAGE_NAMES[lang]}</option>)}
-            </select>
+            <Select name="language" value={props.language} onValueChange={(value) => props.onLanguage(value as PanelLanguage)}
+              options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} />
           </label>
           <label className={inlinePick}><input type="checkbox" checked={props.showAdvanced ?? false}
             onChange={(event) => props.onAdvanced?.(event.currentTarget.checked)} />{t("settings.showAdvanced")}</label>
