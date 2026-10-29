@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { THEME_PREFS } from "../src/theme.js";
+import { THEME_PREFS, readTheme } from "../src/theme.js";
 import { en } from "../src/locales/en.js";
 import { zh } from "../src/locales/zh.js";
-import { utility } from "./sourceClasses.js";
 
 /**
  * Session e236bbe4 (human, away: "add selectable themes ... each must still pass WCAG AA"): every theme the Settings
@@ -65,11 +64,19 @@ describe("the theme list (session e236bbe4)", () => {
   // candidates to be reworked and 4-6 new themes added: rose, ink, violet, lagoon join, light candidates before dark ones,
   // and no earlier id is dropped, so a stored choice of any of them still applies).
   it("offers system, the default pair, then the light candidates and the dark candidates, in that order", () => {
-    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "ink", "contrast", "violet", "navy", "lagoon", "dusk", "ember", "terminal"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」).
+    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "violet", "dusk", "ember"]);
   });
 
-  it("keeps every id an earlier panel could have stored, so nobody's choice silently falls back to system", () => {
-    for (const earlier of ["system", "light", "dark", "frost", "contrast", "navy", "ember", "dusk", "terminal"]) expect(THEME_PREFS, earlier).toContain(earlier);
+  // The five dropped ids were stored by browsers that picked them; such a browser must land on a working theme (system),
+  // not on a data-theme the stylesheet no longer defines.
+  // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」).
+  it("reads a stored choice of a dropped theme as system", () => {
+    for (const dropped of ["ink", "contrast", "navy", "lagoon", "terminal"]) {
+      expect(THEME_PREFS as readonly string[], dropped).not.toContain(dropped);
+      expect(readTheme({ getItem: () => dropped }), dropped).toBe("system");
+    }
+    expect(readTheme({ getItem: () => "ember" })).toBe("ember");
   });
 
   it("has a stylesheet block for every pinned theme and no block the picker cannot reach", () => {
@@ -190,15 +197,8 @@ describe.each(PINNED)("theme %s stays readable (WCAG AA)", (theme) => {
 
   // Seen on the first contrast-theme screenshot: the sidebar's count (text-strong on --border-strong) read 115 as black on black.
   it("keeps the sidebar count readable on its chip", () => {
-    if (theme === "contrast") {
-      // that theme inverts the chip: its card colour on its strongest text
-      // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; final pass: the chip is the nav-count @utility in index.css, its contrast-theme inversion nested in it).
-      // mutation: drop the nested inversion -> red
-      expect(utility("nav-count")).toMatch(/:root\[data-theme="contrast"\] & \{ background: var\(--text-strong\); color: var\(--card\); \}/);
-      expect(ratio(c("card"), c("text-strong"))).toBeGreaterThanOrEqual(4.5);
-    } else {
-      expect(ratio(c("text-strong"), c("border-strong"))).toBeGreaterThanOrEqual(4.5);
-    }
+    // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」). The contrast theme and its inverted chip are gone; every remaining theme reads the chip uninverted.
+    expect(ratio(c("text-strong"), c("border-strong"))).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps every tone readable: strong text on its fill, the tone colour itself as text on a card", () => {
@@ -231,15 +231,5 @@ describe.each(PINNED)("theme %s stays readable (WCAG AA)", (theme) => {
       expect(ratio(c("border-strong"), card), "control edge/card").toBeGreaterThanOrEqual(1.5);
       expect(ratio(selected, card), "selected/card").toBeGreaterThanOrEqual(1.1);
     }
-  });
-});
-
-describe("the high-contrast theme", () => {
-  it("holds every text pair at 7:1 and its edges at 3:1", () => {
-    const { c } = palette("contrast");
-    for (const ink of ["text", "text-strong", "muted", "accent", "ok", "warn", "danger", "info"]) {
-      for (const under of ["card", "bg", "well", "bg-hover"]) expect(ratio(c(ink), c(under)), `${ink} on ${under}`).toBeGreaterThanOrEqual(7);
-    }
-    expect(ratio(c("border"), c("card"))).toBeGreaterThanOrEqual(3);
   });
 });

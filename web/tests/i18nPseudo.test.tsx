@@ -365,7 +365,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Clarify caps spec 2026-10-21 §3.6: requirementScope (3) and requirementClarity (3): 189 + 6.
     // Ruling: session e236bbe4 blanket authorization — the theme family gains six candidate themes (frost, contrast, navy, ember, dusk, terminal): 195 + 6.
     // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the theme family gains four themes -- rose, ink, violet, lagoon): 201 + 4.
-    expect(ENUM_VALUES.length).toBe(205);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」). The theme family drops five (ink, contrast, navy, lagoon, terminal): 205 - 5.
+    expect(ENUM_VALUES.length).toBe(200);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

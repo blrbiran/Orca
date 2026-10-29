@@ -6,19 +6,14 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - Light = warm paper (`--bg #f6f4ef`, cards `#fffdf9`, warm grey text). Dark = neutral graphite (channels within 10, blue ≥ red); never warm.
 - Layers separate by stepping LIGHTER in dark, DARKER-edged in light. Values are pinned by `tests/contrast.test.ts` and `tests/lightTheme.test.ts` — re-run both before changing any token.
 - The two light blocks are identical by rule (`lightTheme.test.ts`).
-- Selectable themes (session e236bbe4; reworked and extended in the tester round 2026-10-28, controller session a9f9d6de, human: 「之前的主题都不好看，你可以都整体再优化一遍」): `system` (follows the browser) · `light` · `dark` stay the defaults above and keep the shared scale. The candidates (the human keeps or drops) each set palette, type, corners and density together — light ones first:
+- Selectable themes (session e236bbe4; reworked and extended in the tester round 2026-10-28, controller session a9f9d6de, human: 「之前的主题都不好看，你可以都整体再优化一遍」): `system` (follows the browser) · `light` · `dark` stay the defaults above and keep the shared scale. The candidates the human kept (session 2026-10-29: 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬; `ink`, `contrast`, `navy`, `lagoon` and `terminal` dropped) each set palette, type, corners and density together — light ones first:
   - `frost` — crisp cool daylight, ocean-blue accent; Inter; radii 5/8/12; roomier controls (34/28).
   - `rose` — warm ivory, rose accent; Inter; radii 6/10/16; spacious (5 px step, controls 36/30).
-  - `ink` — editorial monochrome, black primary, colour only for tones; Inter; square; compact (3 px step, 28/24).
-  - `contrast` — high-contrast daylight, every text pair ≥7:1; system type; radii 2/3/4; taller controls (34/28).
   - `violet` — Linear-style near-black with a violet cast, lilac accent; Inter; radii 4/6/8; compact.
-  - `navy` — deep blue-violet midnight, periwinkle accent; Inter; radii 6/8/14; roomier controls.
-  - `lagoon` — deep teal, cream text, amber accent (after Hermes Teal); system type; radii 5/8/12; roomier controls.
   - `dusk` — soft low-glare slate, lavender accent; system type; radii 6/10/16; spacious.
   - `ember` — forge-at-night brown-black, bronze accent; system type; radii 2/3/4; tighter controls (30/24).
-  - `terminal` — phosphor green on green-black; JetBrains Mono throughout; square; compact (controls 28/22).
 - Each candidate is one `:root[data-theme="<id>"]` block placed after the system-light block, defining every colour token the light block does, with the right `color-scheme`. A theme changes the look beyond colour ONLY through the scale tokens: `--font` / `--mono` (the bundled `var(--font-sans)` / `var(--font-mono)`, or left to the system stack), `--radius-xs` / `--radius-sm` / `--radius`, and density as a whole scale (`--space-1..5` on the 1-2-3-4-6 ratio, `--control-h`, `--control-h-sm`). `index.css` hands these to the utilities (`--spacing` is `--space-1`, `rounded-*` the radii, `h-control` the heights), so migrated and legacy components follow one switch; px literals in the legacy sheet do not, until they migrate.
-- `web/tests/themes.test.ts` holds every theme to the same bar: text ≥7 and secondary ≥4.5 on every surface, accent links ≥4.5, labels on the accent (resting and hover) ≥4.5, tones ≥4.5, focus ring ≥3, dark themes step lighter (page < card < well < field); and every candidate sets its radii plus its type or density, density as a whole scale, fonts only from the bundle. No earlier id was dropped, so a stored choice still applies.
+- `web/tests/themes.test.ts` holds every theme to the same bar: text ≥7 and secondary ≥4.5 on every surface, accent links ≥4.5, labels on the accent (resting and hover) ≥4.5, tones ≥4.5, focus ring ≥3, dark themes step lighter (page < card < well < field); and every candidate sets its radii plus its type or density, density as a whole scale, fonts only from the bundle. A stored choice of a dropped id reads as `system`.
 - Inset boxes (metric tiles, the project control, notices, detail blocks, nested sections) paint `--well`; form fields paint `--field`. In dark: card < well < field, each one step lighter, and no box ever wears the page colour `--bg`. In light both are the paper well (`--bg`).
 
 ## Tone, not role

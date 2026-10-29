@@ -7,12 +7,14 @@
  * Tester round 2026-10-28 (controller session a9f9d6de; human: 「之前的主题都不好看，你可以都整体再优化一遍」): the six reworked
  * (each now sets type, radius and density as well as colour) and four added (rose, ink, violet, lagoon); light themes
  * first, then dark. No id was dropped, so a stored choice of any earlier name still applies.
+ * Session 2026-10-29 (human picked 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬 and 「其他可以删掉」): ink, contrast, navy, lagoon and
+ * terminal were dropped; a browser that stored one of them reads it as "system" (readTheme), its stored value untouched.
  */
 export const THEME_KEY = "orca.panel.theme";
 export const THEME_PREFS = [
   "system", "light", "dark",
-  "frost", "rose", "ink", "contrast",
-  "violet", "navy", "lagoon", "dusk", "ember", "terminal",
+  "frost", "rose",
+  "violet", "dusk", "ember",
 ] as const;
 export type ThemePref = (typeof THEME_PREFS)[number];
 

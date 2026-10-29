@@ -126,7 +126,7 @@ All of these, on the batch's branch:
   mutated file's tests run; restore and prove `git diff | wc -c` = 0 with `/usr/bin/git`.
 - Detector: `/Users/biran/code/skills/UI/impeccable/skill/scripts/impeccable detect --json web/src` — only the
   findings listed in the C1 report may remain (the two `overused-font` lines in `fonts.css`).
-- Screenshots: before (build of the batch's base) and after, at 390 and 1280 px in `light`, `dark` and `navy`, of
+- Screenshots: before (build of the batch's base) and after, at 390 and 1280 px in `light`, `dark` and `navy` (`navy` was dropped 2026-10-29; use `violet`), of
   every page the batch touches, with the isolated panel and scripts under `/private/tmp/orca-a9f9d6de/ui/scripts/`
   (`panel.sh <distDir> <log>` on port 7811 with a temp HOME and control dir — never the real panel or `~/.orca`;
   `shots.py <outdir> <themes>`, extend its page list; `diff.py <before> <after>` prints changed pixels per shot).
