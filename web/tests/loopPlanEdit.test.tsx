@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { controlCommandPath, type ControlAction } from "../src/controlApi.js";
 import { TaskDetail } from "../src/TaskDetail.js";
 import type { Amount, ControlConfigV1, GroupViewV1, LoopPlanViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: 14_400_000, attempts: 3, sessions: 3 });
 const human = { provenance: "human", estimateId: null } as const;
@@ -70,6 +71,21 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
     expect(onCommand).toHaveBeenLastCalledWith({ verb: "set-task-loop", groupId: "g", taskId: "a", expectedRevision: 6, payload: {
       baseLoopVersion: 0, plan: "bugfix", inputs: { ...PLAN.inputs, goal: "fix login, changed" }, work: { tokens: 3_500_000, activeMs: 14_400_000, attempts: 3 },
     } });
+  });
+
+  it("sends the plan the person picks in the plan picker", async () => {
+    // Session b999cc81 (spec 2026-10-29-radix-select-everywhere-design.md §5 item 3): the plan picker is the Radix Select;
+    // the plan picked from its list, by keyboard, is the plan the command carries.
+    const onCommand = vi.fn();
+    render(<Stateful view={view([item()])} onCommand={onCommand} />);
+    fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
+    const picker = screen.getByRole("combobox", { name: "Plan" });
+    expect(shownText(picker)).toBe("Bug fix (red first)");
+    await pickOption(picker, "Safe refactor");
+    // mutation: the picker's onValueChange ignores the pick -> plan "bugfix", red
+    expect(shownText(picker)).toBe("Safe refactor");
+    fireEvent.click(screen.getByRole("button", { name: "Budget unchanged" }));
+    expect(onCommand).toHaveBeenLastCalledWith(expect.objectContaining({ verb: "set-task-loop", payload: expect.objectContaining({ baseLoopVersion: 0, plan: "refactor" }) }));
   });
 
   it("disables the submit and names the shortfall when the reserve cannot cover a raise", () => {

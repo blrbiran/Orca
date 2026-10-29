@@ -18,6 +18,7 @@ import type {
   Amount, ControlConfigV1, ControlSummaryV1, EvidenceManifestV1, GroupViewV1, RecoveryViewV1, RunViewV1, WorkItemViewV1,
 } from "../src/controlTypes.js";
 import { progressText } from "../src/TaskDetail.js";
+import { pickOption } from "./selectControl.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -103,11 +104,12 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
 });
 
 describe("the task detail panel (spec §4.2)", () => {
-  it("sends the draft labels with the labelsVersion they were read at, and restores the plan's labels with null", () => {
+  it("sends the draft labels with the labelsVersion they were read at, and restores the plan's labels with null", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the system label picked in the task detail is the one added to the labels the command sends
     const onCommand = vi.fn();
     render(<Stateful view={view([workItem({ labels: ["bug"], labelsProvenance: "plan", labelsVersion: 4 })])} onCommand={onCommand} />);
     fireEvent.click(screen.getByRole("button", { name: "a" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "System label" }), { target: { value: "perf" } });
+    await pickOption(screen.getByRole("combobox", { name: "System label" }), "perf");
     fireEvent.click(screen.getByRole("button", { name: "Add system label" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Custom label" }), { target: { value: "前端" } });
     fireEvent.click(screen.getByRole("button", { name: "Add custom label" }));

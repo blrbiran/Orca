@@ -10,6 +10,7 @@ import { BudgetEditor } from "../src/BudgetEditor.js";
 import i18n from "../src/i18n.js";
 import { LoopPlanCard, loopDraftKey } from "../src/LoopPlanCard.js";
 import type { Amount, ControlConfigV1, GroupViewV1, LoopPlanViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
+import { optionsOf } from "./selectControl.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: 14_400_000, attempts: 3, sessions: 3 });
 const human = { provenance: "human", estimateId: null } as const;
@@ -158,7 +159,8 @@ describe("the budget editor and the loop card in Chinese", () => {
       "做法", "目标", "完成条件", "只改（每行一个路径）", "检查命令（每行一条）", "不做的事（每行一条）", "相关文档（每行一个）",
       "不许改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "活跃时间（ms）", "最多尝试次数",
     ]);
-    expect([...form.querySelectorAll("select, input, textarea")].map((box) => box.getAttribute("aria-label"))).toEqual([
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): every field of the change form, the plan picker's trigger first, is named in Chinese
+    expect([...form.querySelectorAll("[data-select-trigger], input, textarea")].map((box) => box.getAttribute("aria-label"))).toEqual([
       "做法", "目标", "完成条件", "只改（每行一个路径）", "检查命令（每行一条）", "不做的事（每行一条）", "相关文档（每行一个）",
       "不许改（每行一个路径）", "最多改几个文件（留空按默认）", "token 预算", "活跃时间（ms）", "最多尝试次数",
     ]);
@@ -178,14 +180,15 @@ describe("the budget editor and the loop card in Chinese", () => {
   });
 
   it("names each plan in the plan picker in the chosen language (Task 3 review)", async () => {
-    const options = (): Array<string | null> => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the plans the picker offers, in order, each named in the chosen language
+    const options = async (): Promise<string[]> => {
       render(<LoopPlanCard view={view} item={view.workItems[0]!} drafts={{ [loopDraftKey("g", "a")]: draft("3000000") }} onDraft={vi.fn()} onCommand={vi.fn()} />);
-      const names = texts("option");
+      const names = (await optionsOf(screen.getByRole("combobox"))).map(([name]) => name);
       cleanup();
       return names;
     };
-    expect(options()).toEqual(["Standard", "Bug fix (red first)", "Safe refactor", "Design / docs first", "Investigate only"]);
+    expect(await options()).toEqual(["Standard", "Bug fix (red first)", "Safe refactor", "Design / docs first", "Investigate only"]);
     await i18n.changeLanguage("zh");
-    expect(options()).toEqual(["标准", "修 bug（先红后绿）", "安全重构", "先写设计／文档", "只调研不改代码"]);
+    expect(await options()).toEqual(["标准", "修 bug（先红后绿）", "安全重构", "先写设计／文档", "只调研不改代码"]);
   });
 });

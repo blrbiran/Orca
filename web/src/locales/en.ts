@@ -1314,7 +1314,7 @@ export const en = {
       sendFeedback: "Send feedback",
       sendEdit: "Save as my output",
     },
-    ask: { title: "Answer {{step}}", send: "Send the answer" },
+    ask: { title: "Answer {{step}}", send: "Send the answer", choose: "Choose…" },
     needs: {
       title: "{{step}} asks you",
       confirmation: "Asks to confirm: {{what}} ({{summary}})",

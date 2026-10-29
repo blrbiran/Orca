@@ -1179,7 +1179,7 @@ export const zh: Translation<typeof en> = {
       sendFeedback: "发送意见",
       sendEdit: "存为我的产出",
     },
-    ask: { title: "回答 {{step}}", send: "发送回答" },
+    ask: { title: "回答 {{step}}", send: "发送回答", choose: "请选择…" },
     needs: {
       title: "{{step}} 在问你",
       confirmation: "请求确认：{{what}}（{{summary}}）",

@@ -12,6 +12,7 @@ import type { Banner } from "./chainBanner.js";
 import i18n, { enumText } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
 import type { ChainRepoView, ChainView } from "./types.js";
+import { Select } from "./ui/Select.js";
 
 export type ChainOutcome = { kind: "started"; chainId: string } | { kind: "stop-requested"; chainId: string } | { kind: "refused"; refusal: PanelRefusal };
 export interface ChainForm {
@@ -136,13 +137,7 @@ export function ChainPanel({
       <form className="chain-start" onSubmit={submit}>
         <label>
           {t("chains.formRepository")}
-          <select name="repoKey" value={repoKey} onChange={(e) => setRepoKey(e.target.value)}>
-            {repos.map((r) => (
-              <option key={r.repoKey} value={r.repoKey}>
-                {name(r.repoKey)}
-              </option>
-            ))}
-          </select>
+          <Select name="repoKey" value={repoKey} onValueChange={setRepoKey} options={repos.map((r) => ({ value: r.repoKey, label: name(r.repoKey) }))} />
         </label>
         <label>
           {t("chains.formGoal")}

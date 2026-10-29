@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import { layoutDependencies } from "./dependencyLayout.js";
+import { Select } from "./ui/Select.js";
 
 export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action: ControlAction) => void }): JSX.Element {
   const { t } = useTranslation();
@@ -44,16 +45,12 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
       )}
       <div role="group" aria-label={t("board.graph.add")}>
         <label>{t("board.graph.dependent")}
-          <select value={dependent} onChange={(event) => setDependent(event.currentTarget.value)}>
-            <option value="" />
-            {live.map((group) => <option key={group.groupId} value={group.groupId}>{group.groupId}</option>)}
-          </select>
+          <Select value={dependent} onValueChange={setDependent}
+            options={[{ value: "", label: "" }, ...live.map((group) => ({ value: group.groupId, label: group.groupId }))]} />
         </label>
         <label>{t("board.graph.prerequisite")}
-          <select value={prerequisite} onChange={(event) => setPrerequisite(event.currentTarget.value)}>
-            <option value="" />
-            {live.filter((group) => group.groupId !== dependent).map((group) => <option key={group.groupId} value={group.groupId}>{group.groupId}</option>)}
-          </select>
+          <Select value={prerequisite} onValueChange={setPrerequisite}
+            options={[{ value: "", label: "" }, ...live.filter((group) => group.groupId !== dependent).map((group) => ({ value: group.groupId, label: group.groupId }))]} />
         </label>
         <button type="button" disabled={dependent === "" || prerequisite === "" || dependent === prerequisite}
           onClick={() => send("add-group-dependency", dependent, prerequisite)}>{t("board.graph.addButton")}</button>

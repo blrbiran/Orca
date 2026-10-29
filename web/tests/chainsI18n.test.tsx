@@ -63,7 +63,8 @@ describe("the chains area in Chinese", () => {
       '<dd data-testid="chain-state">已停止：r-1（触达上限）</dd>',
       ">停止链</button>",
       "<span> 当前会话结束后停止。</span>",
-      '<label>仓库 <select name="repoKey">',
+      // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the repository picker is named by its Chinese label (the label wraps its trigger)
+      '<label>仓库 <button type="button" role="combobox"',
       '<label>目标 <textarea name="goal"',
       '<label>最多会话数 <input type="number" min="1" step="1" required="" name="maxSessions"/></label>',
       '<label>费用上限（美元，软限制） <input type="number" min="0.01" step="0.01" required="" name="maxCostUsd"/></label>',

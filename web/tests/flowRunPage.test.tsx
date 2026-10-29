@@ -15,6 +15,7 @@ import type { Me } from "../src/auth.js";
 import type { FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1 } from "../src/controlTypes.js";
 import { FlowRunPage, spendText } from "../src/FlowRunPage.js";
 import i18n from "../src/i18n.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); answerWith = () => ({ schema: "orca-command-success-v1" }); laterViews = []; journals = []; uploadFails = false; });
 const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
@@ -199,6 +200,32 @@ describe("asks, confirm cards and effect records (§4.4, §9)", () => {
     expect(lastPost().body.payload).toEqual({ runId: RUN, stepKey: "pick-title", values: { title: "Slow tea" } });
   });
 
+  it("shows an option field of an ask empty until the person picks, and sends nothing for it until then (spec 2026-10-29 §4)", async () => {
+    // Ruling: human 「(a)，按你的建议走」 (session b999cc81): a value not among the options shows the trigger empty with a placeholder;
+    // what is shown is what is sent -- the native select showed the first option although submitting sent none.
+    const toneAsk = { ...PICK_ASK, form: { ...PICK_ASK.form, tone: { type: "text", options: ["warm", "dry"] } } };
+    const base = runView();
+    await mount(owner, runView({
+      steps: base.steps.map((s) => s.stepKey === "pick-title" ? step("pick-title", "ask", [exec(1, { state: "needs-person", output: null, ask: toneAsk })], { executor: "either" }) : s),
+      openAsks: [{ stepKey: "pick-title", seq: 1, ask: toneAsk }], plans: [],
+    }));
+    const form = within(stepBox("pick-title")).getByRole("form", { name: "Answer pick-title" });
+    const tone = within(form).getByRole("combobox", { name: "tone" });
+    // mutation: hand Radix the first option as the default -> the trigger shows "warm", red
+    expect(shownText(tone)).toBe("Choose…");
+    expect(tone.hasAttribute("data-placeholder")).toBe(true);
+    expect(await optionsOf(tone)).toEqual([["warm", false], ["dry", false]]);
+    fireEvent.click(within(form).getByRole("button", { name: "Send the answer" }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, stepKey: "pick-title", values: { title: "Tea, slowly" } });
+    // Once picked, the trigger shows the pick and the answer carries it.
+    await pickOption(tone, "dry");
+    expect(shownText(tone)).toBe("dry");
+    fireEvent.click(within(form).getByRole("button", { name: "Send the answer" }));
+    await waitFor(() => expect(posts.length).toBe(2));
+    expect(lastPost().body.payload).toEqual({ runId: RUN, stepKey: "pick-title", values: { title: "Tea, slowly", tone: "dry" } });
+  });
+
   it("shows a confirm card with the level's provenance and confirms it", async () => {
     await mount();
     const card = screen.getByRole("group", { name: "Confirm to-draft-box" });
@@ -235,7 +262,8 @@ describe("messages, run commands and the pool (§8, §6.3)", () => {
     expect(second!.getAttribute("data-tone")).toBe("danger");
     expect(second!.textContent).toContain("refused (flow-command-budget)");
     const box = within(stepBox("outline")).getByRole("form", { name: "Message about outline" });
-    fireEvent.change(within(box).getByRole("combobox", { name: "About" }), { target: { value: "2" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the execution picked as the feedback's subject is the one the message targets
+    await pickOption(within(box).getByRole("combobox", { name: "About" }), "Execution #2");
     fireEvent.change(within(box).getByRole("textbox", { name: "Your feedback" }), { target: { value: "shorter" } });
     fireEvent.click(within(box).getByRole("button", { name: "Send feedback" }));
     await waitFor(() => expect(posts.length).toBe(1));
@@ -245,7 +273,8 @@ describe("messages, run commands and the pool (§8, §6.3)", () => {
   it("edits a step's record as the person's own output", async () => {
     await mount();
     const box = within(stepBox("brief")).getByRole("form", { name: "Message about brief" });
-    fireEvent.change(within(box).getByRole("combobox", { name: "Message kind" }), { target: { value: "edit-record" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): picking "edit the record" makes the message an edit of the step's record
+    await pickOption(within(box).getByRole("combobox", { name: "Message kind" }), "Edit the record (field=value per line)");
     fireEvent.change(within(box).getByRole("textbox", { name: "Fields, one field=value per line" }), { target: { value: "title = Tea, slowly\n" } });
     fireEvent.click(within(box).getByRole("button", { name: "Save as my output" }));
     await waitFor(() => expect(posts.length).toBe(1));
@@ -416,7 +445,8 @@ describe("feedback on the whole run and its intake (§4, §14.1-§14.2)", () => 
     await waitFor(() => expect(posts.length).toBe(2));
     // I1: the replacement keeps the location and the screenshot; it only adds "as they are".
     expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "run" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], anchors: [{ quote: "Tea slows you down" }], asIs: true } });
-    fireEvent.change(within(card).getByRole("combobox", { name: "Change target" }), { target: { value: "outline" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the step picked as the new target is the step the replacement feedback goes to
+    await pickOption(within(card).getByRole("combobox", { name: "Change target" }), "outline");
     fireEvent.click(within(card).getByRole("button", { name: "Change target" }));
     await waitFor(() => expect(posts.length).toBe(3));
     expect(lastPost().body.payload).toEqual({ runId: RUN, kind: "feedback", target: { kind: "step", stepKey: "outline" }, body: { text: "this sentence drags", replaces: 7, attachments: [SHOT], anchors: [{ quote: "Tea slows you down" }] } });
@@ -922,7 +952,8 @@ describe("a pause, a resume and a note (§10.5)", () => {
     fireEvent.change(text, { target: { value: "é".repeat(2048) } });
     expect(send.disabled).toBe(false);
     fireEvent.change(text, { target: { value: "  keep the metaphors  " } });
-    fireEvent.change(within(form).getByRole("combobox", { name: "When the note applies" }), { target: { value: "remaining-attempts" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scope picked for the note is the scope the command sends
+    await pickOption(within(form).getByRole("combobox", { name: "When the note applies" }), "every remaining attempt");
     fireEvent.click(send);
     await waitFor(() => expect(posts.length).toBe(1));
     expect(lastPost()).toEqual({ url: "/api/control/flows/messages", body: expect.objectContaining({ payload: {

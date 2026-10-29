@@ -1,10 +1,15 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { startChainBody } from "../src/api.js";
 import { BANNER_TEXT, DISMISSED_KEY, bannersFor, readDismissed, writeDismissed } from "../src/chainBanner.js";
 import { ChainPanel } from "../src/ChainPanel.js";
 import type { ChainOutcome } from "../src/ChainPanel.js";
 import type { ChainRepoView, ChainStopCategory, ChainView } from "../src/types.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
+
+afterEach(() => cleanup());
 
 const chain = (over: Partial<ChainView> = {}): ChainView => ({
   chainId: "chain-0000000a", goal: "distinct goal text", by: "distinct-by", via: "panel", startedAt: "2026-09-18T00:00:00.000Z",
@@ -59,6 +64,23 @@ describe("ChainPanel (D-launch spec §6.2)", () => {
     const h = html([repo(null), repo(null, { repoKey: "other-repo", defaultSessionTimeoutMin: 90 })]);
     expect(h).toMatch(/name="sessionTimeoutMin"[^>]*value="360"/);
     expect(h).toContain("No chain yet.");
+  });
+  it("V6b the repository picked in the form is the one the start sends, with the form's other fields", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the repository a person picks (driving the picker, never its hidden native select) is the repoKey the start carries
+    const onStart = vi.fn();
+    const { container } = render(<ChainPanel repos={[repo(null), repo(null, { repoKey: "other-repo" })]} banners={[]} outcome={null} onStart={onStart} />);
+    const picker = screen.getByRole("combobox");
+    expect(shownText(picker)).toBe("distinct-repo");
+    expect(await optionsOf(picker)).toEqual([["distinct-repo", false], ["other-repo", false]]);
+    await pickOption(picker, "other-repo");
+    expect(shownText(picker)).toBe("other-repo");
+    const form = container.querySelector("form.chain-start") as HTMLFormElement;
+    fireEvent.change(form.querySelector('[name="goal"]')!, { target: { value: "ship it" } });
+    fireEvent.change(form.querySelector('[name="maxSessions"]')!, { target: { value: "3" } });
+    fireEvent.change(form.querySelector('[name="maxCostUsd"]')!, { target: { value: "2.5" } });
+    fireEvent.submit(form);
+    // mutation: the picker's onValueChange ignores the pick -> repoKey "distinct-repo", red
+    expect(onStart).toHaveBeenCalledWith({ repoKey: "other-repo", goal: "ship it", maxSessions: "3", maxCostUsd: "2.5", sessionTimeoutMin: "360" });
   });
   it("V7 a refused start shows the server's code and message", () => {
     const h = html([repo(null)], { kind: "refused", refusal: { status: 409, code: "worktree-dirty", message: "distinct refusal" } });

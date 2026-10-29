@@ -11,6 +11,7 @@ import type { GroupSummaryV1 } from "../src/controlTypes.js";
 import { boardColumn, boardDrop, groupLed } from "../src/groupCategory.js";
 import { GroupList } from "../src/GroupList.js";
 import i18n, { currentLanguage } from "../src/i18n.js";
+import { pickOption } from "./selectControl.js";
 import { utility } from "./sourceClasses.js";
 
 afterEach(cleanup);
@@ -113,7 +114,8 @@ describe("the board tab (kanban spec §4)", () => {
     expect(screen.getByTestId("board-card-g-a-newer-cause").textContent).toContain("a failed: a-newer-cause");
   });
 
-  it("hides the archived column until asked, and the group graph adds and removes a person's edge", () => {
+  it("hides the archived column until asked, and the group graph adds and removes a person's edge", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the dependent and prerequisite picked in the group graph are the groups the add command names
     const onCommand = vi.fn<(action: ControlAction) => void>();
     render(<BoardView groups={[g({ groupId: "a", dependsOn: ["b"] }), g({ groupId: "b", commandRevision: 3 })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={onCommand} />);
     expect(screen.queryByRole("region", { name: "Archived" })).toBeNull();
@@ -122,8 +124,8 @@ describe("the board tab (kanban spec §4)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Group graph" }));
     expect(screen.getByRole("list", { name: "Dependencies" }).textContent).toContain("a waits for b");
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Group" }), { target: { value: "b" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "waits for" }), { target: { value: "a" } });
+    await pickOption(screen.getByRole("combobox", { name: "Group" }), "b");
+    await pickOption(screen.getByRole("combobox", { name: "waits for" }), "a");
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(onCommand.mock.calls).toEqual([
       [{ verb: "remove-group-dependency", groupId: "a", expectedRevision: 7, payload: { dependsOn: "b" } }],

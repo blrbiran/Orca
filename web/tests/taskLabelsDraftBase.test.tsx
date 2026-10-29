@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
+import { pickOption } from "./selectControl.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
@@ -92,7 +93,8 @@ describe("a label draft is sent with the labelsVersion it started from (final re
     expect(screen.getByText(/labels changed since your draft \(v0 → v1\)/).textContent).toContain("now: security");
     expect(screen.getByRole("button", { name: "Remove feature" })).toBeTruthy();
     // An edit after the change keeps the base the draft started from.
-    fireEvent.change(screen.getByRole("combobox", { name: "System label" }), { target: { value: "perf" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the system label picked after the change is added to the draft, which keeps its base
+    await pickOption(screen.getByRole("combobox", { name: "System label" }), "perf");
     fireEvent.click(screen.getByRole("button", { name: "Add system label" }));
     fireEvent.click(screen.getByRole("button", { name: "Save labels" }));
     await screen.findByText(/labels-version-conflict/);

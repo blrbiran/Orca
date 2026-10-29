@@ -156,23 +156,24 @@ describe("the project switcher", () => {
     chainRepos = ["alpha", "beta", "gamma"].map((repoKey) => ({ repoKey, defaultSessionTimeoutMin: null, chain: null, problem: null }));
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
-    const chainSelect = (): HTMLSelectElement => document.querySelector('select[name="repoKey"]') as HTMLSelectElement;
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Chains picker (its trigger, never Radix's hidden select) shows the one selection and moves it
+    const chainSelect = (): HTMLElement => document.querySelector<HTMLElement>('form.chain-start [role="combobox"]')!;
     const requirementSelect = (): HTMLElement =>
       within(screen.getByRole("form", { name: "New requirement" })).getByRole("combobox", { name: "Repository" });
-    await waitFor(() => expect(chainSelect().value).toBe("alpha"));
+    await waitFor(() => expect(shownText(chainSelect())).toBe("alpha"));
     await waitFor(() => expect(shownText(requirementSelect())).toBe("alpha"));
 
     // Chains moves the selection: the sidebar and Requirements follow.
-    fireEvent.change(chainSelect(), { target: { value: "beta" } });
+    await pickOption(chainSelect(), "beta");
     expect(shownText(projectSelect())).toBe("beta");
     expect(shownText(requirementSelect())).toBe("beta");
     // Requirements moves it back.
     await pickOption(requirementSelect(), "alpha");
     expect(shownText(projectSelect())).toBe("alpha");
-    expect(chainSelect().value).toBe("alpha");
+    expect(shownText(chainSelect())).toBe("alpha");
     // The sidebar moves it; Memory, opened afterwards, reads that project.
     await pickOption(projectSelect(), "gamma");
-    expect(chainSelect().value).toBe("gamma");
+    expect(shownText(chainSelect())).toBe("gamma");
     window.location.hash = "#memory";
     await waitFor(() => expect(memoryLists).toContain("gamma"));
     expect(memoryLists[0]).toBe("gamma");

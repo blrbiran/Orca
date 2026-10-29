@@ -15,6 +15,7 @@ import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText } from "./i18n.js";
 import { WEB_LOOP_PLANS } from "./controlTypes.js";
 import type { BudgetAmount, Amount, GroupViewV1, LoopPlanIdV1, LoopPlanViewV1, SetTaskLoopPayloadV1, WorkItemViewV1 } from "./controlTypes.js";
+import { Select } from "./ui/Select.js";
 
 export const loopDraftKey = (groupId: string, taskId: string): string => `loop:${groupId}:${taskId}`;
 
@@ -199,9 +200,8 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
       {draft.base !== plan.loopVersion && <p role="status">{t("loopPlan.draftBehind", { base: draft.base, current: plan.loopVersion })}</p>}
       <label>
         {t("loopPlan.planLabel")}
-        <select aria-label={t("loopPlan.planLabel")} value={draft.plan} onChange={(event) => set({ plan: event.target.value as LoopPlanIdV1 })}>
-          {WEB_LOOP_PLANS.map((option) => <option key={option.planId} value={option.planId}>{planText(option.planId, option.version, "name")}</option>)}
-        </select>
+        <Select aria-label={t("loopPlan.planLabel")} value={draft.plan} onValueChange={(plan) => set({ plan })}
+          options={WEB_LOOP_PLANS.map((option) => ({ value: option.planId, label: planText(option.planId, option.version, "name") }))} />
       </label>
       {FIELDS.map((field) => (
         <label key={field}>

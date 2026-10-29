@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { ControlPanel } from "../src/ControlPanel.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -55,14 +56,16 @@ describe("per-group and per-task view state does not leak (final review finding 
     expect((screen.getByRole("checkbox", { name: "bug" }) as HTMLInputElement).checked).toBe(false);
   });
 
-  it("opens another task with the editor's own choices reset", () => {
+  it("opens another task with the editor's own choices reset", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a system label picked on one task does not carry over to the next task's picker
     render(<ControlGroupView view={view("g", [workItem({ taskId: "a" }), workItem({ taskId: "b" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "a" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "System label" }), { target: { value: "perf" } });
+    await pickOption(screen.getByRole("combobox", { name: "System label" }), "perf");
+    expect(shownText(screen.getByRole("combobox", { name: "System label" }))).toBe("perf");
     fireEvent.change(screen.getByRole("textbox", { name: "Custom label" }), { target: { value: "half typed" } });
     fireEvent.click(screen.getByRole("button", { name: "b" })); // straight from a to b, the detail never closes
     expect(screen.getByRole("region", { name: "Task b" })).toBeTruthy();
-    expect((screen.getByRole("combobox", { name: "System label" }) as HTMLSelectElement).value).toBe("feature");
+    expect(shownText(screen.getByRole("combobox", { name: "System label" }))).toBe("feature");
     expect((screen.getByRole("textbox", { name: "Custom label" }) as HTMLInputElement).value).toBe("");
   });
 });

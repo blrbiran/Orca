@@ -29,6 +29,7 @@ import { currentLanguage } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
 import { ReviseRound, chainEntries } from "./RequirementsPanel.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
+import { Select } from "./ui/Select.js";
 
 type Verb = "messages" | "plan" | "rerun" | "answer" | "effect" | "pool" | "plan-step";
 type Send = (verb: Verb, payload: Record<string, unknown>) => void;
@@ -196,16 +197,11 @@ function MessageBox(props: { step: Step; runId: string; send: Send }): JSX.Eleme
   };
   return (
     <form className="flow-message" aria-label={t("flow.message.title", { step: props.step.stepKey })} onSubmit={(event) => { event.preventDefault(); if (ready) submit(); }}>
-      <select aria-label={t("flow.message.kind")} value={mode} onChange={(event) => setMode(event.currentTarget.value as typeof mode)}>
-        <option value="feedback">{t("flow.message.feedback")}</option>
-        <option value="edit-record">{t("flow.message.editRecord")}</option>
-        <option value="edit-file">{t("flow.message.editFile")}</option>
-      </select>
+      <Select aria-label={t("flow.message.kind")} value={mode} onValueChange={setMode}
+        options={[{ value: "feedback", label: t("flow.message.feedback") }, { value: "edit-record", label: t("flow.message.editRecord") }, { value: "edit-file", label: t("flow.message.editFile") }]} />
       {mode === "feedback" && (
-        <select aria-label={t("flow.message.target")} value={target} onChange={(event) => setTarget(event.currentTarget.value)}>
-          <option value="step">{t("flow.message.onStep")}</option>
-          {props.step.executions.map((e) => <option key={e.seq} value={String(e.seq)}>{t("flow.execution", { seq: e.seq })}</option>)}
-        </select>
+        <Select aria-label={t("flow.message.target")} value={target} onValueChange={setTarget}
+          options={[{ value: "step", label: t("flow.message.onStep") }, ...props.step.executions.map((e) => ({ value: String(e.seq), label: t("flow.execution", { seq: e.seq }) }))]} />
       )}
       {mode === "edit-file" && <input type="text" aria-label={t("flow.message.path")} value={path} onChange={(event) => setPath(event.currentTarget.value)} />}
       <textarea aria-label={t(mode === "feedback" ? "flow.message.text" : mode === "edit-record" ? "flow.message.recordText" : "flow.message.fileText")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
@@ -233,9 +229,8 @@ function AskForm(props: { ask: Extract<FlowAskV1, { kind: "ask" }>; stepKey: str
             ))}
             {spec.type === "bool" ? <input type="checkbox" aria-label={field} checked={value === true} onChange={(event) => set(field, event.currentTarget.checked)} />
               : spec.options !== undefined ? (
-                <select aria-label={field} value={String(value ?? "")} onChange={(event) => set(field, event.currentTarget.value)}>
-                  {spec.options.map((option) => <option key={option} value={option}>{option}</option>)}
-                </select>
+                <Select aria-label={field} value={String(value ?? "")} onValueChange={(next) => set(field, next)} placeholder={t("flow.ask.choose")}
+                  options={spec.options.map((option) => ({ value: option, label: option }))} />
               ) : <input type="text" aria-label={field} value={String(value ?? "")} onChange={(event) => set(field, spec.type === "int" ? Number(event.currentTarget.value) : event.currentTarget.value)} />}
           </fieldset>
         );
@@ -588,10 +583,8 @@ function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string;
       {intake.flags.length > 0 && <p>{intake.flags.map((flag) => <span key={flag} className="badge" data-tone="warn" data-testid="flow-intake-flag">{flag}</span>)}</p>}
       {intake.state !== "failed" && (
         <p>
-          <select aria-label={t("flow.intake.changeTarget")} value={retarget} onChange={(event) => setRetarget(event.currentTarget.value)}>
-            <option value="">{t("flow.intake.pickStep")}</option>
-            {props.steps.map((s) => <option key={s.stepKey} value={s.stepKey}>{s.stepKey}</option>)}
-          </select>{" "}
+          <Select aria-label={t("flow.intake.changeTarget")} value={retarget} onValueChange={setRetarget}
+            options={[{ value: "", label: t("flow.intake.pickStep") }, ...props.steps.map((s) => ({ value: s.stepKey, label: s.stepKey }))]} />{" "}
           <button type="button" disabled={retarget === ""} onClick={() => { replace(keptAnchors, { kind: "step", stepKey: retarget }); setRetarget(""); }}>{t("flow.intake.changeTarget")}</button>
         </p>
       )}
@@ -625,10 +618,8 @@ function NoteForm(props: { step: Step; runId: string; send: Send }): JSX.Element
         props.send("messages", { runId: props.runId, kind: "command", target: { kind: "step", stepKey: props.step.stepKey }, body: { command: "note", text: body, scope } });
         setText(""); }}>
       <textarea aria-label={t("flow.note.text")} value={text} onChange={(event) => setText(event.currentTarget.value)} />
-      <select aria-label={t("flow.note.scope")} value={scope} onChange={(event) => setScope(event.currentTarget.value as typeof scope)}>
-        <option value="next-attempt">{t("flow.note.next-attempt")}</option>
-        <option value="remaining-attempts">{t("flow.note.remaining-attempts")}</option>
-      </select>
+      <Select aria-label={t("flow.note.scope")} value={scope} onValueChange={setScope}
+        options={[{ value: "next-attempt", label: t("flow.note.next-attempt") }, { value: "remaining-attempts", label: t("flow.note.remaining-attempts") }]} />
       <button type="submit" disabled={body === "" || tooLarge}>{t("flow.note.send")}</button>
       {tooLarge && <p data-tone="warn" role="status">{t("flow.note.tooLarge")}</p>}
     </form>

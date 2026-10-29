@@ -12,6 +12,7 @@ import { BoardView } from "../src/BoardView.js";
 import type { FlowListV1, GroupSummaryV1 } from "../src/controlTypes.js";
 import { FlowBoard } from "../src/FlowBoard.js";
 import "../src/i18n.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
 
 afterEach(cleanup);
 const g = (over: Partial<GroupSummaryV1>): GroupSummaryV1 => ({
@@ -149,15 +150,19 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
     const posts = serve();
     render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     const dialog = await openDialog();
-    const choice = within(dialog).getByRole("combobox", { name: "Built-in template" }) as HTMLSelectElement;
-    expect([...choice.options].map((o) => [o.value, o.textContent])).toEqual([["wechat-article", "WeChat article"], ["demo", "demo"]]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the built-ins offered in order, the template picker focused on open, an enum param left on "use the default", and the picked template is the one the start sends
+    const choice = within(dialog).getByRole("combobox", { name: "Built-in template" });
+    expect(document.activeElement).toBe(choice);
+    expect(await optionsOf(choice)).toEqual([["WeChat article", false], ["demo", false]]);
+    // Escape that closes the list is the list's, not the dialog's -- mutation: FlowBoard closes on every Escape -> dialog gone, red
+    expect(screen.getByRole("dialog", { name: "Start a flow" })).toBe(dialog);
     // mutation: the old key=value text area -> found, red
     expect(within(dialog).queryByRole("textbox", { name: "Parameters, one key=value per line" })).toBeNull();
     expect(param(dialog, "idea").querySelector("textarea")).not.toBeNull();
-    expect((within(param(dialog, "language")).getByRole("combobox", { name: "language" }) as HTMLSelectElement).value).toBe("");
+    expect(shownText(within(param(dialog, "language")).getByRole("combobox", { name: "language" }))).toBe("use the default");
     expect(within(param(dialog, "illustrations")).getByRole("checkbox", { name: "illustrations" })).toBeTruthy();
     expect(within(param(dialog, "coverImage")).getByRole("textbox", { name: "coverImage: a path inside the folder" })).toBeTruthy();
-    fireEvent.change(choice, { target: { value: "demo" } });
+    await pickOption(choice, "demo");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
     const count = within(param(dialog, "count")).getByRole("spinbutton", { name: "count (required)" });
     // A required param with no default holds Start back until it is given.
@@ -299,7 +304,8 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
       const posts = serve();
       render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
       const dialog = await openDialog();
-      fireEvent.change(within(dialog).getByRole("combobox", { name: "Built-in template" }), { target: { value: "demo" } });
+      // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the int param of the picked template (demo) holds Start back when it is not an integer
+      await pickOption(within(dialog).getByRole("combobox", { name: "Built-in template" }), "demo");
       fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
       fireEvent.change(within(param(dialog, "count")).getByRole("spinbutton", { name: "count (required)" }), { target: { value: "3.5" } });
       // mutation: typed() takes any number -> Start enabled, red

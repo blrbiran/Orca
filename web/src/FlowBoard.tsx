@@ -16,6 +16,7 @@ import { FolderImagePicker, LIST_DELAY_MS } from "./FolderImagePicker.js";
 import { currentLanguage } from "./i18n.js";
 import { FlowRunPage } from "./FlowRunPage.js";
 import { Refusal } from "./Refusal.js";
+import { Select } from "./ui/Select.js";
 
 export type ParamValue = string | number | boolean;
 export type Template = FlowTemplatesV1["templates"][number];
@@ -52,10 +53,8 @@ export function ParamField(props: { param: FlowTemplateParamV1; value: ParamValu
         return <label><input type="checkbox" checked={checked} onChange={(event) => props.onChange(event.currentTarget.checked)} />{label}</label>;
       }
       case "enum":
-        return <label>{label}<select value={text} onChange={(event) => set(event.currentTarget.value)}>
-          <option value="">{t("flow.start.useDefault")}</option>
-          {(param.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
-        </select></label>;
+        return <label>{label}<Select value={text} onValueChange={set}
+          options={[{ value: "", label: t("flow.start.useDefault") }, ...(param.options ?? []).map((option) => ({ value: option, label: option }))]} /></label>;
       case "longtext": return <label>{label}<textarea value={text} onChange={(event) => set(event.currentTarget.value)} /></label>;
       case "int": return <label>{label}<input type="number" value={text} onChange={(event) => set(event.currentTarget.value)} /></label>;
       case "image": case "path":
@@ -132,7 +131,8 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
     return () => { live = false; clearTimeout(timer); };
   }, [folder]);
   useEffect(() => {
-    const escape = (event: KeyboardEvent): void => { if (event.key === "Escape") onClose(); };
+    // An Escape a picker's open list took (Radix prevents its default) closes the list only, as a native select's did.
+    const escape = (event: KeyboardEvent): void => { if (event.key === "Escape" && !event.defaultPrevented) onClose(); };
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
   }, [onClose]);
@@ -176,9 +176,8 @@ function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClos
         {templates === "failed" && <p role="status">{t("flow.start.templatesFailed")}</p>}
         {Array.isArray(templates) && (
           <label>{t("flow.start.template")}
-            <select autoFocus value={templateId} onChange={(event) => { setTemplateId(event.currentTarget.value); setValues({}); }}>
-              {templates.map((entry) => <option key={entry.id} value={entry.id}>{title(entry)}</option>)}
-            </select>
+            <Select autoFocus value={templateId} onValueChange={(next) => { setTemplateId(next); setValues({}); }}
+              options={templates.map((entry) => ({ value: entry.id, label: title(entry) }))} />
           </label>
         )}
         <label>{t("flow.start.dir")}<input type="text" value={dir} onChange={(event) => setDir(event.currentTarget.value)} /></label>

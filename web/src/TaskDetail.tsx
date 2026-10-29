@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { labelCustomClass, labelSystemClass, taskDetail } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 import { useTranslation } from "react-i18next";
 import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
@@ -264,9 +265,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       </ul>
       {!archived && (
         <>
-      <select aria-label={t("control.task.systemLabel")} value={system} onChange={(event) => setSystem(event.target.value)}>
-        {WEB_SYSTEM_LABELS.map((word) => <option key={word} value={word}>{word}</option>)}
-      </select>
+      <Select aria-label={t("control.task.systemLabel")} value={system} onValueChange={setSystem}
+        options={WEB_SYSTEM_LABELS.map((word) => ({ value: word, label: word }))} />
       <button type="button" onClick={() => setDraft([...labels, system])}>{t("control.task.addSystem")}</button>
       <input aria-label={t("control.task.customLabel")} value={custom} onChange={(event) => setCustom(event.target.value)} />
       <button type="button" onClick={addCustom}>{t("control.task.addCustom")}</button>
