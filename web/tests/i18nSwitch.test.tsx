@@ -3,9 +3,10 @@
  * Panel i18n spec §4, §6.7: choosing 中文 in the sidebar writes orca.panel.lang = zh, sets <html lang="zh"> and
  * re-renders the page's text; choosing English reverses all three. Task 6 adds the helper-built case (a chain banner).
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
+import { pickOption } from "./selectControl.js";
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -40,15 +41,10 @@ async function languageSelect(container: HTMLElement): Promise<HTMLElement> {
     return trigger;
   });
 }
-// jsdom has neither of these; Radix calls them while the list is open.
-Element.prototype.scrollIntoView ??= () => {};
-Element.prototype.hasPointerCapture ??= () => false;
-async function choose(trigger: HTMLElement, name: RegExp): Promise<void> {
-  fireEvent.keyDown(trigger, { key: "Enter" });
-  const option = await screen.findByRole("option", { name });
-  fireEvent.keyDown(option, { key: "Enter" });
-  await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
-}
+// Ruling: human 「本轮允许改必要的判据」 (session b999cc81): the keyboard pick moved into the shared helper (and the jsdom
+// shims into setup.ts); the criterion still protects that choosing a language rewrites the stored choice, <html lang>
+// and the page's text.
+const choose = pickOption;
 const ZH = /中文/, EN = /English/;
 
 describe("the language switch (spec §6.7)", () => {
