@@ -596,7 +596,8 @@ describe("skip, defer, fill and held effects (§6, §14.4)", () => {
     const picker = await waitFor(() => within(form).getByRole("combobox", { name: "coverImage: an image in the folder" }));
     // mutation: list another folder or template -> url differs, red
     expect(reads).toContain(`/api/control/flows/images?dir=${encodeURIComponent("/home/o/tea")}&template=wechat-article`);
-    fireEvent.change(picker, { target: { value: "covers/a.png" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the image picked over the run's folder is the coverImage the params command sets
+    await pickOption(picker, "covers/a.png");
     fireEvent.click(within(form).getByRole("button", { name: "Set" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(lastPost()!.body).toEqual(expect.objectContaining({ payload: { runId: RUN, kind: "command", target: { kind: "run" }, body: { command: "params", set: { coverImage: "covers/a.png" } } } }));

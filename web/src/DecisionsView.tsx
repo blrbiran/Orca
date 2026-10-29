@@ -16,6 +16,7 @@ import { en } from "./locales/en.js";
 import { MinorToggle, visibleByImportance } from "./MinorToggle.js";
 import { useProjectName } from "./projectNames.js";
 import { ALL_PROJECTS } from "./projectScope.js";
+import { Select } from "./ui/Select.js";
 import type { ProjectV1 } from "./project.js";
 import type { SourceStatus } from "./overviewModel.js";
 import type { DecisionListRow, DecisionStatusRow } from "./types.js";
@@ -70,14 +71,11 @@ function FilterSelect(props: {
   return (
     <label>
       {props.label}
-      <select
-        name={`filter-${props.name}`}
+      <Select
         value={props.filter[props.name]}
-        onChange={(e) => props.onFilter?.({ ...props.filter, [props.name]: e.currentTarget.value })}
-      >
-        <option value="">{t("decisions.any")}</option>
-        {values.map((v) => <option key={v} value={v}>{props.optionText ? props.optionText(v) : v}</option>)}
-      </select>
+        onValueChange={(value) => props.onFilter?.({ ...props.filter, [props.name]: value })}
+        options={[{ value: "", label: t("decisions.any") }, ...values.map((v) => ({ value: v, label: props.optionText ? props.optionText(v) : v }))]}
+      />
     </label>
   );
 }
@@ -152,9 +150,8 @@ export function DecisionsView(props: {
         {props.status !== undefined && (
           <label>
             {t("decisions.filterStatus")}
-            <select name="filter-status" value={props.status} onChange={(e) => props.onStatus?.(e.currentTarget.value as DecisionStatus)}>
-              {DECISION_STATUSES.map((s) => <option key={s} value={s}>{t(`decisions.status.${s}`)}</option>)}
-            </select>
+            <Select value={props.status} onValueChange={(value) => props.onStatus?.(value)}
+              options={DECISION_STATUSES.map((s) => ({ value: s, label: t(`decisions.status.${s}`) }))} />
           </label>
         )}
         <FilterSelect label={t("decisions.filterKind")} name="kind" values={distinct(props.rows, (r) => String(r.kind))} filter={props.filter} onFilter={props.onFilter} order={sortKinds} optionText={kindLabel} />
@@ -164,10 +161,11 @@ export function DecisionsView(props: {
         ) : (
           <label>
             {t("decisions.filterRepository")}
-            <select name="filter-projectKey" value={props.scope.value} onChange={(e) => props.scope?.onChange(e.currentTarget.value)}>
-              {props.scope.allowAll && <option value={ALL_PROJECTS}>{t("project.all")}</option>}
-              {props.scope.projects.map((entry) => <option key={entry.projectKey} value={entry.projectKey}>{name(entry.projectKey)}</option>)}
-            </select>
+            <Select value={props.scope.value} onValueChange={(value) => props.scope?.onChange(value)} placeholder={t("settings.projectPick.choose")}
+              options={[
+                ...(props.scope.allowAll ? [{ value: ALL_PROJECTS, label: t("project.all") }] : []),
+                ...props.scope.projects.map((entry) => ({ value: entry.projectKey, label: name(entry.projectKey) })),
+              ]} />
           </label>
         )}
       </div>

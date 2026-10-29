@@ -11,6 +11,7 @@ import i18n from "../src/i18n.js";
 import { App } from "../src/App.js";
 import type { Decision } from "../src/DecisionDetail.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 const QUESTION_A = "question A";
 const QUESTION_B = "question B";
@@ -268,14 +269,15 @@ describe("the decision review loop", () => {
   });
 });
 
-const kindFilter = (): HTMLSelectElement => document.querySelector('select[name="filter-kind"]') as HTMLSelectElement;
+const kindFilter = (): HTMLElement => within(document.querySelector<HTMLElement>(".decisions .filters")!).getByRole("combobox", { name: "Kind" });
 describe("Overview's view-all link (final review M4)", () => {
   it("resets Decisions to the unreviewed, unfiltered list it counted", async () => {
     // Four unreviewed rows, one of a different kind, so the Kind filter visibly narrows the list.
     rows = [A, B, C, { ...row("D", "question D"), kind: "interface" } as DecisionListRow];
     await openA();
     expect(document.querySelectorAll(".decision-list li button")).toHaveLength(4);
-    fireEvent.change(kindFilter(), { target: { value: "interface" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Kind picked narrows the list, and the view-all link resets it to "any"
+    await pickOption(kindFilter(), "🟠 interface");
     await waitFor(() => expect(document.querySelectorAll(".decision-list li button")).toHaveLength(1));
     window.location.hash = "#overview";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -285,7 +287,7 @@ describe("Overview's view-all link (final review M4)", () => {
     // jsdom does not follow hash links on click.
     window.location.hash = "#decisions";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
-    await waitFor(() => expect((kindFilter()).value).toBe(""));
+    await waitFor(() => expect(shownText(kindFilter())).toBe("any"));
     expect(document.querySelectorAll(".decision-list li button")).toHaveLength(4);
     // The row opened before the detour is no longer open.
     expect(question()).not.toBe(QUESTION_A);

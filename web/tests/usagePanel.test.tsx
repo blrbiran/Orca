@@ -13,6 +13,7 @@ import type { Me } from "../src/auth.js";
 import type { UsageViewV1 } from "../src/controlTypes.js";
 import { UsagePanel } from "../src/UsagePanel.js";
 import i18n from "../src/i18n.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -163,7 +164,8 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Clear" }));
     await waitFor(() => expect(calls.filter((call) => call.method === "POST")).toHaveLength(1));
     fireEvent.change(screen.getByLabelText(/time zone/i), { target: { value: "Asia/Tokyo" } });
-    fireEvent.change(screen.getByLabelText(/week starts on/i), { target: { value: "7" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the weekday picked is the weekStart number the calendar command carries
+    await pickOption(screen.getByLabelText(/week starts on/i), "Sunday");
     fireEvent.click(screen.getByRole("button", { name: /save calendar/i }));
     await waitFor(() => expect(calls.filter((call) => call.method === "POST")).toHaveLength(2));
     const posts = calls.filter((call) => call.method === "POST").map((call) => [call.url, (call.body as { payload: unknown }).payload]);
@@ -211,7 +213,8 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     view = { ...VIEW, scope: "repo:alpha-11111111", headline: { ...VIEW.headline, total: 222 } };
     renderAs(member, "alpha-11111111");
     await waitFor(() => expect(release).not.toBeNull());
-    fireEvent.change(screen.getByLabelText(/^scope/i), { target: { value: "project" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the project scope picked while All's read is in flight is the scope whose total stays shown
+    await pickOption(screen.getByLabelText(/^scope/i), "This project (alpha-11111111)");
     await waitFor(() => expect(screen.getByTestId("usage-total").textContent).toBe("222"));
     release!();
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -247,7 +250,8 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     fireEvent.click(screen.getByRole("button", { name: /save calendar/i }));
     expect((await screen.findByTestId("refusal-code")).textContent).toBe("revision-conflict");
     await waitFor(() => expect((screen.getByLabelText(/time zone/i) as HTMLInputElement).value).toBe("America/New_York"));
-    expect((screen.getByLabelText(/week starts on/i) as HTMLSelectElement).value).toBe("7");
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): after the conflict the picker shows the other owner's week start
+    expect(shownText(screen.getByLabelText(/week starts on/i))).toBe("Sunday");
   });
 
   it("keeps an unresolved command's id and looks it up again on request", async () => {
@@ -307,14 +311,15 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
   it("reads a project scope as repo:<id>, a custom range as from/to, and day/week/month as groupBy", async () => {
     renderAs(member, "alpha-11111111");
     await screen.findByTestId("usage-total");
-    fireEvent.change(screen.getByLabelText(/^scope/i), { target: { value: "project" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scope and period picked are the scope, groupBy and range the read carries
+    await pickOption(screen.getByLabelText(/^scope/i), "This project (alpha-11111111)");
     await waitFor(() => expect(lastRead()).toEqual({ scope: "repo:alpha-11111111", groupBy: "model" }));
-    for (const groupBy of ["day", "week", "month"]) {
-      fireEvent.change(screen.getByLabelText(/^period/i), { target: { value: groupBy } });
+    for (const [groupBy, label] of [["day", "By day"], ["week", "By week"], ["month", "By month"]] as const) {
+      await pickOption(screen.getByLabelText(/^period/i), label);
       await waitFor(() => expect(lastRead()).toEqual({ scope: "repo:alpha-11111111", groupBy }));
     }
     expect(screen.getByTestId("usage-groups")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(/^period/i), { target: { value: "custom" } });
+    await pickOption(screen.getByLabelText(/^period/i), "Custom range");
     fireEvent.change(screen.getByLabelText(/^from/i), { target: { value: "2026-10-01T00:00" } });
     fireEvent.change(screen.getByLabelText(/^to/i), { target: { value: "2026-10-08T12:30" } });
     await waitFor(() => expect(lastRead()).toEqual({
@@ -325,7 +330,7 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
   it("offers only All projects when no control repository is chosen", async () => {
     renderAs(member, null);
     await screen.findByTestId("usage-total");
-    const options = [...(screen.getByLabelText(/^scope/i) as HTMLSelectElement).options].map((option) => option.value);
-    expect(options).toEqual(["all"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): without a chosen project the scope picker offers All projects only
+    expect(await optionsOf(screen.getByLabelText(/^scope/i))).toEqual([["All projects", false]]);
   });
 });

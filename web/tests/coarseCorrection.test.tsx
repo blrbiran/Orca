@@ -13,6 +13,7 @@ import { CorrectionsView } from "../src/CorrectionsView.js";
 import "../src/i18n.js";
 import { TaskDetail } from "../src/TaskDetail.js";
 import { run, view, workItem } from "./fixtures/board.js";
+import { optionsOf, pickOption } from "./selectControl.js";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -39,7 +40,8 @@ describe("coarse corrections in the Web (flow spec §13.2, §13.3)", () => {
     render(<CoarseCorrectionForm repositories={[{ repoId: "a-1", name: "A" }, { repoId: "b-2", name: "B" }]} onCancel={vi.fn()} />);
     const submit = screen.getByRole("button", { name: "Record correction" }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "b-2" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the repository picked is the repoId the correction is sent for
+    await pickOption(screen.getByLabelText("Project"), "B");
     fireEvent.change(screen.getByLabelText("One sentence: what is wrong"), { target: { value: "the totals are gone" } });
     fireEvent.click(submit);
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("c_0123456789abcdef"));
@@ -48,11 +50,12 @@ describe("coarse corrections in the Web (flow spec §13.2, §13.3)", () => {
     expect(sent[0]!.body.payload).toEqual({ repoId: "b-2", kind: "wrong", because: "the totals are gone" });
   });
 
-  it("C3: not_my_taste keeps the form closed until the alternative is given", () => {
+  it("C3: not_my_taste keeps the form closed until the alternative is given", async () => {
     stubFetch();
     render(<CoarseCorrectionForm repositories={[{ repoId: "a-1", name: "A" }]} onCancel={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("One sentence: what is wrong"), { target: { value: "x" } });
-    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "not_my_taste" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): picking not_my_taste asks for the alternative before the form can be sent
+    await pickOption(screen.getByLabelText("Kind"), "not_my_taste");
     const submit = screen.getByRole("button", { name: "Record correction" }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("What should have been done instead"), { target: { value: "y" } });
@@ -87,7 +90,8 @@ describe("coarse corrections in the Web (flow spec §13.2, §13.3)", () => {
     expect(document.querySelector('[data-correction-id="c_00000000000000b2"]')!.textContent).toContain("On repository github.com/o/r (no decision named)");
     fireEvent.click(screen.getByRole("button", { name: "Correct…" }));
     await waitFor(() => expect(screen.getByLabelText("Project")).toBeTruthy());
-    expect([...(screen.getByLabelText("Project") as HTMLSelectElement).options].map((option) => option.value)).toEqual(["o-1"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): only the project with a control repository is offered
+    expect(await optionsOf(screen.getByLabelText("Project"))).toEqual([["O", false]]);
   });
 
   it("C6: Correct is offered beside a run that finished, and not beside one that failed", () => {

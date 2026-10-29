@@ -91,7 +91,8 @@ const openDecision = async (projectKey: string): Promise<HTMLElement> => {
   return document.querySelector(".decision-detail") as HTMLElement;
 };
 const becauseBox = (scope: HTMLElement): HTMLTextAreaElement => within(scope).getByRole("textbox", { name: "Because" }) as HTMLTextAreaElement;
-const kindSelect = (scope: HTMLElement): HTMLSelectElement => within(scope).getByRole("combobox", { name: "Kind" }) as HTMLSelectElement;
+const kindSelect = (scope: HTMLElement): HTMLElement => within(scope).getByRole("combobox", { name: "Kind" });
+const TASTE = "not_my_taste — defensible, but not what I would choose";
 
 describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () => {
   it("1: alpha's answers, choices, feedback, limit and correction survive Beta and come back; Beta shows its own defaults", async () => {
@@ -110,7 +111,8 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     // A correction of alpha/d1.
     let detail = await openDecision("alpha");
     fireEvent.change(becauseBox(detail), { target: { value: "alpha because" } });
-    fireEvent.change(kindSelect(detail), { target: { value: "not_my_taste" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the correction kind picked for alpha is part of alpha's kept draft
+    await pickOption(kindSelect(detail), TASTE);
 
     await switchTo("beta", "Beta");
     await waitFor(() => expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull());
@@ -125,7 +127,7 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     expect(limitBox(shown).value).toBe("10,000,000");
     detail = await openDecision("beta");
     expect(becauseBox(detail).value).toBe("");
-    expect(kindSelect(detail).value).toBe("wrong");
+    expect(shownText(kindSelect(detail))).toBe("wrong — the choice was wrong");
 
     await switchTo("alpha", "Alpha");
     await waitFor(() => expect(screen.queryByTestId("decision-question")).toBeNull());
@@ -134,7 +136,7 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     expect(limitBox(shown).value).toBe("12,000,000");
     detail = await openDecision("alpha");
     expect(becauseBox(detail).value).toBe("alpha because");
-    expect(kindSelect(detail).value).toBe("not_my_taste");
+    expect(shownText(kindSelect(detail))).toBe(TASTE);
     shown = await openRequirement("ra", "answers");
     expect(radio(questionGroup(shown, "R1.Q1"), "Own answer").checked).toBe(true);
     expect((within(questionGroup(shown, "R1.Q1")).getByRole("textbox") as HTMLTextAreaElement).value).toBe("alpha text");

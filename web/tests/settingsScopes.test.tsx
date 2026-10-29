@@ -54,7 +54,9 @@ describe("settings scopes", () => {
     expect(globalRegion().textContent).toContain("shared panel operator");
     expect(within(globalRegion()).queryByRole("region", { name: "Workspace mode" })).toBeNull();
     expect(within(globalRegion()).queryByRole("region", { name: "Integration" })).toBeNull();
-    expect(screen.getByRole("navigation", { name: "Sections" }).querySelector('select[name="theme"]')).toBeNull();
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the theme picker lives in Settings only, not in the sidebar's
+    // nav -- read as the picker a person sees (a combobox named Theme), not a native select found by its name, which no longer exists.
+    expect(within(screen.getByRole("navigation", { name: "Sections" })).queryByRole("combobox", { name: "Theme" })).toBeNull();
     expect(shownText(project())).toBe("Alpha");
     const task = screen.getByRole("region", { name: "Task control" });
     expect(within(task).getByRole("button", { name: "Import plan" })).toBeTruthy();

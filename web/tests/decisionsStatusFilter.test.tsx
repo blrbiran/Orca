@@ -12,6 +12,7 @@ import { rowsForStatus } from "../src/DecisionsView.js";
 import i18n from "../src/i18n.js";
 import { enErrors } from "../src/locales/en.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 type StatusRow = DecisionListRow & { reviewed: boolean; highTier: boolean };
 const row = (id: string, over: Partial<StatusRow>): StatusRow => ({
@@ -73,7 +74,10 @@ afterEach(cleanup);
 
 const listed = (): string[] =>
   Array.from(document.querySelectorAll<HTMLButtonElement>(".decision-list li button")).map((b) => b.textContent ?? "");
-const status = (): HTMLSelectElement => document.querySelector<HTMLSelectElement>('select[name="filter-status"]')!;
+// Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): every criterion below picks the status the way a person does;
+// what each protects is unchanged -- the status picked decides which rows are listed, what the heading says and what is read.
+const status = (): HTMLElement => screen.getByRole("combobox", { name: /^(Status|状态)$/ });
+const pickStatus = (label: string): Promise<void> => pickOption(status(), label);
 const ids = (rows: readonly DecisionListRow[]): string[] => rows.map((r) => r.id);
 
 async function openHome(): Promise<void> {
@@ -92,7 +96,7 @@ describe("rowsForStatus (spec §9.2(1))", () => {
 describe("the Decisions status filter in the page", () => {
   it("defaults to Unreviewed, lists exactly today's /api/todo rows, and does not read /api/decisions", async () => {
     await openHome();
-    expect(status().value).toBe("unreviewed");
+    expect(shownText(status())).toBe("Unreviewed");
     expect(listed()).toHaveLength(1);
     expect(listed()[0]).toContain("interface");
     expect(requested.some((u) => u.startsWith("/api/decisions"))).toBe(false);
@@ -100,7 +104,7 @@ describe("the Decisions status filter in the page", () => {
 
   it("Reviewed lists the reviewed decisions of any tier and none of the others", async () => {
     await openHome();
-    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await pickStatus("Reviewed");
     await waitFor(() => expect(listed()).toHaveLength(2));
     expect(screen.getByTestId("decision-count").textContent).toBe("2 of 2");
     expect(requested.some((u) => u.startsWith("/api/decisions"))).toBe(true);
@@ -108,7 +112,7 @@ describe("the Decisions status filter in the page", () => {
 
   it("All lists every decision", async () => {
     await openHome();
-    fireEvent.change(status(), { target: { value: "all" } });
+    await pickStatus("All");
     await waitFor(() => expect(listed()).toHaveLength(4));
   });
 
@@ -117,7 +121,7 @@ describe("the Decisions status filter in the page", () => {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
       String(input).startsWith("/api/decisions") ? json({ rows: [OPEN, UNREVIEWED_LOW] }) : real(input, init)) as typeof fetch;
     await openHome();
-    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await pickStatus("Reviewed");
     expect((await screen.findByText("No decisions in this status.")).tagName).toBe("P");
     expect(screen.queryByText(/Every high-tier decision has been reviewed/)).toBeNull();
   });
@@ -128,18 +132,18 @@ describe("the Decisions status filter in the page", () => {
     await openHome();
     expect(heading()).toBe("Unreviewed high-tier decisions");
     expect(lede()).toBe("High-tier decisions an agent recorded that nobody has reviewed yet. Open one, read it, then Agree or Correct.");
-    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await pickStatus("Reviewed");
     await waitFor(() => expect(listed()).toHaveLength(2));
     expect(heading()).toBe("Reviewed decisions");
     expect(lede()).toBe("Decisions someone has already reviewed, at any tier. Open one to read it again or record a correction.");
-    fireEvent.change(status(), { target: { value: "all" } });
+    await pickStatus("All");
     await waitFor(() => expect(listed()).toHaveLength(4));
     expect(heading()).toBe("All decisions");
     expect(lede()).toBe("Every decision an agent recorded, reviewed or not, at any tier. Open one to read it, then Agree or Correct.");
     await act(async () => { await i18n.changeLanguage("zh"); });
     expect(heading()).toBe("全部决策");
     expect(lede()).toBe("agent 记录下的每一条决策，不论是否评审过、层级高低。打开一条，读完，然后点「同意」或「纠正」。");
-    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await pickStatus("已评审");
     expect(heading()).toBe("已评审的决策");
     expect(lede()).toBe("已经有人评审过的决策，不论层级。打开一条可以重读，或记录一条纠正。");
   });
@@ -150,7 +154,7 @@ describe("the Decisions status filter in the page", () => {
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
       String(input).startsWith("/api/decisions") ? new Promise<Response>((resolve) => { answer = resolve; }) : real(input, init)) as typeof fetch;
     await openHome();
-    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await pickStatus("Reviewed");
     expect(screen.getByText("Reading decisions…").tagName).toBe("P");
     expect(screen.queryByText("No decisions in this status.")).toBeNull();
     await act(async () => { answer(json({ rows: FULL })); });
@@ -160,7 +164,7 @@ describe("the Decisions status filter in the page", () => {
 
   it("opens a reviewed decision with the correction form, and a second correction shows the refusal", async () => {
     await openHome();
-    fireEvent.change(status(), { target: { value: "reviewed" } });
+    await pickStatus("Reviewed");
     await waitFor(() => expect(listed()).toHaveLength(2));
     fireEvent.click(document.querySelector<HTMLButtonElement>(".decision-list li button")!);
     await screen.findByText("question of run/2");

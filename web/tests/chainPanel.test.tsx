@@ -75,9 +75,10 @@ describe("ChainPanel (D-launch spec §6.2)", () => {
     await pickOption(picker, "other-repo");
     expect(shownText(picker)).toBe("other-repo");
     const form = container.querySelector("form.chain-start") as HTMLFormElement;
-    fireEvent.change(form.querySelector('[name="goal"]')!, { target: { value: "ship it" } });
-    fireEvent.change(form.querySelector('[name="maxSessions"]')!, { target: { value: "3" } });
-    fireEvent.change(form.querySelector('[name="maxCostUsd"]')!, { target: { value: "2.5" } });
+    const field = (name: string): Element => form.querySelector(`[name="${name}"]`)!;
+    fireEvent.change(field("goal"), { target: { value: "ship it" } });
+    fireEvent.change(field("maxSessions"), { target: { value: "3" } });
+    fireEvent.change(field("maxCostUsd"), { target: { value: "2.5" } });
     fireEvent.submit(form);
     // mutation: the picker's onValueChange ignores the pick -> repoKey "distinct-repo", red
     expect(onStart).toHaveBeenCalledWith({ repoKey: "other-repo", goal: "ship it", maxSessions: "3", maxCostUsd: "2.5", sessionTimeoutMin: "360" });

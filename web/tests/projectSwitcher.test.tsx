@@ -178,13 +178,14 @@ describe("the project switcher", () => {
     await waitFor(() => expect(memoryLists).toContain("gamma"));
     expect(memoryLists[0]).toBe("gamma");
     // Memory moves it too, and a later sidebar change moves Memory.
-    const memorySelect = (): HTMLSelectElement => document.querySelector('select[name="memory-repo"]') as HTMLSelectElement;
-    await waitFor(() => expect(memorySelect()).not.toBeNull());
-    fireEvent.change(memorySelect(), { target: { value: "beta" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a repository picked in Memory moves the one scope, and the sidebar's pick is what Memory shows
+    const memorySelect = (): HTMLElement => within(document.querySelector<HTMLElement>(".memory-view")!).getByRole("combobox", { name: "Repository" });
+    await waitFor(() => expect(document.querySelector(".memory-view [data-select-trigger]")).not.toBeNull());
+    await pickOption(memorySelect(), "beta");
     expect(shownText(projectSelect())).toBe("beta");
     await pickOption(projectSelect(), "alpha");
     await waitFor(() => expect(memoryLists.at(-1)).toBe("alpha"));
-    expect(memorySelect().value).toBe("alpha");
+    expect(shownText(memorySelect())).toBe("alpha");
     window.location.hash = "";
   });
 

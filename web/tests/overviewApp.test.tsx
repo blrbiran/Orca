@@ -7,7 +7,7 @@ import { act } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { ALPHA, BETA, decisionRow, groupSummary, installFakePanel, planGroupView } from "./fixtures/twoProjects.js";
-import { pickOption, shownText } from "./selectControl.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
 import type { OverviewV1 } from "../src/controlTypes.js";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 let overview: OverviewV1;
@@ -93,8 +93,10 @@ it("same-name decision queue entries open their exact composite owner despite or
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  fireEvent.click(screen.getByRole("link", { name: /^Decisions/ }));
  await waitFor(() => expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true"));
- await waitFor(() => expect(document.querySelector('select[name="filter-kind"] option[value="interface"]')).not.toBeNull());
- fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), { target: { value: "interface" } });
+ // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): an ordinary Kind filter picked in Decisions narrows the list, and the Overview entries still open their exact owner
+ const kind = (): HTMLElement => within(document.querySelector<HTMLElement>(".decisions .filters")!).getByRole("combobox", { name: "Kind" });
+ await waitFor(async () => expect((await optionsOf(kind())).map(([name]) => name)).toContain("🟠 interface"));
+ await pickOption(kind(), "🟠 interface");
  await waitFor(() => expect(document.querySelectorAll(".decision-list button")).toHaveLength(1));
  fireEvent.click(screen.getByRole("link", { name: "Overview" }));
  await waitFor(() => expect(document.querySelector('[data-section="overview"]')?.getAttribute("data-active")).toBe("true"));

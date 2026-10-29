@@ -34,6 +34,7 @@ import { enumText } from "./i18n.js";
 import { en } from "./locales/en.js";
 import { WEB_CORRECTION_KINDS } from "./types.js";
 import { actionsBox, detailHelp, withdrawnItem } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 import type { CorrectionKind } from "./types.js";
 
 export interface DecisionAlternative {
@@ -184,13 +185,8 @@ export function DecisionDetail({
           <p className="text-sm text-muted" role="heading" aria-level={3}>{t("decisions.correctionTitle")}</p>
           <label>
             {t("decisions.kind")}
-            <select name="kind" value={form.kind} onChange={(e) => edit({ kind: e.currentTarget.value as CorrectionKind })}>
-              {WEB_CORRECTION_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {t("decisions.kindOption", { kind: enumText("correctionKind", kind), help: t(`decisions.kindHelp.${kind}`) })}
-                </option>
-              ))}
-            </select>
+            <Select value={form.kind} onValueChange={(kind: CorrectionKind) => edit({ kind })}
+              options={WEB_CORRECTION_KINDS.map((kind) => ({ value: kind, label: t("decisions.kindOption", { kind: enumText("correctionKind", kind), help: t(`decisions.kindHelp.${kind}`) }) }))} />
           </label>
           <label>
             {t("decisions.because")}

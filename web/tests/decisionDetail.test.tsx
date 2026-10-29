@@ -8,6 +8,7 @@ import type { Decision } from "../src/DecisionDetail.js";
 import i18n from "../src/i18n.js";
 import { WEB_CORRECTION_KINDS } from "../src/types.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
+import { optionsOf } from "./selectControl.js";
 
 /**
  * task 8 ruling K7. Every field is a distinct literal, so no assertion can
@@ -34,9 +35,14 @@ describe("DecisionDetail (task 8 ruling K7)", () => {
   // Final review I-3 / ruling R66: `Correct` used to post `because: ""`, which
   // the seam refuses every time. The form must offer every correction kind and
   // must not let a correction go out without a reason.
-  it("renders a correction form with every correction kind, a required because box, and an optional chose_instead box", () => {
+  it("renders a correction form with every correction kind, a required because box, and an optional chose_instead box", async () => {
     const html = renderToStaticMarkup(<DecisionDetail decision={decision} />);
-    for (const kind of WEB_CORRECTION_KINDS) expect(html).toContain(`<option value="${kind}"`);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Kind picker offers every correction kind, in order
+    // (read from its open list: a server render of a Radix picker carries no options).
+    render(<DecisionDetail decision={decision} />);
+    const offered = await optionsOf(screen.getByRole("combobox", { name: "Kind" }));
+    expect(offered.map(([name]) => name.split(" — ")[0])).toEqual([...WEB_CORRECTION_KINDS]);
+    cleanup();
     expect(html).toMatch(/<textarea name="because" required=""/);
     expect(html).toContain('name="chose_instead"');
     expect(html).not.toMatch(/name="chose_instead"[^>]*required/);

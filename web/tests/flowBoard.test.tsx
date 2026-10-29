@@ -187,11 +187,12 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
     expect(within(param(dialog, "idea")).queryByTestId("flow-start-default")).toBeNull();
     expect(cover.textContent).toContain("Enter the folder to pick one of its images.");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
-    const picker = await waitFor(() => within(cover).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
+    const picker = await waitFor(() => within(cover).getByRole("combobox", { name: "coverImage: an image in the folder" }));
     // mutation: list without the template (its excludes) -> url without template, red
     expect(reads).toContain(`/api/control/flows/images?dir=${encodeURIComponent("/home/o/tea")}&template=wechat-article`);
-    expect([...picker.options].map((o) => o.value)).toEqual(["", "covers/a.png", "covers/b.jpg"]);
-    fireEvent.change(picker, { target: { value: "covers/b.jpg" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the picker offers "none" then the folder's images in order, and the image picked fills the param the start sends
+    expect(await optionsOf(picker)).toEqual([["none picked (use the default)", false], ["covers/a.png", false], ["covers/b.jpg", false]]);
+    await pickOption(picker, "covers/b.jpg");
     expect((within(cover).getByRole("textbox", { name: "coverImage: a path inside the folder" }) as HTMLInputElement).value).toBe("covers/b.jpg");
     fireEvent.change(within(param(dialog, "idea")).getByRole("textbox", { name: "idea (required)" }), { target: { value: "Tea" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Start" }));
@@ -207,15 +208,17 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
     render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     const dialog = await openDialog();
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
-    const picker = await waitFor(() => within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
-    expect(picker.options[0]!.textContent).toBe("choose an image");
+    const picker = await waitFor(() => within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }));
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the picker's empty option says "choose" without a default and "use the default" with one, and the closed picker shows it
+    expect((await optionsOf(picker))[0]).toEqual(["choose an image", false]);
+    expect(shownText(picker)).toBe("choose an image");
     cleanup();
     serve();
     render(<FlowBoard groups={[]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     const again = await openDialog();
     fireEvent.change(within(again).getByRole("textbox", { name: "Folder (absolute path)" }), { target: { value: "/home/o/tea" } });
-    const withDefault = await waitFor(() => within(param(again, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
-    expect(withDefault.options[0]!.textContent).toBe("none picked (use the default)");
+    const withDefault = await waitFor(() => within(param(again, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }));
+    expect((await optionsOf(withDefault))[0]).toEqual(["none picked (use the default)", false]);
   });
 
   it("says when the folder's images were cut at 200", async () => {
@@ -328,12 +331,13 @@ describe("the board reads flow runs and opens them (§14.1, P6)", () => {
       fireEvent.change(folder, { target: { value: "/old" } });
       await waitFor(() => expect(reads.some((r) => r.includes(encodeURIComponent("/old")))).toBe(true));
       fireEvent.change(folder, { target: { value: "/new" } });
-      const picker = await waitFor(() => within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement);
-      expect([...picker.options].map((o) => o.value)).toEqual(["", "new.png"]);
+      const picker = await waitFor(() => within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }));
+      // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the list offered is the newest folder's, and an older answer arriving late does not replace it
+      expect(await optionsOf(picker)).toEqual([["none picked (use the default)", false], ["new.png", false]]);
       releaseOld();
       await new Promise((resolve) => setTimeout(resolve, 50));
       // mutation: apply every answer -> the old folder's list replaces the new one, red
-      expect([...(within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }) as HTMLSelectElement).options].map((o) => o.value)).toEqual(["", "new.png"]);
+      expect(await optionsOf(within(param(dialog, "coverImage")).getByRole("combobox", { name: "coverImage: an image in the folder" }))).toEqual([["none picked (use the default)", false], ["new.png", false]]);
     });
 
     it("says a folder is too large to list, not that it cannot be listed", async () => {

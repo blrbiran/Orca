@@ -12,6 +12,7 @@ import { fetchMemoryItem, fetchMemoryList, fetchMemorySearch, fetchMemoryStatus 
 import type { MemoryPageResponse, MemoryRecord, MemoryStatusResponse } from "./memoryTypes.js";
 import { Refusal } from "./Refusal.js";
 import { useProjectName } from "./projectNames.js";
+import { Select } from "./ui/Select.js";
 
 const EXCERPT_CODE_POINTS = 200;
 const SCOPE_KEY = { global: "memory.scopeGlobal", project: "memory.scopeProject" } as const;
@@ -133,9 +134,8 @@ export function MemoryView({ active, project, onProject }: {
           {status!.repos.length > 1 && (
             <label>
               {t("memory.repo")}
-              <select name="memory-repo" value={repo!} onChange={(e) => { const next = e.currentTarget.value; setRepo(next); setDraft(""); void load(next, ""); onProject?.(next); }}>
-                {status!.repos.map((r) => <option key={r.projectKey} value={r.projectKey}>{name(r.projectKey)}</option>)}
-              </select>
+              <Select value={repo!} onValueChange={(next) => { setRepo(next); setDraft(""); void load(next, ""); onProject?.(next); }}
+                options={status!.repos.map((r) => ({ value: r.projectKey, label: name(r.projectKey) }))} />
             </label>
           )}
           <form role="search" onSubmit={submit}>

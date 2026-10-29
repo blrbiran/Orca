@@ -496,9 +496,9 @@ describe("decision identity and count", () => {
   const pane = (): HTMLElement => document.querySelector(".decisions") as HTMLElement;
   const count = (): string => within(pane()).getByTestId("decision-count").textContent ?? "";
   const listRows = (): string[] => Array.from(pane().querySelectorAll(".decision-list button")).map((row) => row.textContent ?? "");
-  const kindSelect = (): HTMLSelectElement => pane().querySelector("select[name=filter-kind]") as HTMLSelectElement;
-  const decisionsSelect = (): HTMLSelectElement => within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
-  const optionsOf = (select: HTMLSelectElement): string[] => Array.from(select.options).map((option) => option.textContent ?? "");
+  const kindSelect = (): HTMLElement => within(pane().querySelector<HTMLElement>(".filters")!).getByRole("combobox", { name: "Kind" });
+  const decisionsSelect = (): HTMLElement => within(pane()).getByRole("combobox", { name: "Repository" });
+  const optionsOf = async (select: HTMLElement): Promise<string[]> => (await offered(select)).map(([name]) => name);
   /** alpha/d1, beta/d1 (same id) and beta/d2; each readable, answering with its own project as the question. */
   function seedDecisions(): void {
     panel.todo = [decisionRow("alpha", "d1"), decisionRow("beta", "d1", { kind: "boundary" }), decisionRow("beta", "d2")];
@@ -531,7 +531,8 @@ describe("decision identity and count", () => {
     fireEvent.click(Array.from(pane().querySelectorAll(".decision-list button")).find((row) => row.textContent?.includes("boundary"))!);
     await screen.findByTestId("decision-question");
     expect(within(pane()).queryByRole("note")).toBeNull();
-    fireEvent.change(kindSelect(), { target: { value: "interface" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the kind picked in the filter narrows the list to that kind
+    await pickOption(kindSelect(), /interface$/);
     await settled("1 of 2");
     expect(within(pane()).getByRole("note").textContent).toBe(HIDDEN_BY_FILTER);
   });
@@ -553,14 +554,15 @@ describe("decision identity and count", () => {
     seedDecisions();
     render(<App />);
     await ready();
-    expect(optionsOf(decisionsSelect())).toEqual(await optionNames());
-    fireEvent.change(decisionsSelect(), { target: { value: decisionsSelect().options[0]!.value } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Decisions picker offers the sidebar's options, and a pick in either is the one scope both show
+    expect(await optionsOf(decisionsSelect())).toEqual(await optionNames());
+    await pickOption(decisionsSelect(), "All projects");
     await waitFor(() => expect(shownText(projectSelect())).toBe("All projects"));
-    expect(decisionsSelect().selectedOptions[0]?.textContent).toBe("All projects");
+    expect(shownText(decisionsSelect())).toBe("All projects");
     expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("all");
     await pickOption(projectSelect(), "Beta");
-    await waitFor(() => expect(decisionsSelect().selectedOptions[0]?.textContent).toBe("Beta"));
-    fireEvent.change(decisionsSelect(), { target: { value: "alpha" } });
+    await waitFor(() => expect(shownText(decisionsSelect())).toBe("Beta"));
+    await pickOption(decisionsSelect(), "Alpha");
     await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     expect(window.localStorage.getItem(PROJECT_VIEW_KEY)).toBe("project");
   });
@@ -586,7 +588,7 @@ describe("decision identity and count", () => {
     render(<App />);
     await ready();
     await settled("2 of 2");
-    fireEvent.change(kindSelect(), { target: { value: "boundary" } });
+    await pickOption(kindSelect(), /boundary$/);
     await settled("1 of 2");
     await chooseAll();
     await settled("1 of 3");
@@ -598,10 +600,9 @@ describe("decision identity and count", () => {
     render(<App />);
     await screen.findByText("epoch epoch-a");
     await waitFor(() => expect(count()).toBe("3 of 3"));
-    const select = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
-    await waitFor(() => expect(optionsOf(select)).toEqual(["any", "alpha", "beta"]));
-    const liveSelect = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
-    fireEvent.change(liveSelect, { target: { value: "beta" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the pane's own repository filter offers "any" and each repository, and the one picked narrows the list
+    await waitFor(async () => expect(await optionsOf(decisionsSelect())).toEqual(["any", "alpha", "beta"]));
+    await pickOption(decisionsSelect(), "beta");
     await waitFor(() => expect(count()).toBe("2 of 3"));
   });
 
@@ -612,9 +613,9 @@ describe("decision identity and count", () => {
     render(<App />);
     await screen.findByText("epoch epoch-a");
     await waitFor(() => expect(count()).toBe("3 of 3"));
-    await waitFor(() => expect(optionsOf(within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement)).toContain("beta"));
-    const liveSelect = within(pane()).getByRole("combobox", { name: "Repository" }) as HTMLSelectElement;
-    fireEvent.change(liveSelect, { target: { value: "beta" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a repository picked in the pane's own filter before the scope arrived narrows the list, then stops counting
+    await waitFor(async () => expect(await optionsOf(decisionsSelect())).toContain("beta"));
+    await pickOption(decisionsSelect(), "beta");
     await waitFor(() => expect(count()).toBe("2 of 3"));
     await act(async () => { release(); });
     await ready();

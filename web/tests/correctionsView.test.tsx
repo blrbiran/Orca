@@ -175,8 +175,9 @@ describe("the Corrections list (Task 13)", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Close by hand" }));
     const form = rowOf(LIVE).querySelector<HTMLFormElement>("form.close-form")!;
     expect(form.querySelector<HTMLInputElement>('input[name="undoHow"]')!.required).toBe(true);
-    fireEvent.change(form.querySelector('input[name="undoHow"]')!, { target: { value: "git revert --no-edit abc" } });
-    fireEvent.change(form.querySelector('input[name="undoCost"]')!, { target: { value: "one commit" } });
+    const undoHow = form.querySelector('input[name="undoHow"]')!, undoCost = form.querySelector('input[name="undoCost"]')!;
+    fireEvent.change(undoHow, { target: { value: "git revert --no-edit abc" } });
+    fireEvent.change(undoCost, { target: { value: "one commit" } });
     answers.push(() => refused(409, "debug-group-active", `debug-group-active:debug-${LIVE}`));
     fireEvent.submit(form);
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -195,7 +196,8 @@ describe("the Corrections list (Task 13)", () => {
     const row = await shown(STOPPED);
     fireEvent.click(within(row).getByRole("button", { name: "Close by hand" }));
     const form = rowOf(STOPPED).querySelector<HTMLFormElement>("form.close-form")!;
-    fireEvent.change(form.querySelector('input[name="undoHow"]')!, { target: { value: "git revert --no-edit abc" } });
+    const undoHow = form.querySelector('input[name="undoHow"]')!;
+    fireEvent.change(undoHow, { target: { value: "git revert --no-edit abc" } });
     answers.push(() => refused(409, "debug-group-active", `debug-group-active:debug-${STOPPED}-2`));
     fireEvent.submit(form);
     // mutation M-13.14: no fallback to the refusal's groups -> "()" here, red

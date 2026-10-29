@@ -15,6 +15,7 @@ import i18n from "../src/i18n.js";
 import { enErrors } from "../src/locales/en.js";
 import { zhErrors } from "../src/locales/zh.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
+import { pickOption } from "./selectControl.js";
 
 const DECISION: Decision = { id: "run/1", question: "q-1", chose: "c-1", because: "b-1", alternatives: [] };
 type Correction = DecisionReviewState["corrections"][number];
@@ -183,7 +184,8 @@ const splitDetail = (): HTMLElement => document.querySelector<HTMLElement>(".spl
 async function openReviewed(id: string): Promise<void> {
   render(<App />);
   await screen.findByText("Unreviewed high-tier decisions");
-  fireEvent.change(document.querySelector('select[name="filter-status"]')!, { target: { value: "reviewed" } });
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): picking "Reviewed" in the status filter lists the reviewed decisions
+  await pickOption(screen.getByRole("combobox", { name: "Status" }), "Reviewed");
   await waitFor(() => expect(listedIds()).toEqual(["run/1", "run/2"]));
   const button = [...document.querySelectorAll<HTMLButtonElement>(".decision-list li button")].find((b) => b.textContent?.includes(id))!;
   fireEvent.click(button);
@@ -311,8 +313,8 @@ describe("withdrawing in the page (spec §7, §10.1)", () => {
         ? json({ code: "review-not-active", message: "You have not reviewed this decision, so there is no review of yours to withdraw." }, 409)
         : real(input, init)) as typeof fetch;
     render(<App />);
-    await waitFor(() => expect(document.querySelector('select[name="filter-status"]')).not.toBeNull());
-    fireEvent.change(document.querySelector('select[name="filter-status"]')!, { target: { value: "reviewed" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): picking 已评审 in the status filter lists the reviewed decisions
+    await pickOption(await screen.findByRole("combobox", { name: "状态" }), "已评审");
     await waitFor(() => expect(listedIds()).toEqual(["run/1", "run/2"]));
     fireEvent.click([...document.querySelectorAll<HTMLButtonElement>(".decision-list li button")].find((b) => b.textContent?.includes("run/1"))!);
     await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe("question of run/1"));

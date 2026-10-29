@@ -5,7 +5,7 @@
  * decision left the list, and the detail's form with each correction kind in words.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
 import { App } from "../src/App.js";
 import { DecisionDetail } from "../src/DecisionDetail.js";
@@ -15,11 +15,13 @@ import { DecisionOperations } from "../src/DecisionOperations.js";
 import type { DecisionReviewState } from "../src/api.js";
 import type { DecisionRequest, RecordedKey } from "../src/decisionRequests.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
+import { optionsOf, pickOption } from "./selectControl.js";
 
 const ROW: DecisionListRow = { projectKey: "github.com/x/y", id: "run/1", at: "2026-09-16T00:00:00.000Z", kind: "reconcile", scope: "cross-repo", verdict: "downgraded", question: null };
 const DECISION: Decision = { id: "run/1", question: "q-1", chose: "c-1", because: "b-1", alternatives: [{ option: "o-1", why_not: "w-1" }] };
-const optionTexts = (container: HTMLElement, name: string): Array<string | null> =>
-  [...container.querySelectorAll(`select[name="${name}"] option`)].map((option) => option.textContent);
+/** The option names a picker offers, in order (read from the open Radix list, never its hidden native select). */
+const optionTexts = async (container: HTMLElement, region: string, name: string): Promise<string[]> =>
+  (await optionsOf(within(container.querySelector<HTMLElement>(region)!).getByRole("combobox", { name }))).map(([text]) => text);
 /** A label's own words: its first text node, before the control it wraps. */
 const labelTexts = (container: HTMLElement, selector: string): Array<string | null> =>
   [...container.querySelectorAll(`${selector} label`)].map((label) => label.firstChild?.textContent ?? null);
@@ -31,22 +33,25 @@ afterEach(cleanup);
 describe("the decisions area in Chinese", () => {
   it("shows the list, its filters, the pills and the detail's form in Chinese", async () => {
     await i18n.changeLanguage("zh");
-    const { container } = render(<DecisionsView rows={[ROW]} filter={NO_FILTER} selected={ROW} detail={<DecisionDetail decision={DECISION} />} />);
+    const onFilter = vi.fn();
+    const onCorrect = vi.fn();
+    const { container } = render(<DecisionsView rows={[ROW]} filter={NO_FILTER} onFilter={onFilter} selected={ROW} detail={<DecisionDetail decision={DECISION} onCorrect={onCorrect} />} />);
     const text = container.textContent ?? "";
     for (const expected of ["未评审的高层级决策", "1 / 1", "（没有记录问题）", "选择了", "被否决的备选", "同意", "改选（可选）", "纠正"]) expect(text).toContain(expected);
     expect(container.querySelector(".field-kind")?.textContent).toBe("协调");
     expect(container.querySelector(".field-kind")?.getAttribute("data-level")).toBe("1");
     expect(container.querySelector(".field-scope")?.textContent).toBe("跨仓库");
     expect(container.querySelector(".field-verdict")?.textContent).toBe("已降级");
-    expect(optionTexts(container, "filter-kind")).toEqual(["任意", "🔴 协调"]);
-    expect(optionTexts(container, "filter-scope")).toEqual(["任意", "跨仓库"]);
-    expect(optionTexts(container, "kind")).toEqual(["错了 —— 选错了", "不合我意 —— 说得通，但不是我会选的", "过时 —— 当时对，现在不成立了"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the filters and the correction kinds offer their options in Chinese, in this order
+    expect(await optionTexts(container, ".filters", "类型")).toEqual(["任意", "🔴 协调"]);
+    expect(await optionTexts(container, ".filters", "范围")).toEqual(["任意", "跨仓库"]);
+    expect(await optionTexts(container, ".correction-form", "类型")).toEqual(["错了 —— 选错了", "不合我意 —— 说得通，但不是我会选的", "过时 —— 当时对，现在不成立了"]);
     // Each site read on its own node, so no assertion passes on a neighbour's text (task 5 implementer addition).
     expect(container.querySelector("h1")?.textContent).toBe("未评审的高层级决策");
     expect(container.querySelector('[data-testid="decision-count"]')?.textContent).toBe("1 / 1");
     expect(container.querySelector(".section-lede")?.textContent).toBe("agent 记录下、还没人评审过的高层级决策。打开一条，读完，然后点「同意」或「纠正」。");
     expect(labelTexts(container, ".filters")).toEqual(["类型", "范围", "仓库"]);
-    expect(optionTexts(container, "filter-projectKey")).toEqual(["任意", "github.com/x/y"]);
+    expect(await optionTexts(container, ".filters", "仓库")).toEqual(["任意", "github.com/x/y"]);
     expect(container.querySelector(".row-question")?.textContent).toBe("（没有记录问题）");
     expect(texts(container, ".decision-detail h3")).toEqual(["选择了", "理由", "被否决的备选"]);
     expect(container.querySelector(".actions > button.btn-primary")?.textContent).toBe("同意");
@@ -57,8 +62,15 @@ describe("the decisions area in Chinese", () => {
     expect(labelTexts(container, ".correction-form")).toEqual(["类型", "理由", "改选（可选）"]);
     expect(container.querySelector('.correction-form button[type="submit"]')?.textContent).toBe("纠正");
     // Form values and data attributes keep the raw values (spec §3.5).
-    expect([...container.querySelectorAll('select[name="kind"] option')].map((o) => o.getAttribute("value"))).toEqual(["wrong", "not_my_taste", "stale"]);
-    expect([...container.querySelectorAll('select[name="filter-scope"] option')].map((o) => o.getAttribute("value"))).toEqual(["", "cross-repo"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a pick in Chinese still hands the raw value on --
+    // the scope filter gets "cross-repo" and the correction carries "not_my_taste", not the words shown.
+    await pickOption(within(container.querySelector<HTMLElement>(".filters")!).getByRole("combobox", { name: "范围" }), "跨仓库");
+    expect(onFilter).toHaveBeenLastCalledWith({ ...NO_FILTER, scope: "cross-repo" });
+    const correction = container.querySelector<HTMLElement>(".correction-form")!;
+    await pickOption(within(correction).getByRole("combobox", { name: "类型" }), "不合我意 —— 说得通，但不是我会选的");
+    fireEvent.change(within(correction).getByRole("textbox", { name: "理由" }), { target: { value: "a reason" } });
+    fireEvent.click(correction.querySelector('button[type="submit"]')!);
+    expect(onCorrect).toHaveBeenLastCalledWith({ kind: "not_my_taste", because: "a reason", chose_instead: "" });
   });
 
   it("says in Chinese why an open decision is not in the list", async () => {
@@ -198,7 +210,8 @@ describe("the recorded outcome in Chinese", () => {
 
     // Correct, recorded at once.
     const submit = (): void => {
-      fireEvent.change(document.querySelector('textarea[name="because"]')!, { target: { value: "a reason" } });
+      const because = document.querySelector('textarea[name="because"]')!;
+      fireEvent.change(because, { target: { value: "a reason" } });
       fireEvent.submit(document.querySelector("form.correction-form")!);
     };
     submit();

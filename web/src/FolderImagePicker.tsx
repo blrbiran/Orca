@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { ControlRequestError, controlGet } from "./controlApi.js";
 import type { FlowFolderImagesV1 } from "./controlTypes.js";
 import { refusalText } from "./i18n.js";
+import { Select } from "./ui/Select.js";
 
 type Listing = { kind: "reading" } | { kind: "failed" } | { kind: "too-large" } | { kind: "refused"; text: string } | { kind: "read"; files: string[]; truncated: boolean; limit: number };
 /** The wait after the last keystroke in the folder field before the folder is listed. */
@@ -52,11 +53,9 @@ export function FolderImagePicker(props: { dir: string; template: string; paramI
   if (listing.files.length === 0) return <p className="detail-note">{t("flow.start.image.empty")}</p>;
   return (
     <>
-      <select aria-label={t("flow.start.image.pick", { param: props.paramId })} value={listing.files.includes(props.value) ? props.value : ""}
-        onChange={(event) => props.onPick(event.currentTarget.value)}>
-        <option value="">{t(props.hasDefault ? "flow.start.image.none" : "flow.start.image.choose")}</option>
-        {listing.files.map((file) => <option key={file} value={file}>{file}</option>)}
-      </select>
+      <Select aria-label={t("flow.start.image.pick", { param: props.paramId })} value={listing.files.includes(props.value) ? props.value : ""}
+        onValueChange={props.onPick}
+        options={[{ value: "", label: t(props.hasDefault ? "flow.start.image.none" : "flow.start.image.choose") }, ...listing.files.map((file) => ({ value: file, label: file }))]} />
       {listing.truncated && <p className="detail-note">{t("flow.start.image.truncated", { limit: listing.limit })}</p>}
     </>
   );

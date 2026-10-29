@@ -5,12 +5,15 @@ const TYPING = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 type KeyFacts = { key: string; target: EventTarget | null; metaKey: boolean; ctrlKey: boolean; altKey: boolean; repeat: boolean };
 
-/** A chord, a repeat, or a key typed into a field: never a page shortcut. */
+/**
+ * A chord, a repeat, or a key typed into a field: never a page shortcut. A picker's trigger (the Radix Select, role
+ * combobox; session b999cc81) counts as a field: a letter on it searches its options, as it did on a native select.
+ */
 function typingOrChord(e: KeyFacts): boolean {
   if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return true;
   const el = e.target as Element | null;
   return el !== null && typeof (el as Element).closest === "function"
-    && (TYPING.has(el.tagName) || el.closest('[contenteditable]:not([contenteditable="false"])') !== null);
+    && (TYPING.has(el.tagName) || el.getAttribute("role") === "combobox" || el.closest('[contenteditable]:not([contenteditable="false"])') !== null);
 }
 
 export function reviewKeyAction(e: KeyFacts): ReviewKeyAction {

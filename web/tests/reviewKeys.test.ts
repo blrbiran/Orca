@@ -17,6 +17,13 @@ describe("reviewKeyAction", () => {
     const inside = document.createElement("span"); editable.appendChild(inside);
     for (const target of [input, area, select, editable, inside]) expect(reviewKeyAction(ev("a", target))).toBeNull();
   });
+  it("ignores keys typed on a picker's trigger: a letter there searches its options, never records an Agree (session b999cc81)", () => {
+    // The Decisions filters and the correction kind are Radix pickers now -- a button with role combobox, not a <select>.
+    // mutation: drop the role="combobox" clause from typingOrChord -> "agree", red
+    const trigger = document.createElement("button"); trigger.setAttribute("role", "combobox");
+    expect(reviewKeyAction(ev("a", trigger))).toBeNull();
+    expect(reviewKeyAction(ev("j", trigger))).toBeNull();
+  });
   it("ignores a held key (auto-repeat): an Agree is never sent twice by holding 'a' (Review Focus 2)", () => {
     expect(reviewKeyAction(ev("a", document.body, { repeat: true }))).toBeNull();
   });

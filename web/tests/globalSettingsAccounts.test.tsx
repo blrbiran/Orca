@@ -6,6 +6,7 @@ import { App } from "../src/App.js";
 import { AuthGate } from "../src/AuthGate.js";
 import { installFakePanel } from "./fixtures/twoProjects.js";
 import type { Me } from "../src/auth.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 let me: Me;
 let authCalls: { url: string; method: string; headers: HeadersInit | undefined; body: unknown }[];
@@ -82,6 +83,22 @@ describe("global account settings", () => {
     expect(authCalls.filter(c => c.url === "/api/auth/me")).toHaveLength(1);
     expect(screen.getAllByRole("form", { name: "Add user" })).toHaveLength(1);
     expect(screen.getByRole("navigation", { name: "Sections" }).closest('.authenticated-shell')).toBe(screen.getByRole("button", { name: "Log out" }).closest('.authenticated-shell'));
+  });
+  it("adds an owner when Owner is picked for the role (Radix picker, session b999cc81)", async () => {
+    // New criterion: none chose a role before. The role picked is the role the add-user request carries.
+    // mutation: the role picker's onValueChange ignores the pick -> role "member", red
+    me.user.roles = ["owner"]; render(ui);
+    await screen.findByRole("region", { name: "Global settings" });
+    const form = within(settings()).getByRole("form", { name: "Add user" });
+    const role = within(form).getByRole("combobox", { name: "Role" });
+    expect(shownText(role)).toBe("member");
+    expect(await optionsOf(role)).toEqual([["member", false], ["owner", false]]);
+    fireEvent.change(within(form).getByLabelText("User name"), { target: { value: "bob" } });
+    await pickOption(role, "owner");
+    fireEvent.change(within(form).getByLabelText("Password for the user"), { target: { value: "bob's long password" } });
+    fireEvent.change(within(form).getByLabelText("Password again"), { target: { value: "bob's long password" } });
+    fireEvent.submit(form); await screen.findByText("Added bob.");
+    expect(posts("/api/auth/users").map(c => c.body)).toEqual([{ name: "bob", role: "owner", password: "bob's long password" }]);
   });
   it("retains the mandatory first-password gate without mounting the panel or account surfaces", async () => {
     me.user.mustChangePassword = true; render(ui);

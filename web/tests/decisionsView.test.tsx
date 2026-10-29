@@ -1,9 +1,15 @@
+// @vitest-environment jsdom
+// jsdom since session b999cc81: the Kind filter is a Radix picker, whose options exist only in its open list.
+import { cleanup, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { NO_QUESTION } from "../src/DecisionList.js";
 import { DecisionsView, HIDDEN_BY_FILTER, NOT_IN_LIST, NO_FILTER, filterRows } from "../src/DecisionsView.js";
 import { DecisionDetail, CORRECT_NOTE, AGREE_HELP } from "../src/DecisionDetail.js";
 import type { DecisionListRow } from "../src/types.js";
+import { optionsOf, shownText } from "./selectControl.js";
+
+afterEach(cleanup);
 
 const row = (over: Partial<DecisionListRow>): DecisionListRow => ({
   projectKey: "proj", id: "run/1", at: "2026-09-01T00:00:00.000Z", kind: "interface", scope: "repo", verdict: "ok", question: "q", ...over,
@@ -57,10 +63,13 @@ describe("DecisionsView (rulings U1, U2; K5's intent)", () => {
   // visible in its select, or the pane shows "any" over an empty list with no way to tell why.
   // REWRITTEN (human authorisation, session f8281a60): the option's text now carries the kind's
   // importance mark; only the expected text changed, the intent did not.
-  it("keeps showing a filter value that no longer matches any row", () => {
-    const html = renderToStaticMarkup(<DecisionsView rows={[rows[0]!]} filter={{ ...NO_FILTER, kind: "boundary" }} />);
-    expect(html).toMatch(/<select name="filter-kind">[\s\S]*?<option value="boundary" selected="">🟠 boundary<\/option>[\s\S]*?<\/select>/);
-    expect(html).toContain("No decision matches these filters.");
+  it("keeps showing a filter value that no longer matches any row", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Kind picker still offers and shows the value filtering the empty list
+    render(<DecisionsView rows={[rows[0]!]} filter={{ ...NO_FILTER, kind: "boundary" }} />);
+    const kind = screen.getByRole("combobox", { name: "Kind" });
+    expect(shownText(kind)).toBe("🟠 boundary");
+    expect(await optionsOf(kind)).toEqual([["any", false], ["🟠 interface", false], ["🟠 boundary", false]]);
+    expect(document.body.textContent).toContain("No decision matches these filters.");
   });
 
   it("marks the selected row and renders the detail it is given", () => {
@@ -88,12 +97,13 @@ describe("DecisionsView (rulings U1, U2; K5's intent)", () => {
   });
 });
 describe("the kind filter (human ruling, session f8281a60)", () => {
-  it("lists kinds most-important first, each option marked with its level", () => {
+  it("lists kinds most-important first, each option marked with its level", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Kind picker offers "any" then the kinds most-important first, each with its level mark
+    // (the raw values behind them are no longer in the DOM; a pick handing on the raw value is pinned in decisionsI18n).
     const all = ["scheduling", "reconcile", "boundary", "abandon"].map((kind, i) => row({ id: `run/${i}`, kind: kind as DecisionListRow["kind"] }));
-    const html = renderToStaticMarkup(<DecisionsView rows={all} filter={NO_FILTER} />);
-    const select = /<select name="filter-kind">([\s\S]*?)<\/select>/.exec(html)![1]!;
-    expect([...select.matchAll(/<option value="([^"]*)"(?: selected="")?>([^<]*)<\/option>/g)].map((m) => `${m[1]}|${m[2]}`)).toEqual([
-      "|any", "reconcile|🔴 reconcile", "abandon|🔴 abandon", "boundary|🟠 boundary", "scheduling|🟡 scheduling",
+    render(<DecisionsView rows={all} filter={NO_FILTER} />);
+    expect((await optionsOf(screen.getByRole("combobox", { name: "Kind" }))).map(([name]) => name)).toEqual([
+      "any", "🔴 reconcile", "🔴 abandon", "🟠 boundary", "🟡 scheduling",
     ]);
   });
 });

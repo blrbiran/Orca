@@ -14,6 +14,7 @@ import type { ControlRefusal } from "./controlState.js";
 import { enumText } from "./i18n.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { actionsBox } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 type Kind = "wrong" | "not_my_taste" | "stale";
 type Outcome = { kind: "idle" } | { kind: "pending" } | { kind: "done"; correctionId: string } | { kind: "refused"; refusal: ControlRefusal };
@@ -59,18 +60,16 @@ export function CoarseCorrectionForm(props: {
     <form className="coarse-correction" data-testid="coarse-correction" onSubmit={(event) => { event.preventDefault(); if (ready) void submit(); }}>
       {props.runId === undefined ? (
         <label>{t("corrections.coarse.project")}
-          <select value={repoId} onChange={(event) => setRepoId(event.target.value)}>
-            {props.repositories.map((repository) => <option key={repository.repoId} value={repository.repoId}>{repository.name}</option>)}
-          </select>
+          <Select value={repoId} onValueChange={setRepoId} placeholder={t("settings.projectPick.choose")}
+            options={props.repositories.map((repository) => ({ value: repository.repoId, label: repository.name }))} />
         </label>
       ) : <p>{t("corrections.coarse.ofRun", { runId: props.runId })}</p>}
       <label>{t("corrections.coarse.because")}
         <input value={because} onChange={(event) => setBecause(event.target.value)} />
       </label>
       <label>{t("corrections.coarse.kind")}
-        <select value={kind} onChange={(event) => setKind(event.target.value as Kind)}>
-          {(["wrong", "not_my_taste", "stale"] as const).map((value) => <option key={value} value={value}>{enumText("correctionKind", value)}</option>)}
-        </select>
+        <Select value={kind} onValueChange={setKind}
+          options={(["wrong", "not_my_taste", "stale"] as const).map((value) => ({ value, label: enumText("correctionKind", value) }))} />
       </label>
       {kind === "not_my_taste" && (
         <label>{t("corrections.coarse.choseInstead")}

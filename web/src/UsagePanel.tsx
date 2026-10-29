@@ -20,6 +20,7 @@ import i18n, { currentLanguage } from "./i18n.js";
 import { TokenInput, Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { Refusal } from "./Refusal.js";
 import { controlRow, tableScroll, tableScrollNarrow } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 const SPEND_SCOPE = "@spend";
 const SPEND_PATHS = {
@@ -117,16 +118,13 @@ export function UsagePanel({ project, active = true }: { project: string | null;
       <div className={controlRow}>
         <label>
           {t("usage.scope")}
-          <select value={project === null ? "all" : scopeKind} onChange={(e) => setScopeKind(e.currentTarget.value as "all" | "project")}>
-            <option value="all">{t("usage.scopeAll")}</option>
-            {project !== null && <option value="project">{t("usage.scopeProject", { id: project })}</option>}
-          </select>
+          <Select value={project === null ? "all" : scopeKind} onValueChange={setScopeKind}
+            options={[{ value: "all" as const, label: t("usage.scopeAll") }, ...(project !== null ? [{ value: "project" as const, label: t("usage.scopeProject", { id: project }) }] : [])]} />
         </label>
         <label>
           {t("usage.period")}
-          <select value={period} onChange={(e) => setPeriod(e.currentTarget.value as PeriodChoice)}>
-            {PERIODS.map((choice) => <option key={choice} value={choice}>{t(`usage.periodChoice.${choice}` as const)}</option>)}
-          </select>
+          <Select value={period} onValueChange={setPeriod}
+            options={PERIODS.map((choice) => ({ value: choice, label: t(`usage.periodChoice.${choice}` as const) }))} />
         </label>
         {period === "custom" && (
           <>
@@ -274,16 +272,13 @@ function Caps({ view, owner, project, onSend }: { view: UsageViewV1; owner: bool
         >
           <label>
             {t("usage.scope")}
-            <select value={newScope} onChange={(e) => setNewScope(e.currentTarget.value)}>
-              <option value="all">{t("usage.capScopeAll")}</option>
-              {project !== null && <option value={`repo:${project}`}>{capScopeText(`repo:${project}`)}</option>}
-            </select>
+            <Select value={newScope} onValueChange={setNewScope}
+              options={[{ value: "all", label: t("usage.capScopeAll") }, ...(project !== null ? [{ value: `repo:${project}`, label: capScopeText(`repo:${project}`) }] : [])]} />
           </label>
           <label>
             {t("usage.th.capPeriod")}
-            <select value={newPeriod} onChange={(e) => setNewPeriod(e.currentTarget.value as SpendPeriodV1)}>
-              {CAP_PERIODS.map((choice) => <option key={choice} value={choice}>{t(`usage.capPeriod.${choice}` as const)}</option>)}
-            </select>
+            <Select value={newPeriod} onValueChange={setNewPeriod}
+              options={CAP_PERIODS.map((choice) => ({ value: choice, label: t(`usage.capPeriod.${choice}` as const) }))} />
           </label>
           <TokenInput label={t("usage.th.cap")} aria-label={t("usage.th.cap")} min={1} value={newTokens} onChange={setNewTokens} onInvalid={() => setNewTokens(null)} />
           <button type="submit" disabled={newTokens === null}>{t("usage.addCap")}</button>
@@ -312,9 +307,8 @@ function Calendar({ view, owner, onSend }: { view: UsageViewV1; owner: boolean; 
       <label>{t("usage.timeZone")}<input value={timeZone} onChange={(e) => setTimeZone(e.currentTarget.value)} /></label>
       <label>
         {t("usage.weekStart")}
-        <select value={weekStart} onChange={(e) => setWeekStart(Number(e.currentTarget.value))}>
-          {WEEKDAYS.map((name, index) => <option key={name} value={index + 1}>{day(index + 1)}</option>)}
-        </select>
+        <Select value={String(weekStart)} onValueChange={(next) => setWeekStart(Number(next))}
+          options={WEEKDAYS.map((_, index) => ({ value: String(index + 1), label: day(index + 1) }))} />
       </label>
       <button type="submit">{t("usage.saveCalendar")}</button>
     </form>

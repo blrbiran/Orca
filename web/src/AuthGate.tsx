@@ -22,6 +22,7 @@ import i18n from "./i18n.js";
 import { en } from "./locales/en.js";
 import { Refusal } from "./Refusal.js";
 import { authPage, noticeButton, passwordInSettings } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 
 /** The logged-in person, for the parts of the page that differ by role (web/src/UsagePanel.tsx). */
@@ -241,10 +242,8 @@ function AddUserForm(): JSX.Element {
       <label>{t("auth.userName")}<input value={name} onChange={(e) => setName(e.currentTarget.value)} /></label>
       <label>
         {t("auth.roleLabel")}
-        <select value={role} onChange={(e) => setRole(e.currentTarget.value as Role)}>
-          <option value="member">{t("auth.role.member")}</option>
-          <option value="owner">{t("auth.role.owner")}</option>
-        </select>
+        <Select value={role} onValueChange={(next: Role) => setRole(next)}
+          options={[{ value: "member", label: t("auth.role.member") }, { value: "owner", label: t("auth.role.owner") }]} />
       </label>
       <label>{t("auth.userPassword")}<input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.currentTarget.value)} /></label>
       <label>{t("auth.userPasswordAgain")}<input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.currentTarget.value)} /></label>

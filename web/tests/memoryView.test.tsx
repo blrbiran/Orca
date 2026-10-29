@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
 import { MemoryView } from "../src/MemoryView.js";
 import type { MemoryRecord } from "../src/memoryTypes.js";
+import { optionsOf, pickOption } from "./selectControl.js";
 
 const rec = (ref: string, over: Partial<MemoryRecord> = {}): MemoryRecord => ({
   ref, scope: "global", projectKey: null, kind: "rule", content: `memory ${ref}`, tags: [], pinned: false, source: "user_explicit",
@@ -120,7 +121,10 @@ describe("MemoryView (spec §5.2, W1)", () => {
     const box = screen.getByRole("searchbox", { name: "Search memory" }) as HTMLInputElement;
     fireEvent.change(box, { target: { value: "typed" } });
     const before = requests.length;
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "other" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the repository picked is the one whose list is read, once, and the search box is cleared
+    const repo = screen.getByRole("combobox", { name: "Repository" });
+    expect(await optionsOf(repo)).toEqual([["mem", false], ["other", false]]);
+    await pickOption(repo, "other");
     expect(await screen.findByText("from other")).toBeTruthy();
     expect(screen.queryByText("from mem")).toBeNull();
     expect(requests.slice(before)).toEqual(["/api/memory/list?projectKey=other"]);
