@@ -562,7 +562,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   1. **合入 `fix/test-affected-web-css`**：主工作区在该分支上，`git switch main` 后 `git merge --ff-only fix/test-affected-web-css`、`git branch -d fix/test-affected-web-css`（agent 把这几步和别的 git 调用写在一条复合命令里，被 Tier 0 闸门以「could not decide」整条拒掉，按闸门要求没换写法重试）。本 handoff 提交也在这个分支上。
   2. **看 Radix 全量换**：截图 `/private/tmp/orca-b999cc81/radix-shots/`（41 张）；要看真浏览器就起隔离面板 `/private/tmp/orca-s29/radix-panel.sh`（7796，登录 `tester`，密码 `/private/tmp/orca-e236bbe4/ui/password.txt`，不碰真面板）。满意 ⇒ 下一位 agent：把分支 rebase 到 main、`npm test`、`--ff-only` 合入、装上（`npm ci` 后 build、web build、`launchctl kickstart -k …/dev.orca.panel`），再 `git worktree remove .worktrees/radix-select`（不带 force）＋`git branch -d`。不满意 ⇒ 说哪里要改。
   3. **审替人定的**（台账 Line 2 各批 accepted 段）：触发器焦点沿用原生字段的 2px 描边、1px 偏移；`className` 只替换默认最小宽度；新增 i18n 键 `agents.chooseAgent`、`flow.ask.choose`；FlowSettings 预设／AgentFields 上下文的未知值不加占位；两个顺带修的行为缺陷（FlowBoard Esc、`reviewKeys` 下拉）；`test-affected` 的修法（`web/src` 非代码文件按名找读它的测试）。
-  4. **push**：Orca（上面合入之后）、ccloop（本会话的 handoff 提交）、ccmem（本会话 handoff 提交＋开工时就多出的一笔 `docs(handoff): Orca session 3ea8a21e pointer …`）。以 `ls-remote` 现测为准。
+  4. **push**：只剩 Orca（上面第 1 条合入之后）。ccloop、ccmem 收尾时 `ls-remote` 现测已与本地 main 一致。
   5. 测试者数据（可选，人在问）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
 - ~~会话 `3ea8a21e` 待人看／待人定~~ **人已全部回复**（会话 `b999cc81`）：Radix 全量换（已在分支做完，见上条 2）；收据与主题回落按建议（收据已修、回落不加映射）；三仓 push 人已做；测试者数据仍在问（上条 5）。
 - ~~会话 `a9f9d6de` 待人审／待人给~~ **人已全部回复**（会话 `3ea8a21e` 开头）：主题留七个、其余删（已做）；可逆项同意，原生 select 改为试 Radix（试样待看）、terminal 删；settle-usage schema「同意」（已做）；push 人已做；测试者数据去问。
