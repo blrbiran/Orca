@@ -31,26 +31,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function languageSelect(container: HTMLElement): Promise<HTMLSelectElement> {
+// Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29, Radix Select trial): the language picker is a Radix
+// select, so the criterion opens it from the keyboard and picks the option, as a person without a mouse would.
+async function languageSelect(container: HTMLElement): Promise<HTMLElement> {
   return waitFor(() => {
-    const select = container.querySelector<HTMLSelectElement>('select[name="language"]');
-    if (select === null) throw new Error("no language switch yet");
-    return select;
+    const trigger = container.querySelector<HTMLElement>('[data-select-trigger="language"]');
+    if (trigger === null) throw new Error("no language switch yet");
+    return trigger;
   });
 }
+// jsdom has neither of these; Radix calls them while the list is open.
+Element.prototype.scrollIntoView ??= () => {};
+Element.prototype.hasPointerCapture ??= () => false;
+async function choose(trigger: HTMLElement, name: RegExp): Promise<void> {
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  const option = await screen.findByRole("option", { name });
+  fireEvent.keyDown(option, { key: "Enter" });
+  await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+}
+const ZH = /中文/, EN = /English/;
 
 describe("the language switch (spec §6.7)", () => {
   it("switches the page to Chinese and back, remembering the choice in this browser", async () => {
     const { container } = render(<App />);
     const select = await languageSelect(container);
     expect(screen.getByRole("link", { name: /Decisions/ })).toBeTruthy();
-    fireEvent.change(select, { target: { value: "zh" } });
+    await choose(select, ZH);
     await waitFor(() => expect(screen.getByRole("link", { name: /决策/ })).toBeTruthy());
     expect(window.localStorage.getItem("orca.panel.lang")).toBe("zh");
     expect(document.documentElement.lang).toBe("zh");
-    expect(select.value).toBe("zh");
+    expect(select.textContent).toContain("中文");
     expect(container.textContent).toContain("主题");
-    fireEvent.change(select, { target: { value: "en" } });
+    await choose(select, EN);
     await waitFor(() => expect(screen.getByRole("link", { name: /Decisions/ })).toBeTruthy());
     expect(window.localStorage.getItem("orca.panel.lang")).toBe("en");
     expect(document.documentElement.lang).toBe("en");
@@ -64,9 +76,9 @@ describe("the language switch (spec §6.7)", () => {
     const { container } = render(<App />);
     const select = await languageSelect(container);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
-    fireEvent.change(select, { target: { value: "zh" } });
+    await choose(select, ZH);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("链已完成"));
-    fireEvent.change(select, { target: { value: "en" } });
+    await choose(select, EN);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
   });
 
@@ -74,7 +86,7 @@ describe("the language switch (spec §6.7)", () => {
     const { container } = render(<App />);
     const select = await languageSelect(container);
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
-    fireEvent.change(select, { target: { value: "zh" } });
+    await choose(select, ZH);
     await waitFor(() => expect(screen.getByRole("link", { name: /决策/ })).toBeTruthy());
     expect(document.documentElement.lang).toBe("zh");
   });
