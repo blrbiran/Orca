@@ -47,7 +47,6 @@ export function GlobalSettings(props: {
         <p>{t("settings.browserScope")}</p>
         <div className="mb-4 flex flex-wrap gap-4">
           <label className={inlinePick}>{t("shell.theme")}
-            {/* Trial (session 2026-10-29): Radix Select here and for the language, native everywhere else, to compare. */}
             <Select name="theme" value={props.theme} onValueChange={(value) => props.onTheme(value as ThemePref)}
               options={THEME_PREFS.map((pref) => ({ value: pref, label: enumText("theme", pref) }))} />
           </label>

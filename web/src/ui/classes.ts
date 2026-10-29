@@ -25,6 +25,7 @@ export const settingHint = "block text-xs text-muted";
 export const settingSource = "text-xs text-muted";
 /** A settings region: long words wrap, fields never widen it, a table scrolls inside it. */
 export const settingsRegion = "min-w-0 wrap-anywhere [&_input]:min-w-0 [&_input]:max-w-full [&_select]:min-w-0 [&_select]:max-w-full"
+  + " [&_[data-select-trigger]]:min-w-0 [&_[data-select-trigger]]:max-w-full"
   + " [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto";
 /** The change-password form inside Settings (AuthGate): one column, 420px at most. */
 export const passwordInSettings = "mb-6 max-w-[420px]";
