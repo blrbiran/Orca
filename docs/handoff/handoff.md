@@ -550,6 +550,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **会话 `3ea8a21e` 待人看／待人定**：
   1. 看 Radix Select 试样（`handoff_ui.md` §七.八 有起面板的命令与截图路径），定：全量换（56 个原生下拉、32 个测试文件、项目选择器 #69/#70 冻结要不要放开）还是删分支 `ui/radix-select-trial`。
   2. 审替人定的：settle-usage 的设计（spec `2026-10-29-socket-usage-settlement-design.md`，尤其 §3 没改的收据工件）；被删主题的已存选择回落 `system`（没做旧 id → 新主题映射）。
+  0. **push 三仓**：人临时授权 agent 收尾 push，但 Tier 0 闸门（Rule 15）机械拦下了 `git push`（Orca、ccloop 各试一次，均 `push is Tier 0`，未换写法重试）⇒ 由人在终端推 Orca、ccloop、ccmem 的 main（都是 fast-forward：收尾时 `ls-remote` 现测远端仍是本会话开工时的那三笔）。
   3. 测试者数据（可选，人说不一定拿得到）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
 - ~~会话 `a9f9d6de` 待人审／待人给~~ **人已全部回复**（会话 `3ea8a21e` 开头）：主题留七个、其余删（已做）；可逆项同意，原生 select 改为试 Radix（试样待看）、terminal 删；settle-usage schema「同意」（已做）；push 人已做；测试者数据去问。
 - ~~会话 `e236bbe4` 待人看／待人定~~ **人已全部回复**（测试者反馈轮台账）：控制器三条裁定「同意」；轮次编号按链上位置；主题「都不太满意」⇒ 整体重做；codex 拆分自测的结果就是测试者 #105／#107。
