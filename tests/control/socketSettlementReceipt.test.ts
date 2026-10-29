@@ -24,7 +24,7 @@ describe("the saved-result receipt of a settlement", () => {
   it("on the Web, its bytes are exactly the row copy they were before: no personPrincipal key", async () => {
     const { t, runId } = await unknownFailure();
     try {
-      const command = t.h.command("settle-unknown-usage" as never, { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" }) as { commandId: string };
+      const command = (t.h.command as (verb: string, payload: unknown) => { commandId: string })("settle-unknown-usage", { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" });
       expect(await settle(t, runId, command)).not.toHaveProperty("error");
       const row = t.h.store.db.prepare("SELECT body_json FROM commands WHERE id=?").get(command.commandId)!;
       const before = { principal: "user:owner", client: "web", verb: "settle-unknown-usage", commandId: command.commandId, result: JSON.parse(String(row.body_json)).result };

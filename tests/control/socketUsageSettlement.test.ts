@@ -40,7 +40,7 @@ describe("a Web owner's settlement is unchanged by the column", () => {
   it("its row's person_principal is NULL and readers accept its marker", async () => {
     const { t, runId } = await unknownFailure();
     try {
-      const command = t.h.command("settle-unknown-usage" as never, { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" }) as { commandId: string };
+      const command = (t.h.command as (verb: string, payload: unknown) => { commandId: string })("settle-unknown-usage", { taskId: "a", runId, generation: 1, acknowledge: "charge-remaining-grant" });
       expect(await settle(t, runId, command)).not.toHaveProperty("error");
       expect(t.h.store.db.prepare("SELECT client,principal,person_principal FROM commands WHERE id=?").get(command.commandId)).toEqual({ client: "web", principal: "user:owner", person_principal: null });
       expect(hasValidUsageSettlement(t.h.store, t.body(runId))).toBe(true);
