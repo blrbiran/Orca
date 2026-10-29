@@ -8,6 +8,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
+import { agentField } from "./agentFieldControl.js";
+import { optionsOf, shownText } from "./selectControl.js";
 import { controlCommandPath } from "../src/controlApi.js";
 import type {
   AgentSelectionPreviewV1, AgentSelectionV1, AgentsViewV1, Amount, ControlConfigV1, FrozenSlotV1, GroupViewV1, OperatorPreferencesV1, SelectionProvenanceV1,
@@ -70,8 +72,15 @@ const view = (over: Partial<GroupViewV1> = {}): GroupViewV1 => ({
 const renderView = (props: { view?: GroupViewV1; preview?: AgentSelectionPreviewV1 | null; drafts?: Record<string, string>; onCommand?: Mock<(...args: any[]) => any>; preferences?: OperatorPreferencesV1 }) =>
   render(<ControlGroupView view={props.view ?? view()} config={config} uncertain={[]} drafts={props.drafts ?? {}} onDraft={vi.fn()} onCommand={props.onCommand ?? vi.fn()} agents={agents} preview={props.preview === undefined ? resolvedPreview() : props.preview} agentPreferences={props.preferences} />);
 const row = (container: HTMLElement, key: string): HTMLElement => container.querySelector(`tr[data-slot="${key}"]`) as HTMLElement;
-const options = (container: HTMLElement, name: string): string[] =>
-  [...container.querySelectorAll(`select[name="${name}"] option`)].map((option) => (option as HTMLOptionElement).value);
+// Session b999cc81: the context picker is read as a person reads it (its offered names, in order); each name is mapped
+// back to the context value it stands for, and a name with no mapping fails the criterion.
+const CONTEXT_OF_NAME: Record<string, string> = { inherit: "", "agent default": "agent-default", "1000000 tokens": "1000000" };
+const options = async (container: HTMLElement, name: string): Promise<string[]> =>
+  (await optionsOf(agentField(container, name.replace(/:context$/, ""), "context"))).map(([label]) => {
+    const value = CONTEXT_OF_NAME[label];
+    if (value === undefined) throw new Error(`unmapped context option ${label}`);
+    return value;
+  });
 
 describe("agent selection in the proposal view (agent selection spec §6.8)", () => {
   it("shows the blocked estimate's selected-Agent compatibility reason locally", () => {
@@ -103,8 +112,10 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
   it("retains an unsupported task context draft and disables submitting that layer", () => {
     const { container } = renderView({ drafts: { "g:agent:task:b:context": "1000000" } });
     const task = row(container, "task:b");
-    expect((task.querySelector('select[name="g:agent:task:b:context"]') as HTMLSelectElement).value).toBe("1000000");
-    expect((task.querySelector("button") as HTMLButtonElement).disabled).toBe(true);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the unsupported draft stays shown in task b's context picker
+    expect(shownText(agentField(task, "g:agent:task:b", "context"))).toBe("1000000");
+    // The pickers are buttons now (role=combobox); the layer's first real button is its submit.
+    expect((task.querySelector("button:not([role=combobox])") as HTMLButtonElement).disabled).toBe(true);
     expect(task.querySelector('[role="alert"]')?.textContent).toMatch(/context/i);
   });
 
@@ -114,7 +125,8 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
       preview: resolvedPreview({ groupOverrides: { worker: { agent: "claude", model: "claude-m", contextWindow: 1_000_000 } } }),
       drafts: { "g:agent:group:worker:agent": "codex" } });
     expect((container.querySelector('input[name="g:agent:group:worker:model"]') as HTMLInputElement).value).toBe("");
-    expect((container.querySelector('select[name="g:agent:group:worker:context"]') as HTMLSelectElement).value).toBe("");
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): after the agent switch the context picker shows inherit (value "") again
+    expect(shownText(agentField(container, "g:agent:group:worker", "context"))).toBe("inherit");
     fireEvent.click(screen.getByRole("button", { name: "Set group worker agent" }));
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ payload: { partial: { agent: "codex" } } });
   });
@@ -172,28 +184,29 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
   // Wave 3 review, T15 item 3: a layer that names no agent inherits the one the layers BELOW it resolve to
   // (spec §6.3 slotLayers), so its context dropdown offers that agent's options -- not whatever some other
   // slot happened to resolve to.
-  it("offers each layer's context over the agent that layer inherits from the layers below it", () => {
+  it("offers each layer's context over the agent that layer inherits from the layers below it", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): each layer's context picker offers exactly the inherited agent's options, in order
     const { container } = renderView({ preferences: { defaultAgent: "codex", perAgent: {}, estimator: { agent: "claude" } } });
     // worker: operator default (codex); estimator: operator-estimator (claude), never the group worker layer;
     // reconcile: operator default (codex) with no operator-reconcile or group worker agent; task a: group worker, else codex.
-    expect(options(container, "g:agent:group:worker:context")).toEqual(["", "agent-default"]);
-    expect(options(container, "g:agent:group:estimator:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(options(container, "g:agent:group:reconcile:context")).toEqual(["", "agent-default"]);
-    expect(options(container, "g:agent:task:a:context")).toEqual(["", "agent-default"]);
+    expect(await options(container, "g:agent:group:worker:context")).toEqual(["", "agent-default"]);
+    expect(await options(container, "g:agent:group:estimator:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options(container, "g:agent:group:reconcile:context")).toEqual(["", "agent-default"]);
+    expect(await options(container, "g:agent:task:a:context")).toEqual(["", "agent-default"]);
     cleanup();
     // With no explicit estimator role, the group worker is also its primary baseline.
     const second = renderView({
       preferences: { defaultAgent: "codex", perAgent: {} },
       preview: resolvedPreview({ groupOverrides: { worker: { agent: "claude" } } }),
     }).container;
-    expect(options(second, "g:agent:group:reconcile:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(options(second, "g:agent:task:a:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(options(second, "g:agent:group:estimator:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options(second, "g:agent:group:reconcile:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options(second, "g:agent:task:a:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options(second, "g:agent:group:estimator:context")).toEqual(["", "agent-default", "1000000"]);
     cleanup();
     // An operator reconcile agent sits below the group layers of the reconcile slot only.
     const third = renderView({ preferences: { defaultAgent: "codex", perAgent: {}, reconcile: { agent: "claude" } } }).container;
-    expect(options(third, "g:agent:group:reconcile:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(options(third, "g:agent:task:a:context")).toEqual(["", "agent-default"]);
+    expect(await options(third, "g:agent:group:reconcile:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options(third, "g:agent:task:a:context")).toEqual(["", "agent-default"]);
   });
 
   it("confirms with the selectionsHash of the resolution on screen", () => {
@@ -287,13 +300,14 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
     expect(onCommand.mock.calls[0]![0].payload).toEqual({ baseProposalVersion: 3, scope: { kind: "group", slot: "worker" }, partial: { model: "gpt-6-panel" } });
   });
 
-  it("sends agent null when the plan's agent is ignored, and offers the context of the agent below instead of the plan's", () => {
+  it("sends agent null when the plan's agent is ignored, and offers the context of the agent below instead of the plan's", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the masked plan agent changes which contexts the picker offers, and null is what is sent
     const onCommand = vi.fn();
     const unmasked = renderView({ preview: withPlan(), preferences: prefs });
-    expect(options(unmasked.container, "g:agent:group:worker:context")).toEqual(["", "agent-default"]);
+    expect(await options(unmasked.container, "g:agent:group:worker:context")).toEqual(["", "agent-default"]);
     unmasked.unmount();
     const { container } = renderView({ onCommand, preview: withPlan(), preferences: prefs, drafts: { "g:agent:group:worker:mask:agent": "1", "g:agent:group:worker:context": "1000000" } });
-    expect(options(container, "g:agent:group:worker:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options(container, "g:agent:group:worker:context")).toEqual(["", "agent-default", "1000000"]);
     fireEvent.click(screen.getByRole("button", { name: "Set group worker agent" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
     // The 1M window is sent: it is what the agent below (claude) can express, though the plan's codex cannot.

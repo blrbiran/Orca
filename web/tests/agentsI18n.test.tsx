@@ -12,6 +12,8 @@ import { AgentSelectionEditor } from "../src/AgentSelectionEditor.js";
 import { AgentSettings } from "../src/AgentSettings.js";
 import { retryNotice } from "../src/App.js";
 import i18n from "../src/i18n.js";
+import { agentField, defaultAgentField } from "./agentFieldControl.js";
+import { optionsOf } from "./selectControl.js";
 import type { AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, Amount, FrozenSlotV1, GroupViewV1 } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: 1_000, attempts: 3, sessions: 3 });
@@ -53,19 +55,22 @@ const fieldset = (root: ParentNode, legend: string): Element => {
   if (!found) throw new Error(`no fieldset ${legend}`);
   return found;
 };
-const firstOption = (root: Element, field: string): string => root.querySelector(`select[name$=":${field}"] option[value=""]`)?.textContent ?? "";
+// Session b999cc81: a layer's picker is found beside its model box; the first option offered is the empty (inherit) one.
+const prefixOf = (root: Element): string => root.querySelector('input[name$=":model"]')!.getAttribute("name")!.replace(/:model$/, "");
+const firstOption = async (root: Element, field: "agent" | "context"): Promise<string> => (await optionsOf(agentField(root, prefixOf(root), field)))[0]![0];
 const firstCell = (root: ParentNode, slot: string): string[] => texts(root, `tr[data-slot="${slot}"] > td`);
 
 afterEach(cleanup);
 
 describe("the agents area in Chinese", () => {
   it("shows the settings page in Chinese", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): every picker's label and offered options are Chinese; the "none" default is read from the offered list, buttons exclude pickers
     await i18n.changeLanguage("zh");
     const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
     const text = container.textContent ?? "";
     for (const expected of [
       "操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。", "安装", "默认模型", "默认上下文窗口", "agent 默认",
-      "默认 agent", "无（每个组都得自己选一个）", "codex 的默认值", "估算槽", "协调槽", "模型", "上下文窗口", "继承", "保存 agent 偏好",
+      "默认 agent", "codex 的默认值", "估算槽", "协调槽", "模型", "上下文窗口", "继承", "保存 agent 偏好",
     ]) expect(text, expected).toContain(expected);
     // Each site by its own element.
     const section = container.querySelector("section")!;
@@ -74,23 +79,24 @@ describe("the agents area in Chinese", () => {
     expect(texts(container, "section > p")).toEqual(["操作者 op-1 · 偏好版本 3。修改只影响之后确认的组；已确认的组保留它冻结的选择。"]);
     expect(texts(container, "thead th")).toEqual(["安装", "类型", "版本", "默认模型", "默认上下文窗口"]);
     expect(texts(container, "tbody td")).toEqual(["codex", "codex", "1.0", "gpt-x", "agent 默认"]);
-    const defaultLabel = container.querySelector(`select[name="agents:default-agent"]`)!.closest("label")!;
+    const defaultLabel = defaultAgentField(container).closest("label")!;
     expect(ownText(defaultLabel)).toBe("默认 agent");
-    expect(defaultLabel.querySelector(`option[value=""]`)?.textContent).toBe("无（每个组都得自己选一个）");
+    expect((await optionsOf(defaultAgentField(container)))[0]).toEqual(["无（每个组都得自己选一个）", false]);
     expect(texts(container, "legend")).toEqual(["codex 的默认值", "估算槽", "协调槽", "审查槽"]);
     const estimator = fieldset(container, "估算槽");
     expect(estimator.getAttribute("aria-label")).toBe("估算槽");
     expect([...estimator.querySelectorAll("label")].map(ownText)).toEqual(["agent", "模型", "上下文窗口"]);
-    expect(firstOption(estimator, "agent")).toBe("继承");
-    expect(firstOption(estimator, "context")).toBe("继承");
-    expect(texts(estimator, `select[name$=":context"] option`)).toEqual(["继承", "agent 默认", "1000000 token"]);
-    expect(texts(container, "button")).toEqual(["保存 agent 偏好"]);
+    expect(await firstOption(estimator, "agent")).toBe("继承");
+    expect(await firstOption(estimator, "context")).toBe("继承");
+    expect((await optionsOf(agentField(estimator, prefixOf(estimator), "context"))).map(([name]) => name)).toEqual(["继承", "agent 默认", "1000000 token"]);
+    expect(texts(container, "button:not([role=combobox])")).toEqual(["保存 agent 偏好"]);
     cleanup();
     const empty = render(<AgentSettings agents={{ ...agents, installations: [] }} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />).container;
     expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里没有任何 agent。运行 orca agent init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。", "必须选择 Agent（无法继承）"]);
   });
 
   it("shows the proposal's agent editor, the confirmed view, the read failure and the retry notice in Chinese", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the buttons (pickers aside, role=combobox) and each picker's first offered option stay Chinese
     await i18n.changeLanguage("zh");
     const { container } = render(
       <AgentSelectionEditor view={view("editable")} agents={agents} preview={preview} preferences={preferences.preferences} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}
@@ -111,16 +117,16 @@ describe("the agents area in Chinese", () => {
     expect(texts(container, `p[data-retry]`)).toEqual(["10 秒后重新读取（第 1/5 次重试）。"]);
     expect(texts(container, "legend")).toEqual(["组 执行", "组 估算", "组 协调", "任务 a", "任务 b"]);
     expect([...container.querySelectorAll("fieldset")].map((node) => node.getAttribute("aria-label"))).toEqual(["组 执行", "组 估算", "组 协调", "任务 a", "任务 b"]);
-    expect(texts(container, "button")).toEqual([
+    expect(texts(container, "button:not([role=combobox])")).toEqual([
       "重新读取 agent 选择", "设置组 执行 的 agent", "清除组 执行 的 agent", "设置组 估算 的 agent", "清除组 估算 的 agent", "设置组 协调 的 agent", "清除组 协调 的 agent",
       "为任务 a 设置 agent", "清除任务 a 的 agent", "为任务 b 设置 agent", "清除任务 b 的 agent",
     ]);
     expect(texts(container, "small")).toContain(" 从下次重新估算起使用；和任何提案修改一样，它会推进提案版本。");
     const worker = fieldset(container, "组 执行");
     expect([...worker.querySelectorAll("label")].map(ownText)).toEqual(["agent", "忽略计划里的agent（codex）", "模型", "忽略计划里的模型（gpt-5x）", "上下文窗口", "忽略计划里的上下文窗口（1000000 token）"]);
-    expect(firstOption(worker, "agent")).toBe("继承（计划：codex）");
-    expect(firstOption(worker, "context")).toBe("继承");
-    expect(firstOption(fieldset(container, "组 估算"), "agent")).toBe("继承");
+    expect(await firstOption(worker, "agent")).toBe("继承（计划：codex）");
+    expect(await firstOption(worker, "context")).toBe("继承");
+    expect(await firstOption(fieldset(container, "组 估算"), "agent")).toBe("继承");
     expect(texts(container, "thead th")).toEqual(["槽位", "agent", "模型", "窗口", "这个任务自己的一层"]);
     expect(firstCell(container, "task:a").slice(0, 4)).toEqual(["a", "codex 来自操作者", "gpt-x 来自agent 描述符", "1000000 token 来自计划（组）"]);
     expect(firstCell(container, "task:b").slice(0, 2)).toEqual(["b", "暂时不可用，点「重新读取」再问一次 · ccloop-timeout"]);

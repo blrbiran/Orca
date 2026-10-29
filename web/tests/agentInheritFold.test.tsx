@@ -68,7 +68,8 @@ describe("per-task agent fields fold away (C18)", () => {
     show(three());
     expect(fold("a").open).toBe(false);
     expect(fold("a").querySelector("summary")!.textContent).toBe("Override task a");
-    expect(fold("a").querySelector("button")?.textContent).toBe("Set agent for task a");
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the fold's first real button (not a picker, role=combobox) is the layer's Set button
+    expect(fold("a").querySelector("button:not([role=combobox])")?.textContent).toBe("Set agent for task a");
     expect(fold("b").open).toBe(true);
     expect(fold("c").open).toBe(true);
   });

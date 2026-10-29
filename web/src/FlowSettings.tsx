@@ -19,6 +19,7 @@ import type { FlowEffectClassV1, FlowLevelSettingV1, FlowLockablePathV1, FlowSet
 import { refusalDetail } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
 import { settingHint, settingSource } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 export type FlowSettingsScope = "global" | { repoId: string };
 type Layer = "project" | "global";
@@ -102,9 +103,8 @@ function PresetField(props: { template: string; paramId: string; param: FlowTemp
       {props.may && (
         <div>
           {type === "bool" || type === "enum" ? (
-            <select aria-label={label} value={draft} onChange={(event) => setDraft(event.currentTarget.value)}>
-              {(type === "bool" ? ["true", "false"] : props.param!.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
+            <Select aria-label={label} value={draft} onValueChange={setDraft}
+              options={(type === "bool" ? ["true", "false"] : props.param!.options ?? []).map((option) => ({ value: option, label: option }))} />
           ) : <input type={type === "int" ? "number" : "text"} aria-label={label} value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />}
           {type === "image" && <p className="detail-note">{t("settings.flows.preset.imageHint")}</p>}
           <button type="button" disabled={parsed === null || (ours && parsed === props.sourced?.value)}
@@ -209,9 +209,8 @@ export function FlowSettings(props: { scope: FlowSettingsScope; /** Gaps spec §
   const layer: Layer = scope === "global" ? "global" : "project";
   const levelText = (value: FlowLevelSettingV1): string => t(`settings.flows.level.${value}`);
   const levelEdit = (cls: FlowEffectClassV1) => (draft: FlowLevelSettingV1, set: (next: FlowLevelSettingV1) => void): JSX.Element => (
-    <select aria-label={t(`settings.flows.effectClass.${cls}.name`)} value={draft} onChange={(event) => set(event.currentTarget.value as FlowLevelSettingV1)}>
-      {LEVELS.filter((level) => !(cls === "irreversible" && level === "apply-flag")).map((level) => <option key={level} value={level}>{levelText(level)}</option>)}
-    </select>
+    <Select aria-label={t(`settings.flows.effectClass.${cls}.name`)} value={draft} onValueChange={set}
+      options={LEVELS.filter((level) => !(cls === "irreversible" && level === "apply-flag")).map((level) => ({ value: level, label: levelText(level) }))} />
   );
   const lines = (value: string[] | null): string => (value ?? []).join("\n");
   return (
@@ -232,10 +231,8 @@ export function FlowSettings(props: { scope: FlowSettingsScope; /** Gaps spec §
           <Field name="rerunReview" label={t("settings.flows.rerunReview")} sourced={view.rerunReview} layer={layer} may={may} send={send}
             show={(value) => t(`settings.flows.review.${value}`)} set={(value) => ({ rerunReview: value })}
             edit={(draft, set) => (
-              <select aria-label={t("settings.flows.rerunReview")} value={draft} onChange={(event) => set(event.currentTarget.value as "auto" | "review")}>
-                <option value="review">{t("settings.flows.review.review")}</option>
-                <option value="auto">{t("settings.flows.review.auto")}</option>
-              </select>
+              <Select aria-label={t("settings.flows.rerunReview")} value={draft} onValueChange={set}
+                options={[{ value: "review", label: t("settings.flows.review.review") }, { value: "auto", label: t("settings.flows.review.auto") }]} />
             )} />
           <Field name="rerunAskTimeoutSeconds" label={t("settings.flows.rerunAskTimeout")} sourced={view.rerunAskTimeoutSeconds} layer={layer} may={may} send={send}
             show={(value) => t("settings.flows.seconds", { n: value })} set={(value) => ({ rerunAskTimeoutSeconds: value })}

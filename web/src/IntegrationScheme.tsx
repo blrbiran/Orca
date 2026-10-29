@@ -13,6 +13,7 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupViewV1, IntegrationSchemeV1, RepositoryIntegrationV1 } from "./controlTypes.js";
 import i18n from "./i18n.js";
+import { Select } from "./ui/Select.js";
 
 type Delivery = IntegrationSchemeV1["delivery"];
 type Trigger = "task" | "group";
@@ -87,24 +88,21 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
     <div>
       <label>
         {t("control.integration.delivery")}
-        <select value={delivery} onChange={(event) => set({ delivery: event.currentTarget.value as Delivery })}>
-          {DELIVERIES.map((value) => <option key={value} value={value}>{tx(`control.integration.deliveries.${value}`)}</option>)}
-        </select>
+        <Select value={delivery} onValueChange={(value) => set({ delivery: value })}
+          options={DELIVERIES.map((value) => ({ value, label: tx(`control.integration.deliveries.${value}`) }))} />
       </label>
       {delivery !== "keep" && (
         <>
           <label>
             {t("control.integration.trigger")}
-            <select value={fields.trigger} onChange={(event) => set({ trigger: event.currentTarget.value as Trigger })}>
-              {TRIGGERS.map((value) => <option key={value} value={value}>{tx(`control.integration.triggers.${value}`)}</option>)}
-            </select>
+            <Select value={fields.trigger} onValueChange={(value) => set({ trigger: value })}
+              options={TRIGGERS.map((value) => ({ value, label: tx(`control.integration.triggers.${value}`) }))} />
           </label>
           {(delivery === "local" || delivery === "push-target") && (
             <label>
               {t("control.integration.method")}
-              <select value={fields.method} onChange={(event) => set({ method: event.currentTarget.value as Method })}>
-                {METHODS.map((value) => <option key={value} value={value}>{tx(`control.integration.methods.${value}`)}</option>)}
-              </select>
+              <Select value={fields.method} onValueChange={(value) => set({ method: value })}
+                options={METHODS.map((value) => ({ value, label: tx(`control.integration.methods.${value}`) }))} />
             </label>
           )}
           <label>

@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { AccountContext } from "../src/AuthGate.js";
 import { config, view, workItem, run } from "./fixtures/board.js";
+import { pickOption } from "./selectControl.js";
 import type { GroupViewV1 } from "../src/controlTypes.js";
 afterEach(cleanup);
 const mount = (value: GroupViewV1, focus?: import("../src/ControlGroupView.js").ControlGroupViewProps["focus"]) => render(<ControlGroupView view={value} focus={focus} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
@@ -92,9 +93,10 @@ it("ControlPanel forwards an explicit repeated owner request independently of po
  const app=render(<ControlPanel {...props} focusRequest={1}/>);select("Results");app.rerender(<ControlPanel {...props} focusRequest={2}/>);expect(selected()).toBe("Problems");
 });
 
-it("unsaved integration form stays mounted through region changes", () => {
+it("unsaved integration form stays mounted through region changes", async () => {
+ // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the delivery picked in the form survives region changes with the typed target
  mount(view([]));select("Results");const region=screen.getByRole("region",{name:"Integration of this group"});
- fireEvent.change(within(region).getByRole("combobox",{name:"Delivery"}),{target:{value:"local"}});
+ await pickOption(within(region).getByRole("combobox",{name:"Delivery"}),"merge into a local branch");
  fireEvent.change(within(region).getByRole("textbox",{name:"Target branch"}),{target:{value:"my unfinished target"}});
  select("Progress");select("Results");expect((within(screen.getByRole("region",{name:"Integration of this group"})).getByRole("textbox",{name:"Target branch"}) as HTMLInputElement).value).toBe("my unfinished target");
 });

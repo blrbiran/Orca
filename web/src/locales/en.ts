@@ -1023,6 +1023,7 @@ export const en = {
     fieldError: { missingAgent: "Choose an Agent; no inherited selection is available", unsupportedContext: "This Agent does not support context {{value}}", invalidContext: "Invalid context {{value}}" },
     inheritPlan: "inherit (plan: {{agent}})",
     inherit: "inherit",
+    chooseAgent: "Choose an Agent",
     inheritConcrete: "inherit {{value}} from {{source}}",
     from: "from {{source}}",
     rejected: "rejected",

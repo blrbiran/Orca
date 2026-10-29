@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText, refusalText } from "./i18n.js";
 import { TokenInput, parseTokens, shortTokens } from "./TokenInput.js";
+import { Select } from "./ui/Select.js";
 import type {
   AllocationViewV1,
   Amount, BudgetAmount,
@@ -418,15 +419,13 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       </p>
       {defaults === null && view.proposal.state === "editable" && <fieldset>
         <legend>{t("budget.executionProfiles")}</legend>
-        <label>{t("budget.budgetMode")}<select value={manualMode} onChange={(event) => setManualMode(event.currentTarget.value as "" | "strict" | "soft") }>
-          <option value="">{t("budget.notChosen")}</option><option value="strict">{enumText("budgetMode", "strict")}</option><option value="soft">{enumText("budgetMode", "soft")}</option>
-        </select></label>
+        <label>{t("budget.budgetMode")}<Select value={manualMode} onValueChange={setManualMode}
+          options={[{ value: "", label: t("budget.notChosen") }, { value: "strict", label: enumText("budgetMode", "strict") }, { value: "soft", label: enumText("budgetMode", "soft") }]} /></label>
         {(["worker", "handoff", "goalReview"] as const).map((kind) => {
           const workKind = kind === "worker" ? "task" : kind === "goalReview" ? "goal-review" : "handoff";
-          return <label key={kind}>{t(`budget.profile.${kind}`)}<select value={manualProfiles[kind]} onChange={(event) => setManualProfiles({ ...manualProfiles, [kind]: event.currentTarget.value })}>
-            <option value="">{t("budget.notChosen")}</option>
-            {config.profiles.filter((profile) => profile.allowedWorkKinds.includes(workKind)).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.profileId}</option>)}
-          </select></label>;
+          return <label key={kind}>{t(`budget.profile.${kind}`)}<Select value={manualProfiles[kind]} onValueChange={(value) => setManualProfiles({ ...manualProfiles, [kind]: value })}
+            options={[{ value: "", label: t("budget.notChosen") },
+              ...config.profiles.filter((profile) => profile.allowedWorkKinds.includes(workKind)).map((profile) => ({ value: profile.profileId, label: profile.profileId }))]} /></label>;
         })}
       </fieldset>}
       {contextUnavailable && (

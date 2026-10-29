@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import type { AgentInstallationV1, AgentSelectionV1, AgentsViewV1, ContextWindowV1, ModelListState, PanelPartialSelectionV1, PartialSelectionV1, SelectionProvenanceV1 } from "./controlTypes.js";
 import i18n, { enumText } from "./i18n.js";
 import { explainCcloopCode } from "./ccloopCodes.js";
+import { Select } from "./ui/Select.js";
 
 export const contextLabel = (value: ContextWindowV1): string => (value === "agent-default" ? i18n.t("agents.contextDefault") : i18n.t("agents.contextTokens", { value }));
 export const contextValue = (value: ContextWindowV1 | undefined): string => (value === undefined ? "" : String(value));
@@ -211,12 +212,11 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
       {props.fixedAgent === undefined && (
         <label>
           {t("agents.label.agent")}
-          <select name={`${prefix}:agent`} value={agentText} onChange={change("agent")}>
-            <option value="">{props.inheritance && (props.current?.agent === undefined || props.current.agent === null)
+          <Select value={agentText} onValueChange={(value) => change("agent")({ target: { value } })} placeholder={t("agents.chooseAgent")}
+            options={[{ value: "", label: props.inheritance && (props.current?.agent === undefined || props.current.agent === null)
               ? t("agents.inheritConcrete", { value: props.inheritance.selection.agent, source: enumText("selectionSource", props.inheritance.provenance.agent) })
-              : props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit")}</option>
-            {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id} ({row.kind} {row.version})</option>)}
-          </select>
+              : props.planned?.agent !== undefined && !masked("agent") ? t("agents.inheritPlan", { agent: props.planned.agent }) : t("agents.inherit") },
+              ...agents.installations.map((row) => ({ value: row.id, label: `${row.id} (${row.kind} ${row.version})` }))]} />
         </label>
       )}
       {props.fixedAgent === undefined && maskBox("agent")}
@@ -239,11 +239,10 @@ export function SelectionFields(props: SelectionFieldsProps): JSX.Element {
       {maskBox("model")}
       <label>
         {t("agents.label.context")}
-        <select name={`${prefix}:context`} value={contextText} aria-invalid={unsupportedContext !== undefined} onChange={change("context")}>
-          <option value="">{t("agents.inherit")}</option>
-          {(effective?.contextOptions ?? []).map((option) => <option key={String(option)} value={String(option)}>{contextLabel(option)}</option>)}
-          {unsupportedContext && contextText !== "" && <option value={contextText}>{contextText}</option>}
-        </select>
+        <Select value={contextText} aria-invalid={unsupportedContext !== undefined} onValueChange={(value) => change("context")({ target: { value } })}
+          options={[{ value: "", label: t("agents.inherit") },
+            ...(effective?.contextOptions ?? []).map((option) => ({ value: String(option), label: contextLabel(option) })),
+            ...(unsupportedContext && contextText !== "" ? [{ value: contextText, label: contextText }] : [])]} />
         {inheritedHint("contextWindow") && <small>{inheritedHint("contextWindow")}</small>}
       </label>
       {errors.filter((error) => error.code !== "missingAgent" || props.showMissingAgent !== false).map((error) => <p key={error.field} role={error.code === "missingAgent" ? "note" : "alert"}>{t(`agents.fieldError.${error.code}`, { value: error.value ?? "" })}</p>)}

@@ -2,11 +2,14 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { AgentSettings } from "../src/AgentSettings.js";
+import { defaultAgentField } from "./agentFieldControl.js";
+import { optionsOf } from "./selectControl.js";
 import type { AgentInstallationStateV1, AgentsViewV1, AgentPreferencesViewV1 } from "../src/controlTypes.js";
 
 afterEach(cleanup);
 
-it("shows OMP as a selectable installation and explains an unavailable OMP update", () => {
+it("shows OMP as a selectable installation and explains an unavailable OMP update", async () => {
+  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the OMP installation is offered (enabled) by the default-agent picker
   const agents: AgentsViewV1 = { schema: "orca-agents-view-v1", installations: [
     { id: "omp-local", kind: "omp", version: "1.0", defaults: { model: "local-proxy/machine-specific", contextWindow: "agent-default" }, contextOptions: ["agent-default"] },
   ] };
@@ -17,7 +20,7 @@ it("shows OMP as a selectable installation and explains an unavailable OMP updat
     ] } };
   const onSave = vi.fn();
   render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={onSave} installationState={state} />);
-  expect(screen.getByRole("option", { name: "omp-local" })).toBeDefined();
+  expect(await optionsOf(defaultAgentField(document.body))).toContainEqual(["omp-local", false]);
   expect((screen.getByLabelText(/New installation: omp/) as HTMLInputElement).disabled).toBe(true);
   expect(screen.getByRole("alert").textContent).toContain("omp-default-model-unresolved");
   fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));

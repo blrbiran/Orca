@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentSettings, preferencesFromDrafts } from "../src/AgentSettings.js";
 import { CLEARED_DRAFT, SelectionFields } from "../src/AgentFields.js";
 import { initialControlState, reduceControlState } from "../src/controlState.js";
+import { agentField, defaultAgentField } from "./agentFieldControl.js";
+import { optionsOf, pickOption, shownText } from "./selectControl.js";
 import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, OperatorPreferencesV1 } from "../src/controlTypes.js";
 
 afterEach(() => cleanup());
@@ -81,11 +83,12 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     expect(container.textContent).toContain('"--custom"');
     expect((screen.getByLabelText(/New installation: unreviewable/) as HTMLInputElement).disabled).toBe(true);
   });
-  it("clears draft model and context when changing the role Agent", () => {
+  it("clears draft model and context when changing the role Agent", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): choosing another agent sends it and clears the model and context drafts
     const onDraft = vi.fn();
     render(<SelectionFields agents={agents} prefix="role" label="Role" current={{ agent: "claude", model: "A-m", contextWindow: 1_000_000 }}
       inheritedAgent="claude" drafts={{ "role:model": "typed-A", "role:context": "1000000" }} onDraft={onDraft} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "agent" }), { target: { value: "codex" } });
+    await pickOption(screen.getByRole("combobox", { name: /^agent/ }), "codex (codex 0.155.1)");
     expect(onDraft.mock.calls).toEqual([["role:agent", "codex"], ["role:model", CLEARED_DRAFT], ["role:context", CLEARED_DRAFT]]);
   });
   it("keeps a model-only role override with its old primary Agent when the primary changes", () => {
@@ -104,16 +107,17 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
   it("places the primary Agent, model and context together and folds role overrides", () => {
     const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
     const primary = container.querySelector('[aria-label="Primary Agent"]') as HTMLElement;
-    expect(primary.querySelector('select[name="agents:default-agent"]')).not.toBeNull();
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the default-agent picker, the model box and the context picker all sit in the Primary block
+    expect(defaultAgentField(primary)).toBeTruthy();
     expect(primary.querySelector('input[name="agents:per:claude:model"]')).not.toBeNull();
-    expect(primary.querySelector('select[name="agents:per:claude:context"]')).not.toBeNull();
+    expect(agentField(primary, "agents:per:claude", "context")).toBeTruthy();
     expect((container.querySelector('[data-role-overrides]') as HTMLDetailsElement).open).toBe(false);
   });
   it("keeps an unsupported context draft visible and prevents a lossy preferences save", () => {
     const onSave = vi.fn();
     const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{ "agents:per:codex:context": "1000000" }} onDraft={vi.fn()} onSave={onSave} />);
-    const context = container.querySelector('select[name="agents:per:codex:context"]') as HTMLSelectElement;
-    expect(context.value).toBe("1000000");
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the unsupported draft stays shown in the codex context picker
+    expect(shownText(agentField(container, "agents:per:codex", "context"))).toBe("1000000");
     expect((screen.getByRole("button", { name: "Save agent preferences" }) as HTMLButtonElement).disabled).toBe(true);
     expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/context/i);
   });
@@ -122,16 +126,18 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     for (const text of ["claude", "2.1.282", "claude-opus-5-5", "codex", "0.155.1", "gpt-6-sol", "preferences revision 4"]) expect(html).toContain(text);
   });
 
-  it("offers each agent's context as a dropdown over that agent's own options, and no free text box for any context", () => {
+  it("offers each agent's context as a dropdown over that agent's own options, and no free text box for any context", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): each layer's context picker offers inherit plus exactly its agent's options, in order; five pickers, no box
     const { container } = render(<AgentSettings agents={agents} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />);
-    const options = (name: string): string[] => [...container.querySelectorAll(`select[name="${name}"] option`)].map((option) => (option as HTMLOptionElement).value);
-    expect(options("agents:per:claude:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(options("agents:per:codex:context")).toEqual(["", "agent-default"]);
+    const options = async (prefix: string): Promise<string[]> => (await optionsOf(agentField(container, prefix, "context"))).map(([name]) => name);
+    expect(await options("agents:per:claude")).toEqual(["inherit", "agent default", "1000000 tokens"]);
+    expect(await options("agents:per:codex")).toEqual(["inherit", "agent default"]);
     // The estimator slot names no agent of its own, so it offers what the default agent (claude) can express.
-    expect(options("agents:estimator:context")).toEqual(["", "agent-default", "1000000"]);
+    expect(await options("agents:estimator")).toEqual(["inherit", "agent default", "1000000 tokens"]);
     // Checks spec 2026-10-22 §6.1 (Task 10): the review slot is a fifth context dropdown, like the estimator's.
-    expect(options("agents:review:context")).toEqual(["", "agent-default", "1000000"]);
-    expect(container.querySelectorAll('select[name$=":context"]')).toHaveLength(5);
+    expect(await options("agents:review")).toEqual(["inherit", "agent default", "1000000 tokens"]);
+    expect([...container.querySelectorAll("fieldset")].map((set) => set.querySelector('input[name$=":model"]')!.getAttribute("name")!.replace(/:model$/, ""))
+      .map((prefix) => agentField(container, prefix, "context"))).toHaveLength(5);
     expect(container.querySelectorAll('input[name$=":context"]')).toHaveLength(0);
   });
 
@@ -159,7 +165,8 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
   // The page's drafts live in the control reducer, which forgets a draft whose text is "" (the budget
   // editor's boxes fall back to the server value that way). Emptying an agent field must still read as
   // "unset at this layer", or a model or default agent the operator set once could never be taken back.
-  it("clears a saved model and the default agent through the panel's own draft store", () => {
+  it("clears a saved model and the default agent through the panel's own draft store", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): choosing "none" for the default agent clears it through the draft store and the save sends no defaultAgent
     const onSave = vi.fn();
     function Page(): JSX.Element {
       const [state, dispatch] = useReducer(reduceControlState, undefined, initialControlState);
@@ -167,12 +174,13 @@ describe("the Agents settings page (agent selection spec §6.8)", () => {
     }
     const { container } = render(<Page />);
     const model = container.querySelector('input[name="agents:per:claude:model"]') as HTMLInputElement;
-    const defaultAgent = container.querySelector('select[name="agents:default-agent"]') as HTMLSelectElement;
+    const defaultAgent = defaultAgentField(container);
     expect(model.value).toBe("claude-fable-5");
+    expect(shownText(defaultAgent)).toBe("claude");
     fireEvent.change(model, { target: { value: "" } });
-    fireEvent.change(defaultAgent, { target: { value: "" } });
+    await pickOption(defaultAgent, "none (every group has to choose one)");
     expect(model.value).toBe("");
-    expect(defaultAgent.value).toBe("");
+    expect(shownText(defaultAgentField(container))).toBe("none (every group has to choose one)");
     fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
     expect(onSave).toHaveBeenCalledWith({ perAgent: {} } satisfies OperatorPreferencesV1, 4);
   });

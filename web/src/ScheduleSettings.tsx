@@ -25,6 +25,7 @@ import { currentLanguage } from "./i18n.js";
 import { Refusal } from "./Refusal.js";
 import { ScheduleDetail } from "./ScheduleDetail.js";
 import { formatRoute } from "./sections.js";
+import { Select } from "./ui/Select.js";
 
 type Send = (path: string, expectedRevision: number, payload: unknown) => void;
 
@@ -271,9 +272,8 @@ function FlowScheduleForm(props: { repoId: string; dirPath: string | null; send:
       <form onSubmit={submit}>
         <label>{t("settings.schedules.name")}<input type="text" aria-label={t("settings.schedules.name")} value={name} onChange={(event) => setName(event.currentTarget.value)} /></label>
         <label>{t("settings.schedules.template")}
-          <select aria-label={t("settings.schedules.template")} value={templateId} onChange={(event) => { setTemplateId(event.currentTarget.value); setValues({}); }}>
-            {(Array.isArray(templates) ? templates : []).map((entry) => <option key={entry.id} value={entry.id}>{title(entry)}</option>)}
-          </select>
+          <Select aria-label={t("settings.schedules.template")} value={templateId} onValueChange={(value) => { setTemplateId(value); setValues({}); }}
+            options={(Array.isArray(templates) ? templates : []).map((entry) => ({ value: entry.id, label: title(entry) }))} />
         </label>
         <label>{t("schedules.cron")}<input type="text" aria-label={t("schedules.cron")} value={cron} onChange={(event) => setCron(event.currentTarget.value)} /></label>
         {template !== null && template.params.length > 0 && (
@@ -361,15 +361,13 @@ function GroupScheduleForm(props: { repoId: string; defaultIntegration: Integrat
         <form onSubmit={submit}>
           <label>{t("settings.schedules.name")}<input type="text" aria-label={t("settings.schedules.name")} value={name} onChange={(event) => setName(event.currentTarget.value)} /></label>
           <label>{t("settings.schedules.entry")}
-            <select aria-label={t("settings.schedules.entry")} value={entryId}
-              onChange={(event) => { setEntry(null); setSha256(""); setEntryId(event.currentTarget.value); }}>
-              {entries.map((candidate) => <option key={candidate.entryId} value={candidate.entryId}>{candidate.name}</option>)}
-            </select>
+            <Select aria-label={t("settings.schedules.entry")} value={entryId}
+              onValueChange={(value) => { setEntry(null); setSha256(""); setEntryId(value); }}
+              options={entries.map((candidate) => ({ value: candidate.entryId, label: candidate.name }))} />
           </label>
           <label>{t("settings.schedules.version")}
-            <select aria-label={t("settings.schedules.version")} value={sha256} onChange={(event) => setSha256(event.currentTarget.value)}>
-              {(entry?.versions ?? []).map((candidate) => <option key={candidate.sha256} value={candidate.sha256}>{candidate.version} · {short7(candidate.sha256)}</option>)}
-            </select>
+            <Select aria-label={t("settings.schedules.version")} value={sha256} onValueChange={setSha256}
+              options={(entry?.versions ?? []).map((candidate) => ({ value: candidate.sha256, label: `${candidate.version} · ${short7(candidate.sha256)}` }))} />
           </label>
           {version !== null && (
             <p data-testid="group-version-provenance">
@@ -381,10 +379,9 @@ function GroupScheduleForm(props: { repoId: string; defaultIntegration: Integrat
           <label>{t("schedules.cron")}<input type="text" aria-label={t("schedules.cron")} value={cron} onChange={(event) => setCron(event.currentTarget.value)} /></label>
           <label>{t("settings.schedules.tokenLimit")}<input type="number" min={1} aria-label={t("settings.schedules.tokenLimit")} value={limit} onChange={(event) => setLimit(event.currentTarget.value)} /></label>
           <label>{t("settings.schedules.delivery")}
-            <select aria-label={t("settings.schedules.delivery")} value={delivery} onChange={(event) => setDelivery(event.currentTarget.value as "own" | "project")}>
-              <option value="own">{t("settings.schedules.deliveryOwn")}</option>
-              {pinned && <option value="project">{t("settings.schedules.deliveryPinned", { delivery: deliveryText(props.defaultIntegration!, t) })}</option>}
-            </select>
+            <Select aria-label={t("settings.schedules.delivery")} value={delivery} onValueChange={setDelivery}
+              options={[{ value: "own" as const, label: t("settings.schedules.deliveryOwn") },
+                ...(pinned ? [{ value: "project" as const, label: t("settings.schedules.deliveryPinned", { delivery: deliveryText(props.defaultIntegration!, t) }) }] : [])]} />
           </label>
           <p data-testid="group-confirm-mode">{mode}</p>
           <button type="submit" disabled={!ready}>{t("schedules.addGroup")}</button>

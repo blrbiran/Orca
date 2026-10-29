@@ -17,6 +17,7 @@ import type { CheckConditionV1, CheckKindV1, CheckLockV1, CheckSourcedV1, CheckS
 import { Refusal } from "./Refusal.js";
 import { ReviewDetail } from "./ReviewDetail.js";
 import { settingSource } from "./ui/classes.js";
+import { Select } from "./ui/Select.js";
 
 type CheckVerb = Parameters<typeof checksCommandPath>[1];
 type Send = (verb: CheckVerb, payload: unknown) => void;
@@ -72,9 +73,8 @@ function TriggerEditor(props: { value: CheckTriggerV1; onChange: (next: CheckTri
             const put = (next: CheckConditionV1): void => setClause(i, clause.any.map((other, k) => (k === j ? next : other)));
             return (
               <div key={j}>
-                <select aria-label={t("settings.checks.trigger.condition")} value={condition.kind} onChange={(event) => put(defaultCondition(event.currentTarget.value as CheckConditionV1["kind"]))}>
-                  {CONDITION_KINDS.map((kind) => <option key={kind} value={kind}>{t(`settings.checks.condition.${kind}` as const)}</option>)}
-                </select>
+                <Select aria-label={t("settings.checks.trigger.condition")} value={condition.kind} onValueChange={(value) => put(defaultCondition(value))}
+                  options={CONDITION_KINDS.map((kind) => ({ value: kind, label: t(`settings.checks.condition.${kind}` as const) }))} />
                 {condition.kind === "landed-groups" && <input type="number" min={1} max={50} aria-label={t("settings.checks.param.min")} value={condition.min} onChange={(event) => put({ kind: "landed-groups", min: Number(event.currentTarget.value) })} />}
                 {condition.kind === "overlapping-files" && <input type="number" min={2} aria-label={t("settings.checks.param.minGroups")} value={condition.minGroups} onChange={(event) => put({ kind: "overlapping-files", minGroups: Number(event.currentTarget.value) })} />}
                 {condition.kind === "since-last" && <input type="number" min={10} aria-label={t("settings.checks.param.minutes")} value={condition.ms / MINUTE} onChange={(event) => put({ kind: "since-last", ms: Math.round(Number(event.currentTarget.value) * MINUTE) })} />}
@@ -219,9 +219,8 @@ function Scheduled(props: { view: ChecksReadV1; layer: Layer; may: boolean; send
       {props.may && (
         <div>
           <input type="text" aria-label={t("settings.checks.scheduled.id")} value={id} onChange={(event) => setId(event.currentTarget.value)} />
-          <select aria-label={t("settings.checks.scheduled.kind")} value={kind} onChange={(event) => setKind(event.currentTarget.value as CheckKindV1)}>
-            {KINDS.map((value) => <option key={value} value={value}>{kindText(value)}</option>)}
-          </select>
+          <Select aria-label={t("settings.checks.scheduled.kind")} value={kind} onValueChange={setKind}
+            options={KINDS.map((value) => ({ value, label: kindText(value) }))} />
           <input type="text" aria-label={t("settings.checks.scheduled.cron")} value={cron} onChange={(event) => setCron(event.currentTarget.value)} />
           <button type="button" disabled={id.trim() === "" || cron.trim() === ""}
             onClick={() => props.send("set-scheduled-check", { id: id.trim(), kind, cron: cron.trim(), enabled: true })}>{t("settings.checks.scheduled.add")}</button>

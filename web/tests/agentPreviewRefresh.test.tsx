@@ -9,6 +9,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
+import { agentField } from "./agentFieldControl.js";
+import { optionsOf } from "./selectControl.js";
 import type {
   AgentPreferencesViewV1, AgentSelectionPreviewV1, AgentsViewV1, Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1,
 } from "../src/controlTypes.js";
@@ -417,8 +419,9 @@ describe("App wires the operator's agent defaults (agent selection spec §6.8)",
     fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
     // The group worker layer names no agent, so its context offers what the operator's default (claude) can express.
-    const options = [...container.querySelectorAll('select[name="g:agent:group:worker:context"] option')].map((option) => (option as HTMLOptionElement).value);
-    expect(options).toEqual(["", "agent-default", "1000000"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the group worker's context picker offers inherit plus claude's options, in order
+    const options = (await optionsOf(agentField(container, "g:agent:group:worker", "context"))).map(([name]) => name);
+    expect(options).toEqual(["inherit", "agent default", "1000000 tokens"]);
     expect(previewReads).toBe(1);
     fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
     // Review P5: the revision lives in the envelope only.

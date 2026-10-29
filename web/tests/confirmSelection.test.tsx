@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BudgetEditor } from "../src/BudgetEditor.js";
+import { pickOption } from "./selectControl.js";
 import type { Amount, ControlConfigV1, GroupViewV1 } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
@@ -34,11 +35,12 @@ const view: GroupViewV1 = {
 afterEach(cleanup);
 
 describe("confirming needs the previewed selectionsHash (agent selection spec §6.4 step 3)", () => {
-  it("allows explicit execution profiles and budget mode with no estimator default", () => {
+  it("allows explicit execution profiles and budget mode with no estimator default", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the budget mode and the three profiles picked are the ones the confirmation carries
     const onCommand = vi.fn();
     render(<BudgetEditor view={view} config={{ ...config, defaults: null }} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} selectionsHash={"9".repeat(64)} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Budget mode" }), { target: { value: "soft" } });
-    for (const name of ["Worker profile", "Handoff profile", "Goal review profile"]) fireEvent.change(screen.getByRole("combobox", { name }), { target: { value: "all" } });
+    await pickOption(screen.getByRole("combobox", { name: "Budget mode" }), "soft");
+    for (const name of ["Worker profile", "Handoff profile", "Goal review profile"]) await pickOption(screen.getByRole("combobox", { name }), "all");
     fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "confirm", payload: {
       budgetMode: "soft", profileIds: { estimator: null, worker: "all", handoff: "all", goalReview: "all" },

@@ -12,7 +12,7 @@ import { createHash, webcrypto } from "node:crypto";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountContext } from "../src/AuthGate.js";
-import { optionsOf as offered, pickOption } from "./selectControl.js";
+import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import type { Me } from "../src/auth.js";
 import type {
   Amount, ControlConfigV1, ControlSummaryV1, FlowExecutionViewV1, FlowListV1, FlowRunViewV1, FlowSpendV1,
@@ -257,7 +257,8 @@ describe("the add-group form's confirm mode (spec §13.3, M-C13c auto-with-deliv
   it("shows unlimited as auto, a token limit as limited, and a delivery as delivery -- never auto", async () => {
     render(as(owner, <ScheduleSettings scope={{ repoId: "repo" }} dir={false} defaultIntegration={DAYLIGHT} />));
     await waitFor(() => expect(screen.getByTestId("group-version-provenance")).toBeTruthy());
-    fireEvent.change(within(form()).getByRole("combobox", { name: "Delivery" }), { target: { value: "own" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): picking own / the pinned delivery is what moves the confirm mode
+    await pickOption(within(form()).getByRole("combobox", { name: "Delivery" }), "Run on its own");
     expect(mode()).toBe("Each fired group confirms on its own (unlimited tokens, no delivery scheme).");
     const limit = within(form()).getByRole("spinbutton", { name: "Token limit (empty: unlimited)" });
     fireEvent.change(limit, { target: { value: "500000" } });
@@ -265,7 +266,7 @@ describe("the add-group form's confirm mode (spec §13.3, M-C13c auto-with-deliv
     expect(mode()).toBe("Each fired group waits for your click: it has a token limit.");
     fireEvent.change(limit, { target: { value: "" } });
     expect(mode()).toBe("Each fired group confirms on its own (unlimited tokens, no delivery scheme).");
-    fireEvent.change(within(form()).getByRole("combobox", { name: "Delivery" }), { target: { value: "project" } });
+    await pickOption(within(form()).getByRole("combobox", { name: "Delivery" }), /^Pinned: /);
     // M-C13c mutation: show `.auto` for a group with a delivery scheme -> red
     expect(mode()).toBe("Each fired group waits for your click: it delivers by merge into a local branch.");
     expect(mode()).not.toContain("confirms on its own");
@@ -276,12 +277,13 @@ describe("the add-group form's confirm mode (spec §13.3, M-C13c auto-with-deliv
     await waitFor(() => expect(screen.getByTestId("group-version-provenance")).toBeTruthy());
     expect(screen.getByTestId("group-version-provenance").textContent).toContain("Version bbbbbbb — saved by olga via web");
     expect(screen.getByTestId("group-version-provenance").textContent).toContain("from group g1");
-    fireEvent.change(within(form()).getByRole("combobox", { name: "Version" }), { target: { value: OLD_SHA } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the version picked (OLD_SHA, by its short hash) is the one sent; the delivery picker still shows the pin
+    await pickOption(within(form()).getByRole("combobox", { name: "Version" }), new RegExp(`· ${OLD_SHA.slice(0, 7)}$`));
     fireEvent.change(within(form()).getByLabelText("Name"), { target: { value: "Nightly two" } });
     fireEvent.change(within(form()).getByLabelText("Cron (minute hour day month weekday), at most hourly"), { target: { value: "0 4 * * *" } });
     // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27. Review finding 7: the
     // Delivery picker (chosen "project" here before) is left untouched -- the project's default is the pin.
-    expect((within(form()).getByRole("combobox", { name: "Delivery" }) as HTMLSelectElement).value).toBe("project");
+    expect(shownText(within(form()).getByRole("combobox", { name: "Delivery" }))).toMatch(/^Pinned: /);
     fireEvent.click(within(form()).getByRole("button", { name: "Add group schedule" }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]).toEqual({

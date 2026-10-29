@@ -25,6 +25,7 @@ import i18n from "../src/i18n.js";
 import { RepositoryIntegration, integrationReasonText, integrationSentence } from "../src/IntegrationScheme.js";
 import { config, view, workItem } from "./fixtures/board.js";
 import { ALPHA, installFakePanel } from "./fixtures/twoProjects.js";
+import { pickOption, shownText } from "./selectControl.js";
 
 afterEach(cleanup);
 
@@ -46,8 +47,21 @@ const draftGroup = (integration?: GroupIntegrationViewV1): GroupViewV1 => {
 };
 const confirmedGroup = (integration?: GroupIntegrationViewV1): GroupViewV1 => ({ ...view([workItem({})]), ...(integration === undefined ? {} : { integration }) });
 
-const field = (region: HTMLElement, name: string): HTMLInputElement | HTMLSelectElement => within(region).getByLabelText(name);
-const choose = (region: HTMLElement, name: string, value: string): void => { fireEvent.change(field(region, name), { target: { value } }); };
+const field = (region: HTMLElement, name: string): HTMLInputElement => within(region).getByLabelText(name);
+// Session b999cc81: Delivery, When and Method are Radix Selects. A criterion still names the scheme value; LABEL maps it to
+// the option a person picks, and `chosen` maps the trigger's shown text back (an unmapped text comes back in <>).
+const LABEL: Record<string, Record<string, string>> = {
+  Delivery: { keep: "keep: Orca does not merge or push", local: "merge into a local branch", "push-target": "merge into the target branch and push it",
+    "push-branch": "push the work branch", "github-pr": "push the work branch and keep a GitHub PR" },
+  When: { task: "after each task", group: "when the group completes" },
+  Method: { merge: "merge commit", squash: "squash into one commit" },
+};
+const picker = (region: HTMLElement, name: string): HTMLElement => within(region).getByRole("combobox", { name });
+const choose = (region: HTMLElement, name: string, value: string): Promise<void> => pickOption(picker(region, name), LABEL[name]![value]!);
+const chosen = (region: HTMLElement, name: string): string => {
+  const text = shownText(picker(region, name));
+  return Object.entries(LABEL[name]!).find(([, label]) => label === text)?.[0] ?? `<${text}>`;
+};
 
 describe("the repository's integration section (spec §9.1)", () => {
   const show = (integration: RepositoryIntegrationV1, onSave = vi.fn()) => {
@@ -55,12 +69,13 @@ describe("the repository's integration section (spec §9.1)", () => {
     return { onSave, region: screen.getByRole("region", { name: "Integration" }) };
   };
 
-  it("names the current default and, for a repository with none, pre-fills origin and the suggested target", () => {
+  it("names the current default and, for a repository with none, pre-fills origin and the suggested target", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onSave, region } = show(repository({ delivery: "keep" }));
     expect(region.textContent).toContain("Orca does not merge or push this work; merging into main is the person's.");
-    expect(field(region, "Delivery").value).toBe("keep");
+    expect(chosen(region, "Delivery")).toBe("keep");
     expect(within(region).queryByLabelText("Target branch")).toBeNull();
-    choose(region, "Delivery", "push-branch");
+    await choose(region, "Delivery", "push-branch");
     expect(within(region).queryByLabelText("Method")).toBeNull();
     expect(field(region, "Remote").value).toBe("origin");
     expect(field(region, "Target branch").value).toBe("develop");
@@ -68,22 +83,24 @@ describe("the repository's integration section (spec §9.1)", () => {
     expect(onSave.mock.calls).toEqual([[{ delivery: "push-branch", trigger: "task", target: "develop", remote: "origin" }, 4]]);
   });
 
-  it("sends a local scheme without a remote, and with the method chosen", () => {
+  it("sends a local scheme without a remote, and with the method chosen", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onSave, region } = show(repository({ delivery: "keep" }));
-    choose(region, "Delivery", "local");
+    await choose(region, "Delivery", "local");
     expect(within(region).queryByLabelText("Remote")).toBeNull();
-    choose(region, "Method", "squash");
-    choose(region, "When", "group");
+    await choose(region, "Method", "squash");
+    await choose(region, "When", "group");
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(onSave.mock.calls).toEqual([[{ delivery: "local", trigger: "group", method: "squash", target: "develop" }, 4]]);
   });
 
-  it("sends a github-pr scheme without a method, and push-target with both method and remote", () => {
+  it("sends a github-pr scheme without a method, and push-target with both method and remote", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onSave, region } = show(repository({ delivery: "keep" }));
-    choose(region, "Delivery", "github-pr");
+    await choose(region, "Delivery", "github-pr");
     expect(within(region).queryByLabelText("Method")).toBeNull();
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
-    choose(region, "Delivery", "push-target");
+    await choose(region, "Delivery", "push-target");
     fireEvent.change(field(region, "Remote"), { target: { value: "upstream" } });
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(onSave.mock.calls).toEqual([
@@ -92,18 +109,20 @@ describe("the repository's integration section (spec §9.1)", () => {
     ]);
   });
 
-  it("starts from the stored scheme, not the suggestion, and sends keep as the delivery alone", () => {
+  it("starts from the stored scheme, not the suggestion, and sends keep as the delivery alone", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onSave, region } = show(repository({ delivery: "push-target", trigger: "group", method: "squash", target: "release", remote: "upstream" }));
-    expect([field(region, "Delivery").value, field(region, "When").value, field(region, "Method").value, field(region, "Target branch").value, field(region, "Remote").value])
+    expect([chosen(region, "Delivery"), chosen(region, "When"), chosen(region, "Method"), field(region, "Target branch").value, field(region, "Remote").value])
       .toEqual(["push-target", "group", "squash", "release", "upstream"]);
-    choose(region, "Delivery", "keep");
+    await choose(region, "Delivery", "keep");
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(onSave.mock.calls).toEqual([[{ delivery: "keep" }, 4]]);
   });
 
-  it("offers no Save while a delivery other than keep has no target (no suggestion and none typed)", () => {
+  it("offers no Save while a delivery other than keep has no target (no suggestion and none typed)", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onSave, region } = show(repository({ delivery: "keep" }, null));
-    choose(region, "Delivery", "local");
+    await choose(region, "Delivery", "local");
     expect(field(region, "Target branch").value).toBe("");
     const save = within(region).getByRole("button", { name: "Save integration" }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
@@ -158,10 +177,11 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
     expect(Object.hasOwn(action!.payload, "integrationHash")).toBe(false);
   });
 
-  it("lets an owner change the scheme before confirming, under the group's revision", () => {
+  it("lets an owner change the scheme before confirming, under the group's revision", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const onCommand = confirm(draftGroup());
     const region = screen.getByRole("region", { name: "Integration of this group" });
-    choose(region, "Delivery", "local");
+    await choose(region, "Delivery", "local");
     expect(field(region, "Target branch").value).toBe("develop");
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(sent(onCommand)).toEqual([{ verb: "set-group-integration", groupId: "g", expectedRevision: 6, payload: { integration: { delivery: "local", trigger: "task", method: "merge", target: "develop" } } }]);
@@ -190,15 +210,17 @@ describe("the scheme on the confirm step (spec §3.2, §9.1)", () => {
 });
 
 describe("the page around the integration UI (spec §9.1)", () => {
-  it("suggests the open group's own repository target on its confirm step", () => {
+  it("suggests the open group's own repository target on its confirm step", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "preparation", taskId: null, runId: null }} view={draftGroup()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}
       integrationFor={(repoId) => (repoId === "orca" ? repository({ delivery: "keep" }, "trunk-z") : null)} />);
     const region = screen.getByRole("region", { name: "Integration of this group" });
-    choose(region, "Delivery", "local");
+    await choose(region, "Delivery", "local");
     expect(field(region, "Target branch").value).toBe("trunk-z");
   });
 
   it("reads the chosen project's default, saves an owner's change under its revision, and reads it back", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const realFetch = globalThis.fetch;
     const panel = installFakePanel();
     const fake = globalThis.fetch;
@@ -213,7 +235,7 @@ describe("the page around the integration UI (spec §9.1)", () => {
     try {
       render(<App />);
       const region = await screen.findByRole("region", { name: "Integration" });
-      choose(region, "Delivery", "push-branch");
+      await choose(region, "Delivery", "push-branch");
       fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
       await waitFor(() => expect(panel.posts.map((post) => post.url)).toEqual([route]));
       expect(panel.posts[0]!.body).toEqual({ commandId: expect.any(String), expectedRevision: 2, payload: { integration: { delivery: "push-branch", trigger: "task", target: "trunk-a", remote: "origin" } } });
@@ -235,18 +257,20 @@ describe("the group's scheme after confirm (fix round 1, F1)", () => {
     return { onCommand, region: screen.getByRole("region", { name: "Integration of this group" }) };
   };
 
-  it("lets an owner switch a started keep group to a scheme, under the group's revision, outside the Git section", () => {
+  it("lets an owner switch a started keep group to a scheme, under the group's revision, outside the Git section", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onCommand, region } = detail(confirmedGroup());
     expect(within(screen.getByRole("region", { name: "Git" })).queryAllByRole("button")).toEqual([]);
-    choose(region, "Delivery", "push-branch");
+    await choose(region, "Delivery", "push-branch");
     fireEvent.change(field(region, "Target branch"), { target: { value: "main" } });
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(onCommand.mock.calls).toEqual([[{ verb: "set-group-integration", groupId: "g", expectedRevision: 6, payload: { integration: { delivery: "push-branch", trigger: "task", target: "main", remote: "origin" } } }]]);
   });
 
-  it("lets an owner change a blocked non-keep group's scheme", () => {
+  it("lets an owner change a blocked non-keep group's scheme", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onCommand, region } = detail(confirmedGroup(record({ frozen: true, state: "blocked", reason: "integration-pr-refused:x" })));
-    choose(region, "When", "group");
+    await choose(region, "When", "group");
     fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
     expect(onCommand.mock.calls).toEqual([[{ verb: "set-group-integration", groupId: "g", expectedRevision: 6, payload: { integration: { ...PR_TASK, trigger: "group" } } }]]);
   });
@@ -263,19 +287,21 @@ describe("the group's scheme after confirm (fix round 1, F1)", () => {
 describe("a late suggested target (fix round 1, F2)", () => {
   const repoView = (suggestedTarget: string | null) => <RepositoryIntegration integration={repository({ delivery: "keep" }, suggestedTarget)} onSave={vi.fn()} />;
 
-  it("fills the target once the suggestion arrives while the field is empty and untouched", () => {
+  it("fills the target once the suggestion arrives while the field is empty and untouched", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { rerender } = render(repoView(null));
     const region = screen.getByRole("region", { name: "Integration" });
-    choose(region, "Delivery", "local");
+    await choose(region, "Delivery", "local");
     expect(field(region, "Target branch").value).toBe("");
     rerender(repoView("late"));
     expect(field(region, "Target branch").value).toBe("late");
   });
 
-  it("never overwrites what the person typed, even after they emptied it", () => {
+  it("never overwrites what the person typed, even after they emptied it", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { rerender } = render(repoView(null));
     const region = screen.getByRole("region", { name: "Integration" });
-    choose(region, "Delivery", "local");
+    await choose(region, "Delivery", "local");
     fireEvent.change(field(region, "Target branch"), { target: { value: "mine" } });
     rerender(repoView("late"));
     expect(field(region, "Target branch").value).toBe("mine");

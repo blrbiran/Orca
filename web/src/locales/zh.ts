@@ -894,6 +894,7 @@ export const zh: Translation<typeof en> = {
     fieldError: { missingAgent: "必须选择 Agent（无法继承）", unsupportedContext: "此 Agent 不支持上下文 {{value}}", invalidContext: "无效的上下文 {{value}}" },
     inheritPlan: "继承（计划：{{agent}}）",
     inherit: "继承",
+    chooseAgent: "选择 Agent",
     inheritConcrete: "继承{{value}}（来自{{source}}）",
     from: "来自{{source}}",
     rejected: "被拒",

@@ -14,6 +14,7 @@ import type { Me } from "../src/auth.js";
 import type { FlowSettingsReadV1, FlowTemplatesV1 } from "../src/controlTypes.js";
 import { FlowSettings } from "../src/FlowSettings.js";
 import i18n from "../src/i18n.js";
+import { optionsOf, pickOption } from "./selectControl.js";
 
 afterEach(cleanup);
 const owner: Me = { user: { id: "u1", name: "olga", roles: ["owner"], mustChangePassword: false }, expiresAt: 0, sessionDays: 15 };
@@ -88,7 +89,8 @@ describe("flow settings with source and lock (§11.2)", () => {
   it("writes this project's layer under the repository settings' revision, and resets a field to the next layer", async () => {
     serve();
     await mount(owner, { repoId: "repo" });
-    fireEvent.change(within(field("effects.local")).getByRole("combobox"), { target: { value: "confirm" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the level picked for local effects ("confirm") is the one written to this project's layer
+    await pickOption(within(field("effects.local")).getByRole("combobox"), "Ask before the step runs");
     fireEvent.click(within(field("effects.local")).getByRole("button", { name: "Override here" }));
     await waitFor(() => expect(posts.length).toBe(1));
     expect(posts[0]).toEqual({ url: "/api/control/repositories/repo/flows/settings", body: expect.objectContaining({ expectedRevision: 7, payload: { set: { effects: { local: "confirm" } }, clear: [] } }) });
@@ -100,9 +102,10 @@ describe("flow settings with source and lock (§11.2)", () => {
   it("never offers apply-flag for irreversible effects", async () => {
     serve();
     await mount(owner, { repoId: "repo" });
-    const options = [...within(field("effects.irreversible")).getByRole("combobox").querySelectorAll("option")].map((o) => o.getAttribute("value"));
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the irreversible picker offers confirm, stage-only, follow-template (by their names) and never apply-flag
+    const options = (await optionsOf(within(field("effects.irreversible")).getByRole("combobox"))).map(([name]) => name);
     // mutation: offer every level to irreversible -> apply-flag listed, red
-    expect(options).toEqual(["confirm", "stage-only", "follow-template"]);
+    expect(options).toEqual(["Ask before the step runs", "Prepare only, run later by hand", "Use the template's recommendation"]);
   });
 
   it("sets the global locks under @orchestration's revision", async () => {
@@ -152,7 +155,8 @@ describe("effect classes and levels in words (tester #68)", () => {
       expect(within(row).getByTestId("flow-setting-hint").textContent).toBe(example);
       expect(within(row).getByRole("combobox", { name })).toBeTruthy();
     }
-    const options = [...within(field("effects.local")).getByRole("combobox").querySelectorAll("option")].map((o) => o.textContent);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the level words offered, in order
+    const options = (await optionsOf(within(field("effects.local")).getByRole("combobox"))).map(([name]) => name);
     // mutation: back to the old level words -> red
     expect(options).toEqual(["Run, then flag for review", "Ask before the step runs", "Prepare only, run later by hand", "Use the template's recommendation"]);
     const region = screen.getByRole("region", { name: "Flow settings" });
@@ -212,7 +216,8 @@ describe("effect classes and levels in words (tester #68)", () => {
       const row = field("effects.cost");
       expect(row.textContent!.startsWith("付费步骤：") || row.textContent!.startsWith("付费步骤: ")).toBe(true);
       expect(within(row).getByTestId("flow-setting-hint").textContent).toBe("例如：生成图片、付费模型批处理。预算上限仍然有效。");
-      expect([...within(row).getByRole("combobox", { name: "付费步骤" }).querySelectorAll("option")].map((o) => o.textContent))
+      // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the level words offered in Chinese, in order
+      expect((await optionsOf(within(row).getByRole("combobox", { name: "付费步骤" }))).map(([name]) => name))
         .toEqual(["先运行，再标记待复核", "步骤运行前先询问", "只准备，之后手动运行", "采用模板的建议"]);
       expect(row.textContent).not.toMatch(/cost|confirm/);
     } finally { await i18n.changeLanguage("en"); }
@@ -273,7 +278,8 @@ describe("the re-run question wait and the parameter presets (gaps §5.3, §8.2;
     expect(posts[0]).toEqual({ url: "/api/control/operator/flows/settings", body: expect.objectContaining({ expectedRevision: 4,
       payload: { set: { paramDefaults: { "wechat-article": { coverImage: "/covers/new.png" } } }, clear: [] } }) });
     const pictures = field("paramDefaults.wechat-article.illustrations");
-    fireEvent.change(within(pictures).getByRole("combobox", { name: "wechat-article · illustrations" }), { target: { value: "false" } });
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the bool preset picked ("false") is sent as the boolean false
+    await pickOption(within(pictures).getByRole("combobox", { name: "wechat-article · illustrations" }), "false");
     fireEvent.click(within(pictures).getByRole("button", { name: "Override here" }));
     await waitFor(() => expect(posts.length).toBe(2));
     // mutation: send the bool as text -> "false", red

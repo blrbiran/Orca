@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { SelectionFields, contextLabel, draftOf, draftText, installationOf, partialFromFields, selectionFieldErrors, textOrUndefined } from "./AgentFields.js";
 import type { AgentPreferencesViewV1, AgentInstallationStateV1, AgentsViewV1, ModelListState, OperatorPreferencesV1 } from "./controlTypes.js";
 import { explainBesideCode } from "./ccloopCodes.js";
+import { Select } from "./ui/Select.js";
 
 const DEFAULT_AGENT_KEY = "agents:default-agent";
 export const AGENTS_OPEN_KEY = "orca.panel.agentsOpen";
@@ -164,11 +165,10 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         <h4>{t("agents.settings.primary")}</h4>
         <label>
           {t("agents.settings.defaultAgent")}
-          <select name={DEFAULT_AGENT_KEY} value={defaultText} onChange={(event) => onDraft(DEFAULT_AGENT_KEY, draftOf(event.target.value))}>
-            <option value="">{t("agents.settings.noDefault")}</option>
-            {defaultAgent && !installationOf(agents, defaultAgent) && <option value={defaultAgent}>{defaultAgent}</option>}
-            {agents.installations.map((row) => <option key={row.id} value={row.id}>{row.id}</option>)}
-          </select>
+          <Select value={defaultText} onValueChange={(value) => onDraft(DEFAULT_AGENT_KEY, draftOf(value))}
+            options={[{ value: "", label: t("agents.settings.noDefault") },
+              ...(defaultAgent && !installationOf(agents, defaultAgent) ? [{ value: defaultAgent, label: defaultAgent }] : []),
+              ...agents.installations.map((row) => ({ value: row.id, label: row.id }))]} />
         </label>
         {defaultAgent && installationOf(agents, defaultAgent) ? (
           <SelectionFields agents={agents} prefix={`agents:per:${defaultAgent}`} label={t("agents.settings.perAgent", { agentId: defaultAgent })} fixedAgent={defaultAgent}

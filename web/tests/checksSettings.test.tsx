@@ -20,6 +20,7 @@ import { ProjectSettings } from "../src/ProjectSettings.js";
 import { ReviewDetail } from "../src/ReviewDetail.js";
 import "../src/i18n.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
+import { optionsOf } from "./selectControl.js";
 
 afterEach(cleanup);
 
@@ -142,8 +143,9 @@ describe("the check settings' source layer (spec §4.3, criterion 11)", () => {
     const kinds = within(trigger).getAllByRole("combobox", { name: "Condition" });
     expect(kinds).toHaveLength(3);
     // The form is generated from the closed set: every condition kind, no other.
-    expect([...(kinds[0] as HTMLSelectElement).options].map((option) => option.value))
-      .toEqual(["landed-groups", "conflict-reconciled", "overlapping-files", "queue-idle", "since-last", "schedule"]);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the condition picker offers every kind of the closed set, in order, and no other (by its English name)
+    expect((await optionsOf(kinds[0]!)).map(([name]) => name))
+      .toEqual(["Groups landed", "A conflict between groups was resolved", "Groups changed the same file", "Nothing of this project is running", "Time since the last run", "Schedule"]);
     fireEvent.change(within(trigger).getByRole("spinbutton", { name: "At least this many groups" }), { target: { value: "3" } });
     fireEvent.change(within(trigger).getByRole("spinbutton", { name: "Minutes since the last run" }), { target: { value: "120" } });
     fireEvent.click(within(trigger).getByRole("button", { name: "Override" }));
