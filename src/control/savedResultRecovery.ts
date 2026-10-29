@@ -82,12 +82,14 @@ function assertKnown(store:ControlStore,run:any):void {
  if(bytes.ownerLeaseReleased!==true||bytes.workerSealed!==true)throw Error('saved-result-process-authority-invalid');
  for(const bucket of ['work','handoff'] as const)amountSchema.parse(run.cumulative[bucket]);
 }
+/** The settlement's ledger row as ccloop checks it; a socket row adds the person token's account it records (session b999cc81), a Web row's bytes are unchanged. */
+export function settlementReceipt(store:ControlStore,run:any){
+ const row=store.db.prepare('SELECT principal,client,person_principal,verb,body_json FROM commands WHERE group_id=? AND id=?').get(run.groupId,run.usageSettlement.commandId)!;
+ return {principal:row.principal,client:row.client,...(row.person_principal===null?{}:{personPrincipal:row.person_principal}),verb:row.verb,commandId:run.usageSettlement.commandId,result:JSON.parse(String(row.body_json)).result};
+}
 export function savedRecoveryAccounting(store:ControlStore,run:any){
  assertKnown(store,run);const proof=settlementProof(store,run);let settlement:ArtifactRef|null=null,receipt:ArtifactRef|null=null;
- if(run.usageSettlement!==undefined){
-  settlement=persistRecoveryArtifact(store,run.usageSettlement);const row=store.db.prepare('SELECT principal,client,verb,body_json FROM commands WHERE group_id=? AND id=?').get(run.groupId,run.usageSettlement.commandId)!;
-  receipt=persistRecoveryArtifact(store,{principal:row.principal,client:row.client,verb:row.verb,commandId:run.usageSettlement.commandId,result:JSON.parse(String(row.body_json)).result});
- }
+ if(run.usageSettlement!==undefined){settlement=persistRecoveryArtifact(store,run.usageSettlement);receipt=persistRecoveryArtifact(store,settlementReceipt(store,run));}
  return {work:run.cumulative.work,handoff:run.cumulative.handoff,highWater:run.highWater,report:proof.report,stopProof:proof.stopProof.source,settlement,receipt};
 }
 const sourcePort=(deps:StopDeps,run:any):ExecutionPort=>deps.profileRouter.resolve('task',run.executionProfile.profileId,run.executionProfile.profileHash).port;
