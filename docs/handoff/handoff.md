@@ -63,6 +63,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
+### 3.0000000000000000 会话 `b999cc81`（2026-10-29／30）：收据缺陷、Radix Select 全量换 —— **先读这一节**
+
+> 人裁（本会话，原话）：Radix「(a) 全量换」；项目选择器「同意你的建议，换radix selector。但是不要合并成一个。」；收据「同意，按你的建议走。需要推 ccloop 时我可以push」；被删主题「按你的建议走。不加映射」；提问表单未选值「(a)，按你的建议走」（空触发器＋占位，不默认第一项）；「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」（**本轮没有付费真跑**）；「执行完在最后阶段报给我审核」。台账 `.superpowers/sdd/2026-10-29-session-b999cc81/progress.md`（每道门、变异、测量命令与原始数）。
+
+- **已合入 main、已推、已装**（按主题行找）：
+  - **socket 结算的已存结果收据**：会话 `3ea8a21e` 把它登记成「只是审计措辞」，实为功能缺陷——ccloop 按严格 schema 校验收据（`client` 必须 `"web"`、principal 必须等于 marker），`orca task settle-usage` 结算过的 run 永远走不了已存结果恢复。两仓修：ccloop `fix(control): a socket settlement's receipt backs the marker by its personPrincipal …`（Web 行按 `principal`、其它行按 `personPrincipal`；改前 4 条新判据全红）；Orca `fix(control): the saved-result receipt of a socket settlement names the person token's account`（`settlementReceipt`，只在 `person_principal` 非空时加键，Web 收据字节不变）＋ `chore(deps): repin ccloop to ed5e4aa …`。spec `2026-10-29-socket-usage-settlement-design.md` 追加 §5 更正。⚠️ `savedRecoveryAccounting` 调用 `settlementReceipt` 这一步没有判据（前置条件要真停止证明；paired 端到端默认跳过且夹具还停在 schema 14），已登记。
+  - `test(control): type the settle-unknown-usage command builder …`：根 typecheck 自会话 `3ea8a21e` 起就是红的（TS2345，两个判据把 payload 传给 `never` 参数），上一会话与本会话前半都只看了 vitest 行。⚠️ **读 `npm test` 日志要看 typecheck 段**，rc≠0 不一定是测试红。
+- **在分支上、未合入 main（Tier 0 闸门拒了复合命令，归人）**：`fix/test-affected-web-css`（主工作区当前就在这个分支上；本 handoff 提交也在它上面）——`fix(scripts): a web/src stylesheet selects the web tests that read it by name`：`scripts/test-affected.mjs` 原来对只改 `web/src/styles.css` 的提交一个 web 测试都不选（styles／shellReflow／contrast 等按名读它）；修后选 8 个。判据在 `tests/scripts/testAffected.test.ts`，改前红；`npm test` 5 文件 70/70。
+- **在分支上、等人看后合入**：`ui/radix-select-trial`（worktree `.worktrees/radix-select`，自带真 `node_modules`，基于 main 上 typecheck 修复那笔）——全面板 55 个原生下拉都换成共用的 `web/src/ui/Select.tsx`（Radix 2.4.1），两个项目选择器都换、结构不动。spec `docs/superpowers/specs/2026-10-29-radix-select-everywhere-design.md`（独立审阅 13 条已并入）。分 6 批、每批一个子 agent、主会话审：批 0 组件＋helper（`web/tests/selectControl.ts` 的 `pickOption`／`optionsOf`／`shownText`，测试**绝不碰** Radix 在 `<form>` 里渲染的隐藏原生 select）；批 1 项目选择器＋需求＋控制；批 2 设置页；批 3 工作视图；批 4 其余；批 5 删原生 select CSS、文档更正。迁移顺带发现并修了两个真缺陷：FlowBoard 开始对话框按 Esc 关下拉会连对话框一起关掉；`reviewKeys` 不把按钮式下拉当输入框，焦点在下拉上按字母会触发「同意／重试」快捷键。门（批 5）：868 文件全绿（根 684、web 184／1758 条），typecheck 无错，37 跳过／10 个按环境开关的文件；两条完成判据 exit 0。bundle `index.js` +19,184 B（gzip +7.16 kB）。截图 41 张（1280／390、深浅、侧栏／设置·本项目／需求／用量，开与关）都无横向溢出、无 pageerror：`/private/tmp/orca-b999cc81/radix-shots/`。详见 `handoff_ui.md` §七.九。
+- **残余（登记未修）**：种子世界没有长列表，Radix 的滚动按钮没在截图里见到；需求页每行的「…」按钮压出行边框（截图所见，主线就有，非本分支）；ChecksSettings 的选择没有「选了什么值」的判据（只有选项清单）；FlowSettings 预设与 AgentFields 上下文在值不在选项里时显示空触发器、不加占位（旁边已显示该值／有红框）。
+
 ### 3.000000000000000 会话 `3ea8a21e`（2026-10-29）：测试者反馈轮的三件后续 —— **先读这一节**
 
 > 人裁（本会话）：主题「霜白，深色，浅色，蔷薇，紫夜，暮色，余烬。这几个配色还行，其他可以删掉」「terminal 主题不好看」；Radix Select「是不是可以换成 Radix Select 看下效果」；settle-usage 的 schema 变更「同意」；其余替人定的可逆项「没特别说明的部分都同意」；测试者数据「我去问问，不一定能拿到」；「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」（**本轮没有付费真跑**）；收尾临时授权 push 三仓（handoff 提交之后）。
@@ -71,9 +82,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - `feat(web): keep the seven themes the human picked; drop ink, contrast, navy, lagoon and terminal`：`THEME_PREFS` 现为 system／light／dark／frost／rose／violet／dusk／ember；存过被删 id 的浏览器读成 `system`。判据改写：`themes.test.ts`（清单、被删 id 回落、侧栏计数徽标、删 high-contrast 块）、`i18nPseudo` 枚举 205 → 200。变异（`readTheme` 不校验）见红。门 `npm test` 172 文件（4 根、168 web）全绿、0 跳过。
   - `feat(control): orca task settle-usage works with a person token -- schema 20 -> 21 records the token's account`（spec `docs/superpowers/specs/2026-10-29-socket-usage-settlement-design.md`；恢复 spec 追加 §5 指过来）：`commands.person_principal`（可空）；socket 上有 person 权限的命令记 token 账号，Web 行为 NULL；`applySettleUnknownUsage` 用 `settlingPersonFor`；`hasValidUsageSettlement` 接受 socket 行的 `person_principal`。新判据 `tests/control/socketUsageSettlement.test.ts`；改写 `testerStuckStates`「stays the Web owner's」→ person token 能结算且读方认；`scheduleMigration` 前驱钉 "19"；12 个文件的当前版本 "20" → "21"、「未来版本」21 → 22（逐条在提交里）。变异 M1–M4（读方 socket 分支、写方写 NULL、服务回到只认 Web、20 路径不迁移）在 clone 里各打红、0 字节还原。门 `npm test` 571 根文件：541 过＋30 个 `panel-dist-missing`（worktree 没 build web，非业务）→ build web 后这 30 个单跑 262/262 绿；35 跳过（固定的 8 个真依赖文件）。
   - **装**：真库先 `sqlite3 .backup` 到 `~/.orca/backups/pre-schema21-20261029-135742/`（integrity ok、v20、61 行 commands），`npm run build`＋web build、`launchctl kickstart -k …/dev.orca.panel`；启动时自动迁移（另有 `control.sqlite.pre-v20-*`），现测 `schemaVersion=21`、7777 应答 200。⚠️ 旧版 Orca 不能再开这个库，回退用该备份。
-- **未合入，等人看**：分支 `ui/radix-select-trial`（worktree `.worktrees/radix-select`，基于主题删减那笔、**不含** schema 21）——`web/src/ui/Select.tsx` 包 `@radix-ui/react-select` 2.4.1（exact），只换了设置 › 外观的主题与语言两个下拉，其余仍原生，便于同页对比。详见 `handoff_ui.md` §七.八。
+- Radix Select 试样：人看后定「全量换」，会话 `b999cc81` 在同一分支上做完（见上一节）。
 - **事故（已恢复）**：worktree 里 `npm ci` 穿过软链清空了主仓 `node_modules`（§6.7 新增一条）；已在主仓 `npm ci`（锁文件 0 字节差、ccloop 仍解析到 `e25381f`）、重启面板 200；`git status` 干净。
-- **残余**：saved-result 收据工件对 socket 结算仍记行的 `principal`（`agent:cli`），旁边的 marker 记用户（spec §3，登记未改）；Radix 试样的判据只跑了 web 全套（183 文件，改写 `i18nSwitch` 后全绿），没做变异。
+- 收据工件那条「登记未改」是误判，会话 `b999cc81` 已两仓修掉（见上一节）。
 
 ### 3.00000000000000 测试者反馈轮（2026-10-28 规划 → 会话 `a9f9d6de` 2026-10-28／29 实施）
 
@@ -547,11 +558,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `3ea8a21e` 待人看／待人定**：
-  1. 看 Radix Select 试样（`handoff_ui.md` §七.八 有起面板的命令与截图路径），定：全量换（56 个原生下拉、32 个测试文件、项目选择器 #69/#70 冻结要不要放开）还是删分支 `ui/radix-select-trial`。
-  2. 审替人定的：settle-usage 的设计（spec `2026-10-29-socket-usage-settlement-design.md`，尤其 §3 没改的收据工件）；被删主题的已存选择回落 `system`（没做旧 id → 新主题映射）。
-  0. **push 三仓**：人临时授权 agent 收尾 push，但 Tier 0 闸门（Rule 15）机械拦下了 `git push`（Orca、ccloop 各试一次，均 `push is Tier 0`，未换写法重试）⇒ 由人在终端推 Orca、ccloop、ccmem 的 main（都是 fast-forward：收尾时 `ls-remote` 现测远端仍是本会话开工时的那三笔）。
-  3. 测试者数据（可选，人说不一定拿得到）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
+- **会话 `b999cc81` 待人做／待人看／待人审**：
+  1. **合入 `fix/test-affected-web-css`**：主工作区在该分支上，`git switch main` 后 `git merge --ff-only fix/test-affected-web-css`、`git branch -d fix/test-affected-web-css`（agent 把这几步和别的 git 调用写在一条复合命令里，被 Tier 0 闸门以「could not decide」整条拒掉，按闸门要求没换写法重试）。本 handoff 提交也在这个分支上。
+  2. **看 Radix 全量换**：截图 `/private/tmp/orca-b999cc81/radix-shots/`（41 张）；要看真浏览器就起隔离面板 `/private/tmp/orca-s29/radix-panel.sh`（7796，登录 `tester`，密码 `/private/tmp/orca-e236bbe4/ui/password.txt`，不碰真面板）。满意 ⇒ 下一位 agent：把分支 rebase 到 main、`npm test`、`--ff-only` 合入、装上（`npm ci` 后 build、web build、`launchctl kickstart -k …/dev.orca.panel`），再 `git worktree remove .worktrees/radix-select`（不带 force）＋`git branch -d`。不满意 ⇒ 说哪里要改。
+  3. **审替人定的**（台账 Line 2 各批 accepted 段）：触发器焦点沿用原生字段的 2px 描边、1px 偏移；`className` 只替换默认最小宽度；新增 i18n 键 `agents.chooseAgent`、`flow.ask.choose`；FlowSettings 预设／AgentFields 上下文的未知值不加占位；两个顺带修的行为缺陷（FlowBoard Esc、`reviewKeys` 下拉）；`test-affected` 的修法（`web/src` 非代码文件按名找读它的测试）。
+  4. **push**：Orca（上面合入之后）、ccloop（本会话的 handoff 提交）、ccmem（本会话 handoff 提交＋开工时就多出的一笔 `docs(handoff): Orca session 3ea8a21e pointer …`）。以 `ls-remote` 现测为准。
+  5. 测试者数据（可选，人在问）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
+- ~~会话 `3ea8a21e` 待人看／待人定~~ **人已全部回复**（会话 `b999cc81`）：Radix 全量换（已在分支做完，见上条 2）；收据与主题回落按建议（收据已修、回落不加映射）；三仓 push 人已做；测试者数据仍在问（上条 5）。
 - ~~会话 `a9f9d6de` 待人审／待人给~~ **人已全部回复**（会话 `3ea8a21e` 开头）：主题留七个、其余删（已做）；可逆项同意，原生 select 改为试 Radix（试样待看）、terminal 删；settle-usage schema「同意」（已做）；push 人已做；测试者数据去问。
 - ~~会话 `e236bbe4` 待人看／待人定~~ **人已全部回复**（测试者反馈轮台账）：控制器三条裁定「同意」；轮次编号按链上位置；主题「都不太满意」⇒ 整体重做；codex 拆分自测的结果就是测试者 #105／#107。
 - **会话 `ffec7b28` 待人审／待人做**（原委在该会话台账）：

@@ -10,7 +10,7 @@
 > ✅ §七.六（组件层重做＋六个候选主题，会话 `e236bbe4`，2026-10-28）已由 agent `--ff-only` 合入 main 并装上；**等人看完全部主题说留哪些**。
 > ✅ §七.七（Radix＋Tailwind v4 全量迁移＋主题重做＋测试者 UI 项，会话 `a9f9d6de`，2026-10-28／29）已由 agent `--ff-only` 合入 main 并装上；**等人看**（待人项见该节末）。§七.六 的「等人选主题」被本节的主题重做取代。
 > ✅ §七.七 的待人项人已回复（会话 `3ea8a21e`，2026-10-29）：主题删减已合入并装上；Radix Select 试样见 §七.八。
-> 🟡 **在飞：分支 `ui/radix-select-trial`（§七.八）等人看，未合入。** 下一轮从 §七.八「待人」开始。（人要求后续问题继续追加在本文）
+> 🟡 **在飞：分支 `ui/radix-select-trial` 已做完全量换（§七.九），等人看截图后合入。** 下一轮从 §七.九「待人」开始。（人要求后续问题继续追加在本文）
 
 > **读者是下一个 agent。** 这一批 UI 改动的交接写在本文，**不写进 `docs/handoff/handoff.md`**；
 > 等 UI 基本 ready、由人决定合并时，再把本文的结论并回 `handoff.md`。
@@ -373,3 +373,15 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 
 **残余**：Radix 的箭头用字符 ▾，和原生下拉的 CSS 箭头略有不同；触屏上失去原生滚轮选择器。
 
+## 七.九、Radix Select 全量换（会话 `b999cc81`，2026-10-29／30；分支 `ui/radix-select-trial`，未合入）
+
+> 人已回复 §七.八：「(a) 全量换」；项目选择器「换radix selector。但是不要合并成一个。」；提问表单未选值「(a)」（空触发器＋占位）。
+
+- spec `docs/superpowers/specs/2026-10-29-radix-select-everywhere-design.md`（在分支上；独立审阅 13 条已并入）。台账 Orca `.superpowers/sdd/2026-10-29-session-b999cc81/progress.md` Line 2。
+- **组件** `web/src/ui/Select.tsx`：触发器是字段样子的按钮（字段底色、边、2px 描边 1px 偏移的焦点、`aria-invalid` 红边），列表浮在 portal 里，选中项 ✓＋加粗，有滚动按钮；未命名的属性都透传到触发器；空串值选项用内部哨兵显示自己的名字；有 `name` 时类型禁止空串选项（隐藏原生 select 会提交哨兵）；值不在选项里 ⇒ 空触发器＋占位。
+- **测试**：`web/tests/selectControl.ts` 的 `pickOption`／`optionsOf`／`shownText`（假定时器下也能用）、`web/tests/agentFieldControl.ts`；jsdom 垫片在 `web/tests/setup.ts`。**任何判据都不许碰 Radix 在 `<form>` 里渲染的隐藏原生 select**（它的 onChange 会改值，旧写法会空绿——批 3 抓到 `projectSwitcher` C 正是这样）。改写的判据每处带 `Ruling:` 行。
+- **顺带修的两个真缺陷**：FlowBoard 开始对话框的 document 级 Esc 监听不看 `defaultPrevented`，Esc 关下拉会连对话框和已填内容一起丢掉；`web/src/reviewKeys.ts` 只把原生 SELECT 当输入框，焦点在按钮式下拉上按 a／r 会触发「同意／重试」。各有判据与变异。
+- **样式**：`styles.css` 共享字段规则里的 `select` 选择器删掉、chevron 规则删掉，coarse 规则 `button, input`（触发器是按钮，仍 44px）。`web/TAILWIND-MIGRATION.md` 与 `web/DESIGN.md` 追加了更正。
+- **门与证据**：868 文件全绿、typecheck 无错；完成判据 `test -z "$(grep -rln '<select' web/src | grep -v ui/Select.tsx)"`、`! grep -rnE 'HTMLSelectElement|HTMLOptionElement|selectedOptions|select\[name|fireEvent\.change\([^)]*[Ss]elect' web/tests` 都 exit 0；bundle `index.js` +19,184 B（gzip +7.16 kB）。截图 `/private/tmp/orca-b999cc81/radix-shots/`（41 张，1280／390 × 深浅 × 侧栏开关／设置·本项目／需求三个下拉／用量），全部无横向溢出、无 pageerror。
+- **待人**：看截图（或起 `/private/tmp/orca-s29/radix-panel.sh`，7796）定合不合；合入步骤见 Orca handoff §8。
+- **残余**：滚动按钮没在截图里见到（种子世界最长列表 3 项）；触屏失去原生滚轮选择器（人知情接受）；需求页每行「…」按钮压出行边框（主线就有）。
