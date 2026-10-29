@@ -46,7 +46,9 @@ describe("narrow shell (P1-2)", () => {
     has(carrying("ProjectControl.tsx", "project-action"), "pointer-coarse:min-h-[44px]");
     const at = css.indexOf("@media (pointer: coarse) {");
     expect(at).toBeGreaterThan(-1);
-    expect(css.slice(at, css.indexOf("}", at))).toMatch(/button, select, input \{ min-height: 44px;/);
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the pickers are Radix Select triggers -- a <button> --
+    // so the coarse-pointer rule no longer names `select`; it still gives every button (the picker trigger included) and input a 44px target.
+    expect(css.slice(at, css.indexOf("}", at))).toMatch(/button, input \{ min-height: 44px;/);
   });
   it("hides the skip link until it is focused", () => {
     // mutation: delete focus:left-2 -> the skip link never comes into view, red

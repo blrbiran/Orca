@@ -77,7 +77,11 @@ describe("dark theme contrast (human visual review, session f8281a60)", () => {
   // Human visual acceptance (session fb98aa31): "in dark mode the inputs are too dark". Fields used --bg, the darkest
   // layer, so every input sank below the card it sits on. A field steps LIGHTER than its card, like every other layer.
   it("raises inputs, selects and textareas above the card and the page they sit on", () => {
-    const rule = css.slice(css.indexOf("input, select, textarea {"), css.indexOf("}", css.indexOf("input, select, textarea {")));
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): pickers are Radix triggers (bg-field in ui/Select.tsx), so the shared
+    // field rule is `input, textarea` now; it still pins that fields take --field, lighter than card and page.
+    const at = css.indexOf("input, textarea {");
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
     expect(rule).toMatch(/background:\s*var\(--field\);/);
     const raw = token("field");
     const via = /^var\(--([a-z-]+)\)$/.exec(raw);

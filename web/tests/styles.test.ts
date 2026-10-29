@@ -160,19 +160,19 @@ describe("styles.css", () => {
   });
 
   // Tester #65 (spec §24, session 3cd8fb02): selects wore each platform's own arrow and fields the browser's focus ring.
-  // One rule set from the tokens, no UI library; the field colours themselves stay pinned by contrast.test.ts.
-  it("styles every select, field and checkbox from the tokens, with a token chevron and an accent focus ring", () => {
-    // mutation: drop the select rule -> the platform arrow returns, red
-    const at = css.indexOf("\nselect {");
-    expect(at).toBeGreaterThan(-1);
-    const select = css.slice(at, css.indexOf("}", at));
-    for (const part of ["appearance: none", "-webkit-appearance: none", "linear-gradient(45deg, transparent 50%, var(--muted) 50%)", "background-repeat: no-repeat"]) expect(select).toContain(part);
-    // The chevron is a background-image layered over the field colour: it must come after the base rule's `background:` shorthand.
-    expect(at).toBeGreaterThan(css.indexOf("input, select, textarea {"));
-    expect(select).not.toMatch(/background:/);
-    // mutation: drop the focus rule -> red
-    expect(rule("input:focus-visible, select:focus-visible, textarea:focus-visible")).toContain("outline: 2px solid var(--accent)");
+  // One rule set from the tokens; the field colours themselves stay pinned by contrast.test.ts.
+  it("styles every field and checkbox from the tokens with an accent focus ring, and leaves no native select rule behind", () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): no native <select> is left in the panel
+    // (spec 2026-10-29-radix-select-everywhere-design.md §3): its chevron rule went and every shared field rule lost `select`; the
+    // picker is a button trigger styled in ui/Select.tsx. Still protects the input/textarea focus ring, the checkbox accent, and
+    // that no stale rule styles Radix's hidden native select.
+    // mutation: drop `input` or `textarea` from the focus rule -> no rule for the selector, red
+    expect(rule("input:focus-visible, textarea:focus-visible")).toContain("outline: 2px solid var(--accent)");
+    expect(rule("input:disabled, textarea:disabled")).toContain("cursor: not-allowed");
+    expect(rule('input[aria-invalid="true"], textarea[aria-invalid="true"]')).toContain("border-color: var(--danger)");
     expect(rule('input[type="checkbox"], input[type="radio"]')).toContain("accent-color: var(--accent)");
+    // mutation: put `select` back in any selector list -> red
+    expect(css).not.toMatch(/(^|[\s,{}(])select[\s,:[{)]/m);
   });
 
   // Session e236bbe4: the group header's source-requirement link sat flush against the next button; the adjacent-control

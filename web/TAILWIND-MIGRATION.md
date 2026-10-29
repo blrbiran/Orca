@@ -191,3 +191,15 @@ did). The region and corrections tabs wear `tabButtonRow` / `tabButton` (`ui/cla
 Deleted as unused: `.btn`, `.btn-danger`, `[role="tabpanel"][hidden]` (preflight's `[hidden]` rule covers it), and
 `.callout` / `.chain-banner` left the role rule (every chain banner has a role). Read a class's declarations in
 `index.css`; a criterion reads them with `utility()` in `web/tests/sourceClasses.ts`.
+
+**Correction (2026-10-30, session b999cc81, branch `ui/radix-select-trial`).** Human ruling 「(a) 全量换」 (and, on the
+project pickers, 「同意你的建议，换radix selector。但是不要合并成一个。」), spec
+`docs/superpowers/specs/2026-10-29-radix-select-everywhere-design.md`. This supersedes §3 "Fields" ("Do not replace a
+native `<select>` with a custom one in a batch; the project pickers are frozen by the #69/#70 ruling") and the
+`input/select/textarea` element base in §2: every native `<select>` in `web/src` is now the shared `Select`
+(`src/ui/Select.tsx`, `@radix-ui/react-select`), the two project pickers included (control only: still two pickers, one
+scope, Add/Rename in the sidebar). `styles.css` keeps no rule that names `select` (the shared field rules read
+`input, textarea`; the chevron rule is gone; the coarse-pointer rule reads `button, input`), so the §6 row "`select`
+chevron" no longer exists — `styles.test.ts` now pins that no `select` selector is left, and `shellReflow.test.ts` and
+`contrast.test.ts` read the `button, input` and `input, textarea` rules. A new picker is `<Select options=…>`; a
+criterion drives it with `pickOption` / `optionsOf` (`web/tests/selectControl.ts`), never Radix's hidden native select.
