@@ -68,9 +68,11 @@ const GRAPH: Record<string, string> = {
   "web/src/w.ts": "export const w = 1;\n",
   "web/src/lone.ts": "export const l = 1;\n",
   "web/tests/w.test.ts": T(`import { w } from "../src/w.js";\nvoid w;`),
-  "web/tests/other.test.tsx": T(`const data = "fixtures/data.json";\nvoid data;`),
+  "web/tests/other.test.tsx": T(`const data = "fixtures/data.json";\nconst css = ["..", "src", "look.css"].join("/");\nvoid data; void css;`),
   "web/tests/setup.ts": "export {};\n",
   "web/tests/fixtures/data.json": "{}\n",
+  // A stylesheet under web/src that tests read as text (styles.css is read by name, never imported by a test).
+  "web/src/look.css": "a { color: red; }\n",
   // Data read as text: named by a test (its basename in a path built from segments), by a helper, by nothing; a decoy
   // whose name merely ends in the same basename must not be selected.
   "tests/fixtures/m/golden.json": "{}\n",
@@ -211,6 +213,16 @@ describe("selection rows (dry run against the real module graph)", () => {
     write(flows, "flows/builtin/x/prompts/p.md", "Write.\n");
     commit(flows);
     expect(dry(flows).files).toEqual(["root tests/flow/kernel.test.ts"]);
+  });
+
+  it("a web/src stylesheet selects the web tests that name it (they read it as text; nothing imports it)", () => {
+    // Session b999cc81: a CSS-only change to web/src/styles.css selected no test, though styles/shellReflow/contrast
+    // criteria read it by name; a whole-suite run (a lockfile change) had hidden the gap.
+    const repo = graphRepo();
+    write(repo, "web/src/look.css", "a { color: blue; }\n");
+    commit(repo);
+    const r = dry(repo);
+    expect(r.out).toContain("  web web/tests/other.test.tsx <- web/src/look.css (named by web/tests/other.test.tsx)\n");
   });
 
   it("a config file selects the whole suite explicitly: root config the root suite, web config the web suite", () => {

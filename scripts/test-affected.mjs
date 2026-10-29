@@ -180,7 +180,8 @@ for (const p of changed) {
       if (dir) select("root", listTests(dir, ROOT_TEST), `${p} (mirror ${dir})`, p);
     }
   } else if (/^web\/(src|tests)\//.test(p)) {
-    if (p.startsWith("web/tests/") && !CODE.test(p)) dataFiles.push(["web", p]);
+    // Data read as text: a web/tests fixture, or a web/src non-code file such as styles.css (tests read it by name).
+    if (!CODE.test(p)) dataFiles.push(["web", p]);
     // A gone web module selects nothing by graph; the web typecheck (always run for web/**) covers its importers.
     if (present && WEB_TEST.test(p)) select("web", [p], `${p} (changed test)`, p);
     else if (present) {
