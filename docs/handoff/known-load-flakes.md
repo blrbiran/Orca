@@ -174,7 +174,7 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 
 | 文件 › 测试 | 现象与观测 |
 |---|---|
-| Orca › `tests/control/correctionCoarseDebug.test.ts` | **挂住**（不是超时）：两次门里 worker 卡在一个 `git hash-object -w` 子进程上 22–35 分钟、0% CPU，占着门锁；杀掉该 git 子进程后门继续（报 1 error）。单跑 3/3 绿、各约 19 s。根因未查。再见时：先 `ps` 找 `git hash-object`，杀的只能是本会话起的那个 |
+| Orca › `tests/control/correctionCoarseDebug.test.ts` | **挂住**（不是超时）：两次门里 worker 卡在一个 `git hash-object -w` 子进程上 22–35 分钟、0% CPU，占着门锁；杀掉该 git 子进程后门继续（报 1 error）。单跑 3/3 绿、各约 19 s。根因未查。再见时：先 `ps` 找 `git hash-object`，杀的只能是本会话起的那个。**第三次（会话 `65b4d067`，2026-10-30，Radix 合入前的 `npm test`，Node 22.13.1）**：挂了约 7 h（02:56→09:58，worker 子进程 `git … hash-object -w --stdin`，cwd 在 `orca-control-*/repo` 临时目录，stdin 是 unix socket，0% CPU），用例是「caps the diff at the inline limit and records the cut」（`commitAt` 喂 16,385 B）。找法：vitest 参数里的文件对照已报告的文件（684 里只有它没报告）。杀掉后单跑 3/3 绿（约 18.5 s）。串行探针（同样的 `execFileSync`，16 KiB 输入 4×400 次、100 B 400 次，负载 9–20）全通过、最长 30 ms；第一次没有逐次日志的尝试 120 s 内没跑完，无法判断。⇒ **不是负载慢，是死锁；根因仍未查**（台账 `.superpowers/sdd/2026-10-30-session-65b4d067/progress.md`） |
 | Orca › `tests/flow/startForm.test.ts` › 「answers the templates…」 | 上表那条，本轮更频繁：**基线分支单跑也 3/4 红**（负载约 25，`fetch failed`／ECONNRESET 或 hook 10 s 超时），负载降下来后的单跑 9/9 绿。不是本轮改动带来的 |
 | Orca › `progressE2E`、`dispatchedRunMarkerE2E`（`checkpoint-usage-high-water`）、`multiDirCollect`（`control-peer-exit … Unexpected end of JSON input`）、`agentUpgradeE2E`（`timed out waiting for b to land`，负载 29.5） | 各在一次全量里红一次，其余门里绿；`progressE2E`、`agentUpgradeE2E` 单跑 3/3 绿，另两条未单跑 |
 | ~~Orca › web `tests/controlCommandRecovery.test.tsx`~~ | **已修，不再是 flake**：三处在文字出现后立刻读 sessionStorage，与 App 的写入 effect 竞速；改为 `waitFor`（主题行 `test(web): the uncertain-command reads wait for App's storage effect…`）。上面几行旧登记里的这个文件以此为准 |

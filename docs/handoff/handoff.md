@@ -63,18 +63,26 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.0000000000000000 会话 `b999cc81`（2026-10-29／30）：收据缺陷、Radix Select 全量换 —— **先读这一节**
+### 3.00000000000000000 会话 `65b4d067`（2026-10-30）：Radix Select 合入并装上 —— **先读这一节**
+
+> 人裁（本会话开头，原话）：`fix/test-affected-web-css`「已做完」（人自己合并、推送）；Radix「同意，合入」；`b999cc81` 替人定的五处（焦点样式、两个 i18n 键、未知值不加占位、顺带修的两个缺陷、test-affected 修法）「同意」。台账 `.superpowers/sdd/2026-10-30-session-65b4d067/progress.md`（测量命令、原始数）。
+
+- **已 `--ff-only` 合入 main 并装上、未推**：`ui/radix-select-trial` rebase 到 main（10/10 无冲突）后合入，主题行 `feat(web): drop the native select CSS; doc corrections (Radix Select batch 5)` 为末笔。装：`npm ci`（新依赖 `@radix-ui/react-select`）、`npm run build`、web build、`launchctl kickstart -k …/dev.orca.panel`；7777 应答 200，服务的 `index.js` 与新 build 字节数相同（1,157,515 B）。schema 没动。worktree 已 `remove`（不带 force），分支已 `-d`；主仓只剩 `main`。
+- **合入前的 `npm test`**（rebase 后的分支，选中 868 文件＝全套，因为 `package-lock.json` 变了）：typecheck 无错；根 683/684 文件、6535 过／37 跳过，web 184/184（1758）；唯一的红是已登记的 `correctionCoarseDebug` **挂住**，这次挂了约 7 小时（`git hash-object -w --stdin` 子进程 0% CPU，杀掉后报 1 error），单跑 3/3 绿。分支不碰根 `src/`、`tests/`、`scripts/`。复现探针（16 KiB 输入的串行 `execFileSync` 共 2000 次）没复现，根因仍未查，登记更新在 `known-load-flakes.md`。⚠️ **以后跑 `npm test` 要盯着它**：日志长时间不涨时，先拿 vitest 参数里的文件对照已报告的文件，找出没报告的那个。
+- 本轮没有付费真跑，没有改任何判据。
+
+### 3.0000000000000000 会话 `b999cc81`（2026-10-29／30）：收据缺陷、Radix Select 全量换
 
 > 人裁（本会话，原话）：Radix「(a) 全量换」；项目选择器「同意你的建议，换radix selector。但是不要合并成一个。」；收据「同意，按你的建议走。需要推 ccloop 时我可以push」；被删主题「按你的建议走。不加映射」；提问表单未选值「(a)，按你的建议走」（空触发器＋占位，不默认第一项）；「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」（**本轮没有付费真跑**）；「执行完在最后阶段报给我审核」。台账 `.superpowers/sdd/2026-10-29-session-b999cc81/progress.md`（每道门、变异、测量命令与原始数）。
 
 - **已合入 main、已推、已装**（按主题行找）：
   - **socket 结算的已存结果收据**：会话 `3ea8a21e` 把它登记成「只是审计措辞」，实为功能缺陷——ccloop 按严格 schema 校验收据（`client` 必须 `"web"`、principal 必须等于 marker），`orca task settle-usage` 结算过的 run 永远走不了已存结果恢复。两仓修：ccloop `fix(control): a socket settlement's receipt backs the marker by its personPrincipal …`（Web 行按 `principal`、其它行按 `personPrincipal`；改前 4 条新判据全红）；Orca `fix(control): the saved-result receipt of a socket settlement names the person token's account`（`settlementReceipt`，只在 `person_principal` 非空时加键，Web 收据字节不变）＋ `chore(deps): repin ccloop to ed5e4aa …`。spec `2026-10-29-socket-usage-settlement-design.md` 追加 §5 更正。⚠️ `savedRecoveryAccounting` 调用 `settlementReceipt` 这一步没有判据（前置条件要真停止证明；paired 端到端默认跳过且夹具还停在 schema 14），已登记。
   - `test(control): type the settle-unknown-usage command builder …`：根 typecheck 自会话 `3ea8a21e` 起就是红的（TS2345，两个判据把 payload 传给 `never` 参数），上一会话与本会话前半都只看了 vitest 行。⚠️ **读 `npm test` 日志要看 typecheck 段**，rc≠0 不一定是测试红。
-- **在分支上、未合入 main（Tier 0 闸门拒了复合命令，归人）**：`fix/test-affected-web-css`（主工作区当前就在这个分支上；本 handoff 提交也在它上面）——`fix(scripts): a web/src stylesheet selects the web tests that read it by name`：`scripts/test-affected.mjs` 原来对只改 `web/src/styles.css` 的提交一个 web 测试都不选（styles／shellReflow／contrast 等按名读它）；修后选 8 个。判据在 `tests/scripts/testAffected.test.ts`，改前红；`npm test` 5 文件 70/70。
-- **在分支上、等人看后合入**：`ui/radix-select-trial`（worktree `.worktrees/radix-select`，自带真 `node_modules`，基于 main 上 typecheck 修复那笔）——全面板 55 个原生下拉都换成共用的 `web/src/ui/Select.tsx`（Radix 2.4.1），两个项目选择器都换、结构不动。spec `docs/superpowers/specs/2026-10-29-radix-select-everywhere-design.md`（独立审阅 13 条已并入）。分 6 批、每批一个子 agent、主会话审：批 0 组件＋helper（`web/tests/selectControl.ts` 的 `pickOption`／`optionsOf`／`shownText`，测试**绝不碰** Radix 在 `<form>` 里渲染的隐藏原生 select）；批 1 项目选择器＋需求＋控制；批 2 设置页；批 3 工作视图；批 4 其余；批 5 删原生 select CSS、文档更正。迁移顺带发现并修了两个真缺陷：FlowBoard 开始对话框按 Esc 关下拉会连对话框一起关掉；`reviewKeys` 不把按钮式下拉当输入框，焦点在下拉上按字母会触发「同意／重试」快捷键。门（批 5）：868 文件全绿（根 684、web 184／1758 条），typecheck 无错，37 跳过／10 个按环境开关的文件；两条完成判据 exit 0。bundle `index.js` +19,184 B（gzip +7.16 kB）。截图 41 张（1280／390、深浅、侧栏／设置·本项目／需求／用量，开与关）都无横向溢出、无 pageerror：`/private/tmp/orca-b999cc81/radix-shots/`。详见 `handoff_ui.md` §七.九。
+- **已在 main、已推（人自己合入，会话 `65b4d067` 开工时现测）**：`fix(scripts): a web/src stylesheet selects the web tests that read it by name`：`scripts/test-affected.mjs` 原来对只改 `web/src/styles.css` 的提交一个 web 测试都不选（styles／shellReflow／contrast 等按名读它）；修后选 8 个。判据在 `tests/scripts/testAffected.test.ts`，改前红；`npm test` 5 文件 70/70。
+- **已合入 main 并装上（会话 `65b4d067`，见上一节）**：原分支 `ui/radix-select-trial`——全面板 55 个原生下拉都换成共用的 `web/src/ui/Select.tsx`（Radix 2.4.1），两个项目选择器都换、结构不动。spec `docs/superpowers/specs/2026-10-29-radix-select-everywhere-design.md`（独立审阅 13 条已并入）。分 6 批、每批一个子 agent、主会话审：批 0 组件＋helper（`web/tests/selectControl.ts` 的 `pickOption`／`optionsOf`／`shownText`，测试**绝不碰** Radix 在 `<form>` 里渲染的隐藏原生 select）；批 1 项目选择器＋需求＋控制；批 2 设置页；批 3 工作视图；批 4 其余；批 5 删原生 select CSS、文档更正。迁移顺带发现并修了两个真缺陷：FlowBoard 开始对话框按 Esc 关下拉会连对话框一起关掉；`reviewKeys` 不把按钮式下拉当输入框，焦点在下拉上按字母会触发「同意／重试」快捷键。门（批 5）：868 文件全绿（根 684、web 184／1758 条），typecheck 无错，37 跳过／10 个按环境开关的文件；两条完成判据 exit 0。bundle `index.js` +19,184 B（gzip +7.16 kB）。截图 41 张（1280／390、深浅、侧栏／设置·本项目／需求／用量，开与关）都无横向溢出、无 pageerror：`/private/tmp/orca-b999cc81/radix-shots/`。详见 `handoff_ui.md` §七.九。
 - **残余（登记未修）**：种子世界没有长列表，Radix 的滚动按钮没在截图里见到；需求页每行的「…」按钮压出行边框（截图所见，主线就有，非本分支）；ChecksSettings 的选择没有「选了什么值」的判据（只有选项清单）；FlowSettings 预设与 AgentFields 上下文在值不在选项里时显示空触发器、不加占位（旁边已显示该值／有红框）。
 
-### 3.000000000000000 会话 `3ea8a21e`（2026-10-29）：测试者反馈轮的三件后续 —— **先读这一节**
+### 3.000000000000000 会话 `3ea8a21e`（2026-10-29）：测试者反馈轮的三件后续
 
 > 人裁（本会话）：主题「霜白，深色，浅色，蔷薇，紫夜，暮色，余烬。这几个配色还行，其他可以删掉」「terminal 主题不好看」；Radix Select「是不是可以换成 Radix Select 看下效果」；settle-usage 的 schema 变更「同意」；其余替人定的可逆项「没特别说明的部分都同意」；测试者数据「我去问问，不一定能拿到」；「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」（**本轮没有付费真跑**）；收尾临时授权 push 三仓（handoff 提交之后）。
 
@@ -379,7 +387,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。下一件候选：**人看 Radix Select 试样后定全量换还是删分支**（`handoff_ui.md` §七.八）；测试者数据（#99 commands 行、拆分 run 的 `events.jsonl`）**可选**——人说「不一定能拿到」，拿到再查；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
+8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。下一件候选：`correctionCoarseDebug` 挂住的根因（三次门里挂住，最长约 7 h，单跑与串行探针都不复现；见 `known-load-flakes.md`）；测试者数据（#99 commands 行、拆分 run 的 `events.jsonl`）**可选**——人说「不一定能拿到」，拿到再查；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -558,12 +566,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `b999cc81` 待人做／待人看／待人审**：
-  1. **合入 `fix/test-affected-web-css`**：主工作区在该分支上，`git switch main` 后 `git merge --ff-only fix/test-affected-web-css`、`git branch -d fix/test-affected-web-css`（agent 把这几步和别的 git 调用写在一条复合命令里，被 Tier 0 闸门以「could not decide」整条拒掉，按闸门要求没换写法重试）。本 handoff 提交也在这个分支上。
-  2. **看 Radix 全量换**：截图 `/private/tmp/orca-b999cc81/radix-shots/`（41 张）；要看真浏览器就起隔离面板 `/private/tmp/orca-s29/radix-panel.sh`（7796，登录 `tester`，密码 `/private/tmp/orca-e236bbe4/ui/password.txt`，不碰真面板）。满意 ⇒ 下一位 agent：把分支 rebase 到 main、`npm test`、`--ff-only` 合入、装上（`npm ci` 后 build、web build、`launchctl kickstart -k …/dev.orca.panel`），再 `git worktree remove .worktrees/radix-select`（不带 force）＋`git branch -d`。不满意 ⇒ 说哪里要改。
-  3. **审替人定的**（台账 Line 2 各批 accepted 段）：触发器焦点沿用原生字段的 2px 描边、1px 偏移；`className` 只替换默认最小宽度；新增 i18n 键 `agents.chooseAgent`、`flow.ask.choose`；FlowSettings 预设／AgentFields 上下文的未知值不加占位；两个顺带修的行为缺陷（FlowBoard Esc、`reviewKeys` 下拉）；`test-affected` 的修法（`web/src` 非代码文件按名找读它的测试）。
-  4. **push**：只剩 Orca（上面第 1 条合入之后）。ccloop、ccmem 收尾时 `ls-remote` 现测已与本地 main 一致。
-  5. 测试者数据（可选，人在问）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
+- **会话 `65b4d067` 待人**：
+  1. **push Orca**：本会话合入的 Radix 系列与 handoff 提交都只在本地 main；ccloop、ccmem 本会话只各多一笔 handoff 提交（主题行 `docs(handoff): Orca session 65b4d067 pointer …`），也归人推；syncskill 未动。以 `ls-remote` 现测为准。
+  2. **看真面板**（可选）：Radix 下拉已装进 7777 的真面板；有不满意的地方，告诉下一位 agent 改哪里。
+  3. 测试者数据（可选，人在问）：#99 那组 `SELECT id,result FROM commands WHERE id LIKE 'orca-auto-confirm-unlimited-%'` 与当时组 `status`；拆分 run 的 `…/single-call/call-*/events.jsonl`。
+- ~~会话 `b999cc81` 待人做／待人看／待人审~~ **人已全部回复**（会话 `65b4d067` 开头）：`fix/test-affected-web-css` 人已合入、推送；Radix「同意，合入」（已合入、装上）；替人定的五处「同意」；push 只剩 Orca（见上条）；测试者数据挪到上条 3。
 - ~~会话 `3ea8a21e` 待人看／待人定~~ **人已全部回复**（会话 `b999cc81`）：Radix 全量换（已在分支做完，见上条 2）；收据与主题回落按建议（收据已修、回落不加映射）；三仓 push 人已做；测试者数据仍在问（上条 5）。
 - ~~会话 `a9f9d6de` 待人审／待人给~~ **人已全部回复**（会话 `3ea8a21e` 开头）：主题留七个、其余删（已做）；可逆项同意，原生 select 改为试 Radix（试样待看）、terminal 删；settle-usage schema「同意」（已做）；push 人已做；测试者数据去问。
 - ~~会话 `e236bbe4` 待人看／待人定~~ **人已全部回复**（测试者反馈轮台账）：控制器三条裁定「同意」；轮次编号按链上位置；主题「都不太满意」⇒ 整体重做；codex 拆分自测的结果就是测试者 #105／#107。
