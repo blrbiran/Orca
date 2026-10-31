@@ -773,9 +773,9 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   }
   // Live transcript spec §10.4.1 / §12.3: keep the last transcripts listing of every run collected (agentTranscript/listing.ts).
   if (report.transcripts !== undefined) write(deps, () => noteTranscriptListing(store, runId, readStartEnvelope(store, run).work.sourceDir, report.transcripts));
-  // Tester round 3 spec §3: kept beside the run for the settlement view; a floor that did not move is not a change of the run.
+  // Tester round 3 spec §3: kept beside the run for the settlement view.
   const floor = report.usageLowerBound;
-  if (floor !== undefined) write(deps, () => { const current = readDriverRun(store, runId); if (current.usageLowerBound?.tokens !== floor.tokens) { current.usageLowerBound = floor; saveDriverRun(store, current); } });
+  if (floor !== undefined) write(deps, () => { const current = readDriverRun(store, runId); current.usageLowerBound = floor; saveDriverRun(store, current); });
   deps.taskResults?.schedule(runId);
   return report;
 }

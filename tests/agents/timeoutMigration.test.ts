@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { migrateAgentTimeouts, timeoutMigrationMarkerOf } from "../../src/agents/timeoutMigration.js";
+import { migrateAgentTimeoutsAsService } from "../../src/panel/server.js";
 
 // Tester #116 (human ruling, session 4ed8eb65, Q2): a 30-minute wall clock was killing long execute phases, so installations
 // still on that old default move to 2 hours. The table is the person's data (Rule 17): a limit they chose stays, and once the
@@ -29,6 +30,16 @@ async function world(bytes: string | null, mode = 0o640) {
 const timeouts = async (table: string) => Object.fromEntries(Object.entries((JSON.parse(await readFile(table, "utf8")) as typeof TABLE).installations).map(([id, row]) => [id, row.timeoutMs]));
 
 describe("the one move from the old 30-minute default to 2 hours", () => {
+  // Criteria boot a foreground `orca panel` with the real HOME; one of them once rewrote a real table this way (Rule 17).
+  it("happens for the installed service and never for a foreground panel", async () => {
+    const w = await world(JSON.stringify(TABLE));
+    await migrateAgentTimeoutsAsService({}, w.env);
+    expect((await timeouts(w.table)).omp).toBe(1_800_000);
+    await expect(lstat(timeoutMigrationMarkerOf(w.table))).rejects.toMatchObject({ code: "ENOENT" });
+    await migrateAgentTimeoutsAsService({ service: true }, w.env);
+    expect((await timeouts(w.table)).omp).toBe(7_200_000);
+  });
+
   it("moves the old default only, keeps the file's layout and mode, and keeps the previous bytes in a private copy", async () => {
     const original = `${JSON.stringify(TABLE, null, 4)}\n`;
     const w = await world(original);
@@ -50,8 +61,10 @@ describe("the one move from the old 30-minute default to 2 hours", () => {
   });
 
   it("marks a table with nothing to move as done, so a later hand-set 30 minutes stays", async () => {
-    const w = await world(JSON.stringify({ ...TABLE, installations: { codex: TABLE.installations.codex } }));
+    const unusualLayout = `${JSON.stringify({ ...TABLE, installations: { codex: TABLE.installations.codex } }, null, 3)}\n\n`;
+    const w = await world(unusualLayout);
     expect(await migrateAgentTimeouts(w.env)).toEqual([]);
+    expect(await readFile(w.table, "utf8")).toBe(unusualLayout);
     await writeFile(w.table, JSON.stringify(TABLE));
     expect(await migrateAgentTimeouts(w.env)).toEqual([]);
     expect((await timeouts(w.table)).omp).toBe(1_800_000);

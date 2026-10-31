@@ -16,7 +16,7 @@ Gitignored files an agent wrote stay invisible to the policy, as they are for cl
 ## 3. #116: the observed usage floor (ccloop + Orca)
 
 - ccloop `collect` gains optional top-level `usageLowerBound: { tokens }`, the sum of the run's `run/<kind>/<attempt>/<phase>/call-*/usage-lower-bound.json`. Malformed or non-positive files contribute nothing.
-- Orca's `collectionSchema` accepts it (optional, so an older ccloop still parses). The driver keeps it on the run as `usageLowerBound`, only when it moved. The run view reports the single call's floor, else this one; the settlement panel prints "At least N tokens".
+- Orca's `collectionSchema` accepts it (optional, so an older ccloop still parses). The driver keeps it on the run as `usageLowerBound`. The run view reports the single call's floor, else this one; the settlement panel prints "At least N tokens".
 - Shown only, never charged, like the single call's (spec 2026-10-27 D3). No auto-settlement: a floor can under-count the real spend.
 - Until Orca repins past the ccloop commit (needs a push, §6) no real run carries the key.
 
@@ -24,9 +24,9 @@ Gitignored files an agent wrote stay invisible to the policy, as they are for cl
 
 Conflict surfaced to and decided by the human: ccloop spec 2026-10-21-activity-watchdog kept existing installations at 30 minutes.
 
-`migrateAgentTimeouts` runs once at panel start (`startPanelFromArgs`, not `createPanelServer`, so criteria that build a panel never reach it). `timeoutMs` equal to the old drafted default moves to `7_200_000`. Other values stay. `timeoutMs` is not in the configHash, so frozen groups resolve as before.
+`migrateAgentTimeouts` runs once when the installed service starts (§7 corrects the first version of this sentence). `timeoutMs` equal to the old drafted default moves to `7_200_000`. Other values stay. `timeoutMs` is not in the configHash, so frozen groups resolve as before.
 
-**Rule 17 registration.** Writer: the panel at start. Paths: `$ORCA_AGENTS_TABLE` or `~/.orca/agents.json` (rewritten keeping mode and layout) and `<table>.bak-pre-2h-timeout` (0600, the previous bytes). The marker's existence means done, so a person who sets 30 minutes back keeps it. Failure leaves the table as it was and logs one line; a crash between the two writes leaves the marker with the table unmoved, and that table stays on 30 minutes.
+**Rule 17 registration.** Writer: the panel service at start. Paths: `$ORCA_AGENTS_TABLE` or `~/.orca/agents.json` (rewritten keeping mode and layout) and `<table>.bak-pre-2h-timeout` (0600, the previous bytes). The marker's existence means done, so a person who sets 30 minutes back keeps it. Failure leaves the table as it was and logs one line; a crash between the two writes leaves the marker with the table unmoved, and that table stays on 30 minutes.
 
 ## 5. #117: the word follows the colour
 
@@ -35,3 +35,9 @@ The tester proposed making a blocked item look running. Red is correct: the run 
 ## 6. Not done here
 
 - Orca's repin to the ccloop commit of §2–§3: Orca pins by GitHub commit, and pushing is the human's.
+
+## 7. Incident and correction: a criterion rewrote the real table
+
+The first version ran the migration in `startPanelFromArgs`. Criteria boot `orca panel` as a child with the real `HOME`, so at 2026-11-01 00:54 a test run rewrote the real `~/.orca/agents.json` (three `timeoutMs` 1800000 to 7200000) and wrote its marker. `relocateUserData` turned 9 root test files red in that run; which of them wrote is not established, since the guard blames every file open at that moment. The content is what Q2 decided, and the previous bytes are the marker, so it was left in place and reported to the human.
+
+Now only `mode.service === true` migrates. Limit: a person who only ever runs a foreground `orca panel` keeps 30 minutes. Proof that the suite no longer reaches it: panel, entry, commands and service criteria run with `HOME` at a temp directory holding an old table leave it byte-identical and create no marker (ledger).

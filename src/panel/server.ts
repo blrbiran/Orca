@@ -420,13 +420,22 @@ export function panelEnvWithCcloop(
   return { env: filled.env, executionPortReason: filled.notInstalled.message };
 }
 
-export async function startPanelFromArgs(args: string[], mode: PanelMode = {}): Promise<StartedPanel> {
-  const { env, executionPortReason } = panelEnvWithCcloop(process.env);
-  const told = executionPortReason === null ? mode : { ...mode, executionPortReason };
-  // A migration that fails is said and leaves the table as it was; the panel still starts.
+/**
+ * Tester round 3 spec §4, §7: the installed service only. A foreground `orca panel` is also what criteria boot with the real
+ * HOME, and one of those rewrote a real ~/.orca/agents.json. A migration that fails is said and leaves the table as it was;
+ * the panel still starts.
+ */
+export async function migrateAgentTimeoutsAsService(mode: PanelMode, env: NodeJS.ProcessEnv): Promise<void> {
+  if (mode.service !== true) return;
   await migrateAgentTimeouts(env).then(
     (moved) => { if (moved.length > 0) process.stderr.write(`orca-panel: agent wall-clock limit raised from 30 min to 2 h: ${moved.join(", ")}\n`); },
     (error: unknown) => { process.stderr.write(`orca-panel: agent timeout migration skipped: ${error instanceof Error ? error.message : String(error)}\n`); },
   );
+}
+
+export async function startPanelFromArgs(args: string[], mode: PanelMode = {}): Promise<StartedPanel> {
+  const { env, executionPortReason } = panelEnvWithCcloop(process.env);
+  const told = executionPortReason === null ? mode : { ...mode, executionPortReason };
+  await migrateAgentTimeoutsAsService(told, env);
   return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env, told);
 }

@@ -42,6 +42,16 @@ describe("features: transcripts v1 (spec §10.2.4)", () => {
   });
 });
 
+describe("collect's observed usage floor through the real port (tester round 3 spec §3)", () => {
+  // Orca's parse is strict: without this a repin past the ccloop commit would refuse every collect of a run that timed out.
+  it("accepts and hands on the floor, and an older ccloop's answer without one", async () => {
+    const h = await fixture({ collectExtra: { usageLowerBound: { tokens: 533486 } } });
+    expect((await h.port.collect(h.envelope, 0)).usageLowerBound).toEqual({ tokens: 533486 });
+    const older = await fixture();
+    expect(Object.hasOwn(await older.port.collect(older.envelope, 0), "usageLowerBound")).toBe(false);
+  });
+});
+
 describe("collect's transcripts listing through the real port (spec §10.2.4)", () => {
   // mutation: drop `transcripts` from collectionSchema -> both protocols refuse the answer, red
   // mutation: drop the pass-through in collect's mapper -> report.transcripts undefined, red
