@@ -38,7 +38,6 @@ export function retryTaskOpen(view: GroupViewV1): boolean {
   return view.stop === null && view.summary.state !== "clarifying" && view.summary.archived !== true;
 }
 
-/** UI qualification uses only exposed server facts; immutable proof and pending event validation remain server-side. */
 /**
  * Tester #117: the status a person reads for a work item. A stored `running` whose current run is blocked is shown blocked,
  * as its colour already says (the server's category); the row's reason says why.
@@ -46,6 +45,7 @@ export function retryTaskOpen(view: GroupViewV1): boolean {
 export const shownWorkStatus = (item: Pick<WorkItemViewV1, "status" | "category">): WorkItemViewV1["status"] =>
   item.category === "blocked" && item.status !== "held" ? "blocked" : item.status;
 
+/** UI qualification uses only exposed server facts; immutable proof and pending event validation remain server-side. */
 export function retryRunOpen(view: GroupViewV1, run: RunViewV1): boolean {
   if (!retryTaskOpen(view) || (!hasFailureOutcome(run)&&!run.savedResultOrdinaryRetry) || run.taskId === null) return false;
   const work = view.workItems.find(item => item.taskId === run.taskId);
