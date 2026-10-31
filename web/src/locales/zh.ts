@@ -110,6 +110,7 @@ export const zh: Translation<typeof en> = {
   board: {
     title: "看板",
     viewChoice: "看板视图",
+    empty: "看板上还没有内容。",
     viewBoard: "看板",
     viewGraph: "组关系图",
     showArchived: "显示已归档",
@@ -318,6 +319,7 @@ export const zh: Translation<typeof en> = {
     dispatchBlockedRecovery: "调度已阻断 · 必须先观察到恢复",
     groupsNav: "控制组",
     noGroups: "还没有控制组。",
+    startFromRequirement: "从一条需求开始",
     groupDone: " · 已完成 {{done}}/{{total}}",
     groupBlockers: " · {{n}} 个阻塞项",
     groupCategory: { "not-started": "未开始", running: "进行中", attention: "需要处理", done: "已完成", archived: "已归档" },

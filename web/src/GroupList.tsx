@@ -108,7 +108,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
         {scope?.kind === "unresolved" ? (
           // Plan decision P1: with no project list a row could belong to any project, so none is shown.
           <p role="note">{t("project.listUnavailable")}</p>
-        ) : listed.length === 0 ? <p>{t("control.noGroups")}</p> : shown.length === 0 && <p>{t("control.groupFilter.empty")}</p>}
+        ) : listed.length === 0 ? <p>{t("control.noGroups")} <a href={hashFor("requirements")}>{t("control.startFromRequirement")}</a></p> : shown.length === 0 && <p>{t("control.groupFilter.empty")}</p>}
         {shown.map((group) => group.state === "clarifying" ? (
           // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
           <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (

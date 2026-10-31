@@ -4,6 +4,7 @@
  * A drag is weak: an allowed drop sends exactly one existing command (boardDrop), any other drop is refused on the page
  * and the card stays where the summary puts it. A second view draws the person's edges between groups (§3.3, §9a.5).
  */
+import { hashFor } from "./sections.js";
 import { useState } from "react";
 import type { DragEvent, JSX } from "react";
 import { useTranslation } from "react-i18next";
@@ -184,6 +185,8 @@ export function BoardView(props: BoardViewProps): JSX.Element {
         )}
       </div>
       {refusal !== null && <p role="alert" data-testid="board-refusal">{refusal}</p>}
+      {/* Tester #87: one line for an empty Board says what to do next; its columns stay quiet. */}
+      {groups.length === 0 && flows.length === 0 && <p data-testid="board-empty">{t("board.empty")} <a href={hashFor("requirements")}>{t("control.startFromRequirement")}</a></p>}
       {view === "graph" ? <GroupGraph groups={groups} onCommand={props.onCommand} /> : (
         <div className="flex items-start gap-3 overflow-x-auto">
           {columns.map((column) => {
