@@ -121,6 +121,13 @@ export const labelCustom = "border border-dashed border-line-strong text-fg";
 /** The whole class lists (hook + look), kept here so no multi-word literal sits in a component (scripts/scan-panel-text.mjs). */
 export const labelSystemClass = `label label-system ${labelChip} ${labelSystem}`;
 export const labelCustomClass = `label label-custom ${labelChip} ${labelCustom}`;
+/** Tester #114: the task detail's one wrapping row -- chips, the add field, Restore. A chip holds its own × (quiet, never hidden, so touch can reach it). */
+export const labelEditor = "my-2 flex flex-wrap items-center gap-2";
+export const labelRow = "m-0 flex list-none flex-wrap items-center gap-y-1 p-0";
+export const labelWithRemove = "inline-flex items-center";
+export const labelRemove = "ms-1 inline-flex min-h-0 items-center border-0 bg-transparent p-0 text-xs leading-none text-inherit opacity-60 shadow-none"
+  + " hover:opacity-100 focus-visible:opacity-100 pointer-coarse:-my-3 pointer-coarse:min-h-[44px] pointer-coarse:min-w-8 pointer-coarse:justify-center";
+export const labelRestore = "ms-0 min-h-0 border-0 bg-transparent p-0 text-xs text-muted underline shadow-none hover:text-fg-strong pointer-coarse:min-h-[44px]";
 /** Tester #21: an open task's detail is lifted as a whole card -- the elevated colour, a firm edge and the pop shadow. */
 export const taskDetail = "border border-line-strong bg-elevated shadow-float";
 /** Tester round 2 §8.2 (H5): a task's goal summary beside its id in the task table, one line. */

@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
 /**
- * Plan A final review finding 1 (labels and progress spec §4.2): a label draft carries the labelsVersion it started
- * from and is sent with that version, whatever the polls read since -- so a draft begun before someone else's change is
- * refused as labels-version-conflict (again and again) instead of overwriting that change. The page says the server
- * moved, shows what it holds now, and lets the person discard the draft.
+ * Tester #114 over the real page: a label change is saved at once with the labelsVersion on screen, so a change from a
+ * stale view is refused as labels-version-conflict instead of overwriting someone else's, the refusal is shown by its
+ * code, and the chips stay what the server holds -- no chip appears that the server did not accept.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
-import { pickOption } from "./selectControl.js";
-import { ControlGroupView } from "../src/ControlGroupView.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
@@ -76,58 +73,44 @@ const openTaskA = async (): Promise<void> => {
   fireEvent.click(await screen.findByRole("button", { name: "a" }));
 };
 
-describe("a label draft is sent with the labelsVersion it started from (final review finding 1)", () => {
-  it("keeps the draft's base after a poll read someone else's v1, so every save is refused as a conflict and the draft stays", async () => {
-    answers = [conflict, conflict];
+const add = (word: string): void => {
+  const field = screen.getByRole("combobox", { name: "Add label" });
+  fireEvent.change(field, { target: { value: word } });
+  fireEvent.keyDown(field, { key: "Enter" });
+};
+const task = () => within(screen.getByRole("region", { name: "Task a" }));
+
+describe("a label change goes straight to the server (tester #114)", () => {
+  it("shows a refusal by its code and no chip the server did not accept, then shows the chip once the server holds it", async () => {
+    const success = { status: 200, body: { schema: "orca-command-success-v1", commandId: "x", actorId: "operator", verb: "set-task-labels", target: { kind: "task", groupId: "g", taskId: "a" }, commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64), result: { kind: "task-labels-set", taskId: "a", labelsVersion: 1 } } };
+    answers = [{ status: 422, body: { error: { code: "labels-invalid", message: "labels-invalid:count:17", commandRevision: 6, evidenceIds: [], retryable: false } } }, success];
     render(<App />);
     await openTaskA();
-    fireEvent.click(screen.getByRole("button", { name: "Add system label" })); // the select starts on "feature"
-    // Someone else sets the labels to v1 meanwhile. The page's next canonical read of the group picks that up (probe at
-    // 7a91fc0: App re-reads the open group on its own well before the 2 s summary tick; the summary's gap would force it
-    // too), so the draft below was started at v0 and the view under it now says v1.
-    groupView = groupViewAt(6, ["security"], 1);
-    summary = summaryAt(6);
-    await screen.findByText("security", { selector: "td span.label" }, { timeout: 6_000 });
-    // A re-read forced by a summary gap drops the cached view and the open detail with it; if so, open the task again.
-    if (screen.queryByRole("region", { name: "Task a" }) === null) fireEvent.click(screen.getByRole("button", { name: "a" }));
-    expect(screen.getByText(/labels changed since your draft \(v0 → v1\)/).textContent).toContain("now: security");
-    expect(screen.getByRole("button", { name: "Remove feature" })).toBeTruthy();
-    // An edit after the change keeps the base the draft started from.
-    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the system label picked after the change is added to the draft, which keeps its base
-    await pickOption(screen.getByRole("combobox", { name: "System label" }), "perf");
-    fireEvent.click(screen.getByRole("button", { name: "Add system label" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save labels" }));
-    await screen.findByText(/labels-version-conflict/);
-    await waitFor(() => expect(posted).toHaveLength(1));
-    expect(screen.getByText(/unsaved draft/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remove feature" })).toBeTruthy();
-    // After the conflict the page re-read the group (still v1); a second save still carries the draft's base.
-    fireEvent.click(screen.getByRole("button", { name: "Save labels" }));
-    await waitFor(() => expect(posted).toHaveLength(2));
+    add("feature");
+    await screen.findByText(/labels-invalid/);
+    expect(task().queryByRole("button", { name: "Remove feature" })).toBeNull();
+    expect(task().getByRole("button", { name: "Remove doc" })).toBeTruthy();
+    groupView = groupViewAt(6, ["doc", "feature"], 1); summary = summaryAt(6);
+    add("feature");
+    await screen.findByRole("button", { name: "Remove feature" }, { timeout: 6_000 });
     expect(posted.map((body) => body.payload)).toEqual([
-      { labels: ["doc", "feature", "perf"], baseLabelsVersion: 0 },
-      { labels: ["doc", "feature", "perf"], baseLabelsVersion: 0 },
+      { labels: ["doc", "feature"], baseLabelsVersion: 0 },
+      { labels: ["doc", "feature"], baseLabelsVersion: 0 },
     ]);
   }, 15_000);
 
-  it("discards the draft on request and shows the server's labels again", async () => {
+  it("sends the version on screen, so the view a poll just read is the one a change is based on", async () => {
+    answers = [conflict];
     render(<App />);
     await openTaskA();
-    fireEvent.click(screen.getByRole("button", { name: "Add system label" }));
-    expect(screen.getByText(/unsaved draft/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remove feature" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
-    await waitFor(() => expect(screen.queryByText(/unsaved draft/)).toBeNull());
-    expect(screen.queryByRole("button", { name: "Remove feature" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Remove doc" })).toBeTruthy();
-    expect(posted).toEqual([]);
-  });
-
-  it("reads a draft in the earlier bare-array form, which has no base, as no draft", () => {
-    render(<ControlGroupView view={groupViewAt(4, ["doc"], 0)} config={config} uncertain={[]} drafts={{ "labels:g:a": JSON.stringify(["feature"]) }} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "a" }));
-    expect(screen.queryByText(/unsaved draft/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Remove doc" })).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Save labels" }) as HTMLButtonElement).disabled).toBe(true);
-  });
+    groupView = groupViewAt(6, ["security"], 1); summary = summaryAt(6);
+    await screen.findByText("security", { selector: "td span.label" }, { timeout: 6_000 });
+    // A re-read forced by a summary gap drops the cached view and the open detail with it; if so, open the task again.
+    if (screen.queryByRole("region", { name: "Task a" }) === null) fireEvent.click(screen.getByRole("button", { name: "a" }));
+    fireEvent.click(task().getByRole("button", { name: "Remove security" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    await screen.findByText(/labels-version-conflict/);
+    expect(posted[0]!.payload).toEqual({ labels: [], baseLabelsVersion: 1 });
+    expect(task().getByRole("button", { name: "Remove security" })).toBeTruthy();
+  }, 15_000);
 });

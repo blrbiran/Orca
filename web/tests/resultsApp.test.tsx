@@ -44,9 +44,9 @@ it("real App completed missing results retain actual success and independent sou
 it("real App opens the task route and preserves mounted local drafts and focus across refresh and hidden sections",async()=>{
   // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops held reads and owners
  const s=setup();render(<App/>);await open();await openTask();expect(s.reads.some(r=>r.path==="/api/control/runs/run-a/results")).toBe(true);expect(task().getByRole("region",{name:"Current result · run-a"}).textContent).toContain("Saved work");
- const draft=task().getByRole("textbox",{name:"Custom label"});fireEvent.change(draft,{target:{value:"pending draft"}});draft.focus();await act(async()=>{await vi.advanceTimersByTimeAsync(6000);});expect(document.activeElement).toBe(draft);expect((draft as HTMLInputElement).value).toBe("pending draft");
+ const draft=task().getByRole("combobox",{name:"Add label"});fireEvent.change(draft,{target:{value:"pending draft"}});draft.focus();await act(async()=>{await vi.advanceTimersByTimeAsync(6000);});expect(document.activeElement).toBe(draft);expect((draft as HTMLInputElement).value).toBe("pending draft");
  fireEvent.click(screen.getByRole("link",{name:"Memory"}));await flush();const count=s.reads.length;await act(async()=>{await vi.advanceTimersByTimeAsync(10000);});expect(s.reads).toHaveLength(count);
- fireEvent.click(screen.getByRole("link",{name:"Task control"}));await flush();expect((task().getByRole("textbox",{name:"Custom label"}) as HTMLInputElement).value).toBe("pending draft");expect(s.panel.posts).toHaveLength(0);
+ fireEvent.click(screen.getByRole("link",{name:"Task control"}));await flush();expect((task().getByRole("combobox",{name:"Add label"}) as HTMLInputElement).value).toBe("pending draft");expect(s.panel.posts).toHaveLength(0);
  fireEvent.click(screen.getByRole("tab",{name:"Progress"}));const stopped=s.reads.length;await act(async()=>{await vi.advanceTimersByTimeAsync(6000);});expect(s.reads).toHaveLength(stopped);fireEvent.click(screen.getByRole("button",{name:"a"}));expect(screen.queryByRole("region",{name:"Task a"})).toBeNull();
 });
 it.each(["scope","auth","epoch","owner"])("real App cancels held task reads across %s and keeps navigation focus",async(kind)=>{

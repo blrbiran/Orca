@@ -14,7 +14,7 @@ import { HIDDEN_BY_FILTER } from "../src/DecisionsView.js";
 import { rowKey } from "../src/DecisionList.js";
 import { UNCERTAIN_COMMANDS_KEY } from "../src/controlApi.js";
 import type { GroupSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
-import { view as boardView, workItem } from "./fixtures/board.js";
+import { PLAN, amount, view as boardView, workItem } from "./fixtures/board.js";
 import { requirementView } from "./fixtures/requirement.js";
 import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import { ALPHA, BETA, TWO_PROJECTS, decisionRow, groupSummary, installFakePanel, planGroupView, twoConfig } from "./fixtures/twoProjects.js";
@@ -178,18 +178,20 @@ describe("selection lifecycle", () => {
 
   // Final fix wave (spec §9 "clear drafts on switch"): a task draft is the person's own data; a scope change closes the
   // detail, never the draft, and reopening the group shows it again.
-  it("9: an unsaved task label draft survives a switch to Beta and back", async () => {
-    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
+  it("9: an unsaved plan draft survives a switch to Beta and back", async () => {
+    // Ruling: human 「这次批准改写所有必要的判据」 (tester #114): labels have no draft any more, so the criterion moves to the plan form, the draft a task still has
     const ga = groupSummary("ga", ALPHA);
     panel.summary = { ...panel.summary, groups: [ga] };
-    const base = boardView([workItem({ taskId: "t" })]);
-    panel.groupViews["ga"] = { ...base, summary: ga, plan: { ...base.plan, repoId: ALPHA } };
+    const base = boardView([workItem({ taskId: "t", status: "ready", loopPlan: PLAN, objective: { goal: "g", successCondition: "s" } })]);
+    const human = { provenance: "human", estimateId: null } as const;
+    const allocations = [{ ownerKind: "task", ownerId: "t", bucket: "work", state: "draft-encumbered", amount: amount(2_000), fieldProvenance: { tokens: human, activeMs: human, attempts: human, sessions: human } }] as const;
+    panel.groupViews["ga"] = { ...base, summary: ga, allocations: [...allocations], plan: { ...base.plan, repoId: ALPHA } };
     render(<App />);
     await ready();
     await openGroup("ga");
     fireEvent.click(await screen.findByRole("button", { name: "t" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add system label" }));
-    expect(screen.getByText(/unsaved draft/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Change plan" }));
+    fireEvent.change(within(screen.getByRole("form", { name: "Change plan t" })).getByRole("textbox", { name: "Goal" }), { target: { value: "half typed goal" } });
     await pickOption(projectSelect(), "Beta");
     await waitFor(() => expect(shownText(projectSelect())).toBe("Beta"));
     await waitFor(() => expect(screen.queryByRole("region", { name: "Control group ga" })).toBeNull());
@@ -197,7 +199,7 @@ describe("selection lifecycle", () => {
     await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     await openGroup("ga");
     fireEvent.click(await screen.findByRole("button", { name: "t" }));
-    expect(await screen.findByText(/unsaved draft/)).toBeTruthy();
+    expect((within(await screen.findByRole("form", { name: "Change plan t" })).getByRole("textbox", { name: "Goal" }) as HTMLInputElement).value).toBe("half typed goal");
   });
 
   it("6: changing the scope closes the open group, requirement and decision; the initial resolution closes nothing", async () => {

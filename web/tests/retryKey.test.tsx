@@ -67,7 +67,7 @@ describe("r retries the open task (issue #57)", () => {
 
   it("never fires while typing, as a chord, on a repeat, or from a hidden pane", () => {
     const onCommand = show(failedGroup(), "a");
-    press({}, screen.getByRole("textbox", { name: "Custom label" }));
+    press({}, screen.getByRole("combobox", { name: "Add label" }));
     press({ ctrlKey: true }); press({ metaKey: true }); press({ altKey: true }); press({ repeat: true });
     expect(onCommand).not.toHaveBeenCalled();
     cleanup();

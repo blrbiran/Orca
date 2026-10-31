@@ -48,7 +48,7 @@ import type { MemoryRecord } from "../src/memoryTypes.js";
 import { MetricsView } from "../src/MetricsView.js";
 import { Refusal } from "../src/Refusal.js";
 import { Shell } from "../src/Shell.js";
-import { TaskDetail, labelsDraftKey } from "../src/TaskDetail.js";
+import { TaskDetail } from "../src/TaskDetail.js";
 import type { ChainRepoView, DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 
 type Tree = { readonly [key: string]: string | Tree };
@@ -172,7 +172,7 @@ const metricsReport: MetricsReport = {
 };
 const coverage: PanelCoverage = { reviewed_high_tier: 0, high_tier_total: 0, rate: null, caveat: "x-6", caveatCode: "reviewed-is-deliberate" };
 const loopDraft = JSON.stringify({ base: 0, plan: "bugfix", text: { goal: "g-1", successCondition: "s-1", targetPaths: "src/a/**", checks: "npm test", nonGoals: "", relevantDocs: "", protectedPaths: "", maxFilesTouched: "", tokens: "3000500", activeMs: "14400000", attempts: "3" } });
-const drafts = { [loopDraftKey("g", "a")]: loopDraft, [labelsDraftKey("g", "b")]: JSON.stringify({ base: 0, labels: ["bug", "perf"] }) };
+const drafts = { [loopDraftKey("g", "a")]: loopDraft };
 const noop = vi.fn();
 const INTEGRATION: GroupIntegrationViewV1 = {
   scheme: { delivery: "github-pr", trigger: "task", target: "trunk-x", remote: "up-x" }, schemeHash: "9".repeat(64), frozen: false, state: "idle", reason: null,

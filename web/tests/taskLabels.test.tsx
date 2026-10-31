@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { labelCustom, labelCustomClass, labelSystem, labelSystemClass } from "../src/ui/classes.js";
+import { labelCustom, labelCustomClass, labelRemove, labelSystem, labelSystemClass } from "../src/ui/classes.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { ControlPanel } from "../src/ControlPanel.js";
@@ -18,7 +18,7 @@ import type {
   Amount, ControlConfigV1, ControlSummaryV1, EvidenceManifestV1, GroupViewV1, RecoveryViewV1, RunViewV1, WorkItemViewV1,
 } from "../src/controlTypes.js";
 import { progressText } from "../src/TaskDetail.js";
-import { pickOption } from "./selectControl.js";
+import { WEB_SYSTEM_LABELS } from "../src/controlTypes.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -104,20 +104,91 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
 });
 
 describe("the task detail panel (spec §4.2)", () => {
-  it("sends the draft labels with the labelsVersion they were read at, and restores the plan's labels with null", async () => {
-    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the system label picked in the task detail is the one added to the labels the command sends
-    const onCommand = vi.fn();
-    render(<Stateful view={view([workItem({ labels: ["bug"], labelsProvenance: "plan", labelsVersion: 4 })])} onCommand={onCommand} />);
-    fireEvent.click(screen.getByRole("button", { name: "a" }));
-    await pickOption(screen.getByRole("combobox", { name: "System label" }), "perf");
-    fireEvent.click(screen.getByRole("button", { name: "Add system label" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Custom label" }), { target: { value: "前端" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add custom label" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save labels" }));
-    expect(onCommand).toHaveBeenLastCalledWith({ verb: "set-task-labels", groupId: "g", taskId: "a", expectedRevision: 6, payload: { labels: ["bug", "custom:前端", "perf"], baseLabelsVersion: 4 } });
-    fireEvent.click(screen.getByRole("button", { name: "Restore plan labels" }));
-    expect(onCommand).toHaveBeenLastCalledWith({ verb: "set-task-labels", groupId: "g", taskId: "a", expectedRevision: 6, payload: { labels: null, baseLabelsVersion: 4 } });
-    expect(controlCommandPath(onCommand.mock.calls[0]![0] as ControlAction)).toBe("/api/control/groups/g/tasks/a/labels");
+  // Ruling: human 「这次批准改写所有必要的判据」 (tester #114): labels save as they change; the two pickers, Save and Discard are gone.
+  describe("the label row saves each change at once (tester #114)", () => {
+    const open = (item: Partial<WorkItemViewV1>): ReturnType<typeof vi.fn> => {
+      const onCommand = vi.fn();
+      render(<Stateful view={view([workItem(item)])} onCommand={onCommand} />);
+      fireEvent.click(screen.getByRole("button", { name: "a" }));
+      return onCommand;
+    };
+    const field = (): HTMLInputElement => screen.getByRole("combobox", { name: "Add label" });
+    const type = (word: string): void => { fireEvent.change(field(), { target: { value: word } }); };
+    const sent = (labels: string[] | null, baseLabelsVersion = 4) => ({ verb: "set-task-labels", groupId: "g", taskId: "a", expectedRevision: 6, payload: { labels, baseLabelsVersion } });
+
+    // mutation: the system-word test is dropped from add -> "perf" goes out as custom:perf, a label no filter or system chip knows -> red
+    it("adds a system word as it is on Enter, sorted the way the server shows it back, and empties the field", () => {
+      const onCommand = open({ labels: ["security"], labelsProvenance: "plan", labelsVersion: 4 });
+      type("perf");
+      fireEvent.keyDown(field(), { key: "Enter" });
+      expect(onCommand.mock.calls).toEqual([[sent(["perf", "security"])]]);
+      expect(controlCommandPath(onCommand.mock.calls[0]![0] as ControlAction)).toBe("/api/control/groups/g/tasks/a/labels");
+      expect(field().value).toBe("");
+    });
+
+    // mutation: the prefix is dropped -> the server refuses a bare word that is no system label -> red
+    it("gives any other word the custom prefix, once", () => {
+      const onCommand = open({ labels: [], labelsVersion: 4 });
+      type(" 前端 ");
+      fireEvent.keyDown(field(), { key: "Enter" });
+      type("custom:ui");
+      fireEvent.keyDown(field(), { key: "Enter" });
+      expect(onCommand.mock.calls).toEqual([[sent(["custom:前端"])], [sent(["custom:ui"])]]);
+    });
+
+    // mutation: the includes guard is dropped -> a repeat spends a labels version on no change -> red
+    it("sends nothing for a label the task already has", () => {
+      const onCommand = open({ labels: ["bug"], labelsVersion: 4 });
+      type("bug");
+      fireEvent.keyDown(field(), { key: "Enter" });
+      expect(onCommand).not.toHaveBeenCalled();
+      expect(field().value).toBe("");
+    });
+
+    // mutation: the isComposing guard is dropped -> a Chinese word is sent half composed -> red
+    it("does not add on the Enter that ends an IME composition", () => {
+      const onCommand = open({ labels: [], labelsVersion: 4 });
+      type("qian");
+      fireEvent.keyDown(field(), { key: "Enter", isComposing: true });
+      expect(onCommand).not.toHaveBeenCalled();
+      expect(field().value).toBe("qian");
+    });
+
+    it("suggests the system labels in the field's list", () => {
+      open({ labels: [], labelsVersion: 4 });
+      const list = document.getElementById(field().getAttribute("list")!)!;
+      expect([...list.querySelectorAll("option")].map((option) => option.value)).toEqual([...WEB_SYSTEM_LABELS]);
+    });
+
+    // mutation: the remove click sends the list unfiltered -> red
+    it("removes a label through the × inside its chip, at once", () => {
+      const onCommand = open({ labels: ["bug", "custom:x"], labelsVersion: 4 });
+      const remove = screen.getByRole("button", { name: "Remove custom:x" });
+      expect(remove.closest("span.label")!.textContent).toBe("custom:x×");
+      fireEvent.click(remove);
+      expect(onCommand.mock.calls).toEqual([[sent(["bug"])]]);
+    });
+
+    // A person on a touch screen has no hover: the × must be visible at rest, and only stronger on hover or focus.
+    it("keeps the × visible at rest and fully opaque on hover and focus", () => {
+      const classes = labelRemove.split(" ");
+      expect(classes).toEqual(expect.arrayContaining(["opacity-60", "hover:opacity-100", "focus-visible:opacity-100"]));
+      expect(classes).not.toContain("opacity-0");
+      expect(classes).not.toContain("hidden");
+    });
+
+    // mutation: the provenance test is dropped -> Restore offered on labels that are already the plan's -> red
+    it("offers Restore only when the labels are not the plan's, and restores with null", () => {
+      const onCommand = open({ labels: ["bug"], labelsProvenance: "operator", labelsVersion: 4 });
+      fireEvent.click(screen.getByRole("button", { name: "Restore plan labels" }));
+      expect(onCommand.mock.calls).toEqual([[sent(null)]]);
+      cleanup();
+      open({ labels: ["bug"], labelsProvenance: "plan", labelsVersion: 4 });
+      expect(screen.queryByRole("button", { name: "Restore plan labels" })).toBeNull();
+      cleanup();
+      open({ labels: ["bug"], labelsVersion: 4 });
+      expect(screen.queryByRole("button", { name: "Restore plan labels" })).toBeNull();
+    });
   });
 
   describe("a run's evidence, piece by piece", () => {

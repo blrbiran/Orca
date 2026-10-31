@@ -144,8 +144,7 @@ describe("changing a loop task's plan on its card (spec §4.2)", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Max attempts" }), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "Budget -1 attempts, returned to the group reserve; 4 left" }));
     expect(onCommand).toHaveBeenLastCalledWith(expect.objectContaining({ payload: expect.objectContaining({ work: { tokens: 3_000_000, activeMs: 14_400_000, attempts: 2 } }) }));
-    // The label editor keeps its own "Discard draft"; the plan form's has a name of its own (final review, B6).
-    expect(screen.getAllByRole("button", { name: "Discard draft" })).toHaveLength(1);
+    // The plan form's discard has a name of its own (final review, B6).
     expect(within(screen.getByRole("form", { name: "Change plan a" })).queryByRole("button", { name: "Discard draft" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Discard plan draft" }));
     expect(screen.queryByRole("textbox", { name: "Goal" })).toBeNull();

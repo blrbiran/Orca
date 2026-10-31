@@ -184,7 +184,7 @@ const PREVIEW: AgentSelectionPreviewV1 = {
   selectionsHash: "f".repeat(64),
 };
 const setup = (): GroupViewV1 => {
-  const base = view([workItem({ taskId: "a", status: "ready", labels: ["x"], loopPlan: PLAN, objective: { goal: "g", successCondition: "s" } })]);
+  const base = view([workItem({ taskId: "a", status: "ready", labels: ["x"], labelsProvenance: "operator", loopPlan: PLAN, objective: { goal: "g", successCondition: "s" } })]);
   return {
     ...base,
     summary: { ...base.summary, state: "ready" },
@@ -210,7 +210,7 @@ describe("an archived group takes no edit anywhere on the page (spec §6.3)", ()
     const names = allRegionActions();
     for (const expected of [
       /^use \d+ for/, /^Apply row/, /^Apply all/, /^Set limit/, /^Save proposal/, /^Re-estimate/, /^Confirm task plan/, /^Save integration/, /^Retry integration/, /^Resolve with an agent/,
-      /^Re-read agent/, /^Set group worker agent/, /^Set agent for task a/, /^Change plan/, /^Remove x/, /^Add system label/, /^Restore plan labels/,
+      /^Re-read agent/, /^Set group worker agent/, /^Set agent for task a/, /^Change plan/, /^Remove x/, /^Restore plan labels/,
     ]) {
       expect(names.some((name) => expected.test(name)), String(expected)).toBe(true);
     }

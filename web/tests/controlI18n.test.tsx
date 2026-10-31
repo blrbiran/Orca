@@ -14,7 +14,7 @@ import { ControlPanel } from "../src/ControlPanel.js";
 import { EvidenceLink } from "../src/EvidenceLink.js";
 import { RecoveryView } from "../src/RecoveryView.js";
 import { WorkspaceModeSelector } from "../src/WorkspaceModeSelector.js";
-import { EvidenceList, TaskDetail, labelsDraftKey, progressText } from "../src/TaskDetail.js";
+import { EvidenceList, TaskDetail, progressText } from "../src/TaskDetail.js";
 import type { MetricsReport } from "../src/types.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, RepositoryWorkspaceV1, RunViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
 
@@ -85,13 +85,14 @@ describe("the task control and recovery areas in Chinese", () => {
     expect(screen.getByRole("region", { name: "控制组 g" })).toBeTruthy();
   });
 
-  it("shows a task's detail, its progress and its label draft in Chinese", async () => {
+  it("shows a task's detail, its progress and its label editor in Chinese", async () => {
     await i18n.changeLanguage("zh");
-    const drafts = { [labelsDraftKey("g", "a")]: JSON.stringify({ base: 0, labels: ["bug", "perf"] }) };
-    const text = render(<TaskDetail view={view} item={item} drafts={drafts} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
+    const { container } = render(<TaskDetail view={view} item={{ ...item, labels: ["perf"] }} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const text = container.textContent ?? "";
+    expect(screen.getByRole("button", { name: "移除 perf" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "添加标签" })).toBeTruthy();
     for (const expected of [
-      "任务 a", "标签来自操作者 · 版本 1 · 未保存的草稿", "你开始草稿后标签已变（v0 → v1） · 现在：", "移除 perf", "添加系统标签", "添加自定义标签",
-      "保存标签", "丢弃草稿", "恢复计划里的标签", "进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 2026-10-01T00:00:00.000Z",
+      "任务 a", "标签来自操作者 · 版本 1", "恢复计划里的标签", "进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 2026-10-01T00:00:00.000Z",
       "a 的运行", "r1 · 工作 · 已阻塞", "列出 r1 的证据",
     ]) expect(text, expected).toContain(expected);
   });
@@ -181,14 +182,12 @@ describe("the rest of the control area's branches in Chinese", () => {
   it("shows a task with plan labels, no progress and no runs, and every progress wording, in Chinese", async () => {
     await i18n.changeLanguage("zh");
     const bare: WorkItemViewV1 = { ...item, labels: [], labelsProvenance: undefined, labelsVersion: undefined, progress: undefined };
-    const drafts = { [labelsDraftKey("g", "a")]: JSON.stringify({ base: 1, labels: [] }) };
-    const { container } = render(<TaskDetail view={{ ...view, runs: [] }} item={bare} drafts={drafts} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const { container } = render(<TaskDetail view={{ ...view, runs: [] }} item={bare} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     const text = container.textContent ?? "";
-    for (const expected of ["标签来自计划 · 版本 0 · 未保存的草稿", "你开始草稿后标签已变（v1 → v0） · 现在：无", "进度：没有运行"]) expect(text, expected).toContain(expected);
+    for (const expected of ["标签来自计划 · 版本 0", "进度：没有运行"]) expect(text, expected).toContain(expected);
     expect(screen.getByRole("region", { name: "任务 a" })).toBeTruthy();
     expect(screen.getByRole("list", { name: "a 的标签" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "系统标签" })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "自定义标签" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "添加标签" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 5, name: "a 的运行" }).nextElementSibling!.textContent).toBe("无");
 
     expect(progressText({ runId: "r1", step: null, attempt: { current: 2, max: 5 }, tokens: null, lastTransitionAt: null })).toBe("尚未上报 · 尝试 2/5 · token 未知");

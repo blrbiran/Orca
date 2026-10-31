@@ -137,7 +137,6 @@ import { MetricsView } from "./MetricsView.js";
 import { UsagePanel } from "./UsagePanel.js";
 import { Refusal } from "./Refusal.js";
 import { RequirementsPanel } from "./RequirementsPanel.js";
-import { labelsDraftKey } from "./TaskDetail.js";
 import { loopDraftKey } from "./LoopPlanCard.js";
 import { tabButton, tabButtonRow } from "./ui/classes.js";
 import { DEFAULT_SECTION, DEFAULT_SETTINGS_CATEGORY, consumeOwnHash, formatRoute, parseRoute, rememberOwnHash } from "./sections.js";
@@ -597,9 +596,6 @@ export function App(): JSX.Element {
     dispatchControl({ type: "command-resolved", value: command });
     // A success clears the refusal shown where the person acted; another group's stays (spec 2026-10-08 §2.2(d)).
     if (answer.status < 400) dispatchControl({ type: "command-succeeded", place, groupId: action.groupId });
-    // Labels and progress spec §4.2 (plan finding F11): a label draft is the person's own data -- cleared only once this
-    // command succeeded; a refusal (and an uncertain answer, above) leaves it for them.
-    if (answer.status < 400 && action.verb === "set-task-labels") dispatchControl({ type: "draft", key: labelsDraftKey(action.groupId, action.taskId), text: "" });
     // Loop plans spec §4.2: a loop draft is the person's own data, cleared only once set-task-loop succeeded. W7 ruling: an
     // estimate's suggestion (the only set-task-loop that carries workProvenance, BudgetEditor.tsx suggestedLoopActions)
     // leaves an open draft alone; the card then says the plan changed after the draft began.

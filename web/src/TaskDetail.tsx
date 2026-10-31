@@ -2,16 +2,13 @@
  * Labels and progress spec §4.2: one task, opened from the group's work item table -- its labels and an editor for them,
  * its progress, and every run it had with that run's evidence, piece by piece.
  *
- * The editor keeps what the person chose as a draft (the page's `drafts`, one key per task) together with the
- * labelsVersion the draft started from, and sends that version -- never the one the latest poll read -- so a draft
- * begun before someone else's change is refused as labels-version-conflict instead of overwriting it (final review
- * finding 1). The draft is the person's own data: the page clears it only when the command succeeded (App.tsx, plan
- * finding F11) or when the person discards it, so a refusal -- shown by its code like every other refusal -- leaves it.
+ * Tester #114: the editor has no draft. Adding or removing a label sends set-task-labels at once, with the labelsVersion
+ * on screen as its base, so a change made from a stale view is refused as labels-version-conflict instead of overwriting
+ * someone else's; a refusal is shown by its code like every other refusal and the chips stay what the server holds.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { JSX } from "react";
-import { labelCustomClass, labelSystemClass, taskDetail } from "./ui/classes.js";
-import { Select } from "./ui/Select.js";
+import { labelCustomClass, labelEditor, labelRemove, labelRestore, labelRow, labelSystemClass, labelWithRemove, taskDetail } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { controlFailureFrom, fetchSavedResultEligibility, downloadEvidenceArtifact, fetchRunActivity, fetchRunEvidence, type ControlAction } from "./controlApi.js";
 import { CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS } from "./controlTypes.js";
@@ -29,8 +26,6 @@ import { shortTokens } from "./TokenInput.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import type { Role } from "./auth.js";
-
-export const labelsDraftKey = (groupId: string, taskId: string): string => `labels:${groupId}:${taskId}`;
 
 /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
 export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
@@ -69,25 +64,6 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
 function labelSourceText(source: string): string {
   const key = `control.task.labelSource.${source}`;
   return i18n.exists(key) ? (i18n.t(key as never) as string) : source;
-}
-
-/** A label draft: the labels the person chose and the labelsVersion shown when they started choosing. */
-interface LabelsDraft { base: number; labels: string[] }
-
-/** Anything else under the key -- including the earlier bare-array form, which carries no base -- is no draft. */
-function readDraft(drafts: Record<string, string>, key: string): LabelsDraft | null {
-  const raw = drafts[key];
-  if (raw === undefined) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const { base, labels } = parsed as Record<string, unknown>;
-    if (!Number.isSafeInteger(base) || (base as number) < 0) return null;
-    if (!Array.isArray(labels) || !labels.every((label) => typeof label === "string")) return null;
-    return { base: base as number, labels };
-  } catch {
-    return null;
-  }
 }
 
 /** One run's evidence manifest, listed on demand; each piece is downloaded through the token-carrying client. */
@@ -215,24 +191,21 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const archived = props.archived === true;
   const { t } = useTranslation();
   const groupId = view.summary.groupId;
-  const key = labelsDraftKey(groupId, item.taskId);
-  const draft = readDraft(drafts, key);
   const current = item.labelsVersion ?? 0;
-  const labels = draft?.labels ?? item.labels ?? [];
-  const [system, setSystem] = useState<string>(WEB_SYSTEM_LABELS[0]);
-  const [custom, setCustom] = useState("");
-  // Sorted by code unit like the server (spec §8 R15), so what is sent is what will be shown back.
-  // A draft keeps the version it started from through every later edit.
-  const setDraft = (next: string[]): void => onDraft(key, JSON.stringify({ base: draft?.base ?? current, labels: [...new Set(next)].sort() }));
-  const send = (next: string[] | null, base: number): void => onCommand({
+  const labels = item.labels ?? [];
+  const [word, setWord] = useState("");
+  const suggestions = useId();
+  const send = (next: string[] | null): void => onCommand({
     verb: "set-task-labels", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision,
-    payload: { labels: next, baseLabelsVersion: base },
+    payload: { labels: next, baseLabelsVersion: current },
   });
-  const addCustom = (): void => {
-    const text = custom.trim();
+  const add = (): void => {
+    const text = word.trim();
     if (text === "") return;
-    setDraft([...labels, text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`]);
-    setCustom("");
+    setWord("");
+    const label = (WEB_SYSTEM_LABELS as readonly string[]).includes(text) || text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`;
+    // Sorted by code unit like the server (spec §8 R15), so what is sent is what will be shown back.
+    if (!labels.includes(label)) send([...labels, label].sort());
   };
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
   const runNumber = taskRunNumber(view, item.taskId);
@@ -242,7 +215,6 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
       <p>
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
-        {draft !== null ? t("control.task.unsavedDraft") : ""}
       </p>
       <TaskResults view={view} item={item} active={props.resultsActive === true} scope={props.resultsScope ?? ""} />
       {props.decisionsFailed != null && <p data-testid="decisions-read-failed">{t("control.decisions.readFailed", { code: props.decisionsFailed })}</p>}
@@ -250,31 +222,28 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         <RunDecisions key={run.runId} groupId={groupId} revision={view.summary.commandRevision} run={run} projectKey={props.decisions?.projectKey ?? null}
           onCommand={onCommand} onCorrect={props.onCorrectDecision && ((projectKey, decisionId) => props.onCorrectDecision?.(projectKey, decisionId, { groupId, taskId: item.taskId, runId: run.runId }))} archived={archived} />
       ))}
-      {draft !== null && draft.base !== current && (
-        <p role="status">
-          {t("control.task.labelsChanged", { base: draft.base, current })}<LabelChips labels={item.labels} />
-        </p>
-      )}
-      <ul aria-label={t("control.task.labelsOf", { taskId: item.taskId })}>
-        {labels.map((label) => (
-          <li key={label}>
-            <LabelChips labels={[label]} />{" "}
-            {!archived && <button type="button" onClick={() => setDraft(labels.filter((other) => other !== label))}>{t("control.task.remove", { label })}</button>}
-          </li>
-        ))}
-      </ul>
-      {!archived && (
-        <>
-      <Select aria-label={t("control.task.systemLabel")} value={system} onValueChange={setSystem}
-        options={WEB_SYSTEM_LABELS.map((word) => ({ value: word, label: word }))} />
-      <button type="button" onClick={() => setDraft([...labels, system])}>{t("control.task.addSystem")}</button>
-      <input aria-label={t("control.task.customLabel")} value={custom} onChange={(event) => setCustom(event.target.value)} />
-      <button type="button" onClick={addCustom}>{t("control.task.addCustom")}</button>
-      <button type="button" disabled={draft === null} onClick={() => draft !== null && send(draft.labels, draft.base)}>{t("control.task.save")}</button>
-      <button type="button" disabled={draft === null} onClick={() => onDraft(key, "")}>{t("control.task.discard")}</button>
-      <button type="button" onClick={() => send(null, current)}>{t("control.task.restore")}</button>
-        </>
-      )}
+      <div className={labelEditor}>
+        <ul className={labelRow} aria-label={t("control.task.labelsOf", { taskId: item.taskId })}>
+          {labels.map((label) => (
+            <li key={label}>
+              <span className={`${label.startsWith(CUSTOM_LABEL_PREFIX) ? labelCustomClass : labelSystemClass} ${labelWithRemove}`}>
+                {label}
+                {!archived && <button type="button" className={labelRemove} aria-label={t("control.task.remove", { label })} onClick={() => send(labels.filter((other) => other !== label))}>×</button>}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {!archived && (
+          <>
+            <input aria-label={t("control.task.addLabel")} placeholder={t("control.task.addLabel")} list={suggestions} value={word}
+              onChange={(event) => setWord(event.target.value)}
+              // Enter that ends an IME composition picks the characters; it does not add the label yet.
+              onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); add(); } }} />
+            <datalist id={suggestions}>{WEB_SYSTEM_LABELS.map((system) => <option key={system} value={system} />)}</datalist>
+            {(item.labelsProvenance ?? "plan") !== "plan" && <button type="button" className={labelRestore} onClick={() => send(null)}>{t("control.task.restore")}</button>}
+          </>
+        )}
+      </div>
       <p className="num">
         {t("control.task.progress", { progress: progressText(item.progress) })}
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}

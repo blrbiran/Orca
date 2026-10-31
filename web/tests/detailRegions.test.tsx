@@ -26,10 +26,10 @@ it("explicit problem owner overrides default and a poll preserves manual region 
 it("task form input stays mounted across regions and polls", () => {
  const value=view([workItem({taskId:"a"})]); const app=mount(value);
  fireEvent.click(screen.getAllByRole("button",{name:"a"})[0]!);
- const input=screen.getByRole("textbox",{name:"Custom label"}) as HTMLInputElement;
+ const input=screen.getByRole("combobox",{name:"Add label"}) as HTMLInputElement;
  fireEvent.change(input,{target:{value:"keep my unfinished text"}}); select("Preparation"); select("Progress");
  app.rerender(<ControlGroupView view={{...value,changeSeq:5}} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
- expect((screen.getByRole("textbox",{name:"Custom label"}) as HTMLInputElement).value).toBe("keep my unfinished text");
+ expect((screen.getByRole("combobox",{name:"Add label"}) as HTMLInputElement).value).toBe("keep my unfinished text");
 });
 it("active and failed task facts remain visible together without inferring success", () => {
  const failed=run({runId:"failed",taskId:"b",state:"settled-failed",outcome:"failed",stopReason:"Error: codex-event-error"});
