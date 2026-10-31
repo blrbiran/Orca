@@ -31,9 +31,6 @@ process.env.ORCA_LAUNCH_AGENTS_DIR = join(relocated, "LaunchAgents");
 process.env.ORCA_SYSTEMD_USER_DIR = join(relocated, "systemd-user");
 process.env.ORCA_SERVICE_LABEL = "dev.orca.panel.test";
 process.env.ORCA_SERVICE_UNIT = "orca-panel-test";
-// Tester round 3 spec §7: a criterion that really starts the service must not reach a person's agents table, which the
-// service migrates once. This one measured failing: tests/service/servicePanel.test.ts rewrote it.
-process.env.ORCA_AGENTS_TABLE = join(relocated, "agents.json");
 
 /**
  * ⚠️ The relocation above is NOT a guard on its own, and saying it was is how this got missed once.

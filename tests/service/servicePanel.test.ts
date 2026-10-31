@@ -36,7 +36,8 @@ function servicePanel(w: Awaited<ReturnType<typeof workspace>>, extra: string[] 
   const args = ["src/cli.ts", "panel", "run", ...(service ? ["--service"] : []), "--by", "t", "--repo", `p=${join(w.r, "repo")}`, "--dist", join(w.r, "dist"), "--control-state-dir", w.state, ...extra];
   const child = spawn(join(process.cwd(), "node_modules", ".bin", "tsx"), args, {
     cwd: process.cwd(),
-    env: { ...process.env, ORCA_AGENTS_TABLE: "", ORCA_CCLOOP_BIN: "", ORCA_PANEL_DIR: w.panelDir, ORCA_CONTROL_DIR: w.controlDir, ORCA_CORRECTIONS_DIR: join(w.r, "k") },
+    // Not "": an empty table path falls back to HOME, and the service migrates that table (tester round 3 spec §7).
+    env: { ...process.env, ORCA_AGENTS_TABLE: join(w.r, "no-agents.json"), ORCA_CCLOOP_BIN: "", ORCA_PANEL_DIR: w.panelDir, ORCA_CONTROL_DIR: w.controlDir, ORCA_CORRECTIONS_DIR: join(w.r, "k") },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
