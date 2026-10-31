@@ -351,6 +351,8 @@ export function App(): JSX.Element {
 
   /** Null while the control plane is not mounted on this panel; then the page shows no control section at all. */
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
+  // Tester #77: a null config or recovery also means "not read yet"; this says the config read failed.
+  const [controlConfigFailed, setControlConfigFailed] = useState(false);
   /** Project registry spec §7: the whole answer, including file errors, editability and restart warnings. */
   const [projectsAnswer, setProjectsAnswer] = useState<ProjectsAnswerV1 | null>(null);
   const projects = projectsAnswer?.projects ?? null;
@@ -888,15 +890,16 @@ export function App(): JSX.Element {
     setAgentUpdateBusy(false);
   };
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        setControlConfig(await fetchControlConfig());
-      } catch {
-        setControlConfig(null);
-      }
-    })();
-  }, []);
+  const readControlConfig = async (): Promise<void> => {
+    setControlConfigFailed(false);
+    try {
+      setControlConfig(await fetchControlConfig());
+    } catch {
+      setControlConfig(null);
+      setControlConfigFailed(true);
+    }
+  };
+  useEffect(() => { void readControlConfig(); }, []);
 
   useEffect(() => {
     if (controlConfig === null) return;
@@ -1851,7 +1854,13 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="board" active={section}>
         {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
-        {section !== "board" ? null : controlConfig === null || control.recovery === null ? <p className="empty">{t("control.unavailable")}</p> : (
+        {section !== "board" ? null : controlConfig === null || control.recovery === null ? (
+          // Tester #77: not there yet is not "not available": that is said only after a read failed, with a way to ask again.
+          // The config read failed, or the poll that follows it did (it keeps polling, so this also clears by itself).
+          controlConfigFailed || (controlConfig !== null && control.panelRefusal !== null)
+            ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void (controlConfig === null ? readControlConfig() : readControlTick()); }}>{t("control.retryRead")}</button></div>
+            : <p className="empty" role="status">{t("control.loadingBoard")}</p>
+        ) : (
           <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
             openFlowRunId={route.kind === "flow-run" ? route.flowRunId : null}
             onOpenFlowRun={(flowRunId) => navigate(flowRunId === null ? { kind: "section", section: "board" } : { kind: "flow-run", section: "board", flowRunId })}

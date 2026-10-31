@@ -306,6 +306,8 @@ export const zh: Translation<typeof en> = {
     preparation: { reviewTitle: "检查任务方案", goal: "目标：{{goal}}", workspace: "工作区：{{mode}}" },
     savedResult:{notDispatched:"验证尚未启动。普通重试会从当前目标创建新的计划与执行。",verify:"验证已保存成果",cost:"跳过执行；校验和验证可能消耗模型用量。",unavailable:"已保存成果暂不可验证。",lineage:"验证来源：{{runId}} · 尝试 {{attempt}}"},
     unavailable: "这个面板上没有任务控制面。",
+    retryRead: "重试",
+    loadingBoard: "正在读取看板…",
     title: "任务控制",
     summaryLine: "服务会话 {{epoch}} · 状态序号 {{seq}} · {{dispatch}}",
     noPort: "未配置执行端口 · 这个面板提供恢复和证据，但拒绝开始工作 · 设置 ORCA_CCLOOP_BIN 和 ORCA_AGENTS_TABLE 后重启它",

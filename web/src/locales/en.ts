@@ -441,6 +441,8 @@ export const en = {
     preparation: { reviewTitle: "Review task plan", goal: "Goal: {{goal}}", workspace: "Workspace: {{mode}}" },
     savedResult:{notDispatched:"Verification was not started. Ordinary retry creates a new plan and execution on the current target.",verify:"Verify saved results",cost:"Execution is skipped; validation and verification may consume model usage.",unavailable:"Saved results are unavailable for verification.",lineage:"Verification source: {{runId}} · attempt {{attempt}}"},
     unavailable: "The task control plane is not available on this panel.",
+    retryRead: "Try again",
+    loadingBoard: "Reading the board…",
     title: "Task control",
     summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
     noPort: "no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it",
