@@ -259,7 +259,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
-              <RunTranscript runId={run.runId} active={props.active !== false} />
+              <RunTranscript runId={run.runId} active={props.active !== false} autoOpen={run.runId === item.currentRunId} />
               {/* Flow engine spec §13.3 (W-COR): a finished run may be corrected as a whole, in one sentence. */}
               {run.phase === "work" && run.outcome === "succeeded" && <CorrectRunButton repoId={view.summary.repoId} runId={run.runId} />}
               {retryRunOpen(view, run) && !archived && (

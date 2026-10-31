@@ -22,6 +22,8 @@ beforeEach(() => {
     { seq: 1, groupId: "g", taskId: "a", runId: "run-a", at: AT - 60_000, kind: "run-started", body: { providerAttemptOrdinal: 1 } },
   ];
   vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+    // Tester #113: the task's current run also reads its transcript listing; these criteria are about the activity feed.
+    if (String(input).endsWith("/transcripts")) return new Response(JSON.stringify({ schema: "orca-run-transcripts-v1", runId: "run-a", available: false, calls: [] }), { status: 200, headers: { "content-type": "application/json" } });
     urls.push(String(input));
     const body = responseOverride !== undefined ? responseOverride : status === 200 ? { schema: "orca-run-activity-v1", runId: "run-a", entries } : { code: "run-not-found", message: "no such run" };
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });

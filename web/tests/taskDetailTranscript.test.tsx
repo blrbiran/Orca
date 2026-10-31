@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
  * T12 (spec §12.3, §12.4 C8): the transcript is mounted on the task detail's run list and in the group's runs table.
- * Each renders a collapsed disclosure that asks nothing until opened; opening calls the shared helper the flow page
- * uses (a spy on the shared module); an open, non-final call polls, and stops when it is final, when `active` turns
+ * The runs table's is a collapsed disclosure that asks nothing until opened; the task detail's, for the task's current
+ * run, opens by itself on the latest call while its pane is active (tester #113; ruling: human 「这次批准改写所有必要的判据」).
+ * Opening calls the shared helper the flow page uses (a spy on the shared module); an open, non-final call polls, and stops when it is final, when `active` turns
  * false (task detail: the group pane hidden; runs table: another region), and when the document is hidden. Opening a
  * transcript in one place closes the one open in the other (one per tab). An archived group still opens it.
  */
@@ -54,6 +55,8 @@ const props = (over: Partial<Parameters<typeof ControlGroupView>[0]> = {}, group
 const taskDetail = (root: HTMLElement): HTMLElement => root.querySelector('[data-task-id="a"]') as HTMLElement;
 const runsRow = (root: HTMLElement): HTMLElement => root.querySelector(`tr[data-run-id="${RUN}"]`) as HTMLElement;
 async function openIn(scope: HTMLElement): Promise<void> {
+  // The task detail's transcript opens by itself (tester #113); only the runs table needs the two presses.
+  if (scope.hasAttribute("data-task-id")) { await flush(); return; }
   fireEvent.click(within(scope).getByRole("button", { name: "Transcript" }));
   await flush();
   fireEvent.click(within(scope).getByRole("button", { name: /execute · call 1/ }));
@@ -61,20 +64,98 @@ async function openIn(scope: HTMLElement): Promise<void> {
 }
 const polls = (): number => transcriptUrls.filter((url) => url.includes("after=")).length;
 
-describe("T12: the task detail and the runs table", () => {
-  it("each renders a collapsed disclosure that asks nothing until opened, then calls the shared helper with its run id", async () => {
+describe("the task's current run opens by itself (tester #113)", () => {
+  const disclosure = (scope: HTMLElement): HTMLElement => within(scope).getByRole("button", { name: "Transcript" });
+  const useCalls = (calls: RunTranscriptsV1["calls"], available = true): void => {
+    vi.mocked(api.fetchRunTranscripts).mockResolvedValueOnce({ ...LISTING, available, calls });
+  };
+  const call = LISTING.calls[0]!;
+
+  // mutation: the auto read is removed -> the person has to press twice again to see what the agent is doing -> red
+  it("reads the listing once and shows the latest call, without the person pressing anything", async () => {
     const { container } = render(<ControlGroupView {...props()} />);
-    await flush(5000);
-    expect(within(taskDetail(container)).getByRole("button", { name: "Transcript" }).getAttribute("aria-expanded")).toBe("false");
-    expect(within(runsRow(container)).getByRole("button", { name: "Transcript" }).getAttribute("aria-expanded")).toBe("false");
-    expect(transcriptUrls).toEqual([]);
-    fireEvent.click(within(taskDetail(container)).getByRole("button", { name: "Transcript" }));
     await flush();
-    expect(api.fetchRunTranscripts).toHaveBeenCalledWith(RUN);
-    fireEvent.click(within(runsRow(container)).getByRole("button", { name: "Transcript" }));
+    expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("true");
+    expect(api.fetchRunTranscripts).toHaveBeenCalledTimes(1);
+    expect(within(taskDetail(container)).getAllByTestId("transcript-call")).toHaveLength(1);
+    expect(api.fetchTranscriptWindow).toHaveBeenCalledWith(RUN, { attempt: 1, phase: "execute", seq: 1 }, { tail: true });
+  });
+
+  // mutation: .at(-1) becomes [0], or the recorded filter is dropped -> the oldest call, or a call with nothing to read -> red
+  it("picks the last recorded call of the last attempt", async () => {
+    useCalls([call, { ...call, attempt: 2, seq: 2 }, { ...call, attempt: 2, seq: 3, recorded: false }]);
+    render(<ControlGroupView {...props()} />);
+    await flush();
+    expect(api.fetchTranscriptWindow).toHaveBeenCalledTimes(1);
+    expect(api.fetchTranscriptWindow).toHaveBeenCalledWith(RUN, { attempt: 2, phase: "execute", seq: 2 }, { tail: true });
+  });
+
+  // mutation: autoOpen is passed for every run -> each old run reads its listing and steals the one open transcript -> red
+  it("leaves an older run of the same task closed and unread", async () => {
+    const older = { ...view.runs[0]!, runId: "run-older" };
+    const both: GroupViewV1 = { ...view, runs: [older, ...view.runs] };
+    const { container } = render(<ControlGroupView {...props({ route: { region: "progress", taskId: "a" } }, both)} />);
+    await flush();
+    expect(within(taskDetail(container).querySelector('section[aria-label="Transcript of run-older"]') as HTMLElement).getByRole("button", { name: "Transcript" }).getAttribute("aria-expanded")).toBe("false");
+    expect(vi.mocked(api.fetchRunTranscripts).mock.calls).toEqual([[RUN]]);
+  });
+
+  // mutation: the active test is dropped from the read -> a hidden pane asks for transcripts and starts a poll -> red
+  it("asks nothing from a hidden pane, and opens when the pane shows", async () => {
+    const { container, rerender } = render(<ControlGroupView {...props({ active: false })} />);
+    await flush(5000);
+    expect(transcriptUrls).toEqual([]);
+    rerender(<ControlGroupView {...props({ active: true })} />);
+    await flush();
+    expect(within(taskDetail(container)).getAllByTestId("transcript-call")).toHaveLength(1);
+  });
+
+  // mutation: the available test is dropped -> a provider without transcripts opens an empty panel on every task -> red
+  it("stays closed when the listing is not available, and says why when pressed", async () => {
+    useCalls([], false);
+    const { container } = render(<ControlGroupView {...props()} />);
+    await flush();
+    expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("false");
+    expect(api.fetchTranscriptWindow).not.toHaveBeenCalled();
+    useCalls([], false);
+    fireEvent.click(disclosure(taskDetail(container)));
     await flush();
     expect(api.fetchRunTranscripts).toHaveBeenCalledTimes(2);
-    expect(transcriptUrls).toEqual([`/api/control/runs/${RUN}/transcripts`, `/api/control/runs/${RUN}/transcripts`]);
+    expect(within(taskDetail(container)).getByText(/too old to record transcripts/)).toBeTruthy();
+  });
+
+  // mutation: setAutoDone is dropped from the press -> the next re-render opens it again against the person's choice -> red
+  it("stays closed once the person closes it, through polls and pane switches, until they reopen it", async () => {
+    const { container, rerender } = render(<ControlGroupView {...props()} />);
+    await flush();
+    fireEvent.click(disclosure(taskDetail(container)));
+    await flush();
+    const reads = vi.mocked(api.fetchRunTranscripts).mock.calls.length;
+    rerender(<ControlGroupView {...props({}, { ...view, changeSeq: view.changeSeq + 1 })} />);
+    rerender(<ControlGroupView {...props({ active: false })} />);
+    rerender(<ControlGroupView {...props({ active: true })} />);
+    await flush(3000);
+    expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("false");
+    expect(within(taskDetail(container)).queryAllByTestId("transcript-call")).toHaveLength(0);
+    expect(api.fetchRunTranscripts).toHaveBeenCalledTimes(reads);
+    fireEvent.click(disclosure(taskDetail(container)));
+    await flush();
+    expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("true");
+    expect(within(taskDetail(container)).getByRole("button", { name: /execute · call 1/ })).toBeTruthy();
+    expect(within(taskDetail(container)).queryAllByTestId("transcript-call")).toHaveLength(0);
+  });
+});
+
+describe("T12: the task detail and the runs table", () => {
+  it("the runs table's disclosure asks nothing until opened, then calls the shared helper with its run id", async () => {
+    const { container } = render(<ControlGroupView {...props({ route: { region: "runs", taskId: null } })} />);
+    await flush(5000);
+    expect(within(runsRow(container)).getByRole("button", { name: "Transcript" }).getAttribute("aria-expanded")).toBe("false");
+    expect(transcriptUrls).toEqual([]);
+    fireEvent.click(within(runsRow(container)).getByRole("button", { name: "Transcript" }));
+    await flush();
+    expect(api.fetchRunTranscripts).toHaveBeenCalledWith(RUN);
+    expect(transcriptUrls).toEqual([`/api/control/runs/${RUN}/transcripts`]);
   });
 
   it("an open, non-final call polls, and stops when the call is final", async () => {

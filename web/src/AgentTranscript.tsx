@@ -282,24 +282,37 @@ function sizeText(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 }
 
-/** The disclosure for one Orca run: collapsed, nothing is asked; opened, the listing as metadata rows. */
-export function RunTranscript(props: { runId: string; active: boolean }): JSX.Element {
+/**
+ * The disclosure for one Orca run: collapsed, nothing is asked; opened, the listing as metadata rows.
+ * Tester #113: with `autoOpen` (a task's current run) it asks once, while active, and when the listing has a recorded call it
+ * opens on the latest one. That happens once: after it, or after any press of the disclosure, only the person opens it.
+ */
+export function RunTranscript(props: { runId: string; active: boolean; autoOpen?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [autoDone, setAutoDone] = useState(false);
   const [listing, setListing] = useState<RunTranscriptsV1 | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [openCall, setOpenCall] = useState<CallKey | null>(null);
   const owner = useRef(Symbol("transcript"));
   useEffect(() => () => releaseSlot(owner.current), []);
+  const autoPending = props.autoOpen === true && !autoDone;
   useEffect(() => {
-    if (!expanded || !props.active) return;
+    if ((!expanded && !autoPending) || !props.active) return;
     let live = true;
     fetchRunTranscripts(props.runId).then(
-      (answer) => { if (live) { setListing(answer); setRefusal(null); } },
-      (error: unknown) => { if (live) setRefusal(controlFailureFrom(error).code); },
+      (answer) => {
+        if (!live) return;
+        setListing(answer); setRefusal(null); setAutoDone(true);
+        const latest = answer.available && autoPending ? answer.calls.filter((call) => call.recorded).at(-1) : undefined;
+        if (latest !== undefined) { setExpanded(true); claimSlot(owner.current, () => setOpenCall(null)); setOpenCall({ attempt: latest.attempt, phase: latest.phase, seq: latest.seq }); }
+      },
+      (error: unknown) => { if (live) { setRefusal(controlFailureFrom(error).code); setAutoDone(true); } },
     );
     return () => { live = false; };
-  }, [expanded, props.active, props.runId]);
+    // One boolean, not the two it is made of: the auto read turning into the expanded view is not a second read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded || autoPending, props.active, props.runId]);
   const toggleCall = (call: TranscriptCallV1): void => {
     if (sameCall(openCall, call)) { setOpenCall(null); releaseSlot(owner.current); return; }
     claimSlot(owner.current, () => setOpenCall(null));
@@ -308,7 +321,7 @@ export function RunTranscript(props: { runId: string; active: boolean }): JSX.El
   const attempts = [...new Set((listing?.calls ?? []).map((call) => call.attempt))];
   return (
     <section className="run-transcript" aria-label={t("transcript.region", { runId: props.runId })}>
-      <button type="button" aria-expanded={expanded} onClick={() => { setExpanded(!expanded); if (expanded) { setOpenCall(null); releaseSlot(owner.current); } }}>
+      <button type="button" aria-expanded={expanded} onClick={() => { setAutoDone(true); setExpanded(!expanded); if (expanded) { setOpenCall(null); releaseSlot(owner.current); } }}>
         {t("transcript.disclosure")}
       </button>
       {expanded && (
