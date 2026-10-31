@@ -112,7 +112,7 @@ describe("the task's current run opens by itself (tester #113)", () => {
 
   // mutation: the available test is dropped -> a provider without transcripts opens an empty panel on every task -> red
   it("stays closed when the listing is not available, and says why when pressed", async () => {
-    useCalls([], false);
+    useCalls([call], false);
     const { container } = render(<ControlGroupView {...props()} />);
     await flush();
     expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("false");
