@@ -333,6 +333,9 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 /* Issue #57: the open task is one tinted node with an accent stroke. The browser's focus ring on the <g> is off for every
    kind of focus -- a mouse click focuses the <g> too, and its box spans the unclipped goal text across its neighbours --
    so a keyboard focus is drawn on the node's own rect instead, dashed so it reads apart from the selection. */
+/* Tester #75: a node answers the pointer and the keyboard. Above the current node's rule, which keeps its own look. */
+.dep-node:hover rect { stroke: var(--accent); stroke-width: 2.5; }
+.dep-node:focus-visible rect { fill: color-mix(in srgb, var(--accent) 10%, var(--card)); }
 .dep-node[aria-current="true"] rect { fill: color-mix(in srgb, var(--accent) 16%, var(--card)); stroke: var(--accent); stroke-width: 3; }
 .dep-node:focus { outline: none; }
 .dep-node:focus-visible rect { stroke: var(--text-strong); stroke-width: 2; stroke-dasharray: 5 3; }
