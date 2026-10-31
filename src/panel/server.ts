@@ -12,6 +12,7 @@ import { verifyControlJsonBody, planLibraryImportBody } from "./controlApi.js";
 import { bindControlSocket, buildControlSocketApp, controlSocketPath, type ControlSocketHandle } from "./controlSocket.js";
 import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
+import { migrateAgentTimeouts } from "../agents/timeoutMigration.js";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
 import { createMultiDirProjects } from "../control/multiGroup.js";
 import { runControlPanelStartup } from "./controlLifecycle.js";
@@ -422,5 +423,10 @@ export function panelEnvWithCcloop(
 export async function startPanelFromArgs(args: string[], mode: PanelMode = {}): Promise<StartedPanel> {
   const { env, executionPortReason } = panelEnvWithCcloop(process.env);
   const told = executionPortReason === null ? mode : { ...mode, executionPortReason };
+  // A migration that fails is said and leaves the table as it was; the panel still starts.
+  await migrateAgentTimeouts(env).then(
+    (moved) => { if (moved.length > 0) process.stderr.write(`orca-panel: agent wall-clock limit raised from 30 min to 2 h: ${moved.join(", ")}\n`); },
+    (error: unknown) => { process.stderr.write(`orca-panel: agent timeout migration skipped: ${error instanceof Error ? error.message : String(error)}\n`); },
+  );
   return createPanelServer(parsePanelArgs(panelArgsWithDefaultProjects(args, env), env), env, told);
 }

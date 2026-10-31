@@ -204,7 +204,7 @@ export const zh: Translation<typeof en> = {
   // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
   transcript: {
     disclosure: "转录", region: "{{runId}} 的转录", refused: "转录读取被拒绝 · {{code}}",
-    unsupported: "这个 ccloop 没有记录转录", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
+    unsupported: "安装的 ccloop 版本过旧，不能记录转录。请在 Orca 目录运行 npm ci 并重启面板。", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
     callLine: "{{phase}} · 第 {{seq}} 次调用 · {{runtime}} · {{size}}", notRecorded: "未记录", live: "进行中", final: "已结束",
     truncatedAt: "记录在 {{bytes}} 字节处停止", lineDropped: "有一行 {{bytes}} 字节未被记录",
     oversized: "超长行 · {{bytes}} 字节 · {{type}}", archived: "从运行的归档读取",

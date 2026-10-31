@@ -27,7 +27,7 @@ import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
 import { RunOutputBound } from "./RunOutputBound.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
-import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf } from "./runFacts.js";
+import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf, shownWorkStatus } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { SkillsGiven } from "./SkillsGiven.js";
 import { NeedsHumanBadge, runNeedsHuman, type GroupDecisionsRead } from "./RunDecisions.js";
@@ -647,7 +647,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {item.objective !== undefined && <> <span className={`task-goal ${taskGoal}`} title={item.objective.goal}>{goalSummary(item.objective.goal)}</span></>}
                 {taskNeedsHuman(item.taskId) && <> <NeedsHumanBadge /></>}
               </td>
-              <td>{enumText("workStatus", item.status)}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
+              <td>{enumText("workStatus", shownWorkStatus(item))}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
                 {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run, props.active !== false && region === "progress"))}</td>
               <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}</td>

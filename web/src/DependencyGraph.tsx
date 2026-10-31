@@ -16,7 +16,7 @@ import type { RunViewV1, WorkItemCategoryV1, WorkItemViewV1 } from "./controlTyp
 import { depSwatch } from "./ui/classes.js";
 import { layoutDependencies } from "./dependencyLayout.js";
 import i18n, { enumText } from "./i18n.js";
-import { lineageRunNumber } from "./runFacts.js";
+import { lineageRunNumber, shownWorkStatus } from "./runFacts.js";
 
 // Tester round 2 §8.2 (D10): one height for every node, with room for the goal line under the id.
 const NODE_W = 180, NODE_H = 104, GAP_X = 56, GAP_Y = 16, PAD = 8;
@@ -97,7 +97,7 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
           {layout.nodes.map((node) => {
             const at = place.get(node.taskId)!;
             const item = byId.get(node.taskId)!;
-            const word = enumText("workStatus", item.status);
+            const word = enumText("workStatus", shownWorkStatus(item));
             const lines = nodeLines(item, props.runs, now);
             const goal = item.objective?.goal;
             // Review minor 10: unique per graph instance (two graphs of one group may be on a page), safe in an id.

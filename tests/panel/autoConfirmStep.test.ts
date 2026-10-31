@@ -14,6 +14,8 @@ describe("the pump's automatic-confirm step", () => {
   it("writes one line per refused group", async () => {
     const lines: string[] = [];
     await autoConfirmStep({ autoConfirmUnlimitedPass: async () => ({ confirmed: ["a"], refused: [{ groupId: "g", code: "handoff-grant-insufficient" }] }) }, line => lines.push(line));
-    expect(lines).toEqual(["orca-control: automatic confirm of g refused: handoff-grant-insufficient\n"]);
+    // Tester #99: an undated line in a long log read as "still happening"; each refusal now says when.
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z orca-control: automatic confirm of g refused: handoff-grant-insufficient\n$/);
   });
 });

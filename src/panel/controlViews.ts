@@ -229,6 +229,8 @@ const persistedRunSchema = z.object({
   usageSettlement: usageSettlementSchema.optional(),
   // Spec 2026-10-27 single-call unknown usage §9 R4: a single call's lower bound (ccloop's record) and its settlement marker.
   singleCallUsageLowerBound: singleCallUsageLowerBoundSchema.optional(),
+  // Tester round 3 spec §3: a loop run's floor, from collect. For display, like the single call's.
+  usageLowerBound: singleCallUsageLowerBoundSchema.optional(),
   singleCallSettlement: singleCallSettlementSchema.optional(),
   drive: driveRecordSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
@@ -1124,7 +1126,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       grant: run.grant[bucket],
       diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
-      ...(run.singleCallUsageLowerBound === undefined ? {} : { usageLowerBound: run.singleCallUsageLowerBound.tokens }),
+      ...((run.singleCallUsageLowerBound ?? run.usageLowerBound) === undefined ? {} : { usageLowerBound: (run.singleCallUsageLowerBound ?? run.usageLowerBound)!.tokens }),
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.

@@ -26,7 +26,7 @@ export const backupPathOf = (table: string): string => `${table}.bak-auto`;
 type Table = { installations: Record<string, { version?: unknown }> };
 
 /** The table's own layout: one line stays one line, else the indent of its first nested line; trailing whitespace kept. */
-function serializeLike(original: string, value: unknown): string {
+export function serializeLike(original: string, value: unknown): string {
   const body = original.trimEnd(), trailing = original.slice(body.length);
   const indent = body.includes("\n") ? (/\n([ \t]+)\S/.exec(body)?.[1] ?? "  ") : undefined;
   return `${JSON.stringify(value, null, indent)}${trailing}`;
@@ -49,7 +49,7 @@ async function writeBeside(target: string, bytes: string, mode: number): Promise
   return temp;
 }
 
-async function replace(target: string, bytes: string, mode: number): Promise<void> {
+export async function replace(target: string, bytes: string, mode: number): Promise<void> {
   const temp = await writeBeside(target, bytes, mode);
   try { await rename(temp, target); } catch (error) { await unlink(temp).catch(() => undefined); throw error; }
 }

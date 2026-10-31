@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { collectInto, readDriverRun, readStartEnvelope } from "../../src/control/executionDriver.js";
 import { isFlowChildGroup } from "../../src/flow/groups.js";
-import { readGroupSummaryFromSnapshot } from "../../src/panel/controlViews.js";
+import { readControlGroup, readGroupSummaryFromSnapshot } from "../../src/panel/controlViews.js";
 import { readProjectionState } from "../../src/control/projectionJournal.js";
 import type { TranscriptEntry } from "../../src/control/schema.js";
 import { driverHarness } from "../control/fixtures/driverHarness.js";
@@ -97,6 +97,36 @@ describe("T13: the listing of every collected run is stored and served", () => {
       expect(await old.get(`/api/control/runs/${runId}/transcripts`)).toEqual({ status: 200, body: { schema: "orca-run-transcripts-v1", runId, available: false, reason: "ccloop-transcripts-unsupported", calls: [] } });
       expect(await old.get(`/api/control/runs/${runId}/transcripts/1/plan/1?tail=1`)).toMatchObject({ status: 422, body: { error: { code: "transcript-unsupported" } } });
     } finally { await web.close(); await socket.close(); await old.close(); await t.h.dispose(); }
+  });
+});
+
+describe("tester #116: a loop run's observed usage floor", () => {
+  it("is kept beside the run from collect, shown by the run view, and an unchanged floor does not move the projection", async () => {
+    const t = await driverHarness([{ taskId: "a" }]);
+    try {
+      let floor: { tokens: number } | undefined = { tokens: 533_486 };
+      const router = t.deps.router;
+      t.deps.router = { ...router, resolve(workKind, profileId, expectedHash) {
+        const profile = router.resolve(workKind, profileId, expectedHash);
+        const collect = profile.port.collect.bind(profile.port);
+        return { ...profile, port: { ...profile.port, async collect(envelope, afterSeq) {
+          const report = await collect(envelope, afterSeq);
+          return floor === undefined ? report : { ...report, usageLowerBound: floor };
+        } } };
+      } };
+      const runId = await acceptedRun(t);
+      await collectInto(t.deps, readDriverRun(t.h.store, runId));
+      expect(t.body(runId).usageLowerBound).toEqual({ tokens: 533_486 });
+      const group = readDriverRun(t.h.store, runId).groupId;
+      expect(readControlGroup(t.h.store, "epoch", group).runs.find((run) => run.runId === runId)!.usageLowerBound).toBe(533_486);
+
+      const settled = readProjectionState(t.h.store).changeSeq;
+      await collectInto(t.deps, readDriverRun(t.h.store, runId));
+      expect(readProjectionState(t.h.store).changeSeq).toBe(settled);
+      floor = undefined;
+      await collectInto(t.deps, readDriverRun(t.h.store, runId));
+      expect(t.body(runId).usageLowerBound).toEqual({ tokens: 533_486 });
+    } finally { await t.h.dispose(); }
   });
 });
 

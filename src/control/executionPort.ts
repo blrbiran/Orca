@@ -32,6 +32,8 @@ export interface ExecutionReport {
  toolRules?:ToolRulesReport;
  /** Live transcript spec §10.2.4: one entry per agent call, present iff ccloop listed at least one; no consumer yet. */
  transcripts?:TranscriptEntry[];
+ /** Tester round 3 spec §3: the observed floor of calls that ended without a usage report. Shown to a person, never booked. */
+ usageLowerBound?:{tokens:number};
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }

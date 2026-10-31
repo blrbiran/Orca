@@ -445,7 +445,7 @@ export function autoConfirmStep(
   write: (line: string) => void = (line) => { process.stderr.write(line); },
 ): Promise<void> {
   return service.autoConfirmUnlimitedPass().then(({ refused }) => {
-    for (const { groupId, code } of refused) write(`orca-control: automatic confirm of ${groupId} refused: ${code}\n`);
+    for (const { groupId, code } of refused) write(`${new Date().toISOString()} orca-control: automatic confirm of ${groupId} refused: ${code}\n`);
   }, (error: unknown) => { write(`orca-control: automatic confirm pass failed: ${error instanceof Error ? error.message : String(error)}\n`); });
 }
 

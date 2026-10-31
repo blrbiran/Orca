@@ -42,6 +42,7 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   if (compact && !offered) return !active ? null : refusal ?? (!owner ? <p>{t("control.settlement.contactOwner")}</p> : null);
   return <div>
     {!compact && <p>{t("control.settlement.unknown")}</p>}
+    {!compact && run.usageLowerBound != null && <p>{t("chargeRetry.lowerBound", { tokens: run.usageLowerBound.toLocaleString("en-US") })}</p>}
     {!compact && !owner && <p>{t("control.settlement.contactOwner")}</p>}
     {!compact && refusal}
     {offered && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>

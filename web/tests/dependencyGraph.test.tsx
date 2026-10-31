@@ -94,7 +94,8 @@ describe("category fill, legend and live node text (issue-fixes spec §6.5)", ()
     render(<ControlGroupView view={view([workItem({ taskId: "i", category: "idle" }), workItem({ taskId: "w", category: "waiting" }), workItem({ taskId: "r", category: "running" }),
       workItem({ taskId: "b", category: "blocked" }), workItem({ taskId: "d", category: "done" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} now={NOW} />);
     for (const [taskId, category] of [["i", "idle"], ["w", "waiting"], ["r", "running"], ["b", "blocked"], ["d", "done"]] as const) {
-      expect(screen.getByRole("button", { name: `${taskId} · active` }).getAttribute("class")).toBe(`dep-node dep-${category}`);
+      // Tester #117: the word follows the colour; a blocked category no longer reads "active".
+      expect(screen.getByRole("button", { name: `${taskId} · ${category === "blocked" ? "blocked" : "active"}` }).getAttribute("class")).toBe(`dep-node dep-${category}`);
     }
     expect(within(screen.getByRole("list", { name: "Legend" })).getAllByRole("listitem").map((entry) => entry.textContent)).toEqual(["idle", "running", "waiting", "blocked", "done"]);
   });
