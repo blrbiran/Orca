@@ -1091,6 +1091,7 @@ export const en = {
     contentLanguage: "Content language",
     agent: "Agent",
     showArchived: "Show archived requirements",
+    showFinished: "Show finished ({{n}})",
     capabilityNote: "Clarification uses a bounded single call. Choose a supported agent, or import a plan in Task control.",
     agentDefault: "Your default",
     open: "Start clarifying",

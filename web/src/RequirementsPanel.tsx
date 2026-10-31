@@ -813,6 +813,11 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
   const [showArchived, setShowArchived] = useState(false);
   const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (showArchived || group.archived !== true)
     && (scope === undefined || inScope(scope, group.repoId)));
+  // Tester #115: a requirement past clarifying needs no person here, so it folds; the open one stays, since a link can open it.
+  // An archived one is listed only because "Show archived" asked for it, so that box alone keeps showing it.
+  const [showFinished, setShowFinished] = useState(false);
+  const finished = listed.filter((group) => group.state !== "clarifying" && group.archived !== true);
+  const shown = showFinished ? listed : listed.filter((group) => !finished.includes(group) || group.groupId === props.selected);
   const view = props.selected === null ? undefined : props.views[props.selected];
   const refusal = props.refusal ?? null;
   return (
@@ -829,8 +834,9 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
           <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
             scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
           <label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.currentTarget.checked)} />{t("requirements.showArchived")}</label>
+          {finished.length > 0 && <label><input type="checkbox" checked={showFinished} onChange={(event) => setShowFinished(event.currentTarget.checked)} />{t("requirements.showFinished", { n: finished.length })}</label>}
           {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 && <p>{t("requirements.none")}</p>}
-          {listed.map((group) => (
+          {shown.map((group) => (
             <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelect(group.groupId)} onAction={props.onGroupAction}
               refusal={group.groupId === props.selected ? null : props.groupRefusals?.[group.groupId]}>{(onContextMenu) => (
             <button type="button" className="mb-2 min-w-0 flex-1 pr-[48px]" title={listName(group) === null ? undefined : group.groupId} aria-current={group.groupId === props.selected} onClick={() => props.onSelect(group.groupId)} onContextMenu={onContextMenu}>

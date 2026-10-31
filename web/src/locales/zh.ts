@@ -960,6 +960,7 @@ export const zh: Translation<typeof en> = {
     contentLanguage: "内容语言",
     agent: "Agent",
     showArchived: "显示已归档需求",
+    showFinished: "显示已完成（{{n}}）",
     capabilityNote: "需求澄清需要有消耗上界的单次调用。请选择支持此能力的 agent，或在任务控制中导入计划。",
     agentDefault: "你的默认",
     open: "开始澄清",
