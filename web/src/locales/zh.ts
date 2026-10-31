@@ -952,6 +952,8 @@ export const zh: Translation<typeof en> = {
   },
   requirements: {
     goToPreparation: "前往任务准备",
+    becameGroup: "这条需求已成为任务组，工作在那里执行。",
+    openGroup: "打开任务组",
     next: { label: "下一步：", retry: "有一步停了或失败了，重试它。", settle: "一次调用停下时没有报告用量；按它的额度记账，之后它会重试。", answer: "回答第 {{n}} 轮。", consensus: "点「达成共识」，或再问一轮。", review: "审阅拆分草案 {{n}}：退回修改或接受。", prepare: "前往任务准备。", waiting: "暂时不用你做什么；Orca 正在做下一步。", go: "跳到那里" },
     ownerRaisesLimit: "只有所有者能提高这个额度，请找一位所有者。",
     title: "需求",

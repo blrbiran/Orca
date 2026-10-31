@@ -1083,6 +1083,8 @@ export const en = {
   },
   requirements: {
     goToPreparation: "Go to task preparation",
+    becameGroup: "This requirement is now a task group; its work runs there.",
+    openGroup: "Open the task group",
     next: { label: "Next: ", retry: "a step stopped or failed; retry it.", settle: "a call stopped without reporting its usage; charge its grant, then it retries.", answer: "answer round {{n}}.", consensus: "say \"We agree\", or ask for one more round.", review: "review split draft {{n}}: send it back or accept it.", prepare: "go to task preparation.", waiting: "nothing for you; Orca is working on the next step.", go: "Go there" },
     ownerRaisesLimit: "Only an owner can raise this limit; ask one to.",
     title: "Requirements",

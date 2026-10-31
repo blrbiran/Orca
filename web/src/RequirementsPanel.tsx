@@ -10,6 +10,7 @@ import { goalSummary } from "./CardGoal.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { useContext, useEffect, useState, type JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
+import { formatRoute } from "./sections.js";
 import { useTranslation } from "react-i18next";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import { ChargeRetry } from "./ChargeRetry.js";
@@ -639,6 +640,10 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       <h3>{view.requirement.slug ?? groupId} · {enumText("groupState", view.summary.state)}</h3>
       {nextStep !== null && <NextStepLine groupId={groupId} step={nextStep} />}
       <FlowSteps view={view} />
+      {/* Tester #80: the steps end at acceptance, so say where the work went from here. A link, never a jump. */}
+      {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" && (
+        <p data-testid="requirement-became-group">{t("requirements.becameGroup")} <a href={formatRoute({ kind: "group", section: "tasks", groupId, region: null, taskId: null })}>{t("requirements.openGroup")}</a></p>
+      )}
       {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" &&
         <div className={`${actionRow} mb-2`}><button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button></div>}
       {archived ? <section aria-label={t("control.group.archivedRegion")}>
