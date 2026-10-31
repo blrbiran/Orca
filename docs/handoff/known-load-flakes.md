@@ -178,3 +178,11 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/flow/startForm.test.ts` › 「answers the templates…」 | 上表那条，本轮更频繁：**基线分支单跑也 3/4 红**（负载约 25，`fetch failed`／ECONNRESET 或 hook 10 s 超时），负载降下来后的单跑 9/9 绿。不是本轮改动带来的 |
 | Orca › `progressE2E`、`dispatchedRunMarkerE2E`（`checkpoint-usage-high-water`）、`multiDirCollect`（`control-peer-exit … Unexpected end of JSON input`）、`agentUpgradeE2E`（`timed out waiting for b to land`，负载 29.5） | 各在一次全量里红一次，其余门里绿；`progressE2E`、`agentUpgradeE2E` 单跑 3/3 绿，另两条未单跑 |
 | ~~Orca › web `tests/controlCommandRecovery.test.tsx`~~ | **已修，不再是 flake**：三处在文字出现后立刻读 sessionStorage，与 App 的写入 effect 竞速；改为 `waitFor`（主题行 `test(web): the uncertain-command reads wait for App's storage effect…`）。上面几行旧登记里的这个文件以此为准 |
+
+## 会话 `4ed8eb65`（2026-11-01，负载 16–43）再见的形状（**下次红先对照，不豁免**）
+
+| 文件 › 测试 | 现象与观测 |
+|---|---|
+| Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while the re-run is in flight…」 | 这次是 `expected { state: 'blocked', … } to deeply equal { state: 'landed', blocked: null }`（与上面 `index.lock` 同用例、不同断言文字）；单跑 3/3 绿（负载 5–6） |
+| Orca › `tests/control/handoffE2E.test.ts` › H6 | `blocked: a=checkpoint-usage-high-water`（临时 HOME 的整套里一次，负载约 20）；最终门里绿，单跑 3/3 绿。同一原因串见 `dispatchedRunMarkerE2E`（`a9f9d6de` 行） |
+| Orca › `tests/flow/startForm.test.ts` | 上表那条，负载 20–40 时再红；单跑 3/3 绿 |

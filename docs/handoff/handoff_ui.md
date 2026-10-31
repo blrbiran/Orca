@@ -385,3 +385,8 @@ U3 主题跟随系统深浅、可手动切；U4 授权改写四条既有判据�
 - **门与证据**：868 文件全绿、typecheck 无错；完成判据 `test -z "$(grep -rln '<select' web/src | grep -v ui/Select.tsx)"`、`! grep -rnE 'HTMLSelectElement|HTMLOptionElement|selectedOptions|select\[name|fireEvent\.change\([^)]*[Ss]elect' web/tests` 都 exit 0；bundle `index.js` +19,184 B（gzip +7.16 kB）。截图 `/private/tmp/orca-b999cc81/radix-shots/`（41 张，1280／390 × 深浅 × 侧栏开关／设置·本项目／需求三个下拉／用量），全部无横向溢出、无 pageerror。
 - ~~待人：看截图定合不合~~ **人裁「同意，合入」，替人定的几处「同意」**（会话 `65b4d067`）：已 rebase、`npm test`（只红已登记的 `correctionCoarseDebug` 挂住，与本分支无关）、`--ff-only` 合入、`npm ci`＋build＋web build＋kickstart，7777 服务的 `index.js` 就是新 build；worktree 与分支已删。细节见 Orca handoff §3 最新一节。
 - **残余**：滚动按钮没在截图里见到（种子世界最长列表 3 项）；触屏失去原生滚轮选择器（人知情接受）；需求页每行「…」按钮压出行边框（主线就有）。
+
+### 七.十 测试者第三轮（会话 `4ed8eb65`，2026-11-01）
+
+#114 标签 chip 改完即存（删了 `taskLabelsDraft*` 判据，换 `taskLabelsSave`）；#115「显示已完成 (N)」折叠，选中的不折叠，归档的仍只归「显示已归档」；#113 当前 run 自动打开最新转录，人关了不再自动开；#77 看板加载中／失败加重试；#91 看板视图与归档勾选提到 App；#87 任务列表与看板空状态链到需求；#80 成组后给链接（一行，不是新阶段）；#75 依赖图节点 hover。**都没有在浏览器里看过**，判据只到组件层。
+
