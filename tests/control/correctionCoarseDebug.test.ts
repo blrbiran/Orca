@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,9 +29,10 @@ import { FIXTURE_AGENT, webFixture } from "./fixtures/web.js";
 // plus the diff capped at today's inline limit with the cut recorded. A run target freezes that run's evidence and its
 // reported decisions without a decision row. Closing either writes one `decision` row and no `overturned`.
 
-const g = (cwd: string, args: string[], options: { input?: string; env?: NodeJS.ProcessEnv } = {}): string =>
+// The timeout is the one thing that can end a stuck call: a synchronous child blocks the worker, so vitest's own timeout never fires.
+const g = (cwd: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args],
-    { cwd, encoding: "utf8", stdio: "pipe", input: options.input, env: { ...process.env, ...unsetInheritedGitEnv(), ...options.env } }).trim();
+    { cwd, encoding: "utf8", stdio: "pipe", timeout: 60_000, killSignal: "SIGKILL", env: { ...process.env, ...unsetInheritedGitEnv(), ...options.env } }).trim();
 
 /** A commit on `ref` (child of `from`) with `files` written and committer time `at`, by plumbing; HEAD is untouched. */
 function commitAt(repo: string, ref: string, from: string, files: Record<string, string>, at: string): string {
@@ -38,7 +40,10 @@ function commitAt(repo: string, ref: string, from: string, files: Record<string,
   const env = { GIT_INDEX_FILE: join(repo, ".git", `orca-test-index-${process.pid}`), GIT_COMMITTER_DATE: at, GIT_AUTHOR_DATE: at };
   g(repo, ["read-tree", parent], { env });
   for (const [path, text] of Object.entries(files)) {
-    const blob = g(repo, ["hash-object", "-w", "--stdin"], { input: text });
+    // Not --stdin: execFileSync's `input` of 16 KiB hangs now and then under Node 22.13.1 (docs/handoff/known-load-flakes.md).
+    const body = join(repo, ".git", `orca-test-blob-${process.pid}`);
+    writeFileSync(body, text);
+    const blob = g(repo, ["hash-object", "-w", "--no-filters", body]);
     g(repo, ["update-index", "--add", "--cacheinfo", `100644,${blob},${path}`], { env });
   }
   const commit = g(repo, ["commit-tree", g(repo, ["write-tree"], { env }), "-p", parent, "-m", `at ${at}`], { env });
