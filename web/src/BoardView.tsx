@@ -20,7 +20,11 @@ import { boardCard as card, boardCardBadge as cardBadge, boardCardOpen as cardOp
 import { minutesSince, updatedText } from "./relativeTime.js";
 import { KNOWN_FAILURE_CAUSES, knownCause } from "./RunReason.js";
 
+export interface BoardPrefs { view: "board" | "graph"; showArchived: boolean }
+
 export interface BoardViewProps {
+  prefs?: BoardPrefs;
+  onPrefs?: (prefs: BoardPrefs) => void;
   groups: GroupSummaryV1[];
   scope: GroupScope;
   repoLabel?: (repoId: string) => string;
@@ -130,12 +134,19 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
   );
 }
 
+export const BOARD_PREFS: BoardPrefs = { view: "board", showArchived: false };
+
 export function BoardView(props: BoardViewProps): JSX.Element {
   const { t } = useTranslation();
   const ticking = useClock(30_000);
   const now = props.now ?? ticking;
-  const [view, setView] = useState<"board" | "graph">("board");
-  const [showArchived, setShowArchived] = useState(false);
+  // Tester #91: App owns these, since the Board unmounts when hidden and Back should find it as it was; on its own it keeps them.
+  const [ownPrefs, setOwnPrefs] = useState(BOARD_PREFS);
+  const prefs = props.prefs ?? ownPrefs;
+  const { view, showArchived } = prefs;
+  const setPrefs = props.onPrefs ?? setOwnPrefs;
+  const setView = (next: BoardPrefs["view"]): void => setPrefs({ ...prefs, view: next });
+  const setShowArchived = (next: boolean): void => setPrefs({ ...prefs, showArchived: next });
   const [refusal, setRefusal] = useState<string | null>(null);
   // Tester #54: the card being dragged, so each column can say before the drop whether it takes it (boardDrop decides).
   const [dragging, setDragging] = useState<GroupSummaryV1 | null>(null);

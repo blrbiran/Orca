@@ -146,6 +146,7 @@ import { BackLine } from "./BackLine.js";
 import type { Section } from "./sections.js";
 import { SettingsPage } from "./SettingsPage.js";
 import { NAV_KEY, SectionPane, Shell, controlAlert } from "./Shell.js";
+import { BOARD_PREFS } from "./BoardView.js";
 import { FlowBoard } from "./FlowBoard.js";
 import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
@@ -353,6 +354,7 @@ export function App(): JSX.Element {
   const [controlConfig, setControlConfig] = useState<ControlConfigV1 | null>(null);
   // Tester #77: a null config or recovery also means "not read yet"; this says the config read failed.
   const [controlConfigFailed, setControlConfigFailed] = useState(false);
+  const [boardPrefs, setBoardPrefs] = useState(BOARD_PREFS);
   /** Project registry spec §7: the whole answer, including file errors, editability and restart warnings. */
   const [projectsAnswer, setProjectsAnswer] = useState<ProjectsAnswerV1 | null>(null);
   const projects = projectsAnswer?.projects ?? null;
@@ -1861,7 +1863,7 @@ export function App(): JSX.Element {
             ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void (controlConfig === null ? readControlConfig() : readControlTick()); }}>{t("control.retryRead")}</button></div>
             : <p className="empty" role="status">{t("control.loadingBoard")}</p>
         ) : (
-          <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel}
+          <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel} prefs={boardPrefs} onPrefs={setBoardPrefs}
             openFlowRunId={route.kind === "flow-run" ? route.flowRunId : null}
             onOpenFlowRun={(flowRunId) => navigate(flowRunId === null ? { kind: "section", section: "board" } : { kind: "flow-run", section: "board", flowRunId })}
             onOpen={(group) => {
