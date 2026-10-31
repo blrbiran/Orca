@@ -1858,9 +1858,9 @@ export function App(): JSX.Element {
         {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
         {section !== "board" ? null : controlConfig === null || control.recovery === null ? (
           // Tester #77: not there yet is not "not available": that is said only after a read failed, with a way to ask again.
-          // The config read failed, or the poll that follows it did (it keeps polling, so this also clears by itself).
+          // The config read failed, or the poll that follows it did. Reading the config again restarts that poll.
           controlConfigFailed || (controlConfig !== null && control.panelRefusal !== null)
-            ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void (controlConfig === null ? readControlConfig() : readControlTick()); }}>{t("control.retryRead")}</button></div>
+            ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void readControlConfig(); }}>{t("control.retryRead")}</button></div>
             : <p className="empty" role="status">{t("control.loadingBoard")}</p>
         ) : (
           <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel} prefs={boardPrefs} onPrefs={setBoardPrefs}

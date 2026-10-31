@@ -284,8 +284,8 @@ function sizeText(bytes: number): string {
 
 /**
  * The disclosure for one Orca run: collapsed, nothing is asked; opened, the listing as metadata rows.
- * Tester #113: with `autoOpen` (a task's current run) it asks once, while active, and when the listing has a recorded call it
- * opens on the latest one. That happens once: after it, or after any press of the disclosure, only the person opens it.
+ * Tester #113: with `autoOpen` (a task's current run) it asks while active, and when the listing has a recorded call it opens
+ * on the latest one. That happens once: after an answer, or after any press of the disclosure, only the person opens it.
  */
 export function RunTranscript(props: { runId: string; active: boolean; autoOpen?: boolean }): JSX.Element {
   const { t } = useTranslation();
@@ -307,7 +307,7 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
         const latest = answer.available && autoPending ? answer.calls.filter((call) => call.recorded).at(-1) : undefined;
         if (latest !== undefined) { setExpanded(true); claimSlot(owner.current, () => setOpenCall(null)); setOpenCall({ attempt: latest.attempt, phase: latest.phase, seq: latest.seq }); }
       },
-      (error: unknown) => { if (live) { setRefusal(controlFailureFrom(error).code); setAutoDone(true); } },
+      (error: unknown) => { if (live) setRefusal(controlFailureFrom(error).code); },
     );
     return () => { live = false; };
     // One boolean, not the two it is made of: the auto read turning into the expanded view is not a second read.

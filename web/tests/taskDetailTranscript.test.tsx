@@ -124,7 +124,17 @@ describe("the task's current run opens by itself (tester #113)", () => {
     expect(within(taskDetail(container)).getByText(/too old to record transcripts/)).toBeTruthy();
   });
 
-  // mutation: setAutoDone is dropped from the press -> the next re-render opens it again against the person's choice -> red
+  // mutation: setAutoDone is dropped from the press -> the answer still on its way opens it against the person's choice -> red
+  it("stays closed when the person opens and closes it before the first answer arrives", async () => {
+    const { container } = render(<ControlGroupView {...props()} />);
+    fireEvent.click(disclosure(taskDetail(container)));
+    fireEvent.click(disclosure(taskDetail(container)));
+    await flush();
+    expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("false");
+    expect(within(taskDetail(container)).queryAllByTestId("transcript-call")).toHaveLength(0);
+  });
+
+  // mutation: setAutoDone is dropped from the answer -> closing makes it read and open again against the person's choice -> red
   it("stays closed once the person closes it, through polls and pane switches, until they reopen it", async () => {
     const { container, rerender } = render(<ControlGroupView {...props()} />);
     await flush();

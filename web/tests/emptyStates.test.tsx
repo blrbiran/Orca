@@ -30,5 +30,9 @@ describe("empty states say what to do next (tester #87)", () => {
     cleanup();
     board([view([]).summary]);
     expect(screen.queryByTestId("board-empty")).toBeNull();
+    cleanup();
+    // A Board holding only a flow run is not empty either.
+    render(<BoardView groups={[]} flows={[{ flowRunId: "f", state: "running", projectId: null, templateRef: "builtin/t@1", dir: null } as never]} scope={scope} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.queryByTestId("board-empty")).toBeNull();
   });
 });

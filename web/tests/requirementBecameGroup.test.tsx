@@ -33,4 +33,11 @@ describe("a requirement that became a group links to it (tester #80)", () => {
     mount(accepted({ state: "clarifying" }));
     expect(screen.queryByTestId("requirement-became-group")).toBeNull();
   });
+
+  // mutation: the accepted test is dropped -> a group with no accepted split claims to have come from this requirement -> red
+  it("offers no link when no draft was accepted", () => {
+    const view = accepted({ state: "ready" });
+    mount({ ...view, requirement: { ...view.requirement, acceptedDraftNo: null } });
+    expect(screen.queryByTestId("requirement-became-group")).toBeNull();
+  });
 });
