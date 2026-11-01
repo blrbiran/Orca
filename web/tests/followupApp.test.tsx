@@ -96,7 +96,8 @@ it.each([false, true])("accepted requirement opens the same group's Preparation 
   }
   const requirements = await screen.findByRole("navigation", { name: "Requirement list" });
   // Tester #115 (ruling: human 「这次批准改写所有必要的判据」): an accepted requirement waits behind this toggle.
-  fireEvent.click(within(requirements).getByRole("checkbox", { name: "Show finished (1)" }));
+  // Ruling (human, session 663fb68e, 「Q1 a」): the toggle became the Finished filter.
+  fireEvent.click(within(requirements).getByRole("button", { name: "Finished (1)" }));
   fireEvent.click(within(requirements).getByRole("button", { name: /r · ready/ }));
   fireEvent.click(await screen.findByRole("button", { name: "Go to task preparation" }));
   const detail = await screen.findByRole("region", { name: "Control group r" });

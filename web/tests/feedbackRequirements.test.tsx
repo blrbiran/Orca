@@ -47,7 +47,8 @@ describe("feedback requirement affordances", () => {
     const view = requirementView("failed"); view.summary.archived = true; mount(view);
     const list = screen.getByRole("navigation", { name: "Requirement list" });
     expect(within(list).queryByRole("button", { name: "r · clarifying" })).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show archived requirements" }));
+    // Ruling (human, session 663fb68e, 「Q1 a」): the two boxes became one row of filters; this still encodes that archived waits to be asked for.
+    fireEvent.click(screen.getByRole("button", { name: "Archived (1)" }));
     expect(within(list).getByRole("button", { name: "r · clarifying" })).toBeTruthy();
   });
   it("keeps an archived requirement readable without offering edits and allows unarchive", () => {

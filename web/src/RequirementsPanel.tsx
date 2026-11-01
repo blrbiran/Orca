@@ -9,6 +9,7 @@ import { overviewRegionId } from "./overviewNavigation.js";
 import { goalSummary } from "./CardGoal.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { useContext, useEffect, useState, type JSX } from "react";
+import { groupFilter } from "./ui/classes.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { formatRoute } from "./sections.js";
 import { useTranslation } from "react-i18next";
@@ -772,6 +773,10 @@ function refusalWords(refusal: ControlRefusal): string {
 }
 
 const LIST_NAME_MAX = 60;
+const REQUIREMENT_PARTS = ["active", "finished", "archived"] as const;
+type RequirementPart = (typeof REQUIREMENT_PARTS)[number];
+const partOf = (group: ControlSummaryV1["groups"][number]): RequirementPart => (group.archived === true ? "archived" : group.state === "clarifying" ? "active" : "finished");
+
 /**
  * Issues #75, #78: a listed requirement is named by its slug, else by the start of its idea on one line (the summary's
  * goal is a clarifying group's idea); null when neither is known, and the group id names it as before.
@@ -815,14 +820,11 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
     : { drafts: ownDrafts, onDraft: <S extends DraftSlot>(slot: S, key: string, value: DetailDrafts[S][string]) => setOwnDrafts((all) => setDraft(all, slot, key, value)) };
   // Only the store's owner can clear a submitted draft, so only it is told which one was submitted.
   const onCommand: OnCommand = owned ? props.onCommand : (action) => props.onCommand(action);
-  const [showArchived, setShowArchived] = useState(false);
-  const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (showArchived || group.archived !== true)
-    && (scope === undefined || inScope(scope, group.repoId)));
-  // Tester #115: a requirement past clarifying needs no person here, so it folds; the open one stays, since a link can open it.
-  // An archived one is listed only because "Show archived" asked for it, so that box alone keeps showing it.
-  const [showFinished, setShowFinished] = useState(false);
-  const finished = listed.filter((group) => group.state !== "clarifying" && group.archived !== true);
-  const shown = showFinished ? listed : listed.filter((group) => !finished.includes(group) || group.groupId === props.selected);
+  const [part, setPart] = useState<RequirementPart>("active");
+  const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (scope === undefined || inScope(scope, group.repoId)));
+  // Tester #115: a requirement past clarifying needs no person here, so the list starts without it; the open one stays
+  // listed, since a link can open it. Human ruling, session 663fb68e: one row of filters, not two overlapping boxes.
+  const shown = listed.filter((group) => partOf(group) === part || (group.groupId === props.selected && group.archived !== true));
   const view = props.selected === null ? undefined : props.views[props.selected];
   const refusal = props.refusal ?? null;
   return (
@@ -838,9 +840,14 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
           {/* Tester #36: the form to start one sits above the list, not after however many requirements there are. */}
           <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
             scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
-          <label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.currentTarget.checked)} />{t("requirements.showArchived")}</label>
-          {finished.length > 0 && <label><input type="checkbox" checked={showFinished} onChange={(event) => setShowFinished(event.currentTarget.checked)} />{t("requirements.showFinished", { n: finished.length })}</label>}
-          {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 && <p>{t("requirements.none")}</p>}
+          <div role="group" aria-label={t("requirements.filter.region")} className={groupFilter}>
+            {REQUIREMENT_PARTS.map((option) => (
+              <button key={option} type="button" aria-pressed={part === option} onClick={() => setPart(option)}>
+                {t(`requirements.filter.${option}`, { n: listed.filter((group) => partOf(group) === option).length })}
+              </button>
+            ))}
+          </div>
+          {scope?.kind === "unresolved" ? <p role="note">{t("project.listUnavailable")}</p> : listed.length === 0 ? <p>{t("requirements.none")}</p> : shown.length === 0 && <p>{t("requirements.filter.empty")}</p>}
           {shown.map((group) => (
             <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelect(group.groupId)} onAction={props.onGroupAction}
               refusal={group.groupId === props.selected ? null : props.groupRefusals?.[group.groupId]}>{(onContextMenu) => (

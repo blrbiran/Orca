@@ -190,7 +190,8 @@ it.each(["clarifying", "draft"] as const)("unarchives an archived %s requirement
     return original(input, init);
   };
   render(<App />);
-  fireEvent.click(await screen.findByRole("checkbox", { name: "Show archived requirements" }));
+  // Ruling (human, session 663fb68e, 「Q1 a」): the box became the Archived filter.
+  fireEvent.click(await screen.findByRole("button", { name: "Archived (1)" }));
   fireEvent.click(await (await requirementList()).findByRole("button", { name: `r · ${state}` }));
   fireEvent.click(await screen.findByRole("button", { name: "Unarchive" }));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Unarchive" })).toBeNull());
