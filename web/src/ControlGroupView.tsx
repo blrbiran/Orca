@@ -175,7 +175,7 @@ export interface ControlGroupViewProps {
   uncertain: UncertainCommand[];
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
-  onCommand: (action: ControlAction) => void;
+  onCommand: (action: ControlAction) => void | Promise<number | null>;
   onSourceRequirement?: (groupId: string) => void;
   /** Issue-fixes spec §6.5: the clock the graph's elapsed and no-progress text is read against; the graph reads it itself when absent. */
   now?: number;

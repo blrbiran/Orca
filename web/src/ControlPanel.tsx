@@ -66,7 +66,7 @@ export interface ControlPanelProps {
   onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
   onOpenDispatch?: (groupId: string) => void;
   onDraft: (key: string, text: string) => void;
-  onCommand: (action: ControlAction) => void;
+  onCommand: (action: ControlAction) => void | Promise<number | null>;
   /** W5: commands one control sends in order (BudgetEditor's onCommands). */
   onCommands?: (actions: ControlAction[]) => void;
   /** Execution driver spec §3.2: the chosen project's repository workspace mode (project mode only), once read. */

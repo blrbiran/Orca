@@ -1825,9 +1825,7 @@ export function App(): JSX.Element {
           onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
           onOpenDispatch={(groupId) => { navigate({ kind: "group", section: "tasks", groupId, region: null, taskId: null }); const request = ++navigationSeq.current; setSelectedGroup(groupId); setOverviewFocus({ target: { kind: "group", groupId, region: "dispatch", taskId: null, runId: null }, request }); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
-          onCommand={(action) => {
-            void sendControl(action);
-          }}
+          onCommand={sendControl}
           onCommands={(actions) => {
             void sendControlSequence(actions);
           }}

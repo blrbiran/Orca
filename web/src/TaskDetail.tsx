@@ -6,7 +6,7 @@
  * on screen as its base, so a change made from a stale view is refused as labels-version-conflict instead of overwriting
  * someone else's; a refusal is shown by its code like every other refusal and the chips stay what the server holds.
  */
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { JSX } from "react";
 import { labelCustomClass, labelEditor, labelRemove, labelRestore, labelRow, labelSystemClass, labelWithRemove, taskDetail } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
@@ -172,7 +172,8 @@ export interface TaskDetailProps {
   item: WorkItemViewV1;
   drafts: Record<string, string>;
   onDraft: (key: string, text: string) => void;
-  onCommand: (action: ControlAction) => void;
+  /** Answers with the new revision, or null when the command did not succeed, once the group has been read again. */
+  onCommand: (action: ControlAction) => void | Promise<number | null>;
   /** Board spec 2026-10-03 D7: the repository's workspace mode for the loop plan card's git line. */
   workspaceMode?: "worktree" | "clone" | null;
   /** Issue-fixes spec §6.3: an archived group refuses every command but the unarchive, so no editor is offered (read-only). */
@@ -195,17 +196,26 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const labels = item.labels ?? [];
   const [word, setWord] = useState("");
   const suggestions = useId();
-  const send = (next: string[] | null): void => onCommand({
-    verb: "set-task-labels", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision,
-    payload: { labels: next, baseLabelsVersion: current },
-  });
+  // One change at a time: a second sent before the first's answer would carry the same base version and be refused.
+  const sending = useRef(false);
+  const change = (next: string[] | null, accepted?: () => void): void => {
+    if (sending.current) return;
+    const answer = onCommand({
+      verb: "set-task-labels", groupId, taskId: item.taskId, expectedRevision: view.summary.commandRevision,
+      payload: { labels: next, baseLabelsVersion: current },
+    });
+    if (answer === undefined) { accepted?.(); return; }
+    sending.current = true;
+    void answer.then((revision) => { if (revision !== null) accepted?.(); }).finally(() => { sending.current = false; });
+  };
   const add = (): void => {
     const text = word.trim();
-    if (text === "") return;
-    setWord("");
+    if (text === "" || sending.current) return;
+    // A refused label stays in the field to fix or send again; what was typed meanwhile is not this label.
+    const clear = (): void => setWord((typed) => (typed.trim() === text ? "" : typed));
     const label = (WEB_SYSTEM_LABELS as readonly string[]).includes(text) || text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`;
     // Sorted by code unit like the server (spec §8 R15), so what is sent is what will be shown back.
-    if (!labels.includes(label)) send([...labels, label].sort());
+    if (labels.includes(label)) clear(); else change([...labels, label].sort(), clear);
   };
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
   const runNumber = taskRunNumber(view, item.taskId);
@@ -228,7 +238,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
             <li key={label}>
               <span className={`${label.startsWith(CUSTOM_LABEL_PREFIX) ? labelCustomClass : labelSystemClass} ${labelWithRemove}`}>
                 {label}
-                {!archived && <button type="button" className={labelRemove} aria-label={t("control.task.remove", { label })} onClick={() => send(labels.filter((other) => other !== label))}>×</button>}
+                {!archived && <button type="button" className={labelRemove} aria-label={t("control.task.remove", { label })} onClick={() => change(labels.filter((other) => other !== label))}>×</button>}
               </span>
             </li>
           ))}
@@ -240,7 +250,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
               // Enter that ends an IME composition picks the characters; it does not add the label yet.
               onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); add(); } }} />
             <datalist id={suggestions}>{WEB_SYSTEM_LABELS.map((system) => <option key={system} value={system} />)}</datalist>
-            {(item.labelsProvenance ?? "plan") !== "plan" && <button type="button" className={labelRestore} onClick={() => send(null)}>{t("control.task.restore")}</button>}
+            {(item.labelsProvenance ?? "plan") !== "plan" && <button type="button" className={labelRestore} onClick={() => change(null)}>{t("control.task.restore")}</button>}
           </>
         )}
       </div>

@@ -80,9 +80,10 @@ const add = (word: string): void => {
 };
 const task = () => within(screen.getByRole("region", { name: "Task a" }));
 
+const success = { status: 200, body: { schema: "orca-command-success-v1", commandId: "x", actorId: "operator", verb: "set-task-labels", target: { kind: "task", groupId: "g", taskId: "a" }, commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64), result: { kind: "task-labels-set", taskId: "a", labelsVersion: 1 } } };
+
 describe("a label change goes straight to the server (tester #114)", () => {
   it("shows a refusal by its code and no chip the server did not accept, then shows the chip once the server holds it", async () => {
-    const success = { status: 200, body: { schema: "orca-command-success-v1", commandId: "x", actorId: "operator", verb: "set-task-labels", target: { kind: "task", groupId: "g", taskId: "a" }, commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64), result: { kind: "task-labels-set", taskId: "a", labelsVersion: 1 } } };
     answers = [{ status: 422, body: { error: { code: "labels-invalid", message: "labels-invalid:count:17", commandRevision: 6, evidenceIds: [], retryable: false } } }, success];
     render(<App />);
     await openTaskA();
@@ -112,5 +113,50 @@ describe("a label change goes straight to the server (tester #114)", () => {
     await screen.findByText(/labels-version-conflict/);
     expect(posted[0]!.payload).toEqual({ labels: [], baseLabelsVersion: 1 });
     expect(task().getByRole("button", { name: "Remove security" })).toBeTruthy();
+  }, 15_000);
+
+  // Session 4ed8eb65's residual: the field was emptied before the answer, so a refused label was lost and had to be retyped.
+  // mutation: empty the field before the send -> it is empty after the refusal -> red
+  it("keeps what was typed when the server refuses it, and empties the field once it is accepted", async () => {
+    answers = [{ status: 422, body: { error: { code: "labels-invalid", message: "labels-invalid:count:17", commandRevision: 6, evidenceIds: [], retryable: false } } }, success];
+    render(<App />);
+    await openTaskA();
+    add("feature");
+    await screen.findByText(/labels-invalid/);
+    const field = screen.getByRole("combobox", { name: "Add label" }) as HTMLInputElement;
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(field.value).toBe("feature");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() => expect(posted).toHaveLength(2));
+    await waitFor(() => expect(field.value).toBe(""));
+  }, 15_000);
+
+  // Session 4ed8eb65's residual: a change sent before the previous one's answer carried the same base version and was refused.
+  // mutation: drop the in-flight guard -> a second POST on the old version -> red
+  it("sends no second change while the first is unanswered, and takes changes again after its answer", async () => {
+    groupView = groupViewAt(4, ["doc", "ui"], 0);
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const response = await original(input, init);
+      if (String(input) === LABELS && init?.method === "POST" && posted.length === 1) await held;
+      return response;
+    }) as typeof fetch;
+    answers = [success, success];
+    render(<App />);
+    await openTaskA();
+    fireEvent.click(task().getByRole("button", { name: "Remove doc" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    fireEvent.click(task().getByRole("button", { name: "Remove ui" }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(posted.map((body) => body.payload)).toEqual([{ labels: ["ui"], baseLabelsVersion: 0 }]);
+    groupView = groupViewAt(6, ["ui"], 1); summary = summaryAt(6);
+    answer();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Remove doc" })).toBeNull(), { timeout: 6_000 });
+    fireEvent.click(task().getByRole("button", { name: "Remove ui" }));
+    await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1]!.payload).toEqual({ labels: [], baseLabelsVersion: 1 });
   }, 15_000);
 });
