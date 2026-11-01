@@ -63,7 +63,19 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.000000000000000000 会话 `4ed8eb65`（2026-10-31／11-01）：`correctionCoarseDebug` 挂住查清；测试者反馈第三轮做完 —— **先读这一节**
+### 3.0000000000000000000 会话 `663fb68e`（2026-11-01）：需求页筛选、标签两个残余、25 万 input 查到来源 —— **先读这一节**
+
+> 人裁（原话）：「Q1 a」「Q2 a」「Q3 a」；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑。」「如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」台账 `.superpowers/sdd/2026-11-01-session-663fb68e/progress.md`（变异、门、替人定的 7 条）。
+
+- **已 `--ff-only` 合入 main、已装（7777 的 `index.js` 与 build 同为 1,159,606 B，含新文案；schema 不变）**：
+  - **需求页筛选**：「显示已归档」「显示已完成」两个勾选框换成一行单选「进行中（n）｜已完成（n）｜已归档（n）」，复用 `groupFilter` 样式，空的一项也保留。打开着的已完成需求留在列表里，已归档的只在「已归档」下。判据改写 4 个文件，都带 `Ruling:` 行。
+  - **标签**：保存被拒时输入框保留内容；上一次改动未答复时，新的改动被忽略（没有可见的忙状态）。为此 `sendControl` 的结果一路传到 `TaskDetail`（`onCommand` 可返回 `Promise<number|null>`）。
+- **门**：`npm test` 176 文件（根 4、web 172），38＋1629 过，0 跳过，typecheck 无错。12 条变异：10 条直接见红；M3 补判据后见红；M12 的守卫是冗余的，已删。真浏览器（构建产物＋假 API，中英 × 1280／390）一行筛选正常，英文 390 折两行，无溢出、无 pageerror；**真面板的真实数据没有看过**。
+- **25 万 input**（`docs/superpowers/specs/2026-11-01-overview-token-cost-findings.md`）：**每次澄清和拆分都带整份仓库 overview，它随仓库变大，上限约 288 KiB**。Orca 仓 276,532 B 量出 134,691 prompt token（claude haiku，约 2.1 B/token），其中 `files` 65 k、`structure` 62 k、`docs` 14 k。备份库里的真实澄清：162–180 KB prompt、8.5–9.2 万 token，overview 占 88–98%。之前 12.6–13 k 那次是小仓。⚠️ 这**没有单独证明** 25 万：到上限也只约 14 万，差的部分要测试者的数（§8）。付费共 $0.16007721（工具报）；codex 额度用完（到 2026-11-04 16:12），两次在作答前被拒。
+- **flow call 结算**：只写了设计 `docs/superpowers/specs/2026-11-01-flow-call-unknown-usage-settlement-design.md`，未实现。写设计时发现两点：`syncWebBudget` 对 flow 父组是空操作；结算后要防止抽取额退回池子。
+- **没做**：overview 的上限没动（它改变模型看到的内容，要先做质量对比，待人定，§8）。
+
+### 3.000000000000000000 会话 `4ed8eb65`（2026-10-31／11-01）：`correctionCoarseDebug` 挂住查清；测试者反馈第三轮做完
 
 > 人裁（原话）：「按 (a)」；反馈文档「合理的部分采纳」「你先不要以我之前的裁定优先」；「同意你的建议，Q1–Q5 都按推荐走」；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」（**本轮没有付费真跑**）；ccloop push「临时允许」，闸门照拦，人手推了。设计与更正 `docs/superpowers/specs/2026-11-01-tester-round-3-design.md`；台账 `.superpowers/sdd/2026-10-31-session-4ed8eb65/progress.md`（门、变异、测量命令与原始数）。
 
@@ -76,7 +88,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **事故（我造成，已修）**：迁移第一版放在所有 panel 启动路径上。`tests/service/servicePanel.test.ts`（`ORCA_AGENTS_TABLE: ""` 回落 HOME）跑了之后，**真实 `~/.orca/agents.json` 的三个 `timeoutMs` 被改成 7200000**，并写了标记。内容就是 Q2 定的结果，原字节在标记文件里，所以没回滚。修法：迁移只在 `mode.service === true` 跑，该测试改用自己的路径。证明：`HOME` 指向放了旧表的临时目录跑整个根套件，表字节不变、无标记。中途试过在 setup 里全局设变量，它覆盖发版门的真表，撤了。另有一次变异（`runFacts.ts`）误在主工作树做，已 0 差还原，违反 Rule 15，记在台账。
 - **门**（最终提交前，`npm test`，全量 867 文件，因 lock 变）：typecheck 无错；web 182/182、1694 过；根 684/685 文件、6543 过／1 红／37 跳过。唯一的红是已登记的 `criteriaBaseRun`，单跑 3/3 绿。ccloop 全量 2440/2440、`check-known-reds` RC 0。独立审阅 0 Critical／0 Important。
 - **决定不再查**：Q4 Board 与项目选择器裁定不重开；Q5 #109 不重开，等 token 数据。
-- **残余（登记未修）**：标签保存被拒时输入已清空；连续两次快速改标签第二次会被版本冲突拒；转录自动读取在飞时按展开，答案回来仍打开最新一条；迁移标记先于表写入，写表失败后不再重试；Task control 面板加载中也有同样的「不可用」（`App.tsx` 约 1781）；`fetchRunTranscripts` 不校验空响应体。
+- **残余（登记未修）**：（标签的两条已由会话 `663fb68e` 修掉）转录自动读取在飞时按展开，答案回来仍打开最新一条；迁移标记先于表写入，写表失败后不再重试；Task control 面板加载中也有同样的「不可用」（`App.tsx` 约 1781）；`fetchRunTranscripts` 不校验空响应体。
 
 ### 3.00000000000000000 会话 `65b4d067`（2026-10-30）：Radix Select 合入并装上
 
@@ -402,7 +414,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。`correctionCoarseDebug` 挂住与测试者反馈第三轮**已做**（会话 `4ed8eb65`）。下一件候选：28–30 万 token（`run-3e770d4e` 单调用 input 25 万、cacheRead 0，等测试者给用量摘录，命令在 §8）；flow call 用量未知结算的设计（第 7 条）；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
+8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。`correctionCoarseDebug` 挂住与测试者反馈第三轮**已做**（会话 `4ed8eb65`）；需求页筛选、标签残余、25 万来源、flow 结算设计**已做**（会话 `663fb68e`）。下一件候选：人定 overview 怎么减后实施，并做一次前后质量对比（findings §4，付费先核额度）；人定 flow 的 D1 后实施结算（设计 §3–§7）；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -581,10 +593,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `4ed8eb65` 待人**：
-  1. 审：本轮替人定的都在 §3 最新一节与 round 3 spec，尤其 #111 的做法（换成观测列表，比「放宽」更严）、标签改完即存、迁移的事故与「只对服务生效」。
-  2. 看真面板（可选）：标签 chip、需求折叠、转录自动打开、看板空状态，都没开浏览器看过。
-  3. 测试者数据（可选）：让测试者对 `~/.orca/control/panel.runs/run-3e770d4e-8e15-40d1-96e1-79a6bf5901af/run/omp/1/single-call/call-POxLtW/events.jsonl` 只输出每个 `message_end` 的 usage 和事件类型计数（不含内容），下一位 agent 据此查 25 万 input 从哪来。
+- **会话 `663fb68e` 待人**：
+  1. 审：替人定的 7 条在台账；round 3 的重点也还没回（#111 换成观测列表且只用 fake 测过、标签改完即存、迁移事故与「只对服务生效」，人已看到清单，未表态）。
+  2. 定：overview 怎么减（findings §4，建议先让 clarify 不带 `structure`）；flow 是否也默认 soft（flow 设计 §6 D1，建议保持有限）。
+  3. 看真面板（可选）：需求筛选、标签 chip、转录自动打开、看板空状态，都没在真数据上看过。
+  4. 测试者数据（可选，定 25 万差的那部分）：在测试者机器上只读跑下面两条，只输出大小和用途，不含内容：
+     `find ~/.orca/control -path '*.overview/*' -name overview.json -exec wc -c {} +`
+     `sqlite3 -readonly <控制库，如 ~/.orca/control/panel/control.sqlite> "SELECT json_extract(r.body,'$.purpose'), length(CAST(json_extract(s.body,'$.work.prompt') AS BLOB)) FROM runs r LEFT JOIN execution_snapshots s ON s.hash=json_extract(r.body,'$.drive.envelopeHash') WHERE r.id LIKE 'run-3e770d4e%'"`（查询在本机备份库副本上验过；控制库路径未在测试者机器上核）。
+  5. ccmem handoff §6.2 的会话号没更新（仍写 `4ed8eb65`）：会话 `663fb68e` 里那次 Edit 被自动模式检查器跳过且提示不要重试；内容仍准确（本仓无改动，入口指向 Orca §3 最新一节），下一轮顺手改。
+- ~~会话 `4ed8eb65` 待人~~ **人已回复用量摘录**（`orca_archived_files/run-3e770d4e-usage-excerpt.json`）与 push；审与看真面板并入上条。
 - ~~会话 `65b4d067` 待人~~ **人已回复**（会话 `4ed8eb65`）；原文：
   1. **push Orca**：本会话合入的 Radix 系列与 handoff 提交都只在本地 main；ccloop、ccmem 本会话只各多一笔 handoff 提交（主题行 `docs(handoff): Orca session 65b4d067 pointer …`），也归人推；syncskill 未动。以 `ls-remote` 现测为准。
   2. **看真面板**（可选）：Radix 下拉已装进 7777 的真面板；有不满意的地方，告诉下一位 agent 改哪里。
