@@ -55,6 +55,12 @@ describe("one row of filters on the requirement list", () => {
     expect(names()).toEqual(["open · clarifying", "ready · ready"]);
   });
 
+  // mutation: the open one is kept whatever it is -> an archived row among those in progress -> red
+  it("keeps an open archived requirement out of the other filters", () => {
+    panel([group("open", "clarifying"), { ...group("gone", "done"), archived: true }], "gone");
+    expect(names()).toEqual(["open · clarifying"]);
+  });
+
   // mutation: a part with nothing in it drops its button -> the row jumps as requirements finish -> red
   it("keeps all three filters when a part is empty", () => {
     panel([group("open", "clarifying")]);

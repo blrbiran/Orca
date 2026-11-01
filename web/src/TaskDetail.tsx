@@ -210,7 +210,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   };
   const add = (): void => {
     const text = word.trim();
-    if (text === "" || sending.current) return;
+    if (text === "") return;
     // A refused label stays in the field to fix or send again; what was typed meanwhile is not this label.
     const clear = (): void => setWord((typed) => (typed.trim() === text ? "" : typed));
     const label = (WEB_SYSTEM_LABELS as readonly string[]).includes(text) || text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`;
