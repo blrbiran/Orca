@@ -12,6 +12,10 @@ import { ROUND_ONE, ROUND_TWO } from "./fixtures/requirementOutputs.js";
  *
  * The repository commit and the delimiter nonce are normalised (they move with the clock); nothing else is.
  * Regenerate only from unchanged code: ORCA_WRITE_GOLDEN=1 writes the file instead of comparing (never in a criterion run).
+ *
+ * Ruling: 「先 (a)，前后质量对比过了再 (b)」 (human, session 43913afc; overview findings 2026-11-01 §4 (a)): clarify is sent the
+ * overview without `structure`. The golden was regenerated from that code; its only change is the `structure` key gone from
+ * both prompts' `repository-overview` (checked by word diff), and it still pins every other byte.
  */
 const GOLDEN = join(import.meta.dirname, "fixtures", "clarifyPromptGolden.txt");
 const SEPARATOR = "\n----- ORCA C7 GOLDEN: next clarify prompt -----\n";

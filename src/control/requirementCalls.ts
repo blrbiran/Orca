@@ -198,6 +198,23 @@ async function buildOverviewFor(deps: SingleCallPrepareDeps, run: SingleCallRunR
   return { kind: "repository", ...built };
 }
 
+/**
+ * Overview findings 2026-11-01 §4 (a), human ruling session 43913afc: clarify is sent the overview without `structure` (the
+ * exported symbols, about half of a large repository's overview). It asks about intent, which symbols do not answer; split
+ * keeps them, since it names the paths a task writes. The hash and bytes are of what is sent, so the stored record, the run's
+ * `overview.hash` and the delimiter nonce all name the overview the model saw; the commits are unchanged.
+ */
+function withoutStructure(built: BuiltOverview): BuiltOverview {
+  const strip = (overview: RepositoryOverview): Omit<RepositoryOverview, "structure"> => {
+    const { structure: _structure, ...rest } = overview;
+    return rest;
+  };
+  const sent = built.kind === "project"
+    ? { ...built.project, dirs: built.project.dirs.map((dir) => ({ ...dir, overview: strip(dir.overview) })) }
+    : strip(built.overview);
+  return { ...built, canonicalJson: canonicalBytes(sent).toString("utf8"), hash: sha256Canonical(sent) };
+}
+
 /** The overview stored with the group and named on the run, before the prompt is built. A store fault here is not the repository's. */
 function storeOverview(deps: SingleCallPrepareDeps, run: SingleCallRunRow, built: Awaited<ReturnType<typeof buildOverviewFor>>): void {
   const release = deps.admissionGate?.enter();
@@ -325,6 +342,7 @@ async function prepareRequirementCall(
   deps: SingleCallPrepareDeps, run: SingleCallRunRow, responseSchema: Readonly<Record<string, unknown>>,
   stillDrafting: (target: RequirementTarget) => boolean,
   promptOf: (group: RequirementGroup, target: RequirementTarget, built: Awaited<ReturnType<typeof buildOverviewFor>>) => string,
+  view: (built: BuiltOverview) => BuiltOverview = (built) => built,
 ): Promise<SingleCallRequest | { blocked: string }> {
   const group = readRequirementGroup(deps.store, run.groupId);
   const target = targetOf(run.workItemId);
@@ -332,7 +350,7 @@ async function prepareRequirementCall(
   // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
   let built: Awaited<ReturnType<typeof buildOverviewFor>>;
   // Dir-requirements spec §6.2: a dir group's folder that is gone or moved is named as such (`dir-folder-missing:<detail>`).
-  try { built = await buildOverviewFor(deps, run, group); }
+  try { built = view(await buildOverviewFor(deps, run, group)); }
   catch (error) { return { blocked: error instanceof DirFolderMissing ? `dir-folder-missing:${error.message}` : "repository-path" }; }
   // Outside the catch: a draining panel or a store fault ends the round as any other step's does.
   storeOverview(deps, run, built);
@@ -352,7 +370,7 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
         earlier: chainRounds(rounds).filter((r) => r.roundNo !== target.no), retryReason: readRound(deps.store, run.groupId, target.no).lastInvalidReason,
         limits: { roundNo: position === -1 ? target.no : position + 1, classification: limits.effective, roundCap: limits.roundCap },
         superseded: supersededForPrompt(rounds), frame: requirementHost(deps.store, group).background() });
-    });
+    }, withoutStructure);
   },
   classify: classifyClarifyOutput,
   complete(deps, run, rawOutput, commitTerminal, failure = null) {

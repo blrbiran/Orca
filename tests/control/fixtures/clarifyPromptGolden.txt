@@ -57,7 +57,7 @@ Let people export their notes as Markdown.
 ORCA-DATA idea <NONCE>>>>
 
 <<<ORCA-DATA repository-overview <NONCE>
-{"commit":"<HEAD>","docs":{"entries":[{"cut":false,"path":"README.md","text":"# Notes\nA note-taking tool.\n"}],"skipped":[],"status":"ok"},"files":{"cut":false,"directories":null,"listed":["README.md","src/a.ts"],"status":"ok","total":2},"schema":"orca-repository-overview-v1","structure":{"cut":false,"detail":"ast-grep-not-installed","files":[],"status":"unavailable"}}
+{"commit":"<HEAD>","docs":{"entries":[{"cut":false,"path":"README.md","text":"# Notes\nA note-taking tool.\n"}],"skipped":[],"status":"ok"},"files":{"cut":false,"directories":null,"listed":["README.md","src/a.ts"],"status":"ok","total":2},"schema":"orca-repository-overview-v1"}
 ORCA-DATA repository-overview <NONCE>>>>
 
 <<<ORCA-DATA rounds <NONCE>
@@ -124,7 +124,7 @@ Let people export their notes as Markdown.
 ORCA-DATA idea <NONCE>>>>
 
 <<<ORCA-DATA repository-overview <NONCE>
-{"commit":"<HEAD>","docs":{"entries":[{"cut":false,"path":"README.md","text":"# Notes\nA note-taking tool.\n"}],"skipped":[],"status":"ok"},"files":{"cut":false,"directories":null,"listed":["README.md","src/a.ts"],"status":"ok","total":2},"schema":"orca-repository-overview-v1","structure":{"cut":false,"detail":"ast-grep-not-installed","files":[],"status":"unavailable"}}
+{"commit":"<HEAD>","docs":{"entries":[{"cut":false,"path":"README.md","text":"# Notes\nA note-taking tool.\n"}],"skipped":[],"status":"ok"},"files":{"cut":false,"directories":null,"listed":["README.md","src/a.ts"],"status":"ok","total":2},"schema":"orca-repository-overview-v1"}
 ORCA-DATA repository-overview <NONCE>>>>
 
 <<<ORCA-DATA rounds <NONCE>
