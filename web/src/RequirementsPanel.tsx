@@ -679,6 +679,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           <span title={t("requirements.heldTip")}>{t("requirements.held", { reserved: short(view.ledger.reserved.tokens) })}</span></p>
         {view.ledger.limit.tokens!==null&&<progress max={view.ledger.limit.tokens} value={view.ledger.used.tokens} />}
         {view.ledger.usageUnknown && <p role="status">{t("requirements.usageUnknown")}</p>}
+        {(view.ledger.approximateRuns ?? 0) > 0 && <p role="note" data-testid="requirement-usage-approximate">{t("requirements.usageApproximate", { count: view.ledger.approximateRuns ?? 0 })}</p>}
       </section>
       <ClarifySize view={view} onCommand={props.onCommand} editable={!archived && view.summary.state === "clarifying" && view.requirement.consensus === null} />
       <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">

@@ -749,7 +749,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
               </td>
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
-              <td><Tokens n={run.used.tokens} /></td>
+              {/* Spec 2026-11-03 soft-mode approximate usage: a booked floor is said to be one, never shown as a reported figure. */}
+              <td><Tokens n={run.used.tokens} />{run.usageApproximate !== undefined && <span className="badge" data-tone="warn" data-testid="usage-approximate">{run.usageApproximate.floorTokens === null ? t("control.group.usageApproximateNone") : t("control.group.usageApproximate")}</span>}</td>
               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
               <td>
                 <EvidenceLink runId={run.runId} />

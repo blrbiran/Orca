@@ -532,6 +532,8 @@ export const en = {
       attempt: " · attempt {{attempt}} in this run (claim {{claim}})",
       taskRun: " · run {{n}} of this task",
       retryRun: "Retry run {{id}}",
+      usageApproximate: "at least (usage not reported)",
+      usageApproximateNone: "unknown, at least 0 (usage not reported)",
       retryTask: "Retry task {{taskId}}",
       handoffRequests: "Handoff requests",
       handoffLine: "{{requestId}} · run {{runId}} · {{state}} · deadline {{deadline}}",
@@ -1122,6 +1124,7 @@ export const en = {
     held: ", {{reserved}} held by running calls",
     heldTip: "Tokens granted to calls still in flight; they are released when those calls settle. It is not a cap.",
     usageUnknown: "Usage is not known yet.",
+    usageApproximate: "At least: the tool did not report the usage of {{count}} call(s); the total counts what was observed before they stopped.",
     rounds: "Rounds",
     round: "Round {{n}}",
     // Flow engine spec §10.3 (Issue #76): rounds by their place on the active chain; a revision and what it replaced.

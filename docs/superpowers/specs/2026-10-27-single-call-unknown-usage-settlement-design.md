@@ -238,3 +238,7 @@ Appended; the text above is unchanged (Rule 13).
 - Criteria: ccloop `tests/control/singleCall.test.ts` W10 (an aborted record keeps the adapter's bound, work usage null);
   Orca `tests/control/singleCallUsageSettle.test.ts` "keeps an aborted call's lower bound on the blocked run for the
   view, never as usage".
+
+## Correction (session `43913afc`, 2026-11-03)
+
+Human ruling: 「同意。我们之前的很多裁定在新的语义下可能有一些过期了，一些需要、可以修改。」 on booking the floor in the unlimited mode. **D3 ("no auto-settlement from the observed floor") and §9 R1–R4 now apply only to groups with a finite token limit.** In a group whose `limit.tokens` is null, a requirement or estimate call with unknown usage is no longer blocked: its floor is booked as approximate and it completes (spec `2026-11-03-soft-mode-approximate-usage-design.md` §7). Flow calls are unchanged (finite pools). The text above is kept as written.

@@ -43,6 +43,7 @@ import { landMultiDirGroups, type MultiLandingCrashPoint, type MultiPrecheck } f
 import { DISPATCHED_PERSON_DIRNAME } from "./commandClient.js";
 import { isSingleCallRun, isWebWorkRun, nextClaimableTask, readSingleCallClaimEnvelope, readWorkClaimEnvelope, reserveProviderAttemptInTransaction } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
+import { approximateUsageApplies, bookApproximateFloorInTransaction } from "./approximateUsage.js";
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
@@ -1143,9 +1144,20 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
     handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, singleCallCommitTerminal(store, run), failure);
   } catch (error) {
     if (error instanceof ControlError && error.code === "run-stop-unconfirmed") {
+      const reason = failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`;
+      // Spec 2026-11-03 soft-mode approximate usage §2: a group with no token limit books the floor and goes on; the
+      // purpose then completes with the answer and failure it was given, as a call with known usage does.
+      if (handler.completeInTransaction !== undefined && approximateUsageApplies(store, run)) {
+        const at = (deps.now?.() ?? new Date()).getTime();
+        write(deps, () => {
+          bookApproximateFloorInTransaction(store, runId, { floorTokens: record.usageLowerBound?.tokens ?? null, reason, at });
+          handler.completeInTransaction!(store, readRun(store, runId) as never, settled, singleCallCommitTerminal(store, run), failure);
+        });
+        return true;
+      }
       // Same spec O1, R4: ccloop's lower bound stays on the blocked run for the view and the settlement marker.
       const bound = record.usageLowerBound === undefined ? {} : { singleCallUsageLowerBound: record.usageLowerBound };
-      blockRun(deps, runId, "C", failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`, {}, bound);
+      blockRun(deps, runId, "C", reason, {}, bound);
       return true;
     }
     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;

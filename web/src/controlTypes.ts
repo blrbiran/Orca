@@ -307,7 +307,8 @@ export type RequirementViewV1 = {
     /** Task 11: a blocked export is "conflict"; the summary's reasonCode tells a path block from a branch conflict. */
     export: { state: "not-due" | "pending" | "done" | "conflict"; path: string | null; commit: string | null; parent: string | null; detail: string | null };
   };
-  ledger: { limit: BudgetAmount; used: Amount; reserved: Amount; usageUnknown: boolean };
+  /** approximateRuns: spec 2026-11-03 soft-mode approximate usage -- runs whose usage is a booked floor; absent from older servers. */
+  ledger: { limit: BudgetAmount; used: Amount; reserved: Amount; usageUnknown: boolean; approximateRuns?: number };
   rounds: RoundBodyV1[];
   drafts: DraftViewV1[];
   /** The live document until accept, the frozen text after. */
@@ -406,6 +407,8 @@ export type RunViewV1 = {
   blockedReason?: string | null;
   /** Spec 2026-10-27 single-call unknown usage O3: ccloop's lower bound on a single call's usage, when kept. */
   usageLowerBound?: number;
+  /** Spec 2026-11-03 soft-mode approximate usage: the run's usage is the booked floor, not a reported figure (null: no floor). */
+  usageApproximate?: { floorTokens: number | null };
   /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
   stopReason?: string | null;
   outcome?: string | null;

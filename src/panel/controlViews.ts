@@ -232,6 +232,8 @@ const persistedRunSchema = z.object({
   // Tester round 3 spec §3: a loop run's floor, from collect. For display, like the single call's.
   usageLowerBound: singleCallUsageLowerBoundSchema.optional(),
   singleCallSettlement: singleCallSettlementSchema.optional(),
+  // Spec 2026-11-03 soft-mode approximate usage §2: the floor booked for a run whose usage was not reported (approximateUsage.ts).
+  usageApproximate: z.object({ floorTokens: safeInteger.nullable(), reason: z.string().min(1), at: safeInteger }).strict().optional(),
   drive: driveRecordSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
   transcripts: transcriptListingSchema.optional(),
@@ -1127,6 +1129,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
       ...((run.singleCallUsageLowerBound ?? run.usageLowerBound) === undefined ? {} : { usageLowerBound: (run.singleCallUsageLowerBound ?? run.usageLowerBound)!.tokens }),
+      ...(run.usageApproximate === undefined ? {} : { usageApproximate: { floorTokens: run.usageApproximate.floorTokens } }),
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
@@ -1275,7 +1278,9 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
     requirement: { requirementId: requirement.requirementId, repoId: requirement.repoId, slug: requirement.slug, contentLanguage: requirement.contentLanguage,
       createdOn: requirement.createdOn, idea: requirement.idea, consensus: requirement.consensus, acceptedDraftNo: requirement.acceptedDraftNo,
       document: requirement.document === null ? null : { sha256: requirement.document.sha256, frozenAt: requirement.document.frozenAt }, export: requirement.export },
-    ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown },
+    // Spec 2026-11-03 soft-mode approximate usage: how many of the group's runs count a booked floor, not a reported figure.
+    ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown,
+      approximateRuns: Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND json_extract(body,'$.usageApproximate') IS NOT NULL").get(groupId)!.n) },
     rounds, drafts: drafts.map(({ plan: _plan, ...rest }) => rest), document, spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),

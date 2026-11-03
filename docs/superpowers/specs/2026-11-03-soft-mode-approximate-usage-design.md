@@ -56,3 +56,12 @@ Each superseded spec gets an appended correction pointing here when this is impl
 ## 6. Out of scope
 
 Changing the finite-mode settlement; flow pools; how ccloop measures the floor.
+
+## 7. As built (session `43913afc`, 2026-11-03) -- single calls only
+
+- **Done: single calls** (requirement clarify and split, estimates; not flow calls). `src/control/approximateUsage.ts`; the hook is in `stepCSingleCall` where it would have blocked: when the group's `limit.tokens` is null it books the floor and runs the purpose's `completeInTransaction` in the same transaction. The floor is booked as ordinary usage (reserved → used, into `cumulative`, `remaining = max(grant - cumulative, 0)`), so every later check (`verifyStoppedSingleCall`, `assertCallUsageBooked`, the purpose's give-back) is unchanged.
+- **D6 (added): a complete answer whose usage was not reported is used**, not thrown away as a person's settlement does (that path never trusts the output). Usage unknown is an accounting gap, not a bad answer; discarding it would pay for the call twice.
+- **Marks:** run body `usageApproximate {floorTokens|null, reason, at}` (strict run schema, `controlViews.ts`); run view `usageApproximate {floorTokens}` with a badge in the runs table; requirement view `ledger.approximateRuns` with a note on the Requirements page. Activity: `usage-settled`, method `approximate-floor`, principal `orca-auto`. **Usage ledger rows stay `quality: unattributed`**: adding `approximate` needs a table rebuild (the column has a CHECK); not done.
+- **Not done: loop runs** (criteria 1, 2, 6 of §5 for tasks). Their settlement writes a `usageSettlement` marker validated against the command ledger's principal (`settlingPersonFor`, `hasValidUsageSettlement`), and ccloop's saved-result recovery receipt checks that principal (`client`/`personPrincipal`, ccloop `savedResultRecovery.ts`). An automatic principal is therefore a cross-repo contract change: design it with ccloop first. Until then an unlimited group's loop run with unknown usage still waits for `settle-unknown-usage` (`release-unmetered`, which books nothing).
+- **D4 (runs already blocked when this ships)** is not done either: a single call already blocked at C keeps the person's charge path.
+- Criteria: `tests/control/softModeApproximateUsage.test.ts` (5), `web/tests/requirementUsageApproximate.test.tsx` (2), `web/tests/estimateChargeRetry.test.tsx` (last describe). Mutations S1–S10 seen red.

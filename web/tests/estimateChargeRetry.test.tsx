@@ -85,3 +85,16 @@ describe("an estimate run blocked on unknown usage (§9 R1)", () => {
     expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "g", expectedRevision: 6, payload: { scope: "run", runId: "run-e" } });
   });
 });
+
+// Spec 2026-11-03 soft-mode approximate usage (session 43913afc): a run whose usage the tool did not report, in a group with
+// no token limit, is booked at its floor and goes on; the runs table says the figure is a floor, never a reported number.
+describe("a run whose usage is a booked floor", () => {
+  // mutation: drop the badge -> no usage-approximate -> red; swap the two texts -> wrong words -> red
+  it("marks the used figure as at least, and says when not even a floor was observed", () => {
+    const withFloor = run({ runId: "run-f", state: "settled-restartable", used: amount(1_234), usageApproximate: { floorTokens: 1_234 } });
+    const noFloor = run({ runId: "run-n", state: "settled-restartable", used: amount(0), usageApproximate: { floorTokens: null } });
+    const plain = run({ runId: "run-p", state: "settled-restartable" });
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([withFloor, noFloor, plain])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.getAllByTestId("usage-approximate").map((badge) => badge.textContent)).toEqual(["at least (usage not reported)", "unknown, at least 0 (usage not reported)"]);
+  });
+});

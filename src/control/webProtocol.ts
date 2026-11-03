@@ -1603,7 +1603,7 @@ export const requirementViewSchema = z.object({
     acceptedDraftNo: positiveSafeInteger.nullable(), document: z.object({ sha256: hashSchema, frozenAt: canonicalTimestampSchema }).strict().nullable(),
     export: requirementExportSchema,
   }).strict(),
-  ledger: z.object({ limit: budgetAmountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean() }).strict(),
+  ledger: z.object({ limit: budgetAmountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean(), approximateRuns: safeInteger.nonnegative().optional() }).strict(),
   rounds: z.array(roundBodySchema),
   drafts: z.array(draftBodySchema.omit({ plan: true })),
   document: z.string(),
@@ -1782,6 +1782,8 @@ export const runViewSchema = z
     blockedReason: nonemptyString.nullable(),
     // Spec 2026-10-27 single-call unknown usage §5 O3 (code review m1): ccloop's lower bound on a single call's usage, when kept.
     usageLowerBound: positiveSafeInteger.optional(),
+    // Spec 2026-11-03 soft-mode approximate usage §2: the run's usage is the booked floor (null: the tool gave none).
+    usageApproximate: z.object({ floorTokens: safeInteger.nullable() }).strict().optional(),
     diagnosis: z.object({ phase: z.enum(["estimate", "work", "handoff", "single-call"]), step: z.enum(["planning", "executing", "verifying"]).nullable(), cause: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden", "usage-unsettled", "unknown"]), attempt: safeInteger }).strict().optional(),
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
