@@ -102,5 +102,8 @@ export function settleSingleCallUsageInTransaction(
       handler.completeInTransaction!(store, readRun(store, run.runId) as SingleCallRun, handler.evaluate === undefined ? null : input.evaluation, commitTerminal, failure);
     }
   }
-  recordActivity(store, { groupId: run.groupId, taskId: null, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged: { work: charged, handoff: zero() }, principal, at: input.at, disposition } });
+  // Flow call settlement spec §4, review (session 43913afc) I1: a flow call a stop closed had its draw returned to the pool
+  // by interruptFlowCall before the charge; the pool does not count the charge (no take-back path, by design). Named here.
+  const poolNotCharged = flow && block.closed ? { poolNotCharged: { tokens: charged.tokens } } : {};
+  recordActivity(store, { groupId: run.groupId, taskId: null, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged: { work: charged, handoff: zero() }, principal, at: input.at, disposition, ...poolNotCharged } });
 }

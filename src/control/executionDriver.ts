@@ -1147,7 +1147,10 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
       const reason = failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`;
       // Spec 2026-11-03 soft-mode approximate usage §2: a group with no token limit books the floor and goes on; the
       // purpose then completes with the answer and failure it was given, as a call with known usage does.
-      if (handler.completeInTransaction !== undefined && approximateUsageApplies(store, run)) {
+      // Review (session 43913afc) m2: verifyStoppedSingleCall also says run-stop-unconfirmed for a ledger that does not
+      // match; only a run whose usage is in fact unknown takes the approximate path, the rest are blocked by name as before.
+      const current = readRun(store, runId);
+      if (handler.completeInTransaction !== undefined && (current.unknown.work || current.unknown.handoff) && approximateUsageApplies(store, run)) {
         const at = (deps.now?.() ?? new Date()).getTime();
         write(deps, () => {
           bookApproximateFloorInTransaction(store, runId, { floorTokens: record.usageLowerBound?.tokens ?? null, reason, at });

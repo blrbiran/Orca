@@ -1,7 +1,7 @@
 /**
  * Spec 2026-11-03 soft-mode approximate usage (human ruling, session 43913afc: 「同意。我们之前的很多裁定在新的语义下可能有一些
  * 过期了，一些需要、可以修改。」): a single call in a group with no token limit whose usage the tool did not report is not
- * blocked for a person to settle. Its observed floor (ccloop's `usageLowerBound`; none ⇒ 0) is booked as ordinary usage --
+ * blocked for a person to settle. Its observed floor (ccloop's `usageLowerBound`, a total; none ⇒ 0) is booked as ordinary usage --
  * moved from the group's `reserved` to `used`, into the run's `cumulative`, with `remaining = max(grant - cumulative, 0)`
  * kept -- the run is marked `usageApproximate`, and its purpose completes as a known-usage call does.
  * Flow calls are out: their pool is finite (flow call settlement spec D1 (a)). Code only (Rule 5).
@@ -28,9 +28,12 @@ export function bookApproximateFloorInTransaction(store: ControlStore, runId: st
   const run = readRun(store, runId) as RunRecord & { usageApproximate?: UsageApproximate; phase?: string; purpose?: string };
   if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
   const group = readGroup(store, run.groupId);
-  const tokens = input.floorTokens ?? 0;
-  if (!Number.isSafeInteger(tokens) || tokens < 0) throw new ControlError("recovery-blocked", `approximate-floor:${tokens}`);
+  const floor = input.floorTokens ?? 0;
+  if (!Number.isSafeInteger(floor) || floor < 0) throw new ControlError("recovery-blocked", `approximate-floor:${floor}`);
   const work = run.cumulative.work, grant = run.grant.work;
+  // Review (session 43913afc) m3: ccloop's floor is the call's observed total, so only what it adds to the usage already
+  // booked for the run is booked now (never counted twice).
+  const tokens = Math.max(floor - work.tokens, 0);
   work.tokens += tokens;
   const held = run.remaining.work.tokens ?? 0;
   run.remaining.work = { ...run.remaining.work, tokens: grant.tokens === null ? null : Math.max(grant.tokens - work.tokens, 0) } as never;
