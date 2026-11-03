@@ -14,7 +14,7 @@ const fenced = (prompt: string): { nonce: string; overview: Record<string, unkno
   const match = FENCED.exec(prompt)!;
   return { nonce: match[1]!, overview: JSON.parse(match[2]!) as Record<string, unknown> };
 };
-const promptOf = (envelope: { work: { kind: string } }): string => (envelope.work as { prompt: string }).prompt;
+const promptOf = (envelope: { work: { kind: string } }): string => (envelope.work as unknown as { prompt: string }).prompt;
 
 describe("clarify sees the overview without its exported symbols; split still sees them", () => {
   // mutation: give clarify the whole overview -> `structure` in its fence -> red
