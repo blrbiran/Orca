@@ -19,4 +19,4 @@ resume a run (--run) or a group (--group) blocked for a reason other than a term
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `--run <run>`: a blocked run
 - `--group <group>`: a blocked group
-- `--acknowledge <acknowledge>`: charge-remaining-grant: settle a single call's unknown usage by charging its remaining grant, then retry (--run only; needs a person token)
+- `--acknowledge <acknowledge>`: charge-remaining-grant: settle a single call's unknown usage (a requirement, estimate or flow call) by charging its remaining grant, then retry (--run only; needs a person token)
