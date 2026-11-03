@@ -63,7 +63,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.0000000000000000000 会话 `663fb68e`（2026-11-01）：需求页筛选、标签两个残余、25 万 input 查到来源 —— **先读这一节**
+### 3.00000000000000000000 会话 `43913afc`（2026-11-03）：小修、clarify 不带 structure、flow 结算、soft 模式下单次调用按下界记账 —— **先读这一节**
+
+> 人裁（原话）：663fb68e 的 7 条「同意」；迁移事故「按你的建议走」；#111「同意，等实际测试时再看是否有问题」；标签即存「同意」；overview「先 (a)，前后质量对比过了再 (b)」；flow D1 (a)；soft 模式「同意。我们之前的很多裁定在新的语义下可能有一些过期了，一些需要、可以修改。」；对比用「同意，使用 opus-5-5」；中途「尽量将这些要做的task都完整做完…这次批准改写所有必要的判据。这一轮允许必要的付费真跑…先按你的建议执行。执行完在最后阶段报给我审核」。台账 `.superpowers/sdd/2026-11-03-session-43913afc/progress.md`（变异、门、对比原始输出 `overview-a-comparison.txt`）。
+
+- **已 `--ff-only` 合入 main、已装（7777 `index.js` 与 build 同为 1,161,352 B；schema 不变）**：
+  - **迁移**：先写 `.pending` 副本 → 写表 → 改名成标记；写表失败不留标记，下次重试。`tests/service/build.test.ts`、`panelSocketE2e` 改用自己的表路径（前者曾以真 HOME 读人的表）。前台 `orca panel` 仍不迁移（人裁）。
+  - **标签**：未答复时显示「正在保存标签…」、按钮禁用。
+  - **overview (a)**：clarify 发的 overview 去掉 `structure`（单仓与多目录各成员）；split 照旧。记录、`run.overview.hash`、nonce 都是发出去的那份。clarify golden 重生成（只少 `structure` 键）。**付费对比（opus-5-5，Orca 仓三个想法）：prompt token −44%，单次 −43%，问题质量看不出损失**；工具报 $5.4493378。(b) 没做。
+  - **flow 结算**：flow 调用用量未知时，owner 在 flow 运行页「按 grant 记账并重试」（`recovery-retry` + `charge-remaining-grant`）；执行拿到失败、不拿输出，池子保留整笔抽取。设计 §9 As built：没给 `syncWebBudget` 加 flow 分支（会让并行 flow 调用互相拒绝完成）；被 stop 关闭后再结算的那一路池子不计费，记在 activity（`poolNotCharged`），**没有判据**（找不到让 stop 关掉 flow 父组调用的路径）。
+  - **soft 模式（单次调用）**：组 `limit.tokens` 为 null 时，clarify／split／估算的用量未知**不再停住**：按 ccloop 下界（总数；没有记 0）记账、标 `usageApproximate`，完整答案照用（spec `2026-11-03-soft-mode-approximate-usage-design.md` §7；D1–D6 是控制器定的，待人审）。有限组、flow 调用照旧停。runs 表与需求页显示「至少」。2026-10-27 spec 追加了具名更正。**loop run 没做**（见 §4.2）。
+- **设计（未实施）**：额度感知的跨安装切换 `docs/superpowers/specs/2026-11-03-quota-failover-design.md`（参考 magpie／cc-switch／LiteLLM，D1–D6 待人）。
+- **门**：最后一次 `npm test`（含全部提交）778 文件（根 605、web 173），5456＋1636 过，35 跳过（按文件：correctionExport 1、agentUpdatePaired 3、ccloopDefaultE2E 3、ccloopProtocol.integration 3、driverSkillsReal 1、savedResultRecovery.paired 20、savedResultRetryAuthorization.paired 3、realSmoke 1），typecheck 无错，RC 0。前一遍 118 红是 wt2 没 build `web/dist`（环境）＋ CLI 文档未重生成（已修）。变异共 31 条（M1–M20、S1–S10，M13 为绿 ⇒ 守卫冗余已删），都在 clone 里，`cmp` 证还原。独立审阅：1 Important（上面的池子缺口，按设计记名）、2 Minor（已修：只对真未知用量走近似路；下界按总数只记增量）。
+- **核实**：#112 的根因不成立（`f4de340` 是 `ed5e4aa` 的祖先，转录早在）；本机真实库只有 10-17 的 6 个 run（早于转录），所以面板上没东西可看；本机 codex 目录 8 个模型都报 100 万窗口，#105 在本机不适用。
+
+### 3.0000000000000000000 会话 `663fb68e`（2026-11-01）：需求页筛选、标签两个残余、25 万 input 查到来源
 
 > 人裁（原话）：「Q1 a」「Q2 a」「Q3 a」；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑。」「如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」台账 `.superpowers/sdd/2026-11-01-session-663fb68e/progress.md`（变异、门、替人定的 7 条）。
 
@@ -414,7 +428,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。`correctionCoarseDebug` 挂住与测试者反馈第三轮**已做**（会话 `4ed8eb65`）；需求页筛选、标签残余、25 万来源、flow 结算设计**已做**（会话 `663fb68e`）。下一件候选：人定 overview 怎么减后实施，并做一次前后质量对比（findings §4，付费先核额度）；人定 flow 的 D1 后实施结算（设计 §3–§7）；测试者 #22 按需排期；model review findings／dismiss 的真浏览器走查（需两个已落地组）。
+8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。`correctionCoarseDebug` 挂住与测试者反馈第三轮**已做**（会话 `4ed8eb65`）；需求页筛选、标签残余、25 万来源、flow 结算设计**已做**（会话 `663fb68e`）；overview (a)＋对比、flow 结算、soft 模式单次调用**已做**（会话 `43913afc`）。下一件候选（按序）：① soft 模式的 **loop run** 一半——先和 ccloop 一起设计「代码自动」的结算 principal（Orca 的 `usageSettlement` 标记按命令台账 principal 校验，ccloop 已存结果恢复收据也按它校验），再实施 spec §5 判据 1、2、6 与 D4（已停住的调用按新规则放行）；② 人定 failover D1–D6 后：ccloop 先加 `quota-exhausted`（先在 Orca 登记 cause），Orca 加 rests 表（schema 动前先备份）与派活时改派；③ overview (b)（降上限）要再做一次对比；④ codex 澄清：等人给机器和报错，额度 2026-11-04 16:12 后付费真跑一次；测试者 #22 按需。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -593,7 +607,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `663fb68e` 待人**：
+- **会话 `43913afc` 待人**（全部可以下一轮再回）：
+  1. 审：soft 模式 D1–D6（spec `2026-11-03-soft-mode-approximate-usage-design.md` §3、§7：无下界记 0 并继续、需求调用跟组走不按 grant 收、花费上限照算、已停住的不自动放行（未做）、不做事后替换、完整答案照用）；flow 结算 As built §9（池子缺口只记名、没有判据）；#117 不改颜色（红是对的，soft 模式消掉成因）。
+  2. 定：failover D1–D6（spec `2026-11-03-quota-failover-design.md` §6，建议：默认开、人手选的不换、无重置时间 15 分钟翻倍封顶 8 h、按安装全局、flow 也换、顺序放在 agent 偏好里）。
+  3. 给：codex 澄清失败的机器和报错原文（本机真实库里没有 codex 尝试）。
+  4. 看（可选）：标签「正在保存」、flow 运行页的结算按钮、需求页「至少」提示，都只在 jsdom 里测过。
+- ~~会话 `663fb68e` 待人~~ **人已回复**（会话 `43913afc` 开头：7 条同意、迁移按建议、overview (a)、flow D1 (a)、round 3 三条同意）；测试者数据（25 万差的那部分）与 ccmem §6.2 会话号的原文如下，前者仍可选，后者已改：
   1. 审：替人定的 7 条在台账；round 3 的重点也还没回（#111 换成观测列表且只用 fake 测过、标签改完即存、迁移事故与「只对服务生效」，人已看到清单，未表态）。
   2. 定：overview 怎么减（findings §4，建议先让 clarify 不带 `structure`）；flow 是否也默认 soft（flow 设计 §6 D1，建议保持有限）。
   3. 看真面板（可选）：需求筛选、标签 chip、转录自动打开、看板空状态，都没在真数据上看过。
