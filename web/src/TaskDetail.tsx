@@ -197,7 +197,9 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const [word, setWord] = useState("");
   const suggestions = useId();
   // One change at a time: a second sent before the first's answer would carry the same base version and be refused.
+  // The ref guards synchronously; the state says so on screen (session 43913afc) instead of ignoring a change silently.
   const sending = useRef(false);
+  const [saving, setSaving] = useState(false);
   const change = (next: string[] | null, accepted?: () => void): void => {
     if (sending.current) return;
     const answer = onCommand({
@@ -205,8 +207,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       payload: { labels: next, baseLabelsVersion: current },
     });
     if (answer === undefined) { accepted?.(); return; }
-    sending.current = true;
-    void answer.then((revision) => { if (revision !== null) accepted?.(); }).finally(() => { sending.current = false; });
+    sending.current = true; setSaving(true);
+    void answer.then((revision) => { if (revision !== null) accepted?.(); }).finally(() => { sending.current = false; setSaving(false); });
   };
   const add = (): void => {
     const text = word.trim();
@@ -232,13 +234,13 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         <RunDecisions key={run.runId} groupId={groupId} revision={view.summary.commandRevision} run={run} projectKey={props.decisions?.projectKey ?? null}
           onCommand={onCommand} onCorrect={props.onCorrectDecision && ((projectKey, decisionId) => props.onCorrectDecision?.(projectKey, decisionId, { groupId, taskId: item.taskId, runId: run.runId }))} archived={archived} />
       ))}
-      <div className={labelEditor}>
+      <div className={labelEditor} aria-busy={saving}>
         <ul className={labelRow} aria-label={t("control.task.labelsOf", { taskId: item.taskId })}>
           {labels.map((label) => (
             <li key={label}>
               <span className={`${label.startsWith(CUSTOM_LABEL_PREFIX) ? labelCustomClass : labelSystemClass} ${labelWithRemove}`}>
                 {label}
-                {!archived && <button type="button" className={labelRemove} aria-label={t("control.task.remove", { label })} onClick={() => change(labels.filter((other) => other !== label))}>×</button>}
+                {!archived && <button type="button" className={labelRemove} aria-label={t("control.task.remove", { label })} disabled={saving} onClick={() => change(labels.filter((other) => other !== label))}>×</button>}
               </span>
             </li>
           ))}
@@ -250,7 +252,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
               // Enter that ends an IME composition picks the characters; it does not add the label yet.
               onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); add(); } }} />
             <datalist id={suggestions}>{WEB_SYSTEM_LABELS.map((system) => <option key={system} value={system} />)}</datalist>
-            {(item.labelsProvenance ?? "plan") !== "plan" && <button type="button" className={labelRestore} onClick={() => change(null)}>{t("control.task.restore")}</button>}
+            {(item.labelsProvenance ?? "plan") !== "plan" && <button type="button" className={labelRestore} disabled={saving} onClick={() => change(null)}>{t("control.task.restore")}</button>}
+            {saving && <span role="status">{t("control.task.savingLabels")}</span>}
           </>
         )}
       </div>

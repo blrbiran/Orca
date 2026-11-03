@@ -572,6 +572,7 @@ export const en = {
       labelsOf: "Labels of {{taskId}}",
       remove: "Remove {{label}}",
       addLabel: "Add label",
+      savingLabels: "Saving labels…",
       restore: "Restore plan labels",
       progress: "progress: {{progress}}",
       lastTransition: " · last transition {{at}}",

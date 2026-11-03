@@ -449,6 +449,7 @@ export const zh: Translation<typeof en> = {
       labelsOf: "{{taskId}} 的标签",
       remove: "移除 {{label}}",
       addLabel: "添加标签",
+      savingLabels: "正在保存标签…",
       restore: "恢复计划里的标签",
       progress: "进度：{{progress}}",
       lastTransition: " · 上次变化 {{at}}",

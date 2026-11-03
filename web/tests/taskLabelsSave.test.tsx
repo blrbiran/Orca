@@ -159,4 +159,31 @@ describe("a label change goes straight to the server (tester #114)", () => {
     await waitFor(() => expect(posted).toHaveLength(2));
     expect(posted[1]!.payload).toEqual({ labels: [], baseLabelsVersion: 1 });
   }, 15_000);
+
+  // Session 663fb68e decision 5 (human: 「同意」, session 43913afc asked for the busy state): a change made while the first is
+  // unanswered was ignored with nothing on screen to say so. The editor now says it is saving and its buttons cannot be pressed.
+  // mutation: never set the saving state -> no status, buttons enabled -> red; never clear it -> still saving after the answer -> red
+  it("says it is saving and holds its buttons while a change is unanswered, and lets go once the answer is in", async () => {
+    groupView = groupViewAt(4, ["doc", "ui"], 0);
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const response = await original(input, init);
+      if (String(input) === LABELS && init?.method === "POST") await held;
+      return response;
+    }) as typeof fetch;
+    answers = [success];
+    render(<App />);
+    await openTaskA();
+    expect((task().getByRole("button", { name: "Remove ui" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(task().getByRole("button", { name: "Remove doc" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(await task().findByText("Saving labels…")).toBeTruthy();
+    expect((task().getByRole("button", { name: "Remove ui" }) as HTMLButtonElement).disabled).toBe(true);
+    groupView = groupViewAt(6, ["ui"], 1); summary = summaryAt(6);
+    answer();
+    await waitFor(() => expect(task().queryByText("Saving labels…")).toBeNull());
+    expect((task().getByRole("button", { name: "Remove ui" }) as HTMLButtonElement).disabled).toBe(false);
+  }, 15_000);
 });
