@@ -50,6 +50,11 @@ export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId:
 export const SETTLEABLE_USAGE_UNKNOWN_REASONS: Readonly<Partial<Record<SingleCallPurpose, string>>> = Object.freeze({
   estimate: "estimate-usage-unknown", clarify: "requirement-usage-unknown", split: "requirement-usage-unknown",
 });
+/**
+ * Flow call settlement spec 2026-11-01 (human ruling, session 43913afc): a flow call's block reason, whatever its purpose
+ * (FLOW_CALL_HANDLER.usageUnknownReason; a flow `clarify` call names it too, its run carrying `flowCall`).
+ */
+export const FLOW_CALL_USAGE_UNKNOWN = "flow-call-usage-unknown";
 export const SINGLE_CALL_SETTLE_ACKNOWLEDGE = "charge-remaining-grant";
 
 /**
@@ -60,15 +65,19 @@ export const SINGLE_CALL_SETTLE_ACKNOWLEDGE = "charge-remaining-grant";
  * Code review S1 (2026-10-28): `closed` -- a stop reached the blocked call first. terminaliseRun closed it (a `settled-*`
  * state, its block reason left on the drive record), interrupted its round, draft or estimate and released its grant, but
  * its usage stays unknown, so the group's flag stays set; it is settled by the same acknowledged retry, without `complete`.
+ * ERRATUM (session 43913afc, flow call settlement spec 2026-11-01, human ruling 「同意顺序」): "never a flow call" above no
+ * longer holds. A flow call (its run names `flowCall`, whatever its purpose) is settleable when its reason is
+ * `flow-call-usage-unknown[:<failure>]`; a bare reason's failure is `flow-call-usage-unknown`, the name its kind is told.
  */
 export function settleableSingleCallBlock(run: { phase?: unknown; purpose?: unknown; state?: unknown; flowCall?: unknown; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null } }): { purpose: SingleCallPurpose; failure: string; closed: boolean } | null {
   const purpose = singleCallPurposeOf(run);
   if (purpose === null || run.drive?.blockedAt !== "C") return null;
   const closed = run.state !== "blocked";
   if (closed && !(typeof run.state === "string" && run.state.startsWith("settled-") && (run.unknown?.work === true || run.unknown?.handoff === true))) return null;
-  const prefix = SETTLEABLE_USAGE_UNKNOWN_REASONS[purpose];
-  if (prefix === undefined || run.flowCall !== undefined) return null;
+  const prefix = run.flowCall !== undefined ? FLOW_CALL_USAGE_UNKNOWN : SETTLEABLE_USAGE_UNKNOWN_REASONS[purpose];
+  if (prefix === undefined) return null;
   const reason = run.drive.blockedReason ?? "";
   if (reason !== prefix && !reason.startsWith(`${prefix}:`)) return null;
-  return { purpose, failure: reason === prefix ? "usage-unknown" : reason.slice(prefix.length + 1), closed };
+  const bare = run.flowCall !== undefined ? FLOW_CALL_USAGE_UNKNOWN : "usage-unknown";
+  return { purpose, failure: reason === prefix ? bare : reason.slice(prefix.length + 1), closed };
 }

@@ -18,7 +18,7 @@ import { profileSnapshot, webFixture } from "./web.js";
 // into its estimate. The synthetic ccloop below answers only single calls (a loop envelope is a test failure).
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 type Outcome = "complete" | "failed" | "aborted";
-interface SingleCallOptions {
+export interface SingleCallOptions {
   outcome?: Outcome; tokens?: number | null; output?: (planHash: string) => unknown;
   /** "prompt": the record names another prompt; "record": the record is not a ccloop single-call record at all. */
   tamper?: "prompt" | "record";
@@ -40,7 +40,7 @@ export const estimateOutput = (planHash: string) => ({ schema: "budget-estimate-
   tasks: [{ taskId: "a", complexity: "M", confidence: "high", work: AMOUNT, handoff: { tokens: 0, activeMs: 100, attempts: 0, sessions: 0 }, rationale: "small", assumptions: ["clean tree"] }],
   goalReviewReserve: AMOUNT, groupRationale: "small" });
 
-function singleCallPort(options: SingleCallOptions, planHash: () => string) {
+export function singleCallPort(options: SingleCallOptions, planHash: () => string) {
   const evidence = new Map<string, Buffer>();
   const calls = { accept: [] as StartEnvelope[], collect: 0, handoff: 0 };
   let requested = false, hookRan = false;

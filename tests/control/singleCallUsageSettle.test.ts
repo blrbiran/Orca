@@ -318,6 +318,9 @@ describe("a call whose round moved on is settled through the interrupt path (§9
   });
 });
 
+// ERRATUM (session 43913afc, flow call settlement spec 2026-11-01): flow calls are now settleable by the flow reason
+// (tests/flow/flowCallSettlement.test.ts). These criteria still hold as written -- a flow call carrying the requirement
+// reason, and a flow purpose without `flowCall`, are not settleable -- but the title's "out of scope" no longer does.
 describe("which runs are settleable (§9 R1: flow calls are out of scope)", () => {
   const blocked = (fields: Record<string, unknown>) => ({ phase: "single-call", state: "blocked", drive: { blockedAt: "C", blockedReason: "requirement-usage-unknown:omp-stalled" }, ...fields });
   it("names the same reason as each purpose's driver step writes", () => {

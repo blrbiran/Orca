@@ -85,10 +85,9 @@ const CLARIFY_ANY: SingleCallHandler = {
   classify: CLARIFY_HANDLER.classify,
   complete: (deps, run, rawOutput, commitTerminal, failure) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).complete(deps, run, rawOutput, commitTerminal, failure),
   // Spec 2026-10-27 §9 R1: a flow clarify call is out of the settlement's scope; singleCallSettlement.ts never reaches it.
-  completeInTransaction: (store, run, rawOutput, commitTerminal, failure) => {
-    if (isFlowCallRun(run)) throw new ControlError("run-usage-not-settleable", "flow-call");
-    CLARIFY_HANDLER.completeInTransaction!(store, run, rawOutput, commitTerminal, failure);
-  },
+  // ERRATUM (session 43913afc, flow call settlement spec 2026-11-01): a flow clarify call is now settled by the flow core.
+  completeInTransaction: (store, run, rawOutput, commitTerminal, failure) =>
+    (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).completeInTransaction!(store, run, rawOutput, commitTerminal, failure),
   usageUnknownReason: CLARIFY_HANDLER.usageUnknownReason,
 };
 const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpose, ...FLOW_CALL_HANDLER });

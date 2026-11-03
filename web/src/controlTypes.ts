@@ -1172,7 +1172,9 @@ export type FlowExecutionViewV1 = {
  * means the tool gave no number (never 0); a sum over a mix keeps the known part with `unknownReason` "partial: …". No
  * tool reports money. A `legacy:<step>#<seq>` run id names no run record.
  */
-export type FlowSpendV1 = { tokens: number | null; unknownReason: string | null; usd: null; usdReason: string; runs: Array<{ runId: string; purpose: string; tokens: number | null }> };
+/** Flow call settlement spec 2026-11-01 §5: a call blocked on unknown usage offers its charge (src/flow/spend.ts SpendCharge). */
+export type FlowSpendChargeV1 = { groupId: string; revision: number; tokens: number; usageLowerBound: number | null };
+export type FlowSpendV1 = { tokens: number | null; unknownReason: string | null; usd: null; usdReason: string; runs: Array<{ runId: string; purpose: string; tokens: number | null; charge?: FlowSpendChargeV1 }> };
 /** Gaps spec §6 (marks.ts): a step's standing skip or defer, with a defer's effect choices. */
 export type FlowMarkV1 = { kind: "skip" | "defer"; messageSeq: number; effects: Record<string, "proceed" | "wait"> };
 /** Gaps spec §5.2-§5.5 (rerun.ts): an unsure step's question, and a step accepted as unchanged. */

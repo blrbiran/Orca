@@ -11,17 +11,25 @@
  *   never spend.
  */
 import { isTerminalRunState } from "../control/budget.js";
+import { settleableSingleCallBlock } from "../control/singleCall.js";
 import type { ControlStore } from "../control/store.js";
 import { childRuns } from "./childPort.js";
 import type { ExecutionRow, PlanRow, IntakeRow } from "./store.js";
 
 export const USD_REASON = "the tool reports no money amount" as const;
-export interface SpendRun { runId: string; purpose: string; tokens: number | null }
+/**
+ * Flow call settlement spec 2026-11-01 §5 (session 43913afc): a call blocked on unknown usage offers its settlement --
+ * the remaining grant the charge books, ccloop's observed floor, and the parent group and revision the command names.
+ * Never spend: it is what a person may choose to charge.
+ */
+export interface SpendCharge { groupId: string; revision: number; tokens: number; usageLowerBound: number | null }
+export interface SpendRun { runId: string; purpose: string; tokens: number | null; charge?: SpendCharge }
 export interface Spend { tokens: number | null; unknownReason: string | null; usd: null; usdReason: typeof USD_REASON; runs: SpendRun[] }
 /** What a call request leaves behind (calls.ts, at claim): the driver run that answers it. */
 export interface CallRef { runId: string; purpose: string }
 
-type RunUsage = { state?: unknown; cumulative?: { work?: { tokens?: unknown } }; unknown?: { work?: unknown } };
+type RunUsage = { state?: unknown; cumulative?: { work?: { tokens?: unknown } }; unknown?: { work?: unknown };
+  groupId?: unknown; remaining?: { work?: { tokens?: unknown } }; singleCallUsageLowerBound?: { tokens?: unknown } };
 /** The kinds whose executions finish through a single call (draft, review, ask, clarify). */
 const CALL_KINDS = new Set(["draft", "review", "ask", "clarify"]);
 export const LEGACY_CALLS_REASON = "calls before run ids were kept";
@@ -42,9 +50,18 @@ function usageOf(body: RunUsage | null): { tokens: number | null; reason: string
   return { tokens, reason: null };
 }
 
-function runSpend(runId: string, purpose: string, body: RunUsage | null): Spend {
+function runSpend(runId: string, purpose: string, body: RunUsage | null, charge: SpendCharge | null = null): Spend {
   const usage = usageOf(body);
-  return spend(usage.tokens, usage.reason, [{ runId, purpose, tokens: usage.tokens }]);
+  return spend(usage.tokens, usage.reason, [{ runId, purpose, tokens: usage.tokens, ...(charge === null ? {} : { charge }) }]);
+}
+
+/** §5: the settlement a blocked call offers, or null (a call not blocked on unknown usage, or no run record). */
+function chargeOf(store: ControlStore, body: RunUsage | null): SpendCharge | null {
+  if (body === null || settleableSingleCallBlock(body as never) === null) return null;
+  const groupId = String(body.groupId), row = store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId);
+  const tokens = body.remaining?.work?.tokens, floor = body.singleCallUsageLowerBound?.tokens;
+  if (row === undefined || typeof tokens !== "number") return null;
+  return { groupId, revision: Number(row.revision), tokens, usageLowerBound: typeof floor === "number" ? floor : null };
 }
 
 /** The known runs added; any unknown run makes the sum partial; all unknown is null with their reason. */
@@ -67,7 +84,7 @@ function runBody(store: ControlStore, runId: string): RunUsage | null {
 
 /** The spend of a list of call refs (an execution's, a plan's or an intake's single calls). */
 export function callsSpend(store: ControlStore, calls: readonly CallRef[]): Spend {
-  return sumSpend(calls.map((c) => runSpend(c.runId, c.purpose, runBody(store, c.runId))));
+  return sumSpend(calls.map((c) => { const body = runBody(store, c.runId); return runSpend(c.runId, c.purpose, body, chargeOf(store, body)); }));
 }
 
 /** A child group's spend: the sum over its driver runs (as childPort.ts sums them for the pool). */

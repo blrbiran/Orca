@@ -987,3 +987,36 @@ describe("a pause, a resume and a note (§10.5)", () => {
     expect(line.textContent).toBe("Only the panel owner can do this here.");
   });
 });
+
+// Flow call settlement spec 2026-11-01 §5 (human ruling, session 43913afc: 「同意顺序」): a call blocked on unknown usage was
+// a dead end on this page -- only stopping the run moved it. Its row now offers the charge, as a requirement call's does.
+describe("a flow call blocked on unknown usage (flow call settlement spec §5)", () => {
+  const CHARGE = { groupId: "flow-g", revision: 7, tokens: 1_000_000, usageLowerBound: 1_234 };
+  const blockedView = (): FlowRunViewV1 => runView({ steps: [step("voice", "draft", [exec(1, { state: "running", output: null,
+    spend: { ...spent(null, "the tool reported no usage"), runs: [{ runId: "run-blocked", purpose: "flow-draft", tokens: null, charge: CHARGE }] } })])] });
+
+  // mutation: drop the ChargeRetry from the call row -> no charge button -> red
+  // mutation: send the parent's revision as 0 -> expectedRevision 0 -> red
+  it("offers the owner the charge with its amount and floor, and sends recovery-retry on the run with the acknowledgement", async () => {
+    await mount(owner, blockedView());
+    const row = within(within(stepBox("voice")).getByTestId("flow-execution-1"));
+    expect(row.getByText("At least 1,234 tokens were observed before the call stopped.", { exact: false })).toBeTruthy();
+    fireEvent.click(row.getByRole("button", { name: "Charge the call's grant (1,000,000 tokens) and retry" }));
+    fireEvent.click(row.getByRole("button", { name: "Charge 1,000,000 tokens and retry" }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(lastPost().url).toBe("/api/control/recovery/retry");
+    expect(lastPost().body).toMatchObject({ expectedRevision: 7, payload: { scope: "run", runId: "run-blocked", acknowledge: "charge-remaining-grant" } });
+  });
+
+  it("tells a member who may charge it instead of offering a control that would be refused", async () => {
+    await mount(member, blockedView());
+    const row = within(within(stepBox("voice")).getByTestId("flow-execution-1"));
+    expect(row.getByRole("note").textContent).toBe("Only an owner can charge the call's grant and retry it.");
+    expect(row.queryByRole("button", { name: /Charge/ })).toBeNull();
+  });
+
+  it("offers nothing for a call that is not blocked on unknown usage", async () => {
+    await mount(owner, runView({ steps: [step("voice", "draft", [exec(1, { spend: { ...spent(1200), runs: [{ runId: "run-ok", purpose: "flow-draft", tokens: 1200 }] } })])] }));
+    expect(within(stepBox("voice")).queryByRole("button", { name: /Charge/ })).toBeNull();
+  });
+});

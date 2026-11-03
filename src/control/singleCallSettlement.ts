@@ -13,6 +13,7 @@ import { chargeRunRemainder } from "./settleUnknownUsage.js";
 import { settleableSingleCallBlock } from "./singleCall.js";
 import { singleCallHandler, type SingleCallRunRow } from "./singleCallPurposes.js";
 import { interruptEstimate, readStopIntent } from "./stopIntent.js";
+import { isFlowCallRun } from "../flow/calls.js";
 import { singleCallSettlementSchema, type SingleCallSettlement } from "./usageSettlement.js";
 import type { ControlStore } from "./store.js";
 
@@ -23,6 +24,9 @@ import type { ControlStore } from "./store.js";
  * zero, D1), the group's usage-unknown flag is recomputed (R3), and the call is completed as failed by its purpose's own
  * core -- so its purpose's retry rule applies -- or interrupted when its round, draft or estimate moved on (R2).
  * Requirement clarify/split and estimate only; flow calls are out of scope (R1).
+ * ERRATUM (session 43913afc, flow call settlement spec 2026-11-01 §3, human ruling 「同意顺序」): flow calls are now in scope.
+ * Their target is the execution (or plan, or feedback intake) that asked: the flow handler's own core drops a result the
+ * target no longer waits on, so a flow call is never "moved" here; one a stop closed is charged only, with no wake.
  */
 
 type SingleCallRun = RunRecord & SingleCallRunRow & { purpose?: string; drive?: DriveRecord; singleCallUsageLowerBound?: { tokens: number }; singleCallSettlement?: SingleCallSettlement };
@@ -58,10 +62,11 @@ export function settleSingleCallUsageInTransaction(
   const { failure } = block, handler = singleCallHandler(block.purpose);
   // Re-review m-b: a requirement call closed by a stop is settled only while its group still clarifies (the summary offers
   // it only then, and the wake it queues is a clarifying group's).
-  if (block.closed && handler.purpose !== "estimate" && (group as { status?: string }).status !== "clarifying") throw new ControlError("run-usage-not-settleable", "group-not-clarifying");
+  const flow = isFlowCallRun(run);
+  if (block.closed && !flow && handler.purpose !== "estimate" && (group as { status?: string }).status !== "clarifying") throw new ControlError("run-usage-not-settleable", "group-not-clarifying");
   if (!block.closed && handler.evaluate !== undefined && input.evaluation === undefined) throw new ControlError("run-usage-not-settleable", "evaluation-missing");
   const estimate = handler.purpose === "estimate";
-  const moved = !block.closed && (estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run));
+  const moved = !block.closed && !flow && (estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run));
   // A single call's grant is work-only (verifyStoppedSingleCall), so its whole remainder is the work bucket's.
   const charged = amountSchema.parse(run.remaining.work);
   // A stop already gave the grant back (interruptRequirementCall / releaseCommitment): the charge books `used` only.
@@ -81,7 +86,8 @@ export function settleSingleCallUsageInTransaction(
   if (block.closed) {
     // Its round or draft was interrupted by the stop; a round or draft re-queued since and parked on the flag is woken
     // (a stopped group keeps the wake pending until the stop is lifted, claimOrWait "held").
-    if (!estimate) queueRequirementCall(store, run.groupId, `usage-settled-${run.runId}`);
+    // A flow call a stop closed has told its execution already (interruptFlowCall); a stopped flow run takes no wake.
+    if (!estimate && !flow) queueRequirementCall(store, run.groupId, `usage-settled-${run.runId}`);
   } else {
     // Back to `accepted`, the state stepCSingleCall left the run in before it blocked it; then its Ce, as the driver runs it.
     resumeBlockedDriverRun(store, run.runId);

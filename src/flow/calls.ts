@@ -190,7 +190,12 @@ function flowCallOf(run: SingleCallRunRow): FlowCallIdentity {
   return identity;
 }
 
-/** The unused grant back to the parent's ledger and to the pool, once the call's usage is known. */
+/**
+ * The unused grant back to the parent's ledger and to the pool, once the call's usage is known.
+ * Flow call settlement spec 2026-11-01 §4 (session 43913afc): a call the person settled returns nothing to the pool, and
+ * needs no rule here: the settlement's charge (chargeRunRemainder) adds the whole remainder to `cumulative`, so `spent`
+ * is the draw (tests/flow/flowCallSettlement.test.ts pins pool_drawn; a separate guard was redundant, mutation M13).
+ */
 function giveBack(store: ControlStore, run: StoppedSingleCallRun, identity: FlowCallIdentity): void {
   const group = readGroup(store, run.groupId);
   // Usage booking already took what the call spent out of `reserved` (usage.ts); what is left of the grant goes too.
@@ -231,22 +236,23 @@ export const FLOW_CALL_HANDLER: Omit<SingleCallHandler, "purpose"> = {
   classify: () => null,
   complete(deps, runRow, rawOutput, commitTerminal, failure = null) {
     const release = deps.admissionGate?.enter();
-    try {
-      deps.store.transaction(() => {
-        const receiptId = `single-call-result:${runRow.groupId}:${runRow.runId}`;
-        if (deps.store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='single-call-result'").get(receiptId)) return;
-        commitTerminal();
-        const row = deps.store.db.prepare("SELECT id,active,body FROM runs WHERE id=?").get(runRow.runId);
-        if (!row) throw new ControlError("run-not-found");
-        const identity = flowCallOf(runRow);
-        const grant = (JSON.parse(String(row.body)) as { grant: { work: StoppedSingleCallRun["grant"]["work"] } }).grant.work;
-        const run = verifyStoppedSingleCall(deps.store, row, { groupId: runRow.groupId, workItemId: runRow.workItemId, workGrant: grant }, "flow-call-ledger");
-        assertCallUsageBooked(readGroup(deps.store, run.groupId) as unknown as Parameters<typeof assertCallUsageBooked>[0], run, "flow-call-usage-unknown");
-        giveBack(deps.store, run, identity);
-        storeResult(deps.store, identity, { runId: run.runId, rawOutput, failure });
-        closeSingleCall(deps.store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
-      });
-    } finally { release?.(); }
+    try { deps.store.transaction(() => FLOW_CALL_HANDLER.completeInTransaction!(deps.store, runRow, rawOutput, commitTerminal, failure)); }
+    finally { release?.(); }
+  },
+  // Flow call settlement spec 2026-11-01 §3 step 4 (session 43913afc): complete's core, shared with a person's settlement.
+  completeInTransaction(store, runRow, rawOutput, commitTerminal, failure = null) {
+    const receiptId = `single-call-result:${runRow.groupId}:${runRow.runId}`;
+    if (store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='single-call-result'").get(receiptId)) return;
+    commitTerminal();
+    const row = store.db.prepare("SELECT id,active,body FROM runs WHERE id=?").get(runRow.runId);
+    if (!row) throw new ControlError("run-not-found");
+    const identity = flowCallOf(runRow);
+    const grant = (JSON.parse(String(row.body)) as { grant: { work: StoppedSingleCallRun["grant"]["work"] } }).grant.work;
+    const run = verifyStoppedSingleCall(store, row, { groupId: runRow.groupId, workItemId: runRow.workItemId, workGrant: grant }, "flow-call-ledger");
+    assertCallUsageBooked(readGroup(store, run.groupId) as unknown as Parameters<typeof assertCallUsageBooked>[0], run, "flow-call-usage-unknown");
+    giveBack(store, run, identity);
+    storeResult(store, identity, { runId: run.runId, rawOutput, failure });
+    closeSingleCall(store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
   },
   usageUnknownReason: "flow-call-usage-unknown",
 };

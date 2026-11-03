@@ -13,15 +13,16 @@
  *
  * The human-only verbs (rerun, answer, effect, pool; §14.2) are offered only to a person who may send them.
  */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { RunTranscript } from "./AgentTranscript.js";
+import { ChargeRetry } from "./ChargeRetry.js";
 import { FolderImagePicker } from "./FolderImagePicker.js";
 import type { TFunction } from "i18next";
 import type { PanelRefusal } from "./api.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
-import { controlGet, nextCommandId, refusalFromAnswer, sendControlCommand, uploadFlowAttachment } from "./controlApi.js";
+import { commandEnvelope, controlCommandPath, controlGet, nextCommandId, refusalFromAnswer, sendControlCommand, uploadFlowAttachment, type ControlAction } from "./controlApi.js";
 import type {
   FlowAnchorV1, FlowAskV1, FlowEffectV1, FlowExecutionViewV1, FlowIntakeV1, FlowJournalV1, FlowMessageV1, FlowPlanV1, FlowRunViewV1, FlowSpendV1, FlowToolRulesReportV1, RoundBodyV1,
 } from "./controlTypes.js";
@@ -137,8 +138,15 @@ function ToolRules(props: { report: FlowToolRulesReportV1 }): JSX.Element {
   );
 }
 
+/**
+ * Flow call settlement spec 2026-11-01 §5 (session 43913afc): the page's own sender of a control command, for a call row's
+ * charge (recovery-retry on the parent group's run); the rows below reach it without threading it through every step.
+ */
+const ControlCommandContext = createContext<(action: ControlAction) => void>(() => undefined);
+
 function ExecutionFacts(props: { execution: FlowExecutionViewV1; active: boolean }): JSX.Element {
   const { t } = useTranslation();
+  const control = useContext(ControlCommandContext);
   const e = props.execution;
   return (
     <div className="flow-execution" data-testid={`flow-execution-${e.seq}`}>
@@ -164,7 +172,10 @@ function ExecutionFacts(props: { execution: FlowExecutionViewV1; active: boolean
       {/* Live transcript spec §10.4.4: the execution's Orca runs (its calls, then its child group's runs), each with its
           transcript; a legacy entry names no run. */}
       {e.spend.runs.filter((run) => !run.runId.startsWith("legacy:")).map((run) => (
-        <div key={run.runId} className="flow-run-transcript"><span>{run.purpose}</span> <RunTranscript runId={run.runId} active /></div>
+        <div key={run.runId} className="flow-run-transcript"><span>{run.purpose}</span> <RunTranscript runId={run.runId} active />
+          {run.charge !== undefined && <p><ChargeRetry charge={{ tokens: run.charge.tokens, usageLowerBound: run.charge.usageLowerBound }}
+            onCharge={() => control({ verb: "recovery-retry", groupId: run.charge!.groupId, expectedRevision: run.charge!.revision, payload: { scope: "run", runId: run.runId, acknowledge: "charge-remaining-grant" } })} /></p>}
+        </div>
       ))}
     </div>
   );
@@ -896,6 +907,15 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
       if (failure !== null) setRefusal(failure);
     })();
   };
+  const control = (action: ControlAction): void => {
+    void (async () => {
+      const answer = await sendControlCommand(controlCommandPath(action), commandEnvelope(nextCommandId(), action));
+      setRefusal(null);
+      await read();
+      if (answer.kind === "uncertain") setRefusal({ status: null, code: "command-outcome-unknown", message: t("panelErrors.noOutcome") });
+      else if (answer.status >= 400) setRefusal(refusalFromAnswer(answer));
+    })();
+  };
   const upload: Upload = async (file) => {
     const answer = await uploadFlowAttachment(props.flowRunId, file);
     if (answer.ok) return answer.id;
@@ -931,6 +951,7 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
   const running = view?.plans.filter((p) => p.state === "running").at(-1) ?? null;
   const intakes = (view?.intakes ?? []).filter((i) => i.state !== "planned" && i.state !== "withdrawn");
   return (
+    <ControlCommandContext.Provider value={control}>
     <article className="flow-run" aria-label={t("flow.page", { title })}>
       {props.onBack !== undefined && <button type="button" onClick={props.onBack}>{t("flow.back")}</button>}
       <h3>{title} · <code>{props.flowRunId}</code>{view !== null && <>{" "}<span className="badge" data-tone={stateTone(view.state)} data-testid="flow-run-state">{t(`flow.state.${view.state}`, { defaultValue: view.state })}</span></>}{view?.scheduled != null && <>{" "}<span className="badge" data-tone="info" data-testid="flow-run-scheduled">{t("board.card.scheduled", { name: view.scheduled.name })}</span></>}</h3>
@@ -970,5 +991,6 @@ export function FlowRunPage(props: { flowRunId: string; onBack?: () => void }): 
         </div>
       </>)}
     </article>
+    </ControlCommandContext.Provider>
   );
 }

@@ -60,3 +60,14 @@ Also add to `orca recovery retry`'s help that flow calls are accepted. The CLI p
 ## 8. Not in scope
 
 Auto-settlement from the observed floor (a floor can under-count; spec 2026-10-27 D3). Changing how `flow-pool-exhausted` parks.
+
+## 9. As built (session `43913afc`, 2026-11-03)
+
+Human rulings: 「同意顺序」 (implement after overview (a)); D1 「(a)」 keep flow pools finite; D2 accepted as recommended. This section corrects §3–§7 where the code differs; the text above is unchanged.
+
+- **§3 step 3, the parent's flag.** No flow branch was added to `syncWebBudget`. A flow parent's `ledger.usageUnknown` is written once at creation (`src/flow/parent.ts`, false) and nothing updates it, while `assertCallUsageBooked` reads it on every flow call's completion: syncing it from `groupUsageUnknown` would make one call's unknown usage refuse the completion of every other call of the same run (flow calls can run in parallel). The block that mattered is the run's own `unknown.work`, which the charge clears; the criterion reads `groupUsageUnknown(parent)` before (true) and after (false).
+- **§4, the pool.** No rule was needed in `giveBack`: `chargeRunRemainder` adds the whole remainder to `cumulative`, so `spent` equals the draw and `returnUnspent` gives back 0. A guard was written and removed when its mutation (M13) stayed green; the criterion pins `poolDrawn` unchanged.
+- **A bare reason's failure** is `flow-call-usage-unknown` (the name the kind is told), not the requirement path's `usage-unknown`.
+- **§7 criterion 5 (a stop-closed flow call)** has no criterion. The code path is there (charge only, no wake), but no way to close a flow parent's own call by a stop was found: `handoff-stop` refuses a flow parent (`recovery-blocked:group-ledger-mirror`), and the flow stop acts on child groups. **Criterion 7** (rerun-proposal, feedback-triage) has no criterion of its own: their results go through the same `storeResult`, which routes by step key.
+- **§5, the panel.** The execution's call row (spend run) carries `charge: {groupId, revision, tokens, usageLowerBound}` when the run is a settleable block; `FlowRunPage` shows `ChargeRetry` there and sends `recovery-retry` with the acknowledgement. Plan and intake calls do not show it (their spend rows have the field, no control).
+- Criteria: `tests/flow/flowCallSettlement.test.ts` (the real driver over a synthetic ccloop), `web/tests/flowRunPage.test.tsx` (last describe).
