@@ -52,7 +52,9 @@ describe("the service runs a node build, never tsx (spec §3, plan D4)", () => {
     const repo = join(out, "repo");
     await mkdir(repo);
     const child = spawn(process.execPath, [join(out, "dist", "cli.js"), "panel", "--by", "t", "--repo", `p=${repo}`, "--port", "0", "--dist", dist], {
-      env: { ...process.env, ORCA_AGENTS_TABLE: "", ORCA_CCLOOP_BIN: "", ORCA_CONTROL_DIR: join(out, "c"), ORCA_CORRECTIONS_DIR: join(out, "k") },
+      // Session 43913afc: an empty ORCA_AGENTS_TABLE falls back to HOME, and with the real HOME this panel read the person's
+      // ~/.orca/agents.json (one such criterion once rewrote it). Both point into this test's own directory (Rule 17).
+      env: { ...process.env, HOME: join(out, "home"), ORCA_AGENTS_TABLE: join(out, "agents.json"), ORCA_CCLOOP_BIN: "", ORCA_CONTROL_DIR: join(out, "c"), ORCA_CORRECTIONS_DIR: join(out, "k") },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "", stderr = "";

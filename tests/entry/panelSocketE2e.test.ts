@@ -12,7 +12,12 @@ useSocketPanels();
 const tsx = () => join(process.cwd(), "node_modules", ".bin", "tsx");
 // The developer's own execution port must not leak into a child: empty means "no port"; `boot(…, { port: true })` puts
 // the fixture's values in w.env, which is spread after this and wins.
-const childEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({ ...process.env, ORCA_AGENTS_TABLE: "", ORCA_CCLOOP_BIN: "", ...env });
+// Session 43913afc: the agents table is named inside the child's own HOME rather than left empty (an empty one falls back to
+// HOME, which was the real one in the criterion that once rewrote a person's ~/.orca/agents.json; Rule 17).
+const childEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  if (env.HOME === undefined || env.HOME === process.env.HOME) throw new Error("panelSocketE2e: give the child its own HOME");
+  return { ...process.env, ORCA_AGENTS_TABLE: join(env.HOME, ".orca", "agents.json"), ORCA_CCLOOP_BIN: "", ...env };
+};
 
 function cli(args: string[], env: NodeJS.ProcessEnv) {
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {

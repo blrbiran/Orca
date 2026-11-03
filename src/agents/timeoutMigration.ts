@@ -1,4 +1,4 @@
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, rename } from "node:fs/promises";
 import { AGENTS_FILE_MODE, agentsTablePath } from "./paths.js";
 import { replace, serializeLike } from "./versionRefresh.js";
 
@@ -7,16 +7,22 @@ const OLD_DEFAULT_MS = 1_800_000;
 const NEW_DEFAULT_MS = 7_200_000;
 
 export const timeoutMigrationMarkerOf = (table: string): string => `${table}.bak-pre-2h-timeout`;
+/** The previous bytes while the table is being moved; renamed to the marker only once the table holds the new limit. */
+export const timeoutMigrationPendingOf = (table: string): string => `${timeoutMigrationMarkerOf(table)}.pending`;
 
 /**
  * Tester round 3 spec §4 (human ruling, session 4ed8eb65, Q2): an installation still on the old drafted 30 minutes moves to
  * 2 hours, once. Long execute phases were being killed at 30 minutes although the 10-minute idle watchdog now catches a call
  * that stopped working. `timeoutMs` is not in the configHash, so frozen groups resolve as before.
  *
- * User data outside any repository (Rule 17): the marker is a copy of the previous bytes (0600), written first whether or not
- * anything changes, and its existence means done -- a person who sets 30 minutes back by hand keeps it. The table keeps its
- * mode and layout. Writes only when the table parses and holds `installations`; a table it cannot read is left for the panel's
- * own reader to refuse.
+ * User data outside any repository (Rule 17): the marker is a copy of the previous bytes (0600), and its existence means done --
+ * a person who sets 30 minutes back by hand keeps it. The table keeps its mode and layout. Writes only when the table parses
+ * and holds `installations`; a table it cannot read is left for the panel's own reader to refuse.
+ *
+ * Session 43913afc (human ruling on the migration incident): the previous bytes go to a pending copy first, then the table,
+ * and only then does the pending copy become the marker, so a failed table write leaves no marker and the next start tries
+ * again. A pending copy found with nothing left to move is a start that stopped between the two: it holds the bytes from
+ * before the move, so it becomes the marker rather than the table as it is now.
  */
 export async function migrateAgentTimeouts(env: { HOME?: string; ORCA_AGENTS_TABLE?: string }): Promise<string[]> {
   const table = agentsTablePath(env), marker = timeoutMigrationMarkerOf(table);
@@ -26,9 +32,15 @@ export async function migrateAgentTimeouts(env: { HOME?: string; ORCA_AGENTS_TAB
   const parsed = JSON.parse(bytes) as { installations?: Record<string, { timeoutMs?: unknown }> };
   if (parsed.installations === undefined) return [];
   const moved = Object.entries(parsed.installations).filter(([, row]) => row.timeoutMs === OLD_DEFAULT_MS);
-  await replace(marker, bytes, AGENTS_FILE_MODE);
-  if (moved.length === 0) return [];
+  const pending = timeoutMigrationPendingOf(table);
+  if (moved.length === 0) {
+    if (await lstat(pending).then(() => true, () => false)) await rename(pending, marker);
+    else await replace(marker, bytes, AGENTS_FILE_MODE);
+    return [];
+  }
+  await replace(pending, bytes, AGENTS_FILE_MODE);
   for (const [, row] of moved) row.timeoutMs = NEW_DEFAULT_MS;
   await replace(table, serializeLike(bytes, parsed), (await lstat(table)).mode & 0o777);
+  await rename(pending, marker);
   return moved.map(([id]) => id);
 }
