@@ -1,10 +1,10 @@
 import { ControlError } from "./errors.js";
 import { SYSTEM_LABELS } from "./labels.js";
 import { documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
-import { npmCommandReason } from "./npmCommand.js";
+import { classifyNpmCommand, npmCommandReason } from "./npmCommand.js";
 import { normalizeControlPlan } from "./planImport.js";
 import { deepFreeze, fence } from "./requirementClarify.js";
-import { overviewPathExists } from "./requirementOverview.js";
+import { overviewPathExists, treeOf } from "./requirementOverview.js";
 import type { DraftBody, MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
 import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
@@ -73,7 +73,7 @@ const SPLIT_INSTRUCTION_V3 = [
   "## The answer",
   "",
   "{",
-  "  \"tasks\": [ { \"taskId\": letters, digits, '.', '_' or '-', starting with a letter or digit, \"title\", \"labels\": [ ], \"loopPlan\": optional, \"goal\", \"successCondition\", \"targetPaths\": [ ], \"checks\": [ ], \"dependsOn\": [ ], \"traces\": [ ] } ],",
+  "  \"tasks\": [ { \"taskId\": letters, digits, '.', '_' or '-', starting with a letter or digit, \"title\", \"labels\": [ ], \"loopPlan\": optional, \"goal\", \"successCondition\", \"targetPaths\": [ ], \"checks\": [ ], \"setup\": optional, \"dependsOn\": [ ], \"traces\": [ ] } ],",
   "  \"notes\": anything the person should know about this split",
   "}",
   "No other key at any level. Every string is non-empty except notes.",
@@ -328,8 +328,11 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
     if (!(await overviewPathExists(input.repo, input.commit, path))) reasons.push(`path:${task.taskId}:${path}`);
   }
   // Task setup spec §4.3: each distinct npm setup or check command against the commit (npmCommand.ts); others pass.
-  for (const command of new Set(output.tasks.flatMap((task) => [...(task.setup ?? []), ...task.checks]))) {
-    const reason = await npmCommandReason(input.repo, input.commit, command);
+  // The commit's tree is read once, and only when some command is npm; an unreadable tree leaves them all unverifiable.
+  const npmCommands = [...new Set(output.tasks.flatMap((task) => [...(task.setup ?? []), ...task.checks]))].filter((command) => classifyNpmCommand(command).kind === "npm");
+  const tree = npmCommands.length === 0 ? null : await treeOf(input.repo, input.commit).catch(() => null);
+  if (tree !== null) for (const command of npmCommands) {
+    const reason = await npmCommandReason(input.repo, input.commit, command, tree);
     if (reason !== null) reasons.push(reason);
   }
   const known = new Set([...input.criterionIds, ...input.adrIds]);

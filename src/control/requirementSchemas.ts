@@ -4,7 +4,7 @@ import { setupCommandsSchema } from "./loopPlans.js";
 import { amountSchema, canonicalTimestampSchema, idSchema, safeInteger } from "./schema.js";
 import type { Amount } from "./types.js";
 
-/** N1 spec §4.2, §5.2, §7, §8 and H4/H7: the requirement's records, as pure zod. No store, no webProtocol import. */
+/** N1 spec §4.2, §5.2, §7, §8 and H4/H7: the requirement's records, as zod. No store, no webProtocol import; `setup`'s bounds come from loopPlans.ts (task setup spec §4.2). */
 export const ROUND_STATES = ["drafting", "awaiting-answers", "answered", "interrupted", "failed"] as const;
 export const DRAFT_STATES = ["drafting", "awaiting-review", "accepted", "rejected", "invalid", "interrupted", "failed"] as const;
 export const MAX_AUTO_RETRIES = 2;

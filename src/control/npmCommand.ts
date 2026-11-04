@@ -1,5 +1,5 @@
 import { MAX_PACKAGE_BYTES, packageOf, workspaceDirs } from "./requirementManifests.js";
-import { GIT_READ_TIMEOUT_MS, readBlobs, treeOf } from "./requirementOverview.js";
+import { GIT_READ_TIMEOUT_MS, readBlobs, treeOf, type TreeEntry } from "./requirementOverview.js";
 
 /** Task setup spec §4.3: one `npm test` / `npm run <s>` part of a command, and the workspace it names (null: the root). */
 export type NpmPart = { script: string; workspace: string | null };
@@ -43,44 +43,70 @@ export function classifyNpmCommand(command: string): NpmCommand {
 
 const manifestPath = (dir: string): string => (dir === "" ? "package.json" : `${dir}/package.json`);
 const pathOf = (workspace: string): string => workspace.replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+/** npm's own `run` subcommands that need no script (`npm run env` lists the environment). */
+const BUILT_IN_SCRIPTS: ReadonlySet<string> = new Set(["env"]);
 
 /**
  * Spec §4.3: null when the command is unverifiable or every part names a script that exists; else `command:<command>:
  * <what is missing>` for the first part that does not. Read from the overview's commit itself, never the disk and never
  * the (cut) manifests view: the task starts from that commit. A workspace is one the root package.json lists, named by
- * its path or by its package's `name` (Review Focus 1), as npm accepts both.
+ * its path or by its package's `name` (Review Focus 1), as npm accepts both. Code refuses only what it can tell npm
+ * would refuse, so these leave the command unverifiable (null): `-w .` (the root) and `-w <dir>` for a directory
+ * holding workspaces (npm selects every workspace under it); a package.json that cannot be read, is too large or does
+ * not parse; a commit whose tree cannot be read. `npm run env` is npm's built-in, so it is not looked up.
+ * `tree` is the commit's tree when the caller already has it (validateSplitDraft reads it once per draft).
  */
-export async function npmCommandReason(repo: string, commit: string, command: string): Promise<string | null> {
+export async function npmCommandReason(repo: string, commit: string, command: string, tree?: readonly TreeEntry[]): Promise<string | null> {
   const classified = classifyNpmCommand(command);
   if (classified.kind === "unverifiable") return null;
-  const tree = await treeOf(repo, commit);
-  const byPath = new Map(tree.map((entry) => [entry.path, entry]));
-  const packages = new Map<string, ReturnType<typeof packageOf>>();
-  const packageAt = async (dir: string): Promise<ReturnType<typeof packageOf>> => {
+  let entries = tree;
+  if (entries === undefined) {
+    try { entries = await treeOf(repo, commit); } catch { return null; }
+  }
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+  // undefined: no package.json there; null: one that cannot be read, is too large or does not parse.
+  const packages = new Map<string, ReturnType<typeof packageOf> | undefined>();
+  const packageAt = async (dir: string): Promise<ReturnType<typeof packageOf> | undefined> => {
     if (!packages.has(dir)) {
       const entry = byPath.get(manifestPath(dir));
-      const bytes = entry === undefined ? null : (await readBlobs(repo, [entry.oid], MAX_PACKAGE_BYTES + 1, GIT_READ_TIMEOUT_MS))[0]!;
-      packages.set(dir, bytes === null || bytes.length > MAX_PACKAGE_BYTES ? null : packageOf(bytes));
+      let read: ReturnType<typeof packageOf> | undefined;
+      if (entry !== undefined) {
+        try {
+          const bytes = (await readBlobs(repo, [entry.oid], MAX_PACKAGE_BYTES + 1, GIT_READ_TIMEOUT_MS))[0]!;
+          read = bytes.length > MAX_PACKAGE_BYTES ? null : packageOf(bytes);
+        } catch { read = null; }
+      }
+      packages.set(dir, read);
     }
-    return packages.get(dir)!;
+    return packages.get(dir);
   };
   const root = await packageAt("");
   const missing = (what: string): string => `command:${command}: ${what}`;
-  if (root === null) return missing("there is no package.json at the root");
-  const dirs = workspaceDirs(root.workspaces ?? [], tree);
+  if (root === null) return null;
+  if (root === undefined) return missing("there is no package.json at the root");
+  const dirs = workspaceDirs(root.workspaces ?? [], [...entries]);
   for (const part of classified.parts) {
     let dir = "";
     if (part.workspace !== null) {
-      const byName = async (): Promise<string | undefined> => {
-        for (const candidate of dirs) if ((await packageAt(candidate))?.name === part.workspace) return candidate;
-        return undefined;
-      };
-      const found = dirs.find((candidate) => candidate === pathOf(part.workspace!)) ?? (await byName());
-      if (found === undefined) return missing(`"${part.workspace}" is not a workspace of the root package.json`);
+      const path = pathOf(part.workspace);
+      if (path === "" || path === ".") return null;
+      let found = dirs.find((candidate) => candidate === path);
+      let unreadable = false;
+      for (const candidate of found === undefined ? dirs : []) {
+        const named = await packageAt(candidate);
+        if (named === null) unreadable = true;
+        else if (named?.name === part.workspace) { found = candidate; break; }
+      }
+      if (found === undefined) {
+        if (unreadable || dirs.some((candidate) => candidate.startsWith(`${path}/`))) return null;
+        return missing(`"${part.workspace}" is not a workspace of the root package.json`);
+      }
       dir = found;
     }
-    const scripts = (dir === "" ? root : await packageAt(dir))?.scripts ?? {};
-    if (!Object.hasOwn(scripts, part.script)) {
+    if (BUILT_IN_SCRIPTS.has(part.script)) continue;
+    const found = dir === "" ? root : await packageAt(dir);
+    if (found === null) return null;
+    if (!Object.hasOwn(found?.scripts ?? {}, part.script)) {
       return missing(dir === "" ? `the root package.json has no script "${part.script}"` : `workspace ${part.workspace} (${manifestPath(dir)}) has no script "${part.script}"`);
     }
   }

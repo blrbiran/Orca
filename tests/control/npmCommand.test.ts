@@ -96,6 +96,47 @@ describe("npmCommandReason against the overview's commit", () => {
     }
   });
 
+  // Fix round 1 (controller ruling): code refuses only what npm would refuse.
+  // mutation C2-M5: drop the `-w .` exemption -> refused as not a workspace -> red
+  it("leaves `-w .` (the root) unverifiable", async () => {
+    expect(await reason("npm test -w .")).toBeNull();
+    expect(await reason("npm test --workspace=./")).toBeNull();
+  });
+
+  // mutation C2-M6: drop the parent-directory exemption -> refused as not a workspace -> red
+  it("leaves `-w <dir>` for a directory holding workspaces unverifiable, and still refuses a mere string prefix", async () => {
+    expect(await reason("npm test -w packages")).toBeNull();
+    expect(await reason("npm run nothing -w packages/")).toBeNull();
+    expect(await reason("npm test -w pack")).toBe('command:npm test -w pack: "pack" is not a workspace of the root package.json');
+  });
+
+  // mutation C2-M7: drop the `env` exemption -> `the root package.json has no script "env"` -> red
+  it("does not look up npm's built-in `npm run env`, but still checks the other parts", async () => {
+    expect(await reason("npm run env")).toBeNull();
+    expect(await reason("npm run env -w web")).toBeNull();
+    expect(await reason("npm run env && npm test")).toBe('command:npm run env && npm test: the root package.json has no script "test"');
+  });
+
+  it("uses the tree it is given instead of reading it again", async () => {
+    expect(await npmCommandReason(repo, commit, "npm test", [])).toBe("command:npm test: there is no package.json at the root");
+  });
+
+  // mutation C2-M8: treat an unparseable package.json as one with no scripts -> refused -> red
+  it("leaves a command unverifiable when the package.json it needs does not parse", async () => {
+    const broken = join(root, "broken");
+    await mkdir(join(broken, "web"), { recursive: true });
+    g(broken, "init", "-q", "-b", "main");
+    await writeFile(join(broken, "package.json"), json({ name: "root", workspaces: ["web"] }));
+    await writeFile(join(broken, "web", "package.json"), "{ not json");
+    g(broken, "add", "-A"); g(broken, "commit", "-qm", "base");
+    const brokenCommit = g(broken, "rev-parse", "HEAD");
+    expect(await npmCommandReason(broken, brokenCommit, "npm test -w web")).toBeNull();
+    expect(await npmCommandReason(broken, brokenCommit, "npm test -w @x/web")).toBeNull();
+    expect(await npmCommandReason(broken, brokenCommit, "npm test")).toBe('command:npm test: the root package.json has no script "test"');
+    await writeFile(join(broken, "package.json"), "{ not json"); g(broken, "add", "-A"); g(broken, "commit", "-qm", "root breaks");
+    expect(await npmCommandReason(broken, g(broken, "rev-parse", "HEAD"), "npm test")).toBeNull();
+  });
+
   it("names a root with no package.json", async () => {
     const bare = join(root, "bare");
     await mkdir(bare);
