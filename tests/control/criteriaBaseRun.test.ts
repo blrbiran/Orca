@@ -270,19 +270,37 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
   });
 
   it("a restart while that re-run is in flight recomputes its files with the setup commands", async () => {
-    // The base version is slow, so the first driver is stopped while the re-run's setup runs.
-    const { t, runId } = await setupLanding("sleep 2; exit 1\n"); try {
+    // Flake fix (A4): the restart happens at a point the test controls, and each wait is on a state, never a duration.
+    // The base version of the setup script marks that it started and then blocks until it is killed; once `gate`
+    // exists it fails at once, so the resumed re-run ends as soon as it reaches the setup.
+    const out = await realpath(await mkdtemp(join(tmpdir(), "orca-criteria-restart-")));
+    const started = join(out, "started"), gate = join(out, "gate");
+    const until = async (what: string, predicate: () => boolean): Promise<void> => {
+      const deadline = Date.now() + 30_000;
+      while (!predicate()) {
+        if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    };
+    const { t, runId } = await setupLanding(`if [ -e '${gate}' ]; then exit 1; fi; : > '${started}'; sleep 600; exit 1\n`); try {
       const first = t.driver();
       await settle(first, () => t.body(runId).drive?.debugRepro?.state === "checking");
       expect(t.body(runId).drive.debugRepro.check).toBe("criteria-base");
+      // The first re-run is inside its setup: the base version of scripts/setup.sh is checked out in the workspace.
+      await until("the first re-run's setup to start", () => existsSync(started));
+      const repo = join(t.body(runId).drive.sourceDir, "repo");
+      expect(hgit(repo, "status", "--porcelain")).not.toBe("");
+      await writeFile(gate, "");
       await first.stop();
-      const repo = join(t.body(runId).drive.sourceDir, "repo"), deadline = Date.now() + 15_000;
-      while ((existsSync(join(repo, ".git", "index.lock")) || hgit(repo, "status", "--porcelain") !== "") && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+      // stop() kills the setup but does not wait for the aborted re-run's restore; the restore is what puts the attempt's
+      // scripts/setup.sh back, so the workspace being clean (and unlocked) is the state that says it finished.
+      await until("the aborted re-run's restore", () => !existsSync(join(repo, ".git", "index.lock")) && hgit(repo, "status", "--porcelain") === "");
       await land(t, runId, createExecutionDriver(t.deps));
+      expect({ state: t.body(runId).state, blocked: t.body(runId).drive.blockedReason }).toEqual({ state: "landed", blocked: null });
       // Mutation "the resume path's classifyCriteriaChange drops setup" -> no file reverted, the attempt's setup passes,
       // base-passed: red.
       expect(t.body(runId).drive.criteriaBase).toEqual({ result: "failed", command: `setup: ${SETUP}` });
-    } finally { await t.h.dispose(); }
+    } finally { await t.h.dispose(); await rm(out, { recursive: true, force: true }); }
   });
 
   it("does not re-run a weakening (it is flagged whatever the base says)", async () => {
