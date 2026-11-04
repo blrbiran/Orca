@@ -62,6 +62,17 @@ describe("the split's manifests (task setup spec §4.1)", () => {
     expect(manifests.entries.map((entry) => entry.package?.name)).toEqual(["root", "a", "b", "x"]);
   });
 
+  // mutation: read `workspaces` as an array only -> yarn's object form expands nothing and reports null -> red
+  it("reads yarn's object form `workspaces: { packages }` for expansion and reports its packages", async () => {
+    const w = await world({
+      "package.json": json({ name: "root", workspaces: { packages: ["packages/*"], nohoist: ["**/x"] } }),
+      "packages/a/package.json": json({ name: "a" }),
+    });
+    const manifests = await buildManifests(w.repo, w.commit);
+    expect(manifests.entries.map((entry) => entry.dir)).toEqual(["", "packages/a"]);
+    expect(manifests.entries[0]!.package).toEqual({ name: "root", scripts: {}, workspaces: ["packages/*"] });
+  });
+
   it("names the lockfile and the other build manifests in each listed directory, and only there", async () => {
     const w = await world({
       "package.json": json({ name: "root", workspaces: ["web"] }),
@@ -108,5 +119,11 @@ describe("the split's manifests (task setup spec §4.1)", () => {
     expect(canonicalBytes(cut).length).toBeLessThanOrEqual(maxBytes);
     const next = { ...cut, entries: whole.entries.slice(0, cut.entries.length + 1) };
     expect(canonicalBytes(next).length).toBeGreaterThan(maxBytes);
+  });
+
+  // Pinned on purpose: entries are whole or absent, so a root entry larger than maxBytes leaves none, and `cut` says so.
+  it("a root entry that alone exceeds maxBytes leaves no entries and is cut", async () => {
+    const w = await world({ "package.json": json({ name: "root", scripts: { test: "x".repeat(400) } }) });
+    expect(await buildManifests(w.repo, w.commit, 200)).toEqual({ status: "ok", entries: [], cut: true });
   });
 });

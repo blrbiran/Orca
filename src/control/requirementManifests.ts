@@ -36,11 +36,22 @@ function packageOf(bytes: Buffer): ManifestEntry["package"] {
   return {
     name: typeof name === "string" ? name : null,
     scripts: scriptsOut,
-    workspaces: Array.isArray(workspaces) ? workspaces.filter((entry): entry is string => typeof entry === "string") : null,
+    workspaces: workspacePatterns(workspaces),
   };
 }
 
-/** One path segment against one pattern segment: `*` any run of characters, `?` one; nothing crosses a `/`. */
+/** `workspaces` as an array of patterns, or yarn's object form `{ packages: [...] }` (reported as its packages); else null. */
+function workspacePatterns(workspaces: unknown): string[] | null {
+  const patterns = Array.isArray(workspaces) ? workspaces
+    : workspaces !== null && typeof workspaces === "object" && Array.isArray((workspaces as { packages?: unknown }).packages) ? (workspaces as { packages: unknown[] }).packages
+    : null;
+  return patterns === null ? null : patterns.filter((entry): entry is string => typeof entry === "string");
+}
+
+/**
+ * One path segment against one pattern segment: `*` any run of characters, `?` one; nothing crosses a `/`. Only what npm
+ * documents for workspaces (`*`, `**`, `!`) is supported: braces (`{a,b}`) and classes (`[abc]`) are matched literally.
+ */
 function segmentMatches(pattern: string, segment: string): boolean {
   const source = pattern.split("").map((char) => (char === "*" ? "[^/]*" : char === "?" ? "[^/]" : char.replace(/[.+^${}()|[\]\\]/g, "\\$&"))).join("");
   return new RegExp(`^${source}$`).test(segment);
@@ -93,6 +104,8 @@ export async function buildManifests(repo: string, commit: string, maxBytes = 32
     const names = [...(namesIn.get(dir) ?? [])].sort();
     return { dir, package: packages.get(dir) ?? null, lockfiles: names.filter((name) => LOCKFILES.has(name)), present: names.filter((name) => OTHER_MANIFEST.test(name)) };
   });
+  // A root entry that alone exceeds maxBytes leaves `entries: []` with `cut: true` (pinned by a test): entries are never
+  // partial, and the brief's type has no per-field cut.
   const kept: ManifestEntry[] = [];
   let bytes = canonicalBytes({ status: "ok", entries: [], cut: false }).length;
   for (const entry of entries) {
