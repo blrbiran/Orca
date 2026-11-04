@@ -31,6 +31,24 @@ describe("a split task's setup (task setup spec §4.2)", () => {
     } finally { await x.dispose(); }
   });
 
+  // Final-review fix wave: codex's strict projection makes `setup` required, and a model answers `[]` as it does for
+  // `labels` or `dependsOn` (its nulls ccloop folds away before Orca reads the answer). An empty setup is none: the
+  // draft is valid and the contract has no setupCommands.
+  // mutation C2-M9: remove the normalisation in evaluateSplit -> schema-invalid draft -> red
+  it("reads a codex-shaped `setup: []` as no setup", async () => {
+    const codexShaped = { ...VALID_SPLIT, tasks: VALID_SPLIT.tasks.map((task) => ({ ...task, setup: [] })) };
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: codexShaped }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", reasons: [] });
+      await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
+      for (const task of readArchivedPlan(x.store, "r").plan.tasks) {
+        expect(JSON.parse(task.originalContractCanonicalJson).context).not.toHaveProperty("setupCommands");
+        expect((task.loop as { inputs: object }).inputs).not.toHaveProperty("setup");
+      }
+    } finally { await x.dispose(); }
+  });
+
   it("is bounded in the split's own schema and offered to the model as an optional key", () => {
     expect(splitOutputSchema.safeParse(WITH_SETUP).success).toBe(true);
     for (const setup of [[], ["a\nb"], ["x".repeat(4097)], Array.from({ length: 9 }, (_, index) => `c${index}`)]) {

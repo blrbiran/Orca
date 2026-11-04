@@ -19,7 +19,7 @@ import {
 } from "./requirementRecords.js";
 import { MAX_AUTO_RETRIES, multiSplitOutputSchema, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
 import {
-  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft,
+  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft, withoutEmptySetup,
   type SplitPlanFile,
 } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
@@ -431,7 +431,7 @@ async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow,
   const group = readRequirementGroup(deps.store, run.groupId);
   const multi = multiDirOf(group);
   if (multi !== null) return evaluateMultiSplit(deps, run, multi, rawOutput);
-  const parsed = splitOutputSchema.safeParse(rawOutput);
+  const parsed = splitOutputSchema.safeParse(withoutEmptySetup(rawOutput));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null };

@@ -117,6 +117,11 @@ describe("npmCommandReason against the overview's commit", () => {
     expect(await reason("npm run env && npm test")).toBe('command:npm run env && npm test: the root package.json has no script "test"');
   });
 
+  // Fails open: a commit code cannot read leaves the command unverifiable (the `path:` checks name such a commit).
+  it("leaves a command unverifiable when the commit's tree cannot be read", async () => {
+    expect(await npmCommandReason(repo, "0".repeat(40), "npm test")).toBeNull();
+  });
+
   it("uses the tree it is given instead of reading it again", async () => {
     expect(await npmCommandReason(repo, commit, "npm test", [])).toBe("command:npm test: there is no package.json at the root");
   });

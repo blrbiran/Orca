@@ -59,15 +59,15 @@ describe("the split validator and npm commands that do not exist (task setup spe
   it("hands back a check whose workspace has no such script, with what it means", async () => {
     const output = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, checks: ["npm test --workspace web"] }, VALID_SPLIT.tasks[1]!] };
     const out = await validate(output);
-    const expected = 'command:npm test --workspace web: workspace web (web/package.json) has no script "test"';
+    const expected = 'command:exporter:npm test --workspace web: workspace web (web/package.json) has no script "test"';
     expect(out).toMatchObject({ ok: false, reasons: [expected], layers: null, implicitEdges: null });
     expect(explainSplitReason(expected)).toBe("an npm setup or check command names a script or workspace that does not exist in the overview's commit: name a script that is already in that package's `scripts` (as `manifests` lists them) and a workspace the root package.json lists, or a command that is not npm");
   });
 
-  it("checks every setup command too, and each distinct command once", async () => {
+  it("checks every setup command too, each distinct command once, naming every task that gives it", async () => {
     const setup = ["npm ci", "npm run gen -w @x/web"];
     const output = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, setup }, { ...VALID_SPLIT.tasks[1]!, setup }] };
     const out = await validate(output);
-    expect(out.reasons).toEqual(['command:npm run gen -w @x/web: workspace @x/web (web/package.json) has no script "gen"']);
+    expect(out.reasons).toEqual(['command:exporter,images:npm run gen -w @x/web: workspace @x/web (web/package.json) has no script "gen"']);
   });
 });

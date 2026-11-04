@@ -66,20 +66,18 @@ export async function npmCommandReason(repo: string, commit: string, command: st
   const byPath = new Map(entries.map((entry) => [entry.path, entry]));
   // undefined: no package.json there; null: one that cannot be read, is too large or does not parse.
   const packages = new Map<string, ReturnType<typeof packageOf> | undefined>();
-  const packageAt = async (dir: string): Promise<ReturnType<typeof packageOf> | undefined> => {
-    if (!packages.has(dir)) {
-      const entry = byPath.get(manifestPath(dir));
-      let read: ReturnType<typeof packageOf> | undefined;
-      if (entry !== undefined) {
-        try {
-          const bytes = (await readBlobs(repo, [entry.oid], MAX_PACKAGE_BYTES + 1, GIT_READ_TIMEOUT_MS))[0]!;
-          read = bytes.length > MAX_PACKAGE_BYTES ? null : packageOf(bytes);
-        } catch { read = null; }
-      }
-      packages.set(dir, read);
-    }
-    return packages.get(dir);
+  // Every dir not read yet is read in one `git cat-file --batch` (a by-name lookup reads all workspaces at once).
+  const load = async (dirs: readonly string[]): Promise<void> => {
+    const wanted = dirs.filter((dir) => !packages.has(dir));
+    for (const dir of wanted) if (!byPath.has(manifestPath(dir))) packages.set(dir, undefined);
+    const present = wanted.filter((dir) => byPath.has(manifestPath(dir)));
+    if (present.length === 0) return;
+    try {
+      const blobs = await readBlobs(repo, present.map((dir) => byPath.get(manifestPath(dir))!.oid), MAX_PACKAGE_BYTES + 1, GIT_READ_TIMEOUT_MS);
+      present.forEach((dir, index) => packages.set(dir, blobs[index]!.length > MAX_PACKAGE_BYTES ? null : packageOf(blobs[index]!)));
+    } catch { for (const dir of present) packages.set(dir, null); }
   };
+  const packageAt = async (dir: string): Promise<ReturnType<typeof packageOf> | undefined> => { await load([dir]); return packages.get(dir); };
   const root = await packageAt("");
   const missing = (what: string): string => `command:${command}: ${what}`;
   if (root === null) return null;
@@ -92,10 +90,10 @@ export async function npmCommandReason(repo: string, commit: string, command: st
       if (path === "" || path === ".") return null;
       let found = dirs.find((candidate) => candidate === path);
       let unreadable = false;
-      for (const candidate of found === undefined ? dirs : []) {
-        const named = await packageAt(candidate);
-        if (named === null) unreadable = true;
-        else if (named?.name === part.workspace) { found = candidate; break; }
+      if (found === undefined) {
+        await load(dirs);
+        found = dirs.find((candidate) => packages.get(candidate)?.name === part.workspace);
+        unreadable = dirs.some((candidate) => packages.get(candidate) === null);
       }
       if (found === undefined) {
         if (unreadable || dirs.some((candidate) => candidate.startsWith(`${path}/`))) return null;
@@ -104,9 +102,10 @@ export async function npmCommandReason(repo: string, commit: string, command: st
       dir = found;
     }
     if (BUILT_IN_SCRIPTS.has(part.script)) continue;
+    // A workspace dir always has a package.json (workspaceDirs lists only those), so only "unreadable" is left to rule out.
     const found = dir === "" ? root : await packageAt(dir);
-    if (found === null) return null;
-    if (!Object.hasOwn(found?.scripts ?? {}, part.script)) {
+    if (found === null || found === undefined) return null;
+    if (!Object.hasOwn(found.scripts, part.script)) {
       return missing(dir === "" ? `the root package.json has no script "${part.script}"` : `workspace ${part.workspace} (${manifestPath(dir)}) has no script "${part.script}"`);
     }
   }

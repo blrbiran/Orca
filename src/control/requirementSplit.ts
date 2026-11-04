@@ -66,8 +66,8 @@ const SPLIT_INSTRUCTION_V3 = [
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   ...PLAN_RULES,
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
-  "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). Omit \"setup\" when nothing is needed.",
-  "- A check must name a script or command that already exists in \"manifests\"; never plan to add a script so that a check exists.",
+  "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). Prefer the repository's own install and check scripts; in an npm workspace, install at the root. Omit \"setup\" (or give null) when nothing is needed.",
+  "- A check that runs a package script must name one already in that package's \"scripts\" in \"manifests\" (and a workspace the root lists); never plan to add a script so that a check exists. Checks that are not package scripts are fine.",
   "- Before the tasks run, Orca commits the agreed requirement document to the repository at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the repository while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "",
   "## The answer",
@@ -147,6 +147,21 @@ export const SPLIT_JSON_SCHEMA_MULTI: Readonly<Record<string, unknown>> = deepFr
           properties: { dir: str, targetPaths: strings, checks: strings } } } } } },
   },
 });
+
+/**
+ * Task setup spec §4.2: codex's strict projection makes every optional key required (ccloop strictSingleCall.ts); its
+ * `null` is folded away there, but a model may write `"setup": []` as it does for `labels` or `dependsOn`. An empty
+ * setup means none, so the key is dropped before the schema (which bounds setup to 1-8 commands) reads the answer.
+ */
+export function withoutEmptySetup(raw: unknown): unknown {
+  if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
+  const tasks = (raw as { tasks: unknown[] }).tasks.map((task) => {
+    if (task === null || typeof task !== "object" || !Array.isArray((task as { setup?: unknown }).setup) || (task as { setup: unknown[] }).setup.length > 0) return task;
+    const { setup: _empty, ...rest } = task as Record<string, unknown>;
+    return rest;
+  });
+  return { ...(raw as object), tasks };
+}
 
 /** N1 spec §8.2: the plan file a split expands into (a PlanFile whose every task is a loop task). */
 export interface SplitPlanFile {
@@ -329,11 +344,14 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   }
   // Task setup spec §4.3: each distinct npm setup or check command against the commit (npmCommand.ts); others pass.
   // The commit's tree is read once, and only when some command is npm; an unreadable tree leaves them all unverifiable.
-  const npmCommands = [...new Set(output.tasks.flatMap((task) => [...(task.setup ?? []), ...task.checks]))].filter((command) => classifyNpmCommand(command).kind === "npm");
+  // Each distinct command is checked once; its reason names every task giving it: `command:<taskId>[,<taskId>]:<command>: ...`.
+  const tasksOf = new Map<string, string[]>();
+  for (const task of output.tasks) for (const command of new Set([...(task.setup ?? []), ...task.checks])) tasksOf.set(command, [...(tasksOf.get(command) ?? []), task.taskId]);
+  const npmCommands = [...tasksOf.keys()].filter((command) => classifyNpmCommand(command).kind === "npm");
   const tree = npmCommands.length === 0 ? null : await treeOf(input.repo, input.commit).catch(() => null);
   if (tree !== null) for (const command of npmCommands) {
     const reason = await npmCommandReason(input.repo, input.commit, command, tree);
-    if (reason !== null) reasons.push(reason);
+    if (reason !== null) reasons.push(`command:${tasksOf.get(command)!.join(",")}:${reason.slice("command:".length)}`);
   }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
