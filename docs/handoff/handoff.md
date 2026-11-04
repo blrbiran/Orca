@@ -63,7 +63,19 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.00000000000000000000 会话 `43913afc`（2026-11-03）：小修、clarify 不带 structure、flow 结算、soft 模式下单次调用按下界记账 —— **先读这一节**
+### 3.000000000000000000000 会话 `af2ceee1`（2026-11-04／05）：第一次 agent 自举测试 → 任务准备命令、检查要真实存在、阶梯只重试能修的 —— **先读这一节**
+
+> 人裁（原话）：soft D1–D6「允许没有下界也继续。新版本之前的不改没关系。」其余三条「其他都同意」；「你先跑一次看下」；预算「同意」（单个小 bug、3M token、$10）；codex trust 条目「备份后删掉」；「顺序同意，先做 F1–F3」；准备命令「每个仓库做不同方向的工作…」「自己推断。如果人愿意，也可以提前由人提供…」；重试「希望在遇到一些非常明显问题的情况下，带着之前的问题，自动再试一次」「对，就是第一类，这样分没问题」；「授权改写，派subagent review spec。修复完问题后继续写plan。」「subagent 逐任务做」；收尾「这次批准改写所有必要的判据。这一轮允许必要的付费真跑。这次在必要时临时允许你push ccloop到 origin main。…先按你的建议执行。执行完在最后阶段报给我审核。」台账：会话 `.superpowers/sdd/2026-11-04-session-af2ceee1/progress.md`（两次 dogfood 原始数、F1–F12）、计划 `.superpowers/sdd/2026-11-04-task-setup-and-check-retry/progress.md`（全部 `Ruling:`、变异、审阅、门）；ccloop 计划台账 `ccloop/.superpowers/sdd/2026-11-04-task-setup-ccloop/progress.md`。
+
+- **第一次自举（付费 codex gpt-6-luna，隔离面板，Orca clone 当目标，同一个 web bug）**：澄清／拆分／估算都一次成；loop run 2 个 attempt 1,051,285 token 必败——检查命令 `npm test --workspace web` 不存在，attempt worktree 没装依赖（`vitest: command not found`），attempt 2 还越界改了 `web/package.json`；Orca 阶梯又自动重试（我停掉）。**转录在真数据上可读**（HTTP），事实（decisions）也收到；#112 不是 Orca／pin 的问题。agent 操作 Orca 的摩擦 F1–F12 在会话台账。
+- **设计** `docs/superpowers/specs/2026-11-04-task-setup-and-check-retry-design.md`（builder check＋独立审阅；§10 是实施期更正）；**计划** `docs/superpowers/plans/2026-11-04-task-setup-and-check-retry.md`（As built 在文末）；ccloop 计划 `ccloop/docs/superpowers/plans/2026-11-04-task-setup-ccloop.md`。
+- **Part A 已 `--ff-only` 合入 Orca main、未装**（主题行 `feat(control): read a setup-phase failure and word setup-failed` 至 `test(control): the restart-during-re-run criterion waits on state, not time`）：任务可带 `setup`（计划文件／recipe／契约 `context.setupCommands`，缺省省略键、字节不变）；debug／系统 debug／冲突解决契约带 setup；Orca 自己跑检查的三处先跑 setup 并清掉它产生的忽略文件；集成检查 setup 失败 = `errored`（不开 debug 组）；认识 `phase:"setup"`／`setup-failed`；阶梯对 `setup-failed` 和「失败检查根本没跑起来」（exit 127/126、`command not found`、`Missing script:`）两级都不重试并留 `ladder-skipped` 行与命令，验证未收集时最多等 10 分钟；已存结果恢复与多目录遇 setup 以 `setup-unsupported-here` 拒。门 `npm test` RC 0（根 609 文件、5368 过、35 跳过按文件列在计划台账；web 173）。**装进 7777 被本会话自动模式拒（restart），归人**，无 schema 变更。
+- **Part B（ccloop）已合入 ccloop 本地 main、未推**：每个 attempt 在 agent 首阶段前跑 setup（日志 16 MiB 帽、进程组注册与收尾、改动 tree 即失败、超时、handoff 边界、用量观测 `attempt-N-setup`）；门 2492/2492、`check-known-reds` RC 0；**push 被 Tier 0 闸门拦（人授权了也拦），归人**。
+- **Part C 在分支 `feat/task-setup-c`（分支在 Orca 主仓；worktree `/private/tmp/orca-af2ceee1/wtC` 重启会丢，丢了用 `git worktree add` 重建，残留登记由人 `worktree prune`）、未合**：拆分看 `manifests`（各 package.json scripts／workspaces／lockfile）、产出 `setup`、代码核对 npm 命令（脚本／workspace 不存在 ⇒ `command:` 退稿）。**必须等人推 ccloop、Task C0 repin 之后再合**（main 仍 pin 026c571，它拒 `setupCommands`）。门（对 ccloop 5e10091）只有登记 flake 红。
+- **第二次自举（C3，付费）通过**：同一需求，拆分推出 `setup:["npm ci"]`＋存在的检查 `npm run check --workspace web`，attempt 1 setup 33 s、检查 190 文件 1805 过、落地 `orca/<组>`；组 1/1 完成、共 1,421,886 token（工具报；codex 不报美元）。两次 `~/.orca` 都零改动；两条 codex trust 条目都已备份后删（`~/.codex/config.toml.bak-af2ceee1-20261104`、`.bak-af2ceee1-df2`）。
+- **残余（登记未修）**：ccloop 2 s drain 截断无标记；setup 超时的 stop reason 一律 budget 措辞；`setup` 的 `-w` 只认 npm；npm 默认脚本 `start`／`restart` 未豁免；多目录 `writes[].checks` 不核对；嵌套 git 仓库躲过清理会进归档；失败检查命令／证据尾巴之外的详情只在归档里；目标仓 `npm ci` 的 prepare 会改 clone 共享 git config 的 `core.hooksPath`（命令自身行为）。
+
+### 3.00000000000000000000 会话 `43913afc`（2026-11-03）：小修、clarify 不带 structure、flow 结算、soft 模式下单次调用按下界记账
 
 > 人裁（原话）：663fb68e 的 7 条「同意」；迁移事故「按你的建议走」；#111「同意，等实际测试时再看是否有问题」；标签即存「同意」；overview「先 (a)，前后质量对比过了再 (b)」；flow D1 (a)；soft 模式「同意。我们之前的很多裁定在新的语义下可能有一些过期了，一些需要、可以修改。」；对比用「同意，使用 opus-5-5」；中途「尽量将这些要做的task都完整做完…这次批准改写所有必要的判据。这一轮允许必要的付费真跑…先按你的建议执行。执行完在最后阶段报给我审核」。台账 `.superpowers/sdd/2026-11-03-session-43913afc/progress.md`（变异、门、对比原始输出 `overview-a-comparison.txt`）。
 
@@ -428,7 +440,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. ~~O9 claude 一段~~ **已过**（会话 `7753e97d`，见 §3）。
 6. ~~repin~~ **已做两次**（会话 `3cd8fb02`，现 pin `e25381f`）。
 7. ~~#62~~ **已实施、审阅、合入、装上**（会话 `3cd8fb02`）；import 环已拆、m5 已补判据（会话 `e236bbe4`）。下一件可选：**flow call 的用量未知结算**——人裁「之后再看」，先写设计：flow 运行页加同一个「结算后重试」，结算后让 flow 父组与池重算。设计前提（会话 `e236bbe4` 现核）：flow 池恒为有限整数（`src/flow/kernel.ts:234`：启动参数 → 设置 → 模板 → `DEFAULT_TOKENS_PER_RUN`），与组／任务默认的 soft 不限 token 模式（人说的「无限 token 模式」）不同；flow 要不要也默认 soft，是这份设计要人定的。
-8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。`correctionCoarseDebug` 挂住与测试者反馈第三轮**已做**（会话 `4ed8eb65`）；需求页筛选、标签残余、25 万来源、flow 结算设计**已做**（会话 `663fb68e`）；overview (a)＋对比、flow 结算、soft 模式单次调用**已做**（会话 `43913afc`）。下一件候选（按序）：① soft 模式的 **loop run** 一半——先和 ccloop 一起设计「代码自动」的结算 principal（Orca 的 `usageSettlement` 标记按命令台账 principal 校验，ccloop 已存结果恢复收据也按它校验），再实施 spec §5 判据 1、2、6 与 D4（已停住的调用按新规则放行）；② 人定 failover D1–D6 后：ccloop 先加 `quota-exhausted`（先在 Orca 登记 cause），Orca 加 rests 表（schema 动前先备份）与派活时改派；③ overview (b)（降上限）要再做一次对比；④ codex 澄清：等人给机器和报错，额度 2026-11-04 16:12 后付费真跑一次；测试者 #22 按需。
+8. ~~测试者反馈轮~~ **已做完、合入、装上**（会话 `a9f9d6de`）；其后续三件（主题删减、settle-usage 走 CLI、Radix Select 试样）会话 `3ea8a21e` 已做（§3 最新一节）。~~人看 Radix Select 试样后定全量换还是删分支~~ **已全量换、合入、装上**（会话 `b999cc81` 做、`65b4d067` 合入）。`correctionCoarseDebug` 挂住与测试者反馈第三轮**已做**（会话 `4ed8eb65`）；需求页筛选、标签残余、25 万来源、flow 结算设计**已做**（会话 `663fb68e`）；overview (a)＋对比、flow 结算、soft 模式单次调用**已做**（会话 `43913afc`）。任务准备命令／检查要存在／阶梯只重试能修的 **Part A、B 已做（会话 `af2ceee1`）**。下一件候选（按序）：⓪ **人推 ccloop 后**：Task C0 repin（`scripts/pin-ccloop.mjs`）→ Part C rebase、`npm test`、合入 → build＋web build＋重启面板；随后可再跑一次自举（同一需求，`.superpowers/sdd/2026-11-04-session-af2ceee1/progress.md` 有完整步骤）；⓪b 会话台账 F5–F12（agent 读转录要 CLI/socket 路由、`orca login` 要 TTY、读不到当前 agent 偏好、无美元上限、skill 里 codex 单次调用的过时说法等）；① soft 模式的 **loop run** 一半——先和 ccloop 一起设计「代码自动」的结算 principal（Orca 的 `usageSettlement` 标记按命令台账 principal 校验，ccloop 已存结果恢复收据也按它校验），再实施 spec §5 判据 1、2、6 与 D4（已停住的调用按新规则放行）；② 人定 failover D1–D6 后：ccloop 先加 `quota-exhausted`（先在 Orca 登记 cause），Orca 加 rests 表（schema 动前先备份）与派活时改派；③ overview (b)（降上限）要再做一次对比；④ codex 澄清：等人给机器和报错，额度 2026-11-04 16:12 后付费真跑一次；测试者 #22 按需。
 9. 付费验收（每次先问人）：同前（debug 计划端到端等）；H7 多仓端到端 codex（`o9-codex-7`）、omp（`o9-omp-5`）、claude（`o9-claude-2`）都已过。
 
 ## 五、已经拍板过的事（**不要重开**）
@@ -607,7 +619,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **会话 `43913afc` 待人**（全部可以下一轮再回）：
+- **会话 `af2ceee1` 待人**：
+  1. 做：**push ccloop main**（本地已含 task-setup 系列，门 2492/2492；agent 的 push 被 Tier 0 闸门拦，人授权也拦）；推完后下一位 agent 做 C0 repin、合 Part C（见 §4.2 ⓪）。
+  2. 做：**装 Orca main 进 7777**（`npm run build`、`npm run build --workspace web`、`launchctl kickstart -k gui/$(id -u)/dev.orca.panel`；本会话自动模式拒了 restart；无 schema 变更）。Orca main 的 push 也归人。
+  3. 审：计划台账里全部 `Ruling:`（约 40 条，含：setup 只跑一次、agent 自己装新依赖；阶梯不再把「重复失败」当跳过条件；不加 features 键、靠 ccloop 严格契约拒绝；setup 时长计入 attempt；集成检查 setup 失败算 errored；验证未收集时阶梯最多等 10 分钟；拆分提示版本仍为 3；`-w .`／父目录／`npm run env` 不拒）。
+  4. 清（可选）：本会话留在 `/private/tmp/orca-af2ceee1/` 的 mutation clone（`mut-*`、`mutB-*`，子 agent 删除被拒，按「不替被拒者执行」未删）、两个 dogfood 根、gate clone；Part C worktree `wtC` 要留到合入。
+- ~~会话 `43913afc` 待人~~ **人已回复**（会话 `af2ceee1` 开头：soft D1–D6 同意、D4 不做；#117、池子缺口、loop run 跨仓「其他都同意」；codex 额度已恢复；「看」那三处等真数据）；failover D1–D6 **仍待人**，原文：
   1. 审：soft 模式 D1–D6（spec `2026-11-03-soft-mode-approximate-usage-design.md` §3、§7：无下界记 0 并继续、需求调用跟组走不按 grant 收、花费上限照算、已停住的不自动放行（未做）、不做事后替换、完整答案照用）；flow 结算 As built §9（池子缺口只记名、没有判据）；#117 不改颜色（红是对的，soft 模式消掉成因）。
   2. 定：failover D1–D6（spec `2026-11-03-quota-failover-design.md` §6，建议：默认开、人手选的不换、无重置时间 15 分钟翻倍封顶 8 h、按安装全局、flow 也换、顺序放在 agent 偏好里）。
   3. 给：codex 澄清失败的机器和报错原文（本机真实库里没有 codex 尝试）。

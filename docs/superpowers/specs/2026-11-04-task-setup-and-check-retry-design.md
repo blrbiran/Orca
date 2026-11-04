@@ -278,3 +278,49 @@ activity row records a ladder skip; how `runChecksAtBase` reports a setup failur
   and plan import (§4.2); I-6 no features key (§4.4, §6.3); I-7 lifecycle (§4.4); I-8 setup once, agent installs what
   it adds (§3 G1); I-9 whole-command verifiability (§4.3); M-1 commit lookup (§4.3); M-2 contract always carries it
   (§4.4); M-3 the class quote (§2); M-4 manifests split-only (§4.1); M-5 archive (§4.9); criteria table and C3 (§6).
+
+## 10. Corrections (implementation, session af2ceee1, 2026-11-05)
+
+Appended after the spec was committed (`d222dfb2`); the text above is unchanged (CLAUDE.md Rule 13). Each line is a
+controller ruling recorded in the SDD ledgers (`.superpowers/sdd/2026-11-04-task-setup-and-check-retry/progress.md`,
+ccloop `.superpowers/sdd/2026-11-04-task-setup-ccloop/progress.md`).
+
+- §4.4 time: setup's measured elapsed time is deducted from the attempt's remaining time before the first phase, and
+  every setup that ran (ok, failed, handoff, error; not a lease loss) writes one usage observation `attempt-<n>-setup`
+  (running-total tokens, measured elapsedMs, evidence kind `setup-ended-attempt-v1` with `outcome`). Without it a handoff
+  during attempt 1's setup would leave Orca's work usage unknown forever.
+- §4.4 failure detail gains `<command> signal=<NAME>` and `<command> error=<message>` (or `setup error=<message>`); a
+  timeout bounded by the attempt's remaining time (not the 15-minute per-command cap) ends `exhausted` with the
+  budget-exhausted reason, like a phase out of time.
+- §4.4 log: each setup log is capped at 16 MiB with one truncation marker line; per-command `process.json`/`outcome.json`
+  under `attempts/<n>/setup-<i>/` let resume reap a setup group left by a crash; the group is SIGKILLed when the command
+  ends; after an exit a 2 s drain bounds a pipe held by an escaped process. A command whose process registration
+  happens through the worker's hook; a pending handoff at registration ends at the handoff boundary.
+- §4.4 handoff: a handoff during setup ends at `handoff_interrupted`/`handoff_boundary` like a phase; a handoff
+  requested during a successful setup stops before the first phase.
+- §4.4 / §4.9 archive: with setup, ccloop's result repository copied from a live worktree leaves out git-ignored
+  paths, and Orca's own check runs remove ignored paths they created, so archives carry no setup output.
+- §5.3: ccloop also refuses `setupCommands` with `additionalRepos` in the contract schema, and both repositories
+  report saved-result eligibility as unavailable for a contract with setup (ccloop `control-setup-recovery-unsupported`,
+  Orca `setup-unsupported-here`); Orca blocks a multi-directory run with setup at A2.
+- §4.4 no features key (as already recorded in §9): an older ccloop refuses the contract key by its strict schema.
+- §4.2: the conflict-resolution contracts (`integrationContractOf`, both reconcile builders) and system-debug groups
+  opened from the integration check or model-review findings also carry the union of the involved tasks' setup.
+- §4.6: a failing setup in the integration check is a could-not-run result (`errored`, no system-debug group, the
+  watermark kept), not a red check.
+- §4.7: a `required-check-failed` candidate is held while its verification has not been collected (bounded by 10
+  minutes from its `run-blocked` row; the pass schedules a collection), then decided; the skip row carries the failing
+  command and the task page shows it; the setup-failed cause line shows its detail.
+- §4.3: `-w .`, `-w <a parent directory of a workspace>`, the built-in `npm run env`, and a package.json that cannot be
+  read or parsed are unverifiable (never refused). The split's answer template lists `"setup": optional`; the prompt
+  head stays "version 3" (compatible superset).
+- §4.1: yarn's object form `workspaces: {packages: [...]}` is read; a manifests build failure blocks the split like an
+  overview failure; a root entry larger than the budget leaves `entries: []`, `cut: true`.
+- §4.5: the full setup log is reached through the run's evidence/archive; no new log viewer.
+- Not done this round (registered in the handoff): the 2 s drain cut is silent; an out-of-time setup's stop reason is
+  always budget-exhausted wording; exempt causes other than setup-failed get no skip row; a human plan file with setup is
+  refused by ccloop 026c571 until the repin.
+- §6.4 C3 result (2026-11-05): PASS on Part C's build with ccloop 5e10091 (ledger `2026-11-04-session-af2ceee1`): the split
+  inferred `setup: ["npm ci"]` and the existing check `npm run check --workspace web`; attempt 1 passed and landed. The
+  target's `npm ci` prepare script set `core.hooksPath` in the clone's shared git config (§5.4, the command's own
+  behaviour).

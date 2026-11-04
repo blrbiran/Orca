@@ -177,4 +177,19 @@ Follow ccloop `docs/superpowers/plans/2026-11-04-task-setup-ccloop.md` Tasks 1�
 
 ## As built
 
-(filled at the end)
+Session af2ceee1, 2026-11-05. Ledger `.superpowers/sdd/2026-11-04-task-setup-and-check-retry/progress.md` (every
+`Ruling:`, mutation, review and gate number). Spec §10 lists the behaviour that differs from §4.
+
+- Part A merged into main (`feat/task-setup-a`, from `feat(control): read a setup-phase failure and word setup-failed`
+  to `test(control): the restart-during-re-run criterion waits on state, not time`). Beyond the tasks above: conflict
+  and system-debug contracts carry setup; Orca's own check runs remove the ignored paths their setup created; the
+  integration check's setup failure is `errored` (no debug group); the ladder holds a required-check-failed run until
+  its verification is stored (≤ 10 min, a collection is scheduled); `runSetup` lives in `src/control/debugRepro.ts`,
+  pure helpers in `src/control/setupUnion.ts` (no `setupCommands.ts`). Gate: `npm test` RC 0 (root 609 files, web
+  173). Not installed into the panel service (the restart was refused in this session; human).
+- Part B: ccloop main fast-forwarded to `test(loop): setup criteria end the processes they leave behind themselves`;
+  gate 2492/2492, known-reds RC 0. Not pushed (Tier 0 gate; human).
+- Part C on branch `feat/task-setup-c` (worktree `/private/tmp/orca-af2ceee1/wtC`), NOT merged: it must follow the
+  ccloop push and Task C0 (repin), spec §5.1. Gate against ccloop 5e10091: only registered load flakes red.
+  C3 acceptance PASSED (paid codex run; landed on the first attempt).
+- Task C0 not done (needs the push).

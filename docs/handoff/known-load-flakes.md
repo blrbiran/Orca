@@ -186,3 +186,11 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while the re-run is in flight…」 | 这次是 `expected { state: 'blocked', … } to deeply equal { state: 'landed', blocked: null }`（与上面 `index.lock` 同用例、不同断言文字）；单跑 3/3 绿（负载 5–6） |
 | Orca › `tests/control/handoffE2E.test.ts` › H6 | `blocked: a=checkpoint-usage-high-water`（临时 HOME 的整套里一次，负载约 20）；最终门里绿，单跑 3/3 绿。同一原因串见 `dispatchedRunMarkerE2E`（`a9f9d6de` 行） |
 | Orca › `tests/flow/startForm.test.ts` | 上表那条，负载 20–40 时再红；单跑 3/3 绿 |
+
+### 会话 `af2ceee1`（2026-11-05，task-setup 三个门；观测提交 Part A `c7654444` 前后、Part C `94ef67be`）
+
+| 测试 | 形状与判别 |
+|---|---|
+| Orca › `web/tests/flowBoard.test.tsx` › 「picks an image param from the folder's images and shows each param's effective default with its source」 | 新见：`Unable to find an element by: [data-testid="flow-start-default"]`；全量负载 22–30 时红一次，同提交单跑 3/3 绿（负载约 10–20，日志 scratch `logs/solo-fb-*.log`，会话结束即失） |
+| Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while that re-run is in flight recomputes its files with the setup commands」 | **不是负载**：本轮新判据，单跑 2/3 红（收到 `criteriaBase` null）；已改成等状态而非等时间（`test(control): the restart-during-re-run criterion waits on state, not time`），单跑 10/10 绿、变异仍红。以后再红按回归查 |
+| Orca › `tests/flow/startForm.test.ts`、`tests/control/schedulerBridge.test.ts` 「…: success」 | 上表已登记的同形状（ECONNRESET／30 s 超时）；后者对 ccloop 5e10091 单跑 3/3 绿（负载约 6–16） |
