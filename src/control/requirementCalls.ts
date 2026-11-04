@@ -7,6 +7,7 @@ import { activeChain, chainRounds, supersededForPrompt } from "./clarifyChain.js
 import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
+import { buildManifests, withManifests } from "./requirementManifests.js";
 import { buildRepositoryOverview, dividedOverviewLimits, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
 import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
 import { flowVaultRepoId } from "../flow/groups.js";
@@ -145,7 +146,7 @@ export async function claimRequirementCall(deps: { store: ControlStore; admissio
  * Multi-directory projects spec §6.3: a multi group's overview is composed of one overview per member; a single group's
  * is the one repository's. The discriminant lets the run record name either one commit or one per member key.
  */
-type BuiltOverview = { canonicalJson: string; hash: string }
+export type BuiltOverview = { canonicalJson: string; hash: string }
   & ({ kind: "repository"; overview: RepositoryOverview } | { kind: "project"; project: ProjectOverview });
 
 /**
@@ -342,7 +343,7 @@ async function prepareRequirementCall(
   deps: SingleCallPrepareDeps, run: SingleCallRunRow, responseSchema: Readonly<Record<string, unknown>>,
   stillDrafting: (target: RequirementTarget) => boolean,
   promptOf: (group: RequirementGroup, target: RequirementTarget, built: Awaited<ReturnType<typeof buildOverviewFor>>) => string,
-  view: (built: BuiltOverview) => BuiltOverview = (built) => built,
+  view: (built: BuiltOverview) => BuiltOverview | Promise<BuiltOverview> = (built) => built,
 ): Promise<SingleCallRequest | { blocked: string }> {
   const group = readRequirementGroup(deps.store, run.groupId);
   const target = targetOf(run.workItemId);
@@ -350,7 +351,7 @@ async function prepareRequirementCall(
   // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
   let built: Awaited<ReturnType<typeof buildOverviewFor>>;
   // Dir-requirements spec §6.2: a dir group's folder that is gone or moved is named as such (`dir-folder-missing:<detail>`).
-  try { built = view(await buildOverviewFor(deps, run, group)); }
+  try { built = await view(await buildOverviewFor(deps, run, group)); }
   catch (error) { return { blocked: error instanceof DirFolderMissing ? `dir-folder-missing:${error.message}` : "repository-path" }; }
   // Outside the catch: a draining panel or a store fault ends the round as any other step's does.
   storeOverview(deps, run, built);
@@ -477,7 +478,12 @@ export const SPLIT_HANDLER: SingleCallHandler = {
       buildSplitPrompt({
         document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, run.groupId)), acceptedSplit: null }),
         overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no), ...(multi ? { multi: true } : {}),
-      }));
+      }),
+    // Task setup spec §4.1: a single repository's split is also sent its manifests, read from the overview's commit in the
+    // group's target (a dir group's vault); a multi group's overview is left as it is (setup is refused there, §5.4).
+    async (built) => built.kind === "repository"
+      ? withManifests(built, await buildManifests(deps.resolveRepository(groupRepoId(deps.store, run.groupId)), built.overview.commit))
+      : built);
   },
   evaluate: evaluateSplit,
   classify: validateSplitDraft,

@@ -11,7 +11,7 @@ import { QUIET_GIT, unsetInheritedGitEnv } from "./workspace.js";
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 256 * 1024 * 1024;
 /** Every git child that reads the commit (rev-parse, ls-tree, the documents' cat-file) is killed after this long. */
-const GIT_READ_TIMEOUT_MS = 30_000;
+export const GIT_READ_TIMEOUT_MS = 30_000;
 
 export interface OverviewLimits {
   maxPaths: number; maxListBytes: number; maxDocBytes: number; maxDocsBytes: number;
@@ -50,7 +50,7 @@ export interface RepositoryOverview {
   docs: { status: "ok"; entries: Array<{ path: string; text: string; cut: boolean }>; skipped: Array<{ path: string; reason: "binary" | "non-utf8" | "over-budget" }> };
   structure: { status: StructureStatus; detail: string | null; files: Array<{ path: string; symbols: Array<{ name: string; kind: string }> }>; cut: boolean };
 }
-interface TreeEntry { path: string; mode: string; oid: string; size: number }
+export interface TreeEntry { path: string; mode: string; oid: string; size: number }
 
 const run = async (repo: string, args: string[]): Promise<string> =>
   (await execFileAsync("git", [...QUIET_GIT, ...args], { cwd: repo, env: { ...process.env, ...unsetInheritedGitEnv() }, maxBuffer: MAX_BUFFER, timeout: GIT_READ_TIMEOUT_MS, killSignal: "SIGKILL" })).stdout;
@@ -62,7 +62,7 @@ class ChildTimeout extends Error {}
  * applied, so nothing the target configures (smudge drivers, git-lfs) runs. At most `keep` bytes of each blob are held;
  * the rest is read and dropped. The child is killed after `timeoutMs` (ChildTimeout).
  */
-function readBlobs(repo: string, oids: string[], keep: number, timeoutMs: number): Promise<Buffer[]> {
+export function readBlobs(repo: string, oids: string[], keep: number, timeoutMs: number): Promise<Buffer[]> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", [...QUIET_GIT, "cat-file", "--batch"], { cwd: repo, env: { ...process.env, ...unsetInheritedGitEnv() }, stdio: ["pipe", "pipe", "pipe"] });
     const blobs: Buffer[] = [];
@@ -118,7 +118,7 @@ export function resolveAstGrepBin(env: NodeJS.ProcessEnv): string | null {
 }
 
 /** `git ls-tree -r -l -z`: every blob of the commit, with its mode, id and size; never the working tree or the index. */
-async function treeOf(repo: string, commit: string): Promise<TreeEntry[]> {
+export async function treeOf(repo: string, commit: string): Promise<TreeEntry[]> {
   const out = await run(repo, ["ls-tree", "-r", "-l", "-z", commit]);
   return out.split("\0").filter((line) => line.length > 0).flatMap((line) => {
     const tab = line.indexOf("\t");
