@@ -46,7 +46,8 @@ describe('saved result controller authority', () => {
   try {
    expect(await settle(t,runId)).not.toHaveProperty('error');
    const answer:any=await verify(t,runId);
-   expect(answer).toHaveProperty('error');
+   expect(answer).toMatchObject({error:{code:'saved-result-unavailable'}});
+   expect(answer.error.message).not.toContain('setup');
    expect(JSON.stringify(answer)).not.toContain('setup-unsupported-here');
   } finally {t.h.store.close();}
  });
@@ -71,6 +72,14 @@ describe('saved result controller authority', () => {
    t.h.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(body),runId);
    try{await t.driver().round();}catch{/* assertCurrentSavedRecovery refuses a run with no recovery record */}
    expect(t.body(runId).drive?.blockedReason).not.toBe('setup-unsupported-here');
+  } finally {t.h.store.close();}
+ });
+ it('answers a target that is not the source task with saved-result-source-stale, not a lookup error',async()=>{
+  const {t,runId}=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
+  try {
+   expect(await settle(t,runId)).not.toHaveProperty('error');
+   const answer:any=await t.service.verifySavedResult(t.h.taskCommand('verify-saved-result','nope',{sourceRunId:runId,sourceAttempt:1,capsuleHash:'a'.repeat(64)}));
+   expect(answer).toMatchObject({error:{code:'saved-result-source-stale'}});
   } finally {t.h.store.close();}
  });
 });

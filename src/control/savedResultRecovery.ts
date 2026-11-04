@@ -121,7 +121,9 @@ export async function applyVerifySavedResult(deps:StopDeps,command:VerifySavedRe
   }
   return applyWebCommand<RecoveryCommandResult>(deps.store,{rawCommand:command,expand:()=>({...command,schema:'orca-authority-command-v1'}),apply:context=>{
    // Task setup spec 2026-11-04 §4.6: recovery re-runs the checks without setup, so it is refused by name, ahead of every source and evidence reason.
-   if(readConfirmedTaskExecution(deps.store,command.target.groupId,command.target.taskId).contract.context.setupCommands!==undefined)throw new ControlError('saved-result-unavailable','setup-unsupported-here');
+   let hasSetup=false;
+   try{hasSetup=readConfirmedTaskExecution(deps.store,command.target.groupId,command.target.taskId).contract.context.setupCommands!==undefined;}catch{/* unreadable target: the identity checks below answer saved-result-source-stale */}
+   if(hasSetup)throw new ControlError('saved-result-unavailable','setup-unsupported-here');
    const current=currentSavedResultSource(deps.store,command.payload.sourceRunId);
    if(command.target.groupId!==current.run.groupId||command.target.taskId!==current.run.taskId)throw new ControlError('saved-result-source-stale');
    if(evidence.status!=='eligible')throw new ControlError('saved-result-unavailable',evidence.reason);
