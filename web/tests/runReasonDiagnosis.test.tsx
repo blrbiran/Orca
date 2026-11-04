@@ -57,9 +57,20 @@ describe("run failure cause (failure-cause spec §5)", () => {
 
   it("setup-failed has its own label and next step in en and zh", async () => {
     const setup = run({ runId: "run-s", state: "blocked", outcome: "failed", stopReason: "Error: setup-failed", failureCause: { cause: "setup-failed", phase: "setup", retries: 0, detail: "npm ci exit=1" } });
-    expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("Why it stopped: Setup failed. A setup command could not finish; see its output, fix the command or the repository, then retry.");
+    // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: final-review fix wave -- the label is a
+    // lower-case clause like its siblings ("a required check failed"), not a capitalised title.
+    expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("Why it stopped: a setup command failed. A setup command could not finish; see its output, fix the command or the repository, then retry.");
+    // Final-review fix wave (I4): the cause's detail (which command, how) follows the line. Mutation I4-M1 (no detail) -> red.
+    expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("then retry. <code>npm ci exit=1</code>");
     await i18n.changeLanguage("zh");
     expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("停止原因：准备步骤失败。有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。");
+    expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("<code>npm ci exit=1</code>");
+  });
+
+  it("only a setup failure shows the cause's detail", () => {
+    const other = run({ runId: "run-r", state: "blocked", outcome: "failed", stopReason: "Error: x", failureCause: { cause: "required-check-failed", phase: "verify", retries: 0, detail: "secret detail" } });
+    // Mutation I4-M2 (show the detail for every cause) -> red.
+    expect(renderToStaticMarkup(<RunReason run={other} />)).not.toContain("secret detail");
   });
 
   it("says nothing of a cause when ccloop stated none", () => {

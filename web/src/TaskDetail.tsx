@@ -17,7 +17,7 @@ import type { SavedResultEligibilityV1, ActivityEntryV1, EvidenceManifestV1, Gro
 import { TaskResults } from "./TaskResults.js";
 import { RunDecisions } from "./RunDecisions.js";
 import { LoopPlanCard } from "./LoopPlanCard.js";
-import { RunReason } from "./RunReason.js";
+import { RunReason, type LadderSkipReason } from "./RunReason.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { explainBesideCode } from "./ccloopCodes.js";
 import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
@@ -129,8 +129,16 @@ function activityText(entry: ActivityEntryV1): string {
   }
   if (entry.kind === "run-settled" && typeof body.state === "string") return `${kind} · ${enumText("runState", body.state)}`;
   // Task setup and check retry spec 2026-11-04 §4.7: why the ladder left the run out; an unknown reason shows the bare kind.
-  if (entry.kind === "ladder-skipped" && (body.reason === "setup-failed" || body.reason === "could-not-run")) return `${kind} · ${i18n.t(`control.ladder.skipped.${body.reason}`)}`;
+  // Final-review fix wave (minor 5): the sentence already says "not retried", so the kind is not put before it; (I4) the
+  // failing command, when the row names one, follows it.
+  const skipped = ladderSkipOf(entry);
+  if (skipped !== null) return `${i18n.t(`control.ladder.skipped.${skipped}`)}${typeof body.command === "string" && body.command !== "" ? ` · ${body.command}` : ""}`;
   return kind;
+}
+
+/** A `ladder-skipped` row's reason, when it is one this panel words; null for any other row. */
+function ladderSkipOf(entry: ActivityEntryV1): LadderSkipReason | null {
+  return entry.kind === "ladder-skipped" && (entry.body.reason === "setup-failed" || entry.body.reason === "could-not-run") ? entry.body.reason : null;
 }
 
 /**
@@ -140,14 +148,19 @@ function activityText(entry: ActivityEntryV1): string {
  * The caller keys it by run id, so a new run mounts empty (never a frame of the previous run's rows); a projection move
  * (changeSeq) keeps the rows on screen until the fresh answer replaces them.
  */
-export function RunActivity(props: { runId: string; changeSeq: number }): JSX.Element {
+export function RunActivity(props: { runId: string; changeSeq: number; onLadderSkipped?: (runId: string, reason: LadderSkipReason | null) => void }): JSX.Element {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ActivityEntryV1[] | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     fetchRunActivity(props.runId).then(
-      (answer) => { if (live) { setEntries(answer.entries); setRefusal(null); } },
+      (answer) => {
+        if (!live) return;
+        setEntries(answer.entries); setRefusal(null);
+        // Final-review fix wave (minor 1): the run's reason line must not promise an escalation the ladder left out.
+        props.onLadderSkipped?.(props.runId, answer.entries.map(ladderSkipOf).find((reason) => reason !== null) ?? null);
+      },
       (err: unknown) => { if (live) setRefusal(controlFailureFrom(err).code); },
     );
     return () => { live = false; };
@@ -222,6 +235,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
     if (labels.includes(label)) clear(); else change([...labels, label].sort(), clear);
   };
   const runs = view.runs.filter((run) => run.taskId === item.taskId);
+  const [ladderSkip, setLadderSkip] = useState<{ runId: string; reason: LadderSkipReason | null } | null>(null);
   const runNumber = taskRunNumber(view, item.taskId);
   return (
     // Tester #21: the open task is set apart from the table and graph around it by an accent edge (ui/classes.ts taskDetail).
@@ -264,7 +278,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
-      {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} />}
+      {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} onLadderSkipped={(runId, reason) => setLadderSkip({ runId, reason })} />}
       <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />
       <h5>{t("control.task.runsOf", { taskId: item.taskId })}</h5>
       {/* Issue fixes spec §4.2(2): the run number counts the runs that reached the provider. */}
@@ -273,7 +287,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         <ul>
           {runs.map((run) => (
             <li key={run.runId}>
-              {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} /> <EvidenceList runId={run.runId} />
+              {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} ladderSkipped={ladderSkip?.runId === run.runId ? ladderSkip.reason ?? undefined : undefined} /> <EvidenceList runId={run.runId} />
               <RunTranscript runId={run.runId} active={props.active !== false} autoOpen={run.runId === item.currentRunId} />
               {/* Flow engine spec §13.3 (W-COR): a finished run may be corrected as a whole, in one sentence. */}
               {run.phase === "work" && run.outcome === "succeeded" && <CorrectRunButton repoId={view.summary.repoId} runId={run.runId} />}

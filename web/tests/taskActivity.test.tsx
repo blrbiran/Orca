@@ -31,9 +31,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const detail = (archived = false): void => {
+const detail = (archived = false, runOver: Parameters<typeof run>[0] = {}): void => {
   const item = workItem({ taskId: "a", currentRunId: "run-a", lineageRunIds: ["run-a"] });
-  render(<TaskDetail view={view([item], [run({})])} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} archived={archived} />);
+  render(<TaskDetail view={view([item], [run(runOver)])} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} archived={archived} />);
 };
 
 describe("the task detail's run activity (spec §6.5)", () => {
@@ -85,8 +85,39 @@ describe("the task detail's run activity (spec §6.5)", () => {
       const region = await screen.findByRole("region", { name: language === "en" ? "Recent activity of run-a" : "run-a 的近期活动" });
       const lines = await within(region).findAllByRole("listitem");
       // mutation: render the bare kind (no reason) -> the sentence is missing, red
-      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · ${language === "en" ? "not retried" : "未自动重试"} · ${sentence}`]);
+      // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: final-review fix wave minor 5 -- the sentence
+      // already says "not retried", so the kind word is no longer put before it (mutation M5-1: keep the kind -> red).
+      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · ${sentence}`]);
     } finally { await i18n.changeLanguage("en"); }
+  });
+
+  // Final-review fix wave (I4): the row names the failing command the ladder read.
+  it("names the failing command on a ladder-skipped row", async () => {
+    entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "ladder-skipped", body: { reason: "could-not-run", command: "npm test" } }];
+    detail();
+    const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
+    const lines = await within(region).findAllByRole("listitem");
+    // Mutation I4-M3 (the row leaves the command out) -> red.
+    expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · Not retried automatically: the check could not run. · npm test`]);
+  });
+
+  // Final-review fix wave (minor 1): once the ladder left the run out, its reason line no longer says Orca escalates it.
+  it("a run the ladder left out does not promise an automatic escalation", async () => {
+    const failed = { state: "blocked" as const, outcome: "failed" as const, stopReason: "Error: check failed", failureCause: { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null } };
+    entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "ladder-skipped", body: { reason: "could-not-run" } }];
+    detail(false, failed);
+    await screen.findByRole("region", { name: "Recent activity of run-a" });
+    const runsList = screen.getByRole("heading", { name: "Runs of a" }).parentElement!;
+    // Mutation M1-1 (RunReason ignores the skip) -> the escalation sentence is shown, red.
+    await vi.waitFor(() => expect(runsList.textContent).toContain("Why it stopped: a required check failed. Not retried automatically: the check could not run."));
+    expect(runsList.textContent).not.toContain("Orca escalates it automatically");
+  });
+
+  it("a run with no ladder-skipped row keeps the escalation sentence", async () => {
+    const failed = { state: "blocked" as const, outcome: "failed" as const, stopReason: "Error: check failed", failureCause: { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null } };
+    detail(false, failed);
+    await screen.findByRole("region", { name: "Recent activity of run-a" });
+    expect(screen.getByRole("heading", { name: "Runs of a" }).parentElement!.textContent).toContain("Orca escalates it automatically when the group is orchestrated.");
   });
 
   it("stays visible on an archived group, which is read-only information", async () => {

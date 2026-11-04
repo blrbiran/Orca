@@ -125,7 +125,8 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
       await storeRejection(t, run, rejection("node check.js", ["command output | required check passed: true", NOT_FOUND]));
       const pass = await w.service.systemDebugPass();
       expect([pass.redispatched, pass.opened, levelOneIssued(t)]).toEqual([[], [], false]);
-      expect(skippedRows(t)).toEqual([[run, "a", { reason: "could-not-run" }]]);
+      // Final-review fix wave (I4): the row names the failing command for the task page. Mutation I4-M4 (no command) -> red.
+      expect(skippedRows(t)).toEqual([[run, "a", { reason: "could-not-run", command: "node check.js" }]]);
       const again = await w.service.systemDebugPass();
       expect([again.redispatched, again.opened]).toEqual([[], []]);
       // mutation: write the row on every pass -> two rows, red
@@ -144,7 +145,7 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
       // mutation A5-M2: skip only at level 1 -> the ladder group opens, red
       expect(pass.opened).toEqual([]);
       expect(t.h.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(LADDER)).toBeUndefined();
-      expect(skippedRows(t)).toEqual([[retry, "a", { reason: "could-not-run" }]]);
+      expect(skippedRows(t)).toEqual([[retry, "a", { reason: "could-not-run", command: "node check.js" }]]);
     } finally { await t.h.dispose(); }
   });
 
@@ -208,7 +209,7 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
       expect(w.scheduled).toEqual([run]);
       await storeRejection(t, run, rejection("node check.js", [NOT_FOUND]));
       expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
-      expect([levelOneIssued(t), skippedRows(t)]).toEqual([false, [[run, "a", { reason: "could-not-run" }]]]);
+      expect([levelOneIssued(t), skippedRows(t)]).toEqual([false, [[run, "a", { reason: "could-not-run", command: "node check.js" }]]]);
     } finally { await t.h.dispose(); }
   });
 
@@ -235,7 +236,7 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
       expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
       await storeRejection(t, run, rejection("node check.js", [NOT_FOUND]));
       expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
-      expect([levelOneIssued(t), skippedRows(t)]).toEqual([false, [[run, "a", { reason: "could-not-run" }]]]);
+      expect([levelOneIssued(t), skippedRows(t)]).toEqual([false, [[run, "a", { reason: "could-not-run", command: "node check.js" }]]]);
     } finally { await t.h.dispose(); }
   });
 });

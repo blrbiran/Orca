@@ -114,7 +114,7 @@ import type { CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, R
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance, isTerminalRunState } from "./budget.js";
 import { reopenProposalBodies, type Body } from "./proposalReopen.js";
-import { isTerminallyFailedRun } from "./driveRecord.js";
+import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { insertSingleCallRun } from "./singleCallLedger.js";
 import {
@@ -1530,12 +1530,14 @@ export class WebControlService {
     }
   }
   /** §4.7: one `ladder-skipped` row per run; a later pass finds it and writes none. A failed write is retried next pass. */
-  private noteLadderSkipped(candidate: { groupId: string; taskId: string; run: { runId: string } }, reason: LadderSkip): void {
+  private noteLadderSkipped(candidate: { groupId: string; taskId: string; run: { runId: string; drive?: DriveRecord } }, reason: LadderSkip): void {
     const runId = candidate.run.runId;
+    // Final-review fix wave (I4): the failing command the decision read, for the task page; absent when there is none.
+    const command = candidate.run.drive?.lastFailure?.failingCommand ?? null;
     try {
       this.mutate(() => this.store.transaction(() => {
         if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(runId) !== undefined) return;
-        recordActivity(this.store, { groupId: candidate.groupId, taskId: candidate.taskId, runId, kind: "ladder-skipped", body: { reason } });
+        recordActivity(this.store, { groupId: candidate.groupId, taskId: candidate.taskId, runId, kind: "ladder-skipped", body: { reason, ...(command === null ? {} : { command }) } });
       }));
     } catch (error) { process.stderr.write(`orca-control: ladder-skipped note for ${runId}: ${String(error)}\n`); }
   }
