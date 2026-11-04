@@ -69,6 +69,8 @@ const VIEW_REASONS = [
   // Multi-directory projects spec §7.4, §9.6: a multi run's blocks (src/control/executionDriver.ts, driverLanding.ts).
   "multi-dir-recovery-unsupported", "multi-dir-continuation-unsupported", "multi-dir-landing-conflict",
   "multi-dir-writes-missing", "multi-dir-writes",
+  // Task setup spec 2026-11-04 §4.6: a recovery run of a task with setup is blocked at dispatch (src/control/executionDriver.ts).
+  "setup-unsupported-here",
 ];
 /**
  * Gaps spec §13 (plan Task 9): a flow message's rejection reason, and a feedback intake's failure, is a code (with a

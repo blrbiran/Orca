@@ -2267,6 +2267,7 @@ export const enErrors: Record<string, string> = {
   "multi-dir-target-missing": "A directory's target branch does not exist: {{detail}}",
   "multi-dir-landing-conflict": "This task's changes conflict with work already in the group in another directory. Retry the task to run it again on the group's latest work.",
   "multi-dir-continuation-unsupported": "A task that works in several directories cannot continue from where it stopped yet. Retry it to start again.",
+  "setup-unsupported-here": "A task with setup commands cannot be recovered from a saved result, because recovery re-runs its checks without the setup. Retry it to start again.",
   "multi-dir-recovery-unsupported": "A task that works in several directories cannot be recovered from a saved result yet. Retry it to start again.",
   "multi-dir-writes-missing": "The task's writes name no directory of this group. Retry the task.",
   "multi-dir-writes": "The task writes in {{detail}}, which is not a directory of this group.",

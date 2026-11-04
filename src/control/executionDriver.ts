@@ -359,6 +359,11 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     if (run.continuationIntentId || allowanceBase !== null) { blockRun(deps, runId, "A2", "multi-dir-continuation-unsupported"); return true; }
     return stepA2Multi(deps, run, multi, operatorNote);
   }
+  // Task setup spec 2026-11-04 §4.6: a recovery run re-runs the checks without the contract's setup, so it would judge a
+  // different environment. Named here, beside the multi-directory refusal, before any workspace exists.
+  if ((run.mode === "verify-saved-result" || run.recoveryOf !== undefined) && readConfirmedTaskExecution(store, run.groupId, run.taskId).contract.context.setupCommands !== undefined) {
+    blockRun(deps, runId, "A2", "setup-unsupported-here"); return true;
+  }
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "A2", "repository-path"); return true; }

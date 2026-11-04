@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { unknownFailure, settle } from './fixtures/unknownFailure.js';
 import { rawAuthorityCommandSchema } from '../../src/control/webProtocol.js';
+import { driverHarness } from './fixtures/driverHarness.js';
 
 describe('saved result controller authority', () => {
  it('accepts only the explicit task-scoped original source tuple', () => {
@@ -28,6 +29,48 @@ describe('saved result controller authority', () => {
    expect(await settle(t,runId)).not.toHaveProperty('error');
    expect(t.service.retryTask(t.h.command('retry-task',{taskId:'a'}))).not.toHaveProperty('error');
    expect(await (t.service as any).savedResultEligibility(runId)).toMatchObject({status:'unavailable',reason:'saved-result-source-stale'});
+  } finally {t.h.store.close();}
+ });
+ // Task setup spec 2026-11-04 §4.6 (A6): recovery re-runs the checks without the contract's setup, so it would judge a
+ // different environment. Refused by name, at the command and at dispatch.
+ const verify=(t:any,runId:string)=>t.service.verifySavedResult(t.h.taskCommand('verify-saved-result','a',{sourceRunId:runId,sourceAttempt:1,capsuleHash:'a'.repeat(64)}));
+ it('refuses verify-saved-result of a task whose contract has setup, by name',async()=>{
+  const {t,runId}=await unknownFailure([{taskId:'a',contextExtra:{setupCommands:['npm ci']}}] as any,true,{extraReserve:true});
+  try {
+   expect(await settle(t,runId)).not.toHaveProperty('error');
+   expect(await verify(t,runId)).toMatchObject({error:{code:'saved-result-unavailable',message:expect.stringContaining('setup-unsupported-here')}});
+  } finally {t.h.store.close();}
+ });
+ it('leaves a task without setup on its own reason (the refusal is about setup, not about every unsettled source)',async()=>{
+  const {t,runId}=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
+  try {
+   expect(await settle(t,runId)).not.toHaveProperty('error');
+   const answer:any=await verify(t,runId);
+   expect(answer).toHaveProperty('error');
+   expect(JSON.stringify(answer)).not.toContain('setup-unsupported-here');
+  } finally {t.h.store.close();}
+ });
+ it('blocks a recovery run of a task with setup at dispatch, before any workspace exists',async()=>{
+  const t=await driverHarness([{taskId:'a',contextExtra:{setupCommands:['npm ci']}}] as any);
+  try {
+   const runId=await t.claim();
+   await t.driver().round();
+   const body:any=t.body(runId);body.mode='verify-saved-result';
+   t.h.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(body),runId);
+   await t.driver().round();
+   expect(t.body(runId).drive.blockedReason).toBe('setup-unsupported-here');
+   expect(t.fake.calls.accept).toHaveLength(0);
+  } finally {t.h.store.close();}
+ });
+ it('does not block a recovery run of a task without setup on setup',async()=>{
+  const t=await driverHarness([{taskId:'a'}]);
+  try {
+   const runId=await t.claim();
+   await t.driver().round();
+   const body:any=t.body(runId);body.mode='verify-saved-result';
+   t.h.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(body),runId);
+   try{await t.driver().round();}catch{/* assertCurrentSavedRecovery refuses a run with no recovery record */}
+   expect(t.body(runId).drive?.blockedReason).not.toBe('setup-unsupported-here');
   } finally {t.h.store.close();}
  });
 });
