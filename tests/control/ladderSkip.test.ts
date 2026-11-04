@@ -34,12 +34,12 @@ describe("couldNotRun: the failing check never ran (spec §4.7)", () => {
 
   it("ENOENT or command not found elsewhere does not count", () => {
     // In a passed entry (another check), and in the failing entry's stdout -- only its own stderr and exit code speak.
-    // mutation A5-M1: match any evidence entry -> the passed entry's text counts, true, red
     expect(couldNotRun("npm test", [
       passed("npm run gen", "sh: protoc: command not found"),
       failed("npm test", { stderr: "AssertionError: expected 1 to be 2", end: "exit=1" }),
     ])).toBe(false);
     // An entry for another failing command does not count either.
+    // mutation A5-M1: match any evidence entry -> the e2e entry's exit 127 counts, true, red
     expect(couldNotRun("npm test", [failed("npm run e2e", { end: "exit=127" }), failed("npm test", { end: "exit=1" })])).toBe(false);
     expect(couldNotRun("npm test", [failed("npm test", { stdout: "sh: foo: command not found ENOENT", stderr: "AssertionError", end: "exit=1" })])).toBe(false);
   });
