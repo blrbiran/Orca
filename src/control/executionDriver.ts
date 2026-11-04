@@ -169,6 +169,8 @@ export interface ExecutionDriver {
   /** Stops the timer and waits for the round in flight (spec §2.1 shutdown order). */
   stop(): Promise<void>;
   readonly crashed: CrashPoint | null;
+  /** Final-review fix wave (I1): collects the run's task results again (TaskResultCollector.schedule; a job in flight stands). */
+  scheduleTaskResults(runId: string): void;
 }
 
 export function describeError(error: unknown): string {
@@ -1557,6 +1559,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       await stopping;
     },
     get crashed() { return crashed; },
+    scheduleTaskResults(runId: string): void { taskResults.schedule(runId); },
   };
 }
 

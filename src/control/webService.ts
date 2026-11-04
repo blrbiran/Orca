@@ -54,7 +54,7 @@ import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
-import { ladderHeld, ladderSkipOf, type LadderSkip } from "./ladderSkip.js";
+import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
@@ -145,6 +145,11 @@ export interface WebServiceDeps extends AsyncImportDeps {
    */
   correctionsDir?: string;
   correctionsBy?: string;
+  /**
+   * Task setup and check retry spec §4.7 (final-review fix wave, I1): collects a run's task results again (the driver's
+   * collector). The ladder pass calls it for a run it holds; absent (no driver), nothing is collected again.
+   */
+  scheduleTaskResults?: (runId: string) => void;
   /** Flow engine spec §14.2: the flow kernel's production ports (a panel with an execution driver); null: none. */
   flowDeps?: () => FlowDeps | null;
   /** Review finding I4: the registered `dir` projects a flow may start on (their settings key and folder); absent: none. */
@@ -775,10 +780,11 @@ export class WebControlService {
       // includes a run that was itself the level-1 retry), and why is recorded once on the run for the task page.
       // A run already recorded as left out is passed over without reading its stored copy again.
       if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(candidate.run.runId) !== undefined) continue;
-      const skip = await ladderSkipOf(this.store, candidate);
-      if (skip !== null) { this.noteLadderSkipped(candidate, skip); continue; }
-      // Its final verification may not be collected yet: re-examined next pass (ladderHeld, bounded).
-      if (ladderHeld(this.store, candidate, this.store.now())) continue;
+      const decision = await ladderDecisionOf(this.store, candidate, this.store.now());
+      // Its final verification may not be collected yet: collected again (nothing else re-collects a blocked run) and
+      // re-examined next pass, bounded (ladderDecisionOf).
+      if (decision === "held") { this.deps.scheduleTaskResults?.(candidate.run.runId); continue; }
+      if (decision !== null) { this.noteLadderSkipped(candidate, decision); continue; }
       // Kanban spec §6 level 1 (ccloop priorFailures spec §3): the first escalation of a task is one fresh re-dispatch
       // as orca-auto; its run carries the earlier runs' failures (A2, priorFailures.ts). The retry-task command row is
       // the level's record -- once it exists (applied or refused), the next failure goes to level 2.

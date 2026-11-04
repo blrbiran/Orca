@@ -8,7 +8,7 @@ import { systemDebugGroupId } from "../../src/control/systemDebug.js";
 import { buildPriorFailures, headBytes, predecessorPriorFailures, priorFailureOf, priorFailuresAtPrepare } from "../../src/control/priorFailures.js";
 import { startEnvelopeSchema } from "../../src/control/schema.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "../../src/control/snapshot.js";
-import { saveTaskResultState } from "../../src/control/taskResultStore.js";
+import { readTaskResultState, saveTaskResultState } from "../../src/control/taskResultStore.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
@@ -27,8 +27,12 @@ async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { ca
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
-  const service = new WebControlService({ ...t.h.deps, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo });
   const driver = t.driver();
+  // Final-review fix wave (I1): the runs the ladder pass asked to collect again; `collectFor` hands them to the driver.
+  const scheduled: string[] = [];
+  const collect = { real: false };
+  const service = new WebControlService({ ...t.h.deps, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo,
+    scheduleTaskResults: (runId: string) => { scheduled.push(runId); if (collect.real) driver.scheduleTaskResults(runId); } });
   const blockedRun = async (runId: string) => { await t.until(driver, () => t.body(runId).state === "blocked", 120); return runId; };
   const redispatched = async (): Promise<string> => {
     replenishStartWakes({ store: t.h.store, admissionGate: t.h.deps.admissionGate });
@@ -38,7 +42,7 @@ async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { ca
     return delivered.runId;
   };
   const envelopeWork = (runId: string) => (JSON.parse(readCanonicalRecord(t.h.store, t.body(runId).drive.envelopeHash)) as { work: Record<string, unknown> }).work;
-  return { t, service, driver, blockedRun, redispatched, envelopeWork, succeedNext: () => { failing = false; } };
+  return { t, service, driver, blockedRun, redispatched, envelopeWork, scheduled, collect, succeedNext: () => { failing = false; } };
 }
 
 describe("ladder level 1: one re-dispatch carrying the earlier failures (kanban spec §6, priorFailures spec §3)", { timeout: 180_000 }, () => {
@@ -156,11 +160,16 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
     } finally { await t.h.dispose(); }
   });
 
+  // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: the final-review fix wave (I1) holds a run whose
+  // stored rejection is not readable yet, since "not stored yet" and "stored but unreadable" read the same; the fail-open
+  // this case pins now comes after the hold (COLLECTOR_HOLD_MS), so the clock is moved past it before the pass.
   it("a stored rejection that cannot be read keeps the ladder (fail open, Review Focus 5)", async () => {
-    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+    const clock = { value: 1_000_000 };
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST }), { storeNow: () => clock.value }); const { t } = w; try {
       const run = await w.blockedRun(await t.claim());
       // The collector settled, but the stored copy's bytes do not parse.
       await storeRejection(t, run, Buffer.from(`{"evidence": ["${NOT_FOUND}"`));
+      clock.value += COLLECTOR_HOLD_MS;
       // mutation A5-M3: treat unreadable as could-not-run -> [], red
       expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
       expect(skippedRows(t)).toEqual([]);
@@ -185,6 +194,36 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
       clock.value += 1;
       expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
       expect(skippedRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("holds a run whose collected state looks settled before its final verification is stored, and collects it again", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      // The state a live round's collection leaves before the final verification exists: `missing`, revision 0 of 0.
+      t.h.store.transaction(() => saveTaskResultState(t.h.store, run, "g", { schema: "orca-task-result-store-v1", identity: { runId: run } as never, revision: 0, sourceRevision: 0, currentAttempt: 0, observations: [], status: "missing", reason: null }));
+      // mutation I1-M1: hold only while the state is unsettled (revision != sourceRevision) -> ["g:a"], red
+      expect([(await w.service.systemDebugPass()).redispatched, levelOneIssued(t), skippedRows(t)]).toEqual([[], false, []]);
+      // mutation I1-M2: the pass does not re-schedule the held run's collection -> [], red
+      expect(w.scheduled).toEqual([run]);
+      await storeRejection(t, run, rejection("node check.js", [NOT_FOUND]));
+      expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
+      expect([levelOneIssued(t), skippedRows(t)]).toEqual([false, [[run, "a", { reason: "could-not-run" }]]]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("the held run's collection really runs again: a collector that gives up ends the hold", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      t.h.store.transaction(() => saveTaskResultState(t.h.store, run, "g", { schema: "orca-task-result-store-v1", identity: { runId: run } as never, revision: 0, sourceRevision: 0, currentAttempt: 0, observations: [], status: "missing", reason: null }));
+      w.collect.real = true;
+      expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
+      // The harness's port cannot collect task results, so the driver's collector, scheduled by the pass, settles it
+      // `unsupported`; the next pass fails open at once instead of waiting out the hold.
+      for (let i = 0; i < 200 && readTaskResultState(t.h.store, run)?.status !== "unsupported"; i++) await new Promise((r) => setTimeout(r, 10));
+      // mutation I1-M3: Driver.scheduleTaskResults does nothing -> still `missing`, red
+      expect(readTaskResultState(t.h.store, run)?.status).toBe("unsupported");
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
     } finally { await t.h.dispose(); }
   });
 

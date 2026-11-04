@@ -270,6 +270,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     trustedConfig: config,
     // Flow engine spec §14.2: the flow verbs act through the kernel's production ports, made below with the driver.
     flowDeps: () => flow?.deps ?? null,
+    // Task setup and check retry spec §4.7 (I1): the ladder pass has the driver collect a held run's results again.
+    scheduleTaskResults: (runId: string) => driver?.scheduleTaskResults(runId),
     // Review finding I4: a flow starts only on a registered `dir` project's folder; its settings key is the project's.
     flowProjects,
     // Dir-requirements spec §5.1: the same `dir` entries, by repo id -- a requirement on one is a dir group (its folder frozen
