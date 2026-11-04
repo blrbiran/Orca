@@ -55,6 +55,13 @@ describe("run failure cause (failure-cause spec §5)", () => {
     expect(renderToStaticMarkup(<RunReason run={failed("tool-rule-violated")} />)).toContain("停止原因：agent 违反了这一步的工具规则。看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。");
   });
 
+  it("setup-failed has its own label and next step in en and zh", async () => {
+    const setup = run({ runId: "run-s", state: "blocked", outcome: "failed", stopReason: "Error: setup-failed", failureCause: { cause: "setup-failed", phase: "setup", retries: 0, detail: "npm ci exit=1" } });
+    expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("Why it stopped: Setup failed. A setup command could not finish; see its output, fix the command or the repository, then retry.");
+    await i18n.changeLanguage("zh");
+    expect(renderToStaticMarkup(<RunReason run={setup} />)).toContain("停止原因：准备步骤失败。有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。");
+  });
+
   it("says nothing of a cause when ccloop stated none", () => {
     expect(renderToStaticMarkup(<RunReason run={run({ runId: "run-n", state: "blocked", outcome: "failed", stopReason: "Error: x", failureCause: null })} />)).not.toContain("Why it stopped");
   });

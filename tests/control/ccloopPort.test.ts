@@ -306,6 +306,11 @@ describe("collect's failure cause and last rejection through the real port",()=>
     const terminal=(await h.port.collect(h.envelope,0)).terminal!;
     expect([terminal.failureCause?.cause,terminal.failureCause?.detail?.length]).toEqual(["some-new-cause",512]);
   });
+  it("a setup-failed cause in phase setup parses in collect and the drive record",async()=>{
+    const setup={cause:"setup-failed",phase:"setup",retries:0,detail:"npm ci exit=1"};
+    const h=await fixture("ok",{terminal:FAILED_TERMINAL,collectExtra:{failureCause:setup}});
+    expect((await h.port.collect(h.envelope,0)).terminal).toMatchObject({failureCause:setup});
+  });
   it("still refuses a cause of the wrong shape",async()=>{
     const h=await fixture("ok",{terminal:FAILED_TERMINAL,collectExtra:{failureCause:{...cause,extra:1}}});
     await expect(h.port.collect(h.envelope,0)).rejects.toThrow("control-response-invalid");

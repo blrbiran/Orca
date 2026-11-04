@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runFailureCauseSchema } from "../../src/control/schema.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 /**
@@ -26,6 +27,17 @@ describe("the failure a blocked run keeps (failure-cause spec §3)", () => {
       await t.until(driver, () => t.body(runId).state === "blocked");
       const drive = t.body(runId).drive;
       expect([drive.outcome, "failureCause" in drive, "lastFailure" in drive]).toEqual(["exhausted", false, false]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a setup-failed cause in phase setup parses in collect and the drive record", async () => {
+    const setup = { cause: "setup-failed", phase: "setup" as const, retries: 0, detail: "npm ci exit=1" };
+    expect(runFailureCauseSchema.parse(setup)).toEqual(setup);
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", failure: () => ({ failureCause: setup }) }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      expect(t.body(runId).drive).toMatchObject({ failureCause: setup });
     } finally { await t.h.dispose(); }
   });
 });

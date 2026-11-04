@@ -117,7 +117,7 @@ export type TranscriptListing=z.infer<typeof transcriptListingSchema>;
  */
 export const runFailureCauseSchema = z.object({
   cause: z.string().min(1).max(64),
-  phase: z.enum(["plan", "execute", "verify"]).nullable(),
+  phase: z.enum(["plan", "execute", "verify", "setup"]).nullable(),
   retries: safeInteger,
   detail: z.string().nullable(),
 }).strict();
