@@ -110,6 +110,7 @@ export async function buildManifests(repo: string, commit: string, maxBytes = 32
  */
 export function withManifests(built: BuiltOverview, manifests: ManifestsPart): BuiltOverview {
   if (built.kind !== "repository") return built;
-  const sent = { ...built.overview, manifests };
+  // Added to the bytes already being sent, not to `built.overview`, so it composes with another view (withoutStructure).
+  const sent = { ...(JSON.parse(built.canonicalJson) as Record<string, unknown>), manifests };
   return { ...built, canonicalJson: canonicalBytes(sent).toString("utf8"), hash: sha256Canonical(sent) };
 }
