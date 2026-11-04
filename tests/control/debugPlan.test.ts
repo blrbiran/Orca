@@ -214,6 +214,16 @@ describe("buildDebugPlanSource", () => {
     expect(contract.safetyPolicy.allowlistPaths).toEqual([]);
   });
 
+  it("a debug contract carries the original's setupCommands", () => {
+    const withSetup = taskContractSchema.parse({ ...original, context: { ...original.context, setupCommands: ["npm ci", "make gen"] } });
+    expect(contractOf(buildDebugPlanSource(input({ contract: withSetup }), OPTS)).context.setupCommands).toEqual(["npm ci", "make gen"]);
+  });
+
+  it("a debug contract omits setupCommands when the original has none or there is no original", () => {
+    expect("setupCommands" in contractOf(buildDebugPlanSource(input(), OPTS)).context).toBe(false);
+    expect("setupCommands" in contractOf(buildDebugPlanSource(input({ contract: null }), OPTS)).context).toBe(false);
+  });
+
   it("budgets and checks come from the original", () => {
     const contract = contractOf(buildDebugPlanSource(input(), OPTS));
     expect(contract.executionPolicy).toEqual(original.executionPolicy);

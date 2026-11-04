@@ -190,7 +190,10 @@ function debugContract(input: DebugInputV1, opts: { repoPath: string; existingTe
   const buildTestCommands = inherited.length > 0 || original !== null ? inherited : [...DEBUG_DEFAULT_BUILD_TEST_COMMANDS];
   return taskContractSchema.parse({
     objective: { taskId: DEBUG_TASK_ID, goal: debugGoalText(input), successCondition: DEBUG_REPRODUCTION_CONDITION, nonGoals: [] },
-    context: { repoPath: opts.repoPath, targetPaths, relevantDocs: [...(original?.context.relevantDocs ?? [])], buildTestCommands, constraints: [] },
+    context: { repoPath: opts.repoPath, targetPaths, relevantDocs: [...(original?.context.relevantDocs ?? [])], buildTestCommands, constraints: [],
+      // The debug run's checks need the original's setup to run at all; absent stays absent (never []).
+      ...(original?.context.setupCommands !== undefined ? { setupCommands: [...original.context.setupCommands] } : {}),
+    },
     executionPolicy: { ...(original?.executionPolicy ?? DEBUG_DEFAULT_EXECUTION_POLICY) },
     safetyPolicy: {
       // An empty allowlist allows every path (ccloop pathPolicy); a non-empty one must admit the new test files too.

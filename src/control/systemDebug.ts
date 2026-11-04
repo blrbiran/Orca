@@ -137,6 +137,8 @@ export function buildSystemDebugPlanSource(input: SystemDebugInputV1, contract: 
       // to its segment comparison.
       repoPath, targetPaths: [SYSTEM_DEBUG_TARGET_PATH], relevantDocs: [...(contract?.context.relevantDocs ?? [])],
       buildTestCommands: checks, constraints: [],
+      // The checks are the original task's; they need its setup to run. Absent stays absent (never []).
+      ...(contract?.context.setupCommands !== undefined ? { setupCommands: [...contract.context.setupCommands] } : {}),
     },
     executionPolicy: { ...(contract?.executionPolicy ?? DEBUG_DEFAULT_EXECUTION_POLICY) },
     safetyPolicy: {

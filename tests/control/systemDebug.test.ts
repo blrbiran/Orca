@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
-import { escalationsOf, readSystemDebugMark, systemDebugGroupId } from "../../src/control/systemDebug.js";
+import { buildSystemDebugPlanSource, escalationsOf, readSystemDebugMark, SYSTEM_DEBUG_INPUT_SCHEMA, systemDebugGroupId, type SystemDebugInputV1 } from "../../src/control/systemDebug.js";
+import { taskContractSchema } from "../../src/scheduler/planFile.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
@@ -246,5 +247,26 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
       t.h.store.db.prepare("DELETE FROM group_orchestration WHERE group_id='g'").run();
       expect(await w.service.systemDebugPass()).toEqual({ redispatched: [], opened: [], confirmed: [], folded: [], settled: [] });
     } finally { await t.h.dispose(); }
+  });
+});
+
+// Task setup A3: a system debug task runs the same checks as the task it fixes, so it keeps that task's setup.
+describe("buildSystemDebugPlanSource keeps the original's setup", () => {
+  const original = (extra: Record<string, unknown> = {}) => taskContractSchema.parse({
+    objective: { taskId: "a", goal: "g", successCondition: "s" },
+    context: { repoPath: "/repo", targetPaths: ["src/**"], buildTestCommands: ["npm test"], ...extra },
+    executionPolicy: { autonomyLevel: "L2", maxAttempts: 2, perAttemptTimeoutMs: 1_000, totalRuntimeBudgetMs: 2_000, tokenBudget: 100, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 5 },
+    safetyPolicy: { maxFilesTouched: 5 }, verification: { verifierType: "agent", requiredChecks: ["npm test"], rejectOn: ["REJECT:x"] }, escalationAndExit: {},
+  });
+  const input = { schema: SYSTEM_DEBUG_INPUT_SCHEMA, source: { kind: "task" }, stackOn: null, repoId: "r", facts: ["f"], checks: ["npm test"] } as unknown as SystemDebugInputV1;
+  const built = (contract: ReturnType<typeof original> | null) => taskContractSchema.parse(buildSystemDebugPlanSource(input, contract, "/repo", undefined).tasks[0]!.originalContract);
+
+  it("a system debug contract carries the original's setupCommands", () => {
+    expect(built(original({ setupCommands: ["npm ci", "make gen"] })).context.setupCommands).toEqual(["npm ci", "make gen"]);
+  });
+
+  it("a system debug contract omits setupCommands when the original has none or there is no original", () => {
+    expect("setupCommands" in built(original()).context).toBe(false);
+    expect("setupCommands" in built(null).context).toBe(false);
   });
 });
