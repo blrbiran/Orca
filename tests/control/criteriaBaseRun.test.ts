@@ -42,9 +42,9 @@ async function workspace(base: Record<string, string>, attempt: Record<string, s
 }
 
 /** The run, then the restore: HEAD back on `work` at the attempt and nothing changed or left behind. */
-async function ran(w: Awaited<ReturnType<typeof workspace>>, files: string[], checks: string[], signal?: AbortSignal) {
+async function ran(w: Awaited<ReturnType<typeof workspace>>, files: string[], checks: string[], signal?: AbortSignal, setupCommands?: string[]) {
   try {
-    return await runChecksAtBase({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, files, requiredChecks: checks, timeoutMs: 10_000, as: { runId: "run-t" }, ...(signal ? { signal } : {}) });
+    return await runChecksAtBase({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, files, requiredChecks: checks, timeoutMs: 10_000, as: { runId: "run-t" }, ...(signal ? { signal } : {}), ...(setupCommands ? { setupCommands } : {}) });
   } finally {
     expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
     expect(git(w.repo, "symbolic-ref", "HEAD")).toBe("refs/heads/work");
@@ -86,6 +86,24 @@ describe("runChecksAtBase (spec §4.2)", () => {
   it("leaves a file the attempt added (it has no base version)", async () => {
     const w = await workspace(BASE, { "tests/new.test.txt": "expect 4\n", "tests/value.test.txt": "expect 4 # reworded\n" });
     expect(await ran(w, ["tests/new.test.txt", "tests/value.test.txt"], ["test -f tests/new.test.txt"])).toEqual({ kind: "base-passed" });
+  });
+
+  // Task setup spec 2026-11-04 §4.6: the re-run's directory has only what the task's setup installs, so setup runs first.
+  it("base run runs setup before checks", async () => {
+    const w = await workspace({ ...BASE, ".gitignore": "build/\n" }, { "tests/value.test.txt": "expect 4 # reworded\n" });
+    // The setup leaves an ignored marker; the check needs it. Mutation A4-M1 (skip setup) -> base-failed, red.
+    const setup = ["mkdir -p build", "touch build/installed"];
+    expect(await ran(w, ["tests/value.test.txt"], [`test -f build/installed && ${CHECK}`], undefined, setup)).toEqual({ kind: "base-passed" });
+    expect(existsSync(join(w.repo, "build", "installed"))).toBe(true);
+  });
+
+  it("a failing setup is base-setup-failed, not base-failed", async () => {
+    const w = await workspace(BASE, { "tests/value.test.txt": "expect 4 # reworded\n" });
+    const seen = join(w.repo, "..", `${w.repo.split("/").pop()!}-checked`);
+    dirs.push(seen);
+    // Mutation A4-M2 (report it as base-failed) -> red; the check after a failed setup never runs.
+    expect(await ran(w, ["tests/value.test.txt"], [`touch '${seen}'`], undefined, ["true", "exit 7"])).toEqual({ kind: "base-setup-failed", command: "exit 7" });
+    expect(existsSync(seen)).toBe(false);
   });
 
   it("restores the workspace and rethrows when the run is aborted", async () => {
@@ -156,6 +174,25 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
       // Mutation "runChecksAtBase without the dispatched env": `unset unset` -> red.
       expect(readFileSync(seen, "utf8")).toBe(`${runId} ${person}\n`);
     } finally { await t.h.dispose(); await rm(out, { recursive: true, force: true }); }
+  });
+
+  // Task setup spec 2026-11-04 §4.6: the driver hands the contract's setup to the re-run; a setup that fails there is the
+  // base run's own could-not-run result, named as the base-run-failed text with the command shown as `setup: <cmd>`.
+  it("a base re-run whose setup fails lands and flags, naming the setup command", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["tests/**", "src/**", "a"], contextExtra: { setupCommands: ["exit 3"] } }],
+      { files: () => ({ "tests/value.test.txt": "expect 4 # reworded\n" }), requiredChecks: [CHECK] });
+    try {
+      await mkdir(join(t.repo, "tests"), { recursive: true }); await mkdir(join(t.repo, "src"), { recursive: true });
+      await writeFile(join(t.repo, "tests", "value.test.txt"), TEST); await writeFile(join(t.repo, "src", "value.txt"), "4\n");
+      hgit(t.repo, "add", "tests", "src"); hgit(t.repo, "commit", "-qm", "checks");
+      const runId = await t.claim();
+      await land(t, runId);
+      expect(t.body(runId).drive.landedCommit).not.toBeNull();
+      // Without the setup the checks would pass at base (the reworded test): the failure is the setup's.
+      expect(t.body(runId).drive.criteriaBase).toEqual({ result: "failed", command: "setup: exit 3" });
+      const decision = JSON.parse(ledgerOf(t, runId).split("\n").find((line) => line.includes("orca-criteria"))!) as { evidence: string[] };
+      expect(decision.evidence).toContain("base-run-failed: setup: exit 3");
+    } finally { await t.h.dispose(); }
   });
 
   it("does not re-run a weakening (it is flagged whatever the base says)", async () => {

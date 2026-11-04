@@ -138,6 +138,7 @@ const debugRepro = {
   "red-at-head": "the reproduction test fails at the run's attempt, so the fix does not make it pass",
   "result-invalid": "the run's debug result cannot be checked: it could not be read and no added test was found instead, it declared the reproduction not expressible without giving a reason, or it named a test file its attempt does not contain",
   "not-located": "the run could not locate where the correction applies in the work it was shown (its notes are in the run's debug.located)",
+  "setup-failed": "one of the task's setup commands failed in the run's workspace, so the reproduction test could not be run",
   skipped: "not reproduced",
 } as const;
 

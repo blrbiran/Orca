@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readCheckState } from "../../src/control/checks/state.js";
@@ -23,9 +24,9 @@ const g = (cwd: string, ...args: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8", env: { ...process.env, ...unsetInheritedGitEnv() } }).trim();
 let sequence = 0;
 
-async function world() {
+async function world(tasks: Parameters<typeof webFixture>[1] = [{ taskId: "a" }], options: Parameters<typeof webFixture>[2] = {}) {
   let now = Date.parse("2026-10-21T00:00:00.000Z");
-  const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
+  const h = await webFixture(profileSnapshot(), tasks, options);
   const repo = join(h.root, "repo");
   g(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");
@@ -153,6 +154,41 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       expect(w.state()?.last).toMatchObject({ state: "passed", debugGroupIds: [] });
       expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE substr(id,1,9)='sysdebug-'").get()?.n).toBe(0);
     } finally { await h.dispose(); }
+  });
+
+  // Task setup spec 2026-11-04 §4.6 (Review Focus 4): the check's fresh worktree has only what setup installs, so the
+  // landed tasks' setup runs first -- each distinct command once, in task order -- and then the checks.
+  it("integration check runs each distinct setup once, in task order, before its commands", async () => {
+    const out = await realpath(await mkdtemp(join(tmpdir(), "orca-integration-setup-")));
+    const log = join(out, "log.txt");
+    const say = (word: string) => `printf '%s\\n' '${word}' >> '${log}'`;
+    const w = await world([
+      { taskId: "a", contextExtra: { setupCommands: [say("npm ci")] } },
+      { taskId: "b", contextExtra: { setupCommands: [say("npm ci"), say("make gen")] } },
+    ], { requiredChecks: [say("check")] }); const { h } = w; try {
+      w.setCheck(true, null);
+      w.land("old"); // an earlier landing names the target; the first evaluation only sets the watermark
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
+      expect(await w.pass()).toEqual({ started: ["repo"] });
+      expect(w.state()?.last).toMatchObject({ state: "passed", groups: ["g", "g2"] });
+      // Two groups of two tasks each name `npm ci`: once. Mutation A4-M3 (per task, duplicates) -> red.
+      expect(readFileSync(log, "utf8")).toBe("npm ci\nmake gen\ncheck\n");
+    } finally { await h.dispose(); await rm(out, { recursive: true, force: true }); }
+  });
+
+  it("a failing setup fails the integration check by the setup command, and its checks do not run", async () => {
+    const out = await realpath(await mkdtemp(join(tmpdir(), "orca-integration-setup-")));
+    const ran = join(out, "ran");
+    const w = await world([{ taskId: "a", contextExtra: { setupCommands: ["exit 5"] } }]); const { h } = w; try {
+      w.setCheck(true, `touch '${ran}'`);
+      w.land("old");
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
+      expect(await w.pass()).toEqual({ started: ["repo"] });
+      expect(w.state()?.last).toMatchObject({ state: "failed", detail: "setup: exit 5" });
+      expect(existsSync(ran)).toBe(false);
+    } finally { await h.dispose(); await rm(out, { recursive: true, force: true }); }
   });
 
   it("a target it cannot read is an error that covers nothing, and a check cut off by a stop is forgotten", async () => {

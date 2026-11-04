@@ -128,7 +128,9 @@ describe("the marker on Orca's other work processes (spec §15.4)", () => {
       const roots = { runsRoot: join(root, "runs"), workspacesRoot: join(root, "ws") };
       await mkdir(roots.runsRoot); await mkdir(roots.workspacesRoot);
       const person = join(root, "dispatched-person");
-      const run = await runIntegrationCheck(repo, roots, "repo-1", "main", [`printf '%s %s' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" > '${out}'`], 123, person);
+      // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: runIntegrationCheck gained `setup` after
+      // `commands` (task setup spec §4.6); this call passes none, so what it asserts is unchanged.
+      const run = await runIntegrationCheck(repo, roots, "repo-1", "main", [`printf '%s %s' "\${ORCA_DISPATCHED_RUN-unset}" "\${ORCA_PERSON_DIR-unset}" > '${out}'`], [], 123, person);
       expect(run.failures).toEqual([]);
       // Review M1 (session b37f7ce9): and the panel's empty person directory -- `unset` here is red.
       expect(readFileSync(out, "utf8")).toMatch(new RegExp(`^integration-check-[0-9a-f]{12}-123 ${person}$`));

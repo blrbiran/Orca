@@ -1751,6 +1751,7 @@ export const zh: Translation<typeof en> = {
     "red-at-head": "复现测试在运行的尝试上失败，修复没有让它通过",
     "result-invalid": "运行的 debug 结果无法检查：要么读不了它、也找不到可以代替的新增测试，要么它声明无法复现却没给理由，要么它点名的测试文件不在这次尝试里",
     "not-located": "运行没能在给它看的工作里定位这条更正落在哪里（它的说明在运行的 debug.located 里）",
+    "setup-failed": "任务的一条准备命令在运行的工作区里失败了，复现测试没能运行",
     skipped: "未复现",
   },
   // Debug task plan Task 13.

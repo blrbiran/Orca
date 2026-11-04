@@ -883,7 +883,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // started; the landing's flag says `base-run-skipped: multi-dir`), so drive.criteriaBase stays null.
   if (!measured.empty && multiDirs === null && !isFlowChildGroup(store, run.groupId)) {
     const workdir = join(drive.sourceDir, "repo");
-    const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks);
+    const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
     if (change.kind === "modified") {
       const snapshot = await snapshotWorkspace(workdir);
       const marked = write(deps, () => {
@@ -970,6 +970,7 @@ function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: Driv
     void runChecksAtBase({
       workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, files: input.criteriaFiles, requiredChecks: input.contract.verification.requiredChecks,
       timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs, snapshot: input.snapshot, signal: entry.controller.signal, as,
+      ...(input.contract.context.setupCommands === undefined ? {} : { setupCommands: input.contract.context.setupCommands }),
     }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
     return;
   }
@@ -978,6 +979,7 @@ function startDebugCheck(deps: ExecutionDriverDeps, runId: string, context: Driv
     workdir: input.workdir, base: input.base, attemptSha: input.attemptSha, contract: input.contract, timeoutMs: input.contract.executionPolicy.perAttemptTimeoutMs,
     result: reported.kind === "object" ? reported.value : {}, resultMalformed: reported.kind === "malformed", snapshot: input.snapshot, signal: entry.controller.signal, as,
     ...(locateRequired(deps.store, input.groupId) ? { requireLocated: true } : {}),
+    ...(input.contract.context.setupCommands === undefined ? {} : { setupCommands: input.contract.context.setupCommands }),
   }).then((verdict) => { entry.settled = { verdict }; }, (error: unknown) => { entry.settled = { error }; });
 }
 
@@ -1000,7 +1002,7 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
     const contract = readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
     // The criteria re-run recomputes its files from git (the marker keeps only what the restore needs).
     const criteriaFiles = marker.check === "criteria-base"
-      ? (await classifyCriteriaChange(workdir, drive.base!, marker.attemptSha, contract.verification.requiredChecks)).files : undefined;
+      ? (await classifyCriteriaChange(workdir, drive.base!, marker.attemptSha, contract.verification.requiredChecks, contract.context.setupCommands)).files : undefined;
     startDebugCheck(deps, runId, context, {
       groupId: run.groupId, workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker,
       ...(criteriaFiles === undefined ? {} : { criteriaFiles }),
@@ -1011,7 +1013,7 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
   checks.delete(runId);
   if ("error" in entry.settled) throw entry.settled.error;
   const verdict = entry.settled.verdict;
-  if (verdict.kind === "base-passed" || verdict.kind === "base-failed") {
+  if (verdict.kind === "base-passed" || verdict.kind === "base-failed" || verdict.kind === "base-setup-failed") {
     // Spec §4.2: the verdict rides on the drive record to the landing, which decides the flag (driverLanding.ts).
     return write(deps, () => {
       const current = readDriverRun(store, runId);
@@ -1019,7 +1021,9 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
       current.state = "collected";
       current.drive = {
         ...current.drive, outcome: "succeeded", attemptSha: marker.attemptSha, landedCommit: null, debugRepro: null,
-        criteriaBase: verdict.kind === "base-passed" ? { result: "passed" } : { result: "failed", command: verdict.command },
+        // Task setup spec §4.6: a setup that failed is the base run's could-not-run, named as `setup: <cmd>` in the same text.
+        criteriaBase: verdict.kind === "base-passed" ? { result: "passed" }
+          : { result: "failed", command: verdict.kind === "base-setup-failed" ? `setup: ${verdict.command}` : verdict.command },
       };
       saveDriverRun(store, current);
       return true;

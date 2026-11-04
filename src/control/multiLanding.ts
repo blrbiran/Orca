@@ -403,7 +403,8 @@ async function runPrecheckChecks(deps: MultiLandingDeps, checks: readonly CheckS
   const failures: Array<{ key: string; command: string; exit: string; tail: string }> = [];
   for (const spec of checks) {
     if (signal?.aborted === true) break;
-    const run = await runIntegrationCheck(spec.repo, deps.roots, spec.repoId, spec.target, spec.commands, deps.store.now(), deps.personDir, spec.rev);
+    // Task setup spec 2026-11-04 §5.3: `setup` on a task of a multi-directory group is refused, so there is none to run.
+    const run = await runIntegrationCheck(spec.repo, deps.roots, spec.repoId, spec.target, spec.commands, [], deps.store.now(), deps.personDir, spec.rev);
     for (const failure of run.failures) failures.push({ key: spec.key, ...failure });
     if (failures.length > 0) break;
   }

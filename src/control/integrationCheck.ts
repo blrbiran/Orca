@@ -8,6 +8,7 @@ import { readGroupIntegration } from "./integrationScheme.js";
 import { readArchivedPlan } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { removeOwnPath, type WorkspaceRoots } from "./workspace.js";
+import { unionSetup } from "./setupCommands.js";
 import { readRepositorySettingsBody } from "./workspaceSettings.js";
 
 /**
@@ -32,7 +33,8 @@ export function readIntegrationCheckSetting(store: ControlStore, repoId: string)
   return { enabled: layer?.enabled ?? false, command: layer?.command ?? null };
 }
 
-export interface LandedGroup { groupId: string; integratedCommit: string; target: string; checks: string[] }
+/** `setup`: task setup spec 2026-11-04 §4.6, the group's tasks' `context.setupCommands` (unionSetup: first-seen, once). */
+export interface LandedGroup { groupId: string; integratedCommit: string; target: string; checks: string[]; setup: string[] }
 
 /**
  * The repository's groups merged into a local target (the only delivery a check on the target can see). Checks spec
@@ -49,11 +51,13 @@ export function landedGroups(store: ControlStore, repoId: string, options: { inc
     let integration: ReturnType<typeof readGroupIntegration>;
     try { integration = readGroupIntegration(body); } catch { return []; }
     if (integration === null || integration.scheme.delivery !== "local" || integration.integratedCommit === null) return [];
-    let checks: string[] = [];
+    let checks: string[] = [], setup: string[] = [];
     try {
-      checks = readArchivedPlan(store, groupId).plan.tasks.flatMap((task) => taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson)).verification.requiredChecks);
-    } catch { /* a plan that cannot be read adds no check */ }
-    return [{ groupId, integratedCommit: integration.integratedCommit, target: integration.scheme.target, checks }];
+      const contracts = readArchivedPlan(store, groupId).plan.tasks.map((task) => taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson)));
+      checks = contracts.flatMap((contract) => contract.verification.requiredChecks);
+      setup = unionSetup(contracts.map((contract) => contract.context.setupCommands)) ?? [];
+    } catch { /* a plan that cannot be read adds no check and no setup */ }
+    return [{ groupId, integratedCommit: integration.integratedCommit, target: integration.scheme.target, checks, setup }];
   });
 }
 
@@ -66,8 +70,11 @@ const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.s
  * Run the commands in a detached worktree of `target`'s head under the driver's workspaces root (removed afterwards).
  * Each command as ccloop runs a required check (`sh -lc`, inherited environment); a timeout is a failure.
  * `personDir`: the panel's empty `dispatched-person` directory, the commands' ORCA_PERSON_DIR (CLI v2 spec §15.3, review M1).
+ * Task setup spec 2026-11-04 §4.6: the fresh worktree has no dependencies, so `setup` (the landed tasks' setup commands,
+ * de-duplicated by the caller) runs first, each the same way and with the same bound; the first that fails is the run's
+ * only failure, its command field `setup: <cmd>`, and no check runs after it.
  */
-export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], at: number, personDir: string, rev: string = `refs/heads/${target}`): Promise<IntegrationCheckRun> {
+export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], setup: readonly string[], at: number, personDir: string, rev: string = `refs/heads/${target}`): Promise<IntegrationCheckRun> {
   const head = await gitChild(repo, ["rev-parse", "--verify", `${rev}^{commit}`]);
   if (head.code !== 0) throw new Error(`integration-check: target ${target} unreadable: ${head.stderr.trim().slice(0, 200)}`);
   const commit = head.stdout.trim();
@@ -76,15 +83,25 @@ export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, r
   const added = await gitChild(repo, ["worktree", "add", "--detach", path, commit]);
   if (added.code !== 0) throw new Error(`integration-check: worktree: ${added.stderr.trim().slice(0, 200)}`);
   const failures: CheckFailure[] = [];
+  /** One command as a required check runs; its failure (named `name`) is answered, null when it exited 0. */
+  const run = async (command: string, name: string): Promise<CheckFailure | null> => {
+    try {
+      const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: dispatchedEnv({ runId: checkId, personDir }) }); // CLI v2 spec §15.3-§15.4 (review M1)
+      return answer.code === 0 ? null : { command: name, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
+    } catch (error) {
+      if (!(error instanceof ChildTimeout)) throw error;
+      return { command: name, exit: `timeout ${INTEGRATION_CHECK_COMMAND_TIMEOUT_MS} ms`, tail: "" };
+    }
+  };
   try {
-    for (const command of commands) {
-      try {
-        const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: dispatchedEnv({ runId: checkId, personDir }) }); // CLI v2 spec §15.3-§15.4 (review M1)
-        if (answer.code !== 0) failures.push({ command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) });
-      } catch (error) {
-        if (!(error instanceof ChildTimeout)) throw error;
-        failures.push({ command, exit: `timeout ${INTEGRATION_CHECK_COMMAND_TIMEOUT_MS} ms`, tail: "" });
-      }
+    let setupFailed = false;
+    for (const command of setup) {
+      const failure = await run(command, `setup: ${command}`);
+      if (failure !== null) { failures.push(failure); setupFailed = true; break; }
+    }
+    if (!setupFailed) for (const command of commands) {
+      const failure = await run(command, command);
+      if (failure !== null) failures.push(failure);
     }
   } finally {
     await removeOwnPath(repo, roots, path).catch(() => undefined);

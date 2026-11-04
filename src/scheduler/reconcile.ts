@@ -1,4 +1,5 @@
 import { DEFAULT_RECONCILE_TOKENS } from "../control/tokenPolicy.js";
+import { setupCommandsOf, unionSetup } from "../control/setupCommands.js";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -346,6 +347,8 @@ export async function synthesizeReconcileContract(
 
   const plan = planReconciliation(contracts.get(a.taskId), contracts.get(b.taskId));
   if (plan.escalate) return { escalate: plan.why };
+  // Task setup spec 2026-11-04 §4.6: the sides' checks run in a fresh copy, so their setup rides along (absent when none).
+  const setupCommands = unionSetup([a, b].map((task) => setupCommandsOf(contracts.get(task.taskId))));
 
   const goal =
     `Reconcile the merge conflict between task ${a.taskId} and task ${b.taskId}. ` +
@@ -382,6 +385,7 @@ export async function synthesizeReconcileContract(
         `The conflict is recorded in commit ${conflict.conflictCommit}, whose parents are ${conflict.wTip} ` +
           `(the work branch) and ${conflict.incomingRef} (the incoming task).`,
       ],
+      ...(setupCommands === undefined ? {} : { setupCommands }),
     },
     executionPolicy: {
       autonomyLevel: "L2",
@@ -551,6 +555,8 @@ export async function synthesizeReconcileContractOf(
   const sides = intents.map((s) => s.intent!);
   const plan = planReconciliationOf(all.map((task) => contracts.get(task.taskId)));
   if (plan.escalate) return { escalate: plan.why };
+  // Task setup spec 2026-11-04 §4.6, as in the two-sided function: every side's setup, first-seen, once.
+  const setupCommands = unionSetup(all.map((task) => setupCommandsOf(contracts.get(task.taskId))));
 
   const two = others.length === 1;
   const partners = two ? `task ${others[0]!.taskId}` : `tasks ${others.map((task) => task.taskId).join(", ")}`;
@@ -593,6 +599,7 @@ export async function synthesizeReconcileContractOf(
         `The conflict is recorded in commit ${conflict.conflictCommit}, whose parents are ${conflict.wTip} ` +
           `(the work branch) and ${conflict.incomingRef} (the incoming task).`,
       ],
+      ...(setupCommands === undefined ? {} : { setupCommands }),
     },
     executionPolicy: {
       autonomyLevel: "L2",

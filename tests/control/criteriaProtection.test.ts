@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classifyCriteriaChange, flagged, type CriteriaChangeKind } from "../../src/control/criteriaProtection.js";
+import { checkPaths, classifyCriteriaChange, flagged, type CriteriaChangeKind } from "../../src/control/criteriaProtection.js";
 import { listFlaggedDecisions } from "../../src/control/flaggedDecisions.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
@@ -72,6 +72,29 @@ describe("classifying an attempt's change to its checks (spec §3-§4.1)", () =>
     expect(result.kind).toBe(kind);
     expect(result.signals).toEqual(signals);
     expect(flagged(result)).toBe(true);
+  });
+});
+
+// Task setup spec 2026-11-04 §4.6: a file a setup command names defines the checks as much as a check's own file does.
+describe("the files a task's setup names (task setup spec §4.6)", () => {
+  it("checkPaths reads paths from setup commands too", async () => {
+    // Mutation A4-M4 (ignore setup in checkPaths) -> the set lacks scripts/setup.sh, red.
+    expect([...checkPaths(["node check.js"], ["sh ./scripts/setup.sh --fast", "npm ci"])].sort()).toEqual(["check.js", "scripts/setup.sh"]);
+    expect([...checkPaths(["node check.js"])]).toEqual(["check.js"]);
+    // The classification reads them: an edit to the setup script is a modification of the checks, not a code change.
+    const repo = await mkdtemp(join(tmpdir(), "orca-criteria-setup-"));
+    try {
+      g(repo, "init", "-q", "-b", "main");
+      await mkdir(join(repo, "scripts"), { recursive: true });
+      await writeFile(join(repo, "scripts", "setup.sh"), "npm ci\n"); await writeFile(join(repo, "check.js"), "process.exit(0);\n");
+      g(repo, "add", "-A"); g(repo, "commit", "-qm", "base");
+      const base = g(repo, "rev-parse", "HEAD");
+      await writeFile(join(repo, "scripts", "setup.sh"), "npm ci --ignore-scripts\n");
+      g(repo, "add", "-A"); g(repo, "commit", "-qm", "attempt");
+      const attempt = g(repo, "rev-parse", "HEAD");
+      expect(await classifyCriteriaChange(repo, base, attempt, ["node check.js"], ["sh scripts/setup.sh"])).toEqual({ kind: "modified", files: ["scripts/setup.sh"], signals: [] });
+      expect((await classifyCriteriaChange(repo, base, attempt, ["node check.js"])).kind).toBe("none");
+    } finally { await rm(repo, { recursive: true, force: true }); }
   });
 });
 

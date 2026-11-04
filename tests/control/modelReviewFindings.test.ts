@@ -9,10 +9,12 @@ import type { RangeGroup } from "../../src/control/checks/range.js";
  * A file that fails the schema or names another range is not read at all.
  */
 const FROM = "a".repeat(40), TO = "b".repeat(40);
+// Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: a landed group gained `setup` (task setup spec
+// §4.6); these fixture groups have none, and no assertion reads it.
 const groups: RangeGroup[] = [
-  { groupId: "g1", integratedCommit: "1".repeat(40), target: "main", checks: [], paths: ["src/api.ts", "src/errors.ts"] },
-  { groupId: "g2", integratedCommit: "2".repeat(40), target: "main", checks: [], paths: ["src/client.ts"] },
-  { groupId: "g3", integratedCommit: "3".repeat(40), target: "main", checks: [], paths: ["src/util.ts"] },
+  { groupId: "g1", integratedCommit: "1".repeat(40), target: "main", checks: [], setup: [], paths: ["src/api.ts", "src/errors.ts"] },
+  { groupId: "g2", integratedCommit: "2".repeat(40), target: "main", checks: [], setup: [], paths: ["src/client.ts"] },
+  { groupId: "g3", integratedCommit: "3".repeat(40), target: "main", checks: [], setup: [], paths: ["src/util.ts"] },
 ];
 const lines: Record<string, number> = { "src/api.ts": 40, "src/errors.ts": 10, "src/client.ts": 25, "src/util.ts": 5, "README.md": 3 };
 const lineCount = (path: string): number | null => lines[path] ?? null;

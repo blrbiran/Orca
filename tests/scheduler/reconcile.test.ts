@@ -5,6 +5,7 @@ import {
   materialiseConflict,
   rebuildMergeCommit,
   synthesizeReconcileContract,
+  synthesizeReconcileContractOf,
 } from "../../src/scheduler/reconcile.js";
 import type { PlanTask } from "../../src/scheduler/planFile.js";
 import { contractObject, git, makeSandbox, seedConflictingCopy } from "./sandbox.js";
@@ -118,6 +119,51 @@ describe("spec 5.2: materialising a conflict and synthesizing its reconciliation
     } finally {
       await s.cleanup();
     }
+  });
+});
+
+// Task setup spec 2026-11-04 §4.6 (controller addendum): a reconciliation runs the sides' required checks in a fresh copy,
+// so its contract carries the sides' setup -- their union, first-seen, each command once -- and omits the key when no
+// side has any (spec §4.2: absent, never []). Both builders: the two-sided one and the N-ary one.
+describe("task setup spec §4.6: a reconciliation contract carries the sides' setup", () => {
+  async function written(build: "two" | "many", setups: Array<string[] | undefined>): Promise<Record<string, unknown>> {
+    const s = await makeSandbox();
+    try {
+      const f = await seedConflictingCopy(s);
+      const conflict = await materialiseConflict(f.copyPath, f.wTip, f.incomingRef);
+      const ids = setups.map((_setup, index) => `T${index + 1}`);
+      const contracts = new Map<string, unknown>();
+      for (const [index, taskId] of ids.entries()) {
+        const object = await contractObject(s, taskId, { goal: `side ${taskId}`, targetPaths: [f.path], requiredChecks: ["true"] }) as { context: Record<string, unknown> };
+        const setup = setups[index];
+        contracts.set(taskId, setup === undefined ? object : { ...object, context: { ...object.context, setupCommands: setup } });
+      }
+      const r = build === "two"
+        ? await synthesizeReconcileContract(side(ids[0]!), side(ids[1]!), contracts, s.runsDir, conflict)
+        : await synthesizeReconcileContractOf(side(ids[0]!), ids.slice(1).map(side), contracts, s.runsDir, conflict);
+      if (!("path" in r)) throw new Error(r.escalate);
+      return (JSON.parse(await readFile(r.path, "utf8")) as { context: Record<string, unknown> }).context;
+    } finally {
+      await s.cleanup();
+    }
+  }
+
+  it("two sides: carries the union, first-seen, de-duplicated", async () => {
+    // Mutation "drop the copy in synthesizeReconcileContract" -> undefined, red.
+    expect((await written("two", [["npm ci", "make gen"], ["npm ci", "pip install -e ."]])).setupCommands).toEqual(["npm ci", "make gen", "pip install -e ."]);
+  });
+
+  it("two sides: omits it when no task has setup", async () => {
+    expect(Object.hasOwn(await written("two", [undefined, undefined]), "setupCommands")).toBe(false);
+  });
+
+  it("N sides: carries the union, first-seen, de-duplicated", async () => {
+    // Mutation "drop the copy in synthesizeReconcileContractOf" -> undefined, red.
+    expect((await written("many", [undefined, ["npm ci"], ["make gen", "npm ci"]])).setupCommands).toEqual(["npm ci", "make gen"]);
+  });
+
+  it("N sides: omits it when no task has setup", async () => {
+    expect(Object.hasOwn(await written("many", [undefined, undefined, undefined]), "setupCommands")).toBe(false);
   });
 });
 

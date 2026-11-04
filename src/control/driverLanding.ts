@@ -235,8 +235,10 @@ export async function criteriaFlagOf(deps: ExecutionDriverDeps, run: DriverRun, 
   // Multi-directory projects spec §7.2: each written directory is judged against its own result repository and its own
   // checks, and the one flag names every directory that changed them.
   if (range === undefined && isMultiGroup(deps.store, run.groupId)) return multiCriteriaFlag(deps, run, at);
-  const checks = range?.checks ?? readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract.verification.requiredChecks;
-  const change = await classifyCriteriaChange(repo, base, attempt, checks);
+  const contract = range?.checks === undefined ? readConfirmedTaskExecution(deps.store, run.groupId, run.taskId).contract : null;
+  const checks = range?.checks ?? contract!.verification.requiredChecks;
+  // Task setup spec 2026-11-04 §4.6: the files the task's setup names define its checks too (as at C, executionDriver).
+  const change = await classifyCriteriaChange(repo, base, attempt, checks, contract?.context.setupCommands);
   if (!flagged(change)) return null;
   // Spec §4.2: a modification whose code also passes the base versions of the checks gives no notice; a failed (or
   // unrunnable, §7a.4) base run is named in the flag. A weakening is flagged either way and never re-run.

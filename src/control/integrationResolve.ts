@@ -23,6 +23,7 @@ import { markersRemaining, materialiseConflict, pinConflictCommit } from "../sch
 import type { PlanFile, PlanTask, taskContractSchema } from "../scheduler/planFile.js";
 import type { ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
+import { unionSetup } from "./setupCommands.js";
 
 /**
  * Integration spec §7 (ruling R3): an integration conflict resolved by an agent. A group-level machine of its own that
@@ -116,6 +117,8 @@ interface ContractInput { taskContracts: readonly TaskContract[]; conflict: Conf
  * spec §7, the synthesized contract: the goal names the target branch and the group and says the target's changes must
  * survive; targetPaths are the conflicted paths; the checks are the union of the group's task contracts' requiredChecks
  * (a blank check is no check); the budget is the landing reconciliation's (the largest of the sides'), one attempt.
+ * Task setup spec 2026-11-04 §4.6: the checks run in a fresh copy, so the tasks' setup rides along (unionSetup), the key
+ * omitted when no task has any.
  */
 export function integrationContractOf(input: ContractInput): { contract: Record<string, unknown>; tokenBudget: number } | { refused: "integration-no-checks" } {
   const { taskContracts, conflict, target, groupId } = input;
@@ -124,6 +127,7 @@ export function integrationContractOf(input: ContractInput): { contract: Record<
   const max = (pick: (contract: TaskContract) => number): number => Math.max(...taskContracts.map(pick));
   const tokenBudget = finiteReconcileTokens(taskContracts.map(contract=>contract.executionPolicy.tokenBudget));
   const paths = conflict.paths.join(", ");
+  const setupCommands = unionSetup(taskContracts.map((contract) => contract.context.setupCommands));
   const contract = {
     objective: {
       taskId: conflict.key,
@@ -138,6 +142,7 @@ export function integrationContractOf(input: ContractInput): { contract: Record<
       repoPath: input.copy, targetPaths: conflict.paths, relevantDocs: [], buildTestCommands: checks,
       constraints: [`The conflict is recorded in commit ${input.conflictCommit}, whose parents are ${conflict.base} (the target branch \`${target}\`) `
         + `and ${conflict.tip} (the work branch \`orca/${groupId}\`).`],
+      ...(setupCommands === undefined ? {} : { setupCommands }),
     },
     executionPolicy: {
       autonomyLevel: "L2", maxAttempts: 1, perAttemptTimeoutMs: max((c) => c.executionPolicy.perAttemptTimeoutMs),

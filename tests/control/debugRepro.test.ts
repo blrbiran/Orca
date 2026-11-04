@@ -160,6 +160,28 @@ describe("checkReproduction (design §12.8)", () => {
     expect(existsSync(join(w.repo, "build", "out"))).toBe(true);
   });
 
+  // Task setup spec 2026-11-04 §4.6: the run's workspace is checked as the task's setup leaves it, so setup runs first.
+  it("reproduction runs setup first", async () => {
+    const w = await workspace();
+    const command = `test -f build/installed && ${REPRO}`;
+    // Mutation "skip setup in checkReproduction" -> red-at-head, red.
+    const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: command }, contract: contract("true"), timeoutMs: 10_000, as: { runId: "run-t" }, setupCommands: ["mkdir -p build", "touch build/installed"] });
+    expect(verdict).toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command });
+    expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
+    expect(git(w.repo, "status", "--porcelain", "--untracked-files=all")).toBe("");
+  });
+
+  it("a failing setup is the setup-failed reproduction failure", async () => {
+    const w = await workspace({ branch: true });
+    const marker = join(await tempDir(), "ran");
+    // Mutation "a setup failure read as red-at-head" -> red; the reproduction command after it never runs.
+    const verdict = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: `touch ${marker}` }, contract: contract("true"), timeoutMs: 10_000, as: { runId: "run-t" }, setupCommands: ["exit 9"] });
+    expect(verdict).toEqual({ kind: "failed", reason: "setup-failed" });
+    expect(existsSync(marker)).toBe(false);
+    expect(git(w.repo, "symbolic-ref", "-q", "HEAD")).toBe("refs/heads/work");
+    expect(git(w.repo, "status", "--porcelain", "--untracked-files=all")).toBe("");
+  });
+
   it("counts a command past its deadline at head as red", async () => {
     const w = await workspace();
     expect(await checked(w, { reproTests: ["tests/repro.test.txt"], reproCommand: "sleep 5" }, "true", undefined, 500)).toEqual({ kind: "failed", reason: "red-at-head" });

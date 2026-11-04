@@ -3,6 +3,7 @@ import type { taskContractSchema } from "../scheduler/planFile.js";
 import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS, DEBUG_TEST_DIRS } from "./debugPlan.js";
 import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, gitChild, oneLine, spawnRunChild } from "./integrationGit.js";
+import { runSetup } from "./setupCommands.js";
 import type { DebugResult } from "./reportedDecisions.js";
 
 type TaskContract = z.infer<typeof taskContractSchema>;
@@ -12,7 +13,7 @@ type TaskContract = z.infer<typeof taskContractSchema>;
  * correction before it fixed it -- a test it added fails at the run's base and passes at its attempt. No model call.
  */
 
-export type ReproFailure = "no-tests" | "no-command" | "green-at-base" | "red-at-head" | "result-invalid" | "not-located";
+export type ReproFailure = "no-tests" | "no-command" | "green-at-base" | "red-at-head" | "result-invalid" | "not-located" | "setup-failed";
 export type ReproVerdict = { kind: "passed"; tests: string[]; command: string } | { kind: "skipped"; reason: string }
   | { kind: "failed"; reason: ReproFailure };
 
@@ -98,6 +99,8 @@ export async function checkReproduction(input: {
   as: DispatchedAs;
   /** Flow engine spec §13.2: the correction is repository-only or a bare run, so the agent had to locate it first. */
   requireLocated?: boolean;
+  /** Task setup spec 2026-11-04 §4.6: the contract's `context.setupCommands`, run at the attempt before the command. */
+  setupCommands?: readonly string[];
 }): Promise<ReproVerdict> {
   const { workdir, base, attemptSha, result, timeoutMs, signal, as } = input;
   // Spec §13.2: a coarse correction the agent could not locate fails `not-located` (its notes stay in the saved report):
@@ -122,7 +125,9 @@ export async function checkReproduction(input: {
   let verdict: ReproVerdict;
   try {
     // stepC's commitAttempt has just made HEAD `attemptSha`, every change committed; a resumed check restored it first.
-    if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) verdict = { kind: "failed", reason: "red-at-head" };
+    // Task setup spec §4.6: setup runs first, once (what it installs stays for the base run); a failure is its own reason.
+    if (!(await runSetup(workdir, input.setupCommands ?? [], timeoutMs, as, signal)).ok) verdict = { kind: "failed", reason: "setup-failed" };
+    else if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) verdict = { kind: "failed", reason: "red-at-head" };
     else {
       await git(workdir, ["checkout", "--force", "--detach", base]);
       await git(workdir, ["checkout", attemptSha, "--", ...tests.map(literal)]);

@@ -5,6 +5,7 @@ import { git } from "../scheduler/gitExec.js";
 import type { DispatchedAs } from "./commandClient.js";
 import { exitsZero, restoreWorkspace, snapshotWorkspace, type WorkspaceSnapshot } from "./debugRepro.js";
 import { gitChild, oneLine } from "./integrationGit.js";
+import { runSetup } from "./setupCommands.js";
 import { QUIET_GIT } from "./workspace.js";
 
 /**
@@ -31,10 +32,13 @@ const NO_OP = /^\s*(?:exit\s+0|true|:|echo(?:\s.*)?)\s*;?\s*$/;
 
 const count = (text: string, pattern: RegExp): number => (text.match(pattern) ?? []).length;
 
-/** The path-like words of the required check commands, as repository paths (`./x` is `x`). */
-export function checkPaths(requiredChecks: readonly string[]): Set<string> {
+/**
+ * The path-like words of the required check commands, as repository paths (`./x` is `x`). Task setup spec 2026-11-04
+ * §4.6: the task's setup commands are read too -- a file setup runs shapes what the checks see.
+ */
+export function checkPaths(requiredChecks: readonly string[], setupCommands: readonly string[] = []): Set<string> {
   const out = new Set<string>();
-  for (const command of requiredChecks) {
+  for (const command of [...requiredChecks, ...setupCommands]) {
     for (const word of command.split(/\s+/)) {
       const token = word.replace(/^['"]|['"]$/g, "").replace(/^\.\//, "");
       if (token.includes("/") || /\.[A-Za-z0-9]+$/.test(token)) if (!token.startsWith("-") && !token.includes("://")) out.add(token);
@@ -64,8 +68,8 @@ function scriptsOf(text: string): Record<string, string> {
  * added lines, no new skip; `weakening` -- a deleted test or check file, fewer assertions, a new skip/only/todo, a
  * script removed or made a no-op; otherwise `modified`. A `package.json` whose `scripts` did not change does not count.
  */
-export async function classifyCriteriaChange(repo: string, base: string, attempt: string, requiredChecks: readonly string[]): Promise<CriteriaChange> {
-  const fromChecks = checkPaths(requiredChecks);
+export async function classifyCriteriaChange(repo: string, base: string, attempt: string, requiredChecks: readonly string[], setupCommands: readonly string[] = []): Promise<CriteriaChange> {
+  const fromChecks = checkPaths(requiredChecks, setupCommands);
   const listed = (await git(repo, [...QUIET_GIT, "diff", "--no-renames", "--name-status", "-z", base, attempt])).split("\0").filter((part) => part !== "");
   const files: string[] = [], signals: string[] = [];
   let modified = false, additive = false;
@@ -119,8 +123,11 @@ export function criteriaDecision(runId: string, groupId: string, base: string, c
   };
 }
 
-/** §4.2: what the required checks did with the base versions of the changed check-defining files. */
-export type CriteriaBaseVerdict = { kind: "base-passed" } | { kind: "base-failed"; command: string };
+/**
+ * §4.2: what the required checks did with the base versions of the changed check-defining files. Task setup spec
+ * 2026-11-04 §4.6: a setup command that failed first is its own verdict, never a check's.
+ */
+export type CriteriaBaseVerdict = { kind: "base-passed" } | { kind: "base-failed"; command: string } | { kind: "base-setup-failed"; command: string };
 
 async function gitOk(workdir: string, args: string[]): Promise<void> {
   const answer = await gitChild(workdir, args);
@@ -132,13 +139,17 @@ async function gitOk(workdir: string, args: string[]): Promise<void> {
  * check-defining file goes back to its base version -- a `package.json` only in its `scripts` -- and the required checks
  * run as debugRepro.ts runs a command (`sh -lc`, inherited environment, each bounded by `timeoutMs`). A file the attempt
  * added stays (it has no base version). The workspace is restored to the snapshot whatever happens; a check that throws
- * (an abort) is rethrown after the restore. Failed and could-not-run give the same verdict (§7a.4: flag).
+ * (an abort) is rethrown after the restore. Failed and could-not-run give the same verdict (§7a.4: flag). Task setup
+ * spec 2026-11-04 §4.6: the task's `setupCommands` run first (runSetup, each bounded by `timeoutMs`); one that fails is
+ * `base-setup-failed` and no check runs.
  */
 export async function runChecksAtBase(input: {
   workdir: string; base: string; attemptSha: string; files: readonly string[]; requiredChecks: readonly string[]; timeoutMs: number;
   snapshot?: WorkspaceSnapshot; signal?: AbortSignal;
   /** The run the checks run as (exitsZero; review I1). */
   as: DispatchedAs;
+  /** The task's contract `context.setupCommands`, run before the checks. */
+  setupCommands?: readonly string[];
 }): Promise<CriteriaBaseVerdict> {
   const { workdir, base, attemptSha, timeoutMs, signal, as } = input;
   const snapshot = input.snapshot ?? await snapshotWorkspace(workdir);
@@ -156,7 +167,9 @@ export async function runChecksAtBase(input: {
       }
       await gitOk(workdir, ["checkout", base, "--", `:(literal)${path}`]);
     }
-    for (const command of input.requiredChecks) {
+    const setup = await runSetup(workdir, input.setupCommands ?? [], timeoutMs, as, signal);
+    if (!setup.ok) verdict = { kind: "base-setup-failed", command: setup.command };
+    else for (const command of input.requiredChecks) {
       if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) { verdict = { kind: "base-failed", command }; break; }
     }
   } catch (error) {

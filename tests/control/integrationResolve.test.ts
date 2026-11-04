@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { applyResolveIntegrationConflict } from "../../src/control/integrationCommands.js";
-import { prepareResolution, recordIntegrationUsage } from "../../src/control/integrationResolve.js";
+import { integrationContractOf, prepareResolution, recordIntegrationUsage } from "../../src/control/integrationResolve.js";
 import { integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
 import { newGroupIntegration, readGroupIntegration, type GroupIntegration, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
@@ -725,5 +725,30 @@ describe.skipIf(!realBinary)("an integration conflict resolved by a real ccloop 
       expect(integrationOf(runtime)).toMatchObject({ state: "idle", integratedCommit: integrated, conflict: null, resolution: null });
       expect(await runtime.shutdown()).toBe(true);
     } finally { await w.teardown(); }
+  });
+});
+
+// Task setup spec 2026-11-04 §4.6 (controller addendum): the resolution runs the group's required checks in a fresh copy,
+// so its contract carries the group's tasks' setup -- their union, first-seen, each command once -- and omits the key
+// when no task has any (spec §4.2: absent, never []).
+describe("the integration resolution contract carries the tasks' setup (task setup spec §4.6)", () => {
+  const task = (setupCommands?: string[]) => ({
+    verification: { requiredChecks: ["npm test"] },
+    executionPolicy: { perAttemptTimeoutMs: 60_000, totalRuntimeBudgetMs: 120_000, tokenBudget: 1000 },
+    context: setupCommands === undefined ? {} : { setupCommands },
+  }) as never;
+  const build = (contracts: never[]) => {
+    const built = integrationContractOf({ taskContracts: contracts, conflict: { key: "integrate-g-1", paths: ["f.txt"], base: "b".repeat(40), tip: "t".repeat(40) } as never, target: "main", groupId: "g", copy: "/copy", conflictCommit: "c".repeat(40) });
+    if ("refused" in built) throw new Error(built.refused);
+    return built.contract as { context: Record<string, unknown> };
+  };
+
+  it("carries the union, first-seen, de-duplicated", () => {
+    // Mutation "drop the copy in integrationContractOf" -> undefined, red.
+    expect(build([task(["npm ci"]), task(), task(["npm ci", "make gen"])]).context.setupCommands).toEqual(["npm ci", "make gen"]);
+  });
+
+  it("omits it when no task has setup", () => {
+    expect(Object.hasOwn(build([task(), task()]).context, "setupCommands")).toBe(false);
   });
 });
