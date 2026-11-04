@@ -177,16 +177,23 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
     } finally { await h.dispose(); await rm(out, { recursive: true, force: true }); }
   });
 
-  it("a failing setup fails the integration check by the setup command, and its checks do not run", async () => {
+  // Controller ruling (A4 fix round 1): a setup that fails means the check could not run -- errored like an unreadable
+  // target (the watermark stays, the streak grows), never a red check, so no system debug group is opened.
+  it("a failing setup is a could-not-run: errored, no debug group, the watermark kept, and its checks do not run", async () => {
     const out = await realpath(await mkdtemp(join(tmpdir(), "orca-integration-setup-")));
     const ran = join(out, "ran");
     const w = await world([{ taskId: "a", contextExtra: { setupCommands: ["exit 5"] } }]); const { h } = w; try {
       w.setCheck(true, `touch '${ran}'`);
       w.land("old");
       await w.pass();
+      const watermark = w.state()!.watermark, streak = w.state()!.failureStreak;
       await w.commitLand("g"); await w.commitLand("g2");
       expect(await w.pass()).toEqual({ started: ["repo"] });
-      expect(w.state()?.last).toMatchObject({ state: "failed", detail: "setup: exit 5" });
+      // Mutation "route setup failure into failures" -> failed, a sysdebug group, the watermark moved: red.
+      expect(w.state()?.last).toMatchObject({ state: "errored", detail: "the integration check could not run: setup exit 5 failed", debugGroupIds: [] });
+      expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE substr(id,1,9)='sysdebug-'").get()?.n).toBe(0);
+      expect(w.state()!.watermark).toBe(watermark);
+      expect(w.state()!.failureStreak).toBe(streak + 1);
       expect(existsSync(ran)).toBe(false);
     } finally { await h.dispose(); await rm(out, { recursive: true, force: true }); }
   });

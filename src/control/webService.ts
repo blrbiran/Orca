@@ -71,7 +71,7 @@ import { groupStopState } from "./stopIntent.js";
 import { readGroupOrchestration } from "./orchestration.js";
 import type { PartialSelection } from "./agentSelection.js";
 import { integrationCheckFacts, runIntegrationCheck } from "./integrationCheck.js";
-import { unionSetup } from "./setupCommands.js";
+import { unionSetup } from "./setupUnion.js";
 import { applyResumeCheck, applyRunCheckNow, applySetCheckLocks, applySetCheckSettings, applySetScheduledCheck, type CheckCommand } from "./checks/commands.js";
 import { migrateIntegrationMeta } from "./checks/migrate.js";
 import { applyCheckEnded, asked, consumeStarters, dueStarters, initialiseSlots, prepareRange, projectTargets, rangeFacts, recordCheckEnded, recordCheckSkipped, recordCheckStarted, type CheckEnd, type Starters } from "./checks/pass.js";
@@ -1280,6 +1280,12 @@ export class WebControlService {
     const ids = groups.map((group) => group.groupId);
     try {
       const run = await runIntegrationCheck(this.repositoryPath(repoId), controlWorkspaceRoots(this.store.stateDir), repoId, target, commands, setup, at, join(this.store.stateDir, DISPATCHED_PERSON_DIRNAME));
+      // Task setup spec 2026-11-04 §4.6 (controller ruling, A4 fix round 1): a setup that failed means the check could not
+      // run -- errored (the watermark stays, the streak grows), never a red check, so no debug group is opened.
+      if (run.setupFailure !== null) {
+        recordCheckEnded(this.store, repoId, "integration-check", target, { state: "errored", at, detail: `the integration check could not run: setup ${run.setupFailure.command} failed`.slice(0, 500) });
+        return;
+      }
       // §5.2: a completed check (green or red) covers its range: the watermark moves to the head it read at the start.
       if (run.failures.length === 0) { recordCheckEnded(this.store, repoId, "integration-check", target, { state: "passed", at, moveTo: head }); return; }
       const source = { kind: "integration-check" as const, groupId: ids.at(-1)!, taskId: null, runId: `check-${at}` };

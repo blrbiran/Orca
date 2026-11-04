@@ -3,9 +3,8 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { git } from "../scheduler/gitExec.js";
 import type { DispatchedAs } from "./commandClient.js";
-import { exitsZero, restoreWorkspace, snapshotWorkspace, type WorkspaceSnapshot } from "./debugRepro.js";
+import { exitsZero, restoreWorkspace, runSetup, snapshotWorkspace, type WorkspaceSnapshot } from "./debugRepro.js";
 import { gitChild, oneLine } from "./integrationGit.js";
-import { runSetup } from "./setupCommands.js";
 import { QUIET_GIT } from "./workspace.js";
 
 /**

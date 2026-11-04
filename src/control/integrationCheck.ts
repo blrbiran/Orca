@@ -8,7 +8,7 @@ import { readGroupIntegration } from "./integrationScheme.js";
 import { readArchivedPlan } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { removeOwnPath, type WorkspaceRoots } from "./workspace.js";
-import { unionSetup } from "./setupCommands.js";
+import { unionSetup } from "./setupUnion.js";
 import { readRepositorySettingsBody } from "./workspaceSettings.js";
 
 /**
@@ -62,7 +62,12 @@ export function landedGroups(store: ControlStore, repoId: string, options: { inc
 }
 
 export interface CheckFailure { command: string; exit: string; tail: string }
-export interface IntegrationCheckRun { commit: string; failures: CheckFailure[]; commands: string[] }
+/**
+ * `setupFailure`: task setup spec 2026-11-04 §4.6 (controller ruling, A4 fix round 1) -- the first setup command that did
+ * not exit 0 (its own command, no prefix). The check could not run, so it is no check verdict: `failures` stays empty and
+ * no check ran.
+ */
+export interface IntegrationCheckRun { commit: string; failures: CheckFailure[]; commands: string[]; setupFailure: CheckFailure | null }
 
 const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.slice(text.length - TAIL_CHARS);
 
@@ -71,8 +76,8 @@ const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.s
  * Each command as ccloop runs a required check (`sh -lc`, inherited environment); a timeout is a failure.
  * `personDir`: the panel's empty `dispatched-person` directory, the commands' ORCA_PERSON_DIR (CLI v2 spec §15.3, review M1).
  * Task setup spec 2026-11-04 §4.6: the fresh worktree has no dependencies, so `setup` (the landed tasks' setup commands,
- * de-duplicated by the caller) runs first, each the same way and with the same bound; the first that fails is the run's
- * only failure, its command field `setup: <cmd>`, and no check runs after it.
+ * de-duplicated by the caller) runs first, each the same way and with the same bound; the first that fails is answered as
+ * `setupFailure` (a could-not-run, never a check failure), and no check runs after it.
  */
 export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, repoId: string, target: string, commands: string[], setup: readonly string[], at: number, personDir: string, rev: string = `refs/heads/${target}`): Promise<IntegrationCheckRun> {
   const head = await gitChild(repo, ["rev-parse", "--verify", `${rev}^{commit}`]);
@@ -83,30 +88,30 @@ export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, r
   const added = await gitChild(repo, ["worktree", "add", "--detach", path, commit]);
   if (added.code !== 0) throw new Error(`integration-check: worktree: ${added.stderr.trim().slice(0, 200)}`);
   const failures: CheckFailure[] = [];
-  /** One command as a required check runs; its failure (named `name`) is answered, null when it exited 0. */
-  const run = async (command: string, name: string): Promise<CheckFailure | null> => {
+  let setupFailure: CheckFailure | null = null;
+  /** One command as a required check runs; its failure is answered, null when it exited 0. */
+  const run = async (command: string): Promise<CheckFailure | null> => {
     try {
       const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: dispatchedEnv({ runId: checkId, personDir }) }); // CLI v2 spec §15.3-§15.4 (review M1)
-      return answer.code === 0 ? null : { command: name, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
+      return answer.code === 0 ? null : { command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
     } catch (error) {
       if (!(error instanceof ChildTimeout)) throw error;
-      return { command: name, exit: `timeout ${INTEGRATION_CHECK_COMMAND_TIMEOUT_MS} ms`, tail: "" };
+      return { command, exit: `timeout ${INTEGRATION_CHECK_COMMAND_TIMEOUT_MS} ms`, tail: "" };
     }
   };
   try {
-    let setupFailed = false;
     for (const command of setup) {
-      const failure = await run(command, `setup: ${command}`);
-      if (failure !== null) { failures.push(failure); setupFailed = true; break; }
+      setupFailure = await run(command);
+      if (setupFailure !== null) break;
     }
-    if (!setupFailed) for (const command of commands) {
-      const failure = await run(command, command);
+    if (setupFailure === null) for (const command of commands) {
+      const failure = await run(command);
       if (failure !== null) failures.push(failure);
     }
   } finally {
     await removeOwnPath(repo, roots, path).catch(() => undefined);
   }
-  return { commit, failures, commands };
+  return { commit, failures, commands, setupFailure };
 }
 
 /** The facts a red check gives its debug task (system debug task spec §2): which commands failed, their exit and output tail. */

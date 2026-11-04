@@ -3,7 +3,8 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { runSetup, setupCommandsOf, unionSetup } from "../../src/control/setupCommands.js";
+import { runSetup } from "../../src/control/debugRepro.js";
+import { setupCommandsOf, unionSetup } from "../../src/control/setupUnion.js";
 
 /**
  * Task setup spec 2026-11-04 §4.6: Orca's own check runs install a task's setup first. runSetup is what the criteria base

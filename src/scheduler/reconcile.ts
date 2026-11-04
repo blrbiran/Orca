@@ -1,5 +1,5 @@
 import { DEFAULT_RECONCILE_TOKENS } from "../control/tokenPolicy.js";
-import { setupCommandsOf, unionSetup } from "../control/setupCommands.js";
+import { setupCommandsOf, unionSetup } from "../control/setupUnion.js";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";

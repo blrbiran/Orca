@@ -195,6 +195,48 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
     } finally { await t.h.dispose(); }
   });
 
+  // A4 fix round 1: a file only a setup command names defines the checks at C and at the landing alike. The base version
+  // of the setup script fails (`exit 1`), the attempt's passes: C classifies the edit `modified` and re-runs at base, where
+  // the reverted setup fails, and the landing (criteriaFlagOf) classifies it the same way and flags it.
+  const SETUP = "sh scripts/setup.sh";
+  async function setupLanding(baseScript: string) {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["scripts/**", "a"], contextExtra: { setupCommands: [SETUP] } }],
+      { files: () => ({ "scripts/setup.sh": "exit 0\n" }), requiredChecks: ["true"] });
+    await mkdir(join(t.repo, "scripts"), { recursive: true });
+    await writeFile(join(t.repo, "scripts", "setup.sh"), baseScript);
+    hgit(t.repo, "add", "scripts"); hgit(t.repo, "commit", "-qm", "setup script");
+    return { t, runId: await t.claim() };
+  }
+
+  it("an attempt that edits only a setup-named script is classified at C and flagged at the landing", async () => {
+    const { t, runId } = await setupLanding("exit 1\n"); try {
+      await land(t, runId);
+      expect(t.body(runId).drive.landedCommit).not.toBeNull();
+      // C classified it `modified` (mutation "stepC drops setup" -> no re-run, null): the re-run's setup failed at base.
+      expect(t.body(runId).drive.criteriaBase).toEqual({ result: "failed", command: `setup: ${SETUP}` });
+      // Mutation "criteriaFlagOf drops setup" -> the landing sees no check-defining change, no flag: red.
+      expect(listFlaggedDecisions(t.h.store, "g")).toEqual([expect.objectContaining({ decisionId: `${runId}/orca-criteria`, source: "test-change", state: "flagged" })]);
+      const decision = JSON.parse(ledgerOf(t, runId).split("\n").find((line) => line.includes("orca-criteria"))!) as { evidence: string[] };
+      expect(decision.evidence).toEqual(expect.arrayContaining([`base-run-failed: setup: ${SETUP}`, "changed: scripts/setup.sh"]));
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a restart while that re-run is in flight recomputes its files with the setup commands", async () => {
+    // The base version is slow, so the first driver is stopped while the re-run's setup runs.
+    const { t, runId } = await setupLanding("sleep 2; exit 1\n"); try {
+      const first = t.driver();
+      await settle(first, () => t.body(runId).drive?.debugRepro?.state === "checking");
+      expect(t.body(runId).drive.debugRepro.check).toBe("criteria-base");
+      await first.stop();
+      const repo = join(t.body(runId).drive.sourceDir, "repo"), deadline = Date.now() + 15_000;
+      while ((existsSync(join(repo, ".git", "index.lock")) || hgit(repo, "status", "--porcelain") !== "") && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+      await land(t, runId, createExecutionDriver(t.deps));
+      // Mutation "the resume path's classifyCriteriaChange drops setup" -> no file reverted, the attempt's setup passes,
+      // base-passed: red.
+      expect(t.body(runId).drive.criteriaBase).toEqual({ result: "failed", command: `setup: ${SETUP}` });
+    } finally { await t.h.dispose(); }
+  });
+
   it("does not re-run a weakening (it is flagged whatever the base says)", async () => {
     const { t, runId } = await landing({ "tests/value.test.txt": "it.skip('value', () => {});\n" }, [CHECK]); try {
       await land(t, runId);

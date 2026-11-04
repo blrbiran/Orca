@@ -263,8 +263,8 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
   // The fixture contract's only check is `true`, so a reported reproCommand is what makes base and head differ.
   const task = (taskId: string) => ({ taskId, targetPaths: [taskId, "tests"] });
   const files = (id: string) => ({ [id]: `${id}\n`, [`tests/${id}.test.txt`]: "t\n" });
-  async function debugHarness(debug: (id: string) => unknown, over: { files?: (id: string) => Record<string, string>; tasks?: string[]; duringCollect?: () => Promise<void> } = {}) {
-    const t = await driverHarness((over.tasks ?? ["a"]).map(task), { files: over.files ?? files, debug, ...(over.duringCollect ? { duringCollect: over.duringCollect } : {}) });
+  async function debugHarness(debug: (id: string) => unknown, over: { files?: (id: string) => Record<string, string>; tasks?: string[]; duringCollect?: () => Promise<void>; setupCommands?: string[] } = {}) {
+    const t = await driverHarness((over.tasks ?? ["a"]).map(task).map((entry) => over.setupCommands === undefined ? entry : { ...entry, contextExtra: { setupCommands: over.setupCommands } }), { files: over.files ?? files, debug, ...(over.duringCollect ? { duringCollect: over.duringCollect } : {}) });
     const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
     t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(String(row.body)), debug: MARK }));
     writeCanonicalRecord(t.h.store, "g", MARK.inputHash, canonicalBytes(FROZEN).toString("utf8"));
@@ -322,6 +322,19 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       const drive = t.body(runId).drive;
       expect(hgit(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(drive.landedCommit);
       expect(drive.debugRepro).toBe(null);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  });
+
+  // A4 fix round 1: the driver hands the contract's setup to the reproduce-first check. The command needs what setup
+  // leaves (an untracked marker, still there at base), so without it the check is red at head and the run blocks.
+  it("a debug run's reproduction runs the task's setup first", async () => {
+    const t = await debugHarness(() => ({ reproCommand: "test -f setup-ran && test -f a" }), { setupCommands: ["touch setup-ran"] });
+    const driver = t.driver();
+    try {
+      const runId = await t.claim();
+      // Mutation "startDebugCheck does not pass setupCommands" -> blocked at C, debug-repro:red-at-head: red.
+      await settle(driver, () => t.body(runId).state === "landed" || t.body(runId).state === "blocked");
+      expect({ state: t.body(runId).state, reason: t.body(runId).drive.blockedReason }).toEqual({ state: "landed", reason: null });
     } finally { await driver.stop(); await t.h.dispose(); }
   });
 

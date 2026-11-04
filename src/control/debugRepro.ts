@@ -3,7 +3,6 @@ import type { taskContractSchema } from "../scheduler/planFile.js";
 import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS, DEBUG_TEST_DIRS } from "./debugPlan.js";
 import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, gitChild, oneLine, spawnRunChild } from "./integrationGit.js";
-import { runSetup } from "./setupCommands.js";
 import type { DebugResult } from "./reportedDecisions.js";
 
 type TaskContract = z.infer<typeof taskContractSchema>;
@@ -55,6 +54,19 @@ export async function exitsZero(workdir: string, command: string, timeoutMs: num
     if (error instanceof ChildTimeout) return false;
     throw error;
   }
+}
+
+/**
+ * Task setup spec 2026-11-04 §4.6: Orca runs a task's required checks itself in directories that would otherwise have no
+ * dependencies (the criteria base run, the reproduce-first check), so the task's setup commands run there first, each as
+ * a check runs (exitsZero), in order, stopping at the first that does not exit 0. The integration check runs its setup
+ * through its own spawn path (integrationCheck.ts), not through here.
+ */
+export async function runSetup(workdir: string, commands: readonly string[], timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<{ ok: true } | { ok: false; command: string }> {
+  for (const command of commands) {
+    if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) return { ok: false, command };
+  }
+  return { ok: true };
 }
 
 export async function snapshotWorkspace(workdir: string): Promise<WorkspaceSnapshot> {

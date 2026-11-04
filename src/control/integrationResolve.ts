@@ -23,7 +23,7 @@ import { markersRemaining, materialiseConflict, pinConflictCommit } from "../sch
 import type { PlanFile, PlanTask, taskContractSchema } from "../scheduler/planFile.js";
 import type { ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
-import { unionSetup } from "./setupCommands.js";
+import { unionSetup } from "./setupUnion.js";
 
 /**
  * Integration spec §7 (ruling R3): an integration conflict resolved by an agent. A group-level machine of its own that
