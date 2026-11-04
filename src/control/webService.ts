@@ -984,12 +984,14 @@ export class WebControlService {
       const involved = involvedOf(entry);
       const checks = [...new Set(groups.filter((group) => involved.includes(group.groupId)).flatMap((group) => group.checks))].slice(0, 32);
       if (checks.length === 0) { routed.push({ findingId: entry.id, severity: "major", debugGroupId: null, detail: "no-checks: fix not opened" }); continue; }
+      // Task setup spec §4.6 (I3): the involved groups' checks need their setup; there is no source task to carry it.
+      const setup = unionSetup(groups.filter((group) => involved.includes(group.groupId)).map((group) => group.setup));
       const findingSource = { kind: "model-review-finding" as const, repoId: source.repoId, reviewGroupId: groupId, findingId: entry.id };
       const fixId = systemDebugGroupId(findingSource);
       const facts = [`${entry.category} (${entry.severity}): ${entry.title}`, entry.explanation, ...entry.evidence.map((evidence) => `evidence: group ${evidence.groupId}, ${evidence.path}:${evidence.line}${evidence.note === "" ? "" : ` -- ${evidence.note}`}`), ...(entry.suggestedFix === "" ? [] : [`suggested fix: ${entry.suggestedFix}`])].map((fact) => fact.slice(0, 4096)).slice(0, 32);
       const answer = await this.openSystemDebugGroup({
         schema: "orca-raw-command-v1", commandId: `orca-auto-finding-${groupId}-${entry.id}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
-        verb: "system-debug-open", target: { kind: "group", groupId: fixId }, payload: { source: findingSource, stackOn: null, repoId: source.repoId, facts, checks },
+        verb: "system-debug-open", target: { kind: "group", groupId: fixId }, payload: { source: findingSource, stackOn: null, repoId: source.repoId, facts, checks, ...(setup === undefined ? {} : { setup }) },
       }, [...involved].reverse().map((id) => groupWorkerAgent(this.store, id)).find((agent) => agent !== undefined) ?? (() => { const profile = newestConfirmedGroup(this.store, source.repoId); return profile === null ? undefined : reviewAgentOf(this.store, profile); })());
       const error = (answer as { error?: { code?: unknown } }).error;
       if (error === undefined) debugGroupIds.push(fixId);
@@ -1308,7 +1310,8 @@ export class WebControlService {
       const answer = await this.openSystemDebugGroup({
         schema: "orca-raw-command-v1", commandId: `orca-auto-integration-check-${at}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: 0,
         verb: "system-debug-open", target: { kind: "group", groupId },
-        payload: { source, stackOn: null, repoId, facts: integrationCheckFacts(run, ids, target), checks: run.failures.map((failure) => failure.command) },
+        // Task setup spec §4.6 (I3): the red checks ran after the groups' setup; the debug group's run needs it too.
+        payload: { source, stackOn: null, repoId, facts: integrationCheckFacts(run, ids, target), checks: run.failures.map((failure) => failure.command), ...(setup.length === 0 ? {} : { setup: [...setup] }) },
       });
       const error = (answer as { error?: { code?: unknown } }).error;
       recordCheckEnded(this.store, repoId, "integration-check", target, { state: "failed", at, moveTo: head, detail: run.failures.map((failure) => failure.command).join("; ").slice(0, 500), debugGroupIds: error === undefined ? [groupId] : [] });

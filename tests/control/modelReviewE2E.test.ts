@@ -28,10 +28,10 @@ import { driverHarness, git } from "./fixtures/driverHarness.js";
 const DAY = 86_400_000;
 type Snapshot = { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null };
 
-async function world(options: { behaviour?: FakeBehaviour; budgetSnapshot?: Snapshot; reviewerExtra?: Record<string, string> } = {}) {
+async function world(options: { behaviour?: FakeBehaviour; budgetSnapshot?: Snapshot; reviewerExtra?: Record<string, string>; setup?: string[] } = {}) {
   let now = Date.parse("2026-10-22T00:00:00.000Z");
   let findings: unknown = null;
-  const t = await driverHarness([{ taskId: "a" }], {
+  const t = await driverHarness([options.setup === undefined ? { taskId: "a" } : { taskId: "a", contextExtra: { setupCommands: options.setup } }], {
     storeNow: () => now,
     files: (id) => id === "debug" ? { ".orca-review/findings.json": JSON.stringify(findings), ...(options.reviewerExtra ?? {}) } : { [id]: `${id}\n` },
     behaviour: (id) => id === "debug" ? options.behaviour ?? "succeed" : "succeed",
@@ -161,6 +161,8 @@ describe("the model review run (checks spec §6, criterion 8)", { timeout: 240_0
       const fixContract = JSON.parse(readArchivedPlan(w.h.store, fixId).plan.tasks[0]!.originalContractCanonicalJson) as { verification: { requiredChecks: string[] }; objective: { goal: string } };
       expect(fixContract.verification.requiredChecks).toEqual(["true"]);
       expect(fixContract.objective.goal).toContain("shared.txt");
+      // Final-review fix wave (I3): the involved groups have no setup, so the fix's contract names none (bytes kept).
+      expect("setupCommands" in (fixContract as unknown as { context: Record<string, unknown> }).context).toBe(false);
       const major = readFlaggedDecision(w.h.store, `model-review:${reviewId}:drift-major`)!;
       expect(major).toMatchObject({ groupId: reviewId, source: "model-review", state: "flagged", severity: "major", involvedGroupIds: ["g1", "g2"], flaggedBy: ORCHESTRATION_ACTOR });
       const minor = readFlaggedDecision(w.h.store, `model-review:${reviewId}:dup-minor`)!;
@@ -185,6 +187,21 @@ describe("the model review run (checks spec §6, criterion 8)", { timeout: 240_0
       expect(git(w.repo, "rev-parse", "main")).toBe(late);
       expect((await w.service.systemDebugPass()).settled).toEqual([]);
     } finally { await w.h.dispose(); }
+  });
+
+  // Final-review fix wave (I3): a finding's fix runs the involved groups' checks, which need their setup; it has no source
+  // task to inherit it from, so the open names the involved groups' setup.
+  it("a major finding's fix group carries the involved groups' setup", async () => {
+    const w = await world({ setup: ["true", "test -f shared.txt"] }); try {
+      const reviewId = await openOne(w);
+      w.setFindings(goodFindings(w, reviewId));
+      await w.driveReview(reviewId);
+      await w.service.systemDebugPass();
+      expect(w.findingGroups()).toHaveLength(1);
+      const fixContract = JSON.parse(readArchivedPlan(w.h.store, w.findingGroups()[0]!).plan.tasks[0]!.originalContractCanonicalJson) as { context: { setupCommands?: string[] } };
+      // Mutation I3-M3 (the finding's open omits the setup) -> absent, red.
+      expect(fixContract.context.setupCommands).toEqual(["true", "test -f shared.txt"]);
+    } finally { await w.t.h.dispose(); }
   });
 
   it("an attempt that writes outside the findings file ends errored: not-read-only, watermark kept, streak 1", async () => {

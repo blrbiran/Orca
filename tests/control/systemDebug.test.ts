@@ -269,4 +269,14 @@ describe("buildSystemDebugPlanSource keeps the original's setup", () => {
     expect("setupCommands" in built(original()).context).toBe(false);
     expect("setupCommands" in built(null).context).toBe(false);
   });
+
+  // Final-review fix wave (I3): an integration check or a model-review finding has no source task; the open names the
+  // setup, and the original's own setup (when there is one) still wins.
+  it("with no original, the open's setup is the contract's; an original's setup wins", () => {
+    const withSetup = { ...input, setup: ["npm ci"] } as SystemDebugInputV1;
+    const of = (contract: ReturnType<typeof original> | null) => taskContractSchema.parse(buildSystemDebugPlanSource(withSetup, contract, "/repo", undefined).tasks[0]!.originalContract);
+    // Mutation I3-M1 (the builder reads only the contract's setup) -> absent, red.
+    expect(of(null).context.setupCommands).toEqual(["npm ci"]);
+    expect(of(original({ setupCommands: ["make gen"] })).context.setupCommands).toEqual(["make gen"]);
+  });
 });

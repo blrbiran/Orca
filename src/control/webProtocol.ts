@@ -5,7 +5,7 @@ import { usageSettlementSchema } from "./usageSettlement.js";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
 import { nonEmptyStoredLabelsSchema, storedLabelsSchema } from "./labels.js";
 import { CLARITIES, DRAFT_STATES, IDEA_MAX_BYTES, REQUIREMENT_WAITING, ROUND_STATES, SCOPES, classPairSchema, classificationSchema, draftBodySchema, questionIdSchema, requirementExportSchema, roundBodySchema } from "./requirementSchemas.js";
-import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema } from "./loopPlans.js";
+import { LOOP_PLAN_IDS, loopInputsSchema, loopRecipeSchema, loopSkillsSchema, setupCommandsSchema } from "./loopPlans.js";
 import { isTimeZone } from "./usageCalendar.js";
 import { CHECK_KINDS, LOCKABLE_PATHS, globalChecksLayerSchema, integrationCheckLayerSchema, modelReviewLayerSchema, scheduledCheckSchema } from "./checks/settingsSchema.js";
 import { FLOW_LOCKABLE_PATHS, FLOW_SETTING_FIELDS, flowsLayerSchema, globalFlowsLayerSchema } from "../flow/settingsSchema.js";
@@ -1153,6 +1153,9 @@ export const systemDebugOpenPayloadSchema = z.object({
   repoId: idSchema,
   facts: z.array(z.string().min(1).max(4096)).min(1).max(32),
   checks: z.array(nonemptyString).min(1).max(32),
+  // Task setup spec 2026-11-04 §4.6 (final-review fix wave, I3): the setup the checks need when there is no source task
+  // (an integration check's groups, a finding's involved groups); omitted when there is none, so the bytes do not change.
+  setup: setupCommandsSchema.optional(),
   // Checks spec 2026-10-22 §6.1-§6.2: a model review's own plan inputs (required for that source kind, refused on any other).
   review: z.object({
     inputDir: z.string().min(1).max(4096), inputSha256: hashSchema, groups: z.array(idSchema).min(1).max(50),

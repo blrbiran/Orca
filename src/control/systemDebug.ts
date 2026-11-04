@@ -120,6 +120,8 @@ export function systemDebugGoalText(input: SystemDebugInputV1, contract: TaskCon
 
 export interface SystemDebugInputV1 {
   schema: typeof SYSTEM_DEBUG_INPUT_SCHEMA; source: SystemDebugSource; stackOn: string | null; repoId: string; facts: string[]; checks: string[];
+  /** Task setup spec 2026-11-04 §4.6 (I3): the open's setup, for a source with no task contract; absent when none. */
+  setup?: string[];
 }
 
 const unique = (values: readonly string[]): string[] => [...new Set(values)];
@@ -137,8 +139,9 @@ export function buildSystemDebugPlanSource(input: SystemDebugInputV1, contract: 
       // to its segment comparison.
       repoPath, targetPaths: [SYSTEM_DEBUG_TARGET_PATH], relevantDocs: [...(contract?.context.relevantDocs ?? [])],
       buildTestCommands: checks, constraints: [],
-      // The checks are the original task's; they need its setup to run. Absent stays absent (never []).
-      ...(contract?.context.setupCommands !== undefined ? { setupCommands: [...contract.context.setupCommands] } : {}),
+      // The checks are the original task's; they need its setup to run. With no original task (an integration check, a
+      // model-review finding) the open names the setup its groups' checks need (I3). Absent stays absent (never []).
+      ...((contract?.context.setupCommands ?? input.setup) !== undefined ? { setupCommands: [...(contract?.context.setupCommands ?? input.setup)!] } : {}),
     },
     executionPolicy: { ...(contract?.executionPolicy ?? DEBUG_DEFAULT_EXECUTION_POLICY) },
     safetyPolicy: {
@@ -180,7 +183,7 @@ function success(context: Parameters<Parameters<typeof applyWebCommand>[1]["appl
  * no integration scheme of its own (keep).
  */
 export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemDebugOpenCommand, reviewAgent?: PartialSelection): WebCommandResult {
-  const { source, stackOn, repoId, facts, checks, review } = command.payload;
+  const { source, stackOn, repoId, facts, checks, review, setup } = command.payload;
   let repoPath: string | null = null, refusal: unknown = null;
   // Multi-directory projects spec §12: a debug group imports a plan, which a multi id refuses by name.
   if (deps.multiDirRepoId?.(repoId) ?? false) refusal = new ControlError("debug-multi-dir-unsupported", repoId);
@@ -203,7 +206,7 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
         if (readSystemDebugMark(existing) === null) throw new ControlError("group-already-exists");
         return success(context, groupId, false);
       }
-      const input: SystemDebugInputV1 = { schema: SYSTEM_DEBUG_INPUT_SCHEMA, source, stackOn, repoId, facts: [...facts], checks: [...checks] };
+      const input: SystemDebugInputV1 = { schema: SYSTEM_DEBUG_INPUT_SCHEMA, source, stackOn, repoId, facts: [...facts], checks: [...checks], ...(setup === undefined ? {} : { setup: [...setup] }) };
       const inputJson = canonicalBytes(input).toString("utf8"), inputHash = sha256Canonical(input);
       const planId = debugPlanId(groupId);
       // Checks spec §6.1 step 0: a review has its own read-only plan builder (the debug builder's write set is `**`).

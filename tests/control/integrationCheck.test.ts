@@ -9,6 +9,7 @@ import { INTEGRATION_CHECK_MIN_INTERVAL_MS } from "../../src/control/integration
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
 import { readSystemDebugMark } from "../../src/control/systemDebug.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
+import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { unsetInheritedGitEnv } from "../../src/control/workspace.js";
@@ -111,8 +112,11 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       expect(debugGroupId).toMatch(/^sysdebug-integration-check-[a-f0-9]{16}$/);
       const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(debugGroupId)!.body));
       expect(readSystemDebugMark(body)).toMatchObject({ source: { kind: "integration-check", groupId: "g2", taskId: null }, stackOn: null, settled: null });
-      const contract = JSON.parse(readArchivedPlan(h.store, debugGroupId).plan.tasks[0]!.originalContractCanonicalJson) as { objective: { goal: string }; verification: { requiredChecks: string[] } };
+      const contract = JSON.parse(readArchivedPlan(h.store, debugGroupId).plan.tasks[0]!.originalContractCanonicalJson) as { objective: { goal: string }; context: Record<string, unknown>; verification: { requiredChecks: string[] } };
       expect(contract.verification.requiredChecks).toEqual(["test -f base.txt && test -f missing.txt"]);
+      // Final-review fix wave (I3): no task has setup, so neither the open's input nor the contract names any (bytes kept).
+      expect("setupCommands" in contract.context).toBe(false);
+      expect("setup" in JSON.parse(readCanonicalRecord(h.store, readSystemDebugMark(body)!.inputHash))).toBe(false);
       expect(contract.objective.goal).toContain("after groups g, g2 were merged into it");
       // The worktree is gone (only the repository's own remains).
       expect(g(w.repo, "worktree", "list", "--porcelain").split("\n").filter((line) => line.startsWith("worktree ")).length).toBe(1);
@@ -175,6 +179,25 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       // Two groups of two tasks each name `npm ci`: once. Mutation A4-M3 (per task, duplicates) -> red.
       expect(readFileSync(log, "utf8")).toBe("npm ci\nmake gen\ncheck\n");
     } finally { await h.dispose(); await rm(out, { recursive: true, force: true }); }
+  });
+
+  // Final-review fix wave (I3): the red check ran after the groups' setup, so the debug group it opens -- which has no
+  // source task to inherit it from -- carries that setup to its own run.
+  it("a red check after setup opens a debug group whose contract carries the groups' setup", async () => {
+    const w = await world([
+      { taskId: "a", contextExtra: { setupCommands: ["true"] } },
+      { taskId: "b", contextExtra: { setupCommands: ["true", "test -f base.txt"] } },
+    ]); const { h } = w; try {
+      w.setCheck(true, "test -f missing.txt");
+      w.land("old");
+      await w.pass();
+      await w.commitLand("g"); await w.commitLand("g2");
+      expect(await w.pass()).toEqual({ started: ["repo"] });
+      const debugGroupId = w.state()!.last!.debugGroupIds[0]!;
+      const contract = JSON.parse(readArchivedPlan(h.store, debugGroupId).plan.tasks[0]!.originalContractCanonicalJson) as { context: { setupCommands?: string[] } };
+      // Mutation I3-M2 (runIntegrationCheckJob opens without the setup) -> absent, red.
+      expect(contract.context.setupCommands).toEqual(["true", "test -f base.txt"]);
+    } finally { await h.dispose(); }
   });
 
   // Controller ruling (A4 fix round 1): a setup that fails means the check could not run -- errored like an unreadable
