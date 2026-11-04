@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
-import { expandLoopTask, expandRecipe, loopPlanFileSchema, loopRecipeSchema, normalizeLoopInputs, SETUP_CONSTRAINT } from "../../src/control/loopPlans.js";
+import { expandLoopTask, expandRecipe, loopInputsSchema, loopPlanFileSchema, loopRecipeSchema, normalizeLoopInputs, SETUP_CONSTRAINT } from "../../src/control/loopPlans.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
 
 /** Task setup spec A2: a task's optional `setup` reaches the contract as context.setupCommands; absent, no byte changes. */
@@ -24,10 +24,14 @@ describe("task setup through plan, recipe and contract", () => {
     expect(canonicalBytes(recipe).toString("utf8")).toBe(golden.recipeCanonical);
     expect("setupCommands" in (historical.contract as { context: object }).context).toBe(false);
     const e = expand();
-    expect("setup" in e.recipe.inputs).toBe(false);
-    expect("setupCommands" in (e.contract as { context: object }).context).toBe(false);
-    expect(e.canonicalJson).not.toContain("setup");
-    expect(e.canonicalJson).not.toContain(SETUP_CONSTRAINT);
+    // The fresh path (plan file -> normalizeLoopInputs -> expandLoopTask) is at the current plan version; the golden is
+    // version 2. Pinned to the golden's version, its bytes and contract hash must be the committed ones.
+    expect(e.recipe.planVersion).toBeGreaterThan(recipe.planVersion);
+    const pinned = { ...e.recipe, planVersion: recipe.planVersion };
+    expect(canonicalBytes(pinned).toString("utf8")).toBe(golden.recipeCanonical);
+    const pinnedExpansion = expandRecipe("a", "/repo", pinned);
+    if (!pinnedExpansion.ok) throw new Error(pinnedExpansion.reason);
+    expect(pinnedExpansion.hash).toBe(golden.contractHash);
   });
 
   it("present setup reaches context.setupCommands and adds the constraint", () => {
@@ -42,6 +46,14 @@ describe("task setup through plan, recipe and contract", () => {
     for (const setup of bad) expect(loopPlanFileSchema.safeParse({ ...GOLDEN_INPUT, setup }).success, JSON.stringify(setup).slice(0, 30)).toBe(false);
     for (const setup of [["x".repeat(4096)], Array.from({ length: 8 }, (_, i) => `c${i}`)]) {
       expect(loopPlanFileSchema.safeParse({ ...GOLDEN_INPUT, setup }).success).toBe(true);
+    }
+  });
+
+  it("loopInputsSchema (set-task-loop, webProtocol) bounds setup the same way", () => {
+    const inputs = { goal: "g", successCondition: "s", targetPaths: ["a"], checks: ["c"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null };
+    expect(loopInputsSchema.safeParse({ ...inputs, setup: ["npm ci"] }).success).toBe(true);
+    for (const setup of [[], ["a\nb"], ["x".repeat(4097)], Array.from({ length: 9 }, (_, i) => `c${i}`)]) {
+      expect(loopInputsSchema.safeParse({ ...inputs, setup }).success).toBe(false);
     }
   });
 
