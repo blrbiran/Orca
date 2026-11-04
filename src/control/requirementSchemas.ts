@@ -1,5 +1,6 @@
 import type { BudgetAmount } from "./tokenPolicy.js";
 import { z } from "zod";
+import { setupCommandsSchema } from "./loopPlans.js";
 import { amountSchema, canonicalTimestampSchema, idSchema, safeInteger } from "./schema.js";
 import type { Amount } from "./types.js";
 
@@ -85,6 +86,9 @@ export const roundBodySchema = z.object({
 export const splitTaskSchema = z.object({
   taskId: nonempty, title: nonempty, labels: z.array(z.string()), loopPlan: nonempty.optional(), goal: nonempty, successCondition: nonempty,
   targetPaths: z.array(nonempty).min(1), checks: z.array(nonempty).min(1), dependsOn: z.array(nonempty), traces: z.array(nonempty),
+  // Task setup spec §4.2: the commands that make the task's checks runnable in a fresh clone; absent, not `[]`. The
+  // multi-directory task below does not have it (spec §5.4).
+  setup: setupCommandsSchema.optional(),
 }).strict();
 export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string() }).strict();
 /**

@@ -17,14 +17,14 @@ type ManifestEntry = ManifestsPart["entries"][number];
 const LOCKFILES: ReadonlySet<string> = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
 const OTHER_MANIFEST = /^(pyproject\.toml|requirements[^/]*\.txt|Makefile|Cargo\.toml|go\.mod)$/;
 /** A package.json larger than this is not read whole, so it is listed as no package (it would not parse). */
-const MAX_PACKAGE_BYTES = 1024 * 1024;
+export const MAX_PACKAGE_BYTES = 1024 * 1024;
 
 const dirOf = (path: string): string => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 const manifestPath = (dir: string): string => (dir === "" ? "package.json" : `${dir}/package.json`);
 
 /** The three fields the split is sent; null when the blob is not a JSON object. Non-string scripts and workspaces are left out. */
-function packageOf(bytes: Buffer): ManifestEntry["package"] {
+export function packageOf(bytes: Buffer): ManifestEntry["package"] {
   let parsed: unknown;
   try { parsed = JSON.parse(bytes.toString("utf8")); } catch { return null; }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
@@ -68,7 +68,7 @@ const segmentsOf = (pattern: string): string[] => pattern.replace(/^(\.\/)+/, ""
  * Review Focus 2: the root's `workspaces` patterns expanded against the commit's tree (never the disk) -- each directory
  * other than the root that has a committed package.json and matches a pattern, less those a `!` pattern matches.
  */
-function workspaceDirs(patterns: string[], tree: TreeEntry[]): string[] {
+export function workspaceDirs(patterns: string[], tree: TreeEntry[]): string[] {
   const positive = patterns.filter((pattern) => !pattern.startsWith("!")).map(segmentsOf);
   const negative = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => segmentsOf(pattern.slice(1)));
   return tree.filter((entry) => nameOf(entry.path) === "package.json").map((entry) => dirOf(entry.path)).filter((dir) => {

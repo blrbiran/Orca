@@ -1,6 +1,7 @@
 import { ControlError } from "./errors.js";
 import { SYSTEM_LABELS } from "./labels.js";
 import { documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
+import { npmCommandReason } from "./npmCommand.js";
 import { normalizeControlPlan } from "./planImport.js";
 import { deepFreeze, fence } from "./requirementClarify.js";
 import { overviewPathExists } from "./requirementOverview.js";
@@ -65,6 +66,8 @@ const SPLIT_INSTRUCTION_V3 = [
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   ...PLAN_RULES,
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
+  "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). Omit \"setup\" when nothing is needed.",
+  "- A check must name a script or command that already exists in \"manifests\"; never plan to add a script so that a check exists.",
   "- Before the tasks run, Orca commits the agreed requirement document to the repository at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the repository while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "",
   "## The answer",
@@ -128,7 +131,7 @@ export const SPLIT_JSON_SCHEMA: Readonly<Record<string, unknown>> = deepFreeze({
     notes: str,
     tasks: { type: "array", items: { type: "object", additionalProperties: false,
       required: ["taskId", "title", "labels", "goal", "successCondition", "targetPaths", "checks", "dependsOn", "traces"],
-      properties: { taskId: str, title: str, labels: strings, loopPlan: str, goal: str, successCondition: str, targetPaths: strings, checks: strings, dependsOn: strings, traces: strings } } },
+      properties: { taskId: str, title: str, labels: strings, loopPlan: str, goal: str, successCondition: str, targetPaths: strings, checks: strings, dependsOn: strings, traces: strings, setup: strings } } },
   },
 });
 
@@ -159,6 +162,7 @@ export interface SplitValidation {
 
 const loopOf = (task: SplitOutput["tasks"][number]): LoopPlanFileInput => ({
   goal: task.goal, successCondition: task.successCondition, targetPaths: [...task.targetPaths], checks: [...task.checks], ...(task.loopPlan === undefined ? {} : { plan: task.loopPlan }),
+  ...(task.setup === undefined ? {} : { setup: [...task.setup] }),
 });
 
 /** N1 spec §8.2: the model's split as a complete plan file; every task a loop task, labels kept. */
@@ -323,6 +327,11 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   for (const task of output.tasks) for (const path of task.targetPaths) {
     if (!(await overviewPathExists(input.repo, input.commit, path))) reasons.push(`path:${task.taskId}:${path}`);
   }
+  // Task setup spec §4.3: each distinct npm setup or check command against the commit (npmCommand.ts); others pass.
+  for (const command of new Set(output.tasks.flatMap((task) => [...(task.setup ?? []), ...task.checks]))) {
+    const reason = await npmCommandReason(input.repo, input.commit, command);
+    if (reason !== null) reasons.push(reason);
+  }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -371,6 +380,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
 }
 
 const PATH_MEANING = "this target path does not exist in the overview's commit: an exact path must be an existing file or a new file in an existing directory, and `<directory>/**` needs an existing directory";
+const COMMAND_MEANING = "an npm setup or check command names a script or workspace that does not exist in the overview's commit: name a script that is already in that package's `scripts` (as `manifests` lists them) and a workspace the root package.json lists, or a command that is not npm";
 const EXPAND_MEANING: Record<LoopRefusal, string> = {
   "investigate-target": "an investigate task (loopPlan investigate, or no loopPlan and the label investigate) must name exactly one target path, an exact path with no `*`",
   "design-target": "a design task (loopPlan design, or no loopPlan and the label design or doc) must not name `**` as a target path",
@@ -390,6 +400,7 @@ export function explainSplitReason(reason: string): string | null {
   switch (parts[0]) {
     case "expand": return EXPAND_MEANING[parts.at(-1) as LoopRefusal] ?? null;
     case "path": return PATH_MEANING;
+    case "command": return COMMAND_MEANING;
     case "trace": return "this id is neither an acceptance criterion's id nor an accepted decision's id in the requirement document";
     case "untraced": return "no task traces this acceptance criterion; every one must be traced by at least one task";
     case "dir": return "this is not a directory key the project overview lists";
