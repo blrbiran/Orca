@@ -132,7 +132,7 @@ function activityText(entry: ActivityEntryV1): string {
   // Final-review fix wave (minor 5): the sentence already says "not retried", so the kind is not put before it; (I4) the
   // failing command, when the row names one, follows it.
   const skipped = ladderSkipOf(entry);
-  if (skipped !== null) return `${i18n.t(`control.ladder.skipped.${skipped}`)}${typeof body.command === "string" && body.command !== "" ? ` · ${body.command}` : ""}`;
+  if (skipped !== null) return `${i18n.t(`control.ladder.skipped.${skipped}`)}${skipped === "could-not-run" && typeof body.command === "string" && body.command !== "" ? ` · ${body.command}` : ""}`;
   return kind;
 }
 

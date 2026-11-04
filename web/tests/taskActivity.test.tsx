@@ -101,6 +101,16 @@ describe("the task detail's run activity (spec §6.5)", () => {
     expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · Not retried automatically: the check could not run. · npm test`]);
   });
 
+  // Scoped fix (re-review item 3): only a could-not-run row names a command; a setup-failed one shows its sentence alone.
+  it("shows no command on a setup-failed row", async () => {
+    entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "ladder-skipped", body: { reason: "setup-failed", command: "npm test" } }];
+    detail();
+    const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
+    const lines = await within(region).findAllByRole("listitem");
+    // Mutation S3-M2 (command for every reason) -> " · npm test" appended, red.
+    expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · Not retried automatically: setup failed.`]);
+  });
+
   // Final-review fix wave (minor 1): once the ladder left the run out, its reason line no longer says Orca escalates it.
   it("a run the ladder left out does not promise an automatic escalation", async () => {
     const failed = { state: "blocked" as const, outcome: "failed" as const, stopReason: "Error: check failed", failureCause: { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null } };

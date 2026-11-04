@@ -1532,8 +1532,9 @@ export class WebControlService {
   /** §4.7: one `ladder-skipped` row per run; a later pass finds it and writes none. A failed write is retried next pass. */
   private noteLadderSkipped(candidate: { groupId: string; taskId: string; run: { runId: string; drive?: DriveRecord } }, reason: LadderSkip): void {
     const runId = candidate.run.runId;
-    // Final-review fix wave (I4): the failing command the decision read, for the task page; absent when there is none.
-    const command = candidate.run.drive?.lastFailure?.failingCommand ?? null;
+    // Final-review fix wave (I4): the failing command the decision read, for the task page -- only for could-not-run (a
+    // setup failure names its command in the run's reason line); absent when there is none.
+    const command = reason === "could-not-run" ? candidate.run.drive?.lastFailure?.failingCommand ?? null : null;
     try {
       this.mutate(() => this.store.transaction(() => {
         if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(runId) !== undefined) return;

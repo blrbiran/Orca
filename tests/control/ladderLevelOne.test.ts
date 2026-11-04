@@ -21,7 +21,7 @@ import { driverHarness } from "./fixtures/driverHarness.js";
 const CAUSE = { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null };
 const LAST = { rejectCategory: "required-check-failed", failingCommand: "node check.js", primaryTargetPaths: ["src/a.js"] };
 
-async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { cause: string; phase: "setup" | null; retries: number; detail: null }; lastFailure?: { rejectCategory: string; failingCommand: string | null; primaryTargetPaths: string[] } } | undefined, options: { stopReason?: () => string | null; storeNow?: () => number } = {}) {
+async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { cause: string; phase: "setup" | null; retries: number; detail: null }; lastFailure?: { rejectCategory: string; failingCommand: string | null; primaryTargetPaths?: string[] } } | undefined, options: { stopReason?: () => string | null; storeNow?: () => number } = {}) {
   let failing = true;
   const t = await driverHarness([{ taskId: "a" }], { behaviour: () => (failing ? "failed" : "succeed"), failure, ...options });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
@@ -225,6 +225,29 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
       // mutation I1-M3: Driver.scheduleTaskResults does nothing -> still `missing`, red
       expect(readTaskResultState(t.h.store, run)?.status).toBe("unsupported");
       expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Scoped fix (re-review item 1): a rejection over its path bound is stored without primaryTargetPaths, so no stored copy
+  // can ever match it; the run is not held for nothing.
+  it("a rejection without paths is not held: the ladder decides at once", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: { rejectCategory: "required-check-failed", failingCommand: "node check.js" } })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      expect(t.body(run).drive?.lastFailure?.primaryTargetPaths).toBeUndefined();
+      t.h.store.transaction(() => saveTaskResultState(t.h.store, run, "g", { schema: "orca-task-result-store-v1", identity: { runId: run } as never, revision: 0, sourceRevision: 0, currentAttempt: 0, observations: [], status: "missing", reason: null }));
+      // Mutation S1-M1 (hold without paths too) -> [], red.
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+      expect(w.scheduled).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Scoped fix (re-review item 3): a setup-failed row names no command (the reason line shows the setup's detail).
+  it("a setup-failed row carries no failing command", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: SETUP, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      await w.service.systemDebugPass();
+      // Mutation S3-M1 (command for every reason) -> command "node check.js", red.
+      expect(skippedRows(t)).toEqual([[run, "a", { reason: "setup-failed" }]]);
     } finally { await t.h.dispose(); }
   });
 

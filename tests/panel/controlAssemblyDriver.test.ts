@@ -75,6 +75,17 @@ describe("the execution driver in the panel's assembly (spec §2.1)", () => {
     expect(stop).not.toHaveBeenCalled();
   });
 
+  // Scoped fix (re-review item 2): the ladder pass collects a held run again through the service's scheduleTaskResults,
+  // which the assembly wires to the driver's collector (its pass-to-deps step is ladderLevelOne.test.ts's criterion).
+  it("wires the service's scheduleTaskResults to the driver's collector", async () => {
+    const runtime = await assembled(true); try {
+      const schedule = vi.spyOn(runtime.driver!, "scheduleTaskResults");
+      // Mutation S2-M1 (drop the wiring in controlAssembly.ts) -> not a function / not called, red.
+      runtime.service.deps.scheduleTaskResults!("run-held");
+      expect(schedule).toHaveBeenCalledWith("run-held");
+    } finally { await runtime.shutdown(); runtime.close(); }
+  });
+
   it("stops the driver on a close with no shutdown before it, and a stopped driver stays stopped (ruling P10)", async () => {
     const runtime = await assembled(true);
     const driver = runtime.driver!;

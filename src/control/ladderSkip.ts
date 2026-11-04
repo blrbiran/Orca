@@ -74,6 +74,9 @@ export async function ladderDecisionOf(store: ControlStore, candidate: LadderRun
   let stored: Awaited<ReturnType<typeof readStoredRejection>>;
   try { stored = await readStoredRejection(store, candidate.run.runId, last); } catch { return null; }
   if (stored !== null) return couldNotRun(stored.failingCommand, stored.evidence) ? "could-not-run" : null;
+  // A rejection whose paths were dropped (boundLastFailure: over its bound) has no fingerprint to find, so no stored copy
+  // ever matches: waiting for one would only delay the ladder. Decided now, as before the hold.
+  if (last.primaryTargetPaths === undefined) return null;
   let state: TaskResultState | null;
   try { state = readTaskResultState(store, candidate.run.runId); } catch { return null; } // unreadable: fail open
   if (state !== null && (state.status === "stale" || state.status === "unavailable" || state.status === "unsupported")) return null;
