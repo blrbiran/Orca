@@ -9,7 +9,7 @@ import type { PartialSelection } from "../control/agentSelection.js";
 import { inputLabelsSchema } from "../control/labels.js";
 import { toolRulesSchema } from "../control/toolRules.js";
 import { detectCycle } from "./graph.js";
-import { expandLoopTask, loopPlanFileSchema, type LoopPlanFileInput, type LoopRecipe } from "../control/loopPlans.js";
+import { expandLoopTask, loopPlanFileSchema, setupCommandsSchema, type LoopPlanFileInput, type LoopRecipe } from "../control/loopPlans.js";
 
 export interface PlanTask {
   taskId: string;
@@ -215,6 +215,7 @@ export const taskContractSchema = z.object({
     repoPath: z.string().min(1), targetPaths: z.array(z.string()).min(1),
     relevantDocs: z.array(z.string()).default([]), buildTestCommands: z.array(z.string()).min(1),
     constraints: z.array(z.string()).default([]),
+    setupCommands: setupCommandsSchema.optional(),
     repoKey: repoKeySchema.optional(), additionalRepos: z.array(additionalRepoSchema).min(1).max(7).optional(),
   }).strict().superRefine((context, issues) => {
     if ((context.repoKey === undefined) !== (context.additionalRepos === undefined)) {

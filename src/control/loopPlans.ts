@@ -115,10 +115,22 @@ const EXECUTION_POLICY = {
 const TERMINAL_STATES = ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] as const;
 
 const pathEntrySchema = z.string().min(1);
+
+/** Task setup spec §4: a task's optional setup commands, at most `commands` of them, each at most `bytes` UTF-8 bytes. */
+export const SETUP_BOUNDS = { commands: 8, bytes: 4096 } as const;
+/** Spec §4.8: added to the contract's constraints, only when the task has setup commands. */
+export const SETUP_CONSTRAINT = "When a required check or a setup command cannot run, report it in your result; do not change the repository to make it run unless the task is about that. Install any dependency you add.";
+/** One setup command: non-empty, within SETUP_BOUNDS.bytes as UTF-8, on one line. Shared by the plan file and the contract schema. */
+export const setupCommandSchema = z.string().refine(
+  (command) => command.length > 0 && Buffer.byteLength(command, "utf8") <= SETUP_BOUNDS.bytes && !/[\r\n]/.test(command),
+  { message: `a setup command is 1-${SETUP_BOUNDS.bytes} bytes on one line` },
+);
+export const setupCommandsSchema = z.array(setupCommandSchema).min(1).max(SETUP_BOUNDS.commands);
 /** A recipe's inputs, every optional field filled, so the same task always has the same recipe bytes. */
 export const loopInputsSchema = z
   .object({
     tokenBudget: safeInteger.nullable().optional(),
+    setup: setupCommandsSchema.optional(),
     goal: z.string().min(1),
     successCondition: z.string().min(1),
     targetPaths: z.array(pathEntrySchema).min(1),
@@ -177,6 +189,7 @@ export const loopPlanFileSchema = z
   .object({
     plan: z.string().min(1).optional(),
     tokenBudget: safeInteger.nullable().optional(),
+    setup: setupCommandsSchema.optional(),
     goal: z.string().min(1),
     successCondition: z.string().min(1),
     targetPaths: z.array(pathEntrySchema).min(1),
@@ -278,7 +291,9 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
     },
     context: {
       repoPath, targetPaths: [...inputs.targetPaths], relevantDocs: [...inputs.relevantDocs],
-      buildTestCommands: [...inputs.checks], constraints: [...plan.constraints],
+      buildTestCommands: [...inputs.checks],
+      constraints: [...plan.constraints, ...(inputs.setup !== undefined ? [SETUP_CONSTRAINT] : [])],
+      ...(inputs.setup !== undefined ? { setupCommands: [...inputs.setup] } : {}),
     },
     executionPolicy: { ...EXECUTION_POLICY, ...(recipe.planVersion>=3?{tokenBudget:inputs.tokenBudget??null}:{}), perAttemptTimeoutMs: plan.perAttemptTimeoutMs },
     safetyPolicy: {
@@ -312,6 +327,7 @@ export function expandLoopPlan(taskId: string, repoPath: string, planId: string,
 export function normalizeLoopInputs(input: LoopPlanFileInput): LoopInputs {
   return {
     ...(input.tokenBudget!==undefined?{tokenBudget:input.tokenBudget}:{}),
+    ...(input.setup !== undefined ? { setup: [...input.setup] } : {}),
     goal: input.goal, successCondition: input.successCondition, targetPaths: [...input.targetPaths], checks: [...input.checks],
     nonGoals: [...(input.nonGoals ?? [])], relevantDocs: [...(input.relevantDocs ?? [])], protectedPaths: [...(input.protectedPaths ?? [])],
     maxFilesTouched: input.maxFilesTouched ?? null,
