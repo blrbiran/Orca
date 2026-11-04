@@ -72,6 +72,23 @@ describe("the task detail's run activity (spec §6.5)", () => {
     expect(blocked).not.toContain("Error: ");
   });
 
+  // Task setup and check retry spec 2026-11-04 §4.7: a run the ladder left out says so on the task page, with the reason.
+  it.each([
+    ["en", "could-not-run", "Not retried automatically: the check could not run."],
+    ["en", "setup-failed", "Not retried automatically: setup failed."],
+    ["zh", "could-not-run", "没有自动重试：检查命令根本没能运行。"],
+  ])("says in %s why a %s run was not retried automatically", async (language, reason, sentence) => {
+    await i18n.changeLanguage(language);
+    try {
+      entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "ladder-skipped", body: { reason } }];
+      detail();
+      const region = await screen.findByRole("region", { name: language === "en" ? "Recent activity of run-a" : "run-a 的近期活动" });
+      const lines = await within(region).findAllByRole("listitem");
+      // mutation: render the bare kind (no reason) -> the sentence is missing, red
+      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · ${language === "en" ? "not retried" : "未自动重试"} · ${sentence}`]);
+    } finally { await i18n.changeLanguage("en"); }
+  });
+
   it("stays visible on an archived group, which is read-only information", async () => {
     detail(true);
     expect(await screen.findByRole("region", { name: "Recent activity of run-a" })).toBeTruthy();

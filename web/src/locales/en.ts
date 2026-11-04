@@ -104,6 +104,7 @@ const activityKind = {
   command: "command", "run-claimed": "claimed", "run-started": "started", phase: "phase", "run-blocked": "blocked", "run-resumed": "resumed",
   "run-settled": "settled", "task-retried": "task retried", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
   archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed", "debug-open-failed": "debug group not opened",
+  "ladder-skipped": "not retried",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -683,6 +684,10 @@ export const en = {
       refused: "activity refused · {{code}}",
       responseInvalid: "The activity response is malformed",
       phase: "{{step}} · attempt {{attempt}}",
+    },
+    // Task setup and check retry spec 2026-11-04 §4.7: why the ladder left a run out (a `ladder-skipped` activity row).
+    ladder: {
+      skipped: { "setup-failed": "Not retried automatically: setup failed.", "could-not-run": "Not retried automatically: the check could not run." },
     },
     diagnosis: {
       phaseLabel: "Phase: {{phase}}", stepLabel: "step: {{step}}", attempt: "attempt {{attempt}}", identity: "run {{runId}}",

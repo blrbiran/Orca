@@ -3,6 +3,7 @@ import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { boundLastFailure } from "../../src/control/driveRecord.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
+import { systemDebugGroupId } from "../../src/control/systemDebug.js";
 import { buildPriorFailures, headBytes, predecessorPriorFailures, priorFailureOf, priorFailuresAtPrepare } from "../../src/control/priorFailures.js";
 import { startEnvelopeSchema } from "../../src/control/schema.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "../../src/control/snapshot.js";
@@ -19,9 +20,9 @@ import { driverHarness } from "./fixtures/driverHarness.js";
 const CAUSE = { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null };
 const LAST = { rejectCategory: "required-check-failed", failingCommand: "node check.js", primaryTargetPaths: ["src/a.js"] };
 
-async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { cause: string; phase: null; retries: number; detail: null }; lastFailure?: typeof LAST } | undefined) {
+async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { cause: string; phase: "setup" | null; retries: number; detail: null }; lastFailure?: { rejectCategory: string; failingCommand: string | null; primaryTargetPaths: string[] } } | undefined, stopReason?: () => string | null) {
   let failing = true;
-  const t = await driverHarness([{ taskId: "a" }], { behaviour: () => (failing ? "failed" : "succeed"), failure });
+  const t = await driverHarness([{ taskId: "a" }], { behaviour: () => (failing ? "failed" : "succeed"), failure, ...(stopReason === undefined ? {} : { stopReason }) });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
@@ -74,6 +75,101 @@ describe("ladder level 1: one re-dispatch carrying the earlier failures (kanban 
       const second = await w.redispatched();
       // mutation: a run without lastFailure is skipped -> [], red
       expect(w.envelopeWork(second).priorFailures).toEqual([{ runId: first, rejectCategory: "run-failed:unknown", failingCommand: null, evidence: null }]);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+/**
+ * Task setup and check retry spec 2026-11-04 §4.7: another try cannot fix a run whose setup failed or whose failing check
+ * could not run at all, so the ladder leaves it out -- both levels -- and records why once, for the task page. Every other
+ * failure keeps the ladder, and so does a run whose stored rejection cannot be read (fail open).
+ */
+describe("the ladder leaves out what another try cannot fix (spec §4.7)", { timeout: 180_000 }, () => {
+  const LADDER = systemDebugGroupId({ kind: "ladder", groupId: "g", taskId: "a", runId: null });
+  const SETUP = { cause: "setup-failed", phase: "setup" as const, retries: 0, detail: null };
+  const NOT_FOUND = "command output | required check failed: node check.js | stderr=sh: node: command not found | exit=127";
+  /** The collector's stored copy of the run's last rejection (taskResultStore), as the driver keeps it. */
+  const storeRejection = async (t: Awaited<ReturnType<typeof levelOneWorld>>["t"], runId: string, bytes: Buffer, settled = true) => {
+    const ref = await writeArtifact(t.h.store, `verify-${runId}`, bytes);
+    t.h.store.transaction(() => saveTaskResultState(t.h.store, runId, "g", {
+      schema: "orca-task-result-store-v1", identity: { runId } as never, revision: 1, sourceRevision: 1, currentAttempt: 1, reason: null,
+      observations: [{ manifestRef: ref, manifest: { attempt: 1, stage: "verification", verificationRef: ref }, verification: "failed" }] as never, status: (settled ? "available" : "stale") as never,
+    }));
+  };
+  const rejection = (failingCommand: string | null, evidence: string[], rejectCategory = "required-check-failed") =>
+    Buffer.from(JSON.stringify({ approved: false, rejectCategory, primaryTargetPaths: ["src/a.js"], failingCommand, safeToRetry: false, evidence, pauseSignals: [], stopSignals: [] }));
+  const skippedRows = (t: Awaited<ReturnType<typeof levelOneWorld>>["t"]) => t.h.store.db.prepare("SELECT run_id, task_id, body FROM activity WHERE group_id='g' AND kind='ladder-skipped' ORDER BY seq").all()
+    .map((row) => [String(row.run_id), String(row.task_id), JSON.parse(String(row.body))]);
+  const levelOneIssued = (t: Awaited<ReturnType<typeof levelOneWorld>>["t"]) => t.h.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id='orca-auto-ladder-l1-a'").get() !== undefined;
+
+  it("a run whose setup failed gets neither level, and one row says why", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: SETUP })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      const pass = await w.service.systemDebugPass();
+      // mutation A5-M5: setup-failed out of LADDER_EXEMPT_CAUSES -> level 1 re-dispatches it, red
+      expect([pass.redispatched, pass.opened, levelOneIssued(t)]).toEqual([[], [], false]);
+      expect(skippedRows(t)).toEqual([[run, "a", { reason: "setup-failed" }]]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a run whose failing check could not run gets neither level, and a second pass writes no second row", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      await storeRejection(t, run, rejection("node check.js", ["command output | required check passed: true", NOT_FOUND]));
+      const pass = await w.service.systemDebugPass();
+      expect([pass.redispatched, pass.opened, levelOneIssued(t)]).toEqual([[], [], false]);
+      expect(skippedRows(t)).toEqual([[run, "a", { reason: "could-not-run" }]]);
+      const again = await w.service.systemDebugPass();
+      expect([again.redispatched, again.opened]).toEqual([[], []]);
+      // mutation: write the row on every pass -> two rows, red
+      expect(skippedRows(t)).toHaveLength(1);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("the level-1 retry whose check could not run opens no debug group", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      await w.blockedRun(await t.claim());
+      // The first run failed ordinarily (no stored copy: the ladder keeps it), so level 1 re-dispatches.
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+      const retry = await w.blockedRun(await w.redispatched());
+      await storeRejection(t, retry, rejection("node check.js", [NOT_FOUND]));
+      const pass = await w.service.systemDebugPass();
+      // mutation A5-M2: skip only at level 1 -> the ladder group opens, red
+      expect(pass.opened).toEqual([]);
+      expect(t.h.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(LADDER)).toBeUndefined();
+      expect(skippedRows(t)).toEqual([[retry, "a", { reason: "could-not-run" }]]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("two verifier rejections that ccloop stopped as a repeated pattern still get the level-1 retry", async () => {
+    const verifier = { rejectCategory: "scope-violation", failingCommand: null, primaryTargetPaths: ["src/a.js"] };
+    const w = await levelOneWorld(() => ({ failureCause: { ...CAUSE, cause: "verifier-rejected" }, lastFailure: verifier }), () => "repeated failure pattern detected"); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      await storeRejection(t, run, rejection(null, ["the change touches files outside the task"], "scope-violation"));
+      expect(t.body(run).drive?.stopReason).toBe("repeated failure pattern detected");
+      // mutation A5-M4: skip on the repeated-failure stop reason -> [], red
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+      expect(skippedRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a stored rejection that cannot be read keeps the ladder (fail open, Review Focus 5)", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      // The copy's bytes do not parse; the copy is there but the collector has not settled.
+      await storeRejection(t, run, Buffer.from(`{"evidence": ["${NOT_FOUND}"`));
+      // mutation A5-M3: treat unreadable as could-not-run -> [], red
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+      expect(skippedRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a readable copy the collector has not settled keeps the ladder too", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      await storeRejection(t, run, rejection("node check.js", [NOT_FOUND]), false);
+      expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
+      expect(skippedRows(t)).toEqual([]);
     } finally { await t.h.dispose(); }
   });
 });

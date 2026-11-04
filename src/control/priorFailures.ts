@@ -45,11 +45,12 @@ function sameFingerprint(a: { rejectCategory: string; primaryTargetPaths: string
 }
 
 /**
- * The failed run's rejection evidence, from the collector's own stored copy (taskResultStore). Null unless the collector
+ * The failed run's last rejection, uncut, from the collector's own stored copy (taskResultStore). Null unless the collector
  * settled (`available`), the run's last rejection carried its full fingerprint, and a stored, completed, rejected
- * verification has that fingerprint (the latest attempt wins).
+ * verification has that fingerprint (the latest attempt wins). Task setup and check retry spec 2026-11-04 §4.7 reads the
+ * raw entries (ladderSkip.ts); priorFailures cuts them (storedEvidence).
  */
-async function storedEvidence(store: ControlStore, runId: string, last: NonNullable<DriveRecord["lastFailure"]>): Promise<string[] | null> {
+export async function readStoredRejection(store: ControlStore, runId: string, last: NonNullable<DriveRecord["lastFailure"]>): Promise<{ failingCommand: string | null; evidence: string[] } | null> {
   if (last.primaryTargetPaths === undefined) return null;
   const state = readTaskResultState(store, runId);
   if (state === null || state.status !== "available" || state.identity?.runId !== runId) return null;
@@ -65,11 +66,18 @@ async function storedEvidence(store: ControlStore, runId: string, last: NonNulla
       parsed = value.data;
     } catch { continue; }
     if (parsed.approved || !sameFingerprint(parsed, fingerprint)) continue;
-    const evidence = parsed.evidence.flatMap((entry) => { const cut = bounded(entry, PRIOR_FAILURE_BOUNDS.evidenceEntry); return cut === null ? [] : [cut]; })
-      .slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
-    return evidence.length === 0 ? null : evidence;
+    return { failingCommand: parsed.failingCommand, evidence: parsed.evidence };
   }
   return null;
+}
+
+/** The stored rejection's evidence (readStoredRejection), each entry cut to its bound; null when there is none. */
+async function storedEvidence(store: ControlStore, runId: string, last: NonNullable<DriveRecord["lastFailure"]>): Promise<string[] | null> {
+  const stored = await readStoredRejection(store, runId, last);
+  if (stored === null) return null;
+  const evidence = stored.evidence.flatMap((entry) => { const cut = bounded(entry, PRIOR_FAILURE_BOUNDS.evidenceEntry); return cut === null ? [] : [cut]; })
+    .slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
+  return evidence.length === 0 ? null : evidence;
 }
 
 /** One earlier failed run, as ccloop's PriorFailureV1 (§2.1), pre-cut to its bounds. */

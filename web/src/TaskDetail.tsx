@@ -128,6 +128,8 @@ function activityText(entry: ActivityEntryV1): string {
     return `${kind} · ${explainRunReason(code) ?? body.reason}`;
   }
   if (entry.kind === "run-settled" && typeof body.state === "string") return `${kind} · ${enumText("runState", body.state)}`;
+  // Task setup and check retry spec 2026-11-04 §4.7: why the ladder left the run out; an unknown reason shows the bare kind.
+  if (entry.kind === "ladder-skipped" && (body.reason === "setup-failed" || body.reason === "could-not-run")) return `${kind} · ${i18n.t(`control.ladder.skipped.${body.reason}`)}`;
   return kind;
 }
 

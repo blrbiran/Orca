@@ -292,8 +292,8 @@ export function anyTaskFailed(store: ControlStore, groupId: string): boolean {
  * and that refused row would count as level 1 done, so the next pass opened a ladder group the person had paused out of.
  * The candidate returns once the person resumes.
  */
-export function ladderCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> {
-  const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string }> = [];
+export function ladderCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string; exempt: boolean }> {
+  const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; repoId: string; exempt: boolean }> = [];
   // Flow engine spec §6.2, §9.6: a flow run's hidden child is the kernel's to settle (a failed effect is never retried
   // on its own); orca-auto confirmed it, but no ladder level acts on it.
   for (const row of store.db.prepare(`SELECT g.id AS id, g.body AS body, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
@@ -311,9 +311,13 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
       if (run === null) continue;
       // Failure-cause spec 2026-10-21 §4-§5: a debug run cannot fix the agent's credentials, quota or program, and would only
       // fail the same way at the same cost; such a task stays with the person (a quota wait may retry it, quotaWaitCandidates).
-      if (LADDER_EXEMPT_CAUSES.has(run.drive?.failureCause?.cause ?? "")) continue;
+      // Task setup and check retry spec 2026-11-04 §4.7: `setup-failed` is exempt too, but handed on marked `exempt` so
+      // systemDebugPass records why (ladderSkip.ts); the other exempt causes stay the person's without a note.
+      const cause = run.drive?.failureCause?.cause ?? "";
+      const exempt = LADDER_EXEMPT_CAUSES.has(cause);
+      if (exempt && cause !== "setup-failed") continue;
       if (groupBody(store, systemDebugGroupId({ kind: "ladder", groupId, taskId, runId: null })) !== null) continue;
-      out.push({ groupId, taskId, run, repoId });
+      out.push({ groupId, taskId, run, repoId, exempt });
     }
   }
   return out;
@@ -325,9 +329,10 @@ export function ladderLevelOneCommandId(taskId: string): string { return `orca-a
 /**
  * Failure-cause spec 2026-10-21 §4-§5: the causes the escalation ladder leaves to the person (or to a quota wait). A
  * `tool-rule-violated` run is terminal in ccloop (per-contract tool rules spec), and a debug run held to the same rules
- * would break them the same way.
+ * would break them the same way. Task setup and check retry spec 2026-11-04 §4.7: a `setup-failed` run would fail its setup
+ * again before the agent could change anything.
  */
-export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated"]);
+export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated", "setup-failed"]);
 /** §5: how long a quota wait holds a failed task before Orca retries it (re-probe interval; no reset time is reported today). */
 export const QUOTA_REPROBE_MS = 30 * 60_000;
 
