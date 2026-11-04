@@ -150,13 +150,16 @@ export const SPLIT_JSON_SCHEMA_MULTI: Readonly<Record<string, unknown>> = deepFr
 
 /**
  * Task setup spec §4.2: codex's strict projection makes every optional key required (ccloop strictSingleCall.ts); its
- * `null` is folded away there, but a model may write `"setup": []` as it does for `labels` or `dependsOn`. An empty
- * setup means none, so the key is dropped before the schema (which bounds setup to 1-8 commands) reads the answer.
+ * `null` is folded away there, but a model may write `"setup": []` as it does for `labels` or `dependsOn`. A call with
+ * no such fold (claude, omp) passes on the `null` the instruction allows. An empty or null setup means none, so the key
+ * is dropped before the schema (which bounds setup to 1-8 commands) reads the answer.
  */
 export function withoutEmptySetup(raw: unknown): unknown {
   if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
   const tasks = (raw as { tasks: unknown[] }).tasks.map((task) => {
-    if (task === null || typeof task !== "object" || !Array.isArray((task as { setup?: unknown }).setup) || (task as { setup: unknown[] }).setup.length > 0) return task;
+    if (task === null || typeof task !== "object" || !("setup" in task)) return task;
+    const setup = (task as { setup: unknown }).setup;
+    if (setup !== null && !(Array.isArray(setup) && setup.length === 0)) return task;
     const { setup: _empty, ...rest } = task as Record<string, unknown>;
     return rest;
   });

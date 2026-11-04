@@ -35,8 +35,10 @@ describe("a split task's setup (task setup spec §4.2)", () => {
   // `labels` or `dependsOn` (its nulls ccloop folds away before Orca reads the answer). An empty setup is none: the
   // draft is valid and the contract has no setupCommands.
   // mutation C2-M9: remove the normalisation in evaluateSplit -> schema-invalid draft -> red
-  it("reads a codex-shaped `setup: []` as no setup", async () => {
-    const codexShaped = { ...VALID_SPLIT, tasks: VALID_SPLIT.tasks.map((task) => ({ ...task, setup: [] })) };
+  // The instruction allows `null`; a claude or omp single call has no ccloop fold, so Orca reads it as none too.
+  // mutation C2-M11: drop only `[]`, not `null` -> schema-invalid draft -> red (the `null` case)
+  it.each([["a codex-shaped `setup: []`", []], ["a non-codex answer's `setup: null`", null]])("reads %s as no setup", async (_name, setup) => {
+    const codexShaped = { ...VALID_SPLIT, tasks: VALID_SPLIT.tasks.map((task) => ({ ...task, setup })) };
     const x = await requirementHarness({ answers: [{ purpose: "split", output: codexShaped }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
