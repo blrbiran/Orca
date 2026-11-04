@@ -3,6 +3,7 @@ import { writeArtifact } from "../../src/control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { boundLastFailure } from "../../src/control/driveRecord.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
+import { COLLECTOR_HOLD_MS } from "../../src/control/ladderSkip.js";
 import { systemDebugGroupId } from "../../src/control/systemDebug.js";
 import { buildPriorFailures, headBytes, predecessorPriorFailures, priorFailureOf, priorFailuresAtPrepare } from "../../src/control/priorFailures.js";
 import { startEnvelopeSchema } from "../../src/control/schema.js";
@@ -20,9 +21,9 @@ import { driverHarness } from "./fixtures/driverHarness.js";
 const CAUSE = { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null };
 const LAST = { rejectCategory: "required-check-failed", failingCommand: "node check.js", primaryTargetPaths: ["src/a.js"] };
 
-async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { cause: string; phase: "setup" | null; retries: number; detail: null }; lastFailure?: { rejectCategory: string; failingCommand: string | null; primaryTargetPaths: string[] } } | undefined, stopReason?: () => string | null) {
+async function levelOneWorld(failure: () => { failureCause?: typeof CAUSE | { cause: string; phase: "setup" | null; retries: number; detail: null }; lastFailure?: { rejectCategory: string; failingCommand: string | null; primaryTargetPaths: string[] } } | undefined, options: { stopReason?: () => string | null; storeNow?: () => number } = {}) {
   let failing = true;
-  const t = await driverHarness([{ taskId: "a" }], { behaviour: () => (failing ? "failed" : "succeed"), failure, ...(stopReason === undefined ? {} : { stopReason }) });
+  const t = await driverHarness([{ taskId: "a" }], { behaviour: () => (failing ? "failed" : "succeed"), failure, ...options });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
@@ -89,17 +90,19 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
   const SETUP = { cause: "setup-failed", phase: "setup" as const, retries: 0, detail: null };
   const NOT_FOUND = "command output | required check failed: node check.js | stderr=sh: node: command not found | exit=127";
   /** The collector's stored copy of the run's last rejection (taskResultStore), as the driver keeps it. */
-  const storeRejection = async (t: Awaited<ReturnType<typeof levelOneWorld>>["t"], runId: string, bytes: Buffer, settled = true) => {
+  const storeRejection = async (t: Awaited<ReturnType<typeof levelOneWorld>>["t"], runId: string, bytes: Buffer) => {
     const ref = await writeArtifact(t.h.store, `verify-${runId}`, bytes);
     t.h.store.transaction(() => saveTaskResultState(t.h.store, runId, "g", {
       schema: "orca-task-result-store-v1", identity: { runId } as never, revision: 1, sourceRevision: 1, currentAttempt: 1, reason: null,
-      observations: [{ manifestRef: ref, manifest: { attempt: 1, stage: "verification", verificationRef: ref }, verification: "failed" }] as never, status: (settled ? "available" : "stale") as never,
+      observations: [{ manifestRef: ref, manifest: { attempt: 1, stage: "verification", verificationRef: ref }, verification: "failed" }] as never, status: "available",
     }));
   };
   const rejection = (failingCommand: string | null, evidence: string[], rejectCategory = "required-check-failed") =>
     Buffer.from(JSON.stringify({ approved: false, rejectCategory, primaryTargetPaths: ["src/a.js"], failingCommand, safeToRetry: false, evidence, pauseSignals: [], stopSignals: [] }));
   const skippedRows = (t: Awaited<ReturnType<typeof levelOneWorld>>["t"]) => t.h.store.db.prepare("SELECT run_id, task_id, body FROM activity WHERE group_id='g' AND kind='ladder-skipped' ORDER BY seq").all()
     .map((row) => [String(row.run_id), String(row.task_id), JSON.parse(String(row.body))]);
+  /** As if the collector's job for the run had not run yet (the harness's own collector settles it at once). */
+  const uncollected = (t: Awaited<ReturnType<typeof levelOneWorld>>["t"], runId: string) => { t.h.store.db.prepare("DELETE FROM outbox WHERE id=?").run(`task-results:${runId}`); };
   const levelOneIssued = (t: Awaited<ReturnType<typeof levelOneWorld>>["t"]) => t.h.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id='orca-auto-ladder-l1-a'").get() !== undefined;
 
   it("a run whose setup failed gets neither level, and one row says why", async () => {
@@ -143,7 +146,7 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
 
   it("two verifier rejections that ccloop stopped as a repeated pattern still get the level-1 retry", async () => {
     const verifier = { rejectCategory: "scope-violation", failingCommand: null, primaryTargetPaths: ["src/a.js"] };
-    const w = await levelOneWorld(() => ({ failureCause: { ...CAUSE, cause: "verifier-rejected" }, lastFailure: verifier }), () => "repeated failure pattern detected"); const { t } = w; try {
+    const w = await levelOneWorld(() => ({ failureCause: { ...CAUSE, cause: "verifier-rejected" }, lastFailure: verifier }), { stopReason: () => "repeated failure pattern detected" }); const { t } = w; try {
       const run = await w.blockedRun(await t.claim());
       await storeRejection(t, run, rejection(null, ["the change touches files outside the task"], "scope-violation"));
       expect(t.body(run).drive?.stopReason).toBe("repeated failure pattern detected");
@@ -156,7 +159,7 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
   it("a stored rejection that cannot be read keeps the ladder (fail open, Review Focus 5)", async () => {
     const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
       const run = await w.blockedRun(await t.claim());
-      // The copy's bytes do not parse; the copy is there but the collector has not settled.
+      // The collector settled, but the stored copy's bytes do not parse.
       await storeRejection(t, run, Buffer.from(`{"evidence": ["${NOT_FOUND}"`));
       // mutation A5-M3: treat unreadable as could-not-run -> [], red
       expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
@@ -164,12 +167,36 @@ describe("the ladder leaves out what another try cannot fix (spec §4.7)", { tim
     } finally { await t.h.dispose(); }
   });
 
-  it("a readable copy the collector has not settled keeps the ladder too", async () => {
-    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+  // Ruling: fix round 1, controller ruling (session af2ceee1) -- this case pinned "an unsettled copy keeps the ladder"; the
+  // ladder may run before the final verification is collected, so it now pins the hold: no level, no row, until the
+  // collector settles, failing open COLLECTOR_HOLD_MS after the run blocked.
+  it("holds a required-check-failed run while the collector has not settled, and fails open after ten minutes", async () => {
+    const clock = { value: 1_000_000 };
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST }), { storeNow: () => clock.value }); const { t } = w; try {
       const run = await w.blockedRun(await t.claim());
-      await storeRejection(t, run, rejection("node check.js", [NOT_FOUND]), false);
+      // Nothing collected yet (no state), then a collection under way (a page admitted, the next not yet).
+      uncollected(t, run);
+      // mutation: no hold (fail open while unsettled) -> ["g:a"], red
+      expect([(await w.service.systemDebugPass()).redispatched, levelOneIssued(t), skippedRows(t)]).toEqual([[], false, []]);
+      t.h.store.transaction(() => saveTaskResultState(t.h.store, run, "g", { schema: "orca-task-result-store-v1", identity: { runId: run } as never, revision: 2, sourceRevision: 1, currentAttempt: 1, observations: [], status: "available", reason: null }));
+      clock.value += COLLECTOR_HOLD_MS - 1;
+      expect([(await w.service.systemDebugPass()).redispatched, levelOneIssued(t), skippedRows(t)]).toEqual([[], false, []]);
+      // mutation: no bound (hold forever) -> [], red
+      clock.value += 1;
       expect((await w.service.systemDebugPass()).redispatched).toEqual(["g:a"]);
       expect(skippedRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("decides once the collector settles: the held run whose copy shows the check could not run is left out", async () => {
+    const w = await levelOneWorld(() => ({ failureCause: CAUSE, lastFailure: LAST })); const { t } = w; try {
+      const run = await w.blockedRun(await t.claim());
+      // The harness's collector settled at once (`unsupported`); as if its job had not run yet, there is no state.
+      uncollected(t, run);
+      expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
+      await storeRejection(t, run, rejection("node check.js", [NOT_FOUND]));
+      expect((await w.service.systemDebugPass()).redispatched).toEqual([]);
+      expect([levelOneIssued(t), skippedRows(t)]).toEqual([false, [[run, "a", { reason: "could-not-run" }]]]);
     } finally { await t.h.dispose(); }
   });
 });

@@ -54,7 +54,7 @@ import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
-import { ladderSkipOf, type LadderSkip } from "./ladderSkip.js";
+import { ladderHeld, ladderSkipOf, type LadderSkip } from "./ladderSkip.js";
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
@@ -773,8 +773,12 @@ export class WebControlService {
     for (const candidate of ladderCandidates(this.store)) {
       // Task setup and check retry spec 2026-11-04 §4.7: a run another try cannot fix is left out of both levels (this
       // includes a run that was itself the level-1 retry), and why is recorded once on the run for the task page.
+      // A run already recorded as left out is passed over without reading its stored copy again.
+      if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(candidate.run.runId) !== undefined) continue;
       const skip = await ladderSkipOf(this.store, candidate);
       if (skip !== null) { this.noteLadderSkipped(candidate, skip); continue; }
+      // Its final verification may not be collected yet: re-examined next pass (ladderHeld, bounded).
+      if (ladderHeld(this.store, candidate, this.store.now())) continue;
       // Kanban spec §6 level 1 (ccloop priorFailures spec §3): the first escalation of a task is one fresh re-dispatch
       // as orca-auto; its run carries the earlier runs' failures (A2, priorFailures.ts). The retry-task command row is
       // the level's record -- once it exists (applied or refused), the next failure goes to level 2.
