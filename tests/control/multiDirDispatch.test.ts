@@ -108,6 +108,18 @@ describe("A2 for a multi group's run (§7.1)", () => {
     expect(saved.body(savedRun).drive.blockedReason).toBe("multi-dir-recovery-unsupported");
   });
 
+  // Final-review fix wave (minor 3): a multi-directory task's contract with setup (refused by the split, spec §5.3) is
+  // blocked by name at A2, before any workspace is made, instead of running without it.
+  it("blocks a multi-directory task with setup by name before any workspace is made", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["**"], contextExtra: { setupCommands: ["npm ci"] } }], options());
+    freeze(t, [{ key: "main", repoId: "repo" }, { key: "alpha", repoId: alphaKey }], { a: [{ dir: "main", targetPaths: ["**"], checks: [] }] });
+    const runId = await t.claim();
+    await t.until(t.driver(), () => t.body(runId).drive?.blockedReason != null || t.fake.calls.accept.length > 0, 10);
+    // Mutation m3-M1 (no setup check before stepA2Multi) -> the run is accepted, red.
+    expect(t.body(runId).drive.blockedReason).toBe("setup-unsupported-here");
+    expect([t.fake.calls.accept.length, existsSync(workspacePathOf(controlWorkspaceRoots(t.h.store.stateDir), runId))]).toEqual([0, false]);
+  });
+
   it("blocks a dir member whose work branch is missing", async () => {
     const vaultId = "ab".repeat(32);
     const t = await driverHarness([{ taskId: "a", targetPaths: ["**"] }], {

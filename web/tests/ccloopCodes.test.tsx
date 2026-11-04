@@ -34,6 +34,14 @@ describe("explaining a ccloop code", () => {
       "A slot has no agent selected. Choose an agent for every slot, then confirm.", "omp-new-thing: x", "omp-new-thing"]);
   });
 
+  // Final-review fix wave (minor 2): ccloop's refusal of a saved-result recovery for a task with setup reads as Orca's own.
+  it("words ccloop's setup recovery refusal as Orca's setup-unsupported-here, in both languages", async () => {
+    // Mutation m2-M2 (drop the entry) -> the bare code, red.
+    expect(explainCcloopCode("control-setup-recovery-unsupported", "")).toBe("A task with setup commands cannot be recovered from a saved result, because recovery re-runs its checks without the setup. Retry it to start again.");
+    await i18n.changeLanguage("zh");
+    expect(explainCcloopCode("control-setup-recovery-unsupported", "")).toBe("带有准备命令的任务暂时不能从已保存的结果恢复，因为恢复时的检查不会先跑准备命令。请重试，从头开始。");
+  });
+
   it("in Chinese", async () => {
     await i18n.changeLanguage("zh");
     expect([explainCcloopCode("omp-model-catalog-unavailable", "spawn ENOENT"), explainCcloopCode("omp-new-thing", "x"), explainCcloopCode("omp-new-thing", "")])

@@ -96,6 +96,11 @@ const sourcePort=(deps:StopDeps,run:any):ExecutionPort=>deps.profileRouter.resol
 export async function readSavedResultEligibility(deps:StopDeps,runId:string):Promise<SavedResultSourceEligibility>{
  let prepared:ReturnType<typeof prepareRecoverySource>|undefined;
  try {
+  // Final-review fix wave (minor 2): the recovery applyVerifySavedResult refuses for a task with setup -- ahead of every
+  // source and evidence reason -- is not offered either; a run or task that cannot be read falls through to those reasons.
+  let hasSetup=false;
+  try{const raw=readRunBody(deps.store,runId) as {groupId:string;taskId:string};hasSetup=readConfirmedTaskExecution(deps.store,raw.groupId,raw.taskId).contract.context.setupCommands!==undefined;}catch{/* unreadable: the answer below stands */}
+  if(hasSetup)return unavailable('setup-unsupported-here');
   const current=currentSavedResultSource(deps.store,runId),port=sourcePort(deps,current.run);
   if((await port.readFeatures?.())?.savedResultRecovery!=='v1'||!port.savedResultSourceEligibility)return unavailable('control-saved-result-unsupported');
   const source=sourceRecord(deps.store,current.run);prepared=prepareRecoverySource(deps.store,source.source,source.authorityKind);

@@ -2177,7 +2177,10 @@ export const zhErrors: Record<string, string> = {
   "multi-dir-target-missing": "某个目录的目标分支不存在：{{detail}}",
   "multi-dir-landing-conflict": "这个任务的改动与任务组在另一个目录中已有的工作冲突。重试这个任务，让它基于任务组的最新工作重新运行。",
   "multi-dir-continuation-unsupported": "跨多个目录的任务暂时不能从中断处继续。请重试，从头开始。",
-  "setup-unsupported-here": "带有准备命令的任务暂时不能从已保存的结果恢复，因为恢复时的检查不会先跑准备命令。请重试，从头开始。",
+  // Spec §5.3: one code for both refusals; final-review fix wave (minor 3) also blocks a multi-directory run by it.
+  "setup-unsupported-here": "这里暂时不支持准备命令：从已保存的结果恢复时，检查不会先跑准备命令；多目录分组里的任务也不能跑准备命令。请重试任务从头开始，或去掉它的准备命令。",
+  // Final-review fix wave (minor 2): ccloop's own refusal of the same recovery, in the same words.
+  "control-setup-recovery-unsupported": "带有准备命令的任务暂时不能从已保存的结果恢复，因为恢复时的检查不会先跑准备命令。请重试，从头开始。",
   "multi-dir-recovery-unsupported": "跨多个目录的任务暂时不能从已保存的结果恢复。请重试，从头开始。",
   "multi-dir-writes-missing": "这个任务要写的位置不属于本任务组的任何目录。请重试这个任务。",
   "multi-dir-writes": "这个任务要写 {{detail}}，但这不是本任务组的目录。",

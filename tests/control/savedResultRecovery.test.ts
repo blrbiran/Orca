@@ -41,6 +41,20 @@ describe('saved result controller authority', () => {
    expect(await verify(t,runId)).toMatchObject({error:{code:'saved-result-unavailable',message:expect.stringContaining('setup-unsupported-here')}});
   } finally {t.h.store.close();}
  });
+ // Final-review fix wave (minor 2): the eligibility the task page reads does not offer the recovery the command refuses.
+ it('answers the eligibility of a task with setup unavailable by name, and a task without setup on its own reason',async()=>{
+  const {t,runId}=await unknownFailure([{taskId:'a',contextExtra:{setupCommands:['npm ci']}}] as any,true,{extraReserve:true});
+  try {
+   expect(await settle(t,runId)).not.toHaveProperty('error');
+   // Mutation m2-M1 (no setup check in readSavedResultEligibility) -> another reason, red.
+   expect(await (t.service as any).savedResultEligibility(runId)).toMatchObject({status:'unavailable',reason:'setup-unsupported-here'});
+  } finally {t.h.store.close();}
+  const plain=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
+  try {
+   expect(await settle(plain.t,plain.runId)).not.toHaveProperty('error');
+   expect((await (plain.t.service as any).savedResultEligibility(plain.runId)).reason).not.toBe('setup-unsupported-here');
+  } finally {plain.t.h.store.close();}
+ });
  it('leaves a task without setup on its own reason (the refusal is about setup, not about every unsettled source)',async()=>{
   const {t,runId}=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
   try {

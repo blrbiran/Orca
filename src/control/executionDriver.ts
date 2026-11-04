@@ -359,6 +359,9 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     const allowancePredecessor = (allowanceWork(store, run.groupId, run.workItemId) as { allowancePredecessorRunId?: string }).allowancePredecessorRunId;
     const allowanceBase = allowancePredecessor === undefined ? null : readDriverRun(store, allowancePredecessor).drive?.base ?? null;
     if (run.continuationIntentId || allowanceBase !== null) { blockRun(deps, runId, "A2", "multi-dir-continuation-unsupported"); return true; }
+    // Task setup spec 2026-11-04 §5.3 (final-review fix wave, minor 3): setup is refused on a multi-directory task (the
+    // split refuses it; a contract that reached here anyway is blocked by name, before any workspace exists).
+    if (readConfirmedTaskExecution(store, run.groupId, run.taskId).contract.context.setupCommands !== undefined) { blockRun(deps, runId, "A2", "setup-unsupported-here"); return true; }
     return stepA2Multi(deps, run, multi, operatorNote);
   }
   // Task setup spec 2026-11-04 §4.6: a recovery run re-runs the checks without the contract's setup, so it would judge a

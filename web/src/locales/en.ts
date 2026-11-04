@@ -705,7 +705,7 @@ export const en = {
         auth: "the agent's credentials were refused", quota: "the agent's quota or credits are used up", "rate-limited": "the provider kept rate-limiting",
         "provider-5xx": "the provider kept failing on its side", network: "the network to the provider kept failing", "context-overflow": "the task did not fit the model's context window",
         stalled: "the agent went silent and was stopped", "executable-missing": "the agent's program was not found", "required-check-failed": "a required check failed",
-        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", "tool-rule-violated": "the agent broke the step's tool rules", "setup-failed": "Setup failed", unknown: "the cause is unknown",
+        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", "tool-rule-violated": "the agent broke the step's tool rules", "setup-failed": "a setup command failed", unknown: "the cause is unknown",
       },
       next: {
         auth: "Log the agent in again (or fix its key), then retry the task.", quota: "Wait for the quota to reset or add credits, then retry the task.",
@@ -2267,7 +2267,10 @@ export const enErrors: Record<string, string> = {
   "multi-dir-target-missing": "A directory's target branch does not exist: {{detail}}",
   "multi-dir-landing-conflict": "This task's changes conflict with work already in the group in another directory. Retry the task to run it again on the group's latest work.",
   "multi-dir-continuation-unsupported": "A task that works in several directories cannot continue from where it stopped yet. Retry it to start again.",
-  "setup-unsupported-here": "A task with setup commands cannot be recovered from a saved result, because recovery re-runs its checks without the setup. Retry it to start again.",
+  // Spec §5.3: one code for both refusals; final-review fix wave (minor 3) also blocks a multi-directory run by it.
+  "setup-unsupported-here": "Setup commands are not supported here yet: a saved-result recovery re-runs the checks without them, and a task of a multi-directory group cannot run them. Retry the task to start again, or remove its setup.",
+  // Final-review fix wave (minor 2): ccloop's own refusal of the same recovery, in the same words.
+  "control-setup-recovery-unsupported": "A task with setup commands cannot be recovered from a saved result, because recovery re-runs its checks without the setup. Retry it to start again.",
   "multi-dir-recovery-unsupported": "A task that works in several directories cannot be recovered from a saved result yet. Retry it to start again.",
   "multi-dir-writes-missing": "The task's writes name no directory of this group. Retry the task.",
   "multi-dir-writes": "The task writes in {{detail}}, which is not a directory of this group.",
