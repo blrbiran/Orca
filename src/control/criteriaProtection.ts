@@ -151,7 +151,7 @@ export async function runChecksAtBase(input: {
   setupCommands?: readonly string[];
 }): Promise<CriteriaBaseVerdict> {
   const { workdir, base, attemptSha, timeoutMs, signal, as } = input;
-  const snapshot = input.snapshot ?? await snapshotWorkspace(workdir);
+  const snapshot = input.snapshot ?? await snapshotWorkspace(workdir, input.setupCommands);
   let verdict: CriteriaBaseVerdict = { kind: "base-passed" };
   try {
     for (const path of input.files) {

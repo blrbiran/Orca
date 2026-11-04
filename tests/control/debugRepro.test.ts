@@ -169,6 +169,9 @@ describe("checkReproduction (design §12.8)", () => {
     expect(verdict).toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command });
     expect(git(w.repo, "rev-parse", "HEAD")).toBe(w.attemptSha);
     expect(git(w.repo, "status", "--porcelain", "--untracked-files=all")).toBe("");
+    // Final-review fix wave (I2): what Orca's setup installed (ignored `build/`) is removed with the restore.
+    // Mutation I2-M5 (checkReproduction's own snapshot without the setup commands) -> build/ stays, red.
+    expect(existsSync(join(w.repo, "build"))).toBe(false);
   });
 
   it("a failing setup is the setup-failed reproduction failure", async () => {
@@ -335,6 +338,21 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       // Mutation "startDebugCheck does not pass setupCommands" -> blocked at C, debug-repro:red-at-head: red.
       await settle(driver, () => t.body(runId).state === "landed" || t.body(runId).state === "blocked");
       expect({ state: t.body(runId).state, reason: t.body(runId).drive.blockedReason }).toEqual({ state: "landed", reason: null });
+    } finally { await driver.stop(); await t.h.dispose(); }
+  });
+
+  // Final-review fix wave (I2): the driver's own snapshot for the check keeps the ignored paths when the task has setup,
+  // so what the setup installed in the run's workspace is gone before the landing archives it.
+  it("a debug run's reproduction leaves no setup output in the run's workspace", async () => {
+    const t = await debugHarness(() => ({ reproCommand: "test -d node_modules/x && test -f a" }), { setupCommands: ["mkdir -p node_modules/x"] });
+    writeFileSync(join(t.repo, ".gitignore"), "node_modules/\n"); hgit(t.repo, "add", ".gitignore"); hgit(t.repo, "commit", "-qm", "ignore");
+    const driver = t.driver();
+    try {
+      const runId = await t.claim();
+      await settle(driver, () => t.body(runId).state === "landed" || t.body(runId).state === "blocked");
+      expect({ state: t.body(runId).state, reason: t.body(runId).drive.blockedReason }).toEqual({ state: "landed", reason: null });
+      // Mutation I2-M6 (the driver's snapshot at the reproduce-first check drops the setup commands) -> true, red.
+      expect(existsSync(join(t.body(runId).drive.sourceDir, "repo", "node_modules"))).toBe(false);
     } finally { await driver.stop(); await t.h.dispose(); }
   });
 

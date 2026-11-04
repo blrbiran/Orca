@@ -870,7 +870,8 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // lets a restart restore the workspace is persisted first; a later round applies the verdict (stepDebugCheck).
   if (readDebugMark(readGroup(store, run.groupId)) !== null) {
     const workdir = join(drive.sourceDir, "repo");
-    const snapshot = await snapshotWorkspace(workdir);
+    // Final-review fix wave (I2): with setup, the snapshot keeps the ignored paths, so the restore removes what setup installs.
+    const snapshot = await snapshotWorkspace(workdir, contract.context.setupCommands);
     const marked = write(deps, () => {
       const current = readDriverRun(store, runId);
       if (current.state !== "accepted" || current.drive === undefined) return false;
@@ -892,7 +893,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     const workdir = join(drive.sourceDir, "repo");
     const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
     if (change.kind === "modified") {
-      const snapshot = await snapshotWorkspace(workdir);
+      const snapshot = await snapshotWorkspace(workdir, contract.context.setupCommands);
       const marked = write(deps, () => {
         const current = readDriverRun(store, runId);
         if (current.state !== "accepted" || current.drive === undefined) return false;

@@ -16,8 +16,11 @@ export type ReproFailure = "no-tests" | "no-command" | "green-at-base" | "red-at
 export type ReproVerdict = { kind: "passed"; tests: string[]; command: string } | { kind: "skipped"; reason: string }
   | { kind: "failed"; reason: ReproFailure };
 
-/** What the restore puts back: the symbolic ref HEAD was on (null when detached) and the untracked paths that were there. */
-export interface WorkspaceSnapshot { headRef: string | null; untrackedBefore: string[] }
+/**
+ * What the restore puts back: the symbolic ref HEAD was on (null when detached) and the untracked paths that were there.
+ * `ignoredBefore` (only when the task has setup commands): the ignored paths that were there, git's `--directory` form.
+ */
+export interface WorkspaceSnapshot { headRef: string | null; untrackedBefore: string[]; ignoredBefore?: string[] }
 
 /** Rule 5's test-file shapes, for an attempt whose agent named no reproTests. */
 const TEST_FILE = /(\.test|\.spec|_test)\.[^/]+$|(^|\/)test_[^/]+\.py$/;
@@ -33,6 +36,8 @@ const paths = (stdout: string): string[] => stdout.split("\0").filter((path) => 
 /** A path as git reads it on the command line: literally, never as a glob. */
 const literal = (path: string): string => `:(literal)${path}`;
 const untracked = async (workdir: string): Promise<string[]> => paths(await git(workdir, ["ls-files", "--others", "--exclude-standard", "-z"]));
+/** The ignored paths, each ignored directory once (`--directory`: `node_modules/`, never its contents). */
+const ignored = async (workdir: string): Promise<string[]> => paths(await git(workdir, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"]));
 
 /** The test files the attempt added: under a test directory at the root, or named like a test. */
 async function addedTests(workdir: string, base: string, attemptSha: string): Promise<string[]> {
@@ -69,15 +74,24 @@ export async function runSetup(workdir: string, commands: readonly string[], tim
   return { ok: true };
 }
 
-export async function snapshotWorkspace(workdir: string): Promise<WorkspaceSnapshot> {
+/**
+ * Task setup spec 2026-11-04 §4.6 (final-review fix wave, I2): with setup commands, the ignored paths present now are kept
+ * too, so the restore can remove what Orca's own setup installed (it would otherwise be archived with the workspace).
+ * Without setup the snapshot is what it was (no `ignoredBefore` key).
+ */
+export async function snapshotWorkspace(workdir: string, setupCommands: readonly string[] = []): Promise<WorkspaceSnapshot> {
   const symbolic = (await gitChild(workdir, ["symbolic-ref", "-q", "HEAD"])).stdout.trim();
-  return { headRef: symbolic.startsWith("refs/heads/") ? symbolic : null, untrackedBefore: await untracked(workdir) };
+  const snapshot: WorkspaceSnapshot = { headRef: symbolic.startsWith("refs/heads/") ? symbolic : null, untrackedBefore: await untracked(workdir) };
+  if (setupCommands.length > 0) snapshot.ignoredBefore = await ignored(workdir);
+  return snapshot;
 }
 
 /**
  * HEAD back at `attemptSha` on the snapshot's ref, and every untracked non-ignored path that was not there before removed
- * (never `-x`, never the whole tree: ignored build output cannot ride into Step D's merge of `attemptSha`). Both steps are
- * always tried; the first failure is answered, not thrown, so a caller with an error of its own keeps that one.
+ * (never the whole tree: ignored build output cannot ride into Step D's merge of `attemptSha`). A snapshot that kept
+ * `ignoredBefore` (the task has setup) also has each ignored path that appeared since removed, one by one (`-x` scoped to
+ * those paths only); ignored paths that were already there stay. All steps are always tried; the first failure is
+ * answered, not thrown, so a caller with an error of its own keeps that one.
  */
 export async function restoreWorkspace(workdir: string, attemptSha: string, snapshot: WorkspaceSnapshot): Promise<Error | null> {
   let failure: Error | null = null;
@@ -89,6 +103,13 @@ export async function restoreWorkspace(workdir: string, attemptSha: string, snap
     const stray = (await untracked(workdir)).filter((path) => !before.has(path));
     if (stray.length > 0) await git(workdir, ["clean", "-fdq", "--", ...stray.map(literal)]);
   } catch (error) { failure ??= error as Error; }
+  if (snapshot.ignoredBefore !== undefined) {
+    try {
+      const before = new Set(snapshot.ignoredBefore);
+      const installed = (await ignored(workdir)).filter((path) => !before.has(path));
+      if (installed.length > 0) await git(workdir, ["clean", "-fdxq", "--", ...installed.map(literal)]);
+    } catch (error) { failure ??= error as Error; }
+  }
   return failure;
 }
 
@@ -133,11 +154,12 @@ export async function checkReproduction(input: {
   const command = result.reproCommand ?? input.contract.context.buildTestCommands[0];
   // `undefined` is defensive only: the contract schema requires at least one buildTestCommands entry.
   if (command === undefined || PLACEHOLDER.has(command)) return { kind: "failed", reason: "no-command" };
-  const snapshot = input.snapshot ?? await snapshotWorkspace(workdir);
+  const snapshot = input.snapshot ?? await snapshotWorkspace(workdir, input.setupCommands);
   let verdict: ReproVerdict;
   try {
     // stepC's commitAttempt has just made HEAD `attemptSha`, every change committed; a resumed check restored it first.
-    // Task setup spec §4.6: setup runs first, once (what it installs stays for the base run); a failure is its own reason.
+    // Task setup spec §4.6: setup runs first, once (what it installs stays for the base run, and the restore removes it); a
+    // failure is its own reason.
     if (!(await runSetup(workdir, input.setupCommands ?? [], timeoutMs, as, signal)).ok) verdict = { kind: "failed", reason: "setup-failed" };
     else if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) verdict = { kind: "failed", reason: "red-at-head" };
     else {

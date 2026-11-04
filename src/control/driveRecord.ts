@@ -177,6 +177,9 @@ export const driveRecordSchema = z.object({
     z.object({
       state: z.literal("checking"), startedAt: z.string().min(1), attemptSha: commitSchema, headRef: z.string().min(1).nullable(),
       untrackedBefore: z.array(z.string().min(1)), empty: z.boolean(),
+      // Task setup spec 2026-11-04 §4.6 (final-review fix wave, I2): the ignored paths that were there, kept only for a
+      // task with setup commands so the restore removes what Orca's setup installed; absent otherwise (bytes unchanged).
+      ignoredBefore: z.array(z.string().min(1)).optional(),
       // Protect-acceptance-criteria spec §7a.1: the same off-round check, marker and restore run the base-version re-run of
       // a run whose attempt modified its check-defining files; absent for the reproduce-first check.
       check: z.literal("criteria-base").optional(),

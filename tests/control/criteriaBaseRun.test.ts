@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { readArtifact } from "../../src/control/archive.js";
+import type { ArtifactRef } from "../../src/control/types.js";
 import { runChecksAtBase } from "../../src/control/criteriaProtection.js";
 import { createExecutionDriver, type ExecutionDriver } from "../../src/control/executionDriver.js";
 import { listFlaggedDecisions } from "../../src/control/flaggedDecisions.js";
@@ -94,7 +96,27 @@ describe("runChecksAtBase (spec §4.2)", () => {
     // The setup leaves an ignored marker; the check needs it. Mutation A4-M1 (skip setup) -> base-failed, red.
     const setup = ["mkdir -p build", "touch build/installed"];
     expect(await ran(w, ["tests/value.test.txt"], [`test -f build/installed && ${CHECK}`], undefined, setup)).toEqual({ kind: "base-passed" });
-    expect(existsSync(join(w.repo, "build", "installed"))).toBe(true);
+    // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: the final-review fix wave (I2) has the restore
+    // remove the ignored paths Orca's setup installed (they were archived with the workspace), so `build/` is gone afterwards.
+    // Mutation I2-M1 (the restore keeps new ignored paths) -> true, red.
+    expect(existsSync(join(w.repo, "build"))).toBe(false);
+  });
+
+  // Final-review fix wave (I2): only what appeared during the run is removed; an ignored path already there stays, and
+  // without setup the restore leaves ignored paths alone as it always did.
+  it("with setup, the restore removes only ignored paths that appeared; without setup it removes none", async () => {
+    const w = await workspace({ ...BASE, ".gitignore": "build/\nnode_modules/\n" }, { "tests/value.test.txt": "expect 4 # reworded\n" });
+    await mkdir(join(w.repo, "build"), { recursive: true }); await writeFile(join(w.repo, "build", "kept"), "x");
+    const install = "mkdir -p node_modules/x build && touch node_modules/x/index.js build/new";
+    expect(await ran(w, ["tests/value.test.txt"], [CHECK], undefined, [install])).toEqual({ kind: "base-passed" });
+    // Mutation I2-M2 (clean every ignored path, not only new ones) -> build/kept gone, red.
+    expect([existsSync(join(w.repo, "node_modules")), existsSync(join(w.repo, "build", "kept"))]).toEqual([false, true]);
+    // `build/` was there before, so what setup added inside it stays (scoped to new top-level ignored paths only).
+    expect(existsSync(join(w.repo, "build", "new"))).toBe(true);
+    // Without setup: a check that writes an ignored path keeps it (no `ignoredBefore`, behaviour unchanged).
+    expect(await ran(w, ["tests/value.test.txt"], [`mkdir -p node_modules/y && ${CHECK}`])).toEqual({ kind: "base-passed" });
+    // Mutation I2-M3 (record ignoredBefore with no setup) -> false, red.
+    expect(existsSync(join(w.repo, "node_modules", "y"))).toBe(true);
   });
 
   it("a failing setup is base-setup-failed, not base-failed", async () => {
@@ -218,6 +240,32 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
       expect(listFlaggedDecisions(t.h.store, "g")).toEqual([expect.objectContaining({ decisionId: `${runId}/orca-criteria`, source: "test-change", state: "flagged" })]);
       const decision = JSON.parse(ledgerOf(t, runId).split("\n").find((line) => line.includes("orca-criteria"))!) as { evidence: string[] };
       expect(decision.evidence).toEqual(expect.arrayContaining([`base-run-failed: setup: ${SETUP}`, "changed: scripts/setup.sh"]));
+    } finally { await t.h.dispose(); }
+  });
+
+  // Final-review fix wave (I2): Orca's own setup in the base re-run installs into the run's workspace, which archiveRun
+  // snapshots; the restore removes it, so neither the workspace nor the archived snapshot tree holds node_modules.
+  it("a base re-run's setup output is neither left in the workspace nor archived", async () => {
+    const install = "mkdir -p node_modules/x && touch node_modules/x/index.js";
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["tests/**", "src/**", "a"], contextExtra: { setupCommands: [install] } }],
+      { files: () => ({ "tests/value.test.txt": "expect 4 # reworded\n" }), requiredChecks: [CHECK] });
+    try {
+      await mkdir(join(t.repo, "tests"), { recursive: true }); await mkdir(join(t.repo, "src"), { recursive: true });
+      await writeFile(join(t.repo, "tests", "value.test.txt"), TEST); await writeFile(join(t.repo, "src", "value.txt"), "4\n");
+      await writeFile(join(t.repo, ".gitignore"), "node_modules/\n");
+      hgit(t.repo, "add", "tests", "src", ".gitignore"); hgit(t.repo, "commit", "-qm", "checks");
+      const runId = await t.claim();
+      const driver = t.driver();
+      await land(t, runId, driver);
+      expect(t.body(runId).drive.criteriaBase).toEqual({ result: "passed" });
+      // Mutation I2-M4 (the driver's snapshot drops the setup commands) -> node_modules stays, red.
+      expect(existsSync(join(t.body(runId).drive.sourceDir, "repo", "node_modules"))).toBe(false);
+      await settle(driver, () => t.body(runId).state === "settled");
+      const row = t.h.store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC").get(runId);
+      const snapshot = JSON.parse((await readArtifact(t.h.store, (JSON.parse(String(row!.body)) as { snapshot: ArtifactRef }).snapshot)).toString("utf8")) as { tree: Array<{ path: string }> };
+      const tree = snapshot.tree.map((entry) => entry.path);
+      expect(tree).toContain("src/value.txt");
+      expect(tree.filter((path) => path.includes("node_modules"))).toEqual([]);
     } finally { await t.h.dispose(); }
   });
 
