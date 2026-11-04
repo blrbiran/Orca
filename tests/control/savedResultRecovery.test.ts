@@ -74,12 +74,16 @@ describe('saved result controller authority', () => {
    expect(t.body(runId).drive?.blockedReason).not.toBe('setup-unsupported-here');
   } finally {t.h.store.close();}
  });
- it('answers a target that is not the source task with saved-result-source-stale, not a lookup error',async()=>{
+ it('answers a target that is not a task of the group exactly as it would without the setup lookup, not with a lookup error',async()=>{
   const {t,runId}=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
   try {
    expect(await settle(t,runId)).not.toHaveProperty('error');
-   const answer:any=await t.service.verifySavedResult(t.h.taskCommand('verify-saved-result','nope',{sourceRunId:runId,sourceAttempt:1,capsuleHash:'a'.repeat(64)}));
-   expect(answer).toMatchObject({error:{code:'saved-result-source-stale'}});
+   const body={sourceRunId:runId,sourceAttempt:1,capsuleHash:'a'.repeat(64)};
+   const known:any=await t.service.verifySavedResult(t.h.taskCommand('verify-saved-result','a',body));
+   const unknown:any=await t.service.verifySavedResult(t.h.taskCommand('verify-saved-result','nope',body));
+   // A failed contract lookup must fall through to the identity/source checks, which answer the same way for any target here.
+   expect(unknown.error.code).toBe(known.error.code);
+   expect(unknown.error.message).toBe(known.error.message);
   } finally {t.h.store.close();}
  });
 });
