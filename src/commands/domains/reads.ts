@@ -62,10 +62,19 @@ const groupList = (body: unknown): string => {
 
 interface ProjectRow { projectKey: string; controlRepoId: string | null; path: string; kind?: string; dirs?: Array<{ projectKey: string }> }
 
-/** Issue 146: each row names its kind; a multi lists its members instead of the primary's path it carries for display. */
+/**
+ * Issue 146: each row names its kind; a multi lists its members instead of the primary's path it carries for display.
+ * Issue 148: a projects file the panel could not apply, and edits waiting for a restart, are said after the rows.
+ */
 const projectList = (body: unknown): string => {
   const rows = (field(body, "projects") as ProjectRow[] | undefined) ?? [];
-  return rows.map((p) => `${p.projectKey}  ${p.kind ?? "repo"}  ${p.controlRepoId ?? "(no control)"}  ${p.kind === "multi" ? `members ${(p.dirs ?? []).map((d) => d.projectKey).join(", ")}` : p.path}`).join("\n") || "no projects";
+  const lines = rows.map((p) => `${p.projectKey}  ${p.kind ?? "repo"}  ${p.controlRepoId ?? "(no control)"}  ${p.kind === "multi" ? `members ${(p.dirs ?? []).map((d) => d.projectKey).join(", ")}` : p.path}`);
+  if (lines.length === 0) lines.push("no projects");
+  const fileError = field(body, "fileError");
+  if (typeof fileError === "string") lines.push(`error: the projects file is not in effect (the list above is the last good one): ${fileError}`);
+  const pending = field(body, "pendingRestart");
+  if (Array.isArray(pending) && pending.length > 0) lines.push(`restart needed for: ${pending.join(", ")} (orca panel restart)`);
+  return lines.join("\n");
 };
 
 export const READ_ROWS: CommandDef[] = [

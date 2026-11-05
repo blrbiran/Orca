@@ -220,3 +220,27 @@ describe("group list --project (issue 151)", () => {
     expect(out.stdout.split("\n").filter(Boolean)).toEqual(["g-one  repo-1  running  rev 5  ship", "g-two  repo-2  draft  rev 1  other"]);
   });
 });
+
+// Issue 148 (session 3cfc2e73): a broken projects.json (the panel keeps the last good list, registry spec) and edits
+// waiting for a restart showed only under --json; the human list looked healthy.
+describe("the human project list says a broken projects file and pending restarts (issue 148)", () => {
+  const ROWS = [{ projectKey: "proj", name: "proj", path: "/repos/proj", controlRepoId: "repo-1" }];
+  const listed = async (body: unknown) => {
+    const p = await fakePanel({ "GET projects": { status: 200, body } });
+    const out = await cli(["project", "list"], p.dir);
+    expect(out.code).toBe(0);
+    return out.stdout.split("\n").filter(Boolean);
+  };
+
+  it("fileError and pendingRestart get their own lines after the rows", async () => {
+    expect(await listed({ source: "file", projects: ROWS, fileError: "Unexpected token } in JSON", pendingRestart: ["alpha", "beta"] })).toEqual([
+      "proj  repo  repo-1  /repos/proj",
+      "error: the projects file is not in effect (the list above is the last good one): Unexpected token } in JSON",
+      "restart needed for: alpha, beta (orca panel restart)",
+    ]);
+  });
+
+  it("a healthy file adds no line", async () => {
+    expect(await listed({ source: "file", projects: ROWS, fileError: null, pendingRestart: [] })).toEqual(["proj  repo  repo-1  /repos/proj"]);
+  });
+});
