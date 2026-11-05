@@ -343,3 +343,12 @@ this section holds.
    `tests/control/requirementSplitItems.test.ts` ("checks every setup command too", which uses `npm ci` in a repository
    with no lockfile). Existing criteria are not rewritten without the human's authorization.
 3. Criteria: `tests/control/requirementManifestsType.test.ts`.
+
+## 12. Correction (session 3cfc2e73, issues #130 and #135, after the human's 「这个session允许改写必要的判据」)
+
+Supersedes §11 item 2. The single-repository split instruction (still "version 3", as earlier text changes under a human
+authorization kept it) gains two rules: with no lockfile in `manifests`, omit setup when nothing needs installing,
+else `npm install --no-package-lock` (§4.2's "use the lockfile's installer" holds only when there is a lockfile; #130);
+and prefer the repository's own test scripts as checks, no ad-hoc `node -e` module-loading checks (a package's `type`
+in `manifests` says ESM or CommonJS), no assertions about files not shown (#135). The validator is unchanged.
+Criteria: `tests/control/splitPromptRules130135.test.ts`; the prompt pin in `tests/control/multiDirOverview.test.ts` moved.

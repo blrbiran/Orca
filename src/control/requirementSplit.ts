@@ -36,6 +36,17 @@ const EARLIER_DRAFTS = "- `earlier-draft`, when present: JSON, the latest earlie
 const REVISION_RULE = "- When `earlier-draft` is present, revise that draft: change only what its feedback or reasons name and keep every other task as it is; when its `tasks` is null, write the split afresh, avoiding what the reasons name.";
 
 /**
+ * Issue #135 (session 3cfc2e73, under the human's 「这个session允许改写必要的判据」; version stays 3, as earlier text
+ * changes did): the split has no tools, and it wrote `node -e "require(...)"` checks in an ESM repository and asserted
+ * file contents it was never shown. `manifests` now carries each package's `type`.
+ */
+export const CHECK_SOURCE_RULE = "- Prefer the repository's own test scripts (as \"manifests\" lists them) as checks. Do not write ad-hoc `node -e` checks that load modules: a package's \"type\" in \"manifests\" says whether it is an ES module (\"module\") or CommonJS. Do not assert facts about the contents of files you were not shown.";
+/**
+ * Issue #130 (session 3cfc2e73, same ruling): `npm ci` fails without a lockfile, and ccloop's setup guard fails an
+ * install that writes a new package-lock.json. So with no lockfile there is either no setup or a lockfile-free install.
+ */
+export const NO_LOCKFILE_RULE = "When \"manifests\" shows no lockfile, omit \"setup\" if nothing needs installing, else use npm install --no-package-lock (never npm ci, which needs a lockfile).";
+/**
  * N1 spec §8.1: the fixed instruction. The two word lists come from the code that reads them. Version 2 (N1 spec §16,
  * Orca session 7753e97d): the requirement document Orca commits before the tasks run (§9.2) and Orca's own files are in
  * the repository, so a check must not assert a directory holds only certain files -- a paid O9 run failed on exactly
@@ -66,7 +77,8 @@ const SPLIT_INSTRUCTION_V3 = [
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   ...PLAN_RULES,
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
-  "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). Prefer the repository's own install and check scripts; in an npm workspace, install at the root. Omit \"setup\" (or give null) when nothing is needed.",
+  CHECK_SOURCE_RULE,
+  "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). " + NO_LOCKFILE_RULE + " Prefer the repository's own install and check scripts; in an npm workspace, install at the root. Omit \"setup\" (or give null) when nothing is needed.",
   "- A check that runs a package script must name one already in that package's \"scripts\" in \"manifests\" (and a workspace the root lists); never plan to add a script so that a check exists. Checks that are not package scripts are fine.",
   "- Before the tasks run, Orca commits the agreed requirement document to the repository at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the repository while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "",
