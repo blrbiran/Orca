@@ -166,7 +166,36 @@ export async function skillCheck(ctx: CheckContext): Promise<StatusCheck> {
   return { level: "ok", subject: "skill", fact: `${found.join(", ")} at ${cli}` };
 }
 
-export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, panelHttpCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck];
+/**
+ * Issue 148 (session 3cfc2e73): the projects file as the panel applied it. A file that does not parse keeps the last
+ * good list (registry spec) and is named in fileError -- a fail, since the person's edit is not in effect; edits that
+ * wait for a restart are a warning. A panel that does not answer is a warning here: the panel check already fails.
+ */
+export async function projectsCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { discoverSocketPath } = await import("../entry/discovery.js");
+  const { requestOverSocket } = await import("../entry/socketClient.js");
+  const { EntryRejection } = await import("../entry/envelope.js");
+  let answer: { status: number; body: unknown };
+  try {
+    const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
+    answer = await requestOverSocket({ socketPath, method: "GET", path: "projects", client: "cli", timeoutMs: 10_000 });
+  } catch (error) {
+    if (error instanceof EntryRejection) return { level: "warn", subject: "projects", fact: `not checked: the panel does not answer (${error.code})` };
+    throw error;
+  }
+  if (answer.status !== 200) return { level: "warn", subject: "projects", fact: `not checked: the panel answered ${answer.status}` };
+  const body = answer.body as { projects?: unknown[]; fileError?: unknown; pendingRestart?: unknown };
+  if (typeof body.fileError === "string") {
+    return { level: "fail", subject: "projects", fact: `the projects file is not in effect (the panel keeps the last good list): ${body.fileError}`, fix: "fix the projects file; orca project list shows what the panel uses" };
+  }
+  if (Array.isArray(body.pendingRestart) && body.pendingRestart.length > 0) {
+    return { level: "warn", subject: "projects", fact: `restart needed for: ${body.pendingRestart.join(", ")}`, fix: "orca panel restart" };
+  }
+  const count = body.projects?.length ?? 0;
+  return { level: "ok", subject: "projects", fact: `${count} project${count === 1 ? "" : "s"} in effect` };
+}
+
+export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, panelHttpCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck, projectsCheck];
 
 /** Every check in order; one that throws is a fail by name, never a crash of the whole screen. */
 export async function runChecks(checks: readonly Check[], ctx: CheckContext): Promise<StatusCheck[]> {

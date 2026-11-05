@@ -9,8 +9,9 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ccloopBinCheck, DOCTOR_CHECKS, orcaModesCheck, runDoctor, staleSocketsCheck } from "../../src/commands/doctor.js";
 import { runRegistered } from "../../src/commands/run.js";
-import { runStatus, agentsTableCheck, ccmemCheck, schemaCheck, skillCheck, STATUS_CHECKS, type Check, type CheckContext } from "../../src/commands/status.js";
+import { projectsCheck, runStatus, agentsTableCheck, ccmemCheck, schemaCheck, skillCheck, STATUS_CHECKS, type Check, type CheckContext } from "../../src/commands/status.js";
 import type { CommandIo, ParsedArgs } from "../../src/commands/types.js";
+import { fakePanel, useFakePanels } from "./fixtures/fakePanel.js";
 
 const CHECKOUT = resolve(import.meta.dirname, "..", "..");
 const VERSION = (JSON.parse(readFileSync(join(CHECKOUT, "package.json"), "utf8")) as { version: string }).version;
@@ -96,9 +97,10 @@ describe("orca status (spec §8)", () => {
     expect(out()).toMatch(/^fail skill: /m);
   });
 
-  it("status runs the spec's checks: service, panel socket and HTTP, control schema, agents table, ccloop pin, ccmem, skill", () => {
+  // Rewritten under session 3cfc2e73's ruling (issue 148): status also checks the projects file the panel applied.
+  it("status runs the spec's checks: service, panel socket and HTTP, control schema, agents table, ccloop pin, ccmem, skill, projects", () => {
     expect(STATUS_CHECKS.map((check) => check.name)).toEqual([
-      "serviceCheck", "panelSocketCheck", "panelHttpCheck", "schemaCheck", "agentsTableCheck", "ccloopPinCheck", "ccmemCheck", "skillCheck",
+      "serviceCheck", "panelSocketCheck", "panelHttpCheck", "schemaCheck", "agentsTableCheck", "ccloopPinCheck", "ccmemCheck", "skillCheck", "projectsCheck",
     ]);
     // Doctor: the same, then the slower ones.
     expect(DOCTOR_CHECKS.slice(0, STATUS_CHECKS.length)).toEqual(STATUS_CHECKS);
@@ -300,5 +302,37 @@ describe("orca version", () => {
     const json = capture();
     expect(await runRegistered(["version", "--json"], json.io)).toBe(0);
     expect(JSON.parse(json.out())).toEqual({ schema: "orca-cli-response-v1", status: 200, body: { schema: "orca-version-v1", version: VERSION } });
+  });
+});
+
+// Issue 148 (session 3cfc2e73): a projects file the panel could not apply was invisible to status and doctor.
+describe("projects check (issue 148)", () => {
+  useFakePanels();
+  const answering = async (body: unknown) => {
+    const p = await fakePanel({ "GET projects": { status: 200, body } });
+    const { env } = sandbox();
+    return projectsCheck({ env, checkout: CHECKOUT, stateDirFlag: p.dir });
+  };
+  const ROWS = [{ projectKey: "proj", path: "/repos/proj", controlRepoId: "repo-1" }];
+
+  it("a file that did not parse is a fail naming the reason", async () => {
+    expect(await answering({ projects: ROWS, fileError: "Unexpected token", pendingRestart: [] })).toMatchObject({ level: "fail", subject: "projects", fact: expect.stringContaining("Unexpected token") });
+  });
+
+  it("edits waiting for a restart are a warning whose fix is orca panel restart", async () => {
+    expect(await answering({ projects: ROWS, fileError: null, pendingRestart: ["alpha"] })).toMatchObject({ level: "warn", subject: "projects", fact: expect.stringContaining("alpha"), fix: "orca panel restart" });
+  });
+
+  it("a healthy file is ok", async () => {
+    expect(await answering({ projects: ROWS, fileError: null, pendingRestart: [] })).toMatchObject({ level: "ok", subject: "projects" });
+  });
+
+  it("a panel that does not answer is a warning, not a fail (the panel check fails already)", async () => {
+    const { home, env } = sandbox();
+    expect(await projectsCheck({ env, checkout: CHECKOUT, stateDirFlag: join(home, "no-panel") })).toMatchObject({ level: "warn", subject: "projects" });
+  });
+
+  it("doctor inherits it", () => {
+    expect(DOCTOR_CHECKS).toContain(projectsCheck);
   });
 });
