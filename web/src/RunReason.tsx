@@ -43,5 +43,9 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   // Final-review fix wave (I4): a setup failure's detail (ccloop's words for which command failed and how) follows its line.
   const setupDetail = causeKey === "setup-failed" && failure?.detail ? <>{" "}<code>{failure.detail}</code></> : null;
   const causeLine = failure === null && coded === null ? null : <span>{t("control.failureCause.line", { cause: t(`control.failureCause.label.${causeKey}`), next: coded ?? skipped ?? t(`control.failureCause.next.${causeKey}`) })}{failure !== null && failure.retries > 0 && t("control.failureCause.retries", { retries: failure.retries })}{setupDetail} </span>;
-  return <>{lineage} — {causeLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}</>;
+  // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the run was not switched and its installation rests --
+  // until the vendor's named reset, or the default rest's end.
+  const rest = props.run.quotaRest;
+  const restLine = rest === undefined ? null : <span data-testid="run-quota-rest">{t(`control.quotaRest.${rest.source}`, { installation: rest.installation, time: new Date(rest.until).toLocaleString() })} </span>;
+  return <>{lineage} — {causeLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}</>;
 }

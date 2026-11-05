@@ -1808,6 +1808,9 @@ export const runViewSchema = z
     outcome: nonemptyString.nullable().optional(),
     // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (driveRecord.ts runFailureCauseSchema); optional like stopReason.
     failureCause: runFailureCauseSchema.nullable().optional(),
+    // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the task's current run failed with quota, was not
+    // switched, and its installation rests (quotaRest.ts) until `until`; omitted otherwise.
+    quotaRest: z.object({ installation: nonemptyString, until: safeInteger, source: z.enum(["vendor", "default"]) }).strict().optional(),
     unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]), settlement: usageSettlementSchema.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,

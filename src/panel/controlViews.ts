@@ -11,6 +11,8 @@ import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
+import { installationRests, type InstallationRest } from "../control/quotaRest.js";
+import { isTerminallyFailedRun } from "../control/driveRecord.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
@@ -1064,6 +1066,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
   // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
   // the 1-based place of its row in the snapshot's rowid order -- total, and stable because runs are never deleted.
   const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
+  // Read once, and only when a run needs it (quotaRest below).
+  let rests: Map<string, InstallationRest> | undefined;
   return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).map(row => {
     const runId = String(row.id);
     const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
@@ -1081,6 +1085,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     }
 
     let profile: RunViewV1["profile"];
+    let quotaRest: RunViewV1["quotaRest"];
     if (run.phase === "single-call") {
       // N1 DR26: a clarify or split call of the requirement this group was, frozen with the requirement's profile and agent.
       const requirement = readRequirementGroup(store, groupId).requirement;
@@ -1131,6 +1136,15 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       } else {
         profile = profileView(run.executionProfile);
       }
+      // Quota failover spec 2026-11-03 §3 "Nothing to switch to" (session 3cfc2e73, batch FB): the task's current run
+      // failed with quota and was not switched (a switch retries the task, which settles this run): the rest its
+      // installation is on, so the panel can say until when.
+      const installation = (run as { agent?: { agent?: unknown } }).agent?.agent;
+      if (current && isTerminallyFailedRun(run) && run.drive?.failureCause?.cause === "quota" && typeof installation === "string") {
+        rests ??= installationRests(store, store.now());
+        const rest = rests.get(installation);
+        if (rest !== undefined) quotaRest = { installation, until: rest.until, source: rest.source };
+      }
     }
     const bucket = run.phase === "handoff" ? "handoff" : "work";
     return {
@@ -1150,6 +1164,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       stopReason: run.drive?.stopReason ?? null,
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
       failureCause: run.drive?.failureCause ?? null,
+      ...(quotaRest === undefined ? {} : { quotaRest }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),

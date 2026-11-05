@@ -416,6 +416,8 @@ export type RunViewV1 = {
   outcome?: string | null;
   /** Failure-cause spec 2026-10-21 §5: ccloop's run-level cause; optional so literal fixtures need no edit. */
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; retries: number; detail: string | null } | null;
+  /** Quota failover spec §3 (session 3cfc2e73): the current run failed with quota, was not switched, and its installation rests. */
+  quotaRest?: { installation: string; until: number; source: "vendor" | "default" };
   continuable?: boolean;
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */

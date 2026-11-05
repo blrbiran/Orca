@@ -721,6 +721,8 @@ export const en = {
         "budget-exhausted": "Raise the task's budget, or split it, then retry.", "tool-rule-violated": "Read the tool-rule report and the evidence below, then fix the step's tools or the task, and retry.", "setup-failed": "A setup command could not finish; see its output, fix the command or the repository, then retry.", unknown: "Review the evidence below, then retry the task.",
       },
     },
+    // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the run was not switched; its installation rests.
+    quotaRest: { vendor: "{{installation}} is out of quota until {{time}}.", default: "{{installation}} is resting, retry around {{time}}." },
     workspace: {
       region: "Workspace mode",
       line: "New runs in {{repoId}} use {{mode}} (setting revision {{revision}}). Runs already started keep theirs.",

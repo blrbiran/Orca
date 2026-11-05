@@ -591,6 +591,7 @@ export const zh: Translation<typeof en> = {
         "budget-exhausted": "调高任务预算或拆分任务后重试。", "tool-rule-violated": "看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。", "setup-failed": "有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。", unknown: "先看下方证据，再重试这个任务。",
       },
     },
+    quotaRest: { vendor: "{{installation}} 的额度已用尽，{{time}} 恢复。", default: "{{installation}} 正在休息，约 {{time}} 后可重试。" },
     workspace: {
       region: "工作区模式",
       line: "{{repoId}} 里新的运行使用{{mode}}（设置版本 {{revision}}）。已开始的运行保持原样。",
