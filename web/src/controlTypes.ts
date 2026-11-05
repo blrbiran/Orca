@@ -1093,6 +1093,8 @@ export interface GroupResultsV1 {
     tasks: Array<{
         taskId: string;
         status: WorkItemViewV1['status'];
+        /** Tester #117: the server's display category, as on the work item; optional so literal fixtures need no edit. */
+        category?: WorkItemViewV1['category'];
         currentRunId: string | null;
         pendingRunId: string | null;
         lineageRunIds: string[];

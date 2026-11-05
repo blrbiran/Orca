@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { GroupViewV1, ResultAttemptV1, ResultExplanationV1, RunResultsV1, WorkItemViewV1 } from "./controlTypes.js";
 import { enumText } from "./i18n.js";
 import { fetchRunResults } from "./resultApi.js";
+import { shownWorkStatus } from "./runFacts.js";
 import { useResultsRead } from "./useResultsRead.js";
 import { ResultOutput } from "./ResultOutput.js";
 import { SafeMarkdown } from "./SafeMarkdown.js";
@@ -84,7 +85,7 @@ export function TaskResults(props:{view:GroupViewV1;item:WorkItemViewV1;active:b
  const authority=useSavedRunAuthority(JSON.stringify([props.scope,view.epoch,view.summary.groupId,item.taskId]));
  const state=useResultsRead(props.active,identity,signal=>Promise.all(runIds.map(id=>fetchRunResults(id,signal))), (answers,prior)=>{ const accepted=answers.every((answer,index)=>answer.schema==="orca-run-results-v1" && answer.epoch===view.epoch && answer.changeSeq>=view.changeSeq && answer.groupId===view.summary.groupId && answer.taskId===item.taskId && answer.runId===runIds[index] && answer.generation===runs[index]?.generation && answer.run.generation===answer.generation && answer.run.runId===answer.runId && answer.run.taskId===answer.taskId && authority.admit(answer,prior?.[index])); if (accepted) authority.remember(answers); return accepted; });
  return <section hidden={!props.active} aria-label={t("results.taskRegion",{taskId:item.taskId})}>
-  <h4>{t("results.taskRegion",{taskId:item.taskId})}</h4><p>{t("results.taskStatus",{taskId:item.taskId,status:enumText("workStatus",item.status)})}</p>
+  <h4>{t("results.taskRegion",{taskId:item.taskId})}</h4><p>{t("results.taskStatus",{taskId:item.taskId,status:enumText("workStatus",shownWorkStatus(item))})}</p>
   {runIds.length===0 && <p>{t("results.notProduced")}</p>}
   {state.error!==null && <p role="alert">{t("results.refused",{code:state.error})}</p>}
   {state.value?.map(value=><SavedRunResult key={value.runId} value={value} current={value.runId===item.currentRunId} active={props.active} identity={identity}/>)}

@@ -3,6 +3,7 @@ import {cleanup,render,screen,fireEvent} from "@testing-library/react";
 import {afterEach,it,expect,vi} from "vitest";
 import i18n from "../src/i18n.js";
 import {GroupResults} from "../src/GroupResults.js";
+import {TaskResults} from "../src/TaskResults.js";
 import {ControlGroupView} from "../src/ControlGroupView.js";
 import {config,view,workItem} from "./fixtures/board.js";
 import {savedGroup,savedRun} from "./fixtures/results.js";
@@ -23,4 +24,18 @@ it("tabs use roving keyboard navigation and preserve panel ownership",()=>{
 
 it("Chinese saved results translate actual outcome and Git delivery state",async()=>{
  await i18n.changeLanguage("zh");const data=savedGroup();data.delivery={scheme:{delivery:"local",trigger:"group",method:"merge",target:"main"},schemeHash:"s",frozen:true,state:"conflict",reason:null,lastIntegrated:null,integratedCommit:null,pr:null};vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));render(<GroupResults view={view([])} active scope="locale-owner"/>);const region=await screen.findByRole("region",{name:"当前结果 · run-a"});expect(region.textContent).toContain("成功");expect(screen.getByText(/交付：有冲突/)).toBeTruthy();await i18n.changeLanguage("en");
+});
+
+// Tester #117: the result views show the status the graph and table show (shownWorkStatus), not the raw stored one.
+it("group and task results show a running task whose run is blocked as blocked",async()=>{
+ const data=savedGroup();data.tasks[0]={...data.tasks[0]!,status:"active",category:"blocked"};
+ vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));
+ render(<GroupResults view={view([])} active scope="shown-status"/>);
+ // mutation: GroupResults reads task.status -> "task acceptance: active", red
+ expect(await screen.findByText(/a · task acceptance: blocked/)).toBeTruthy();
+ cleanup();
+ const item=workItem({status:"active",category:"blocked"});
+ render(<TaskResults view={view([item])} item={item} active scope="shown-status-task"/>);
+ // mutation: TaskResults reads item.status -> "task acceptance: active", red
+ expect(screen.getByText(/a · task acceptance: blocked/)).toBeTruthy();
 });

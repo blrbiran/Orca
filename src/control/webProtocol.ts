@@ -2578,7 +2578,7 @@ export const runResultsSchema = z.object({
 }).strict();
 export const groupResultsSchema = z.object({
     schema: z.literal('orca-group-results-v1'), epoch: nonemptyString, changeSeq: safeInteger, groupId: idSchema, goal: nonemptyString, successConditions: z.array(nonemptyString), status: groupSummarySchema.shape.state, review: z.object({ runs: z.array(runViewSchema) }).strict(), delivery: groupIntegrationViewSchema.nullable(), tasks: z.array(z.object({
-        taskId: idSchema, status: workItemViewSchema.shape.status, currentRunId: idSchema.nullable(), pendingRunId: idSchema.nullable(), lineageRunIds: z.array(idSchema), availability: z.enum(['available', 'partial', 'missing', 'unavailable', 'not-produced']), runs: z.array(runResultsSchema)
+        taskId: idSchema, status: workItemViewSchema.shape.status, category: workItemViewSchema.shape.category, currentRunId: idSchema.nullable(), pendingRunId: idSchema.nullable(), lineageRunIds: z.array(idSchema), availability: z.enum(['available', 'partial', 'missing', 'unavailable', 'not-produced']), runs: z.array(runResultsSchema)
     }).strict()), coverage: z.object({
         total: safeInteger, available: safeInteger, partial: safeInteger, missing: safeInteger, unavailable: safeInteger, notProduced: safeInteger
     }).strict()

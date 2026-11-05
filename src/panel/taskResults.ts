@@ -180,7 +180,8 @@ export async function readGroupResults(store: ControlStore, groupId: string, con
             runs.push(await readRunResults(store, run.runId, context, group));
         const current = runs.find(r => r.runId === item.currentRunId);
         tasks.push({
-            taskId: task.taskId, status: item.status, currentRunId: item.currentRunId, pendingRunId: item.pendingRunId, lineageRunIds: item.lineageRunIds, availability: runs.length ? (current?.availability ?? 'unavailable') : 'not-produced', runs
+            // Tester #117: the item's display category too, so the result views show the status the graph and table show.
+            taskId: task.taskId, status: item.status, ...(item.category === undefined ? {} : { category: item.category }), currentRunId: item.currentRunId, pendingRunId: item.pendingRunId, lineageRunIds: item.lineageRunIds, availability: runs.length ? (current?.availability ?? 'unavailable') : 'not-produced', runs
         });
     }
     const coverage = {

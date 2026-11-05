@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { resultFixture, context } from './fixtures/taskResults.js';
 import { readRunResults, readGroupResults } from '../../src/panel/taskResults.js';
+import { readControlGroup } from '../../src/panel/controlViews.js';
 import { readTaskResultState } from '../../src/control/taskResultStore.js';
 import { readArchivedPlan } from '../../src/control/queries.js';
 import { runResultsSchema, groupResultsSchema } from '../../src/control/webProtocol.js';
@@ -183,6 +184,21 @@ describe('admitted run and group result facts', { timeout: 30000 }, () => {
             expect(after.tasks[0].availability).toBe('available');
             expect(after.tasks[0].runs[0].runId).toBe(f.runId);
             expect(after.tasks[1].runs).toEqual([]);
+        }
+        finally {
+            await f.dispose();
+        }
+    });
+    // Tester #117: the result views read the same display category as the graph and table (shownWorkStatus).
+    it('group results carry each task\'s display category, the one the group view gives its work item', async () => {
+        const f = await resultFixture();
+        try {
+            const row = f.store.db.prepare("SELECT id, body FROM work_items WHERE group_id='g'").get()!;
+            f.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), status: 'blocked' }), String(row.id));
+            const results = await readGroupResults(f.store, 'g', context);
+            // mutation: drop category from readGroupResults -> undefined, red
+            expect(results.tasks[0].category).toBe('blocked');
+            expect(results.tasks[0].category).toBe(readControlGroup(f.store, context.epoch, 'g').workItems.find(i => i.taskId === 'a')!.category);
         }
         finally {
             await f.dispose();
