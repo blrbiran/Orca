@@ -42,6 +42,12 @@ const REVISION_RULE = "- When `earlier-draft` is present, revise that draft: cha
  */
 export const CHECK_SOURCE_RULE = "- Prefer the repository's own test scripts (as \"manifests\" lists them) as checks. Do not write ad-hoc `node -e` checks that load modules: a package's \"type\" in \"manifests\" says whether it is an ES module (\"module\") or CommonJS. Do not assert facts about the contents of files you were not shown.";
 /**
+ * Issue #136 (session 3cfc2e73, human ruling D1-D8 「其余都同意」; version stays 3): a split wrote a verify-only task whose
+ * check was `git diff --name-only HEAD | grep -x src/math.js`; the task it verified had already landed, so the agent added
+ * a meaningless comment to make a diff. A task changes files, and a check runs a command against what is delivered.
+ */
+export const NO_VERIFY_ONLY_RULE = "- Do not write verify-only tasks: every task changes files, and verifying earlier work belongs in that work's own checks. A check must not require that some file was changed (such as `git diff --name-only HEAD`) and must not check commit ids or base shas; checks are runnable commands that read the delivered files or run the repository's tests.";
+/**
  * Issue #130 (session 3cfc2e73, same ruling): `npm ci` fails without a lockfile, and ccloop's setup guard fails an
  * install that writes a new package-lock.json. So with no lockfile there is either no setup or a lockfile-free install.
  */
@@ -78,6 +84,7 @@ const SPLIT_INSTRUCTION_V3 = [
   ...PLAN_RULES,
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
   CHECK_SOURCE_RULE,
+  NO_VERIFY_ONLY_RULE,
   "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). " + NO_LOCKFILE_RULE + " Prefer the repository's own install and check scripts; in an npm workspace, install at the root. Omit \"setup\" (or give null) when nothing is needed.",
   "- A check that runs a package script must name one already in that package's \"scripts\" in \"manifests\" (and a workspace the root lists); never plan to add a script so that a check exists. Checks that are not package scripts are fine.",
   "- Before the tasks run, Orca commits the agreed requirement document to the repository at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the repository while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",

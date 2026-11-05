@@ -352,3 +352,13 @@ else `npm install --no-package-lock` (§4.2's "use the lockfile's installer" hol
 and prefer the repository's own test scripts as checks, no ad-hoc `node -e` module-loading checks (a package's `type`
 in `manifests` says ESM or CommonJS), no assertions about files not shown (#135). The validator is unchanged.
 Criteria: `tests/control/splitPromptRules130135.test.ts`; the prompt pin in `tests/control/multiDirOverview.test.ts` moved.
+
+## 13. Correction (session 3cfc2e73, issue #136, after the human's 「D1-D8其余都同意。」)
+
+The single-repository split instruction (still "version 3", as §12) gains one more rule: no verify-only tasks (every
+task changes files; verifying earlier work belongs in that work's own checks), no check that requires some file to have
+changed (such as `git diff --name-only HEAD`), no check of commit ids or base shas; checks are runnable commands that
+read the delivered files or run the repository's tests. A tester's verify task was checked by
+`git diff --name-only HEAD | grep -x src/math.js` after the work had landed, and its agent added a meaningless comment
+to pass (#136). The validator is unchanged. Criteria: `tests/control/splitPromptRule136.test.ts`; the prompt pin in
+`tests/control/multiDirOverview.test.ts` moved.

@@ -38,7 +38,8 @@ const PINNED = {
   // Ruling: 2026-11-04 session af2ceee1, controller ruling on the C2 review (fix round 1), under the human's 「授权改写」: the answer template gains `"setup": optional,` after `"checks": [ ],`; version stays 3.
   // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」 (controller ruling, Part C final review): the setup and check lines reworded (null allowed, the repository's own scripts, install at the workspace root, checks that are not package scripts are fine).
   // Ruling: 「这个session允许改写必要的判据」 (human, session 3cfc2e73, 2026-11-05): issues #130 and #135 add the no-lockfile setup rule and the check-source rule to the single instruction; version stays 3.
-  splitPrompt: "30537999aada9ea12f2c7cbdf2c9f8619729e97a882d3dec9d166b95e2689ec8",
+  // Ruling: 「D1-D8其余都同意。」 (human, session 3cfc2e73, 2026-11-05, on the controller's proposals): issue #136 adds the no-verify-only rule to the single instruction; version stays 3.
+  splitPrompt: "d50e936ae96f1015e7271ebd022e1760e5d7e8df1d80eb5bb612f3b9ae5ed380",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
