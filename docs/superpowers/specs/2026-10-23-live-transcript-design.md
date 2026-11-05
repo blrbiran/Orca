@@ -1070,3 +1070,31 @@ its end, over a 1023 MiB stream. So L7 certifies retention under a pinned young 
 RSS growth that §4.3 words. The review checked the gate is not blind: an injected retention of forty 1 MiB deltas fails
 it (growth 59.7 MiB, rc 1) while the unmodified fold passes (17.7 MiB). Production phase processes do not get the
 semi-space flag; their RSS is not measured by any gate.
+
+## 16. Correction: a CLI reader over the socket (human ruling, session 3cfc2e73, 2026-11-05, F5)
+
+Who: Orca session `3cfc2e73` (implementer batch I6, branch `feat/run-transcript-cli`, on main `3cdced36`). The sections
+above stay as written; this supersedes them where they differ.
+
+Ruling (verbatim, on the proposal below): 「同意你的建议」. It lifts ruling 3's 「orca cli现阶段不用做」 for a read-only
+reader; the Web run page stays the primary view.
+
+The proposal as agreed: a read-only `orca run transcript <run> [--call <attempt>/<phase>/<seq>] [--before <n> | --after
+<n>] [--thinking]` that reads through the same handlers the Web transcript routes use, so redaction, the
+O_NOFOLLOW / run-directory containment and the window semantics are one code path. Without `--call` it prints the run's
+call listing (rows carry no `path`); with it, one window (the tail unless `--before`/`--after` is given; `--thinking`
+sends `include=thinking`).
+
+What changes against the text above:
+
+- **§1 non-goal "A CLI viewer", §2 ruling 3, §10 "Routes".** The transcript routes (listing, window, expand) are
+  registered on both the Web and the socket listener. On the socket an ordinary caller reads, with or without a person
+  token. A principal carrying a run Orca dispatched (the `ORCA_DISPATCHED_RUN` marker, sent as `x-orca-dispatched-run`)
+  is refused `control-dispatched-run-refused` on either listener, as before.
+- **Criteria T5 and T13.** Their clause "the socket listener has no route" / "answers `route-not-found`", and their
+  mutation "Registering the routes on both listeners", no longer hold. Their safety half is kept and re-stated as: the
+  socket route refuses dispatched-run principals. The existing assertions are not rewritten in this session (no human
+  authorization yet); they are reported to the controller as failing, with this replacement wording. New criteria:
+  `tests/agentTranscript/socketRead.test.ts` (socket read by a non-dispatched caller equal to the Web's answer,
+  dispatched refused, symlink and outside-path refused, listing without path, window semantics) and
+  `tests/commands/runTranscript.test.ts` (the CLI sends the Web's query and prints the panel's answer).
