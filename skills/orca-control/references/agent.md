@@ -11,6 +11,13 @@ the agent installations the panel can run
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 
+## `orca agent preferences`
+
+the operator's current agent preferences (defaultAgent, perAgent, estimator, reconcile, review) and their revision
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+
 ## `orca agent models <installation>`
 
 an installation's models
@@ -25,7 +32,7 @@ set the operator's agent preferences from a JSON file, or only the model review'
 
 - What it does: sends control verb `set-agent-preferences`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
-- `--file <file>`: the preferences JSON (orca-agent-preferences-v1 .preferences)
+- `--file <file>`: the preferences JSON: the .preferences of `orca agent preferences --json`, {defaultAgent?, perAgent: {<installation>: {model?, contextWindow?}}, estimator?, reconcile?, review?}
 - `--review <review>`: the model review's agent, <installation>[:<model>] (on top of --file, else of the current preferences)
 
 ## `orca agent apply-update --accept <accept>`

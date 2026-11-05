@@ -33,7 +33,7 @@ execution attempt. A **requirement** is the same group while an idea is clarifie
 it into a draft task group. Read the returned state rather than infer success from a command being accepted.
 
 1. Read `config`, `summary` and `recovery`. Choose a concrete registered repository; never guess a filesystem path.
-2. Open a requirement only with a single-call capable agent (the pinned Codex adapter lacks that capability), or import
+2. Open a requirement only with a single-call capable agent (one whose `singleCallExecution` is not null in `orca agent list --json`), or import
    a registered plan. Read the group/requirement before each edit; use its current `commandRevision`.
    Clarification is capped by the requirement's class (`.clarify` of `get groups/<id>/requirement`: round 1's
    scope/clarity, the round cap and per-round caps). After the cap round is answered no next round is drafted: reach

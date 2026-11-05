@@ -27,6 +27,10 @@ any command; `orca version` should equal this skill's version.
 
 1. **Never start, stop or restart the panel or its service.** `orca panel install|uninstall|start|stop|restart|status|logs` are the human's (`status` and `logs` only read it; the others change the running service). Never run them; ask the human.
    `orca user …` is a person's too. If `orca status` says the panel is not answering, report it and stop.
+   One exception, only when the human asked you to test Orca itself: a foreground `orca panel run --by <you> --port <a free port>`
+   whose `ORCA_CONTROL_DIR`, `ORCA_PANEL_DIR`, `ORCA_PERSON_DIR`, `ORCA_VAULT_DIR`, `ORCA_CORRECTIONS_DIR`, `ORCA_PROJECTS_FILE`
+   and `ORCA_AGENTS_TABLE` all point under a scratch directory you created. Stop it when you are done; never touch the
+   person's service, its port or `~/.orca`, and ask before any run that spends money.
 2. **Read state, not command acceptance.** A 2xx answer means the panel booked the command, not that the work is done.
    Read the group (or the flow run) again and act on what it shows.
 3. **Long work is polled.** Runs take minutes to hours: after `group start`, `task continue`, `flow start` or
@@ -49,6 +53,7 @@ any command; `orca version` should equal this skill's version.
    e.g. `flow start`).
 7. **Parse `--json`.** One line: `{schema:"orca-cli-response-v1", status, commandId?, body, request?}`. Exit 0 = 2xx,
    1 = refused here before sending, 2 = the panel refused (`body.error.code` names why), 3 = crash.
+   The text output is for people: it shortens long values with an ellipsis, so never parse it.
 
 ## I want to …
 
@@ -70,7 +75,7 @@ any command; `orca version` should equal this skill's version.
 | change a task's loop or labels | `orca task set-loop <g> <t> --file …`, `orca task set-labels …` | references/task.md |
 | decide a pending or flagged decision | `orca decision list <g>`, `decision approve / reject / ratify <g> <id>` | references/decision.md |
 | record, close or withdraw a correction | `orca correction record / close / withdraw / debug` | references/correction.md |
-| see agents and models; set preferences; apply an update | `orca agent list`, `orca agent models <i>`, `agent set-preferences`, `agent apply-update --accept` | references/agent.md |
+| see agents and models; read or set preferences; apply an update | `orca agent list`, `orca agent models <i>`, `agent preferences`, `agent set-preferences`, `agent apply-update --accept` | references/agent.md |
 | see spend; set a cap or the calendar | `orca usage show`, `orca usage set-cap / clear-cap / set-calendar` | references/usage.md |
 | see or change how many groups run at once | `orca orchestration show / set` | references/orchestration.md |
 | see what blocks dispatch, or retry recovery | `orca recovery list`, `orca recovery retry` | references/recovery.md |

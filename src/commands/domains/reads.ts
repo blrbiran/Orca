@@ -101,6 +101,8 @@ export const READ_ROWS: CommandDef[] = [
   read({ domain: "decision", action: "list", summary: "a group's landed, pending and unlanded decisions", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/decisions`] }),
   read({ domain: "correction", action: "list", summary: "every recorded correction, its debug groups and closed state", paths: () => ["corrections"] }),
   read({ domain: "agent", action: "list", summary: "the agent installations the panel can run", paths: () => ["agents"] }),
+  // Session af2ceee1 F7: an agent could not read the preferences it was about to replace with `agent set-preferences`.
+  read({ domain: "agent", action: "preferences", summary: "the operator's current agent preferences (defaultAgent, perAgent, estimator, reconcile, review) and their revision", paths: () => ["operator/agent-preferences"] }),
   read({ domain: "agent", action: "models", summary: "an installation's models", positionals: [{ name: "installation", summary: "an installation id", required: true }],
     paths: (c) => [`agents/${ids(c, "installation")}/models`] }),
   read({ domain: "usage", action: "show", summary: "tokens used per model, the caps and the spend revision",

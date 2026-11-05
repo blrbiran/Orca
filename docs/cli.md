@@ -125,6 +125,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca agent`
 
 - `orca agent list` — the agent installations the panel can run
+- `orca agent preferences` — the operator's current agent preferences (defaultAgent, perAgent, estimator, reconcile, review) and their revision
 - `orca agent models <installation>` — an installation's models
 - `orca agent set-preferences [--file <file>] [--review <review>]` — set the operator's agent preferences from a JSON file, or only the model review's agent (--review)
 - `orca agent apply-update --accept <accept>` — apply the detected installation changes named by --accept (person token)

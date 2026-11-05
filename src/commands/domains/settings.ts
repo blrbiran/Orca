@@ -141,7 +141,7 @@ export const SETTINGS_ROWS: CommandDef[] = [
   // --- agent (operator scope)
   verb({ domain: "agent", action: "set-preferences", summary: "set the operator's agent preferences from a JSON file, or only the model review's agent (--review)", verb: "set-agent-preferences", scope: "operator",
     flags: [
-      { name: "file", type: "string", summary: "the preferences JSON (orca-agent-preferences-v1 .preferences)" },
+      { name: "file", type: "string", summary: "the preferences JSON: the .preferences of `orca agent preferences --json`, {defaultAgent?, perAgent: {<installation>: {model?, contextWindow?}}, estimator?, reconcile?, review?}" },
       { name: "review", type: "string", summary: "the model review's agent, <installation>[:<model>] (on top of --file, else of the current preferences)" },
     ],
     route: () => "operator/agent-preferences",
