@@ -12,7 +12,7 @@ a requirement's rounds, drafts and document
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
-## `orca requirement open --idea <idea> [--group <group>] [--language <language>] [--limit <limit>]`
+## `orca requirement open --idea <idea> [--group <group>] [--language <language>] [--limit <limit>] [--agent <agent>]`
 
 open a requirement from an idea; the group id is generated unless --group names one
 
@@ -22,9 +22,11 @@ open a requirement from an idea; the group id is generated unless --group names 
 - `--group <group>`: the new group's id
 - `--language <language>`: en|zh: the requirement's content language
 - `--limit <limit>`: the requirement's budget as JSON {tokens,activeMs,attempts,sessions} — human-only: needs a person token
+- `--agent <agent>`: the installation that runs this requirement's agent calls (orca agent list); default: your agent preferences
 
 ```
 orca requirement open --idea "add a dark mode"
+orca requirement open --idea "add a dark mode" --agent claude-main
 ```
 
 ## `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]`

@@ -69,7 +69,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca requirement`
 
 - `orca requirement show <group>` — a requirement's rounds, drafts and document
-- `orca requirement open --idea <idea> [--group <group>] [--language <language>] [--limit <limit>]` — open a requirement from an idea; the group id is generated unless --group names one
+- `orca requirement open --idea <idea> [--group <group>] [--language <language>] [--limit <limit>] [--agent <agent>]` — open a requirement from an idea; the group id is generated unless --group names one
 - `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]` — answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words
 - `orca requirement consensus <group>` — close clarification at the current round
 - `orca requirement continue <group>` — grant exactly one more clarification round after the cap
