@@ -375,7 +375,8 @@ export function failoverCommandId(taskId: string, runId: string): string { retur
 
 /**
  * Quota failover spec §8: an orchestrated group's task whose current run ended with cause `quota` on an installation the
- * task may leave (D2), with no failover command for that run yet. The groups are chosen as for the quota wait.
+ * task may leave (D2). The groups are chosen as for the quota wait. A run already answered keeps its answer: the command
+ * id is the run's, so a second send is the ledger's replay of the first (applied or refused), never a second switch.
  */
 export function failoverCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; installation: string }> {
   const out: Array<{ groupId: string; taskId: string; runId: string; installation: string }> = [];
@@ -388,7 +389,6 @@ export function failoverCandidates(store: ControlStore): Array<{ groupId: string
       if (run === null || run.drive?.failureCause?.cause !== "quota" || typeof run.agent?.agent !== "string") continue;
       const source = (work as { agentProvenance?: { agent?: unknown } }).agentProvenance?.agent;
       if (typeof source !== "string" || !SWITCHABLE_AGENT_SOURCES.has(source)) continue;
-      if (store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, failoverCommandId(taskId, run.runId)) !== undefined) continue;
       out.push({ groupId, taskId, runId: run.runId, installation: run.agent.agent });
     }
   }
