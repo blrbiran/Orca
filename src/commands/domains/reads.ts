@@ -77,6 +77,41 @@ const projectList = (body: unknown): string => {
   return lines.join("\n");
 };
 
+/** `orca run transcript`: the listing, or one call's window; the window options are the Web route's query (tail|before|after). */
+function transcriptPath(context: WriteContext): string {
+  const { flags } = context.args;
+  const run = encodeURIComponent(ids(context, "run"));
+  const call = flags.call, before = flags.before, after = flags.after;
+  if (call === undefined) {
+    if (before !== undefined || after !== undefined || flags.thinking === true) throw new EntryRejection("control-cli-argument-invalid", "--before, --after and --thinking choose a window of one call: pass --call <attempt>/<phase>/<seq>");
+    return `runs/${run}/transcripts`;
+  }
+  const match = /^([0-9]+)\/([a-z][a-z-]{0,31})\/([0-9]+)$/.exec(String(call));
+  if (match === null) throw new EntryRejection("control-cli-argument-invalid", `--call wants <attempt>/<phase>/<seq> as orca run transcript ${ids(context, "run")} lists it, not ${JSON.stringify(call)}`);
+  if (before !== undefined && after !== undefined) throw new EntryRejection("control-cli-argument-invalid", "pass at most one of --before and --after");
+  const query = [before !== undefined ? `before=${String(before)}` : after !== undefined ? `after=${String(after)}` : "tail=1", ...(flags.thinking === true ? ["include=thinking"] : [])];
+  return `runs/${run}/transcripts/${match[1]}/${match[2]}/${match[3]}?${query.join("&")}`;
+}
+
+interface TranscriptCallRow { attempt: number; phase: string; seq: number; runtime: string | null; recorded: boolean; bytes: number | null; final: boolean }
+interface TranscriptEvent { at: number; kind: string; meta?: Record<string, string>; num?: Record<string, number>; flag?: Record<string, boolean>; fields?: Record<string, { text: string; more: boolean }> }
+
+function transcriptText(body: unknown): string {
+  const b = body as { schema?: string; available?: boolean; reason?: string; calls?: TranscriptCallRow[]; events?: TranscriptEvent[]; start?: number; end?: number; runtime?: string; final?: boolean };
+  if (b.schema === "orca-run-transcripts-v1") {
+    if (b.available === false) return `transcripts unavailable: ${b.reason ?? "unknown"}`;
+    const calls = b.calls ?? [];
+    return calls.length === 0 ? "no transcript calls" : calls.map((c) => `${c.attempt}/${c.phase}/${c.seq}  ${c.runtime ?? "?"}  ${c.recorded ? `${c.bytes ?? "?"} B` : "not recorded"}${c.final ? "  final" : "  live"}`).join("\n");
+  }
+  const events = b.events ?? [];
+  const lines = events.map((e) => {
+    const meta = e.meta === undefined ? "" : ` ${Object.entries(e.meta).map(([k, v]) => `${k}=${v}`).join(" ")}`;
+    const fields = Object.entries(e.fields ?? {}).map(([k, f]) => `  ${k}: ${f.text}${f.more ? " …" : ""}`);
+    return [`@${e.at} ${e.kind}${meta}`, ...fields].join("\n");
+  });
+  return [`${b.runtime ?? "?"} window [${b.start ?? "?"}, ${b.end ?? "?"})${b.final ? " final" : " live"}`, ...(lines.length === 0 ? ["(no events)"] : lines)].join("\n");
+}
+
 export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
@@ -136,6 +171,18 @@ export const READ_ROWS: CommandDef[] = [
     } }),
   read({ domain: "run", action: "activity", summary: "a run's newest 200 activity rows, newest first", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/activity`] }),
   read({ domain: "run", action: "evidence", summary: "a run's evidence manifest", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/evidence`] }),
+  // Live transcript spec Correction (session 3cfc2e73, F5): the socket serves the Web's transcript routes; a run Orca
+  // dispatched is refused there. Without --call: the run's calls (no paths); with it: one window, the tail by default.
+  read({ domain: "run", action: "transcript", summary: "a run's agent transcript: its calls, or one call's window (tail by default), redacted as the Web shows it",
+    positionals: [RUN],
+    flags: [
+      { name: "call", type: "string", summary: "<attempt>/<phase>/<seq> as the call list prints it (default: list the calls)" },
+      { name: "before", type: "integer", summary: "the window ending at this byte offset: pass a shown window's start to page back" },
+      { name: "after", type: "integer", summary: "the window starting at this byte offset: pass a shown window's end to follow" },
+      { name: "thinking", type: "boolean", summary: "include thinking events" },
+    ],
+    examples: ["orca run transcript run-1", "orca run transcript run-1 --call 1/plan/1", "orca run transcript run-1 --call 1/plan/1 --before 4096"],
+    paths: (c) => [transcriptPath(c)], format: transcriptText }),
   read({ domain: "run", action: "results", summary: "a run's saved results", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/results`] }),
   read({ domain: "run", action: "eligibility", summary: "whether a run's saved result can be verified instead of re-run", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/saved-result-eligibility`] }),
   read({ domain: "decision", action: "list", summary: "a group's landed, pending and unlanded decisions", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/decisions`] }),

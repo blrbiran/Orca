@@ -29,6 +29,24 @@ a run's evidence manifest
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<run>`: a run id
 
+## `orca run transcript <run> [--call <call>] [--before <before>] [--after <after>] [--thinking]`
+
+a run's agent transcript: its calls, or one call's window (tail by default), redacted as the Web shows it
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<run>`: a run id
+- `--call <call>`: <attempt>/<phase>/<seq> as the call list prints it (default: list the calls)
+- `--before <n>`: the window ending at this byte offset: pass a shown window's start to page back
+- `--after <n>`: the window starting at this byte offset: pass a shown window's end to follow
+- `--thinking`: include thinking events
+
+```
+orca run transcript run-1
+orca run transcript run-1 --call 1/plan/1
+orca run transcript run-1 --call 1/plan/1 --before 4096
+```
+
 ## `orca run results <run>`
 
 a run's saved results
