@@ -290,7 +290,10 @@ describe("C7a: a fired group meets R2's pass in the real pump order", () => {
     w.schedule({ entryId, sha256, tokenLimit: null, integration: null });
     const first = await w.pump(at(1, 9));
     expect(first.crashes).toEqual([]);
-    expect(w.h.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(fired())).toEqual([{ state: "blocked-capability" }]);
+    // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The fire's import has no token limit, so it queues no
+    // estimate at all (spec 2026-11-05 §3.3; was one blocked-capability estimate). Nothing can fail between the fire and
+    // R2 in one pump any more; what stays pinned is that step 9 records nothing and the fire copies R2's booked attempt.
+    expect(w.h.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(fired())).toEqual([]);
     expect(fireAt(w.h, at(1, 9))).toMatchObject({ outcome: "started", reason: null });
     expect(commandsOf(w.h, fired(), "orca-auto-confirm-unlimited-v%")).toHaveLength(1);
     const second = await w.pump(at(2, 9));

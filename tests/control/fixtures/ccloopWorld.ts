@@ -304,10 +304,12 @@ export const raw = (runtime: ControlRuntime, commandId: string, verb: string, pa
  */
 export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0, beforeStart?: () => Promise<void>): Promise<void> {
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
-  expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+  // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit, so it queues no
+  // estimate at all (spec 2026-11-05 §3.3); these worlds never used the import-time estimate (it was blocked-capability).
+  expect(imported).toMatchObject({ result: { kind: "imported", estimateId: null, estimateState: "none" } });
   if(!optionalPolicyWorlds.has(runtime))seedHistoricalFiniteBudget(runtime.store,"g");
   // Agent selection spec §6.2 layer 1: the operator's default worker is the world's installation (set after the
-  // import, so the import's estimator still degrades to blocked-capability, as asserted above).
+  // import, which queued no estimate, as asserted above).
   const preferences = await runtime.service.setAgentPreferences(raw(runtime, "preferences", "set-agent-preferences", { preferences: { defaultAgent: "codex", perAgent: {} } }, { kind: "operator", operatorId: "human" }));
   expect("error" in preferences ? preferences.error : "set").toBe("set");
   const selections = await resolveGroupSelections({ store: runtime.store, port: runtime.port }, "g", "human");

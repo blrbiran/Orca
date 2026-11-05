@@ -63,13 +63,15 @@ async function setPreferences(runtime: ControlRuntime, preferences: OperatorPref
 type Frozen = { selection: AgentSelection; provenance: Record<"agent" | "model" | "contextWindow", ProvenanceSource> };
 
 /**
- * Import (the estimator degrades to blocked-capability: no preferences exist yet), set the operator's preferences,
+ * Import (no estimate is queued: the group has no token limit), set the operator's preferences,
  * preview as the panel would (T14), confirm soft on that preview's hash. Answers what the confirm FROZE, read back from
  * the store -- each work item's frozen fields and the snapshot's reconcile slot -- never the preview it was bound to.
  */
 async function confirmAgentGroup(runtime: ControlRuntime, repoId: string, preferences: OperatorPreferences): Promise<Record<string, Frozen>> {
   const imported = await runtime.service.importPlan(raw(runtime, `import-${++seq}`, "import-plan", { groupId: "g", repoId, planId: "plan" }));
-  expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
+  // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit, so it queues no
+  // estimate (spec 2026-11-05 §3.3); this flow never used the import-time one (it was blocked-capability).
+  expect(imported).toMatchObject({ result: { kind: "imported", estimateId: null, estimateState: "none" } });
   await setPreferences(runtime, preferences);
   const preview = await readSelectionPreview(runtime.store, runtime.port, OPERATOR, "g");
   if (preview.selectionsHash === null) throw new Error(`preview rejected: ${JSON.stringify(preview.slots)}`);
