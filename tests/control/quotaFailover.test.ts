@@ -69,8 +69,9 @@ describe("a quota failure switches the task's installation and retries it (§8)"
       expect(() => readConfirmedTaskExecution(w.t.h.store, "g", "a")).not.toThrow();
       const activity = w.t.h.store.db.prepare("SELECT body FROM activity WHERE kind='task-retried' AND run_id=?").get(w.runId);
       expect(JSON.parse(String(activity!.body))).toEqual({ fromRunId: w.runId, agent: { from: "codex", to: "claude" } });
-      // The failed codex run still belongs to the task's lineage: the group view is not blocked by it.
-      expect(readControlGroup(w.t.h.store, "epoch-test", "g").blockers ?? []).toEqual([]);
+      // The failed codex run still belongs to the task's lineage: the group view (which throws recovery-blocked on a run
+      // that disagrees with its work item) still reads, and lists it.
+      expect(readControlGroup(w.t.h.store, "epoch-test", "g").runs.map((run) => run.runId)).toContain(w.runId);
       // The next run is claimed on claude and the task finishes.
       const next = await w.t.claim();
       expect((w.t.body(next) as { agent: { agent: string } }).agent.agent).toBe("claude");
@@ -140,7 +141,7 @@ describe("a resting installation is not switched to (D3, D4)", { timeout: 120_00
       expect(w.work().agent.agent).toBe("codex");
       expect(w.work().agentSwitches.map((entry: { afterRunId: string }) => entry.afterRunId)).toEqual([w.runId, second]);
       // Both earlier runs (one per installation) still agree with what the task carried when they were claimed.
-      expect(readControlGroup(w.t.h.store, "epoch-test", "g").blockers ?? []).toEqual([]);
+      expect(readControlGroup(w.t.h.store, "epoch-test", "g").runs.map((run) => run.runId)).toEqual(expect.arrayContaining([w.runId, second]));
       expect(() => readConfirmedTaskExecution(w.t.h.store, "g", "a")).not.toThrow();
     } finally { await w.t.h.dispose(); }
   });
