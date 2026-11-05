@@ -286,6 +286,9 @@ function GrantBanners({ view }: { view: GroupViewV1 }): JSX.Element {
   const over = (run: RunViewV1): AmountDimensionV1[] => run.overGrant ?? [];
   const estimates = view.runs.filter((run) => run.phase === "estimate" && over(run).length > 0);
   const blocker = view.summary.state === "blocked" ? view.runs.find((run) => run.phase !== "estimate" && over(run).length > 0) : undefined;
+  // Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): in a group that is not blocked (no token limit), each non-estimate run
+  // over its grant is a status line, one per over dimension.
+  const overRuns = view.summary.state === "blocked" ? [] : view.runs.filter((run) => run.phase !== "estimate" && over(run).length > 0);
   const line = (run: RunViewV1, dimension: AmountDimensionV1) => ({ runId: run.runId, dimension: enumText("dimension", dimension), used: figure(dimension, run.used[dimension]), grant: figure(dimension, run.grant?.[dimension]) });
   const deficit = view.ledger.budgetDeficit.tokens;
   return <>
@@ -295,6 +298,9 @@ function GrantBanners({ view }: { view: GroupViewV1 }): JSX.Element {
     {estimates.length > 0 && deficit > 0 && view.ledger.groupLimit.tokens !== null && (
       <p role="alert" data-testid="estimate-deficit">{t("control.group.estimateDeficit", { deficit: shortTokens(deficit) })}</p>
     )}
+    {overRuns.flatMap((run) => over(run).map((dimension) => (
+      <p key={`${run.runId}:${dimension}`} role="status" data-testid="run-over-grant">{t("control.group.runOverGrant", line(run, dimension))}</p>
+    )))}
     {blocker !== undefined && <p role="alert" data-testid="blocked-banner">{t("control.group.blockedBanner", line(blocker, over(blocker)[0]!))}</p>}
   </>;
 }

@@ -45,6 +45,7 @@ import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDi
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
+import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
@@ -94,7 +95,7 @@ import { readCorrections } from "../corrections/store.js";
 import { autoConfirmBlocker, autoConfirmCommandId } from "./autoConfirm.js";
 import { autoStartPass, ORCHESTRATION_ACTOR, readOrchestrationSettings, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
-import { applyAddGroupDependency, applyRemoveGroupDependency, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
+import { applyAddGroupDependency, applyRemoveGroupDependency, prerequisiteDone, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
 import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
@@ -815,7 +816,7 @@ export class WebControlService {
           try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, candidate.groupId, to, "failover"); }
           catch { continue; }
           const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
-          const answer = applyRetryTask({ ...this.stopDeps(), switchTo: { frozen, source: "failover" } }, {
+          const answer = applyRetryTask({ ...this.stopDeps(), prerequisiteDone, switchTo: { frozen, source: "failover" } }, {
             schema: "orca-raw-command-v1", commandId: failoverCommandId(candidate.taskId, candidate.runId), actorId: ORCHESTRATION_ACTOR,
             expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
             payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
@@ -1786,7 +1787,7 @@ export class WebControlService {
   verifySavedResult(command:VerifySavedResultCommand){return applyVerifySavedResult(this.stopDeps(),command);}
   retryTask(command: RetryTaskCommand): WebCommandResult {
     if (command.payload.agent !== undefined) throw new ControlError("recovery-blocked", "agent-switch-needs-resolution");
-    return applyRetryTask(this.stopDeps(), command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone }, command) as WebCommandResult;
   }
   /**
    * Quota failover spec 2026-11-03 §8: a retry on another installation. ccloop resolves the installation before the
@@ -1804,7 +1805,7 @@ export class WebControlService {
     } catch (error) {
       return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
-    return applyRetryTask({ ...this.stopDeps(), switchTo: { frozen, source } }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, switchTo: { frozen, source } }, command) as WebCommandResult;
   }
   /**
    * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only
@@ -1949,7 +1950,10 @@ export class WebControlService {
         // N1 spec §11.1 (survey S6): before any proposal read, which a clarifying group does not have.
         if (group.status === "clarifying") return success(context, { kind: "limit-set", limit: setRequirementLimit(this.store, id, command.payload.limit) });
         const proposal = readBudgetProposal(this.store, id);
-        if (!["ready", "running", "review"].includes(group.status)) throw new ControlError("group-state-invalid");
+        // Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): a group blocked only by a run over its grant takes a new limit -- the
+        // person raising it is the authorisation; a `blocked` group whose block names no such run is still refused.
+        const overGrantBlocked = group.status === "blocked" && overGrantBlockRuns(this.store.db, id).length > 0;
+        if (!["ready", "running", "review"].includes(group.status) && !overGrantBlocked) throw new ControlError("group-state-invalid");
         const limit = command.payload.limit;
         if (same(limit, group.limit)) throw new ControlError("no-op-command");
         // Unknown usage cannot authorize a decrease or a new allocation.
@@ -1958,6 +1962,8 @@ export class WebControlService {
         if (decreasing || !group.ledger.usageUnknown) assertKnownConservation(this.store, group, proposal);
         proposal.groupLimit = limit;
         setReserve(proposal, residual(limit, group.used, group.reserved));
+        // §3.2: the status the block is lifted to is set by rule (overGrantBlock.ts), not restored from memory.
+        if (overGrantBlocked) group.status = unblockedStatus(this.store, id, prerequisiteDone);
         saveWebAuthority(this.store, group, proposal);
         return success(context, { kind: "limit-set", limit });
       },

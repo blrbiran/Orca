@@ -45,7 +45,10 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
           // advice, and never changes the group's status. §4.2.5 (N3): its non-token excess grows the group's limit.
           const estimateRun=(run as {phase?:string}).phase==="estimate";
           if(estimateRun)growForEstimateOverrun(store,group as never,run,next.eventSeq,appliedAt);
-          if((group as {status?:string}).status!=="clarifying"&&!estimateRun){if("planHash" in group)group.status="blocked";else group.stopped=true;}
+          // Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): a Web group with no token limit is not blocked by any dimension's
+          // breach -- the breach stays recorded on the run (RunViewV1.overGrant). A limited group still blocks.
+          const unlimitedWeb="planHash" in group&&(group as {limit?:{tokens?:number|null}}).limit?.tokens===null;
+          if((group as {status?:string}).status!=="clarifying"&&!estimateRun&&!unlimitedWeb){if("planHash" in group)group.status="blocked";else group.stopped=true;}
         }
       }
       run.highWater=next.eventSeq;

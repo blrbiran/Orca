@@ -461,6 +461,19 @@ export function groupCardFlaggedCount(store: ControlStore, groupId: string): num
  * waiting for a person (major pending ones plus flags not ratified -- a flag a correction answered still counts here,
  * the corrections store is not read for a summary); the first task, in plan order, whose current run failed and why.
  */
+/**
+ * Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): a group that is not blocked yet has a non-estimate run over its grant -- a
+ * group with no token limit, where a breach is recorded on the run only. Over the summary's own snapshot; only a body
+ * with a non-empty `breaches` array is decoded.
+ */
+function overGrantUnblocked(status: unknown, snapshot: GroupReadSnapshot): boolean {
+  if (status === "blocked") return false;
+  return snapshot.runsByRowid.some((row) => {
+    if (!/"breaches":\[[^\]]/.test(row.body)) return false;
+    try { return (decodedValue(snapshot.decodeRun(row.id)) as { phase?: unknown } | undefined)?.phase !== "estimate"; } catch { return false; }
+  });
+}
+
 function cardFacts(store: ControlStore, groupId: string, body: Record<string, unknown>, taskIds: readonly string[], snapshot: GroupReadSnapshot) {
   const tokens = (value: unknown): number | null => {
     const n = (value as { tokens?: unknown } | undefined)?.tokens;
@@ -583,6 +596,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     updatedAt: latestGroupActivityAt(store, groupId),
     archived: archivedMarkOf(body) !== null,
     ...(executing === undefined ? {} : { executionPending: executing }),
+    ...(archived !== null && overGrantUnblocked(body.status, readSnapshot!) ? { overGrant: true } : {}),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
     ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),

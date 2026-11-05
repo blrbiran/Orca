@@ -126,7 +126,7 @@ describe("immutable plan import", () => {
       } }, command());
       expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
       if (!("result" in imported) || imported.result.kind !== "imported") throw new Error("import refused");
-      expect(readEstimateRecord(h.store, "g", imported.result.estimateId).compatibilityReasonCodes).toEqual(["single-call-unavailable"]);
+      expect(readEstimateRecord(h.store, "g", imported.result.estimateId!).compatibilityReasonCodes).toEqual(["single-call-unavailable"]);
       expect(readControlGroup(h.store, "epoch", "g").estimates[0]?.compatibilityReasonCodes).toEqual(["single-call-unavailable"]);
     } finally { await h.dispose(); }
   });
@@ -138,7 +138,7 @@ describe("immutable plan import", () => {
       if (!("result" in imported) || imported.result.kind !== "imported") throw new Error("import refused");
       const row = h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(imported.result.estimateId)!;
       const before = String(row.body);
-      expect(Object.hasOwn(readEstimateRecord(h.store, "g", imported.result.estimateId), "compatibilityReasonCodes")).toBe(false);
+      expect(Object.hasOwn(readEstimateRecord(h.store, "g", imported.result.estimateId!), "compatibilityReasonCodes")).toBe(false);
       expect(String(h.store.db.prepare("SELECT body FROM estimates WHERE group_id='g' AND id=?").get(imported.result.estimateId)!.body)).toBe(before);
     } finally { await h.dispose(); }
   });
@@ -157,7 +157,7 @@ describe("immutable plan import", () => {
       const result = importControlPlan({ ...h.deps, defaults: () => null }, command());
       expect(result).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
       if (!("result" in result) || result.result.kind !== "imported") throw new Error("import refused");
-      expect(readEstimateRecord(h.store, "g", result.result.estimateId)).toMatchObject({ profile: null, estimatorSlot: null });
+      expect(readEstimateRecord(h.store, "g", result.result.estimateId!)).toMatchObject({ profile: null, estimatorSlot: null });
     } finally { await h.dispose(); }
   });
   it("probes the plan worker primary for a new import and freezes that estimator selection", async () => {
@@ -177,7 +177,7 @@ describe("immutable plan import", () => {
       expect(result).toMatchObject({ result: { kind: "imported", estimateState: "queued" } });
       expect(probed).toEqual([{ agent: "claude", model: "B-m" }]);
       if (!("result" in result) || result.result.kind !== "imported") throw new Error("import refused");
-      expect(readEstimateRecord(h.store, "g", result.result.estimateId).estimatorSlot?.selection).toEqual({ agent: "claude", model: "B-m", contextWindow: "agent-default" });
+      expect(readEstimateRecord(h.store, "g", result.result.estimateId!).estimatorSlot?.selection).toEqual({ agent: "claude", model: "B-m", contextWindow: "agent-default" });
     } finally { await h.dispose(); }
   });
 
@@ -231,7 +231,7 @@ describe("immutable plan import", () => {
       await writeFile(h.planPath, JSON.stringify({ ...h.plan, goal: "changed", tasks: [] }));
       expect(readArchivedPlan(h.store, "g")).toEqual({ ...archived, canonicalJson: original });
       expect(readBudgetProposal(h.store, "g")).toMatchObject({ proposalVersion: 1, state: "editable" });
-      expect(readEstimateRecord(h.store, "g", imported.result.kind === "imported" ? imported.result.estimateId : "missing")).toMatchObject({ estimateVersion: 1, state: "queued" });
+      expect(readEstimateRecord(h.store, "g", imported.result.kind === "imported" ? imported.result.estimateId! : "missing")).toMatchObject({ estimateVersion: 1, state: "queued" });
       const group = h.store.db.prepare("SELECT revision,projection_seq FROM groups WHERE id='g'").get();
       expect(group).toEqual({ revision: 1, projection_seq: 1 });
     } finally { await h.dispose(); }
@@ -584,7 +584,7 @@ describe("immutable plan import", () => {
     try {
       const result = importControlPlan(h.deps, command());
       if ("error" in result || result.result.kind !== "imported") throw new Error("expected import");
-      const estimateId = result.result.estimateId;
+      const estimateId = result.result.estimateId!;
       const proposalRow = h.store.db.prepare("SELECT body FROM budget_proposals WHERE group_id='g'").get()!;
       const proposal = JSON.parse(String(proposalRow.body));
       h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'")
@@ -607,7 +607,7 @@ describe("immutable plan import", () => {
     try {
       const result = importControlPlan(h.deps, command());
       if ("error" in result || result.result.kind !== "imported") throw new Error("expected import");
-      const estimateId = result.result.estimateId;
+      const estimateId = result.result.estimateId!;
       const proposal = readBudgetProposal(h.store, "g");
       const reversed = Object.fromEntries(Object.entries(proposal).reverse());
       h.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(JSON.stringify(reversed));

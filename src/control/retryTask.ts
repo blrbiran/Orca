@@ -23,6 +23,7 @@ import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { refuseFlowChild } from "../flow/groups.js";
 import { readBudgetProposal, readWork, saveWork } from "./queries.js";
+import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import {
   ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readGroupBody, readRunBody, readStopIntent, releaseCommitment,
   reserveCommitment, saveRunBody, setAllocationStates,
@@ -45,7 +46,11 @@ export type RetryTaskResult = CommandSuccessV1 | CommandErrorBodyV1;
  * `switchTo` (quota failover spec 2026-11-03 §8): the frozen selection a retry on another installation gives the task,
  * resolved through ccloop before this transaction (agentSwitch.ts resolveAgentSwitch); `source` says who chose it.
  */
-export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource } }
+/**
+ * `prerequisiteDone` (session 3cfc2e73 D2): D1's done rule (groupEdges.ts), passed in by webService.ts so this module on
+ * the control import cycle does not import groupEdges.ts; absent, a lifted block never lands on `done`.
+ */
+export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource }; prerequisiteDone?: (store: ControlStore, groupId: string) => boolean }
 
 interface RetriedWork { workItemId: string; taskId: string | null; targetVersion: number; lineageRunIds?: string[]; status: string; currentRunId?: string | null; grant: { work: Amount; handoff: Amount }; retryGrantSourceRunId?: string; pendingRunId?: string | null; continuation?: { continuationIntentId: string; pendingRunId: string } | null }
 
@@ -156,6 +161,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         validateRetryGrantSource(store, groupId, work);
         readConfirmedTaskExecution(store, groupId, taskId);
         if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) throw new ControlError("recovery-blocked", "retry-settlement");
+        // Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): the group is blocked because a run went over its grant.
+        const overGrantBlocked = group.status === "blocked" && overGrantBlockRuns(store.db, groupId).length > 0;
         if(hasOptionalTaskPolicy(store,groupId,taskId)) {
           const funding=readFundedAllowance(store,run as never);if(!funding)throw new ControlError("recovery-blocked","retry-funding-missing");
           const inherited=add(funding.inheritedUsage,lineageWorkUsage(run));
@@ -192,6 +199,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         work.pendingRunId = null;
         saveWork(store, groupId, work as never);
         recordSavedOrdinaryRetry(store,runId,command.commandId);
+        // Session 3cfc2e73 D2 (triage #161): the retry lifts the over-grant block it answers, by set-limit's rule.
+        if (overGrantBlocked) { const lifted = readGroup(store, groupId); lifted.status = unblockedStatus(store, groupId, deps.prerequisiteDone ?? (() => false)); saveGroup(store, lifted); }
         // Effect 4 (the command revision advances in applyWebCommand).
         recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, ...(switched === null ? {} : { agent: switched }) } });
         deps.beforeCommit?.();

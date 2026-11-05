@@ -93,6 +93,8 @@ export type GroupSummaryV1 = {
   archived?: boolean;
   /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
   executionPending?: boolean;
+  /** Session 3cfc2e73 D2: present (true) only when the group is not blocked and a non-estimate run went over its grant. */
+  overGrant?: boolean;
   /** Debug task plan Task 6: present only on a group a correction opened. Task 13: the mark's facts the group view shows. */
   debug?: {
     correctionId: string; ordinal: number;
@@ -691,7 +693,7 @@ export type CommandSuccessV1 = {
     | {kind:"saved-result-verification-started";taskId:string;runId:string;recoveryOf:RecoveryOf}
 
     | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount }; at: number; method: "remaining-grant" | "owner-acknowledged-unmetered" }
-    | { kind: "imported"; groupId: string; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; estimateReasonCode: string | null }
+    | { kind: "imported"; groupId: string; estimateId: string | null; estimateState: "queued" | "blocked-capability" | "input-too-large" | "none"; estimateReasonCode: string | null }
     | { kind: "proposal-edited"; proposalVersion: number }
     | { kind: "estimate-created"; estimateId: string; estimateVersion: number; estimateState: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null; wakeId: string | null }
     | { kind: "confirmed"; executionSnapshotHash: string }
@@ -770,7 +772,7 @@ export type CommandSuccessV1 = {
     | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }
     | { kind: "requirement-classified"; scope: RequirementScopeV1; clarity: RequirementClarityV1 }
     | { kind: "requirement-revised"; roundNo: number; revises: number; consensusWithdrawn: boolean; nextRoundNo: number | null; wakeId: string | null }
-    | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string; estimateState: "queued" | "blocked-capability" | "input-too-large"; documentSha256: string; exportWakeId: string }
+    | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string | null; estimateState: "queued" | "blocked-capability" | "input-too-large" | "none"; documentSha256: string; exportWakeId: string }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned" | "unchanged-idle"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
 };
 export type CommandLookupV1 = { schema: "orca-command-lookup-v1"; originalStatus: number; body: CommandSuccessV1 | { error: CommandErrorV1 } };

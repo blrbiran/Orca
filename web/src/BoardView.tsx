@@ -131,6 +131,8 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
       {/* Checks spec 2026-10-22 §7: a model review's findings this group is involved in -- major red, minor grey (P5). */}
       {(facts?.reviewFindings?.major ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-tone="danger" data-testid="board-card-findings-major">{t("board.card.findingsMajor", { count: facts!.reviewFindings!.major })}</span>}
       {(facts?.reviewFindings?.minor ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-testid="board-card-findings-minor">{t("board.card.findingsMinor", { count: facts!.reviewFindings!.minor })}</span>}
+      {/* Session 3cfc2e73 D2: a run went over its grant in a group that was not blocked (no token limit). */}
+      {group.overGrant === true && <span className={`badge ${cardBadge}`} data-tone="warn" data-testid="board-card-over-grant">{t("board.card.overGrant")}</span>}
     </li>
   );
 }

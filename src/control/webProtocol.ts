@@ -1484,6 +1484,9 @@ export const groupSummarySchema = z
     // Web-started group stays `ready` through its first run, so this, not `state`, says it is not startable.
     // Given for every group with a plan; optional on the wire so older fixtures still parse.
     executionPending: z.boolean().optional(),
+    // Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): present (true) only when the group is not blocked and a non-estimate
+    // run of it went over its grant -- in a group with no token limit a breach is recorded, not blocking. The Board's chip.
+    overGrant: z.boolean().optional(),
     // Debug task plan Task 6: present only on a group a correction opened (its debug mark), so the panel labels it.
     // Task 13: the mark's facts the group view shows -- the frozen input's missing pieces, why the agent fell back, where
     // the checks came from and what the landing did about the correction. Optional so a Task 6 summary still parses.
@@ -2069,8 +2072,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("imported"),
       groupId: idSchema,
-      estimateId: idSchema,
-      estimateState: z.enum(["queued", "blocked-capability", "input-too-large"]),
+      // Session 3cfc2e73 D3: a group with no token limit is imported with no estimate (null, "none").
+      estimateId: idSchema.nullable(),
+      estimateState: z.enum(["queued", "blocked-capability", "input-too-large", "none"]),
       estimateReasonCode: nonemptyString.nullable(),
     })
     .strict(),
@@ -2215,8 +2219,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("requirement-draft-accepted"),
       draftNo: positiveSafeInteger,
-      estimateId: idSchema,
-      estimateState: z.enum(["queued", "blocked-capability", "input-too-large"]),
+      estimateId: idSchema.nullable(),
+      estimateState: z.enum(["queued", "blocked-capability", "input-too-large", "none"]),
       documentSha256: hashSchema,
       exportWakeId: nonemptyString,
     })
