@@ -47,5 +47,29 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   // until the vendor's named reset, or the default rest's end.
   const rest = props.run.quotaRest;
   const restLine = rest === undefined ? null : <span data-testid="run-quota-rest">{t(`control.quotaRest.${rest.source}`, { installation: rest.installation, time: new Date(rest.until).toLocaleString() })} </span>;
-  return <>{lineage} — {causeLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}</>;
+  return <>{lineage} — {causeLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}<FormatFailureWorkLines work={props.run.diagnosis?.formatFailureWork} /></>;
+}
+
+type FormatFailureWork = NonNullable<NonNullable<RunViewV1["diagnosis"]>["formatFailureWork"]>;
+const block = { display: "block" } as const;
+
+/**
+ * Session 3cfc2e73 D7 (#158): an omp execute format failure's work survives only under ccloop's attempt refs; each ref, what
+ * it changed against the attempt's base, and the git command to see it, so a person can take the work by hand (the same
+ * facts `orca run show` prints). Spans, not blocks: the reason renders inside a paragraph or a table cell.
+ */
+function FormatFailureWorkLines(props: { work: FormatFailureWork | undefined }): JSX.Element | null {
+  const { t } = useTranslation();
+  const work = props.work;
+  if (work === undefined) return null;
+  const base = work.attemptBase;
+  return <span data-testid="run-format-failure-work" style={block}>
+    <span style={block}>{t("control.formatFailureWork.heading", { attempt: work.attempt, count: work.refs.length })}{base !== null && <> {t("control.formatFailureWork.base")} <code>{base.slice(0, 12)}</code></>}</span>
+    {work.issues.map((issue, index) => <span key={`issue-${index}`} style={block}>{t("control.formatFailureWork.refused")} <code>{issue.path === "" ? t("control.formatFailureWork.topLevel") : issue.path}</code>: {issue.message}</span>)}
+    {work.refs.map((ref) => <span key={ref.ref} style={block}>
+      <code>{ref.ref}</code>{ref.commit === null ? <> — {t("control.formatFailureWork.missing")}</> : <> = <code>{ref.commit.slice(0, 12)}</code> — {t("control.formatFailureWork.files", { count: ref.files.length, more: ref.filesMore ? "+" : "" })}
+        {ref.stat.length > 0 && <code style={{ ...block, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{ref.stat.map((line) => line.trim()).join("\n")}</code>}
+        {base !== null && <span style={block}>{t("control.formatFailureWork.seeIt")} <code>{["git", "diff", base.slice(0, 12), ref.ref].join(" ")}</code></span>}</>}
+    </span>)}
+  </span>;
 }

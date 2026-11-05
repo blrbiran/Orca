@@ -592,6 +592,12 @@ export const zh: Translation<typeof en> = {
       },
     },
     quotaRest: { vendor: "{{installation}} 的额度已用尽，{{time}} 恢复。", default: "{{installation}} 正在休息，约 {{time}} 后可重试。" },
+    formatFailureWork: {
+      heading_one: "执行格式失败（第 {{attempt}} 次尝试）：这次尝试的成果保存在项目仓库的下列 ref 下",
+      heading_other: "执行格式失败（第 {{attempt}} 次尝试）：这次尝试的成果保存在项目仓库的下列 ref 下",
+      base: "基于", refused: "被拒：", topLevel: "（顶层）", missing: "在项目仓库里找不到（尚未发布，或已删除）",
+      files_one: "改了 {{count}}{{more}} 个文件", files_other: "改了 {{count}}{{more}} 个文件", seeIt: "查看：",
+    },
     workspace: {
       region: "工作区模式",
       line: "{{repoId}} 里新的运行使用{{mode}}（设置版本 {{revision}}）。已开始的运行保持原样。",

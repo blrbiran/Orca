@@ -723,6 +723,13 @@ export const en = {
     },
     // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the run was not switched; its installation rests.
     quotaRest: { vendor: "{{installation}} is out of quota until {{time}}.", default: "{{installation}} is resting, retry around {{time}}." },
+    // Session 3cfc2e73 D7 (#158): an omp execute format failure's attempt refs (the same facts orca run show prints).
+    formatFailureWork: {
+      heading_one: "Execute format failure (attempt {{attempt}}): the attempt's work is kept under this ref in the project repository",
+      heading_other: "Execute format failure (attempt {{attempt}}): the attempt's work is kept under these refs in the project repository",
+      base: "on base", refused: "Refused:", topLevel: "(top level)", missing: "not found in the project repository (not published yet, or removed)",
+      files_one: "{{count}}{{more}} file changed", files_other: "{{count}}{{more}} files changed", seeIt: "see it:",
+    },
     workspace: {
       region: "Workspace mode",
       line: "New runs in {{repoId}} use {{mode}} (setting revision {{revision}}). Runs already started keep theirs.",
