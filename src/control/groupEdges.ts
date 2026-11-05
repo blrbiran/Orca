@@ -148,8 +148,10 @@ export function applyAddGroupDependency(deps: { store: ControlStore }, command: 
       if (prerequisite === dependent) throw new ControlError("group-edge-self");
       const before = groupBody(store, prerequisite);
       if (before === null) throw new ControlError("group-edge-prerequisite-not-found", prerequisite);
-      // Issue #133: an archived group takes no new work, so it may never be done and the dependent would wait forever.
-      if (isGroupArchived(store, prerequisite)) throw new ControlError("group-edge-prerequisite-archived", prerequisite);
+      // Issue #133: an archived group takes no new work, so one that is not done may never be and the dependent would
+      // wait forever. Ruling (session 86352010): 「都同意按你的建议走」 -- an archived group whose work is done (the same
+      // prerequisiteDone the dependent waits on) is accepted: a person often archives a group Orca could not finish.
+      if (isGroupArchived(store, prerequisite) && !prerequisiteDone(store, prerequisite)) throw new ControlError("group-edge-prerequisite-archived", prerequisite);
       if (repoOf(before) !== repoOf(group)) throw new ControlError("group-edge-repository-mismatch", `${repoOf(before)}:${repoOf(group)}`);
       if (store.db.prepare("SELECT 1 FROM group_edges WHERE from_group=? AND to_group=?").get(prerequisite, dependent)) throw new ControlError("no-op-command");
       if (dependentStarted(store, dependent, group)) throw new ControlError("group-edge-dependent-started");

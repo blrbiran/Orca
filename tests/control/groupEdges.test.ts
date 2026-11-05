@@ -196,6 +196,20 @@ describe("edges between groups (kanban spec §3.3-§3.4)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Ruling (session 86352010): an archived prerequisite whose work is done is accepted; the dependent does not wait on it.
+  it("accepts an edge to an archived prerequisite whose work is done, and the dependent does not wait for it", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      finishTasks(h, "p");
+      expect(service.archiveGroup(h.rawCommand(`archive-p-${++sequence}`, revisionOf(h, "p"), "archive-group", { kind: "group", groupId: "p" }, {}) as never)).toMatchObject({ result: { kind: "archived" } });
+      // mutation: refuse every archived prerequisite (the session 3cfc2e73 rule) -> group-edge-prerequisite-archived, red
+      expect(edge(h, service, "add-group-dependency", "g", "p")).toMatchObject({ result: { kind: "group-dependency-added", groupId: "g", dependsOn: "p" } });
+      expect(readGroupSummary(h.store, "g").dependsOn).toEqual(["p"]);
+      expect(waitingPrerequisites(h.store, "g")).toEqual([]);
+    } finally { await h.dispose(); }
+  });
+
   it("a dependent of one prerequisite not delivered locally stacks on that prerequisite's branch", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);

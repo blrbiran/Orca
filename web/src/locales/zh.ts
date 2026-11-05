@@ -2083,7 +2083,7 @@ export const zhErrors: Record<string, string> = {
   "group-edge-repository-mismatch": "两个组必须是同一个项目。",
   "group-edge-stack-ambiguous": "一个组只能叠在一个非本地交付的组上（{{detail}}）。",
   "group-edge-self": "组不能等它自己。",
-  "group-edge-prerequisite-archived": "组 {{detail}} 已归档，不再接新工作，这个组可能会永远等下去。",
+  "group-edge-prerequisite-archived": "组 {{detail}} 在完成前已归档，不再接新工作，这个组可能会永远等下去。",
   "group-dependency-unmet": "这个组要等的组还没完成（{{detail}}），等它们完成后才能开始。",
   "control-argument-invalid": "这条命令收到的值无效：{{detail}}",
   "check-schedule-too-frequent": "定时检查最多每小时一次。",
