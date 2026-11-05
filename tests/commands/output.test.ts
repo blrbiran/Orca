@@ -31,6 +31,24 @@ describe("printResponse (spec §7)", () => {
     expect(err.join("")).toContain("panel-not-running: none");
   });
 
+  // Issue #149 (session 3cfc2e73): the same --command-id re-run re-reads the revision, so the panel refuses it as a
+  // different request (spec §14 R1, unchanged). The human output names the commands that look the id up or replay it;
+  // --json stays the one-line envelope with nothing added.
+  it("command-id-conflict: the human output names orca command show <id> and orca command retry --request; --json unchanged", () => {
+    const conflict = { schema: "orca-cli-response-v1" as const, status: 409, commandId: "run-1", body: { error: { code: "command-id-conflict", message: "different bytes" } } };
+    const err: string[] = [];
+    const human = { stdout: (_text: string) => undefined, stderr: (text: string) => err.push(text) };
+    expect(printResponse(conflict, { json: false, quiet: false, format: () => "" }, human)).toBe(2);
+    expect(err.join("")).toContain("orca command show run-1 --group <group>");
+    expect(err.join("")).toContain("orca command retry --request <file|->");
+    const other: string[] = [];
+    printResponse({ ...conflict, body: { error: { code: "revision-conflict", message: "stale" } } }, { json: false, quiet: false, format: () => "" }, { stdout: () => undefined, stderr: (text: string) => other.push(text) });
+    expect(other.join("")).not.toContain("orca command show");
+    const { out, io } = capture();
+    printResponse(conflict, { json: true, quiet: false, format: () => "" }, io);
+    expect(out).toEqual([`${JSON.stringify(conflict)}\n`]);
+  });
+
   it("no automatic JSON when stdout is not a TTY: human text unless --json", () => {
     const { out, io } = capture();
     printResponse({ schema: "orca-cli-response-v1", status: 200, body: {} }, { json: false, quiet: false, format: () => "text" }, io);
