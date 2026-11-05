@@ -521,7 +521,7 @@ function persistAsyncPreparationFailure(store: ControlStore, command: ImportComm
  * identity/CAS preflight happens before dynamic defaults or I/O; applyWebCommand
  * repeats both checks after the await to close concurrent commit races.
  */
-export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf; multiDirRepoId?: (repoId: string) => boolean }, command: ImportCommand, opts: { origin?: ImportOrigin } = {}): Promise<ImportResult> {
+export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf; multiDirRepoId?: (repoId: string) => boolean }, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight" } = {}): Promise<ImportResult> {
   const preflight = preflightWebCommand(deps.store, command);
   if (preflight) return preflight.body;
 
@@ -544,7 +544,10 @@ export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjec
     };
     profile = frozenDefaults.estimatorProfileId !== null && frozenDefaults.estimatorProfileHash !== null
       ? deps.profileRouter.resolve("budget-estimate", frozenDefaults.estimatorProfileId, frozenDefaults.estimatorProfileHash) : null;
-    prepared = profile === null ? null : await prepareEstimatorSlot(deps, command, profile);
+    // Session 3cfc2e73 (R3 ledger note 3): an import whose estimate is deferred (no token limit, D3) never reads the
+    // estimator slot, so it is not probed -- the same condition importControlPlan defers on.
+    const deferred = (raw.tokenLimit ?? null) === null && opts.estimate !== "preflight";
+    prepared = profile === null || deferred ? null : await prepareEstimatorSlot(deps, command, profile);
   } catch (error) {
     return persistAsyncPreparationFailure(deps.store, command, error);
   }

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { ControlError } from "../../src/control/errors.js";
 import { applyPlanLibraryCommand, type PlanLibraryCommand } from "../../src/control/planLibrary/commands.js";
@@ -31,8 +31,8 @@ async function libraryWorld() {
   const saved = withCommandContext("save-1", PERSON, () => applyPlanLibraryCommand(deps, { schema: "orca-raw-command-v1", commandId: "save-1", actorId: "human", expectedRevision: 0,
     verb: "plan-library-save", target: { kind: "plan-library" }, payload: { source: { kind: "group", groupId: "g" }, name: "weekly" } } as PlanLibraryCommand)) as Answer;
   const libraryEntry = { entryId: saved.result!.entryId!, sha256: saved.result!.sha256! };
-  const importFrom = (groupId: string, extra: Record<string, unknown>, opts: Parameters<typeof importControlPlanAsync>[2] = {}) =>
-    importControlPlanAsync({ ...f.deps, resolveRepository: deps.resolveRepository } as never, {
+  const importFrom = (groupId: string, extra: Record<string, unknown>, opts: Parameters<typeof importControlPlanAsync>[2] = {}, depsExtra: Record<string, unknown> = {}) =>
+    importControlPlanAsync({ ...f.deps, resolveRepository: deps.resolveRepository, ...depsExtra } as never, {
       schema: "orca-raw-command-v1", commandId: `import-${groupId}`, actorId: "human", expectedRevision: 0, verb: "import-plan",
       target: { kind: "group", groupId }, payload: { groupId, repoId: "repo", libraryEntry, ...extra },
     } as ImportCommand, opts) as Promise<Answer>;
@@ -62,6 +62,23 @@ describe("criterion 14: import-plan", () => {
       expect(parses(answer)).toBe(true);
       expect(estimates(w.f.store, "g3")).toBe(1);
       expect(estimateWakes(w.f.store, "g3")).toBe(1);
+    } finally { await w.f.dispose(); }
+  });
+});
+
+describe("an import whose estimate is deferred does not probe the estimator", () => {
+  // Session 3cfc2e73 (R3 ledger note 3): the probe resolves a capability only the import-time estimate uses; an unlimited
+  // import has none, so a probe there is one wasted ccloop call per import. A limited import still needs it.
+  it("an unlimited import makes no estimator probe; a limited one makes one", async () => {
+    const w = await libraryWorld(); try {
+      // The fixture's router is frozen: count its probes through a child object that overrides only probe.
+      const router = w.f.deps.profileRouter;
+      const probe = vi.fn((...args: Parameters<typeof router.probe>) => router.probe(...args));
+      const profileRouter = Object.defineProperty(Object.create(router), "probe", { value: probe });
+      expect((await w.importFrom("p1", {}, {}, { profileRouter })).result).toMatchObject({ kind: "imported", estimateId: null, estimateState: "none" });
+      expect(probe).toHaveBeenCalledTimes(0);
+      expect((await w.importFrom("p2", { tokenLimit: 50_000_000 }, {}, { profileRouter })).result).toMatchObject({ kind: "imported", estimateState: "queued" });
+      expect(probe).toHaveBeenCalledTimes(1);
     } finally { await w.f.dispose(); }
   });
 });
