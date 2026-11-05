@@ -771,6 +771,7 @@ export class WebControlService {
    * run ran out of quota on an installation it may leave (D2) is switched, as orca-auto, to the first installation of the
    * failover order (D6: the orchestration settings' `failoverOrder`, else the agents table's order) that is another one,
    * is not resting (D3, D4: quotaRest.ts) and the agents table lists, and retried at once -- one command per failed run,
+ * unless the person set the installation to wait (quotaWait) --
    * outside the retry ladder (`quota` is ladder-exempt). With nothing to switch to the task stays as it is: the quota wait,
    * if set for the installation, or the person. A listing that fails skips this pass.
    */
@@ -780,9 +781,13 @@ export class WebControlService {
     let listed: string[];
     try { listed = (await this.deps.port.listAgents()).installations.map((installation) => installation.id); }
     catch (error) { process.stderr.write(`orca: failover: the agents table could not be listed: ${error instanceof Error ? error.message : String(error)}\n`); return; }
-    const order = readOrchestrationSettings(this.store).failoverOrder ?? listed;
+    const settings = readOrchestrationSettings(this.store);
+    const order = settings.failoverOrder ?? listed;
+    // Failure-cause spec 2026-10-21 §5 ("on quota exhausted, wait instead of switching"): an installation the person set to
+    // wait is waited for, not left.
+    const waiting = new Set(settings.quotaWait ?? []);
     const rests = installationRests(this.store, this.store.now());
-    for (const candidate of candidates) {
+    for (const candidate of candidates.filter((entry) => !waiting.has(entry.installation))) {
       // Independent review (session e2ad4802): a target ccloop cannot resolve now is skipped for this pass without booking
       // anything, so the next one is tried and a transient failure is not final; the group revision is read after the
       // resolution, so a command in between does not book a revision conflict; one candidate's error never stops the pass.

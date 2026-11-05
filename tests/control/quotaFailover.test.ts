@@ -98,6 +98,14 @@ describe("a quota failure switches the task's installation and retries it (§8)"
       expect(auth.retries()).toEqual([]);
       expect(auth.work().agent.agent).toBe("codex");
     } finally { await auth.t.h.dispose(); }
+    // An installation the person set to wait (failure-cause spec 2026-10-21 §5) is waited for, not left.
+    const waits = await world(); try {
+      expect("error" in (waits.service.setOrchestrationSettings(waits.t.h.rawCommand("wait", Number(waits.t.h.store.db.prepare("SELECT revision FROM orchestration_settings").get()?.revision ?? 0),
+        "set-orchestration-settings", { kind: "orchestration" }, { maxRunningGroups: 3, quotaWait: ["codex"] }) as never) as object)).toBe(false);
+      await waits.service.systemDebugPass();
+      expect(waits.retries()).toEqual([]);
+      expect(waits.work().agent.agent).toBe("codex");
+    } finally { await waits.t.h.dispose(); }
     const off = await world(); try {
       expect("error" in (off.setOrder([]) as object)).toBe(false);
       await off.service.systemDebugPass();

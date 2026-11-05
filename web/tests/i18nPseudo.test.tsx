@@ -367,7 +367,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the theme family gains four themes -- rose, ink, violet, lagoon): 201 + 4.
     // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」). The theme family drops five (ink, contrast, navy, lagoon, terminal): 205 - 5.
     // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: the activityKind `ladder-skipped` (task setup spec §4.7, Task A5) adds one: 200 + 1.
-    expect(ENUM_VALUES.length).toBe(201);
+    // Ruling: 2026-11-05 session e2ad4802, human 「这次批准改写所有必要的判据」: the selectionSource `failover` (quota failover spec 2026-11-03 §8) adds one: 201 + 1.
+    expect(ENUM_VALUES.length).toBe(202);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
