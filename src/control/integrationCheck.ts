@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { dispatchedEnv } from "./commandClient.js";
+import { firstFailingSetup, runAsCheck, type CheckFailure } from "./checkCommand.js";
 import { join } from "node:path";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { isGroupArchived } from "./archivedMark.js";
-import { ChildTimeout, gitChild, spawnRunChild } from "./integrationGit.js";
+import { gitChild } from "./integrationGit.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { readArchivedPlan } from "./queries.js";
 import type { ControlStore } from "./store.js";
@@ -23,7 +23,6 @@ import { readRepositorySettingsBody } from "./workspaceSettings.js";
 export const INTEGRATION_CHECK_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** Each command's bound: the slow suites the human named fit; a hung one cannot hold the check forever. */
 export const INTEGRATION_CHECK_COMMAND_TIMEOUT_MS = 60 * 60 * 1000;
-const TAIL_CHARS = 2048;
 
 export interface IntegrationCheckSetting { enabled: boolean; command: string | null }
 
@@ -61,15 +60,13 @@ export function landedGroups(store: ControlStore, repoId: string, options: { inc
   });
 }
 
-export interface CheckFailure { command: string; exit: string; tail: string }
+export type { CheckFailure };
 /**
  * `setupFailure`: task setup spec 2026-11-04 §4.6 (controller ruling, A4 fix round 1) -- the first setup command that did
  * not exit 0 (its own command, no prefix). The check could not run, so it is no check verdict: `failures` stays empty and
  * no check ran.
  */
 export interface IntegrationCheckRun { commit: string; failures: CheckFailure[]; commands: string[]; setupFailure: CheckFailure | null }
-
-const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.slice(text.length - TAIL_CHARS);
 
 /**
  * Run the commands in a detached worktree of `target`'s head under the driver's workspaces root (removed afterwards).
@@ -89,23 +86,11 @@ export async function runIntegrationCheck(repo: string, roots: WorkspaceRoots, r
   if (added.code !== 0) throw new Error(`integration-check: worktree: ${added.stderr.trim().slice(0, 200)}`);
   const failures: CheckFailure[] = [];
   let setupFailure: CheckFailure | null = null;
-  /** One command as a required check runs; its failure is answered, null when it exited 0. */
-  const run = async (command: string): Promise<CheckFailure | null> => {
-    try {
-      const answer = await spawnRunChild("sh", ["-lc", command], { cwd: path, timeoutMs: INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, inheritEnv: true, env: dispatchedEnv({ runId: checkId, personDir }) }); // CLI v2 spec §15.3-§15.4 (review M1)
-      return answer.code === 0 ? null : { command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
-    } catch (error) {
-      if (!(error instanceof ChildTimeout)) throw error;
-      return { command, exit: `timeout ${INTEGRATION_CHECK_COMMAND_TIMEOUT_MS} ms`, tail: "" };
-    }
-  };
+  const as = { runId: checkId, personDir }; // CLI v2 spec §15.3-§15.4 (review M1)
   try {
-    for (const command of setup) {
-      setupFailure = await run(command);
-      if (setupFailure !== null) break;
-    }
+    setupFailure = await firstFailingSetup(path, setup, INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, as);
     if (setupFailure === null) for (const command of commands) {
-      const failure = await run(command);
+      const failure = await runAsCheck(path, command, INTEGRATION_CHECK_COMMAND_TIMEOUT_MS, as);
       if (failure !== null) failures.push(failure);
     }
   } finally {

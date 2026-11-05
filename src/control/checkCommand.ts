@@ -1,0 +1,34 @@
+import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
+import { ChildTimeout, spawnRunChild } from "./integrationGit.js";
+
+/**
+ * One command Orca runs itself the way ccloop runs a contract's required checks (runLoop.js runRequiredChecks): `sh -lc` in
+ * the workspace with the environment inherited unchanged, `as` the run Orca dispatched (CLI v2 spec §15.3-§15.4:
+ * ORCA_DISPATCHED_RUN and ORCA_PERSON_DIR over the inherited variables). Human ruling 2026-11-05 (session e2ad4802, "按你的
+ * 建议抽公共函数"): the criteria base run, the reproduce-first check and the integration check all run their setup and
+ * check commands through here, so the bound, the environment and what a timeout means cannot drift apart.
+ */
+export interface CheckFailure { command: string; exit: string; tail: string }
+
+const TAIL_CHARS = 2048;
+const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.slice(text.length - TAIL_CHARS);
+
+/** Null when the command exits 0. A timeout kills its process group and is a failure; an abort is thrown, never read as an exit. */
+export async function runAsCheck(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure | null> {
+  try {
+    const answer = await spawnRunChild("sh", ["-lc", command], { cwd, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) });
+    return answer.code === 0 ? null : { command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
+  } catch (error) {
+    if (!(error instanceof ChildTimeout)) throw error;
+    return { command, exit: `timeout ${timeoutMs} ms`, tail: "" };
+  }
+}
+
+/** Task setup spec 2026-11-04 §4.6: a task's setup commands, in order, each as a check runs; the first that fails, or null. */
+export async function firstFailingSetup(cwd: string, commands: readonly string[], timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure | null> {
+  for (const command of commands) {
+    const failure = await runAsCheck(cwd, command, timeoutMs, as, signal);
+    if (failure !== null) return failure;
+  }
+  return null;
+}

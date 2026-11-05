@@ -1,8 +1,9 @@
 import type { z } from "zod";
 import type { taskContractSchema } from "../scheduler/planFile.js";
 import { DEBUG_DEFAULT_BUILD_TEST_COMMANDS, DEBUG_TEST_DIRS } from "./debugPlan.js";
-import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
-import { ChildTimeout, gitChild, oneLine, spawnRunChild } from "./integrationGit.js";
+import { firstFailingSetup, runAsCheck } from "./checkCommand.js";
+import type { DispatchedAs } from "./commandClient.js";
+import { gitChild, oneLine } from "./integrationGit.js";
 import type { DebugResult } from "./reportedDecisions.js";
 
 type TaskContract = z.infer<typeof taskContractSchema>;
@@ -53,12 +54,7 @@ async function addedTests(workdir: string, base: string, attemptSha: string): Pr
  * §15.3-§15.4, review I1): ORCA_DISPATCHED_RUN and ORCA_PERSON_DIR over the inherited variables.
  */
 export async function exitsZero(workdir: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<boolean> {
-  try {
-    return (await spawnRunChild("sh", ["-lc", command], { cwd: workdir, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) })).code === 0;
-  } catch (error) {
-    if (error instanceof ChildTimeout) return false;
-    throw error;
-  }
+  return (await runAsCheck(workdir, command, timeoutMs, as, signal)) === null;
 }
 
 /**
@@ -66,12 +62,12 @@ export async function exitsZero(workdir: string, command: string, timeoutMs: num
  * dependencies (the criteria base run, the reproduce-first check), so the task's setup commands run there first, each as
  * a check runs (exitsZero), in order, stopping at the first that does not exit 0. The integration check runs its setup
  * through its own spawn path (integrationCheck.ts), not through here.
+ * ERRATUM (human ruling 2026-11-05, session e2ad4802): both now share one loop, checkCommand.ts firstFailingSetup; the
+ * integration check calls it directly for the failure's exit and tail, this wrapper keeps only the command.
  */
 export async function runSetup(workdir: string, commands: readonly string[], timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<{ ok: true } | { ok: false; command: string }> {
-  for (const command of commands) {
-    if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) return { ok: false, command };
-  }
-  return { ok: true };
+  const failure = await firstFailingSetup(workdir, commands, timeoutMs, as, signal);
+  return failure === null ? { ok: true } : { ok: false, command: failure.command };
 }
 
 /**
