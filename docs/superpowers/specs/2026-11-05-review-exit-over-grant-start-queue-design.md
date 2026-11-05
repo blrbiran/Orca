@@ -259,3 +259,44 @@ kept as written (Rule 13).
    resume arms its wake as before.
 9. **Web**: the queued line is a client notice (`startQueued`, from the command's answer) shown beside Start while the
    group is `ready` and not executing, cleared by the group's next successful command.
+
+## 7. Correction: D2/D3 as built (session 3cfc2e73, batch D23, branch `feat/over-grant-no-auto-estimate`)
+
+Departures from §3.2/§3.3, each a reversible controller decision (Rule 1 rung 2) unless marked **for the human**:
+
+1. **`retry-task`'s optional `work` grant is not built — for the human.** Changing a started task's authored work grant
+   breaks the identity check every earlier run of that task is read through: `readFundedAllowance` (`fundedAllowance.ts`,
+   the `funded-authored-policy` check of the token ceiling and the `funded-grant-authority` check that each non-token
+   dimension of an earlier run's grant equals the current authored grant less the lineage's usage) throws
+   `recovery-blocked`, and the group view reads every run through it (`controlViews.ts`, `run-work-identity`); a
+   fixed-grant task's grant is also its current run's and its derived contract's (`retryTask.ts` `retryGrantSource`,
+   `executionSnapshot.ts` frozen allocations). Seen: a built criterion's group view failed `recovery-blocked:funded-grant-authority`
+   right after such a retry. This is why `set-task-loop` refuses a started task. Building it needs the funded allowance
+   to record the authored ceiling it was funded from (or an equivalent identity change) — a budget-authority design
+   decision. Built instead: set-limit's exit and the plain retry lifting the block (below). Consequence (criterion 13):
+   in a group with no token limit, a run's breach in a non-token dimension uses that dimension of the task's authored
+   ceiling up, so its retry is refused `authored-budget-exhausted` and its next run is not funded; the rest of the group
+   runs on. That task has no exit until the above is decided.
+2. **Block reasons.** `blocked` has one writer (`usage.ts`). "Every block reason is an over-grant breach" is read as: at
+   least one run with a recorded breach other than an estimate run or a clarify/split call (`overGrantBlock.ts`, the
+   18 → 19 repair's reading). A `blocked` group with none is refused by `set-limit` (`group-state-invalid`).
+3. **The non-optional retry** lifts an over-grant block by set-limit's rule. The optional-policy retry already set the
+   group `running` (unchanged).
+4. **The migration's rule** is `running` (an active run) else `review`: D1's done rule needs a `ControlStore`, which a
+   migration does not have; the D1 done pass moves an all-done `review` group to `done` at its next round (§3.1).
+   Schema version 21 → 22; the store's backup before every migration covers it.
+5. **`overGrant` on the group summary** is optional on the wire and present (true) only when it holds, like
+   `stopRetryable`, so existing summaries parse and compare unchanged.
+6. **D3's import rule is built on a separate branch, `feat/no-auto-estimate-rule` (one commit on top of this batch),
+   not on `feat/over-grant-no-auto-estimate` — for the human.** It turns red every existing criterion that imports by
+   `planId` and then reads, waits for or applies the import-time estimate (the D23 ledger lists them); those rewrites
+   are a batch of their own. The rule keys on the import payload's `tokenLimit` (null or absent ⇒ deferred). `tokenLimit` is accepted
+   only with `libraryEntry` (`webProtocol.ts` refineImportSource), so a `planId` import is always unlimited and never
+   estimated automatically. `importControlPlan` gains an in-process `opts.estimate: "preflight"` (never a payload field,
+   no route passes it) for the historical finite-budget test fixture, which turns the group limited right after the
+   import and so gets the estimate a limited import would. Requirement-accept keys on the requirement's own limit when
+   it carries a token policy (a group without one gets a fresh finite limit, `planImport.ts` legacyCarry, and keeps its
+   estimate).
+7. **The confirm/show line** is printed by the CLI's human formatters (`unestimatedLines`, `commands/domains/verbs.ts`)
+   for a task whose work `tokens` is null with provenance `complex-1m-default`; the reopen step is named as a proposal
+   edit (`orca proposal replace … --if-revision`), the CLI's way to reopen a confirmed, not-yet-started proposal.

@@ -1103,3 +1103,14 @@ rest of H6 (one Settings page with categories, old hashes redirect, theme/langua
 open list staying native keeps keyboard, screen-reader and touch behaviour right, while a headless library would add a
 dependency, bundle size, its own focus/keyboard upkeep and a rewrite of every criterion that drives a native select —
 for the look of the open list only.
+
+### 25. Correction to §4.2 item 1 (session `3cfc2e73`, 2026-11-05, D2; issues #128, #160, #161)
+
+Human, verbatim (session 3cfc2e73 ledger): 「D1-D8其余都同意。」, accepting D2 as put to them: 「组不限 token（soft 或不限模式）时，task
+超额只记录并在面板提示，组不卡住，其他任务照常跑。组有上限时仍然卡住，但允许在卡住状态下提高额度或上限，然后继续。」 §4.2 item 1's last
+sentence ("A breach by a work, handoff or other single-call run still blocks as before") now holds **only for a group
+with a token limit**. In a Web group with `limit.tokens === null` no run's breach, in any dimension, sets `blocked`: the
+breach is recorded on the run (`run.breaches`, the view's `overGrant`) and shown (a status line in the group view, the
+summary's `overGrant` and its Board chip). The non-Web `group.stopped = true` branch is unchanged. Groups already blocked
+that way are repaired by the schema 21 → 22 migration. Design and criteria: `2026-11-05-review-exit-over-grant-start-queue-design.md`
+§3.2 and its §7.

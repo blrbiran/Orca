@@ -149,7 +149,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     updateRevision(h.store, groupId, 1); recordProjectionChange(h.store, [groupId]); // what applyWebCommand does after a command's apply: a group row is never read at revision 0
     return written;
   };
-  return { ...h, deps, frozen, accept, imported, importDeferred, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
+  return { ...h, deps, frozen, accept, imported, importDeferred, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId as string, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
 }
 
 /** Controller-approved historical mutable rows: old finite ceilings, reservations and policy tags; frozen source bytes stay exact. */
