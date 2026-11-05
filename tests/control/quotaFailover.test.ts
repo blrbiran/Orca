@@ -15,13 +15,13 @@ import { caps } from "./fixtures/store.js";
  * resting and retried at once -- unless a person or a plan chose its agent (a pin is a statement), or failover is off.
  * The switch keeps every earlier run valid: the view, the retry and the snapshot all still agree.
  */
-async function world(options: { agent?: PartialSelection; detail?: string } = {}) {
+async function world(options: { agent?: PartialSelection; detail?: string; cause?: string } = {}) {
   const clock = { value: Date.UTC(2026, 10, 5, 12, 0, 0) };
   let failing = true;
   const t = await driverHarness([{ taskId: "a", ...(options.agent ? { agent: options.agent } : {}) }], {
     storeNow: () => clock.value,
     behaviour: (id) => (id === "a" && failing ? "failed" : "succeed"),
-    failure: (id) => (id === "a" && failing ? { failureCause: { cause: "quota", phase: "plan", retries: 0, detail: options.detail ?? "You've hit your usage limit" } } : undefined),
+    failure: (id) => (id === "a" && failing ? { failureCause: { cause: options.cause ?? "quota", phase: "plan", retries: 0, detail: options.detail ?? "You've hit your usage limit" } } : undefined),
   });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
@@ -89,6 +89,12 @@ describe("a quota failure switches the task's installation and retries it (§8)"
       expect(pinned.retries()).toEqual([]);
       expect(pinned.work().agent.agent).toBe("codex");
     } finally { await pinned.t.h.dispose(); }
+    // Only quota: credentials (auth) are not another installation's to fix.
+    const auth = await world({ cause: "auth" }); try {
+      await auth.service.systemDebugPass();
+      expect(auth.retries()).toEqual([]);
+      expect(auth.work().agent.agent).toBe("codex");
+    } finally { await auth.t.h.dispose(); }
     const off = await world(); try {
       expect("error" in (off.setOrder([]) as object)).toBe(false);
       await off.service.systemDebugPass();
