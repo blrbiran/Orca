@@ -114,16 +114,18 @@ function groupFacts(store: ControlStore): GroupFacts[] {
 }
 
 /**
- * The groups holding a slot: not archived, and running, in review, or ready and executing (executionPending's three
- * facts: an undelivered start/no-start/resume wake, an active work run, a busy task). One query whatever the number of
- * groups, tasks or runs, so a summary that asks costs the same for every group (controlPollPerformance's bound).
+ * The groups holding a slot: not archived, not paused, and running, in review, or ready and executing (executionPending's
+ * three facts: an undelivered start/no-start/resume wake, an active work run, a busy task). One query whatever the number
+ * of groups, tasks or runs, so a summary that asks costs the same for every group (controlPollPerformance's bound).
+ * Kanban spec 2026-10-20 §S2: "a blocked or paused group does not" hold a slot (issue #129).
  */
 export function runningGroupIds(store: ControlStore): string[] {
   const wakeKinds = [...EXECUTION_WAKE_KINDS].map((kind) => `'${kind}'`).join(","), busy = [...BUSY_WORK].map((status) => `'${status}'`).join(",");
   // CASE json_valid: a body that does not parse holds no slot here (its own reads name it); json_extract would throw.
   const at = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column},'${path}') END`;
   // Flow engine spec §6.2: a flow run holds one slot, through its parent, while the run is running; its children hold none.
-  return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND ${flowRoleSql("g")} IS NOT 'child' AND (
+  return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND ${flowRoleSql("g")} IS NOT 'child'
+    AND NOT EXISTS (SELECT 1 FROM stop_intents s WHERE s.group_id=g.id AND s.mode='pause') AND (
     (${flowRoleSql("g")} = 'parent' AND EXISTS (SELECT 1 FROM flow_runs f WHERE f.group_id=g.id AND f.state='running')) OR
     ${at("g.body", "$.status")} IN ('running','review') OR (${at("g.body", "$.status")}='ready' AND (
       EXISTS (SELECT 1 FROM scheduler_wakes w WHERE w.group_id=g.id AND w.delivered=0 AND w.kind IN (${wakeKinds}))

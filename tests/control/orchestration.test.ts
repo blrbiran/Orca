@@ -154,6 +154,22 @@ describe("running-group cap (kanban spec §3.2)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Issue #129, kanban spec §S2 ("a blocked or paused group does not" hold a slot): a paused running or review group
+  // frees its slot; a handoff stop is not a pause and keeps it.
+  it("a paused running or review group does not hold a slot; a group under a handoff stop still does", async () => {
+    for (const [status, mode, started] of [["running", "pause", ["g"]], ["review", "pause", ["g"]], ["running", "handoff", []]] as const) {
+      const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+        const service = new WebControlService(h.deps);
+        setCap(h, service, 1);
+        h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('held',1,1,?)").run(JSON.stringify({ status }));
+        h.store.db.prepare("INSERT INTO stop_intents(group_id,mode,revision,body) VALUES ('held',?,1,'{}')").run(mode);
+        await confirm(h, service, "g");
+        // mutation: drop the pause clause of runningGroupIds -> waiting-slot for both paused cases, red
+        expect(await service.autoStart(), `${status}/${mode}`).toEqual({ started, refused: [] });
+      } finally { await h.dispose(); }
+    }
+  });
+
   it("setting the same cap is a no-op command; a stale revision is refused", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);
