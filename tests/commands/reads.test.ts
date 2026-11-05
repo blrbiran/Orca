@@ -178,3 +178,20 @@ describe("multi projects in project resolution and the project list (issue 146)"
     ]);
   });
 });
+
+// Issue 152 (session 3cfc2e73): rows that never use the project still took --project and ignored it, so a misspelt
+// one passed silently. It is now checked once at dispatch, with the refusal every project-scoped command gives.
+describe("--project is validated on every panel row (issue 152)", () => {
+  it.each([[["usage", "show"]], [["group", "show", "g-alpha"]], [["recovery", "list"]]])("orca %j --project <unknown> is project-not-found, exit 1", async (argv) => {
+    const p = await panel();
+    const out = await cli([...argv, "--project", "no-such-project", "--json"], p.dir);
+    expect([out.code, out.json().body.error.code]).toEqual([1, "project-not-found"]);
+  });
+
+  it("a registered --project still answers the row as before", async () => {
+    const p = await panel();
+    const out = await cli(["usage", "show", "--project", "proj", "--json"], p.dir);
+    expect(out.code, out.stdout).toBe(0);
+    expect(out.json().body).toEqual(RAW["usage?scope=all"]);
+  });
+});

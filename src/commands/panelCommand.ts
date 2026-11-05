@@ -125,6 +125,8 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
     }
     const session = openSession(args, io);
     const context = contextFor(args, io, session, await resolveIds(args, session));
+    // Issue 152: a --project the row never reads is still checked, so a misspelt one is refused, not silently ignored.
+    if (args.global.project !== undefined) await context.project();
     const mapping = def.mapsTo;
     if (mapping.kind === "read") return print(await runRead(def, mapping, context));
     if (mapping.kind === "verb") {
