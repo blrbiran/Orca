@@ -7,9 +7,10 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  checkpointOf, config, currentRun, file, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, verb, workItem,
+  checkpointOf, config, currentRun, file, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
+import { text } from "./format.js";
 
 interface RequirementView { summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } }; drafts: Array<{ draftNo: number; draftHash: string | null }> }
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
@@ -169,7 +170,7 @@ export const WORK_ROWS: CommandDef[] = [
       if (binding === null || mode === undefined) throw new EntryRejection("estimator-unconfigured", "the panel has no estimator default; pass --estimator-profile and --mode");
       return { proposalVersion: (await groupView(c)).proposal.proposalVersion, estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash, estimateMode: mode };
     } }),
-  verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
+  { ...verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
     flags: [
       { name: "hold", type: "boolean", summary: "confirm only; start it later with orca group start" },
       { name: "budget-mode", type: "string", summary: "strict|soft when the proposal has none" },
@@ -178,6 +179,8 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "handoff-at-context-tokens", type: "integer", summary: "hand off at this many context tokens" },
     ],
     route: (c) => `groups/${group(c)}/confirm`, payload: (c) => confirmPayload(c) }),
+    // Session 3cfc2e73 D3: the confirm result carries no allocations; the lines come from the view the payload read.
+    format: (body: unknown) => { const lines = confirmNote; confirmNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } },
   queuedFormat(empty("group", "start", "start a confirmed group (one confirmed with --hold); at the running-group cap it is queued", "start", "start")),
   empty("group", "pause", "stop dispatching new runs (running ones finish)", "pause-dispatch", "pause-dispatch"),
   queuedFormat(empty("group", "resume", "dispatch again after a pause", "resume-dispatch", "resume-dispatch")),
@@ -318,8 +321,11 @@ function unresolvedMessage(groupId: string, preview: AgentPreview): string {
 }
 
 /** Spec §4: confirm's pins, as the Web's confirm builds them (BudgetEditor.tsx submitConfirm), read now. */
+/** Session 3cfc2e73 D3: the unestimated-default lines of the view `group confirm` read, for its human output (one command per CLI process). */
+let confirmNote: string[] = [];
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
+  confirmNote = unestimatedLines(group(c), view.allocations);
   const defaults = (await config(c)).defaults;
   const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;
   if (preview.selectionsHash === null || preview.proposalVersion !== view.proposal.proposalVersion) {

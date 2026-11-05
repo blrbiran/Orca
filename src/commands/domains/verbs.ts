@@ -65,6 +65,26 @@ export interface ConfigView {
   defaults: { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" } | null;
 }
 
+/**
+ * Session 3cfc2e73 D3 (spec 2026-11-05 §3.3): one line per task whose work tokens are unlimited by default -- no person
+ * set them and no estimate was applied -- then the path to an estimate. Empty when there is none. `orca group confirm`,
+ * `orca group show` and `orca proposal show` print it under their human output; their JSON is unchanged.
+ */
+export function unestimatedLines(groupId: string, allocations: GroupView["allocations"] | undefined): string[] {
+  const tasks = (allocations ?? []).filter((a) => a.ownerKind === "task" && a.bucket === "work" && a.amount.tokens === null
+    && a.fieldProvenance?.tokens?.provenance === "complex-1m-default");
+  if (tasks.length === 0) return [];
+  return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (default, not estimated)`),
+    `to estimate: before the group starts, reopen its proposal with a proposal edit (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>), then orca group estimate ${groupId}, orca group apply-estimate ${groupId}, orca group confirm ${groupId}`];
+}
+const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
+/** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
+export function formatWithUnestimated(body: unknown): string {
+  const b = body as { summary?: { groupId?: string }; groupId?: string; allocations?: GroupView["allocations"] } | null;
+  const groupId = b?.summary?.groupId ?? b?.groupId;
+  return withLines(text(body), typeof groupId === "string" ? unestimatedLines(groupId, b?.allocations) : []);
+}
+
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */
 export function proposalDocument(view: GroupView & { ledger: { groupLimit: unknown } }): unknown {
   return { schema: "orca-proposal-view-v1", groupId: view.summary.groupId, revision: view.summary.commandRevision, proposal: view.proposal, allocations: view.allocations, groupLimit: view.ledger.groupLimit };

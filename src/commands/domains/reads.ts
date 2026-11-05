@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { proposalDocument } from "./verbs.js";
+import { formatWithUnestimated, proposalDocument } from "./verbs.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
@@ -134,11 +134,11 @@ export const READ_ROWS: CommandDef[] = [
       return { ...(summary as Summary), groups: (summary as Summary).groups.filter((g) => g.repoId === repoId) };
     },
     format: groupList }),
-  read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`] }),
+  read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`], format: formatWithUnestimated }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
     paths: (c) => [`groups/${ids(c, "group")}`],
-    compose: ([view]) => proposalDocument(view as Parameters<typeof proposalDocument>[0]) }),
+    compose: ([view]) => proposalDocument(view as Parameters<typeof proposalDocument>[0]), format: formatWithUnestimated }),
   read({ domain: "task", action: "show", summary: "one task of a group and its runs", positionals: [GROUP, TASK], paths: (c) => [`groups/${ids(c, "group")}`],
     compose: ([view], c) => {
       const v = view as GroupView;
