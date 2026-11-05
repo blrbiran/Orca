@@ -17,6 +17,7 @@ import {
   json,
   revision,
   settleRecoverableWork,
+  requestEstimate,
   settleRun,
   view,
   type Panel,
@@ -40,6 +41,9 @@ async function confirmSoft(panel: Panel): Promise<string> {
   const config = controlConfigSchema.parse(await json(await get(panel, "/api/control/config")));
   const imported = await command(panel, "/api/control/groups/import-plan", { commandId: `recover-import-${panel.epoch}`, expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" } });
   expect(imported.status).toBe(201);
+  // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The planId import queues no estimate (spec 2026-11-05
+  // §3.3); the estimate answered below is the one `orca group estimate` asks for.
+  await requestEstimate(panel, `recover-estimate-${panel.epoch}`);
   const draft = await view(panel);
   await panel.drainWakes();
   const estimateRun = panel.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=?").get(GROUP, String(draft.estimates[0].estimateId))!;

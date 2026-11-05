@@ -2,7 +2,7 @@ import {estimateOutput} from "../control/fixtures/estimateHarness.js";
 import { expect, vi } from "vitest";
 import {readFileSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
-import {command,createHarness,get,json,GROUP,revision,view,claudeCodexResolveAgent,settleRun} from "./fixtures/controlPanel.js";
+import {command,createHarness,get,json,GROUP,revision,view,claudeCodexResolveAgent,settleRun,requestEstimate} from "./fixtures/controlPanel.js";
 import {insertClarifyingGroup,newRound,writeRound} from "../../src/control/requirementRecords.js";
 import {clarifyingInput} from "../control/fixtures/requirement.js";
 import {classifyClarifyOutput} from "../../src/control/requirementClarify.js";
@@ -23,6 +23,9 @@ export function createOverviewFixtures(h: ReturnType<typeof createHarness>) {
     const probe = vi.fn(claudeCodexResolveAgent);
     const panel = await h.boot("overview-epoch", paths, { resolveAgent: probe });
     await command(panel, "/api/control/groups/import-plan", { commandId: "import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" } });
+    // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The planId import queues no estimate (spec 2026-11-05
+    // §3.3); the queued estimate these criteria read is the one `orca group estimate` asks for.
+    await requestEstimate(panel);
     return { panel, probe };
   }
   async function confirm(panel: Awaited<ReturnType<typeof panelFixture>>["panel"]) {

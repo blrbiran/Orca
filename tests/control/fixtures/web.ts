@@ -153,7 +153,18 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
     updateRevision(h.store, groupId, 1); recordProjectionChange(h.store, [groupId]); // what applyWebCommand does after a command's apply: a group row is never read at revision 0
     return written;
   };
-  return { ...h, deps, frozen, accept, imported, importDeferred, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId as string, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
+  /**
+   * Session 3cfc2e73 R3 (spec 2026-11-05 §3.3): what `orca group estimate` sends -- the explicit estimate a group with no
+   * token limit (an optional-v1 fixture, or another planId import) no longer gets at import. Answers the new estimate's id.
+   */
+  const requestEstimate = async (service: { createEstimate(command: never): Promise<unknown> }, groupId = "g"): Promise<string> => {
+    const revision = Number(h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)!.revision);
+    const answer = await service.createEstimate(raw(`estimate-${++sequence}`, revision, "estimate", { kind: "group", groupId },
+      { proposalVersion: readBudgetProposal(h.store, groupId).proposalVersion, estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" }) as never) as { result?: { estimateId?: string } };
+    if (typeof answer.result?.estimateId !== "string") throw new Error(`group estimate refused: ${JSON.stringify(answer)}`);
+    return answer.result.estimateId;
+  };
+  return { ...h, deps, frozen, accept, imported, importDeferred, requestEstimate, command, taskCommand, runCommand, rawCommand: raw, confirmPayload, estimateId: imported.result.estimateId as string, setObserved: (value: typeof observed) => { observed = value; }, asked, resolveAgent };
 }
 
 /** Controller-approved historical mutable rows: old finite ceilings, reservations and policy tags; frozen source bytes stay exact. */

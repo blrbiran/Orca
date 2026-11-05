@@ -27,6 +27,7 @@ import {
   proposalEdit,
   revision,
   settleRecoverableWork,
+  requestEstimate,
   settleRun,
   view,
 } from "./fixtures/controlPanel.js";
@@ -61,6 +62,11 @@ describe("web control acceptance over a real panel (task 10 step 1)", () => {
     expect(importResult).toMatchObject({ commandId: "accept-import", verb: "import-plan", result: { kind: "imported" } });
     expect(String(imported.body.actorId)).toMatch(/^operator-/);
     expect(panel.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(GROUP)).toMatchObject({ revision: 1 });
+    // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit, so it queues no
+    // estimate (spec 2026-11-05 §3.3); the person asks for one with `orca group estimate`, and that one is queued.
+    expect(importResult.result).toMatchObject({ estimateId: null, estimateState: "none" });
+    expect(panel.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id=?").get(GROUP)).toMatchObject({ n: 0 });
+    await requestEstimate(panel, "accept-estimate");
     expect(panel.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").get(GROUP)).toMatchObject({ state: "queued" });
     expect(panel.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE group_id=? AND kind='budget-estimate'").get(GROUP)).toMatchObject({ delivered: 0 });
 

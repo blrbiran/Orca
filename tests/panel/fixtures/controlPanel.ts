@@ -248,6 +248,19 @@ export async function revision(panel: Panel, groupId = GROUP): Promise<number> {
   return (await view(panel, groupId)).summary.commandRevision;
 }
 
+/**
+ * Session 3cfc2e73 R3 (spec 2026-11-05 §3.3): `orca group estimate` through the panel's route, with the panel's default
+ * estimator -- the estimate a planId import (it has no token limit) no longer queues by itself. Expects it queued (202).
+ */
+export async function requestEstimate(panel: Panel, commandId = "estimate", groupId = GROUP): Promise<void> {
+  const group = await view(panel, groupId);
+  const config = await json(await get(panel, "/api/control/config")) as { defaults: { estimatorProfileId: string; estimateMode: "soft" | "strict" }; profiles: Array<{ profileId: string; profileHash: string }> };
+  const profile = config.profiles.find((entry) => entry.profileId === config.defaults.estimatorProfileId)!;
+  const answer = await command(panel, `/api/control/groups/${groupId}/estimates`, { commandId, expectedRevision: group.summary.commandRevision,
+    payload: { proposalVersion: group.proposal.proposalVersion, estimatorProfileId: profile.profileId, estimatorProfileHash: profile.profileHash, estimateMode: config.defaults.estimateMode } });
+  if (answer.status !== 202) throw new Error(`group estimate refused (${answer.status}): ${JSON.stringify(answer.body)}`);
+}
+
 /** A run the adapter reported terminal: the worker's own settlement, not the panel's. */
 export function settleRun(store: ControlStore, runId: string, state: string, checkpointId: string | null = null): void {
   const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);

@@ -121,7 +121,10 @@ describe("an agent's walk on v2 commands only (CLI v2 spec §12.2)", { timeout: 
       try { stored = readDraft({ db } as unknown as ControlStore, "g", 1).plan as { targetRepo: string }; } finally { db.close(); }
       const planHash = sha256Canonical(normalizeControlPlan({ ...schedulerControlPlanSourceOf(stored, stored.targetRepo), repoId, planId: "requirement-draft-1" }));
       await writeFile(w.claudeScriptPath, JSON.stringify({ "single-call-queue": [...queue, { match: "budget-estimate-request-v1", output: estimateFor(planHash) }] }));
-      expect((await ok("requirement", "accept", "g")).body).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateState: "queued" } });
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The requirement has no token limit, so its accept queues no
+      // estimate (spec 2026-11-05 §3.3); the estimate this flow runs is the one the person asks for with `orca group estimate`.
+      expect((await ok("requirement", "accept", "g")).body).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateId: null, estimateState: "none" } });
+      expect((await ok("group", "estimate", "g")).body).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued" } });
       await until(() => rows("SELECT state FROM estimates WHERE group_id='g'").some((row) => row.state === "ready")
         && JSON.parse(String(rows("SELECT body FROM groups WHERE id='g'")[0]!.body)).requirement.export.state === "done", 180_000, "the estimate and the export", 100);
 

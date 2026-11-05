@@ -82,11 +82,16 @@ describe("a requirement from idea to landed work, against real ccloop (N1 spec �
       const planHash = planHashOfDraft(runtime, 2);
       await writeFile(w.claudeScriptPath, JSON.stringify({ "single-call-queue": [...queue, { match: "budget-estimate-request-v1", output: estimateFor(planHash) }] }));
       const accepted = await runtime.service.acceptRequirementDraft(raw(runtime, "accept", "requirement-draft-accept", { draftNo: 2, draftHash: readDraft(runtime.store, "g", 2).draftHash! }));
-      expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateState: "queued" } });
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The requirement has no token limit, so its accept queues no
+      // estimate (spec 2026-11-05 §3.3); the estimate this flow runs is the one the person asks for with `orca group estimate`.
+      expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateId: null, estimateState: "none" } });
       expect(readArchivedPlan(runtime.store, "g").planHash).toBe(planHash);
       // N1 spec §9.1: the clarifying spend is carried over unchanged.
       expect(readWebGroup(runtime.store, "g").used).toEqual(usedBeforeAccept);
-      const estimateId = (accepted as { result: { estimateId: string } }).result.estimateId;
+      const created = await runtime.service.createEstimate(raw(runtime, "estimate", "estimate", { proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
+        estimatorProfileId: "all", estimatorProfileHash: runtime.router.list()[0]!.profileHash, estimateMode: "soft" }));
+      expect(created).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued" } });
+      const estimateId = (created as { result: { estimateId: string } }).result.estimateId;
       await until(() => readEstimateRecord(runtime.store, "g", estimateId).state === "ready" && readRequirementGroup(runtime.store, "g").requirement.export.state === "done", 120_000, "the estimate and the export", 50);
       // The pinned legacy peer is exercised with explicit finite task ceilings through the owner API.
       if((await runtime.port.readFeatures?.())?.tokenPolicy!=="optional-v1") {

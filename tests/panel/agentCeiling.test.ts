@@ -34,8 +34,11 @@ describe("the agent ceiling (spec §6.3.2, D4, D10)", () => {
       const prepare=await importer(h);setCap(h.store,1);
       const receipt=withCommandContext("agent-import",AGENT,await prepare("agent-import","g2"));
       expect(receipt).toMatchObject({result:{kind:"imported",groupId:"g2"}});expect(groupLimitTokens(h.store,"g2")).toBeNull();
-      const estimateId=(receipt as {result:{estimateId:string}}).result.estimateId;
-      expect(await new WebControlService(h.deps).claimEstimate("g2",estimateId)).toBeNull();
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 An unlimited import queues no estimate (spec
+      // 2026-11-05 §3.3); the finite estimate claim is the one `orca group estimate` asks for.
+      expect((receipt as {result:{estimateId:string|null}}).result.estimateId).toBeNull();
+      const service=new WebControlService(h.deps),estimateId=await h.requestEstimate(service,"g2");
+      expect(await service.claimEstimate("g2",estimateId)).toBeNull();
       expect(readSpendCapBlock(h.store,"g2")).toMatchObject({code:"spend-cap-reached",scope:"all",period:"total",capTokens:1});
       expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g2'").all()).toEqual([]);
       expect(withCommandContext("user-import",{client:"web",principal:"user:u1"},await prepare("user-import","g3"))).toMatchObject({result:{kind:"imported",groupId:"g3"}});
@@ -46,7 +49,9 @@ describe("the agent ceiling (spec §6.3.2, D4, D10)", () => {
       const prepare=await importer(h);setCap(h.store,1,"repo:repo");
       const receipt=withCommandContext("agent-import",AGENT,await prepare("agent-import","g2"));
       expect(receipt).toMatchObject({result:{kind:"imported",groupId:"g2"}});
-      expect(await new WebControlService(h.deps).claimEstimate("g2",(receipt as {result:{estimateId:string}}).result.estimateId)).toBeNull();
+      // Ruling (session 3cfc2e73 R3): as above, the estimate is the explicit one.
+      const service=new WebControlService(h.deps);
+      expect(await service.claimEstimate("g2",await h.requestEstimate(service,"g2"))).toBeNull();
       expect(readSpendCapBlock(h.store,"g2")).toMatchObject({code:"spend-cap-reached",scope:"repo:repo",period:"total",capTokens:1});
       expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g2'").all()).toEqual([]);
     }finally{await h.dispose();}

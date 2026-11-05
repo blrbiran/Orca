@@ -22,7 +22,7 @@ import { recordLandedTip } from "../../src/control/dirGroup.js";
 import { placeDirGroups } from "../../src/control/dirPlacement.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { normalizeControlPlan } from "../../src/control/planImport.js";
-import { readArchivedPlan, readEstimateRecord } from "../../src/control/queries.js";
+import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { CLARIFY_PROMPT_HEAD } from "../../src/control/requirementClarify.js";
 import { readDraft, readRequirementGroup, readRound } from "../../src/control/requirementRecords.js";
 import { SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
@@ -114,9 +114,14 @@ describe.skipIf(!realBinary)("a dir requirement writes only to its redirected ro
         const planHash = planHashOfDraft(runtime, 1);
         writeFileSync(w.claudeScriptPath, JSON.stringify({ "single-call-queue": [...queue, { match: "budget-estimate-request-v1", output: estimateFor(planHash) }] }));
         const accepted = await runtime.service.acceptRequirementDraft(raw(runtime, "accept", "requirement-draft-accept", { draftNo: 1, draftHash: readDraft(runtime.store, "g", 1).draftHash! }));
-        expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateState: "queued" } });
+        // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The requirement has no token limit, so its accept queues no
+        // estimate (spec 2026-11-05 §3.3); the estimate this flow runs is the one the person asks for with `orca group estimate`.
+        expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateId: null, estimateState: "none" } });
+        const created = await runtime.service.createEstimate(raw(runtime, "estimate", "estimate", { proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
+          estimatorProfileId: "all", estimatorProfileHash: runtime.router.list()[0]!.profileHash, estimateMode: "soft" }));
+        expect(created).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued" } });
         expect(readArchivedPlan(runtime.store, "g").planHash).toBe(planHash);
-        const estimateId = (accepted as { result: { estimateId: string } }).result.estimateId;
+        const estimateId = (created as { result: { estimateId: string } }).result.estimateId;
         await until(() => readEstimateRecord(runtime.store, "g", estimateId).state === "ready" && readRequirementGroup(runtime.store, "g").requirement.export.state === "done", 120_000, "the estimate and the export", 50);
         expect(readRequirementGroup(runtime.store, "g").requirement.export.state).toBe("done");
         // The pump also runs the placement pass every round; stop it so the two landings below are placed once, by

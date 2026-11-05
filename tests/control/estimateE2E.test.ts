@@ -27,14 +27,21 @@ export const estimateOutput = (planHash: string) => ({
   goalReviewReserve: { tokens: 50_000, activeMs: 60_000, attempts: 1, sessions: 1 }, groupRationale: "a single small task",
 });
 
-/** Preferences, then the import; answers the queued estimate's id and the plan hash. */
+/**
+ * Preferences, the import, then `orca group estimate`; answers the queued estimate's id and the plan hash.
+ * Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit, so it queues no estimate
+ * (spec 2026-11-05 §3.3); the estimate these criteria run is the one the person asks for, through the same service.
+ */
 export async function importWithClaudeEstimator(runtime: ControlRuntime, w: World): Promise<{ estimateId: string; planHash: string }> {
   const preferences = await runtime.service.setAgentPreferences(raw(runtime, "prefs", "set-agent-preferences",
     { preferences: { defaultAgent: "codex", perAgent: {}, estimator: { agent: "claude", contextWindow: 1_000_000 } } }, { kind: "operator", operatorId: "human" }));
   expect("error" in preferences ? preferences.error : "set").toBe("set");
   const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId: w.repoId, planId: "plan" }));
-  expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "queued" } });
-  return { estimateId: (imported as { result: { estimateId: string } }).result.estimateId, planHash: readArchivedPlan(runtime.store, "g").planHash };
+  expect(imported).toMatchObject({ result: { kind: "imported", estimateId: null, estimateState: "none" } });
+  const created = await runtime.service.createEstimate(raw(runtime, "estimate", "estimate", { proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
+    estimatorProfileId: "all", estimatorProfileHash: runtime.router.list()[0]!.profileHash, estimateMode: "soft" }));
+  expect(created).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued" } });
+  return { estimateId: (created as { result: { estimateId: string } }).result.estimateId, planHash: readArchivedPlan(runtime.store, "g").planHash };
 }
 export const estimateRun = (runtime: ControlRuntime) => {
   const row = runtime.store.db.prepare("SELECT id,active,body FROM runs WHERE group_id='g' AND json_extract(body,'$.phase')='estimate'").get();

@@ -189,20 +189,23 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
     } finally { await h.dispose(); }
   });
 
+  // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 An unlimited import queues no estimate (spec 2026-11-05
+  // §3.3), so the estimate here is the one a person asks for with `orca group estimate`.
   it("C23: a running estimate holds the confirm; a queued one is withdrawn by it with no run", async () => {
     const running = await unlimited(); try {
       const service = new WebControlService(running.deps);
-      expect(await service.claimEstimate("g", running.estimateId)).not.toBeNull();
+      expect(await service.claimEstimate("g", await running.requestEstimate(service))).not.toBeNull();
       const { blocker, result } = await passWithPredicate(running, service);
       expect(blocker).toEqual({ condition: 7, code: "estimate-running" });
       expect(result.confirmed).toEqual([]);
     } finally { await running.dispose(); }
     const queued = await unlimited(); try {
       const service = new WebControlService(queued.deps);
-      expect(readEstimateRecord(queued.store, "g", queued.estimateId).state).toBe("queued");
+      const estimateId = await queued.requestEstimate(service);
+      expect(readEstimateRecord(queued.store, "g", estimateId).state).toBe("queued");
       expect((await passWithPredicate(queued, service)).result.confirmed).toEqual(["g"]);
-      expect(await service.claimEstimate("g", queued.estimateId)).toBeNull();
-      expect(readEstimateRecord(queued.store, "g", queued.estimateId)).toMatchObject({ state: "withdrawn", reasonCode: "estimate-withdrawn:proposal-confirmed" });
+      expect(await service.claimEstimate("g", estimateId)).toBeNull();
+      expect(readEstimateRecord(queued.store, "g", estimateId)).toMatchObject({ state: "withdrawn", reasonCode: "estimate-withdrawn:proposal-confirmed" });
       expect(count(queued, "runs")).toBe(0);
     } finally { await queued.dispose(); }
   });

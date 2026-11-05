@@ -177,11 +177,16 @@ describe.skipIf(!realBinary)("a requirement on a dir project, end to end against
       const planHash = planHashOfDraft(runtime, 1);
       writeFileSync(w.claudeScriptPath, JSON.stringify({ "single-call-queue": [...queue, { match: "budget-estimate-request-v1", output: estimateFor(planHash) }] }));
       const accepted = await runtime.service.acceptRequirementDraft(raw(runtime, "accept", "requirement-draft-accept", { draftNo: 1, draftHash: readDraft(runtime.store, "g", 1).draftHash! }));
-      expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateState: "queued" } });
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The requirement has no token limit, so its accept queues no
+      // estimate (spec 2026-11-05 §3.3); the estimate this flow runs is the one the person asks for with `orca group estimate`.
+      expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", estimateId: null, estimateState: "none" } });
+      const created = await runtime.service.createEstimate(raw(runtime, "estimate", "estimate", { proposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
+        estimatorProfileId: "all", estimatorProfileHash: runtime.router.list()[0]!.profileHash, estimateMode: "soft" }));
+      expect(created).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued" } });
       expect(readArchivedPlan(runtime.store, "g").planHash).toBe(planHash);
       // §7: no integration record, though the repo id's default is local.
       expect(Object.hasOwn(bodyOf(runtime.store), "integration")).toBe(false);
-      const estimateId = (accepted as { result: { estimateId: string } }).result.estimateId;
+      const estimateId = (created as { result: { estimateId: string } }).result.estimateId;
       await until(() => readEstimateRecord(runtime.store, "g", estimateId).state === "ready" && readRequirementGroup(runtime.store, "g").requirement.export.state === "done", 120_000, "the estimate and the export", 50);
       const documentCommit = readRequirementGroup(runtime.store, "g").requirement.export.commit!;
       expect(g(vault, "rev-parse", "refs/heads/orca/g")).toBe(documentCommit);

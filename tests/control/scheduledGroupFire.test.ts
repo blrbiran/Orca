@@ -7,7 +7,7 @@ import { withCommandContext } from "../../src/control/commandClient.js";
 import { canonicalPlanDoc } from "../../src/control/planLibrary/codec.js";
 import { applyPlanLibraryCommand, type PlanLibraryCommand } from "../../src/control/planLibrary/commands.js";
 import { appendVersion, readVersion } from "../../src/control/planLibrary/store.js";
-import { readArchivedPlan } from "../../src/control/queries.js";
+import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { firedGroupId } from "../../src/control/schedules/model.js";
 import { applyScheduleCommand, type ScheduleCommand } from "../../src/control/schedules/commands.js";
 import { readSchedule } from "../../src/control/schedules/store.js";
@@ -181,6 +181,14 @@ describe("C7: a group fire is one booked import", () => {
     const groupId = firedGroupId("sch-g", at(1, 9));
     // R2 has not run in this file: nothing blocks it, so step 9 leaves the row for R2's attempt.
     expect(fireRows(h, "sch-g")[0]).toMatchObject({ outcome: "started", reason: null });
+    // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The fire's import has no token limit, so it queues no
+    // estimate (spec 2026-11-05 §3.3). The failed estimate is one a person asks for with `orca group estimate`: ana names
+    // no agent and the plan none, so it ends blocked-capability exactly as the fire's own estimate used to.
+    expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM estimates WHERE group_id=?").get(groupId)).toEqual({ n: 0 });
+    const revisionOf = Number(h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)!.revision);
+    expect(await new WebControlService(h.deps).createEstimate({ schema: "orca-raw-command-v1", commandId: "estimate-ana", actorId: "ana", expectedRevision: revisionOf, verb: "estimate",
+      target: { kind: "group", groupId }, payload: { proposalVersion: readBudgetProposal(h.store, groupId).proposalVersion, estimatorProfileId: "all", estimatorProfileHash: h.frozen.profileHash, estimateMode: "soft" } } as never))
+      .toMatchObject({ result: { estimateState: "blocked-capability", reasonCode: "agent-selection-rejected:estimator:agent-unselected" } });
     h.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,0,'start-unknown','{}')").run(groupId, "est-stale");
     expect(await fire(at(1, 10))).toEqual({ crashes: [] });
     const reason = "estimate-failed:blocked-capability:agent-selection-rejected:estimator:agent-unselected";

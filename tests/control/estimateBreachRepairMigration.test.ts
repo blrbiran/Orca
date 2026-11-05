@@ -30,7 +30,9 @@ interface Stuck { h: Fixture; runId: string; stateDir: string; dbPath: string; e
 async function stuck(options: { confirm?: boolean; tokens?: number; extraRuns?: Array<Record<string, unknown>>; finite?: boolean; before?: (raw: InstanceType<typeof DatabaseSync>) => void } = {}): Promise<Stuck> {
   const h = await webFixture(undefined, [{ taskId: "a" }], options.finite === false ? { tokenPolicy: "optional-v1" } : {});
   const service = new WebControlService(h.deps);
-  const run = await service.claimEstimate("g", h.estimateId);
+  // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 An unlimited (optional-v1) import queues no estimate
+  // (spec 2026-11-05 §3.3): its estimate is the one a person asks for with `orca group estimate`.
+  const run = await service.claimEstimate("g", options.finite === false ? await h.requestEstimate(service) : h.estimateId);
   const runId = run!.runId as string;
   if (options.confirm) { const answer = await service.confirm(h.command("confirm", await h.confirmPayload())); if ("error" in answer) throw new Error(JSON.stringify(answer)); }
   const grant = runBody(h.store, runId).grant.work as Amount;

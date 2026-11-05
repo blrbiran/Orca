@@ -21,18 +21,21 @@ const runBody = (h: Fixture, runId: string) => JSON.parse(String(h.store.db.prep
 let seqSource = 0;
 const book = (h: Fixture, runId: string, eventSeq: number, cumulative: Amount) => recordUsage(h.store, {
   runId, generation: 1, eventSeq, bucket: "work", cumulative, source: { artifactId: `usage-${++seqSource}`, hash: "a".repeat(64) } });
+// Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 An unlimited (optional-v1) import queues no estimate
+// (spec 2026-11-05 §3.3): its estimate is the one a person asks for with `orca group estimate`.
 async function claimed(options: WebFixtureOptions = {}) {
   const h = await webFixture(undefined, [{ taskId: "a" }], options);
   const service = new WebControlService(h.deps);
-  const run = await service.claimEstimate("g", h.estimateId);
+  const estimateId = options.tokenPolicy === "optional-v1" ? await h.requestEstimate(service) : h.estimateId;
+  const run = await service.claimEstimate("g", estimateId);
   if (run === null) throw new Error("estimate not claimed");
-  return { h, service, runId: run.runId as string, grant: runBody(h, run.runId as string).grant.work as Amount };
+  return { h, service, estimateId, runId: run.runId as string, grant: runBody(h, run.runId as string).grant.work as Amount };
 }
 /** Settle the estimate run as the driver would after a stop (state, then the settlement transaction). */
-function settle(h: Fixture, service: WebControlService, runId: string): void {
+function settle(h: Fixture, service: WebControlService, runId: string, estimateId = h.estimateId): void {
   const row = runBody(h, runId); row.state = "settled-restartable";
   h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), runId);
-  service.completeEstimate("g", h.estimateId, {});
+  service.completeEstimate("g", estimateId, {});
 }
 
 describe("H1: an estimate breach never changes a group's status", () => {
@@ -102,7 +105,7 @@ describe("§4.2.5: no deficit-induced refusal from an estimate overrun", () => {
   });
 
   it("C1b: an unlimited group's activeMs overrun grows the three limits by exactly the excess and leaves no deficit", async () => {
-    const { h, service, runId, grant } = await claimed({ tokenPolicy: "optional-v1" }); try {
+    const { h, service, estimateId, runId, grant } = await claimed({ tokenPolicy: "optional-v1" }); try {
       const before = { group: groupBody(h).limit.activeMs, ledger: groupBody(h).ledger.groupLimit.activeMs, proposal: readBudgetProposal(h.store, "g").groupLimit.activeMs };
       expect(groupBody(h).limit.tokens).toBeNull();
       // Two growing events (3M, then 7M more), then one that moves only tokens: two entries, 10M in all, never twice.
@@ -119,7 +122,7 @@ describe("§4.2.5: no deficit-induced refusal from an estimate overrun", () => {
       expect(proposal.groupLimit.activeMs).toBe(before.proposal + 10_000_000);
       expect(body.ledger.budgetDeficit).toEqual({ tokens: 0, activeMs: 0, attempts: 0, sessions: 0 });
       expect(body.status).toBe("draft");
-      settle(h, service, runId);
+      settle(h, service, runId, estimateId);
       expect(readControlGroup(h.store, "epoch", "g").ledger.budgetDeficit).toEqual({ tokens: 0, activeMs: 0, attempts: 0, sessions: 0 });
       expect(await service.proposalSetAgent(h.command("proposal-set-agent", { baseProposalVersion: readBudgetProposal(h.store, "g").proposalVersion, scope: { kind: "group", slot: "worker" }, partial: { agent: FIXTURE_AGENT_ID } })))
         .not.toHaveProperty("error");
