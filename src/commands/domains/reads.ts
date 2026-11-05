@@ -91,8 +91,16 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: unknown; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
-      return [`group ${b.groupId}`, `run ${compact(b.run)}`, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");
+      const b = body as { groupId: string; run: { state?: string; stopReason?: string | null; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
+      const cause = b.run?.failureCause ?? null;
+      const why = [
+        ...(b.run?.state === undefined ? [] : [`state: ${b.run.state}`]),
+        ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
+        ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
+        ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
+      ];
+      return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");
     } }),
   read({ domain: "run", action: "activity", summary: "a run's newest 200 activity rows, newest first", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/activity`] }),
   read({ domain: "run", action: "evidence", summary: "a run's evidence manifest", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/evidence`] }),

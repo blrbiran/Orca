@@ -4,6 +4,8 @@ export function text(body: unknown, indent = ""): string {
   if (Array.isArray(body)) return body.length === 0 ? `${indent}(none)` : body.map((item) => `${indent}- ${compact(item)}`).join("\n");
   const lines: string[] = [];
   for (const [key, value] of Object.entries(body)) {
+    // Issue #140: an absent field is left out, not printed as `key: undefined` (plan show without --version).
+    if (value === undefined) continue;
     if (value === null || typeof value !== "object") lines.push(`${indent}${key}: ${String(value)}`);
     else if (Array.isArray(value)) lines.push(`${indent}${key}: ${value.length === 0 ? "(none)" : ""}`, ...(value.length === 0 ? [] : [text(value, `${indent}  `)]));
     else lines.push(`${indent}${key}: ${compact(value)}`);
