@@ -203,3 +203,16 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/control/criteriaBaseRun.test.ts` › 「a restart while the re-run is in flight restores the workspace and runs it again」 | 上表已登记的 `index.lock File exists` 形状（failover 门第二轮，负载约 21–23）；同提交单跑 3/3 绿；同一分支前一轮门里是绿的 |
 | Orca › `tests/control/ccloopProtocol.integration.test.ts` | **不是 flake，是环境**：`ORCA_AGENTS_TABLE` 指了真实 agent 表（本会话开头误用）；换 fake-codex `integration` 表后绿（上节「环境依赖的红」第二条） |
 | ccloop › `runLoop` 「persists phase usage evidence…」 | 名单内（`check-known-reds` RC 0），ccloop 门 2494 条唯一红 |
+
+### 会话 `3cfc2e73`（2026-11-05／06，十余个门、多个 agent 并行；负载 15–190）
+
+> 本会话多数门是在多个 agent 同时跑测试时跑的（负载 50–190），红多是这个原因；每条都在栈顶与**未改动 main 的 clone** 上交替单跑对照过（台账 `.superpowers/sdd/2026-11-05-session-3cfc2e73/progress.md` 有逐次记录）。两次真回归也是这样抓出来的（见下「不是 flake」）。
+
+| 测试 | 形状与判别 |
+|---|---|
+| Orca › `tests/flow/driftLock.test.ts` › D15「the snapshot waits…」「a pending copy-back and the snapshot…」 | **新登记**：5 s 超时；负载约 83 时在**未改动 main（606b2ebd）上单跑 2/2 也红**，负载约 28 时单跑绿 |
+| Orca › `tests/control/archivedWakePerformance.test.ts` | 20 s 超时；只改 pin 的分支上也红，单跑 24/24 两边都绿 |
+| Orca › `tests/control/driverReconcile*.test.ts`、`handoffE2E`、`schedulerBridge`、`reconcileFlowDecisions`、`chainsApi`、`gateCheck`、`correctionCoarseDebug`、`multiDirOverview`、`multiDirSites`、`panel/security` | `ENOTEMPTY`／deadline／hook 或 20 s 超时／面板未自退；负载 40–125 时红，负载 4–30 单跑两边全绿 |
+| Orca › web 多个轮询类（`resultsApp`、`overviewDecisionNavigation`、`projectScope*`、`requirementsApp` 等 18 个文件） | 负载约 125 时 37 条红；负载 16 时 247/247 两边全绿 |
+| ccloop › `updates`、`savedResultRecovery.native`、`phasesCompleted`、`skillsController`、`setupCommands`（time limit）、`extractFinalObject`（3 s perf）、`parseArgs` | 负载 50–116 时红；未改动 963b856 上同形状或更多；负载约 10 单跑分支 39/39 绿 |
+| **不是 flake** › Orca 90 个文件加载失败（`TypeError … 'attempts'`）与 25 条 `multiDir*`（`multi-dir-precheck-failed`，`… reading '_parse'`） | 真回归：`webDispatch.ts`／`stopIntent.ts` 新加对 `groupEdges` 的静态 import 改变了控制模块 import 环的求值顺序。`git bisect` 定位，修在 `fix(control): the default allocations live in a leaf module…` 与 `fix(control): start and resume get the prerequisite reader from webService…`。**教训：控制模块（estimator→commands→fundedAllowance→budget→stopIntent→webDispatch→…）上不要新加静态 import，函数经 deps 传入；改完必跑按改动选测试的整套** |
