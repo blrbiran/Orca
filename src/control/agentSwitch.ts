@@ -20,7 +20,8 @@ import type { ControlStore } from "./store.js";
 
 /** Who chose the new installation: a person's retry on another agent, or orca-auto's quota failover. */
 export type SwitchSource = "task" | "failover";
-export interface AgentSwitchRecord { afterRunId: string; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" }
+/** `afterClaimOrdinal`: the claim ordinal of the run that was current at the switch; it and every earlier claim carry `previous`. */
+export interface AgentSwitchRecord { afterRunId: string; afterClaimOrdinal: number; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" }
 
 /** The work item's switch history; anything malformed is treated as no history (the comparisons then stay strict). */
 export function agentSwitchesOf(work: unknown): AgentSwitchRecord[] {
@@ -29,18 +30,17 @@ export function agentSwitchesOf(work: unknown): AgentSwitchRecord[] {
 }
 
 /**
- * I1 with switches: the selection `run` must carry. Runs are ordered by the work item's lineage; a run at or before a
- * switch's `afterRunId` carries that switch's `previous` (the first such switch), a later run the current selection.
+ * I1 with switches: the selection `run` must carry. Runs are ordered by their claim ordinal (the lineage list is sorted by
+ * id, not by claim; a continuation keeps its predecessor's ordinal): a run claimed at or before a switch's
+ * `afterClaimOrdinal` carries that switch's `previous` (the first such switch), a later one the current selection.
  */
 export function runAgentAgrees(work: unknown, run: unknown): boolean {
   try {
-    const runId = (run as { runId?: unknown }).runId;
-    const lineage = (work as { lineageRunIds?: unknown }).lineageRunIds;
+    const ordinal = (run as { claimOrdinal?: unknown }).claimOrdinal;
     let expected: FrozenWorkAgent = frozenWorkAgent(work);
     const switches = agentSwitchesOf(work);
-    if (switches.length > 0 && typeof runId === "string" && Array.isArray(lineage)) {
-      const at = lineage.indexOf(runId);
-      const owner = switches.find((entry) => { const index = lineage.indexOf(entry.afterRunId); return at >= 0 && index >= 0 && at <= index; });
+    if (switches.length > 0 && typeof ordinal === "number") {
+      const owner = switches.find((entry) => typeof entry.afterClaimOrdinal === "number" && ordinal <= entry.afterClaimOrdinal);
       if (owner !== undefined) expected = owner.previous;
     }
     return canonicalBytes(frozenWorkAgent(run)).equals(canonicalBytes(expected));
@@ -74,7 +74,8 @@ export async function resolveAgentSwitch(
  * and the confirmed snapshot is re-issued with only this task's agent entry replaced. A task with skills is refused
  * (its skill set was checked against the frozen agent's kind at confirm); so is a switch to the installation it is on.
  */
-export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
+export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, run: { runId: string; claimOrdinal: number | null }, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
+  if (typeof run.claimOrdinal !== "number") throw new ControlError("recovery-blocked", "agent-switch-claim-ordinal");
   const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown>;
   const previous = frozenWorkAgent(work);
   if (previous.agent.agent === next.agent.agent) throw new ControlError("task-not-retryable", "agent-unchanged");
@@ -93,7 +94,7 @@ export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: s
   writeCanonicalRecord(store, groupId, hash, canonicalJson);
   proposal.executionSnapshotHash = hash;
   saveWebAuthority(store, group, proposal);
-  const record: AgentSwitchRecord = { afterRunId: runId, previous, by, at: store.now(), reason };
+  const record: AgentSwitchRecord = { afterRunId: run.runId, afterClaimOrdinal: run.claimOrdinal, previous, by, at: store.now(), reason };
   Object.assign(work, next, { agentSwitches: [...agentSwitchesOf(work), record] });
   saveWork(store, groupId, work as never);
   return { from: previous.agent.agent, to: next.agent.agent };

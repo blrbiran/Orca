@@ -6,6 +6,7 @@ import { readWebGroup, WebControlService } from "../../src/control/webService.js
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import type { PartialSelection } from "../../src/control/agentSelection.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
+import { caps } from "./fixtures/store.js";
 
 /**
  * Quota failover spec 2026-11-03 §3, §8 (human: 「如果是provider额度用完，且有备用provider，可以改provider并重试。」, D1-D6 as
@@ -29,7 +30,7 @@ async function world(options: { agent?: PartialSelection } = {}) {
   const runId = await t.claim();
   await t.until(t.driver(), () => t.body(runId).state === "blocked");
   const work = () => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
-  const retries = () => t.h.store.db.prepare("SELECT id, actor_id FROM commands WHERE group_id='g' AND json_extract(body_json,'$.verb')='retry-task'").all().map((r) => [String(r.id), String(r.actor_id)]);
+  const retries = () => t.h.store.db.prepare("SELECT id, actor_id FROM commands WHERE group_id='g' AND json_extract(body_json,'$.verb')='retry-task' ORDER BY rowid").all().map((r) => [String(r.id), String(r.actor_id)]);
   let orders = 0;
   const setOrder = (failoverOrder: string[]) => service.setOrchestrationSettings(t.h.rawCommand(`order-${++orders}`,
     Number(t.h.store.db.prepare("SELECT revision FROM orchestration_settings").get()?.revision ?? 0), "set-orchestration-settings", { kind: "orchestration" }, { maxRunningGroups: 3, failoverOrder }) as never);
@@ -165,5 +166,24 @@ describe("rests from the stored runs (D3)", () => {
     // Over: not resting; another installation's failure is its own.
     expect(installationRests(store([run("r1", "codex", t0, quota())]), t0 + REST_DEFAULT_MS).has("codex")).toBe(false);
     expect(installationRests(store([run("r1", "claude", t0, quota())]), t0).has("codex")).toBe(false);
+  });
+});
+
+describe("which selection an earlier run must carry after switches (runAgentAgrees)", () => {
+  // Found in session e2ad4802: the lineage list is sorted by run id, not by claim, so ordering by it made the answer depend
+  // on random ids. Claim ordinals order the runs.
+  const frozen = (agent: string) => ({ agent: { agent, model: "m", contextWindow: "agent-default" }, agentProvenance: { agent: "operator", model: "descriptor", contextWindow: "descriptor" },
+    configHash: "c".repeat(64), timeoutMs: 1, killGraceMs: 0, agentCapabilities: caps });
+  it("orders by claim ordinal whatever the run ids sort as", async () => {
+    const { runAgentAgrees } = await import("../../src/control/agentSwitch.js");
+    const work = { ...frozen("codex"), lineageRunIds: ["run-a", "run-b", "run-c"],
+      agentSwitches: [{ afterRunId: "run-c", afterClaimOrdinal: 1, previous: frozen("codex-old"), by: "orca-auto", at: 0, reason: "quota" },
+        { afterRunId: "run-a", afterClaimOrdinal: 2, previous: frozen("claude"), by: "orca-auto", at: 0, reason: "quota" }] };
+    // run-c was claimed first (ordinal 1), run-a second, run-b third -- the reverse of their id order for the first two.
+    expect(runAgentAgrees(work, { runId: "run-c", claimOrdinal: 1, ...frozen("codex-old") })).toBe(true);
+    expect(runAgentAgrees(work, { runId: "run-a", claimOrdinal: 2, ...frozen("claude") })).toBe(true);
+    expect(runAgentAgrees(work, { runId: "run-b", claimOrdinal: 3, ...frozen("codex") })).toBe(true);
+    expect(runAgentAgrees(work, { runId: "run-a", claimOrdinal: 2, ...frozen("codex") })).toBe(false);
+    expect(runAgentAgrees(work, { runId: "run-b", claimOrdinal: 3, ...frozen("claude") })).toBe(false);
   });
 });
