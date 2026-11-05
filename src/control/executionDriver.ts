@@ -38,7 +38,7 @@ import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
 import { placeDirGroups, type DirPlacementCrashPoint } from "./dirPlacement.js";
-import { admissionFacts, readOrchestrationSettings, runningGroupIds } from "./orchestration.js";
+import { admissionOf, readOrchestrationSettings, runningGroupIds } from "./orchestration.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { landMultiDirGroups, type MultiLandingCrashPoint, type MultiPrecheck } from "./multiLanding.js";
@@ -1335,15 +1335,16 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
   const failed: string[] = [];
   const armedIds = write(deps, () => {
     const armed: string[] = [];
-    const admission = admissionFacts(store);
     const executing = (groupId: string) => groupExecutionPendingInStore(store, groupId) || store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined;
     let slotsTaken = runningGroupIds(store).filter(executing).length;
     const cap = readOrchestrationSettings(store).maxRunningGroups;
-    const rows = store.db.prepare("SELECT id,body FROM groups ORDER BY id").all()
-      .map((row, index) => ({ row, index, rank: admission.get(String(row.id))?.rank ?? 1 }))
-      .sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.row);
-    for (const row of rows) {
-      const groupId = String(row.id);
+    // Each body is parsed once here (archivedWakePerformance's bound); a body that does not parse fails in its own savepoint.
+    const rows = store.db.prepare("SELECT id,body FROM groups ORDER BY id").all().map((row, index) => {
+      let parsed: { ok: true; body: unknown } | { ok: false; error: unknown };
+      try { parsed = { ok: true, body: JSON.parse(String(row.body)) }; } catch (error) { parsed = { ok: false, error }; }
+      return { groupId: String(row.id), parsed, index, admission: parsed.ok ? admissionOf(parsed.body) : { rank: 1, flowChild: false } };
+    }).sort((a, b) => a.admission.rank - b.admission.rank || a.index - b.index);
+    for (const { groupId, parsed, admission } of rows) {
       // Backlog #3 (Orca handoff §9.0 挂账): a group whose wake cannot be armed -- a row that does not parse, a query
       // that throws -- is skipped and named on stderr below, like every failure the driver cannot pin on a run. It no
       // longer takes every other group's wake, and the whole round, down with it. Each group writes at most one row,
@@ -1354,14 +1355,15 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
       let open = true;
       store.db.exec("SAVEPOINT replenish_group");
       try {
-        const group = JSON.parse(String(row.body)) as { planHash?: string; status: string; stopped: boolean };
+        if (!parsed.ok) throw parsed.error;
+        const group = parsed.body as { planHash?: string; status: string; stopped: boolean };
         if (group.planHash === undefined || group.stopped || !DISPATCHABLE_GROUP_STATES.has(group.status)) continue;
         if (store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)) continue;
         if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId)) continue;
         if (store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId)) continue;
         const last = store.db.prepare("SELECT body FROM scheduler_wakes WHERE group_id=? AND kind='start' ORDER BY rowid DESC LIMIT 1").get(groupId);
         if (!last || nextClaimableTask(store, groupId, group) === null) continue;
-        const takesSlot = admission.get(groupId)?.flowChild !== true && !executing(groupId);
+        const takesSlot = !admission.flowChild && !executing(groupId);
         if (takesSlot && slotsTaken >= cap) continue;
         const body = JSON.parse(String(last.body)) as { startRevision: number; executionSnapshotHash?: string };
         const ordinal = Number(store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id=? AND id LIKE ?").get(groupId, `drive:${groupId}:%`)!.n) + 1;

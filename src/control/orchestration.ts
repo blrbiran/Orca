@@ -109,16 +109,20 @@ export function writeOrchestrationSettings(store: ControlStore, settings: Orches
 type GroupFacts = { id: string; status: string; debug: boolean; review: boolean; flowChild: boolean };
 function groupFacts(store: ControlStore): GroupFacts[] {
   return store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all().flatMap((row) => {
-    let body: { status?: unknown; debug?: unknown };
-    try { body = JSON.parse(String(row.body)) as typeof body; } catch { return []; } // its own reads name a bad body
-    // System debug task spec 2026-10-21 §2: Orca's own debug groups are admitted first too.
-    const debug = [body.debug, (body as { systemDebug?: unknown }).systemDebug].some((mark) => typeof mark === "object" && mark !== null);
-    // Checks spec 2026-10-22 §6.1: a model review fixes nothing, so it is admitted after every person-confirmed group.
-    const review = (body as { systemDebug?: { source?: { kind?: unknown } } }).systemDebug?.source?.kind === "model-review";
-    // Flow engine spec §6.2: a flow run's child runs under the slot its parent holds.
-    const flowChild = (body as { flow?: { role?: unknown } }).flow?.role === "child";
-    return [{ id: String(row.id), status: String(body.status), debug: debug && !review, review, flowChild }];
+    let body: unknown;
+    try { body = JSON.parse(String(row.body)); } catch { return []; } // its own reads name a bad body
+    return [factsOf(String(row.id), body)];
   });
+}
+function factsOf(id: string, parsed: unknown): GroupFacts {
+  const body = (parsed ?? {}) as { status?: unknown; debug?: unknown };
+  // System debug task spec 2026-10-21 §2: Orca's own debug groups are admitted first too.
+  const debug = [body.debug, (body as { systemDebug?: unknown }).systemDebug].some((mark) => typeof mark === "object" && mark !== null);
+  // Checks spec 2026-10-22 §6.1: a model review fixes nothing, so it is admitted after every person-confirmed group.
+  const review = (body as { systemDebug?: { source?: { kind?: unknown } } }).systemDebug?.source?.kind === "model-review";
+  // Flow engine spec §6.2: a flow run's child runs under the slot its parent holds.
+  const flowChild = (body as { flow?: { role?: unknown } }).flow?.role === "child";
+  return { id, status: String(body.status), debug: debug && !review, review, flowChild };
 }
 
 /**
@@ -215,11 +219,13 @@ function passCandidates(store: ControlStore): Array<{ group: GroupFacts; row: Gr
 }
 
 /**
- * The pass's admission facts per group id: `rank` 0 a debug group, 1 an ordinary one, 2 a model review; `flowChild` runs
- * under its parent's slot. Review-exit spec §3.1: regained work is admitted in the same order (replenishStartWakes).
+ * The pass's admission facts for one parsed group body: `rank` 0 a debug group, 1 an ordinary one, 2 a model review;
+ * `flowChild` runs under its parent's slot. Review-exit spec §3.1: regained work is admitted in the same order
+ * (replenishStartWakes, which hands in the body it already parsed).
  */
-export function admissionFacts(store: ControlStore): Map<string, { rank: number; flowChild: boolean }> {
-  return new Map(groupFacts(store).map((group) => [group.id, { rank: group.review ? 2 : group.debug ? 0 : 1, flowChild: group.flowChild }]));
+export function admissionOf(body: unknown): { rank: number; flowChild: boolean } {
+  const facts = factsOf("", body);
+  return { rank: facts.review ? 2 : facts.debug ? 0 : 1, flowChild: facts.flowChild };
 }
 
 /**
