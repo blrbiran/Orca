@@ -68,6 +68,10 @@ export const durableCommandErrorStatuses = {
   "group-edge-repository-mismatch": 409,
   "group-edge-stack-ambiguous": 409,
   "group-edge-self": 400,
+  // Issue #133 (session 3cfc2e73): an archived group named as a prerequisite (it takes no new work, so it may never be
+  // done; detail: its id); a start or resume of a group whose prerequisites are not done (detail: their ids, comma-joined).
+  "group-edge-prerequisite-archived": 409,
+  "group-dependency-unmet": 409,
   // Checks spec 2026-10-22 §2.2: a check setting's value fails its shape or bound (a trigger, a cron); the detail names
   // which. A schedule whose cron fires more often than once an hour (spends review budget unattended).
   "control-argument-invalid": 400,

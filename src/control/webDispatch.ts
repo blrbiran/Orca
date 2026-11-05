@@ -27,6 +27,7 @@ import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
 import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
+import { waitingPrerequisites } from "./groupEdges.js";
 import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capStatuses } from "./spendCaps.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
@@ -171,6 +172,10 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         // And again here: a wake inserted while the probe ran is still caught.
         if (groupExecutionPendingInStore(store, groupId)) throw new ControlError("group-execution-pending");
         if (group.status !== "ready") throw new ControlError("group-state-invalid");
+        // Issue #133, kanban spec §3.1/§3.4: an explicit start honours the group's edges as the automatic start does,
+        // with the same "done" (prerequisiteDone); otherwise the dependent runs on a base without its prerequisite's work.
+        const unmet = waitingPrerequisites(store, groupId);
+        if (unmet.length > 0) throw new ControlError("group-dependency-unmet", unmet.join(","));
         refuseUnnamedDebugChecks(store, groupId, group);
         // N1 spec §9.3: a requirement's group starts only on top of its exported document.
         if (hasRequirementBlock(group as { requirement?: unknown }) && readRequirementGroup(store, groupId).requirement.export.state !== "done") throw new ControlError("requirement-export-pending");

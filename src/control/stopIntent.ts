@@ -18,6 +18,7 @@ import { noteRunWrite, recordActivity } from "./activity.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { rearmFailedContinuation } from "./continuation.js";
+import { waitingPrerequisites } from "./groupEdges.js";
 import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
@@ -511,6 +512,12 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
         if (readBudgetProposal(store, groupId).state !== "confirmed") {
           deps.beforeCommit?.();
           return commandSuccess(context, { kind: "resumed", operation: "resume-dispatch" });
+        }
+        // Issue #133: a ready group resumed before it ran arms a start, so it honours its edges as `start` does. The
+        // refusal rolls the command back, so the pause stays.
+        if (group.status === "ready") {
+          const unmet = waitingPrerequisites(store, groupId);
+          if (unmet.length > 0) throw new ControlError("group-dependency-unmet", unmet.join(","));
         }
         const wakeId = startSchedulerWake(store, groupId, context.nextCommandRevision);
         deps.beforeCommit?.();

@@ -148,6 +148,54 @@ describe("edges between groups (kanban spec §3.3-§3.4)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Issue #133: an explicit start and a resume honour the edges with the automatic start's "done", so a dependent never
+  // runs on a base without its prerequisite's work.
+  it("refuses a person's start of a dependent whose prerequisite is not done, naming it; starts once it is done", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      edge(h, service, "add-group-dependency", "g", "p");
+      await confirm(h, service, "g");
+      const wakes = () => Number(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND kind='start'").get()!.n);
+      const refused = await service.start(h.rawCommand(`start-g-${++sequence}`, revisionOf(h, "g"), "start", { kind: "group", groupId: "g" }, {}) as never);
+      // mutation: drop the waitingPrerequisites check in scheduleStart -> scheduled, red
+      expect(refused).toMatchObject({ error: { code: "group-dependency-unmet", message: "group-dependency-unmet:p" } });
+      expect(wakes()).toBe(0);
+      finishTasks(h, "p");
+      const started = await service.start(h.rawCommand(`start-g-${++sequence}`, revisionOf(h, "g"), "start", { kind: "group", groupId: "g" }, {}) as never);
+      expect(started).toMatchObject({ result: { kind: "scheduled", operation: "start" } });
+      expect(wakes()).toBe(1);
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses resuming a paused, never-run dependent whose prerequisite is not done; the pause stays", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      edge(h, service, "add-group-dependency", "g", "p");
+      await confirm(h, service, "g");
+      const pause = (verb: "pause-dispatch" | "resume-dispatch") => h.rawCommand(`${verb}-${++sequence}`, revisionOf(h, "g"), verb, { kind: "group", groupId: "g" }, {}) as never;
+      expect(code(await service.pauseDispatch(pause("pause-dispatch")))).toBeNull();
+      // mutation: drop the waitingPrerequisites check in applyResumeDispatch -> scheduled with a start wake, red
+      expect(await service.resumeDispatch(pause("resume-dispatch"))).toMatchObject({ error: { code: "group-dependency-unmet", message: "group-dependency-unmet:p" } });
+      expect(h.store.db.prepare("SELECT mode FROM stop_intents WHERE group_id='g'").get()).toMatchObject({ mode: "pause" });
+      expect(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND kind='start'").get()).toMatchObject({ n: 0 });
+      finishTasks(h, "p");
+      expect(await service.resumeDispatch(pause("resume-dispatch"))).toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses an edge to an archived prerequisite, naming it", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      expect(service.archiveGroup(h.rawCommand(`archive-p-${++sequence}`, revisionOf(h, "p"), "archive-group", { kind: "group", groupId: "p" }, {}) as never)).toMatchObject({ result: { kind: "archived" } });
+      // mutation: drop the archived check in applyAddGroupDependency -> group-dependency-added, red
+      expect(edge(h, service, "add-group-dependency", "g", "p")).toMatchObject({ error: { code: "group-edge-prerequisite-archived", message: "group-edge-prerequisite-archived:p" } });
+      expect(readGroupSummary(h.store, "g").dependsOn).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
   it("a dependent of one prerequisite not delivered locally stacks on that prerequisite's branch", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);

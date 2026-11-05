@@ -151,8 +151,10 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `group-archived` | 409 |
 | `group-budget-unavailable` | 422 |
 | `group-deadline-expired` | 422 |
+| `group-dependency-unmet` | 409 |
 | `group-edge-cycle` | 409 |
 | `group-edge-dependent-started` | 409 |
+| `group-edge-prerequisite-archived` | 409 |
 | `group-edge-prerequisite-not-found` | 404 |
 | `group-edge-repository-mismatch` | 409 |
 | `group-edge-self` | 400 |

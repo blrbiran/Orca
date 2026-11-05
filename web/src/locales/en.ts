@@ -2157,6 +2157,8 @@ export const enErrors: Record<string, string> = {
   "group-edge-repository-mismatch": "Both groups must work on the same project.",
   "group-edge-stack-ambiguous": "A group can stack on only one group that is not delivered locally ({{detail}}).",
   "group-edge-self": "A group cannot wait for itself.",
+  "group-edge-prerequisite-archived": "Group {{detail}} is archived and takes no new work, so this group could wait for it forever.",
+  "group-dependency-unmet": "This group waits for other groups that are not done yet ({{detail}}). It starts once they are done.",
   "control-argument-invalid": "A value this command was given is not valid: {{detail}}",
   "check-schedule-too-frequent": "A schedule may run at most once an hour.",
   "check-schedule-limit": "There are already 8 scheduled checks here; remove one first.",
