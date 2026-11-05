@@ -70,7 +70,7 @@ any command; `orca version` should equal this skill's version.
 | set a group's limit or where its work goes | `orca group set-limit`, `orca group set-integration`, `retry-integration`, `resolve-integration` | references/group.md |
 | answer a stopped folder placement or multi landing | `orca group folder-change <g> --take-folder / --recheck / --withhold`, `orca group multi-land <g> --retry-rest / --mark-resolved` | references/group.md |
 | make one group wait for another | `orca group depend <g> --on <other>`, `orca group undepend …` | references/group.md |
-| find out why a run failed, or whether its result can be verified | `orca run show <r>`, `run activity`, `run evidence`, `run results`, `run eligibility` | references/run.md |
+| find out why a run failed, or whether its result can be verified | `orca run show <r>`, `run activity`, `run transcript`, `run evidence`, `run results`, `run eligibility` | references/run.md |
 | retry, continue, verify a saved result or settle unknown usage | `orca task retry / continue / verify-saved-result / settle-usage <g> <t>` | references/task.md |
 | change a task's loop or labels | `orca task set-loop <g> <t> --file …`, `orca task set-labels …` | references/task.md |
 | decide a pending or flagged decision | `orca decision list <g>`, `decision approve / reject / ratify <g> <id>` | references/decision.md |
@@ -102,7 +102,9 @@ Ids: a full id or a unique prefix; projects also by name or path (default: the r
 - A confirm binds the plan, profiles and agent selections exactly as shown now; read `proposal show` first.
 - A failed run: report the recorded phase, typed cause, raw code and run/attempt ids from `run show` /
   `run activity`; never infer token exhaustion from a decode error, and never claim a provider completed because a
-  command was accepted.
+  command was accepted. To see what the agent itself did before it failed, `orca run transcript <r>` lists its calls and
+  `orca run transcript <r> --call <attempt>/<phase>/<seq>` prints the tail of one (redacted as the Web shows it;
+  `--before <start>` pages back). A run Orca dispatched is refused it: report that, do not work around it.
 - Verifying a saved result skips execution, but validation and verification may still spend model usage. A flow's
   `plan`, `rerun` and `include` spend too.
 - A schedule fires on its own: a fired group either confirms itself (no token limit, no delivery scheme) or waits for
