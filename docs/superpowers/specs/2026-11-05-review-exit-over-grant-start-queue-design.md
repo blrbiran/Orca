@@ -226,3 +226,36 @@ the proposal; show prints it (§3.3). 18 → base and dependencies (header). 19 
 
 **For the human (reversible controller decisions):** regained work waits for a slot; verdict groups become `done`; the
 Board gets an over-grant chip.
+
+## Correction (session 3cfc2e73, batch D14a, 2026-11-05) — as built for D1 and D4
+
+Builder decisions where §3.1/§3.4 left room or would not work as written (Rule 1 rung 2, reversible); the text above is
+kept as written (Rule 13).
+
+1. **Slot (a) is limited to started statuses.** "an active run of any phase, or a task in `BUSY_WORK`" counts for any
+   status but `clarifying`/`draft`: read literally, an estimate run of an unconfirmed draft (or a split call of a
+   clarifying requirement) would take a running-group slot. `blocked` with an active run does count.
+2. **The claimable-task clause of (b) needs the group to have started** (it has a `start` wake, delivered or not):
+   otherwise every confirmed, never-started `ready` group holds a slot through its ready tasks, and no queued group could
+   ever start. The SQL approximates `nextClaimableTask`: ready, no active run on it, every `dependsOn` done; it does not
+   repeat the saved-result-recovery exclusion (an over-count, never an under-count).
+3. **Pending-delivery gates in SQL**: a group-scope recovery blocker (that covers `claim-capability-unavailable`), any
+   `spend_cap_blocks` row, `ledger.usageUnknown`. A null funded allowance that records nothing (no cap) is not visible to
+   SQL and still holds a slot while its wake is pending.
+4. **Regained work** (`replenishStartWakes`): a group already executing (pending wake, active run or busy task) arms its
+   next claim freely (it adds no slot); any other takes a slot only while fewer than `maxRunningGroups` groups execute.
+   Groups are visited debug first, model reviews last, then by id.
+5. **Verdict predicate**: a group whose `systemDebug.source.kind` is `criteria-review` or `ladder` and whose
+   `systemDebug.settled` is recorded (any settle state, including `debug-failed`) is done; other system kinds follow the
+   delivery rule. A ladder group whose debug run ended with an empty result (task D14-blocked, not settled) is not done; it
+   holds no slot.
+6. **Activity**: the done pass writes a new activity kind `group-done` `{from, cause: "delivered" | "verdict"}` (en
+   "group done", zh 「组已完成」). The orca-auto start that takes a queued group's slot writes its `command` row with
+   `queuedCommandId` and `queuedBy`.
+7. **Lost race**: orca-auto's own start answered `queued-for-slot` increments `slotRaces` on the orchestration row; the
+   pass's next command id gets the suffix `-q<slotRaces>` (the queued answer is booked under the old id and would only
+   replay). Queuing also resets `startedRevision` to null so the pass can start the group.
+8. **Resume**: only a group with no `start` wake ever (never started) is queued by `resume-dispatch`; a started group's
+   resume arms its wake as before.
+9. **Web**: the queued line is a client notice (`startQueued`, from the command's answer) shown beside Start while the
+   group is `ready` and not executing, cleared by the group's next successful command.

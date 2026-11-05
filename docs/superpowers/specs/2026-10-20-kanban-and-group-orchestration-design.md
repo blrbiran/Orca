@@ -344,3 +344,22 @@ start and the board; a refused resume keeps its pause. The edge refusals of S3 g
 an archived prerequisite is refused with `group-edge-prerequisite-archived` (409; detail: its id), since an archived
 group takes no new work and may never be done. Whether an explicit start may exceed `maxRunningGroups` is not decided
 here (left for the human). Commit subject: `fix(control): start and resume honour group dependencies (#133)`.
+
+## Correction (session 3cfc2e73, 2026-11-05) — slots, group done, explicit start at the cap (issues #127, #129)
+
+Human rulings D1 and D4 of `2026-11-05-review-exit-over-grant-start-queue-design.md` §1 override two sentences of §S2;
+the text above is kept as written (Rule 13).
+
+- "A group holds a slot while running, in review, or ready and executing" is replaced: a group holds a slot while it has
+  something to run -- an active run of any phase or a busy task; or (status ready/running/review, no group recovery
+  blocker, no spend-cap block, known usage) an undelivered start/no-start/resume wake, or, once started, a claimable
+  ready task. A review group whose tasks are all done or blocked holds none. `runningGroupIds` (orchestration.ts) is
+  still one SQL statement. A group whose every task is done and whose work is delivered becomes `done` (driver pass,
+  `src/control/groupDone.ts`).
+- "Any `start` or `resume-dispatch` records the group as started" no longer holds for a start at the cap: an explicit
+  start (every actor) or the resume of a group never started is checked against the cap inside its transaction, last,
+  and answers `queued-for-slot` with `ahead` (202). The group is recorded as wanting to run (`mode = run`) and is
+  recorded as started by the orca-auto start that later takes the slot. This also answers the question left open in the
+  #133 correction above: an explicit start does not exceed `maxRunningGroups` (flow children excepted).
+- A started group that held no slot and regains claimable work is armed by `replenishStartWakes` only while fewer than
+  the cap groups execute (controller decision, reversible).

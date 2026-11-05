@@ -1784,3 +1784,13 @@ The text above is left as written (Rule 13). Two answers now differ from it:
   `waitingOn?: "answer" | "consensus" | "review" | "call" | "person"`, present only when the retry lifted a requirement's
   completed stop and queued nothing; it names the step the requirement now waits on (issue #98). Commit subject:
   `fix(control): a retry that lifts a stop says what it now waits on (#98)`.
+
+## Correction (session 3cfc2e73, 2026-11-05) — a delivered group becomes `done` (issue #127)
+
+Human ruling D1 (`2026-11-05-review-exit-over-grant-start-queue-design.md` §1, 「组里所有任务都完成并落地后，组自动变成
+`done`，不再占槽位。…目标评审仍然延后。」) narrows the sentence at line 884 ("V1 does not release it or move the group to
+`done` on the operator's behalf"), which is kept as written above (Rule 13): the driver now moves a Web group from
+`review`/`running` to `done` once every task is done and its work is delivered (by delivery: integrated, placed, landed),
+with no active run and no stop intent, and a criteria-review or ladder group once its verdict is recorded
+(`src/control/groupDone.ts`, activity kind `group-done`). The goal-review reserve is still not released and goal review
+is still not dispatched. A `blocked` group is never moved.
