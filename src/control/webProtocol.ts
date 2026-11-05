@@ -15,6 +15,8 @@ import { DECISION_IMPORTANCES } from "../ledger/types.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
+/** Issue #98: what a requirement waits on after recovery-retry lifted its stop and queued no call (stopIntent.ts). */
+export const RECOVERY_WAITING_ON = ["answer", "consensus", "review", "call", "person"] as const;
 
 const nonemptyString = z.string().min(1);
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -2193,6 +2195,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
       blockerCodes: z.array(nonemptyString).superRefine((values, ctx) => requireSortedUnique(values, String, ctx, [])),
       evidenceIds: sortedIdArraySchema,
       wakeIds: z.array(nonemptyString).superRefine((values, ctx) => requireSortedUnique(values, String, ctx, [])),
+      // Issue #98: a retry that lifted a requirement's stop and queued no call names the person's step it now waits on.
+      waitingOn: z.enum(RECOVERY_WAITING_ON).optional(),
     })
     .strict(),
   // N1 spec §11.1: the requirement commands' results.

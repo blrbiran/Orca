@@ -114,3 +114,31 @@ describe("a requeued handoff's deadline (issue 91 review fix)", () => {
     } finally { await x.dispose(); }
   });
 });
+
+// Issue #98: a retry that lifts a completed stop and re-runs nothing used to answer only `resolved: true, wakeIds: []`, so
+// an agent read it as a call re-run. The answer now names the person's step the requirement waits on.
+describe("recovery-retry that lifts a stop and queues nothing (issue #98)", () => {
+  it("names what the requirement now waits on: the person's answers", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(await x.service.handoffStop(x.command("handoff-stop", {}))).toMatchObject({ result: { kind: "handoff-stopped", frozenRunIds: [] } });
+      expect(groupStopState(x.store, "r")).toBe("handoff-complete");
+      const answer = await x.service.recoveryRetry(x.command("recovery-retry", { scope: "group", groupId: "r" }));
+      // mutation: drop waitingOn from retryRequirementInTransaction's answer -> no waitingOn, red
+      expect(answer).toMatchObject({ result: { kind: "recovery-observed", resolved: true, wakeIds: [], waitingOn: "answer" } });
+      expect(groupStopState(x.store, "r")).toBe("none");
+    } finally { await x.dispose(); }
+  });
+
+  it("says nothing it waits on when the retry re-queued a call", async () => {
+    const { x, settle, retry } = await stoppedWhileDrafting();
+    try {
+      settle("settled-unrecoverable", "handoff-capability-unavailable");
+      const answer = await retry() as { result: { wakeIds: string[]; waitingOn?: unknown } };
+      expect(answer.result.wakeIds).toHaveLength(1);
+      // mutation: give waitingOn whenever the stop is lifted -> waitingOn beside a queued call, red
+      expect("waitingOn" in answer.result).toBe(false);
+    } finally { await x.dispose(); }
+  });
+});

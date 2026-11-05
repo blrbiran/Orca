@@ -25,7 +25,7 @@ import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKN
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
 import type { SettleSingleCallUsage } from "./singleCallSettlement.js";
-import { dispatchEnvelopeSchema, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
+import { dispatchEnvelopeSchema, RECOVERY_WAITING_ON, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
 import type { Amount, HandoffRequest } from "./types.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
@@ -582,6 +582,7 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
           kind: "recovery-observed", resolved: observed.resolved,
           blockerCodes: [...new Set(observed.blockerCodes)].sort(), evidenceIds: [...new Set(observed.evidenceIds)].sort(),
           wakeIds: [...new Set(observed.wakeIds)].sort(),
+          ...(observed.waitingOn === undefined ? {} : { waitingOn: observed.waitingOn }),
         };
         deps.beforeCommit?.();
         return commandSuccess(context, result);
@@ -590,7 +591,8 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
   } finally { release?.(); }
 }
 
-interface ObservedRecovery { resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
+interface ObservedRecovery { resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: RecoveryWaitingOn }
+type RecoveryWaitingOn = typeof RECOVERY_WAITING_ON[number];
 
 function clearedBlockers(store: ControlStore, groupId: string, runId: string | null): { codes: string[]; evidenceIds: string[]; resolved: boolean } {
   const rows = runId === null
@@ -669,7 +671,8 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   const requirement = row !== undefined && hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })
     ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision, outputBound, context.rawCommand.commandId, now) : { resolved: false, wakeIds: [] };
-  return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds };
+  return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds,
+    ...(requirement.waitingOn === undefined ? {} : { waitingOn: requirement.waitingOn }) };
 }
 
 /**
@@ -679,10 +682,10 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
  * draft is drafted with a fresh retry count (the failed or interrupted draft stays as it ended). A conflicted export is
  * set pending again with its wake undelivered.
  */
-function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number, outputBound: number | null, commandId: string, now: string): { resolved: boolean; wakeIds: string[] } {
+function retryRequirementInTransaction(store: ControlStore, groupId: string, revision: number, outputBound: number | null, commandId: string, now: string): { resolved: boolean; wakeIds: string[]; waitingOn?: RecoveryWaitingOn } {
   const group = readRequirementGroup(store, groupId);
   const wakeIds: string[] = [];
-  let resolved = false;
+  let resolved = false, lifted = false;
   if (group.requirement.export.state === "conflict") {
     const wakeId = `scheduler-wake:${groupId}:requirement-export`;
     group.requirement.export = { state: "pending", path: null, commit: null, parent: null, detail: null };
@@ -701,6 +704,7 @@ function retryRequirementInTransaction(store: ControlStore, groupId: string, rev
       store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
       group.stopped = false;
       resolved = true;
+      lifted = true;
     } else if (stop === "handoff-unresolved") {
       for (const runId of readStopIntent(store, groupId)?.frozenRunIds ?? []) if (requeueUnknownHandoff(store, groupId, runId, commandId, now)) resolved = true;
     }
@@ -724,7 +728,17 @@ function retryRequirementInTransaction(store: ControlStore, groupId: string, rev
     if (requeue) { wakeIds.push(queueRequirementCall(store, groupId, `recovery-${revision}`)); resolved = true; }
   }
   if (resolved) saveRequirementGroup(store, group);
+  // Issue #98: the stop was lifted and nothing was re-run; say what the requirement now waits on.
+  if (lifted && wakeIds.length === 0) return { resolved, wakeIds, waitingOn: requirementWaitingOn(store, groupId, group.requirement.consensus === null) };
   return { resolved, wakeIds };
+}
+
+/** Issue #98: the person's step a clarifying requirement waits on once no call is in flight (RequirementsPanel's next step). */
+function requirementWaitingOn(store: ControlStore, groupId: string, beforeConsensus: boolean): RecoveryWaitingOn {
+  const state = beforeConsensus ? latestRound(store, groupId)?.state : latestDraft(store, groupId)?.state;
+  if (state === "drafting") return "call";
+  if (beforeConsensus) return state === "awaiting-answers" ? "answer" : state === "answered" ? "consensus" : "person";
+  return state === "awaiting-review" ? "review" : "person";
 }
 
 export function deliverHandoffStop(deps: StopDeps, groupId: string): HandoffDelivery {

@@ -135,3 +135,16 @@ describe("against a real panel", () => {
     expect((await cli(["project", "set-workspace-mode", "--mode", "worktree"], w.state, { cwd: w.repo })).code).toBe(0);
   }, 60_000);
 });
+
+// Issue #98: the human output of a retry that lifted a stop and re-ran nothing says what the requirement waits on.
+describe("orca recovery retry's human output (issue #98)", () => {
+  it("adds the waiting-on line only when the answer names one", async () => {
+    const { findCommand } = await import("../../src/commands/registry.js");
+    const found = findCommand(["recovery", "retry"]);
+    if (!("def" in found)) throw new Error("no recovery retry row");
+    const body = (result: Record<string, unknown>) => ({ schema: "orca-command-success-v1", result: { kind: "recovery-observed", resolved: true, blockerCodes: [], evidenceIds: [], wakeIds: [], ...result } });
+    // mutation: drop recoveryFormat on the row -> no such line, red
+    expect(found.def.format(body({ waitingOn: "answer" }))).toContain("the stop is lifted and no call was re-run; now waiting on: answer");
+    expect(found.def.format(body({}))).not.toContain("now waiting on");
+  });
+});

@@ -761,7 +761,7 @@ export type CommandSuccessV1 = {
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "task-retried"; taskId: string; fromRunId: string }
-    | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[] }
+    | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: "answer" | "consensus" | "review" | "call" | "person" }
     | { kind: "requirement-opened"; groupId: string; requirementId: string; roundNo: 1; wakeId: string }
     | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null }
     | { kind: "requirement-consensus"; roundNo: number; draftNo: number; wakeId: string }

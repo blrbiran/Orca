@@ -46,6 +46,18 @@ export async function debugGroupOf(c: WriteContext, correctionId: string, reopen
   return ordinal === 1 ? base : `${base}-${ordinal}`;
 }
 
+/**
+ * Issue #98: a retry that lifted a requirement's stop but re-ran nothing answers `wakeIds: []` with `waitingOn`; the
+ * human output says so in one more line, so nobody reads the retry as a call that ran again.
+ */
+function recoveryFormat(def: CommandDef): CommandDef {
+  return { ...def, format: (body) => {
+    const waitingOn = (body as { result?: { waitingOn?: unknown } } | null)?.result?.waitingOn;
+    const base = def.format(body);
+    return typeof waitingOn === "string" ? `${base}\nthe stop is lifted and no call was re-run; now waiting on: ${waitingOn}` : base;
+  } };
+}
+
 /** The group a run belongs to: from the recovery read's blockers, else the first group whose view lists it. */
 export async function groupOfRunId(c: WriteContext, runId: string): Promise<string> {
   const blockers = ((await c.read("recovery")) as { blockers?: Array<{ groupId: string; runId: string | null }> }).blockers ?? [];
@@ -197,7 +209,7 @@ export const SETTINGS_ROWS: CommandDef[] = [
     } }),
 
   // --- recovery (the group it acts on)
-  verb({ domain: "recovery", action: "retry", summary: "resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure", verb: "recovery-retry",
+  recoveryFormat(verb({ domain: "recovery", action: "retry", summary: "resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure", verb: "recovery-retry",
     flags: [{ name: "run", type: "string", summary: "a blocked run" }, { name: "group", type: "string", summary: "a blocked group" },
       // Tester #103 (2026-10-28): the panel's "charge and retry" for a clarify, split or estimate call blocked on unknown usage.
       { name: "acknowledge", type: "string", summary: "charge-remaining-grant: settle a single call's unknown usage (a requirement, estimate or flow call) by charging its remaining grant, then retry (--run only; needs a person token)" }],
@@ -208,5 +220,5 @@ export const SETTINGS_ROWS: CommandDef[] = [
       if (target.scope !== "run") throw invalid("--acknowledge goes with --run <run>");
       if (acknowledge !== "charge-remaining-grant") throw invalid("--acknowledge wants charge-remaining-grant");
       return { ...target, acknowledge };
-    } }),
+    } })),
 ];
