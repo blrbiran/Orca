@@ -2133,6 +2133,7 @@ export const enErrors: Record<string, string> = {
   "group-review-budget-unavailable": "The group's review budget is not enough.",
   "group-execution-pending": "This group is already starting or running; a second start is not needed.",
   "group-state-invalid": "The group's current state does not allow this command. Only the buttons its view shows apply now.",
+  "proposal-confirmed": "The proposal is already confirmed, so an estimate could no longer change it.",
   "group-stopped": "The group is stopped. Resume it before sending this command.",
   "handoff-budget-unavailable": "There is not enough budget for the handoff.",
   "handoff-grant-insufficient": "The handoff's grant is not enough.",

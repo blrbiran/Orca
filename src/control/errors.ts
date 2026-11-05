@@ -298,6 +298,8 @@ export const durableCommandErrorStatuses = {
   "group-reserve-insufficient": 422,
   "group-review-budget-unavailable": 422,
   "group-state-invalid": 422,
+  // Issue #147 (session 3cfc2e73): an estimate asked for on a confirmed proposal, whose answer could never apply.
+  "proposal-confirmed": 422,
   // Flow engine spec §10.3 (W-76): a revision after a split draft was accepted, and one that changes nothing.
   "requirement-already-accepted": 422,
   // Flow engine spec §5.1 [IR-I7]: a flow group on a `dir` workspace delivers `keep`, fixed by code.

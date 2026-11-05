@@ -2043,6 +2043,7 @@ export const zhErrors: Record<string, string> = {
   "group-review-budget-unavailable": "组的评审预算不够。",
   "group-execution-pending": "这个组已在启动或运行中，不需要再次启动。",
   "group-state-invalid": "组当前的状态不允许这个操作。",
+  "proposal-confirmed": "提案已经确认，估算结果无法再用上。",
   "group-stopped": "组已停止。",
   "handoff-budget-unavailable": "交接预算不够。",
   "handoff-grant-insufficient": "交接额度不够。",

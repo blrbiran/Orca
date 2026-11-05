@@ -221,6 +221,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `plan-library-target-mismatch` | 422 |
 | `plan-version-conflict` | 409 |
 | `profile-changed` | 409 |
+| `proposal-confirmed` | 422 |
 | `proposal-version-conflict` | 409 |
 | `query-invalid` | 400 |
 | `reconcile-budget` | 409 |

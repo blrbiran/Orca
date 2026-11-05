@@ -263,6 +263,14 @@ function syncskillRefusal(error: unknown): unknown {
   const known = SYNCSKILL_REFUSALS.find(code => code === error.code);
   return known === undefined ? error : new ControlError(known);
 }
+/**
+ * Issue #147 (session 3cfc2e73): an estimate's answer is a suggestion applied to an editable proposal, and the claim
+ * withdraws any estimate whose proposal is confirmed (withdrawalReason). Booking one on a confirmed proposal left a dead
+ * row and an `estimate-created` answer, so createEstimate refuses before it reserves or inserts anything.
+ */
+function refuseConfirmedProposal(proposal: BudgetProposalRecord): void {
+  if (proposal.state === "confirmed") throw new ControlError("proposal-confirmed");
+}
 function prestart(group: Group): void {
   if (group.status === "running" || group.status === "review" || group.status === "done") throw new ControlError("grant-amendment-unsupported");
   if (group.status !== "draft" && group.status !== "ready") throw new ControlError("group-state-invalid");
@@ -531,7 +539,7 @@ export class WebControlService {
         const id = groupId(command), group = readWebGroup(this.store, id);
         const plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id);
         if (proposal.proposalVersion !== command.payload.proposalVersion) throw new ControlError("proposal-version-conflict");
-        prestart(group);
+        prestart(group); refuseConfirmedProposal(proposal);
         const profile = this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
         // Spec §6.4: a re-estimate resolves the estimator layers as they are now -- including the group's, which only
         // the panel sets (controller ruling R7) -- and freezes them for this estimate only.
@@ -552,7 +560,7 @@ export class WebControlService {
         apply: context => {
           const id = groupId(command), group = readWebGroup(this.store, id), proposal = readBudgetProposal(this.store, id);
           if (proposal.proposalVersion !== command.payload.proposalVersion) throw new ControlError("proposal-version-conflict");
-          prestart(group);
+          prestart(group); refuseConfirmedProposal(proposal);
           const currentPlan = readArchivedPlan(this.store, id).plan;
           const currentPrefs = readAgentPreferences(this.store, command.actorId).preferences;
           if (estimatorLayerAuthority(currentPrefs, readGroupAgentOverrides(group), currentPlan.agent) !== layerAuthority) throw new ControlError("agent-selection-changed");
