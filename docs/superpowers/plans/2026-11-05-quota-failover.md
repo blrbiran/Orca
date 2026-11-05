@@ -101,3 +101,55 @@ Who: Claude Code (Opus 5.5). Closes three items of "Not built (registered)" abov
   "Quota rests", read-only.
 - **D7 web display** (not part of the failover plan, same batch): the run reason renders the run diagnosis's
   `formatFailureWork` — each attempt ref, its commit, files and diff stat, refused issues, and "see it: git diff <base> <ref>".
+
+## Addendum 2026-11-06 — batch FA (session 3cfc2e73, branch `feat/failover-dispatch` on `e783beee`)
+
+Who: Claude Code (Opus 5.5), implementation agent of Orca session 3cfc2e73. The sections above are kept as written; this
+one adds what was built after them and corrects one line of "Not built". Human rulings (session 3cfc2e73): the failover
+deviations above 「同意」; retry-task agent permission 「想要增加被授权的 agent 的能力，可以不止是人才允许。」 then, on the
+proposal (authorized agents may switch; an agent's switch locks like a person's and names who switched; a person unlocks
+with `--agent auto`), 「同意按你的建议走」.
+
+Built:
+
+1. **`retry-task --agent auto`** (`4f518165`). `agent: "auto"` in the payload (no new field; an installation named `auto`
+   can no longer be named there) hands the choice back to orca-auto: the task's installation resting and not set to wait
+   ⇒ the first `failoverTargets` entry ccloop resolves now; else a locked task (provenance `task`, `group`, `*-plan`) stays
+   on its installation with provenance `failover`; a task already switchable and not resting is retried as it is. Recorded
+   as a switch with reason `auto`. Found on the way: the switch record's `by` was `command.actorId`, which the control
+   routes set to the panel operator for every principal, so an agent's switch and a person's read the same; `by` is now
+   the routed principal (`agent:<client>`, `user:<id>`), else the actor. A run Orca dispatched is refused `retry-task`
+   with `agent` (`control-dispatched-run-refused`); before this nothing refused it (the review minor above said any
+   principal could). The agent's switch keeps provenance `task`, so it locks as a person's does (D2).
+2. **Dispatch-time routing** (`774879ec`, criteria `a852c806`), spec §3 Route for the task not started yet: before every
+   start delivery (`createWebWakeHandlers`), `WebControlService.routeBeforeClaim` looks at the task the delivery would
+   claim; no current run and an empty lineage, its installation resting and not set to wait, provenance switchable, group
+   as failoverPass's (`isFailoverGroup`) ⇒ switched as orca-auto to the first resolvable failover target in one
+   transaction that re-reads the task, re-issues the confirmed snapshot and records the switch (reason `rest`,
+   `afterRunId` null). No ledger command and no activity row (a new activity kind is a `web/` change, left to batch FB).
+   A task that has run stays failoverPass's.
+3. **Correction to "Not built"**: "A `recovery-blocked` refusal is not booked by the command ledger, so such a failover is
+   re-attempted every pass" is wrong for the refusal the retry itself gives. Measured on `a852c806` in a clone before any
+   change: a failover whose work item disagrees with its run is answered `recovery-blocked:retry-identity`, booked 423
+   under `orca-auto-failover-<task>-<run>` (`recovery-blocked` is in `errors.ts` `durableCommandErrorStatuses`), and the
+   next pass leaves the run. Nothing built; a criterion pins it (`5f2c6179`). Only an error thrown before the ledger (e.g.
+   `panel-draining` from the admission gate) is not booked, and that one is meant to be tried again.
+4. **Claude's reset time and a cap** (`388d212d`): `Claude AI usage limit reached|<unix seconds>` is read (evidence: magpie
+   `internal/gateway/routing.go` `resetsWords`; ccloop's fixture `tests/runtime/failureCause.test.ts`); **no real claude
+   sample on this machine**. Every named reset is trusted at most `REST_VENDOR_CAP_MS` = 24 h past the failure (review
+   minor "a vendor-named reset has no cap").
+
+Criteria (`tests/control/quotaFailover.test.ts`, 22 cases, 10 new) and mutations, each in a `git clone --local` copy,
+`git diff` and `git diff --cached` 0 bytes after every restore: A1 auto may not keep the installation · A2 `by` is the
+actorId · A3 auto never takes a target · A4 unlock keeps the provenance · A5 auto always unlocks · A6 no dispatched-run
+refusal · A7 auto payload refused as unresolved · A8 reason `auto` dropped · R1 the wake handler skips the route · R2 a
+plan pin routed · R3 rests ignored · R4 quota wait ignored · R5 a task that has run routed (survived first: the
+transaction's re-read covered it; criterion "ccloop is asked nothing" added) · R5b the re-read's not-started check dropped
+· R6 any group · R7 the switch not applied · R8 reason `quota` · R9 the re-read always bails · B1 `recovery-blocked` out of
+the durable outcomes (first tried on the `errors.ts` code list at the bottom, which is not the one booking reads: survived)
+· B2 an answered run not skipped · C1 claude's shape not parsed · C2 seconds read as ms · C3 eleven digits accepted · C4 no
+vendor cap — all red.
+
+Still not built: routing a retried task (one with a run) on a resting installation before its claim (failoverPass handles
+it after its own quota failure); single calls and flow calls (D5); the panel text, the agents-page rest view and the
+scheduler wake at the earliest `until` (batch FB); paid acceptance.

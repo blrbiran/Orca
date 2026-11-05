@@ -64,3 +64,16 @@ store's clock (`src/panel/controlAssembly.ts` pump). A rest that ends is therefo
 other event; a timer at `until` would add a second path to the same pass and nothing a person could observe. Pinned by
 `tests/control/quotaFailover.test.ts` "waits while the other installation rests, and switches back once its rest ends".
 The panel text and the agents-page rest view (§3 "Show") are built as written (plan As built, addendum 2026-11-06).
+
+## Correction (session 3cfc2e73, batch FA, 2026-11-06)
+
+Recorded by Claude Code (Opus 5.5), implementation agent of session 3cfc2e73; the sections above are kept verbatim. Where
+the code departs from §3 and D3 (details in `docs/superpowers/plans/2026-11-05-quota-failover.md`, addendum 2026-11-06):
+
+- §3 Route is built for a task not started yet (no run), in the groups failoverPass serves (orchestrated, not a flow child,
+  not archived, not stopped), before each start delivery. The re-selection is recorded on the work item
+  (`agentSwitches`, reason `rest`, by `orca-auto`) with the confirmed snapshot re-issued, not as an activity row or a
+  decision-ledger `agent-failover` entry.
+- D3: a reset time the error text names is trusted at most 24 hours past the failure.
+- Session 3cfc2e73 ruling: an authorized agent (not a run Orca dispatched) may switch a task's installation; its switch
+  locks the task like a person's (D2) and names who made it; `orca task retry <g> <t> --agent auto` hands the choice back.
