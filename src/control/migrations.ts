@@ -1,8 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
+import { overGrantBlockRuns } from "./overGrantBlock.js";
 
-export const schemaVersion = "21";
+export const schemaVersion = "22";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -341,7 +342,37 @@ function repairOf(store: DatabaseSync, groupId: string, group: Body, now: () => 
   return writes;
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, then the version marker. */
+/**
+ * 21 → 22 (session 3cfc2e73 D2, spec 2026-11-05 §3.2): a one-time data repair, no DDL. A Web group with no token limit is
+ * no longer blocked by a run over its grant; one already `blocked` that way -- every run that could have blocked it is an
+ * over-grant run (overGrantBlock.ts; a `blocked` group with none is left as it is) -- gets its status by the unblock rule:
+ * an active run: `running`; else `review`. D1's done rule (groupEdges.ts prerequisiteDone) needs a ControlStore, which a
+ * migration does not have; the done pass moves an all-done `review` group to `done` at its next round (spec §3.1). A
+ * `statusRepairs` entry names it, as the 18 → 19 repair does; one savepoint per group; never throws; revision unchanged.
+ */
+export function repairOverGrantUnlimitedGroups(store: DatabaseSync, now: () => number): void {
+  for (const row of store.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
+    const groupId = String(row.id);
+    store.exec("SAVEPOINT repair_og");
+    try {
+      const group = JSON.parse(String(row.body)) as Body;
+      if (typeof group === "object" && group !== null && group.status === "blocked" && Object.hasOwn(group, "planHash")
+        && (group.limit as { tokens?: unknown } | undefined)?.tokens === null) {
+        const runIds = overGrantBlockRuns(store, groupId);
+        if (runIds.length > 0) {
+          const to = store.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1 LIMIT 1").get(groupId) !== undefined ? "running" : "review";
+          group.status = to;
+          const statusRepairs = Array.isArray(group.statusRepairs) ? group.statusRepairs : [];
+          group.statusRepairs = [...statusRepairs, { from: "blocked", to, cause: "over-grant-unlimited", runIds, by: "migration-21-to-22", at: now() }];
+          store.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+        }
+      }
+      store.exec("RELEASE repair_og");
+    } catch { store.exec("ROLLBACK TO repair_og"); store.exec("RELEASE repair_og"); /* left as it is: not repaired, not thrown */ }
+  }
+}
+
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, then the version marker. */
 function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
@@ -350,6 +381,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   repairEstimateBreachedGroups(store, now);
   store.exec(schema19To20);
   migrate20To21(store);
+  repairOverGrantUnlimitedGroups(store, now);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -367,16 +399,23 @@ function migrate7To8(store: DatabaseSync): void {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
+  if (fromVersion === "21") {
+    repairOverGrantUnlimitedGroups(store, now);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
   // adds installation-update revision/outbox tables; it leaves old policy and accounting rows intact.
   if (fromVersion === "20") {
     migrate20To21(store);
+    repairOverGrantUnlimitedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "19") {
     store.exec(schema19To20);
     migrate20To21(store);
+    repairOverGrantUnlimitedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -384,6 +423,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairEstimateBreachedGroups(store, now);
     store.exec(schema19To20);
     migrate20To21(store);
+    repairOverGrantUnlimitedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -392,6 +432,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairEstimateBreachedGroups(store, now);
     store.exec(schema19To20);
     migrate20To21(store);
+    repairOverGrantUnlimitedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -401,6 +442,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairEstimateBreachedGroups(store, now);
     store.exec(schema19To20);
     migrate20To21(store);
+    repairOverGrantUnlimitedGroups(store, now);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

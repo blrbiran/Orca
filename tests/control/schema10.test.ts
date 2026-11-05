@@ -10,8 +10,8 @@ import { schemaVersion } from "../../src/control/migrations.js";
 describe("D9 one-way schema gate", () => {
   it("opens fresh stores at current version 16", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
-      expect(schemaVersion).toBe("21");
-      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("21");
+      expect(schemaVersion).toBe("22");
+      expect(h.store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22");
     } finally { await h.dispose(); }
   });
 });
@@ -26,7 +26,7 @@ describe("D9 migration preservation", () => {
       const raw = new DatabaseSync(join(dir, "control.sqlite")); raw.prepare("UPDATE meta SET value='9' WHERE key='schemaVersion'").run();
       const before = ["groups", "runs", "usage_ledger", "activity"].map(t => raw.prepare(`SELECT * FROM ${t}`).all()); raw.close();
       store = await openControlStore({ stateDir: dir });
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("21");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22");
       expect(["groups", "runs", "usage_ledger", "activity"].map(t => store.db.prepare(`SELECT * FROM ${t}`).all())).toEqual(before);
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
   });
@@ -39,7 +39,7 @@ describe("D9 migration preservation", () => {
       const raw = new DatabaseSync(join(dir, "control.sqlite")); raw.exec("DROP TABLE pending_decisions"); raw.prepare("UPDATE meta SET value='13' WHERE key='schemaVersion'").run();
       const before = ["groups", "runs", "usage_ledger", "activity"].map(t => raw.prepare(`SELECT * FROM ${t}`).all()); raw.close();
       store = await openControlStore({ stateDir: dir });
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("21");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22");
       expect(["groups", "runs", "usage_ledger", "activity"].map(t => store.db.prepare(`SELECT * FROM ${t}`).all())).toEqual(before);
       expect(store.db.prepare("SELECT count(*) AS n FROM pending_decisions").get()!.n).toBe(0);
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
@@ -56,7 +56,7 @@ describe("D9 migration preservation", () => {
       raw.prepare("UPDATE meta SET value='14' WHERE key='schemaVersion'").run();
       const before = ["groups", "runs", "usage_ledger", "activity", "pending_decisions"].map(t => raw.prepare(`SELECT * FROM ${t}`).all()); raw.close();
       store = await openControlStore({ stateDir: dir });
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("21");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22");
       expect(["groups", "runs", "usage_ledger", "activity", "pending_decisions"].map(t => store.db.prepare(`SELECT * FROM ${t}`).all())).toEqual(before);
       expect(added.map((t) => store.db.prepare(`SELECT count(*) AS n FROM ${t}`).get()!.n)).toEqual([0, 0, 0, 0]);
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }

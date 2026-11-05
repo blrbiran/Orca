@@ -31,8 +31,8 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
   it("a fresh store is version 10 with the activity table: STRICT, group-referencing, both indexes", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
-      expect(schemaVersion).toBe("21");
-      expect(version(store.db)).toBe("21");
+      expect(schemaVersion).toBe("22");
+      expect(version(store.db)).toBe("22");
       expect(String(store.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity'").get()!.sql)).toMatch(/STRICT\s*$/);
       expect(store.db.prepare("PRAGMA table_info(activity)").all().map((row) => [row.name, row.type, row.notnull])).toEqual([
         ["seq", "INTEGER", 0], ["group_id", "TEXT", 1], ["task_id", "TEXT", 0], ["run_id", "TEXT", 0], ["at", "INTEGER", 1], ["kind", "TEXT", 1], ["body", "TEXT", 1],
@@ -59,7 +59,7 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
     raw.close();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(version(store.db)).toBe("21");
+      expect(version(store.db)).toBe("22");
       expect(dump(store.db)).toEqual(before);
       expect(hasActivity(store.db)).toBe(true);
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM activity").get()).toMatchObject({ n: 0 });
