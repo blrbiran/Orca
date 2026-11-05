@@ -245,7 +245,7 @@ function preflightEstimate(
     observation: deps.estimatorObservation(profile), exactTokenCount: deps.exactTokenCount });
 }
 
-function success(context: WebCommandContext, groupId: string, estimateId: string, state: EstimateState, reasonCode: string | null): { status: number; body: CommandSuccessV1 } {
+function success(context: WebCommandContext, groupId: string, estimateId: string | null, state: EstimateState | "none", reasonCode: string | null): { status: number; body: CommandSuccessV1 } {
   return {
     status: 201,
     body: {
@@ -467,7 +467,12 @@ function librarySource(deps: ImportDeps, repoId: string, ref: { entryId: string;
   return { planId: `lib-${ref.entryId}-${ref.sha256.slice(0, 12)}`, source: canonicalPlanDoc(JSON.parse(version.doc), deps.resolveRepository(repoId)).source };
 }
 
-export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin } = {}): ImportResult {
+/**
+ * `opts.estimate` (in-process only, never a payload field, like `origin`): "preflight" queues the import-time estimate even
+ * for a group imported with no token limit -- for a caller that turns the group into a limited one before anything reads
+ * it (the historical finite-budget test fixture), which a limited import would have given one. No route passes it.
+ */
+export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight" } = {}): ImportResult {
   const outcome = applyWebCommand<CommandSuccessV1>(deps.store, {
     rawCommand: command,
     expand: () => {
@@ -488,12 +493,15 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts
       const { planId, source } = payload.libraryEntry !== undefined ? librarySource(deps, payload.repoId, payload.libraryEntry)
         : { planId: payload.planId!, source: readSchedulerControlPlanSource(deps.trustedConfig.resolveTarget({ repoId: payload.repoId, planId: payload.planId })) };
       const plan = normalizeControlPlan({ ...source, repoId: payload.repoId, planId });
+      // Session 3cfc2e73 D3 (spec 2026-11-05 §3.3): a group with no token limit gets no automatic estimate -- the
+      // deferred path; a person who wants one runs `orca group estimate`. A limited group keeps it.
+      const unlimited = (payload.tokenLimit ?? null) === null && opts.estimate !== "preflight";
       const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
         estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode,
         ...(payload.tokenLimit === undefined ? {} : { tokenLimit: payload.tokenLimit }), ...(payload.integration === undefined ? {} : { integration: payload.integration }),
-        ...(opts.origin === undefined ? {} : { origin: opts.origin }) }, null);
+        ...(opts.origin === undefined ? {} : { origin: opts.origin }) }, null, { estimate: unlimited ? "deferred" : "preflight" });
       deps.beforeCommit?.();
-      return success(context, payload.groupId, estimateId, preflight.state, preflight.reasonCode);
+      return success(context, payload.groupId, estimateId, preflight?.state ?? "none", preflight?.reasonCode ?? null);
     },
   });
   return outcome.body;

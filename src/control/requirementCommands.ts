@@ -1,4 +1,5 @@
 import type { BudgetAmount } from "./tokenPolicy.js";
+import { hasTokenPolicy } from "./fundedAllowance.js";
 import { requirementHost } from "./clarifyHost.js";
 import { createHash } from "node:crypto";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
@@ -409,11 +410,14 @@ export async function applyRequirementDraftAccept(
           estimatorObservation: (selected) => { if (selected !== profile) throw new ControlError("profile-changed"); return slot.observation; } };
         const writes = multi === null ? undefined : Object.fromEntries((draft.output as MultiSplitOutput).tasks.map((task) => [task.taskId,
           orderWrites(task.writes, keys).map((write) => ({ dir: write.dir, targetPaths: [...write.targetPaths], checks: [...write.checks] }))]));
+        // Session 3cfc2e73 D3 (spec 2026-11-05 §3.3): the accepted group keeps its requirement's token limit (a group with
+        // no token policy gets a fresh finite one, planImport.ts legacyCarry); with none, no automatic estimate is queued.
+        const unlimited = hasTokenPolicy(deps.store, id) && (group.limit as { tokens: number | null }).tokens === null;
         const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId, commandId: command.commandId, at: now.getTime(),
           estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode,
           ...(multi === null ? {} : { integration: null }) },
           { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])),
-            ...(writes === undefined ? {} : { writes }) });
+            ...(writes === undefined ? {} : { writes }) }, { estimate: unlimited ? "deferred" : "preflight" });
         // Tester round 2 spec §6.2.1 (ruling H3): the agent the person picked on New requirement (the estimator override)
         // becomes the group's worker default -- an ordinary panel layer, still editable -- unless a worker override exists
         // or the accepted plan names a group agent (the panel layer would mask it). Seeded after the import, whose
@@ -431,7 +435,7 @@ export async function applyRequirementDraftAccept(
         deps.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'requirement-export',?,0) ON CONFLICT(id) DO NOTHING")
           .run(exportWakeId, id, canonicalBytes({ groupId: id }).toString("utf8"));
         deps.beforeCommit?.();
-        return commandSuccess(context, { kind: "requirement-draft-accepted", draftNo: draft.draftNo, estimateId, estimateState: preflight.state, documentSha256, exportWakeId });
+        return commandSuccess(context, { kind: "requirement-draft-accepted", draftNo: draft.draftNo, estimateId, estimateState: preflight?.state ?? "none", documentSha256, exportWakeId });
       },
     }).body;
   } finally { release?.(); }

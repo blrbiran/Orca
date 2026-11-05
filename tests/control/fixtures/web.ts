@@ -119,7 +119,11 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   const deps = { store: h.store, port, admissionGate: createAdmissionGate(), profileRouter: router, trustedConfig,
     defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: frozen.profileHash, estimateMode: "soft" as const }), estimatorSlot: prepared.outcome };
   // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
-  const runImport = () => importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand);
+  // Session 3cfc2e73 D3: an unlimited import queues no estimate. The historical finite fixture is made limited right after
+  // the import (seedHistoricalFiniteBudget), so it asks for the import-time estimate a limited group gets; an optional-v1
+  // (unlimited) fixture gets none, and its `estimateId` is null.
+  const runImport = () => importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand,
+    options.tokenPolicy === "optional-v1" ? {} : { estimate: "preflight" });
   const imported = options.importContext === undefined ? runImport() : withCommandContext(importCommand.commandId, options.importContext, runImport);
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
   if(options.tokenPolicy!=="optional-v1")seedHistoricalFiniteBudget(h.store,"g");
