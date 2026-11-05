@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { installationRests, parseResetAt, REST_CAP_MS, REST_DEFAULT_MS } from "../../src/control/quotaRest.js";
 import { failoverCommandId } from "../../src/control/systemDebug.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
+import { permissionRefusal } from "../../src/panel/permissions.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import type { PartialSelection } from "../../src/control/agentSelection.js";
@@ -274,5 +276,71 @@ describe("the pass survives what it cannot do (independent review)", { timeout: 
       expect(written.filter((line) => line.includes("failover"))).toEqual([]);
       expect(w.work().agent.agent).toBe("codex");
     } finally { await w.t.h.dispose(); }
+  });
+});
+
+describe("an agent may switch a task's installation; --agent auto hands it back (session 3cfc2e73 ruling)", { timeout: 120_000 }, () => {
+  // Human: 「想要增加被授权的 agent 的能力，可以不止是人才允许。」 then 「同意按你的建议走」: an authorized agent may switch, its
+  // switch locks the task against failover like a person's and names who switched; a person unlocks it with --agent auto.
+  const retry = (w: Awaited<ReturnType<typeof world>>, commandId: string, payload: object, principal: { client: string; principal: string }) =>
+    withCommandContext(commandId, principal, () => w.service.retryTaskOnAgent({ schema: "orca-raw-command-v1", commandId, actorId: "operator",
+      expectedRevision: Number(w.t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
+      verb: "retry-task", target: { kind: "group", groupId: "g" }, payload: { taskId: "a", ...payload } } as never));
+  const agent = { client: "cli:claude", principal: "agent:cli:claude" }, person = { client: "web", principal: "user:u1" };
+
+  it("an agent's switch is named and locks; auto unlocks in place while every installation rests, and failover moves it later", async () => {
+    const w = await world(); try {
+      expect("error" in (await retry(w, "agent-switch", { runId: w.runId, agent: "claude" }, agent) as object)).toBe(false);
+      expect(w.work().agentProvenance.agent).toBe("task");
+      expect(w.work().agentSwitches[0]).toMatchObject({ by: "agent:cli:claude", reason: "person" });
+      // claude runs out too: the agent's pin holds (D2), orca-auto leaves it.
+      const second = await w.t.claim();
+      await w.t.until(w.t.driver(), () => w.t.body(second).state === "blocked");
+      await w.service.systemDebugPass();
+      expect(w.retries().map(([id]) => id)).toEqual(["agent-switch"]);
+      // Both installations rest: auto keeps claude, only its provenance changes, and the person is named.
+      expect("error" in (await retry(w, "person-auto", { runId: second, agent: "auto" }, person) as object)).toBe(false);
+      expect(w.work().agent.agent).toBe("claude");
+      expect(w.work().agentProvenance.agent).toBe("failover");
+      expect(w.work().agentSwitches[1]).toMatchObject({ afterRunId: second, by: "user:u1", reason: "auto", previous: expect.objectContaining({ agentProvenance: expect.objectContaining({ agent: "task" }) }) });
+      expect(() => readConfirmedTaskExecution(w.t.h.store, "g", "a")).not.toThrow();
+      // Unlocked: claude fails again (a streak of two, 30 minutes), codex's 15-minute rest ends first, and failover moves the task.
+      const third = await w.t.claim();
+      await w.t.until(w.t.driver(), () => w.t.body(third).state === "blocked");
+      w.clock.value += REST_DEFAULT_MS + 1;
+      await w.service.systemDebugPass();
+      expect(w.work().agent.agent).toBe("codex");
+      expect(w.retries().map(([id]) => id)).toEqual(["agent-switch", "person-auto", failoverCommandId("a", third)]);
+      expect(readControlGroup(w.t.h.store, "epoch-test", "g").runs.map((run) => run.runId)).toEqual(expect.arrayContaining([w.runId, second, third]));
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("auto on a resting installation takes the next one in the failover order, as failover would", async () => {
+    const w = await world(); try {
+      expect("error" in (await retry(w, "agent-auto", { runId: w.runId, agent: "auto" }, agent) as object)).toBe(false);
+      expect(w.work().agent.agent).toBe("claude");
+      expect(w.work().agentProvenance.agent).toBe("failover");
+      expect(w.work().agentSwitches).toEqual([expect.objectContaining({ afterRunId: w.runId, by: "agent:cli:claude", reason: "auto" })]);
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("auto on a task already switchable whose installation is not resting retries it as it is", async () => {
+    // An auth failure leaves codex not resting; the plan named no agent, so the task is switchable already.
+    const w = await world({ cause: "auth" }); try {
+      expect("error" in (await retry(w, "auto-plain", { runId: w.runId, agent: "auto" }, person) as object)).toBe(false);
+      expect(w.retries()).toEqual([["auto-plain", "operator"]]);
+      expect(w.work().agent.agent).toBe("codex");
+      expect(w.work().agentSwitches).toBeUndefined();
+      expect(w.work().status).toBe("ready");
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("a run Orca dispatched may not choose or unlock an installation; the socket agent and a person may", () => {
+    const dispatched = { kind: "agent" as const, client: "cli", dispatchedRun: "run-1" };
+    expect(permissionRefusal(dispatched, "retry-task", { taskId: "a", agent: "claude" })?.code).toBe("control-dispatched-run-refused");
+    expect(permissionRefusal(dispatched, "retry-task", { taskId: "a", agent: "auto" })?.code).toBe("control-dispatched-run-refused");
+    expect(permissionRefusal(dispatched, "retry-task", { taskId: "a" })).toBeNull();
+    expect(permissionRefusal({ kind: "agent", client: "cli" }, "retry-task", { taskId: "a", agent: "auto" })).toBeNull();
+    expect(permissionRefusal({ kind: "user", userId: "u1", name: "u", roles: ["member"] }, "retry-task", { taskId: "a", agent: "claude" })).toBeNull();
   });
 });

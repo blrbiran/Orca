@@ -252,7 +252,7 @@ export const WORK_ROWS: CommandDef[] = [
 
   // --- task
   verb({ domain: "task", action: "retry", summary: "start again a task whose current run failed (the run read now is the one retried), optionally on another installation", verb: "retry-task", positionals: [GROUP, TASK],
-    flags: [{ name: "agent", type: "string", summary: "retry on this agent installation instead (quota failover spec §8; not for a task with skills)" }],
+    flags: [{ name: "agent", type: "string", summary: "retry on this agent installation instead (quota failover spec §8; not for a task with skills); `auto` hands the choice back to orca-auto (unlocks a task a switch pinned); refused to a run Orca dispatched" }],
     route: (c) => `groups/${group(c)}/retry-task`, payload: async (c) => ({ taskId: task(c), runId: await currentRun(c), ...(typeof c.args.flags.agent === "string" ? { agent: c.args.flags.agent } : {}) }) }),
   verb({ domain: "task", action: "continue", summary: "continue a task's current run from its newest complete checkpoint", verb: "continue-task", positionals: [GROUP, TASK],
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/continue`,

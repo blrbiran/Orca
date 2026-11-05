@@ -21,7 +21,7 @@ start again a task whose current run failed (the run read now is the one retried
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
-- `--agent <agent>`: retry on this agent installation instead (quota failover spec §8; not for a task with skills)
+- `--agent <agent>`: retry on this agent installation instead (quota failover spec §8; not for a task with skills); `auto` hands the choice back to orca-auto (unlocks a task a switch pinned); refused to a run Orca dispatched
 
 ## `orca task continue <group> <task>`
 

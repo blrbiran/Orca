@@ -50,6 +50,14 @@ export function parseResetAt(detail: string | null, at: number): number | null {
   return null;
 }
 
+/**
+ * Quota failover spec §8, D6: the installations a task on `current` may move to now -- the failover order's entries that
+ * are another installation, are listed by the agents table and are not resting (failoverPass, retry-task --agent auto).
+ */
+export function failoverTargets(order: readonly string[], listed: readonly string[], rests: ReadonlyMap<string, InstallationRest>, current: string): string[] {
+  return order.filter((id) => id !== current && listed.includes(id) && !rests.has(id));
+}
+
 interface RunRow { runId: string; installation: string; at: number; quota: boolean; succeeded: boolean; detail: string | null }
 
 /** Every installation resting at `now`, from the task runs in store order. */

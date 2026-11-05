@@ -11,7 +11,8 @@ import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { FrozenWorkAgent } from "./agentFreeze.js";
-import { applyAgentSwitch, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
+import { applyAgentSwitch, AUTO_AGENT, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
+import { commandPrincipalFor } from "./commandClient.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
@@ -45,12 +46,14 @@ export type RetryTaskResult = CommandSuccessV1 | CommandErrorBodyV1;
 /**
  * `switchTo` (quota failover spec 2026-11-03 §8): the frozen selection a retry on another installation gives the task,
  * resolved through ccloop before this transaction (agentSwitch.ts resolveAgentSwitch); `source` says who chose it.
+ * `auto` (session 3cfc2e73): the payload said `agent: "auto"` and the service chose this selection (webService.ts
+ * retryTaskOnAgent); with `agent: "auto"` and no `switchTo` the task keeps its selection.
  */
 /**
  * `prerequisiteDone` (session 3cfc2e73 D2): D1's done rule (groupEdges.ts), passed in by webService.ts so this module on
  * the control import cycle does not import groupEdges.ts; absent, a lifted block never lands on `done`.
  */
-export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource }; prerequisiteDone?: (store: ControlStore, groupId: string) => boolean }
+export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource; auto?: true }; prerequisiteDone?: (store: ControlStore, groupId: string) => boolean }
 
 interface RetriedWork { workItemId: string; taskId: string | null; targetVersion: number; lineageRunIds?: string[]; status: string; currentRunId?: string | null; grant: { work: Amount; handoff: Amount }; retryGrantSourceRunId?: string; pendingRunId?: string | null; continuation?: { continuationIntentId: string; pendingRunId: string } | null }
 
@@ -104,8 +107,9 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         }
         const allocations = readBudgetProposal(store, groupId).allocations.filter(a => a.ownerKind === "task" && a.ownerId === taskId);
         // Quota failover spec §8: the payload's installation must be the one resolved before this transaction.
-        if ((command.payload.agent === undefined) !== (deps.switchTo === undefined)
-          || (deps.switchTo !== undefined && deps.switchTo.frozen.agent.agent !== command.payload.agent)) throw new ControlError("recovery-blocked", "agent-switch-unresolved");
+        // `auto` (session 3cfc2e73): the service chose, or kept, the selection (webService.ts retryTaskOnAuto).
+        if (command.payload.agent !== AUTO_AGENT && ((command.payload.agent === undefined) !== (deps.switchTo === undefined)
+          || (deps.switchTo !== undefined && deps.switchTo.frozen.agent.agent !== command.payload.agent))) throw new ControlError("recovery-blocked", "agent-switch-unresolved");
         if(run.mode==="verify-saved-result"&&run.state==="settled-restartable"){
           if(deps.switchTo!==undefined)throw new ControlError("task-not-retryable","agent-switch-saved-result");
           if(!validSavedNoDispatch(store,run)||groupUsageUnknown(store,groupId))throw new ControlError("task-not-retryable","saved-result-no-dispatch-proof");
@@ -155,8 +159,10 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         }
         // Quota failover spec §8: the switch, after every eligibility check above and before A2 re-reads the task, so the
         // re-issued snapshot and the work item's new selection are checked together; a refusal below rolls it back.
+        // Session 3cfc2e73 ruling: the switch names who made it -- the routed principal (an agent or a person), else the actor.
         const switched = deps.switchTo === undefined ? null
-          : applyAgentSwitch(store, groupId, taskId, runId, deps.switchTo.frozen, command.actorId, deps.switchTo.source === "failover" ? "quota" : "person");
+          : applyAgentSwitch(store, groupId, taskId, runId, deps.switchTo.frozen, commandPrincipalFor(command.commandId) ?? command.actorId,
+            deps.switchTo.auto === true ? "auto" : deps.switchTo.source === "failover" ? "quota" : "person");
         if (switched !== null) Object.assign(work, readWork(store, groupId, taskId));
         validateRetryGrantSource(store, groupId, work);
         readConfirmedTaskExecution(store, groupId, taskId);

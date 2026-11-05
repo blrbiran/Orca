@@ -26,11 +26,12 @@ import type { MultiDirProjectOf } from "./multiGroup.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults, type ImportOrigin } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
-import { resolveAgentSwitch } from "./agentSwitch.js";
-import { installationRests } from "./quotaRest.js";
+import { AUTO_AGENT, resolveAgentSwitch, unlockedAgent } from "./agentSwitch.js";
+import { frozenWorkAgent } from "./agentFreeze.js";
+import { failoverTargets, installationRests } from "./quotaRest.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
-import { allWork, effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
+import { allWork, effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
@@ -58,7 +59,7 @@ import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -811,7 +812,7 @@ export class WebControlService {
       // anything, so the next one is tried and a transient failure is not final; the group revision is read after the
       // resolution, so a command in between does not book a revision conflict; one candidate's error never stops the pass.
       try {
-        for (const to of order.filter((id) => id !== candidate.installation && listed.includes(id) && !rests.has(id))) {
+        for (const to of failoverTargets(order, listed, rests, candidate.installation)) {
           let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
           try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, candidate.groupId, to, "failover"); }
           catch { continue; }
@@ -1798,6 +1799,7 @@ export class WebControlService {
     const installation = command.payload.agent;
     if (installation === undefined) return this.retryTask(command);
     const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+    if (installation === AUTO_AGENT) return this.retryTaskOnAuto(command);
     const source = command.actorId === ORCHESTRATION_ACTOR ? "failover" as const : "task" as const;
     let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
     try {
@@ -1806,6 +1808,31 @@ export class WebControlService {
       return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
     return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, switchTo: { frozen, source } }, command) as WebCommandResult;
+  }
+  /**
+   * Session 3cfc2e73 ruling (「同意按你的建议走」): `retry-task --agent auto` hands the task's installation back to orca-auto
+   * -- the unlock of a task a person's or an agent's switch locked against failover. Its installation resting (and not
+   * set to wait), the first failover target ccloop resolves now is taken, as failoverPass would; otherwise the task stays
+   * on its installation with its agent provenance `failover` (switchable). Either is a recorded switch (reason `auto`).
+   * A task already switchable and not resting is retried as it is.
+   */
+  private async retryTaskOnAuto(command: RetryTaskCommand): Promise<WebCommandResult> {
+    const book = (error: unknown) => applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+    let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>> | null = null;
+    try {
+      const current = frozenWorkAgent(readWork(this.store, groupId(command), command.payload.taskId));
+      const settings = readOrchestrationSettings(this.store);
+      const rests = installationRests(this.store, this.store.now());
+      if (rests.has(current.agent.agent) && !(settings.quotaWait ?? []).includes(current.agent.agent)) {
+        const listed = await this.deps.port.listAgents().then((answer) => answer.installations.map((entry) => entry.id), () => [] as string[]);
+        for (const to of failoverTargets(settings.failoverOrder ?? listed, listed, rests, current.agent.agent)) {
+          try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, groupId(command), to, "failover"); break; }
+          catch { continue; }
+        }
+      }
+      if (frozen === null && !SWITCHABLE_AGENT_SOURCES.has(current.agentProvenance.agent)) frozen = unlockedAgent(current);
+    } catch (error) { return book(error); }
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, ...(frozen === null ? {} : { switchTo: { frozen, source: "failover" as const, auto: true as const } }) }, command) as WebCommandResult;
   }
   /**
    * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only

@@ -20,8 +20,19 @@ import type { ControlStore } from "./store.js";
 
 /** Who chose the new installation: a person's retry on another agent, or orca-auto's quota failover. */
 export type SwitchSource = "task" | "failover";
-/** One switch: the run that was current when it happened (for reading), and the selection it replaced. */
-export interface AgentSwitchRecord { afterRunId: string; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" }
+/**
+ * One switch: the run that was current when it happened (for reading), the selection it replaced, and who made it (the
+ * routed principal, e.g. `agent:cli` or `user:<id>`, else the command's actor). `auto`: a `retry-task --agent auto`
+ * handing the choice back to orca-auto (session 3cfc2e73 ruling: a person unlocks a task with it).
+ */
+export interface AgentSwitchRecord { afterRunId: string; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" | "auto" }
+
+/** `retry-task`'s `agent: "auto"`: not an installation id but "let orca-auto choose" (an installation named `auto` cannot be named). */
+export const AUTO_AGENT = "auto";
+/** The selection a task keeps on its installation once handed back to orca-auto: only the agent's provenance changes, to `failover`. */
+export function unlockedAgent(previous: FrozenWorkAgent): FrozenWorkAgent {
+  return { ...previous, agentProvenance: { ...previous.agentProvenance, agent: "failover" } };
+}
 
 /** The work item's switch history; anything malformed is treated as no history (the comparisons then stay strict). */
 export function agentSwitchesOf(work: unknown): AgentSwitchRecord[] {
@@ -82,7 +93,8 @@ export async function resolveAgentSwitch(
 export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
   const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown>;
   const previous = frozenWorkAgent(work);
-  if (previous.agent.agent === next.agent.agent) throw new ControlError("task-not-retryable", "agent-unchanged");
+  // `auto` may keep the installation and change only its provenance (the unlock); nothing else may switch to the same one.
+  if (reason === "auto" ? canonicalBytes(previous).equals(canonicalBytes(next)) : previous.agent.agent === next.agent.agent) throw new ControlError("task-not-retryable", "agent-unchanged");
   const group = readWebGroup(store, groupId), proposal = readBudgetProposal(store, groupId);
   if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
   const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));

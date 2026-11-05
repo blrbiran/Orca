@@ -73,6 +73,10 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
   const repoId = (payload as { repoId?: unknown } | null | undefined)?.repoId;
   if (p.kind === "agent" && p.dispatchedRun !== undefined && verb === "requirement-open" && typeof repoId === "string" && (dirProjectOf?.(repoId) ?? null) !== null)
     return { code: "control-dispatched-run-refused", message: `${verb} on a folder project (${repoId}) is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
+  // Session 3cfc2e73 ruling (「同意按你的建议走」): an authorized agent may choose a task's installation (`retry-task`'s
+  // `agent`, `auto` included); a run Orca dispatched may not -- it would pick or unlock the agent of the work it is part of.
+  if (p.kind === "agent" && p.dispatchedRun !== undefined && verb === "retry-task" && (payload as { agent?: unknown } | null | undefined)?.agent !== undefined)
+    return { code: "control-dispatched-run-refused", message: `${verb} --agent is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
   const humanOnly = humanOnlyRefusal(verb, payload);
   // Gaps spec §6.3, §13: an `any` verb whose SOCKET_TIER predicate calls this payload `token` (a `defer` releasing a held
   // effect): the socket agent needs a person token (any person's: the verb is not human-only), and a run Orca dispatched
