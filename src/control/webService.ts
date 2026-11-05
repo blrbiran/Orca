@@ -557,6 +557,16 @@ export class WebControlService {
           const currentPrefs = readAgentPreferences(this.store, command.actorId).preferences;
           if (estimatorLayerAuthority(currentPrefs, readGroupAgentOverrides(group), currentPlan.agent) !== layerAuthority) throw new ControlError("agent-selection-changed");
           this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
+          // Issue #144: an estimator that does not resolve gives the same blocked estimate every time; while nothing has
+          // changed (proposal version, profile, mode, reason), answer with the newest one instead of adding a version.
+          if (prepared.request === null && prepared.reasonCode?.startsWith("agent-selection-rejected:estimator:") === true) {
+            const head = this.store.db.prepare("SELECT body FROM estimates WHERE group_id=? ORDER BY estimate_version DESC LIMIT 1").get(id);
+            const last = head === undefined ? null : JSON.parse(String(head.body)) as { estimateId: string; estimateVersion: number; state: string; reasonCode: string | null; proposalVersion?: number; mode: string; profile: { profileId: string; profileHash: string } | null };
+            if (last !== null && last.state === prepared.state && last.reasonCode === prepared.reasonCode && last.proposalVersion === proposal.proposalVersion && last.mode === command.payload.estimateMode
+              && last.profile?.profileId === command.payload.estimatorProfileId && last.profile.profileHash === command.payload.estimatorProfileHash) {
+              return success(context, { kind: "estimate-created", estimateId: last.estimateId, estimateVersion: last.estimateVersion, estimateState: prepared.state, reasonCode: prepared.reasonCode, wakeId: null });
+            }
+          }
           const estimateVersion = safeNumber(BigInt(Number(this.store.db.prepare("SELECT MAX(estimate_version) AS n FROM estimates WHERE group_id=?").get(id)?.n ?? 0)) + 1n);
           const estimateId = `estimate-${sha256Canonical({ groupId: id, planHash: proposal.planHash, version: estimateVersion }).slice(0, 24)}`;
           let grant: Amount = ESTIMATE_GRANT;
