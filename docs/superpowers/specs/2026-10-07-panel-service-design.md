@@ -132,3 +132,15 @@ These record where the implementation departs from or sharpens §1–§10. Each 
 - **12. D17 departure: Linux `install --dry-run` probes.** On Linux, `install --dry-run` runs one read-only probe (`systemctl --user show-environment`) unless the manager is forced. It changes no state.
 - **13. Rule 17 leftovers that survive `orca panel uninstall`.** launchd keeps the `enable` override entry for the real label `dev.orca.panel`; the OS owns that database. On Linux, `systemctl --user disable --now` removes the `default.target.wants` link, but if disable fails the link remains: uninstall continues (the unit file is still removed, then `daemon-reload` runs) and reports the error on stderr.
 - **14. Exit-code contract.** An unexpected error from `orca panel ...` (not a named refusal, for example EACCES) exits 3, the CLI's existing crash code, not the plan's "1 anything else". Named refusals exit 1.
+
+## 12. Correction (session 3cfc2e73, issue #120, after the human's 「D1-D8其余都同意。」)
+
+On macOS two managers can run the same panel, and neither looked at the other: a detached panel (or any process) on
+the configured port made launchd's panel exit 78 on bind, retried every `ThrottleInterval`. §5's exit-78 handling is
+**unchanged**. New: `orca panel start --detach` refuses with `service-manager-conflict` (exit 1) when the launchd plist
+exists and `launchctl print` reports the job loaded (naming the label and its pid), or when `lsof` reports a listener on
+service.json's `--port` that is not the panel panel.json names. `orca panel restart` under launchd refuses when
+panel.json names a live panel (same start time) whose pid is not launchd's, or when a pid that is not launchd's holds
+the port; under the detached manager it applies the `start --detach` checks. No `--port` (or `--port 0`) and no `lsof`
+on PATH skip the port check. Code: `src/service/managerConflict.ts`. Criteria: `tests/service/managerConflict.test.ts`
+(fake launchctl/lsof, temp panel and LaunchAgents dirs).

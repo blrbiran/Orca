@@ -9,6 +9,7 @@ import { identifyPanel } from "./identify.js";
 import type { PanelJsonV1 } from "./instance.js";
 import { launchd } from "./launchd.js";
 import { defaultContext, type ServiceContext, type ServiceIo, type ServiceManager } from "./manager.js";
+import { assertNoOtherManager } from "./managerConflict.js";
 import { servicePaths, type ServicePaths } from "./paths.js";
 import { ServiceRejection } from "./rejection.js";
 import { renderPlist, renderRunSh, renderServiceEnv, renderUnit } from "./render.js";
@@ -106,7 +107,8 @@ export async function runServiceCommand(sub: string, args: string[], env: NodeJS
     const detach = sub === "start" && args.includes("--detach");
     const rest = sub === "install" ? args.filter((a) => a !== "--dry-run") : args.filter((a) => !(sub === "start" && a === "--detach"));
     if (sub !== "install" && sub !== "logs" && rest.length > 0) throw new ServiceRejection("service-argument-invalid", `orca panel ${sub} takes no ${JSON.stringify(rest[0])}`);
-    const { manager, auto } = selectManager({ env, platform: seams.platform ?? process.platform, detach, run: ctx.run, uid: ctx.uid });
+    const platform = seams.platform ?? process.platform;
+    const { manager, auto } = selectManager({ env, platform, detach, run: ctx.run, uid: ctx.uid });
     // The detached manager waits for its own child's pid itself; it starts nothing on install.
     const confirm = (verb: string, code: number, before: PanelJsonV1 | null = null): Promise<number> =>
       code !== 0 || manager.kind === "detached" ? Promise.resolve(code) : waitForPanel(ctx, manager.kind, verb, before);
@@ -137,11 +139,13 @@ export async function runServiceCommand(sub: string, args: string[], env: NodeJS
       }
       case "start":
         if (startNeedsDetach(manager.kind, auto, detach)) throw new ServiceRejection("service-detach-required", "no service manager here; orca panel start --detach starts a process that neither restarts on crash nor survives a reboot");
+        if (detach) assertNoOtherManager(ctx, manager, platform, "start --detach"); // issue #120
         return confirm("start", await manager.start(ctx));
       case "stop": return manager.stop(ctx);
       case "restart": {
         const stored = readServiceConfig(paths);
         const missing = missingAgentPathDirs(stored, env.PATH ?? "");
+        assertNoOtherManager(ctx, manager, platform, "restart"); // issue #120
         if (missing.length > 0) ctx.err(`orca panel: warning: the service PATH in ${paths.configFile} lacks ${missing.join(", ")}, which the agents in ${stored.env.ORCA_AGENTS_TABLE} need; restart keeps the stored PATH, re-run orca panel install to recompute it`);
         writeServiceFiles(paths, stored); // plan D20
         const now = await identifyPanel(paths.panelJson);
