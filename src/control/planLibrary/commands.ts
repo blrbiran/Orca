@@ -7,6 +7,9 @@
  */
 import { createHash } from "node:crypto";
 import { readArchivedPlan } from "../queries.js";
+import { effectiveTaskLabels, readTaskLabelState } from "../labels.js";
+import { effectivePlan, workBodyOf } from "../taskAmendments.js";
+import type { ControlPlanV1 } from "../webProtocol.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "../commandLedger.js";
 import { commandAttributionFor } from "../commandClient.js";
 import { sha256Canonical } from "../canonicalJson.js";
@@ -47,11 +50,28 @@ function repositoryPath(deps: PlanLibraryDeps, repoId: string): string {
   return deps.resolveRepository(repoId);
 }
 
+/**
+ * Issue #154 (session 3cfc2e73; spec 2026-10-24 Correction of that session): a group is saved as it now runs, not as it
+ * was imported -- each loop task's recipe as its set-task-loop amendment left it (effectivePlan) and each task's labels
+ * as set-task-labels left them (effectiveTaskLabels; an empty result is omitted, as the archive omits it). The origin
+ * keeps the archive's planHash: it names the group's identity, not the bytes saved.
+ */
+function effectiveSavedPlan(store: ControlStore, groupId: string, archived: ControlPlanV1): ControlPlanV1 {
+  const plan = effectivePlan(store, groupId, archived);
+  return { ...plan, tasks: plan.tasks.map((task) => {
+    const work = workBodyOf(store, groupId, task.taskId);
+    if (work === null) return task;
+    const { labels } = effectiveTaskLabels(readTaskLabelState(work), task.labels);
+    const { labels: _archived, ...rest } = task;
+    return labels.length > 0 ? { ...rest, labels } : rest;
+  }) };
+}
+
 /** §5.3 (a), (b): the document, its project and origin from Orca's own data. Nothing is accepted or changed. */
 function savedSource(store: ControlStore, source: Extract<PlanLibraryCommand, { verb: "plan-library-save" }>["payload"]["source"]): { projectId: string; raw: unknown; origin: LibraryOrigin } {
   if (source.kind === "group") {
     const archived = readArchivedPlan(store, source.groupId);
-    return { projectId: archived.plan.repoId, raw: docFromArchivedPlan(archived.plan), origin: { kind: "group", groupId: source.groupId, planHash: archived.planHash } };
+    return { projectId: archived.plan.repoId, raw: docFromArchivedPlan(effectiveSavedPlan(store, source.groupId, archived.plan)), origin: { kind: "group", groupId: source.groupId, planHash: archived.planHash } };
   }
   const group = readRequirementGroup(store, source.groupId);
   const draft = readDraft(store, source.groupId, source.draftNo);

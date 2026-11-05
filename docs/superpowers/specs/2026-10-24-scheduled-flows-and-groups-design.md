@@ -900,3 +900,20 @@ Appended on top of `ebf680ee`; the sections above stay as committed (Rule 13). W
    admits only object bodies; the plan library's `usedBy` skips a schedule body that does not parse, and an archive
    refuses `plan-library-entry-in-use` naming `<id>:unreadable` while such a row is live; the schedules list puts a
    schedule whose newest fire body does not parse under `corrupt`.
+
+## 24. Correction (session 3cfc2e73, issue #154, branch `fix/estimate-plan-split`, 2026-11-05)
+
+Appended on top of `3cdced36`; the sections above stay as committed (Rule 13). Where this section and §5.3 row (b)
+disagree, this section holds.
+
+1. **Source (b) saves the group as it runs, not as it was imported.** §5.3 (b) said the save "reads the group's archived
+   plan" and maps each loop task's recipe. It did not consider loop amendments: under the loop-plans design a
+   `set-task-loop` amendment is the task's authority (`effectivePlanTask`, `src/control/taskAmendments.ts`), and a
+   `set-task-labels` override is the task's labels (`effectiveTaskLabels`, `src/control/labels.ts`). Saving the archive
+   silently stored a loop task's pre-amendment goal and a task's pre-override labels, and every re-import or schedule
+   fire ran the old task. The two texts contradicted each other; under Rule 7 the evidence favours the amendment, so the
+   save now maps `effectivePlan(...)` with each task's labels as `effectiveTaskLabels` answers them (an empty result is
+   omitted, as the archive omits it). A hand-written contract task has no amendment and is saved as before.
+2. **`origin.planHash` stays the archive's hash.** It names which group the version came from (its identity), not the
+   bytes saved; the version's own `sha256` names those.
+3. Criteria: `tests/control/planLibrarySaveEffective.test.ts`.
