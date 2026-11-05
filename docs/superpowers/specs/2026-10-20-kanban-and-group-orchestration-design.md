@@ -333,3 +333,14 @@ trigger document, a watermark per (project, kind, target) — with project > glo
 scheduled checks and a person's run now. `set-integration-check` is removed (no alias) in favour of `set-check-settings`;
 system groups no longer count toward the landed groups (checks spec §2.3). §7 and §11–§14 above are left as written
 (history, Rule 13); where they differ, the checks spec is the current one.
+
+## 16. Correction (session 3cfc2e73, 2026-11-05): an explicit start honours the edges (issue #133)
+
+The text above is left as written (Rule 13). §3.1 says a group starts when its explicit prerequisite groups are done;
+only the automatic start checked it, so a person's `start` (and a `resume-dispatch` of a ready group that never ran,
+which arms a start) could run a dependent on a base without its prerequisite's work. Both now refuse with
+`group-dependency-unmet` (409; detail: the unmet prerequisite ids), using the same `prerequisiteDone` as the automatic
+start and the board; a refused resume keeps its pause. The edge refusals of S3 gain one: `add-group-dependency` naming
+an archived prerequisite is refused with `group-edge-prerequisite-archived` (409; detail: its id), since an archived
+group takes no new work and may never be done. Whether an explicit start may exceed `maxRunningGroups` is not decided
+here (left for the human). Commit subject: `fix(control): start and resume honour group dependencies (#133)`.

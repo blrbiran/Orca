@@ -1767,3 +1767,20 @@ earlier `ERRATUM (handoff delivery, 2026-09-25)` that quotes it, are kept verbat
    `handoff-complete` is offered the same resume dialog as a human handoff-stop (`resume-from-handoff`, with or without
    selections), and every stopped group shows one banner naming how it stopped, its stop state and the way out. Commit
    subject: `feat(web): stop banner and the resume dialog for a completed panel shutdown`.
+
+## Correction (session 3cfc2e73, 2026-11-05): resume with nothing to run; a retry's waiting-on (issues #139, #98)
+
+The text above is left as written (Rule 13). Two answers now differ from it:
+
+- **`resume-dispatch` (§ line 1240, "writes durable `scheduler-wake:<groupId>:<resumeRevision>`").** On a group that
+  already has a start wake, no active run, no registered continuation and no claimable task (a `review` group whose
+  tasks are done or blocked), the pause is lifted and no wake is written; the answer is
+  `{ kind: "resumed", operation: "resume-dispatch" }` (the result the estimate-parking spec 2026-10-21 §3.4 added),
+  not `scheduled`. Such a wake used to be delivered idle while the answer said work was scheduled (issue #139).
+  `replenishStartWakes` re-arms from the earlier start wake once work becomes claimable. A group mid-run (an active run
+  or ready work) and a group never started still get the wake and `scheduled`. Commit subject:
+  `fix(control): resume with nothing to run answers resumed, not scheduled (#139)`.
+- **`recovery-observed` (§ line 591).** The result has one more optional field,
+  `waitingOn?: "answer" | "consensus" | "review" | "call" | "person"`, present only when the retry lifted a requirement's
+  completed stop and queued nothing; it names the step the requirement now waits on (issue #98). Commit subject:
+  `fix(control): a retry that lifts a stop says what it now waits on (#98)`.
