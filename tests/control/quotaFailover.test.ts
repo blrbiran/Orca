@@ -442,3 +442,32 @@ describe("a task not started yet leaves a resting installation before its first 
     } finally { await w.t.h.dispose(); }
   });
 });
+
+describe("a failover refused recovery-blocked is booked and not tried again (session 3cfc2e73)", { timeout: 120_000 }, () => {
+  // The 2026-11-05 plan registered "a recovery-blocked refusal is not booked by the command ledger, so such a failover is
+  // re-attempted every pass". Measured in session 3cfc2e73: recovery-blocked is a durable command outcome (errors.ts), so
+  // the refusal is booked (423) under the run's failover id and failoverCandidates leaves the run, as for any answer. A store
+  // that disagrees with itself needs a person; the person's retry is a new run, which failover reads afresh.
+  it("books the refusal: the next pass asks ccloop nothing and logs nothing", async () => {
+    const w = await world(); try {
+      let resolved = 0;
+      const port = { ...w.t.h.deps.port, resolveAgent: async (partial: PartialSelection) => { resolved += 1; return w.t.h.deps.port.resolveAgent(partial); } };
+      const service = new WebControlService({ ...w.t.h.deps, port, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => w.t.repo });
+      // The work item no longer carries what its run was claimed with (I1): the retry is refused recovery-blocked.
+      w.t.h.store.db.prepare("UPDATE work_items SET body=json_set(body,'$.configHash',?) WHERE group_id='g' AND id='a'").run("e".repeat(64));
+      const written: string[] = [];
+      const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; });
+      try {
+        await service.systemDebugPass();
+        expect(resolved).toBe(1);
+        const row = w.t.h.store.db.prepare("SELECT original_status, body_json FROM commands WHERE group_id='g' AND id=?").get(failoverCommandId("a", w.runId));
+        expect(row?.original_status).toBe(423);
+        expect(JSON.parse(String(row?.body_json)).error).toMatchObject({ code: "recovery-blocked", message: "recovery-blocked:retry-identity" });
+        await service.systemDebugPass();
+        expect(resolved).toBe(1);
+        expect(written.filter((line) => line.includes("failover"))).toEqual([]);
+      } finally { spy.mockRestore(); }
+      expect(w.work().agent.agent).toBe("codex");
+    } finally { await w.t.h.dispose(); }
+  });
+});
