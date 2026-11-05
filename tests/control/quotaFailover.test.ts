@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
-import { installationRests, parseResetAt, REST_CAP_MS, REST_DEFAULT_MS } from "../../src/control/quotaRest.js";
+import { installationRests, parseResetAt, REST_CAP_MS, REST_DEFAULT_MS, REST_VENDOR_CAP_MS } from "../../src/control/quotaRest.js";
 import { failoverCommandId } from "../../src/control/systemDebug.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { permissionRefusal } from "../../src/panel/permissions.js";
@@ -469,5 +469,31 @@ describe("a failover refused recovery-blocked is booked and not tried again (ses
       } finally { spy.mockRestore(); }
       expect(w.work().agent.agent).toBe("codex");
     } finally { await w.t.h.dispose(); }
+  });
+});
+
+describe("claude's reset time, and a cap on every named one (session 3cfc2e73)", () => {
+  type Row = { id: string; body: string };
+  const store = (rows: Row[]) => ({ db: { prepare: () => ({ all: () => rows, get: () => undefined }) } }) as never;
+  const run = (id: string, agent: string, endedAt: number, detail: string): Row => ({ id, body: JSON.stringify({ agent: { agent }, endedAt, drive: { outcome: "failed", failureCause: { cause: "quota", detail } } }) });
+  it("reads claude's `usage limit reached|<unix seconds>`, the shape magpie parses and ccloop's fixture carries", () => {
+    // No real claude sample on this machine (an exhausted account is needed); magpie routing.go resetsWords and ccloop's
+    // tests/runtime/failureCause.test.ts are the evidence. Ten digits only: anything else is not this shape.
+    const at = new Date(2026, 10, 5, 10, 0).getTime();
+    const reset = Math.floor(at / 1000) + 3 * 3600;
+    expect(parseResetAt(`Claude AI usage limit reached|${reset}`, at)).toBe(reset * 1000);
+    expect(parseResetAt("Claude AI usage limit reached|1760000000", at)).toBe(1760000000 * 1000);
+    expect(parseResetAt("Claude AI usage limit reached|17600000001", at)).toBeNull();
+    expect(parseResetAt("Claude AI usage limit reached", at)).toBeNull();
+    expect(installationRests(store([run("r1", "claude", at, `Claude AI usage limit reached|${reset}`)]), at).get("claude")).toMatchObject({ until: reset * 1000, source: "vendor" });
+  });
+  it("trusts a named reset at most 24 hours past the failure", () => {
+    const at = new Date(2026, 10, 5, 10, 0).getTime();
+    // Four days ahead (a weekly limit, or a misread): rests 24 hours, then one run asks again.
+    expect(installationRests(store([run("r1", "codex", at, "You've hit your usage limit ... try again at Nov 9th, 2026 2:13 PM")]), at).get("codex")).toMatchObject({ until: at + REST_VENDOR_CAP_MS, source: "vendor" });
+    const far = Math.floor(at / 1000) + 3 * 24 * 3600;
+    expect(installationRests(store([run("r1", "claude", at, `Claude AI usage limit reached|${far}`)]), at).get("claude")!.until).toBe(at + REST_VENDOR_CAP_MS);
+    // Within the cap the named time stands.
+    expect(installationRests(store([run("r1", "codex", at, "try again at 16:12")]), at).get("codex")!.until).toBe(new Date(2026, 10, 5, 16, 12).getTime());
   });
 });

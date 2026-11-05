@@ -1,6 +1,7 @@
 /**
  * Quota failover spec 2026-11-03 §3 "Remember", D3, D4 (human rulings §8, session e2ad4802): an installation whose quota
- * ran out rests, for every group, until its vendor's reset time when the CLI's own error text names one, else 15 minutes
+ * ran out rests, for every group, until its vendor's reset time when the CLI's own error text names one (at most 24 hours
+ * ahead, REST_VENDOR_CAP_MS), else 15 minutes
  * doubling per consecutive quota failure, capped at 8 hours. Code only (Rule 5). Derived from the runs already stored
  * (ccloop's typed `quota` cause and its `detail`, the CLI's error row): no table of its own, so nothing to keep in step.
  * A run on the installation that succeeded after the quota failures ends the rest.
@@ -9,6 +10,13 @@ import type { ControlStore } from "./store.js";
 
 export const REST_DEFAULT_MS = 15 * 60_000;
 export const REST_CAP_MS = 8 * 60 * 60_000;
+/**
+/**
+ * Session 3cfc2e73 (independent review minor: "a vendor-named reset has no cap"): a reset the error text names is trusted
+ * at most 24 hours ahead of the failure, so a misread or a far reset never parks an installation for days. A longer limit
+ * (codex's weekly one) costs one more run a day, which fails at once and names the reset again.
+ */
+export const REST_VENDOR_CAP_MS = 24 * 60 * 60_000;
 /**
  * `since`: the first quota failure of the streak the rest comes from; `detail`: the CLI's own error text of the last one
  * (ccloop's `failureCause.detail`), for the agents page (session 3cfc2e73, batch FB).
@@ -20,10 +28,15 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 /**
  * The reset time a codex quota error names, in the machine's local time (the CLI prints local time), or null.
  * Shapes seen on this machine: "try again at Oct 22nd, 2026 2:13 PM" and "try again at 16:12" (the next 16:12 after
- * the failure). Anything else is null: the default rest applies, never a guess.
+ * the failure). Claude's (session 3cfc2e73, no real sample on this machine): "Claude AI usage limit reached|<unix seconds>",
+ * the shape magpie parses (internal/gateway/routing.go resetsWords, `limit reached\|(\d{10})`) and ccloop's claude
+ * fixture carries (tests/runtime/failureCause.test.ts, "Claude AI usage limit reached|1760000000"). Anything else is null:
+ * the default rest applies, never a guess.
  */
 export function parseResetAt(detail: string | null, at: number): number | null {
   if (detail === null) return null;
+  const epoch = /limit reached\|(\d{10})(?!\d)/i.exec(detail);
+  if (epoch !== null) return Number(epoch[1]) * 1000;
   const dated = /try again at ([A-Z][a-z]{2})[a-z]* (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d{2})\s*([AP]M)?/i.exec(detail);
   if (dated !== null) {
     const month = MONTHS.indexOf(dated[1]!.toLowerCase());
@@ -84,7 +97,8 @@ export function installationRests(store: ControlStore, now: number): Map<string,
     const streak = list.slice(lastSuccess + 1).filter((row) => row.quota);
     const last = streak.at(-1);
     if (last === undefined) continue;
-    const vendor = parseResetAt(last.detail, last.at);
+    const named = parseResetAt(last.detail, last.at);
+    const vendor = named === null ? null : Math.min(named, last.at + REST_VENDOR_CAP_MS);
     const until = vendor ?? last.at + Math.min(REST_CAP_MS, REST_DEFAULT_MS * 2 ** Math.min(streak.length - 1, 10));
     if (until > now) rests.set(installation, { installation, until, source: vendor === null ? "default" : "vendor", runId: last.runId, since: streak[0]!.at, detail: last.detail });
   }
