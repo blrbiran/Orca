@@ -6,7 +6,7 @@ Every `orca group` command. Ids: a full id, a unique prefix, or (projects) a nam
 
 ## `orca group list`
 
-every group: id, state, revision, goal
+every group (with --project, that project's): id, repository, state, revision, goal
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).

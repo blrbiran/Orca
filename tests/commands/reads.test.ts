@@ -195,3 +195,28 @@ describe("--project is validated on every panel row (issue 152)", () => {
     expect(out.json().body).toEqual(RAW["usage?scope=all"]);
   });
 });
+
+// Issue 151 (session 3cfc2e73): group list took --project and ignored it. Without the flag it still lists every group
+// (spec §4, unchanged); with it, only that project's groups. The human line names each group's repository.
+describe("group list --project (issue 151)", () => {
+  const TWO_REPOS = { ...RAW.summary as object, groups: [
+    { groupId: "g-one", repoId: "repo-1", state: "running", commandRevision: 5, goal: "ship" },
+    { groupId: "g-two", repoId: "repo-2", state: "draft", commandRevision: 1, goal: "other" },
+  ] };
+  const twoRepoPanel = () => fakePanel({ "GET summary": { status: 200, body: TWO_REPOS }, "GET projects": { status: 200, body: RAW.projects } });
+
+  it("with --project, only that project's groups; without it, every group as before", async () => {
+    const p = await twoRepoPanel();
+    const filtered = await cli(["group", "list", "--project", "proj", "--json"], p.dir);
+    expect(filtered.code, filtered.stdout).toBe(0);
+    expect(filtered.json().body.groups.map((g: { groupId: string }) => g.groupId)).toEqual(["g-one"]);
+    const all = await cli(["group", "list", "--json"], p.dir);
+    expect(all.json().body).toEqual(TWO_REPOS);
+  });
+
+  it("the human line names the group's repository", async () => {
+    const p = await twoRepoPanel();
+    const out = await cli(["group", "list"], p.dir);
+    expect(out.stdout.split("\n").filter(Boolean)).toEqual(["g-one  repo-1  running  rev 5  ship", "g-two  repo-2  draft  rev 1  other"]);
+  });
+});

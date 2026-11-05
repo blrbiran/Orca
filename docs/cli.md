@@ -44,7 +44,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca group`
 
-- `orca group list` — every group: id, state, revision, goal
+- `orca group list` — every group (with --project, that project's): id, repository, state, revision, goal
 - `orca group show <group>` — one group's full view
 - `orca group import [<plan>] [--group <group>] [--estimator-profile <estimator-profile>] [--estimate-mode <estimate-mode>] [--library <library>] [--version <version>]` — import a registered plan, or a plan library version (--library), as a new draft group
 - `orca group estimate <group> [--estimator-profile <estimator-profile>] [--mode <mode>]` — ask the estimator for budgets at the current proposal version

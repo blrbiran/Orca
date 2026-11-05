@@ -23,7 +23,7 @@ const RUN: PositionalDef = { name: "run", summary: "a run id", required: true };
 const ids = (context: WriteContext, name: string): string => context.ids[name]!;
 
 interface GroupView { summary: { groupId: string; commandRevision: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
-interface Summary { groups: Array<{ groupId: string; state?: string; commandRevision?: number; goal?: string }> }
+interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string }> }
 
 /** Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it. */
 async function groupOfRun(context: WriteContext, runId: string): Promise<string> {
@@ -57,7 +57,7 @@ async function commandScope(context: WriteContext): Promise<string> {
 
 const groupList = (body: unknown): string => {
   const groups = (body as Summary).groups ?? [];
-  return groups.length === 0 ? "no groups" : groups.map((g) => `${g.groupId}  ${g.state ?? ""}  rev ${g.commandRevision ?? "?"}${g.goal ? `  ${g.goal}` : ""}`).join("\n");
+  return groups.length === 0 ? "no groups" : groups.map((g) => `${g.groupId}  ${g.repoId ?? ""}  ${g.state ?? ""}  rev ${g.commandRevision ?? "?"}${g.goal ? `  ${g.goal}` : ""}`).join("\n");
 };
 
 interface ProjectRow { projectKey: string; controlRepoId: string | null; path: string; kind?: string; dirs?: Array<{ projectKey: string }> }
@@ -82,7 +82,14 @@ export const READ_ROWS: CommandDef[] = [
         workspace: bodies[0], integration: bodies[1],
       };
     } }),
-  read({ domain: "group", action: "list", summary: "every group: id, state, revision, goal", paths: () => ["summary"], format: groupList }),
+  // Issue 151: every group by default (spec §4); with --project, only that project's groups.
+  read({ domain: "group", action: "list", summary: "every group (with --project, that project's): id, repository, state, revision, goal", paths: () => ["summary"],
+    compose: async ([summary], context) => {
+      if (context.args.global.project === undefined) return summary;
+      const { repoId } = await context.project();
+      return { ...(summary as Summary), groups: (summary as Summary).groups.filter((g) => g.repoId === repoId) };
+    },
+    format: groupList }),
   read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`] }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
