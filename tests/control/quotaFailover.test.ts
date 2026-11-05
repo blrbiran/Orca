@@ -351,7 +351,8 @@ describe("an agent may switch a task's installation; --agent auto hands it back 
 describe("a task not started yet leaves a resting installation before its first claim (spec §3 Route, session 3cfc2e73)", { timeout: 120_000 }, () => {
   // Spec §3 Route: 「At dispatch -- never mid-run -- a work item whose selected installation is resting is offered to the next
   // installation」. Task `a` runs out of quota on codex; task `b` has not run yet and would only hit the same wall.
-  async function pair(options: { bAgent?: PartialSelection; cause?: string } = {}) {
+  type Port = WebControlService["deps"]["port"];
+  async function pair(options: { bAgent?: PartialSelection; cause?: string; port?: (base: Port, claim: () => Promise<string>) => Port } = {}) {
     const clock = { value: Date.UTC(2026, 10, 5, 12, 0, 0) };
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b", ...(options.bAgent ? { agent: options.bAgent } : {}) }], {
       storeNow: () => clock.value,
@@ -361,7 +362,8 @@ describe("a task not started yet leaves a resting installation before its first 
     const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
     const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
     if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
-    const service = new WebControlService({ ...t.h.deps, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo });
+    const port = options.port?.(t.h.deps.port, t.claim) ?? t.h.deps.port;
+    const service = new WebControlService({ ...t.h.deps, port, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo });
     const first = await t.claim();
     await t.until(t.driver(), () => t.body(first).state === "blocked");
     const work = (id: string) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(id)!.body));
@@ -413,12 +415,30 @@ describe("a task not started yet leaves a resting installation before its first 
       await held.deliver();
       expect(held.runsOf("b").map((run) => run.agent.agent)).toEqual(["codex"]);
     } finally { await held.t.h.dispose(); }
-    // A task that has run is failoverPass's (after its own quota failure), not this route's: a's plain retry is claimed on codex.
-    const ran = await pair(); try {
+    // A task that has run is failoverPass's (after its own quota failure), not this route's: a's plain retry is claimed on
+    // codex, and ccloop is not asked to resolve anything for it.
+    let resolved = 0;
+    const ran = await pair({ port: (base) => ({ ...base, resolveAgent: async (partial: PartialSelection) => { resolved += 1; return base.resolveAgent(partial); } }) }); try {
       expect("error" in (ran.service.retryTask(ran.t.h.command("retry-task", { taskId: "a" })) as object)).toBe(false);
+      resolved = 0;
       await ran.deliver();
       expect(ran.runsOf("a").map((run) => run.agent.agent)).toEqual(["codex", "codex"]);
       expect(ran.work("a").agentSwitches).toBeUndefined();
+      expect(resolved).toBe(0);
     } finally { await ran.t.h.dispose(); }
+  });
+
+  it("a claim that lands while ccloop is asked leaves the task as it now is (re-read in the switch's transaction)", async () => {
+    let racing = true;
+    const w = await pair({ port: (base, claim) => ({ ...base, resolveAgent: async (partial: PartialSelection) => {
+      // The driver claims b on codex while the route waits for ccloop.
+      if (racing && partial.agent === "claude") { racing = false; await claim(); }
+      return base.resolveAgent(partial);
+    } }) }); try {
+      await w.deliver();
+      expect(racing).toBe(false);
+      expect(w.work("b").agentSwitches).toBeUndefined();
+      expect(w.runsOf("b").map((run) => run.agent.agent)).toEqual(["codex"]);
+    } finally { await w.t.h.dispose(); }
   });
 });
