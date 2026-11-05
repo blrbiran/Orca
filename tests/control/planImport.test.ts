@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
-import { estimatorSlotFor, importControlPlan, importControlPlanAsync, normalizeControlPlan, writeImportedPlan, type ImportCommand } from "../../src/control/planImport.js";
+import { estimatorSlotFor, importControlPlan as importAnyPlan, importControlPlanAsync as importAnyPlanAsync, normalizeControlPlan, writeImportedPlan, type ImportCommand } from "../../src/control/planImport.js";
 import { readArchivedContract, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { readSchedulerControlPlanSource } from "../../src/scheduler/planFile.js";
@@ -19,6 +19,15 @@ import { lookupCommandResult } from "../../src/control/commandLedger.js";
 import { ControlError } from "../../src/control/errors.js";
 import { FIXTURE_AGENT_ID, fixtureResolutionFor, writePreferencesRow } from "./fixtures/agents.js";
 
+/**
+ * Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 Spec 2026-11-05 §3.3: an import with no token limit -- every
+ * planId import -- now queues no estimate (pinned in noAutoEstimate.test.ts). This file pins the import-time estimate a
+ * limited group still gets, so each import here asks for it with the in-process `estimate: "preflight"` (planImport.ts
+ * importControlPlan's opts; importControlPlanAsync passes its opts through unchanged, though its type names only `origin`).
+ */
+const PREFLIGHT = { estimate: "preflight" as const };
+const importControlPlan = (deps: Parameters<typeof importAnyPlan>[0], command: ImportCommand) => importAnyPlan(deps, command, PREFLIGHT);
+const importControlPlanAsync = (deps: Parameters<typeof importAnyPlanAsync>[0], command: ImportCommand) => importAnyPlanAsync(deps, command, PREFLIGHT as never);
 const hash = (letter: string) => letter.repeat(64);
 const contract = (taskId: string, tokenBudget = 100) => ({
   objective: { taskId, goal: `ship ${taskId}`, successCondition: `${taskId} passes`, nonGoals: [] },
@@ -526,7 +535,7 @@ describe("immutable plan import", () => {
       // spawned child process (not a vitest worker) cannot initialize.
       const resolutionFor = capabilities => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default" }, configHash: sha256Canonical({}), timeoutMs: 120_000, killGraceMs: 5_000, capabilities, singleCallExecution: "v1" });
       const deps = { store, profileRouter: router, trustedConfig: { resolveTarget() { return { repositoryPath: c.repositoryPath, planPath: c.planPath, validatePlanDescriptor() {} }; } }, defaults: () => ({ estimatorProfileId: "estimator", estimatorProfileHash: c.profileHash, estimateMode: "strict" }), estimatorObservation: selected => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution: resolutionFor(selected.snapshot.profile.capabilities) }), estimatorSlot: c.estimatorSlot, ...(c.point === "before-commit" ? { beforeCommit: () => stop("BEFORE_COMMIT") } : {}) };
-      importControlPlan(deps, c.command);
+      importControlPlan(deps, c.command, { estimate: "preflight" });
       stop("AFTER_COMMIT");
     `;
     const child = spawn(process.execPath, ["--import", "tsx", "--eval", script], {

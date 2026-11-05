@@ -96,8 +96,10 @@ describe("import freezes the estimator slot from the primary and role layers", (
     const h = await webFixture(); try {
       const service = new WebControlService({ ...h.deps, defaults: () => null });
       const imported = await service.importPlan(importG2(h));
-      expect(imported).toMatchObject({ result: { kind: "imported", estimateState: "blocked-capability" } });
-      expect(readControlGroup(h.store, "epoch", "g2").estimates[0]).toMatchObject({ profile: null, state: "blocked-capability" });
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit, so it queues no
+      // estimate at all (spec 2026-11-05 §3.3) -- with or without an estimator profile; the confirm below needs none.
+      expect(imported).toMatchObject({ result: { kind: "imported", estimateId: null, estimateState: "none" } });
+      expect(readControlGroup(h.store, "epoch", "g2").estimates).toEqual([]);
       const preview = await resolveGroupSelections({ store: h.store, port: h.deps.port }, "g2", "human");
       expect(preview.selectionsHash).not.toBeNull();
       const hash = h.frozen.profileHash;
@@ -150,7 +152,9 @@ describe("import freezes the estimator slot from the primary and role layers", (
       const refusing = createExecutionProfileRouter([resolveProfile(profileSnapshot(), portWith(async () => { throw new ControlError("agent-installation-missing"); }))]);
       const prepared = await estimatorSlotFor({ store: h.store, profileRouter: refusing }, "human", {}, refusing.list()[0]!);
       expect(prepared.outcome).toEqual({ kind: "rejected", partial: { agent: FIXTURE_AGENT_ID }, code: "agent-installation-missing" });
-      const second = importControlPlan({ ...h.deps, estimatorSlot: prepared.outcome, estimatorObservation: () => prepared.observation }, importG2(h));
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import queues no estimate (spec 2026-11-05
+      // §3.3); this criterion pins the import-time estimate a limited group gets, asked in-process with `estimate: "preflight"`.
+      const second = importControlPlan({ ...h.deps, estimatorSlot: prepared.outcome, estimatorObservation: () => prepared.observation }, importG2(h), { estimate: "preflight" });
       expect(second).toMatchObject({ result: { estimateState: "blocked-capability", estimateReasonCode: "agent-selection-rejected:estimator:agent-installation-missing" } });
       expect(group(h, "g2").estimatorSlot).toBeNull();
     } finally { await h.dispose(); }
@@ -171,7 +175,8 @@ describe("import freezes the estimator slot from the primary and role layers", (
     const h = await webFixture(); try {
       seedPreferences(h.store, "human", { defaultAgent: "other", perAgent: {} }, 1);
       // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
-      const stale = importControlPlan({ ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities) }) }, importG2(h));
+      // Ruling (session 3cfc2e73 R3): as above -- the frozen estimator slot is checked on the import that queues an estimate.
+      const stale = importControlPlan({ ...h.deps, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities) }) }, importG2(h), { estimate: "preflight" });
       expect(stale).toMatchObject({ error: { code: "plan-version-conflict" } });
       expect(h.store.db.prepare("SELECT id FROM groups WHERE id='g2'").get()).toBeUndefined();
     } finally { await h.dispose(); }

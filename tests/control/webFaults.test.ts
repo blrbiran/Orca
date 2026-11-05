@@ -81,15 +81,18 @@ describe("commit boundaries (task 10 step 3)", () => {
       const command = h.rawCommand("crash-import", 0, "import-plan", { kind: "group", groupId: "g2" }, { groupId: "g2", repoId: "repo", planId: "plan" }) as Extract<RawAuthorityCommandV1, { verb: "import-plan" }>;
       // Single-call estimate spec §4.4: the injected observation carries ccloop's resolution, which answers singleCallExecution "v1", so this estimate queues exactly as before the single-call gate.
       const deps = { ...h.deps, beforeCommit: fault.hook, estimatorObservation: () => ({ profile: h.frozen, observed: h.frozen.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(h.frozen.snapshot.profile.capabilities) }) };
+      // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import queues no estimate (spec 2026-11-05
+      // §3.3); this criterion pins that the import-time estimate and its wake commit with the group or not at all, so it
+      // asks for the estimate a limited group gets, in-process (`estimate: "preflight"`).
       fault.arm();
-      expect(() => importControlPlan(deps, command)).toThrow("fault-before-commit");
+      expect(() => importControlPlan(deps, command, { estimate: "preflight" })).toThrow("fault-before-commit");
       // Half an import is not a state the ledger may hold: no group, no estimate, no command record.
       expect(count(h.store, "groups", "id='g2'")).toBe(0);
       expect(count(h.store, "estimates", "group_id='g2'")).toBe(0);
       expect(count(h.store, "commands", "id='crash-import'")).toBe(0);
 
       fault.clear();
-      const imported = importControlPlan(deps, command);
+      const imported = importControlPlan(deps, command, { estimate: "preflight" });
       expect("error" in imported ? JSON.stringify(imported.error) : imported.result.kind).toBe("imported");
       expect(count(h.store, "groups", "id='g2'")).toBe(1);
       expect(count(h.store, "estimates", "group_id='g2'")).toBe(1);

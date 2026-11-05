@@ -138,7 +138,10 @@ async function setup(): Promise<Harness> {
     estimatorObservation: (selected: typeof frozen) => ({ profile: selected, observed: selected.snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(selected.snapshot.profile.capabilities) }),
     estimatorSlot: prepared.outcome,
   };
-  for (const groupId of ["group-b", "group-a"]) importControlPlan(deps, command(groupId, `import-${groupId}`));
+  // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit and so queues no
+  // estimate (spec 2026-11-05 §3.3); confirmGroup below readies the import-time estimate a limited group gets, so these
+  // imports ask for it in-process (planImport.ts importControlPlan's `estimate: "preflight"`).
+  for (const groupId of ["group-b", "group-a"]) importControlPlan(deps, command(groupId, `import-${groupId}`), { estimate: "preflight" });
 
   const app = express();
   app.use(express.json());
