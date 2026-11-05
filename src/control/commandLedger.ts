@@ -37,6 +37,8 @@ export interface WebCommandInput<T> {
   apply: (context: WebCommandContext) => StoredCommandOutcome<T>;
   authorityChanged?: boolean | ((outcome: StoredCommandOutcome<T>) => boolean);
   projectionGroupIds?: readonly string[] | ((outcome: StoredCommandOutcome<T>) => readonly string[]);
+  /** Fields the command's `command` activity row carries besides verb and actor, read after a successful apply. */
+  activityFields?: () => Record<string, unknown>;
 }
 
 type CommandRow = { raw_request_hash: unknown; original_status: unknown; body_json: unknown };
@@ -424,7 +426,7 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
       const target = rawCommand.target;
       appendActivity(store, {
         groupId: commandScope.groupId, taskId: target.kind === "task" ? target.taskId : null, runId: target.kind === "run" ? target.runId : null,
-        kind: "command", body: { verb: rawCommand.verb, actor: rawCommand.actorId },
+        kind: "command", body: { verb: rawCommand.verb, actor: rawCommand.actorId, ...input.activityFields?.() },
       });
     }
 

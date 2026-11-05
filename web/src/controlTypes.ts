@@ -696,6 +696,7 @@ export type CommandSuccessV1 = {
     | { kind: "estimate-created"; estimateId: string; estimateVersion: number; estimateState: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null; wakeId: string | null }
     | { kind: "confirmed"; executionSnapshotHash: string }
     | { kind: "scheduled"; operation: "start" | "resume-dispatch"; wakeId: string }
+    | { kind: "queued-for-slot"; operation: "start" | "resume-dispatch"; ahead: number }
     | { kind: "resumed"; operation: "resume-dispatch" }
     | { kind: "paused"; stopMode: "pause" }
     | { kind: "handoff-stopped"; stopRevision: number; acceptedAt: string; handoffDeadlineAt: string; frozenRunIds: string[]; requestIds: string[] }

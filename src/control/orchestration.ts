@@ -30,6 +30,13 @@ const groupOrchestrationSchema = z.object({
   /** The command revision of the start that took it (a person's or orca-auto's); null until then. */
   startedRevision: z.number().int().positive().nullable(),
   refusal: refusalSchema.nullable(),
+  /**
+   * Review-exit spec 2026-11-05 §3.4 (D4): the explicit start queued at the cap (a person's, or a resume of a group never
+   * started), named by the activity row of the start that later takes the slot. Absent when none waits.
+   */
+  queued: z.object({ commandId: z.string().min(1), actorId: z.string().min(1) }).strict().optional(),
+  /** How many of orca-auto's own starts found the cap full (a lost race); it keys the pass's next command id. */
+  slotRaces: z.number().int().positive().optional(),
 }).strict();
 export type GroupOrchestration = z.infer<typeof groupOrchestrationSchema>;
 
@@ -67,7 +74,8 @@ export function recordConfirmed(store: ControlStore, groupId: string, mode: "run
 export function recordStarted(store: ControlStore, groupId: string, startRevision: number): void {
   const current = readGroupOrchestration(store, groupId);
   if (current === null) return;
-  writeGroupOrchestration(store, groupId, { ...current, startedRevision: startRevision, refusal: null });
+  const { queued: _queued, slotRaces: _slotRaces, ...rest } = current;
+  writeGroupOrchestration(store, groupId, { ...rest, startedRevision: startRevision, refusal: null });
 }
 
 /** A refused automatic start: backoff 30 s, 60 s, … up to 10 min; the count says how many in a row. */
@@ -198,12 +206,50 @@ export interface AutoStartDeps {
   prerequisites?: PrerequisiteReader;
 }
 
+/** The pass's candidates in its order: model reviews last, debug groups first, then by confirm time (spec §3.2). */
+function passCandidates(store: ControlStore): Array<{ group: GroupFacts; row: GroupOrchestration }> {
+  return groupFacts(store)
+    .map((group) => ({ group, row: readGroupOrchestration(store, group.id) }))
+    .filter((entry): entry is { group: GroupFacts; row: GroupOrchestration } => entry.row !== null && entry.row.mode === "run" && entry.row.startedRevision === null)
+    .sort((a, b) => Number(a.group.review) - Number(b.group.review) || Number(b.group.debug) - Number(a.group.debug) || a.row.confirmedAt - b.row.confirmedAt || a.group.id.localeCompare(b.group.id));
+}
+
 /**
  * The pass's admission facts per group id: `rank` 0 a debug group, 1 an ordinary one, 2 a model review; `flowChild` runs
  * under its parent's slot. Review-exit spec §3.1: regained work is admitted in the same order (replenishStartWakes).
  */
 export function admissionFacts(store: ControlStore): Map<string, { rank: number; flowChild: boolean }> {
   return new Map(groupFacts(store).map((group) => [group.id, { rank: group.review ? 2 : group.debug ? 0 : 1, flowChild: group.flowChild }]));
+}
+
+/**
+ * Review-exit spec 2026-11-05 §3.4 (D4): inside an explicit start's transaction, after every refusal. The cap counts every
+ * other group holding a slot; a flow child is exempt (its parent holds the slot). A free slot (or a flow child) answers
+ * null and the caller starts. A full cap records the group as wanting to run -- `mode = run`, `hold` cleared, no start
+ * recorded; no row yet ⇒ one at this command's revision -- keeps any refusal (the pass counts its attempts from it), and
+ * answers `ahead`: the groups before it in the pass's order that would start now if a slot were free (backoff not counted).
+ */
+export function queueStartForSlot(store: ControlStore, input: { groupId: string; revision: number; actorId: string; commandId: string; now: number; prerequisites: PrerequisiteReader }): number | null {
+  const { groupId } = input;
+  const facts = groupFacts(store).find((group) => group.id === groupId);
+  if (facts?.flowChild === true) return null;
+  const others = runningGroupIds(store).filter((id) => id !== groupId).length;
+  if (others < readOrchestrationSettings(store).maxRunningGroups) return null;
+  const current = readGroupOrchestration(store, groupId);
+  const auto = input.actorId === ORCHESTRATION_ACTOR;
+  const queued = auto ? current?.queued : { commandId: input.commandId, actorId: input.actorId };
+  const slotRaces = auto ? (current?.slotRaces ?? 0) + 1 : current?.slotRaces;
+  writeGroupOrchestration(store, groupId, {
+    mode: "run", confirmRevision: current?.confirmRevision ?? input.revision, confirmedAt: current?.confirmedAt ?? input.now,
+    startedRevision: null, refusal: current?.refusal ?? null,
+    ...(queued === undefined ? {} : { queued }), ...(slotRaces === undefined ? {} : { slotRaces }),
+  });
+  let ahead = 0;
+  for (const { group } of passCandidates(store)) {
+    if (group.id === groupId) break;
+    if (autoStartState(store, group, input.now, false, input.prerequisites).kind === "waiting-slot") ahead += 1;
+  }
+  return ahead;
 }
 
 /**
@@ -215,12 +261,7 @@ export async function autoStartPass(deps: AutoStartDeps): Promise<{ started: str
   const { store } = deps;
   const prerequisites = deps.prerequisites ?? noPrerequisites;
   const started: string[] = [], refused: Array<{ groupId: string; code: string }> = [];
-  const facts = groupFacts(store);
-  const candidates = facts
-    .map((group) => ({ group, row: readGroupOrchestration(store, group.id) }))
-    .filter((entry): entry is { group: GroupFacts; row: GroupOrchestration } => entry.row !== null && entry.row.mode === "run" && entry.row.startedRevision === null)
-    .sort((a, b) => Number(a.group.review) - Number(b.group.review) || Number(b.group.debug) - Number(a.group.debug) || a.row.confirmedAt - b.row.confirmedAt || a.group.id.localeCompare(b.group.id));
-  for (const { group } of candidates) {
+  for (const { group } of passCandidates(store)) {
     const { running, cap } = slotUse(store);
     const state = autoStartState(store, group, deps.now(), running < cap || group.flowChild, prerequisites);
     if (state.kind !== "eligible") continue;
@@ -228,11 +269,16 @@ export async function autoStartPass(deps: AutoStartDeps): Promise<{ started: str
     const revision = store.db.prepare("SELECT revision FROM groups WHERE id=?").get(group.id);
     if (revision === undefined) continue;
     const attempt = (row.refusal?.count ?? 0) + 1;
+    // Review-exit spec §3.4: a start that lost the slot to another was booked queued under its id, so the next one is new.
+    const raced = row.slotRaces === undefined ? "" : `-q${row.slotRaces}`;
     const body = await deps.start({
-      schema: "orca-raw-command-v1", commandId: `orca-auto-start-${row.confirmRevision}-${attempt}`, actorId: ORCHESTRATION_ACTOR,
+      schema: "orca-raw-command-v1", commandId: `orca-auto-start-${row.confirmRevision}-${attempt}${raced}`, actorId: ORCHESTRATION_ACTOR,
       expectedRevision: Number(revision.revision), verb: "start", target: { kind: "group", groupId: group.id }, payload: {},
     });
     const error = (body as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+    // Review-exit spec §3.4: the cap filled between this pass's check and the start's transaction -- not started, and no
+    // refusal (nothing is wrong with the group; it waits for the next free slot).
+    if (error === undefined && (body as { result?: { kind?: unknown } } | null)?.result?.kind === "queued-for-slot") continue;
     if (error === undefined) { started.push(group.id); continue; }
     const code = typeof error.code === "string" ? error.code : "unknown";
     store.transaction(() => recordAutoStartRefused(store, group.id, code, typeof error.message === "string" ? error.message.slice(0, 500) : null, deps.now()));

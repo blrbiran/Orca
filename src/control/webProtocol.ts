@@ -2087,6 +2087,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ kind: z.literal("confirmed"), executionSnapshotHash: hashSchema }).strict(),
   z.object({ kind: z.literal("scheduled"), operation: z.enum(["start", "resume-dispatch"]), wakeId: nonemptyString }).strict(),
+  // Review-exit spec 2026-11-05 §3.4 (D4): the cap was full, so the start waits for a slot; `ahead` groups go first.
+  z.object({ kind: z.literal("queued-for-slot"), operation: z.enum(["start", "resume-dispatch"]), ahead: safeInteger }).strict(),
   z.object({ kind: z.literal("resumed"), operation: z.literal("resume-dispatch") }).strict(),
   z.object({ kind: z.literal("paused"), stopMode: z.literal("pause") }).strict(),
   z

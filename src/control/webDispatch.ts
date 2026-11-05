@@ -1,7 +1,7 @@
 import {hasSavedOrdinaryRetryAuthorization} from "./savedResultNoDispatch.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { releaseCommitment } from "./stopIntent.js";
-import { recordStarted } from "./orchestration.js";
+import { queueStartForSlot, readGroupOrchestration, recordStarted } from "./orchestration.js";
 import { allocateFundedAllowance, decideFundedAllowance, hasTokenPolicy, persistFundedAllowance, type FundedAllowance } from "./fundedAllowance.js";
 import { finiteCommitment, tokenProofCovers } from "./tokenPolicy.js";
 import { add, syncWebBudget } from "./budget.js";
@@ -166,9 +166,12 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
       // requirement-not-split (N1 spec §4.1, survey S7), so that a clarifying group's refusal is ledgered.
       if (!(error instanceof ControlError) || (error.code !== "profile-changed" && error.code !== "requirement-not-split")) throw error;
     }
+    // Review-exit spec §3.4: the start that takes a queued group's slot names the explicit start that queued it.
+    let activityFields: Record<string, unknown> = {};
     const outcome = applyWebCommand<CommandResult>(store, {
       rawCommand: command,
       expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      activityFields: () => activityFields,
       apply: (context) => {
         const groupId = groupTarget(command);
         const group = readGroup(store, groupId);
@@ -192,6 +195,12 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         }
         resolveBindings(profileRouter, snapshot);
         if (degraded||observations.some(entry=>scopedProbeBlocks(store,groupId,entry,snapshot.budgetMode,(deps.now?.()??new Date()).getTime()))) throw new ControlError("control-capability-unsupported");
+        // Review-exit spec 2026-11-05 §3.4 (D4): the running-group cap, last -- a group that cannot start is refused above,
+        // never queued. Every actor, orca-auto included (a pass start that lost the slot is queued and not refused).
+        const ahead = queueStartForSlot(store, { groupId, revision: context.nextCommandRevision, actorId: command.actorId, commandId: command.commandId, now: (deps.now?.() ?? new Date()).getTime(), prerequisites: waitingPrerequisites });
+        if (ahead !== null) return success(context, { kind: "queued-for-slot", operation: "start", ahead }, 202);
+        const queued = readGroupOrchestration(store, groupId)?.queued;
+        if (queued !== undefined) activityFields = { queuedCommandId: queued.commandId, queuedBy: queued.actorId };
         const wakeId = `scheduler-wake:${groupId}:${context.nextCommandRevision}`;
         store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)")
           .run(wakeId, groupId, canonicalBytes({ groupId, startRevision: context.nextCommandRevision, executionSnapshotHash: sha256Canonical(snapshot) }).toString("utf8"));
