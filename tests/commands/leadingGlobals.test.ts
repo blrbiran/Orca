@@ -13,6 +13,7 @@ const RAW: Record<string, unknown> = {
   "summary": { schema: "orca-control-summary-v1", groups: [{ groupId: "g-alpha", state: "running", commandRevision: 5 }] },
   "projects": { source: "command-line", projects: [{ projectKey: "proj", name: "proj", path: "/repos/proj", controlRepoId: "repo-1" }] },
   "repositories/repo-1/workspace": { schema: "orca-repository-workspace-v1", repoId: "repo-1", workspaceMode: "worktree", revision: 7 },
+  "groups/g-alpha": { schema: "orca-control-group-v1", summary: { groupId: "g-alpha", repoId: "repo-1", state: "running", commandRevision: 5 }, workItems: [], runs: [] },
   "repositories/repo-1/integration": { schema: "orca-repository-integration-v1", repoId: "repo-1", integration: { delivery: "keep" }, revision: 7 },
 };
 const panel = () => fakePanel(Object.fromEntries(Object.entries(RAW).map(([path, body]) => [`GET ${path}`, { status: 200, body }])));
@@ -57,6 +58,13 @@ describe("global flags before the command (#142)", () => {
     const { code, stdout } = await run(["--json", "group", "list", "--control-state-dir", p.dir]);
     expect(code).toBe(0);
     expect(JSON.parse(stdout)).toMatchObject({ schema: "orca-cli-response-v1", status: 200, body: RAW.summary });
+  });
+
+  it("a moved flag lands before a `--`, so it stays a flag and is not read as a positional", async () => {
+    const p = await panel();
+    const { code, stdout } = await run(["--json", "group", "show", "--control-state-dir", p.dir, "--", "g-alpha"]);
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ status: 200, body: { summary: { groupId: "g-alpha" } } });
   });
 
   it("orca --help group list prints the group list help, not the top-level help", async () => {
