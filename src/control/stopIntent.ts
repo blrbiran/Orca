@@ -531,7 +531,7 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
         // Review-exit spec 2026-11-05 §3.4 (D4): resuming a group that never started is its start, so it waits for a slot
         // as an explicit start does. A started group's claims wait in replenishStartWakes instead.
         if (store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) === undefined) {
-          const ahead = queueStartForSlot(store, { groupId, revision: context.nextCommandRevision, actorId: command.actorId, commandId: command.commandId, now: store.now(), prerequisites: waitingPrerequisites });
+          const ahead = queueStartForSlot(store, { groupId, revision: context.nextCommandRevision, actorId: command.actorId, commandId: command.commandId, now: store.now(), prerequisites: deps.waitingPrerequisites ?? (() => []) });
           if (ahead !== null) {
             deps.beforeCommit?.();
             return commandSuccess(context, { kind: "queued-for-slot", operation: "resume-dispatch", ahead }, 202);

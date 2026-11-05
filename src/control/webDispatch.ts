@@ -197,7 +197,7 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         if (degraded||observations.some(entry=>scopedProbeBlocks(store,groupId,entry,snapshot.budgetMode,(deps.now?.()??new Date()).getTime()))) throw new ControlError("control-capability-unsupported");
         // Review-exit spec 2026-11-05 §3.4 (D4): the running-group cap, last -- a group that cannot start is refused above,
         // never queued. Every actor, orca-auto included (a pass start that lost the slot is queued and not refused).
-        const ahead = queueStartForSlot(store, { groupId, revision: context.nextCommandRevision, actorId: command.actorId, commandId: command.commandId, now: (deps.now?.() ?? new Date()).getTime(), prerequisites: waitingPrerequisites });
+        const ahead = queueStartForSlot(store, { groupId, revision: context.nextCommandRevision, actorId: command.actorId, commandId: command.commandId, now: (deps.now?.() ?? new Date()).getTime(), prerequisites: deps.waitingPrerequisites ?? (() => []) });
         if (ahead !== null) return success(context, { kind: "queued-for-slot", operation: "start", ahead }, 202);
         const queued = readGroupOrchestration(store, groupId)?.queued;
         if (queued !== undefined) activityFields = { queuedCommandId: queued.commandId, queuedBy: queued.actorId };
