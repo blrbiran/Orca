@@ -89,7 +89,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca task`
 
 - `orca task show <group> <task>` — one task of a group and its runs
-- `orca task retry <group> <task>` — start again a task whose current run failed (the run read now is the one retried)
+- `orca task retry <group> <task> [--agent <agent>]` — start again a task whose current run failed (the run read now is the one retried), optionally on another installation
 - `orca task continue <group> <task>` — continue a task's current run from its newest complete checkpoint
 - `orca task set-loop <group> <task> --file <file>` — set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}
 - `orca task set-labels <group> <task> [--label <label>] [--clear]` — set a task's labels (--label repeatable), or --clear back to the plan's
@@ -143,7 +143,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca orchestration`
 
 - `orca orchestration show` — how many groups run at once, and how many hold a slot now
-- `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>]` — how many groups run at once; the reviewer default; quota-wait installations
+- `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>] [--failover-order <failover-order>] [--failover-off]` — how many groups run at once; the reviewer default; quota-wait installations; the quota failover order
 
 ### `orca recovery`
 

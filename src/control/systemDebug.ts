@@ -364,6 +364,37 @@ export function quotaWaitCandidates(store: ControlStore, waiting: ReadonlySet<st
   return out;
 }
 
+/**
+ * Quota failover spec 2026-11-03 §8 (D2): the agent sources a person or a plan did not choose. An installation that came
+ * from a person's panel choice (`task`, `group`) or a plan file (`task-plan`, `group-plan`) is a statement and is never
+ * switched; one from the defaults, ccloop's descriptor, or an earlier failover may be.
+ */
+export const SWITCHABLE_AGENT_SOURCES: ReadonlySet<string> = new Set(["operator", "operator-agent", "descriptor", "failover"]);
+/** The command id of orca-auto's one failover retry of a failed run; its row (applied or refused) is the record. */
+export function failoverCommandId(taskId: string, runId: string): string { return `orca-auto-failover-${taskId}-${runId}`; }
+
+/**
+ * Quota failover spec §8: an orchestrated group's task whose current run ended with cause `quota` on an installation the
+ * task may leave (D2), with no failover command for that run yet. The groups are chosen as for the quota wait.
+ */
+export function failoverCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; installation: string }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; installation: string }> = [];
+  for (const row of store.db.prepare(`SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
+    const groupId = String(row.id);
+    try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue; } catch { continue; }
+    if (isGroupArchived(store, groupId) || groupStopped(store, groupId)) continue;
+    for (const { id: taskId, work } of tasksOf(store, groupId)) {
+      const run = terminallyFailedRun(store, groupId, taskId) as (ReturnType<typeof terminallyFailedRun> & { agent?: { agent?: unknown } }) | null;
+      if (run === null || run.drive?.failureCause?.cause !== "quota" || typeof run.agent?.agent !== "string") continue;
+      const source = (work as { agentProvenance?: { agent?: unknown } }).agentProvenance?.agent;
+      if (typeof source !== "string" || !SWITCHABLE_AGENT_SOURCES.has(source)) continue;
+      if (store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, failoverCommandId(taskId, run.runId)) !== undefined) continue;
+      out.push({ groupId, taskId, runId: run.runId, installation: run.agent.agent });
+    }
+  }
+  return out;
+}
+
 /** §3.1: the facts a ladder debug task is given -- what Orca recorded about the failed run, nothing interpreted. */
 export function ladderFacts(run: { runId: string; drive?: DriveRecord; failureCode?: unknown }): string[] {
   const drive = run.drive;

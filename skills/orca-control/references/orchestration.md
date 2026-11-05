@@ -11,12 +11,14 @@ how many groups run at once, and how many hold a slot now
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 
-## `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>]`
+## `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>] [--failover-order <failover-order>] [--failover-off]`
 
-how many groups run at once; the reviewer default; quota-wait installations
+how many groups run at once; the reviewer default; quota-wait installations; the quota failover order
 
 - What it does: sends control verb `set-orchestration-settings`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `--max-running-groups <n>` (required): 1..64
 - `--criteria-review <criteria-review>`: on|off: the reviewer's global default
 - `--quota-wait <quota-wait>` (repeatable): an installation whose quota failures are retried after 30 min (repeatable)
+- `--failover-order <failover-order>` (repeatable): the installations a quota failure switches a task to, in order (repeatable; unset = the agents table's order)
+- `--failover-off`: never switch a task's installation after a quota failure (an empty failover order)

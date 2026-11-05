@@ -26,6 +26,8 @@ import type { MultiDirProjectOf } from "./multiGroup.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults, type ImportOrigin } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
+import { resolveAgentSwitch } from "./agentSwitch.js";
+import { installationRests } from "./quotaRest.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
 import { allWork, effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
@@ -55,7 +57,7 @@ import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -764,8 +766,37 @@ export class WebControlService {
    * ladder debug group whose tasks are all done is folded into its original group's branch, and the failed task is
    * retried once. Every outcome that ends the ladder is written on the debug group's mark (level 3: needs you).
    */
+  /**
+   * Quota failover spec 2026-11-03 §3, §8 (human: 「如果是provider额度用完，且有备用provider，可以改provider并重试。」): a task whose
+   * run ran out of quota on an installation it may leave (D2) is switched, as orca-auto, to the first installation of the
+   * failover order (D6: the orchestration settings' `failoverOrder`, else the agents table's order) that is another one,
+   * is not resting (D3, D4: quotaRest.ts) and the agents table lists, and retried at once -- one command per failed run,
+   * outside the retry ladder (`quota` is ladder-exempt). With nothing to switch to the task stays as it is: the quota wait,
+   * if set for the installation, or the person. A listing that fails skips this pass.
+   */
+  private async failoverPass(out: { redispatched: string[] }): Promise<void> {
+    const candidates = failoverCandidates(this.store);
+    if (candidates.length === 0) return;
+    let listed: string[];
+    try { listed = (await this.deps.port.listAgents()).installations.map((installation) => installation.id); }
+    catch (error) { process.stderr.write(`orca: failover: the agents table could not be listed: ${error instanceof Error ? error.message : String(error)}\n`); return; }
+    const order = readOrchestrationSettings(this.store).failoverOrder ?? listed;
+    const rests = installationRests(this.store, this.store.now());
+    for (const candidate of candidates) {
+      const to = order.find((id) => id !== candidate.installation && listed.includes(id) && !rests.has(id));
+      if (to === undefined) continue;
+      const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
+      const answer = await this.retryTaskOnAgent({
+        schema: "orca-raw-command-v1", commandId: failoverCommandId(candidate.taskId, candidate.runId), actorId: ORCHESTRATION_ACTOR,
+        expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
+        payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
+      });
+      if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
+    }
+  }
   async systemDebugPass(): Promise<{ redispatched: string[]; opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
     const out = { redispatched: [] as string[], opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
+    await this.failoverPass(out);
     // Failure-cause spec 2026-10-21 §5: a quota failure on an installation set to wait is retried once per failed run, as
     // orca-auto, after the re-probe interval; the retry's ledger row and its task-retried activity are its record.
     for (const candidate of quotaWaitCandidates(this.store, new Set(readOrchestrationSettings(this.store).quotaWait ?? []), this.store.now())) {
@@ -1720,7 +1751,26 @@ export class WebControlService {
   savedResultEligibility(runId:string){return readSavedResultEligibility(this.stopDeps(),runId);}
   verifySavedResult(command:VerifySavedResultCommand){return applyVerifySavedResult(this.stopDeps(),command);}
   retryTask(command: RetryTaskCommand): WebCommandResult {
+    if (command.payload.agent !== undefined) throw new ControlError("recovery-blocked", "agent-switch-needs-resolution");
     return applyRetryTask(this.stopDeps(), command) as WebCommandResult;
+  }
+  /**
+   * Quota failover spec 2026-11-03 §8: a retry on another installation. ccloop resolves the installation before the
+   * transaction (a refusal is booked as the command's answer, as estimate books one); the retry then switches and
+   * retries in one transaction. orca-auto's switches are marked `failover`, a person's `task`.
+   */
+  async retryTaskOnAgent(command: RetryTaskCommand): Promise<WebCommandResult> {
+    const installation = command.payload.agent;
+    if (installation === undefined) return this.retryTask(command);
+    const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+    const source = command.actorId === ORCHESTRATION_ACTOR ? "failover" as const : "task" as const;
+    let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
+    try {
+      frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, groupId(command), installation, source);
+    } catch (error) {
+      return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+    }
+    return applyRetryTask({ ...this.stopDeps(), switchTo: { frozen, source } }, command) as WebCommandResult;
   }
   /**
    * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only

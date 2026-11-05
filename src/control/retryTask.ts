@@ -10,7 +10,8 @@ import type { DriveRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
-import { frozenWorkAgent } from "./agentFreeze.js";
+import type { FrozenWorkAgent } from "./agentFreeze.js";
+import { applyAgentSwitch, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
@@ -40,7 +41,11 @@ import {
  */
 export type RetryTaskCommand = Extract<RawAuthorityCommandV1, { verb: "retry-task" }>;
 export type RetryTaskResult = CommandSuccessV1 | CommandErrorBodyV1;
-export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void }
+/**
+ * `switchTo` (quota failover spec 2026-11-03 §8): the frozen selection a retry on another installation gives the task,
+ * resolved through ccloop before this transaction (agentSwitch.ts resolveAgentSwitch); `source` says who chose it.
+ */
+export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource } }
 
 interface RetriedWork { workItemId: string; taskId: string | null; targetVersion: number; lineageRunIds?: string[]; status: string; currentRunId?: string | null; grant: { work: Amount; handoff: Amount }; retryGrantSourceRunId?: string; pendingRunId?: string | null; continuation?: { continuationIntentId: string; pendingRunId: string } | null }
 
@@ -82,7 +87,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const newest = store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, taskId);
         if (run.runId !== runId || run.groupId !== groupId || run.workItemId !== taskId || run.taskId !== taskId || work.taskId !== taskId
           || run.targetVersion !== work.targetVersion || newest?.id !== runId || !work.lineageRunIds?.includes(runId)
-          || !settlementSame(frozenWorkAgent(run), frozenWorkAgent(work))) throw new ControlError("recovery-blocked", "retry-identity");
+          || !runAgentAgrees(work, run)) throw new ControlError("recovery-blocked", "retry-identity");
         const claim = readWorkClaimEnvelope(store, groupId, runId);
         if (claim.runId !== runId || claim.groupId !== groupId || claim.workItemId !== taskId || claim.generation !== run.generation
           || claim.claimOrdinal !== run.claimOrdinal || claim.continuationIntentId !== (run.continuationIntentId ?? null)
@@ -91,7 +96,11 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           throw new ControlError("recovery-blocked", "retry-claim-identity");
         }
         const allocations = readBudgetProposal(store, groupId).allocations.filter(a => a.ownerKind === "task" && a.ownerId === taskId);
+        // Quota failover spec §8: the payload's installation must be the one resolved before this transaction.
+        if ((command.payload.agent === undefined) !== (deps.switchTo === undefined)
+          || (deps.switchTo !== undefined && deps.switchTo.frozen.agent.agent !== command.payload.agent)) throw new ControlError("recovery-blocked", "agent-switch-unresolved");
         if(run.mode==="verify-saved-result"&&run.state==="settled-restartable"){
+          if(deps.switchTo!==undefined)throw new ControlError("task-not-retryable","agent-switch-saved-result");
           if(!validSavedNoDispatch(store,run)||groupUsageUnknown(store,groupId))throw new ControlError("task-not-retryable","saved-result-no-dispatch-proof");
           if(hasOptionalTaskPolicy(store,groupId,taskId)||run.grant.work.tokens===null)throw new ControlError("task-not-retryable","saved-result-no-dispatch-funding");
           if(claimCapBlocking(store,groupId,run.grant.work.tokens+run.grant.handoff.tokens,store.now()))throw new ControlError("task-not-retryable","spend-cap-reached");
@@ -137,6 +146,11 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           if (request?.state !== "settled-recoverable") throw new ControlError("task-not-retryable", "handoff-settlement");
           releasedSettlementCheckpoint(store, run as never);
         }
+        // Quota failover spec §8: the switch, after every eligibility check above and before A2 re-reads the task, so the
+        // re-issued snapshot and the work item's new selection are checked together; a refusal below rolls it back.
+        const switched = deps.switchTo === undefined ? null
+          : applyAgentSwitch(store, groupId, taskId, runId, deps.switchTo.frozen, command.actorId, deps.switchTo.source === "failover" ? "quota" : "person");
+        if (switched !== null) Object.assign(work, readWork(store, groupId, taskId));
         validateRetryGrantSource(store, groupId, work);
         readConfirmedTaskExecution(store, groupId, taskId);
         if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) throw new ControlError("recovery-blocked", "retry-settlement");
@@ -150,7 +164,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
-          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId}});deps.beforeCommit?.();
+          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched})}});deps.beforeCommit?.();
           return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
         }
         const retrying = held || released || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
@@ -177,7 +191,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         saveWork(store, groupId, work as never);
         recordSavedOrdinaryRetry(store,runId,command.commandId);
         // Effect 4 (the command revision advances in applyWebCommand).
-        recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId } });
+        recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, ...(switched === null ? {} : { agent: switched }) } });
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "task-retried", taskId, fromRunId: runId });
       },

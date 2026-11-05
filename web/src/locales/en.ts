@@ -130,6 +130,7 @@ const selectionSource = {
   operator: "operator", "operator-estimator": "operator-estimator", "operator-reconcile": "operator-reconcile", group: "group",
   "group-estimator": "group-estimator", "group-reconcile": "group-reconcile", task: "task", "operator-agent": "operator-agent", descriptor: "descriptor",
   "group-plan": "group-plan", "group-primary": "group primary", "group-reconcile-plan": "group-reconcile-plan", "task-plan": "task-plan",
+  failover: "switched by Orca after a quota failure",
 } as const satisfies Record<ProvenanceSourceV1, string>;
 // Debug task plan Task 8 (design §12.8): Orca's reproduce-first check on a debug run -- why it failed, and its skipped label.
 const debugRepro = {

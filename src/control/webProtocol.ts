@@ -123,6 +123,8 @@ export const provenanceSourceSchema = z.enum([
   "operator", "operator-estimator", "operator-reconcile", "group", "group-estimator", "group-reconcile", "task", "operator-agent", "descriptor",
   // Ruling review R7: the plan file's half of each level, below the panel's (which keeps the older names).
   "group-plan", "group-primary", "group-reconcile-plan", "task-plan",
+  // Quota failover spec 2026-11-03 §8: an installation orca-auto switched a task to after a quota failure.
+  "failover",
 ]);
 export const selectionProvenanceSchema = z
   .object({ agent: provenanceSourceSchema, model: provenanceSourceSchema, contextWindow: provenanceSourceSchema })
@@ -797,7 +799,8 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 ]);
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
 // CLI v2 spec §14 R2: `runId`, when present, is the run the sender saw failing; refused task-run-moved unless it is current.
-export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional() }).strict();
+// Quota failover spec 2026-11-03 §8: `agent` retries the task on another installation (the switch is recorded on the task).
+export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional() }).strict();
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
@@ -1121,7 +1124,7 @@ export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema
 export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString, note: z.string().min(1).max(2048).optional() }).strict();
 // Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
 // Protect-acceptance-criteria spec §5: `criteriaReview` is the reviewer's global default (absent: unchanged; never set: on).
-export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional() }).strict();
+export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional(), failoverOrder: z.array(z.string().min(1).max(200)).max(64).optional() }).strict();
 // Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
 export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next

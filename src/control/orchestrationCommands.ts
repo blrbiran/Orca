@@ -22,7 +22,7 @@ export function applySetOrchestrationSettings(deps: { store: ControlStore; admis
       apply: (context) => {
         const raw = context.rawCommand as SetOrchestrationSettingsCommand;
         if (raw.target.kind !== "orchestration") throw new ControlError("control-target-not-allowed");
-        const { maxRunningGroups, criteriaReview, quotaWait } = raw.payload;
+        const { maxRunningGroups, criteriaReview, quotaWait, failoverOrder } = raw.payload;
         const current = readOrchestrationSettings(deps.store);
         // Protect-acceptance-criteria spec §5: a payload without `criteriaReview` keeps the stored default.
         const review = criteriaReview ?? current.criteriaReview;
@@ -30,9 +30,12 @@ export function applySetOrchestrationSettings(deps: { store: ControlStore; admis
         const waiting = quotaWait === undefined ? current.quotaWait : [...new Set(quotaWait)].sort();
         // Checks spec 2026-10-22 §4.1: the global check settings are not this verb's; they are kept as stored. Likewise the
         // global flow settings and their locks (flow engine spec §11.2; dropped here until session e2ad4802, 2026-11-05).
-        const next = { maxRunningGroups, ...(review === undefined ? {} : { criteriaReview: review }), ...(waiting === undefined ? {} : { quotaWait: waiting }), ...(current.checks === undefined ? {} : { checks: current.checks }), ...(current.flows === undefined ? {} : { flows: current.flows }) };
+        // Quota failover spec §8: `failoverOrder` is kept as given (its order is the meaning); omitted keeps the stored one.
+        const order = failoverOrder === undefined ? current.failoverOrder : [...new Set(failoverOrder)];
+        const next = { maxRunningGroups, ...(review === undefined ? {} : { criteriaReview: review }), ...(waiting === undefined ? {} : { quotaWait: waiting }), ...(order === undefined ? {} : { failoverOrder: order }), ...(current.checks === undefined ? {} : { checks: current.checks }), ...(current.flows === undefined ? {} : { flows: current.flows }) };
         if (current.maxRunningGroups === maxRunningGroups && (criteriaReview === undefined || criteriaReview === current.criteriaReview)
-          && (quotaWait === undefined || JSON.stringify(waiting) === JSON.stringify(current.quotaWait ?? []))) throw new ControlError("no-op-command");
+          && (quotaWait === undefined || JSON.stringify(waiting) === JSON.stringify(current.quotaWait ?? []))
+          && (failoverOrder === undefined || JSON.stringify(order) === JSON.stringify(current.failoverOrder))) throw new ControlError("no-op-command");
         writeOrchestrationSettings(deps.store, next, context.nextCommandRevision);
         return { status: 200, body: {
           schema: "orca-command-success-v1", commandId: raw.commandId, actorId: raw.actorId,

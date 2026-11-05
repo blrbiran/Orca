@@ -13,14 +13,15 @@ one task of a group and its runs
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 
-## `orca task retry <group> <task>`
+## `orca task retry <group> <task> [--agent <agent>]`
 
-start again a task whose current run failed (the run read now is the one retried)
+start again a task whose current run failed (the run read now is the one retried), optionally on another installation
 
 - What it does: sends control verb `retry-task`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
+- `--agent <agent>`: retry on this agent installation instead (quota failover spec §8; not for a task with skills)
 
 ## `orca task continue <group> <task>`
 

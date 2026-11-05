@@ -15,7 +15,8 @@ export interface PanelPartialSelection { agent?: string | null; model?: string |
 export type LayerName =
   | "operator" | "operator-estimator" | "operator-reconcile"
   | "group-plan" | "group" | "group-primary" | "group-estimator" | "group-reconcile-plan" | "group-reconcile" | "task-plan" | "task";
-export type ProvenanceSource = LayerName | "operator-agent" | "descriptor";
+// Quota failover spec 2026-11-03 §8: "failover" marks an installation orca-auto switched a task to after a quota failure.
+export type ProvenanceSource = LayerName | "operator-agent" | "descriptor" | "failover";
 export interface SelectionLayer { name: LayerName; partial: PartialSelection }
 export interface OperatorPreferences {
   defaultAgent?: string;

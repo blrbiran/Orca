@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { frozenWorkAgent } from "./agentFreeze.js";
+import { runAgentAgrees } from "./agentSwitch.js";
 import { sha256Canonical } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
 import { readArchivedPlan, readBudgetProposal } from "./queries.js";
@@ -53,7 +53,7 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
       const row = rows[i]!, run = decode(row);
       if (run.runId !== row.id || run.groupId !== groupId || run.workItemId !== work.workItemId || run.taskId !== work.taskId
         || run.generation !== Number(row.generation) || run.graphVersion !== graphVersion || run.targetVersion !== work.targetVersion
-        || !settlementSame(frozenWorkAgent(run), frozenWorkAgent(work)) || !settlementSame(run.grant, source.grant)) bad("identity");
+        || !runAgentAgrees(work, run) || !settlementSame(run.grant, source.grant)) bad("identity");
       const claimRow = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='work-claim'").get(`work:${groupId}:${run.runId}`);
       if (!claimRow) bad("claim");
       const hash = JSON.parse(String(claimRow!.body)).envelopeHash;

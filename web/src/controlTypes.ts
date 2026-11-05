@@ -653,7 +653,9 @@ export type ContextWindowV1 = "agent-default" | number;
 export type ProvenanceSourceV1 =
   | "operator" | "operator-estimator" | "operator-reconcile" | "group" | "group-estimator" | "group-reconcile" | "task" | "operator-agent" | "descriptor"
   // Ruling review R7: the plan file's half of each level, below the panel's.
-  | "group-plan" | "group-primary" | "group-reconcile-plan" | "task-plan";
+  | "group-plan" | "group-primary" | "group-reconcile-plan" | "task-plan"
+  // Quota failover spec 2026-11-03 §8.
+  | "failover";
 export type PartialSelectionV1 = { agent?: string; model?: string; contextWindow?: ContextWindowV1 };
 /** Ruling review R7: a panel layer; a null field masks the plan's value for that field at the same level. */
 export type PanelPartialSelectionV1 = { agent?: string | null; model?: string | null; contextWindow?: ContextWindowV1 | null };

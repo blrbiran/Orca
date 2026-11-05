@@ -1942,6 +1942,7 @@ export const zh: Translation<typeof en> = {
       operator: "操作者", "operator-estimator": "操作者的估算槽", "operator-reconcile": "操作者的协调槽", group: "组",
       "group-estimator": "组的估算槽", "group-reconcile": "组的协调槽", task: "任务", "operator-agent": "操作者对该 agent 的默认", descriptor: "agent 描述符",
       "group-plan": "计划（组）", "group-primary": "组主 Agent", "group-reconcile-plan": "计划（组协调槽）", "task-plan": "计划（任务）",
+      failover: "额度用完后由 Orca 切换",
     },
   },
 };

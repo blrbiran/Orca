@@ -178,10 +178,12 @@ export const SETTINGS_ROWS: CommandDef[] = [
     route: () => "operator/set-usage-calendar", payload: (c) => ({ timeZone: str(c, "time-zone"), weekStart: c.args.flags["week-start"] }) }),
 
   // --- orchestration
-  verb({ domain: "orchestration", action: "set", summary: "how many groups run at once; the reviewer default; quota-wait installations", verb: "set-orchestration-settings", scope: "orchestration",
+  verb({ domain: "orchestration", action: "set", summary: "how many groups run at once; the reviewer default; quota-wait installations; the quota failover order", verb: "set-orchestration-settings", scope: "orchestration",
     flags: [
       { name: "max-running-groups", type: "integer", required: true, summary: "1..64" }, { name: "criteria-review", type: "string", summary: "on|off: the reviewer's global default" },
       { name: "quota-wait", type: "string", repeatable: true, summary: "an installation whose quota failures are retried after 30 min (repeatable)" },
+      { name: "failover-order", type: "string", repeatable: true, summary: "the installations a quota failure switches a task to, in order (repeatable; unset = the agents table's order)" },
+      { name: "failover-off", type: "boolean", summary: "never switch a task's installation after a quota failure (an empty failover order)" },
     ],
     route: () => "operator/set-orchestration-settings",
     payload: (c) => {
@@ -190,6 +192,7 @@ export const SETTINGS_ROWS: CommandDef[] = [
       return {
         maxRunningGroups: c.args.flags["max-running-groups"], ...(review === undefined ? {} : { criteriaReview: review === "on" }),
         ...(list(c, "quota-wait").length === 0 ? {} : { quotaWait: list(c, "quota-wait") }),
+        ...(c.args.flags["failover-off"] === true ? { failoverOrder: [] } : list(c, "failover-order").length === 0 ? {} : { failoverOrder: list(c, "failover-order") }),
       };
     } }),
 

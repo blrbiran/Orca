@@ -10,6 +10,7 @@ import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
+import { runAgentAgrees } from "../control/agentSwitch.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
@@ -819,10 +820,6 @@ function sameFrozen(record: unknown, entry: { taskId: string } & Record<string, 
   catch { return false; }
 }
 
-function sameFrozenRecords(left: unknown, right: unknown): boolean {
-  try { return canonicalBytes(frozenWorkAgent(left)).equals(canonicalBytes(frozenWorkAgent(right))); }
-  catch { return false; }
-}
 
 /** Labels and progress spec §4.1 (§8 R18): ccloop's status as the step the panel shows. */
 const STEP_OF = {
@@ -1099,8 +1096,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       const current = work.currentRunId === runId;
       const funded=readFundedAllowance(store,run);
       const claimed = current && run.state === "settled-recoverable" ? run.remaining : run.grant;
-      // Agent selection spec §6.4 / §3 I1: the run carries its work item's frozen selection, byte for byte.
-      if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || !sameFrozenRecords(run, work)
+      // Agent selection spec §6.4 / §3 I1: the run carries its work item's frozen selection, byte for byte -- after a
+      // switch (quota failover spec 2026-11-03 §8), the selection frozen when the run was claimed.
+      if (work.workItemId !== run.workItemId || work.taskId !== run.taskId || !runAgentAgrees(work, run)
         || work.targetVersion !== run.targetVersion
         || (current && funded===null && canonicalBytes(work.grant).compare(canonicalBytes(claimed)) !== 0)
         || !sameBinding(run.executionProfile, proposal.profiles.worker, "task")

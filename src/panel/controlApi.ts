@@ -865,7 +865,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "recovery-retry": await service.recoveryRetry(command); break;
           case "settle-unknown-usage": await service.settleUnknownUsage(command); break;
           case "verify-saved-result":await service.verifySavedResult(command);break;
-          case "retry-task": service.retryTask(command); break;
+          case "retry-task": if (command.payload.agent === undefined) service.retryTask(command); else await service.retryTaskOnAgent(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-check-settings": service.setCheckSettings(command); break;
