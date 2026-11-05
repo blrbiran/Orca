@@ -21,6 +21,7 @@ import { DependencyGraph } from "./DependencyGraph.js";
 import { EvidenceLink } from "./EvidenceLink.js";
 import { FolderPlacementBlock } from "./FolderPlacement.js";
 import { GitScheme } from "./GitScheme.js";
+import { reviewWording } from "./groupCategory.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { MultiDirLandingBlock } from "./MultiDirLanding.js";
 import { RefusalNotice } from "./RefusalNotice.js";
@@ -610,7 +611,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           </button>
         </p>
       )}
-      <p>{t(view.summary.state === "review" ? "detail.goalReview" : "detail.nextAction")}</p>
+      <p>{t(reviewWording(view.summary) === "goal-review" ? "detail.goalReview" : reviewWording(view.summary) === "blocked" ? "detail.tasksBlocked" : "detail.nextAction")}</p>
       {/* Issue #47: the execution controls are one bar above the region tabs, shown whatever tab is open. */}
       {dispatchControls}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion} regions={{

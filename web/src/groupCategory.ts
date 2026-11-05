@@ -32,6 +32,17 @@ export function groupCategory(summary: GroupSummaryV1): GroupCategory {
 }
 
 /**
+ * Tester #128: what a `review` group's line says. The server moves a group to `review` after every settle, blocked tasks
+ * included, so "goal review" is said only when every task is done; with a blocked task it says the tasks are blocked;
+ * otherwise (or outside review) nothing special.
+ */
+export function reviewWording(summary: GroupSummaryV1): "goal-review" | "blocked" | null {
+  if (summary.state !== "review") return null;
+  if (summary.completion !== undefined && summary.completion.total > 0 && summary.completion.done === summary.completion.total) return "goal-review";
+  return (summary.counts?.blocked ?? 0) > 0 ? "blocked" : null;
+}
+
+/**
  * Ruling H8 (2026-10-27, session 7753e97d): the status light on a group's card, from its board column. Needs-you is red
  * (failed or blocked), a group with a run going is green, one started or queued with none going is amber (waiting), and
  * anything not yet started or already settled -- clarifying, awaiting confirmation, done, archived -- is dim. The card's

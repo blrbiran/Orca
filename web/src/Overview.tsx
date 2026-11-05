@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { CardGoal } from "./CardGoal.js";
 import { enumText } from "./i18n.js";
+import { reviewWording } from "./groupCategory.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { reasonCode } from "./runFacts.js";
 import type { WorkItemCategoryV1 } from "./controlTypes.js";
@@ -39,7 +40,7 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
     {model.progress.length === 0 && model.complete && <p>{t("overview.noProgress")}</p>}
     <ul className={rowList}>{model.progress.map(({ group, owner, ownerUnknown, target }) => <li key={group.groupId} className={rowItem}>
      <div className="flex flex-wrap items-baseline justify-between gap-3"><button type="button" className={rowButton} onClick={() => props.onOpen(target)}><CardGoal group={group} fallback={group.groupId} /></button><span>{owner || t("overview.global")}{ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""}</span></div>
-     <p className={rowText}>{enumText("groupState", group.state)}{group.state === "review" ? ` · ${t("overview.goalReview")}` : group.state === "done" ? ` · ${t("overview.deliverySeparate")}` : ""}</p>
+     <p className={rowText}>{enumText("groupState", group.state)}{reviewWording(group) === "goal-review" ? ` · ${t("overview.goalReview")}` : reviewWording(group) === "blocked" ? ` · ${t("overview.tasksBlocked")}` : group.state === "done" ? ` · ${t("overview.deliverySeparate")}` : ""}</p>
      {group.completion ? <><p className={rowText}>{t("overview.tasks", { done: group.completion.done, total: group.completion.total })}</p>{group.completion.total > 0 && <progress className="w-full max-w-full" value={group.completion.done} max={group.completion.total} aria-label={t("overview.taskProgress")} />}</> : group.requirement ? <p className={rowText}>{t("overview.requirementProgress", { round: group.requirement.roundNo ?? "—", questions: group.requirement.openQuestions })}</p> : <p className={rowText}>{t("overview.taskCountsUnavailable")}</p>}
      {group.counts && <p className={`${rowText} flex flex-wrap gap-3`}>{Object.entries(group.counts).map(([kind, n]) => <span key={kind}>{t(`control.graph.category.${kind as WorkItemCategoryV1}`)} {n}</span>)}</p>}
     </li>)}</ul>
