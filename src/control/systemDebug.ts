@@ -397,6 +397,17 @@ export function failoverCandidates(store: ControlStore): Array<{ groupId: string
   return out;
 }
 
+/**
+ * Quota failover spec §3 Route (session 3cfc2e73): whether orca-auto may route `groupId`'s tasks off a resting installation
+ * before their first claim -- the groups failoverCandidates reads (orchestrated, not a flow child, not archived, not stopped).
+ */
+export function isFailoverGroup(store: ControlStore, groupId: string): boolean {
+  const row = store.db.prepare(`SELECT o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE g.id=? AND ${flowRoleSql("g")} IS NOT 'child'`).get(groupId);
+  if (row === undefined) return false;
+  try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") return false; } catch { return false; }
+  return !isGroupArchived(store, groupId) && !groupStopped(store, groupId);
+}
+
 /** §3.1: the facts a ladder debug task is given -- what Orca recorded about the failed run, nothing interpreted. */
 export function ladderFacts(run: { runId: string; drive?: DriveRecord; failureCode?: unknown }): string[] {
   const drive = run.drive;

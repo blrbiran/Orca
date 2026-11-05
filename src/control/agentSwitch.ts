@@ -23,9 +23,10 @@ export type SwitchSource = "task" | "failover";
 /**
  * One switch: the run that was current when it happened (for reading), the selection it replaced, and who made it (the
  * routed principal, e.g. `agent:cli` or `user:<id>`, else the command's actor). `auto`: a `retry-task --agent auto`
- * handing the choice back to orca-auto (session 3cfc2e73 ruling: a person unlocks a task with it).
+ * handing the choice back to orca-auto (session 3cfc2e73 ruling: a person unlocks a task with it). `rest`: orca-auto moved
+ * a task not yet started (no run, `afterRunId` null) off a resting installation before its first claim (spec §3 Route).
  */
-export interface AgentSwitchRecord { afterRunId: string; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" | "auto" }
+export interface AgentSwitchRecord { afterRunId: string | null; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" | "auto" | "rest" }
 
 /** `retry-task`'s `agent: "auto"`: not an installation id but "let orca-auto choose" (an installation named `auto` cannot be named). */
 export const AUTO_AGENT = "auto";
@@ -90,7 +91,7 @@ export async function resolveAgentSwitch(
  * and the confirmed snapshot is re-issued with only this task's agent entry replaced. A task with skills is refused
  * (its skill set was checked against the frozen agent's kind at confirm); so is a switch to the installation it is on.
  */
-export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
+export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string | null, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
   const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown>;
   const previous = frozenWorkAgent(work);
   // `auto` may keep the installation and change only its provenance (the unlock); nothing else may switch to the same one.

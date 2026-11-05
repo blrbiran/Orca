@@ -654,14 +654,21 @@ export function recoverAttempt(deps: { store: ControlStore }, tuple: AttemptTupl
   return { result: "start-unknown" };
 }
 
-export interface EstimateClaimAuthority { claimEstimate(groupId: string, estimateId: string): Promise<unknown> }
+/**
+ * `routeBeforeClaim` (quota failover spec §3 Route, session 3cfc2e73): asked before every start delivery, so the task it
+ * would claim can leave a resting installation first (webService.ts); it never throws.
+ */
+export interface EstimateClaimAuthority { claimEstimate(groupId: string, estimateId: string): Promise<unknown>; routeBeforeClaim?(groupId: string): Promise<void> }
 export interface WebWakeDeps extends WebDispatchDeps { service: EstimateClaimAuthority }
 
 /** Bind each durable wake kind to the control authority that can settle it. */
 export function createWebWakeHandlers(deps: WebWakeDeps): WakeHandlers {
   const { store } = deps;
   // A `blocked` answer (a capability blocker, unknown usage, a spend cap) leaves the wake pending.
-  const start: WakeHandler = async (wake) => (await deliverScheduledStart(deps, wake.groupId)).kind !== "blocked";
+  const start: WakeHandler = async (wake) => {
+    await deps.service.routeBeforeClaim?.(wake.groupId);
+    return (await deliverScheduledStart(deps, wake.groupId)).kind !== "blocked";
+  };
   return {
     start,
     "no-start": start,

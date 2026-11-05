@@ -26,7 +26,7 @@ import type { MultiDirProjectOf } from "./multiGroup.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, type AsyncImportDeps, type ImportCommand, type ImportDefaults, type ImportOrigin } from "./planImport.js";
 import { readAgentPreferences } from "./agentPreferences.js";
-import { AUTO_AGENT, resolveAgentSwitch, unlockedAgent } from "./agentSwitch.js";
+import { applyAgentSwitch, AUTO_AGENT, resolveAgentSwitch, unlockedAgent } from "./agentSwitch.js";
 import { frozenWorkAgent } from "./agentFreeze.js";
 import { failoverTargets, installationRests } from "./quotaRest.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
@@ -37,7 +37,7 @@ import { agentSelectionSchema, amountSchema } from "./schema.js";
 import { writeCanonicalRecord, readCanonicalRecord } from "./snapshot.js";
 import { estimateExecutionContractSchema, executionSnapshotSchema } from "./webProtocol.js";
 import { parkEstimate } from "./estimateParking.js";
-import { scheduleStart, type StartCommand } from "./webDispatch.js";
+import { nextClaimableTask, scheduleStart, type StartCommand } from "./webDispatch.js";
 import { settleSingleCallUsageInTransaction } from "./singleCallSettlement.js";
 import { settleableSingleCallBlock } from "./singleCall.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
@@ -59,7 +59,7 @@ import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -828,6 +828,49 @@ export class WebControlService {
       } catch (error) {
         process.stderr.write(`orca: failover ${candidate.groupId}/${candidate.taskId}: ${error instanceof Error ? error.message : String(error)}\n`);
       }
+    }
+  }
+  /**
+   * Quota failover spec §3 Route (registered "Not built" in the 2026-11-05 plan; session 3cfc2e73): before a start wake is
+   * delivered (webDispatch.ts createWebWakeHandlers), the task it would claim -- not started yet (no run) -- whose
+   * installation rests (D3, D4) and is not set to wait, and whose agent the task may leave (D2), is switched as orca-auto to
+   * the first failover target ccloop resolves now (failoverTargets, the order failoverPass uses), with the confirmed
+   * snapshot re-issued and the switch recorded (reason `rest`). No run is spent on a wall already known. The groups are
+   * failoverPass's. Nothing to switch to, or any error: the task is claimed as it is. Never throws.
+   */
+  async routeBeforeClaim(groupId: string): Promise<void> {
+    try {
+      const next = nextClaimableTask(this.store, groupId);
+      if (next === null || !isFailoverGroup(this.store, groupId)) return;
+      const notStarted = (work: { currentRunId?: string | null; lineageRunIds?: string[] }) => work.currentRunId == null && (work.lineageRunIds ?? []).length === 0;
+      const work = readWork(this.store, groupId, next.workItemId) as unknown as { taskId: string | null; currentRunId?: string | null; lineageRunIds?: string[] };
+      if (work.taskId === null || !notStarted(work)) return;
+      const current = frozenWorkAgent(work), taskId = work.taskId;
+      if (!SWITCHABLE_AGENT_SOURCES.has(current.agentProvenance.agent)) return;
+      const settings = readOrchestrationSettings(this.store);
+      const rests = installationRests(this.store, this.store.now());
+      if (!rests.has(current.agent.agent) || (settings.quotaWait ?? []).includes(current.agent.agent)) return;
+      const listed = (await this.deps.port.listAgents()).installations.map((entry) => entry.id);
+      for (const to of failoverTargets(settings.failoverOrder ?? listed, listed, rests, current.agent.agent)) {
+        let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
+        try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, groupId, to, "failover"); }
+        catch { continue; }
+        const release = this.deps.admissionGate?.enter();
+        try {
+          this.store.transaction(() => {
+            // Re-read after the awaits: a claim or another switch in between leaves the task as it now is.
+            const now = readWork(this.store, groupId, taskId) as unknown as { currentRunId?: string | null; lineageRunIds?: string[] };
+            if (!notStarted(now) || !canonicalBytes(frozenWorkAgent(now)).equals(canonicalBytes(current))) return;
+            applyAgentSwitch(this.store, groupId, taskId, null, frozen, ORCHESTRATION_ACTOR, "rest");
+            recordProjectionChange(this.store, [groupId]);
+          });
+        } finally { release?.(); }
+        return;
+      }
+    } catch (error) {
+      // A task with skills is refused by applyAgentSwitch (its skills were checked against its agent's kind): it waits.
+      if (error instanceof ControlError && error.detail === "agent-switch-skills") return;
+      process.stderr.write(`orca: failover route ${groupId}: ${error instanceof Error ? error.message : String(error)}\n`);
     }
   }
   async systemDebugPass(): Promise<{ redispatched: string[]; opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {

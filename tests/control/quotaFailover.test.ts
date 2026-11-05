@@ -4,6 +4,9 @@ import { installationRests, parseResetAt, REST_CAP_MS, REST_DEFAULT_MS } from ".
 import { failoverCommandId } from "../../src/control/systemDebug.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { permissionRefusal } from "../../src/panel/permissions.js";
+import { createWebWakeHandlers } from "../../src/control/webDispatch.js";
+import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
+import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import type { PartialSelection } from "../../src/control/agentSelection.js";
@@ -342,5 +345,80 @@ describe("an agent may switch a task's installation; --agent auto hands it back 
     expect(permissionRefusal(dispatched, "retry-task", { taskId: "a" })).toBeNull();
     expect(permissionRefusal({ kind: "agent", client: "cli" }, "retry-task", { taskId: "a", agent: "auto" })).toBeNull();
     expect(permissionRefusal({ kind: "user", userId: "u1", name: "u", roles: ["member"] }, "retry-task", { taskId: "a", agent: "claude" })).toBeNull();
+  });
+});
+
+describe("a task not started yet leaves a resting installation before its first claim (spec §3 Route, session 3cfc2e73)", { timeout: 120_000 }, () => {
+  // Spec §3 Route: 「At dispatch -- never mid-run -- a work item whose selected installation is resting is offered to the next
+  // installation」. Task `a` runs out of quota on codex; task `b` has not run yet and would only hit the same wall.
+  async function pair(options: { bAgent?: PartialSelection; cause?: string } = {}) {
+    const clock = { value: Date.UTC(2026, 10, 5, 12, 0, 0) };
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b", ...(options.bAgent ? { agent: options.bAgent } : {}) }], {
+      storeNow: () => clock.value,
+      behaviour: (id) => (id === "a" ? "failed" : "succeed"),
+      failure: (id) => (id === "a" ? { failureCause: { cause: options.cause ?? "quota", phase: "plan", retries: 0, detail: "You've hit your usage limit" } } : undefined),
+    });
+    const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
+    const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
+    if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
+    const service = new WebControlService({ ...t.h.deps, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => t.repo });
+    const first = await t.claim();
+    await t.until(t.driver(), () => t.body(first).state === "blocked");
+    const work = (id: string) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(id)!.body));
+    const runsOf = (id: string) => t.h.store.db.prepare("SELECT id, body FROM runs WHERE group_id='g' AND work_item_id=? ORDER BY rowid").all(id).map((row) => ({ id: String(row.id), ...JSON.parse(String(row.body)) }));
+    // The driver's path: the next start wake is armed and delivered through the wake handlers.
+    const deliver = async () => {
+      replenishStartWakes({ store: t.h.store, admissionGate: t.h.deps.admissionGate });
+      return deliverSchedulerWakes(t.h.store, createWebWakeHandlers({ ...t.dispatch, service }));
+    };
+    return { t, service, first, clock, work, runsOf, deliver };
+  }
+
+  it("switches it before the claim, records the switch, and its one run is on the other installation", async () => {
+    const w = await pair(); try {
+      expect(installationRests(w.t.h.store, w.clock.value).has("codex")).toBe(true);
+      expect(w.work("b").agent.agent).toBe("codex");
+      expect(w.runsOf("b")).toEqual([]);
+      await w.deliver();
+      expect(w.work("b").agent.agent).toBe("claude");
+      expect(w.work("b").agentProvenance.agent).toBe("failover");
+      expect(w.work("b").agentSwitches).toEqual([expect.objectContaining({ afterRunId: null, by: "orca-auto", reason: "rest", previous: expect.objectContaining({ agent: expect.objectContaining({ agent: "codex" }) }) })]);
+      // No run was spent on codex: b's only run is claude's, stamped after the switch.
+      expect(w.runsOf("b").map((run) => [run.agent.agent, run.agentEpoch])).toEqual([["claude", 1]]);
+      expect(() => readConfirmedTaskExecution(w.t.h.store, "g", "b")).not.toThrow();
+      expect(readControlGroup(w.t.h.store, "route-test", "g").runs.map((run) => run.runId)).toContain(w.runsOf("b")[0]!.id);
+      // Not a retry: nothing booked in the command ledger for it.
+      expect(w.t.h.store.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE json_extract(body_json,'$.verb')='retry-task'").get()!.n).toBe(0);
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("leaves a plan-named agent (D2), an installation that is not resting or set to wait, a held group, and a task that has run", async () => {
+    const pinned = await pair({ bAgent: { agent: "codex" } }); try {
+      await pinned.deliver();
+      expect(pinned.work("b").agentSwitches).toBeUndefined();
+      expect(pinned.runsOf("b").map((run) => run.agent.agent)).toEqual(["codex"]);
+    } finally { await pinned.t.h.dispose(); }
+    const auth = await pair({ cause: "auth" }); try {
+      await auth.deliver();
+      expect(auth.runsOf("b").map((run) => run.agent.agent)).toEqual(["codex"]);
+    } finally { await auth.t.h.dispose(); }
+    const waits = await pair(); try {
+      expect("error" in (waits.service.setOrchestrationSettings(waits.t.h.rawCommand("wait", Number(waits.t.h.store.db.prepare("SELECT revision FROM orchestration_settings").get()?.revision ?? 0),
+        "set-orchestration-settings", { kind: "orchestration" }, { maxRunningGroups: 3, quotaWait: ["codex"] }) as never) as object)).toBe(false);
+      await waits.deliver();
+      expect(waits.runsOf("b").map((run) => run.agent.agent)).toEqual(["codex"]);
+    } finally { await waits.t.h.dispose(); }
+    const held = await pair(); try {
+      held.t.h.store.db.prepare("UPDATE group_orchestration SET body=json_set(body,'$.mode','hold') WHERE group_id='g'").run();
+      await held.deliver();
+      expect(held.runsOf("b").map((run) => run.agent.agent)).toEqual(["codex"]);
+    } finally { await held.t.h.dispose(); }
+    // A task that has run is failoverPass's (after its own quota failure), not this route's: a's plain retry is claimed on codex.
+    const ran = await pair(); try {
+      expect("error" in (ran.service.retryTask(ran.t.h.command("retry-task", { taskId: "a" })) as object)).toBe(false);
+      await ran.deliver();
+      expect(ran.runsOf("a").map((run) => run.agent.agent)).toEqual(["codex", "codex"]);
+      expect(ran.work("a").agentSwitches).toBeUndefined();
+    } finally { await ran.t.h.dispose(); }
   });
 });
