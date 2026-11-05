@@ -60,12 +60,28 @@ const groupList = (body: unknown): string => {
   return groups.length === 0 ? "no groups" : groups.map((g) => `${g.groupId}  ${g.state ?? ""}  rev ${g.commandRevision ?? "?"}${g.goal ? `  ${g.goal}` : ""}`).join("\n");
 };
 
+interface ProjectRow { projectKey: string; controlRepoId: string | null; path: string; kind?: string; dirs?: Array<{ projectKey: string }> }
+
+/** Issue 146: each row names its kind; a multi lists its members instead of the primary's path it carries for display. */
+const projectList = (body: unknown): string => {
+  const rows = (field(body, "projects") as ProjectRow[] | undefined) ?? [];
+  return rows.map((p) => `${p.projectKey}  ${p.kind ?? "repo"}  ${p.controlRepoId ?? "(no control)"}  ${p.kind === "multi" ? `members ${(p.dirs ?? []).map((d) => d.projectKey).join(", ")}` : p.path}`).join("\n") || "no projects";
+};
+
 export const READ_ROWS: CommandDef[] = [
-  read({ domain: "project", action: "list", summary: "the registered projects, their roots and control repository ids", paths: () => ["projects"],
-    format: (body) => ((field(body, "projects") as Array<{ projectKey: string; controlRepoId: string | null; path: string }> | undefined) ?? []).map((p) => `${p.projectKey}  ${p.controlRepoId ?? "(no control)"}  ${p.path}`).join("\n") || "no projects" }),
+  read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
+    format: projectList }),
   read({ domain: "project", action: "show", summary: "the project's workspace mode and integration settings (and their revision)",
     paths: async (context) => { const { repoId } = await context.project(); return [`repositories/${repoId}/workspace`, `repositories/${repoId}/integration`]; },
-    compose: async (bodies, context) => { const p = await context.project(); return { schema: "orca-project-show-v1", repoId: p.repoId, projectKey: p.projectKey, path: p.path, workspace: bodies[0], integration: bodies[1] }; } }),
+    compose: async (bodies, context) => {
+      const p = await context.project();
+      // Issue 146: a dir or multi project says so (a multi with its members); a repository's body keeps its shape.
+      return {
+        schema: "orca-project-show-v1", repoId: p.repoId, projectKey: p.projectKey, path: p.path,
+        ...(p.kind === undefined ? {} : { kind: p.kind }), ...(p.dirs === undefined ? {} : { dirs: p.dirs }),
+        workspace: bodies[0], integration: bodies[1],
+      };
+    } }),
   read({ domain: "group", action: "list", summary: "every group: id, state, revision, goal", paths: () => ["summary"], format: groupList }),
   read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`] }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),

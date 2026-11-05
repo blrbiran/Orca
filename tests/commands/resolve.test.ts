@@ -65,3 +65,39 @@ describe("resolveProject (spec §4 Project)", () => {
     for (const id of ["outer", "inner", "lone"]) expect(error.message).toContain(id);
   });
 });
+
+// Issue 146 (session 3cfc2e73): a multi project's row carries its primary member's path for display only (multi spec
+// §4.2). Resolving by that path made the answer depend on how the keys sort -- a multi whose key sorts first captured
+// every cwd inside its primary member. Both sort orders are pinned, since either one alone passes by luck.
+describe("resolveProject never finds a multi project by a path (issue 146)", () => {
+  async function multi(multiKey: string) {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "orca-resolve-multi-")));
+    for (const dir of ["backend/src", "frontend"]) await mkdir(join(root, dir), { recursive: true });
+    const projects: ProjectRef[] = [
+      { repoId: "repo-backend", projectKey: "backend", path: join(root, "backend") },
+      { repoId: "repo-frontend", projectKey: "frontend", path: join(root, "frontend") },
+      { repoId: "multi-x", projectKey: multiKey, path: join(root, "backend"), kind: "multi", dirs: ["backend", "frontend"] },
+    ];
+    // The panel lists rows sorted by project key, so the multi's place depends on its name.
+    projects.sort((a, b) => a.projectKey.localeCompare(b.projectKey));
+    return { root, projects };
+  }
+
+  it.each([["app"], ["zz-app"]])("multi key %j: a cwd inside the primary member is the member repository", async (key) => {
+    const { root, projects } = await multi(key);
+    expect(resolveProject(projects, join(root, "backend/src"), undefined).repoId).toBe("repo-backend");
+    expect(resolveProject(projects, join(root, "backend"), undefined).repoId).toBe("repo-backend");
+  });
+
+  it.each([["app"], ["zz-app"]])("multi key %j: --project <a member's path> is the member repository", async (key) => {
+    const { root, projects } = await multi(key);
+    expect(resolveProject(projects, root, join(root, "backend")).repoId).toBe("repo-backend");
+    expect(resolveProject(projects, root, join(root, "backend/src")).repoId).toBe("repo-backend");
+  });
+
+  it("--project <the multi's id or key> is the multi", async () => {
+    const { root, projects } = await multi("app");
+    expect(resolveProject(projects, join(root, "backend/src"), "multi-x").projectKey).toBe("app");
+    expect(resolveProject(projects, join(root, "backend/src"), "app").repoId).toBe("multi-x");
+  });
+});

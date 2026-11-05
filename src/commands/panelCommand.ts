@@ -86,7 +86,7 @@ export async function resolveIds(args: ParsedArgs, session: PanelSession): Promi
   return ids;
 }
 
-interface ProjectsBody { projects: Array<{ projectKey: string; path: string; controlRepoId: string | null }> }
+interface ProjectsBody { projects: Array<{ projectKey: string; path: string; controlRepoId: string | null; kind?: "dir" | "multi"; dirs?: Array<{ projectKey: string }> }> }
 
 export function contextFor(args: ParsedArgs, io: CommandIo, session: PanelSession, ids: Record<string, string>): WriteContext {
   let project: Promise<ProjectRef> | null = null;
@@ -96,7 +96,10 @@ export function contextFor(args: ParsedArgs, io: CommandIo, session: PanelSessio
       project ??= session.read("projects").then((body) => {
         const refs = (body as ProjectsBody).projects
           .filter((p) => p.controlRepoId !== null)
-          .map((p) => ({ repoId: p.controlRepoId!, projectKey: p.projectKey, path: p.path }));
+          .map((p) => ({
+            repoId: p.controlRepoId!, projectKey: p.projectKey, path: p.path,
+            ...(p.kind === undefined ? {} : { kind: p.kind }), ...(p.dirs === undefined ? {} : { dirs: p.dirs.map((d) => d.projectKey) }),
+          }));
         return resolveProject(refs, io.cwd, args.global.project);
       });
       return project;

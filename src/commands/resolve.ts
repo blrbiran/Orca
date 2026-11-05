@@ -2,8 +2,11 @@ import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve as resolvePath, sep } from "node:path";
 import { EntryRejection } from "../entry/envelope.js";
 
-/** A registered project as the panel lists it: its control repository id, its key and its root on disk. */
-export interface ProjectRef { repoId: string; projectKey: string; path: string }
+/**
+ * A registered project as the panel lists it: its control repository id, its key and its root on disk. Only a `dir` or
+ * `multi` project names its kind; a multi names its member project keys, and its `path` is the primary's, for display.
+ */
+export interface ProjectRef { repoId: string; projectKey: string; path: string; kind?: "dir" | "multi"; dirs?: string[] }
 
 const real = (path: string): string => { try { return realpathSync(path); } catch { return resolvePath(path); } };
 const holds = (root: string, path: string): boolean => {
@@ -15,11 +18,13 @@ const listed = (projects: readonly ProjectRef[]): string => projects.map((p) => 
 /**
  * Spec §4 "Project": `--project` (repo id, project key, or a path inside one) wins; else the registered repository whose
  * root holds realpath(cwd) -- the deepest when they nest; else the only one; else project-ambiguous listing them.
+ * Issue 146: a multi project is never found by a path (multi spec §4.2: its `path` is the primary member's, for
+ * display), so a cwd or a path inside a member is that member; a multi is named by its id or project key only.
  */
 export function resolveProject(projects: readonly ProjectRef[], cwd: string, flag: string | undefined): ProjectRef {
   const byPath = (path: string): ProjectRef | null => {
     const at = real(path);
-    const containing = projects.filter((p) => holds(real(p.path), at));
+    const containing = projects.filter((p) => p.kind !== "multi" && holds(real(p.path), at));
     containing.sort((a, b) => real(b.path).length - real(a.path).length);
     return containing[0] ?? null;
   };

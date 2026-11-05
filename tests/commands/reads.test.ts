@@ -136,3 +136,45 @@ describe("against a real panel", () => {
     }
   }, 60_000);
 });
+
+// Issue 146 (session 3cfc2e73): a multi project's row carries its primary member's path for display (multi spec §4.2).
+// The CLI must not resolve a cwd to the multi by that path, and the human list must say which row is a multi.
+describe("multi projects in project resolution and the project list (issue 146)", () => {
+  const MULTI_PROJECTS = { source: "file", editable: true, pendingRestart: [], fileError: null, projects: [
+    // Sorted by key, as the panel lists them: the multi "app" comes before its primary member "backend".
+    { projectKey: "app", name: "app", path: "/repos/backend", kind: "multi", dirs: [{ projectKey: "backend", kind: "repo" }, { projectKey: "web", kind: "repo" }], controlRepoId: "multi-app" },
+    { projectKey: "backend", name: "backend", path: "/repos/backend", controlRepoId: "repo-b" },
+    { projectKey: "web", name: "web", path: "/repos/web", controlRepoId: "repo-w" },
+  ] };
+  const settings = (repoId: string) => ({
+    [`GET repositories/${repoId}/workspace`]: { status: 200, body: { repoId, workspaceMode: "worktree", revision: 1 } },
+    [`GET repositories/${repoId}/integration`]: { status: 200, body: { repoId, integration: { delivery: "keep" }, revision: 1 } },
+  });
+  const multiPanel = () => fakePanel({ "GET projects": { status: 200, body: MULTI_PROJECTS }, ...settings("repo-b"), ...settings("multi-app") });
+
+  it("a cwd inside the primary member resolves to the member repository, not the multi", async () => {
+    const p = await multiPanel();
+    const out = await cli(["project", "show", "--json"], p.dir, { cwd: "/repos/backend/src" });
+    expect(out.code, out.stdout).toBe(0);
+    expect(out.json().body).toMatchObject({ repoId: "repo-b", projectKey: "backend" });
+    expect(out.json().body.kind).toBeUndefined();
+  });
+
+  it("--project <the multi's key> is the multi, and project show names its kind and members", async () => {
+    const p = await multiPanel();
+    const out = await cli(["project", "show", "--project", "app", "--json"], p.dir, { cwd: "/repos/backend/src" });
+    expect(out.code, out.stdout).toBe(0);
+    expect(out.json().body).toMatchObject({ repoId: "multi-app", projectKey: "app", kind: "multi", dirs: ["backend", "web"] });
+  });
+
+  it("the human project list names each row's kind, and a multi's members instead of the primary's path", async () => {
+    const p = await multiPanel();
+    const out = await cli(["project", "list"], p.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout.split("\n").filter(Boolean)).toEqual([
+      "app  multi  multi-app  members backend, web",
+      "backend  repo  repo-b  /repos/backend",
+      "web  repo  repo-w  /repos/web",
+    ]);
+  });
+});

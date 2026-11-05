@@ -6,7 +6,7 @@ Every `orca project` command. Ids: a full id, a unique prefix, or (projects) a n
 
 ## `orca project list`
 
-the registered projects, their roots and control repository ids
+the registered projects: key, kind, control repository id, and root (a multi's member projects)
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).

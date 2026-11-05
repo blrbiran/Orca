@@ -79,7 +79,7 @@ export interface WriteContext {
   /** Gaps spec §4.7: POST raw bytes (an attachment) outside the command ledger; a non-2xx answer throws a PanelAnswer. */
   upload(path: string, bytes: Buffer): Promise<unknown>;
   /** Spec §4 "Project": --project, else the registered repository holding cwd, else the only one. */
-  project(): Promise<{ repoId: string; projectKey: string; path: string }>;
+  project(): Promise<{ repoId: string; projectKey: string; path: string; kind?: "dir" | "multi"; dirs?: string[] }>;
   io: CommandIo;
 }
 
