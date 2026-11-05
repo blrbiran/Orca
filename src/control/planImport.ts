@@ -8,6 +8,7 @@ import { readAgentPreferences } from "./agentPreferences.js";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
 import { descriptorProvenance, estimatorLayerAuthority, frozenSlotOf, resolveSelection, slotLayers, type FrozenSlot, type GroupAgentOverrides, type PartialSelection } from "./agentSelection.js";
 import { unavailableCapabilities, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile } from "./profiles.js";
+import { catalogMissOf } from "./estimatorCompatibility.js";
 import { dirWorkspaceOf, type DirProjectOf } from "./dirGroup.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
@@ -198,9 +199,13 @@ export async function estimatorSlotFor(
   if (observation.probeFailureCode !== null || observation.resolution === null) {
     return { outcome: { kind: "rejected", partial, code: observation.probeFailureCode ?? "control-capability-probe-failed" }, observation, layerAuthority };
   }
+  // Issue #124 (session 3cfc2e73): a codex model the read catalog does not list is named by the estimator check.
+  const resolution = observation.resolution;
+  const catalogMiss = await catalogMissOf(profile.port, resolution);
+  const seen: ObservedProfile = catalogMiss === null ? observation : Object.freeze({ ...observation, catalogMiss });
   try {
-    const labelled = descriptorProvenance(partial, observation.resolution.selection, provenance);
-    return { outcome: { kind: "frozen", partial, slot: frozenSlotOf(structuredClone(observation.resolution), partial, labelled) }, observation, layerAuthority };
+    const labelled = descriptorProvenance(partial, resolution.selection, provenance);
+    return { outcome: { kind: "frozen", partial, slot: frozenSlotOf(structuredClone(resolution), partial, labelled) }, observation: seen, layerAuthority };
   } catch (error) {
     if (!(error instanceof ControlError)) throw error;
     return { outcome: { kind: "rejected", partial, code: error.code }, observation: { ...observation, observed: unavailableCapabilities, probeFailureCode: error.code, resolution: null }, layerAuthority };

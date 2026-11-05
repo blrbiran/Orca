@@ -1879,6 +1879,7 @@ export const en = {
       "single-call-unavailable": "This agent and model cannot make the single call an estimate needs in the current estimate mode.",
       "preflight-unavailable": "The estimator profile has no estimate preflight.",
       "instruction-unknown": "The estimator profile names estimate instructions this Orca does not know.",
+      "model-not-in-catalog": "The chosen model is not in the agent's catalog: {{detail}}. Choose a listed model (set the model in agent preferences or on the group).",
       "context-unavailable": "The model's context window is unknown. This usually means the model is not in the agent's catalog (for codex, a third-party model that `codex debug models` does not list); choose a model the agent lists.",
       // #105: the catalog lists the model but gives no window; ccloop's installation field fills it.
       "context-unreported": "The agent's catalog lists this model but reports no context window for it (common with a third-party codex provider). Declare the window on this installation: set `declaredContextWindow` (the model's context window, in tokens) in the agent installation table (by default ~/.orca/agents.json); ccloop uses it only when the catalog gives no window.",

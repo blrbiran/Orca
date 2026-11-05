@@ -62,12 +62,16 @@ const ESTIMATOR_CHECK_REASONS = new Set(["selection-unavailable", "single-call-u
  * Issues #70, #73, #58: requirement open's `agent-selection-rejected:estimator:<a>,<b>` names Orca's estimator compatibility
  * check, not ccloop. Its refusal in words, each reason code explained; null when any code is not one of that check's.
  */
+/** Issue #124 (session 3cfc2e73): the one estimator-check reason that carries a detail -- the model and what the catalog lists. */
+const CATALOG_MISS = "model-not-in-catalog: ";
 export function explainEstimatorCheck(message: string): string | null {
   if (!message.startsWith(ESTIMATOR_REJECTED)) return null;
   const codes = message.slice(ESTIMATOR_REJECTED.length).split(",");
-  if (!codes.every((code) => ESTIMATOR_CHECK_REASONS.has(code))) return null;
+  if (!codes.every((code) => ESTIMATOR_CHECK_REASONS.has(code) || code.startsWith(CATALOG_MISS))) return null;
   const t = i18n.t as (key: string, options?: object) => unknown;
-  const reasons = codes.map((code) => String(t(`estimatorCheck.reason.${code}`))).join(currentLanguage() === "zh" ? "" : " ");
+  const reasons = codes.map((code) => code.startsWith(CATALOG_MISS)
+    ? String(t("estimatorCheck.reason.model-not-in-catalog", { detail: code.slice(CATALOG_MISS.length) }))
+    : String(t(`estimatorCheck.reason.${code}`))).join(currentLanguage() === "zh" ? "" : " ");
   return String(t("estimatorCheck.refused", { reasons }));
 }
 

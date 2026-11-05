@@ -31,6 +31,11 @@ export interface ObservedProfile {
    * re-estimate freezes. Null when the probe failed.
    */
   readonly resolution: AgentResolution | null;
+  /**
+   * Issue #124 (session 3cfc2e73): set by estimatorSlotFor when ccloop read the codex catalog and the chosen model is not
+   * in it, so the estimator check names that instead of the two capability codes it implies. Absent otherwise.
+   */
+  readonly catalogMiss?: { model: string; listed: string[] };
 }
 
 export interface ExecutionProfileRouter {
@@ -84,6 +89,8 @@ function ownPort(port: ExecutionPort): ExecutionPort {
   const readFeatures=port.readFeatures?.bind(port);
   const collectTaskResults=port.collectTaskResults?.bind(port);
   const readTaskResultEvidence=port.readTaskResultEvidence?.bind(port);
+  // Issue #124 (session 3cfc2e73): the estimator check reads the installation's catalog through the profile's port.
+  const listModels=port.listModels?.bind(port);
   const owned: ExecutionPort = {
     ...Object.fromEntries(["savedResultSourceEligibility","savedResultEligibility","collectSavedResultEvidence","readSavedResultEvidence","settleSavedResult","readSavedResultSettlement"].flatMap(key=>{const method=port[key as keyof ExecutionPort];return typeof method==="function"?[[key,method.bind(port)]]:[]})),
     ...(readFeatures?{readFeatures:()=>readFeatures()}:{}),
@@ -96,6 +103,7 @@ function ownPort(port: ExecutionPort): ExecutionPort {
     collect: (input, afterSeq) => collect(input, afterSeq),
     ...(collectTaskResults?{collectTaskResults:(input,afterRevision)=>collectTaskResults(input,afterRevision)}:{}),
     ...(readTaskResultEvidence?{readTaskResultEvidence:(input,manifestRef,ref)=>readTaskResultEvidence(input,manifestRef,ref)}:{}),
+    ...(listModels?{listModels:(installation,refresh)=>listModels(installation,refresh)}:{}),
   };
   return Object.freeze(owned);
 }

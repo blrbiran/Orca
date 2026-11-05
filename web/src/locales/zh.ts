@@ -1738,6 +1738,7 @@ export const zh: Translation<typeof en> = {
       "single-call-unavailable": "这个 agent 和模型在当前估算模式下无法发起估算所需的单次调用。",
       "preflight-unavailable": "估算器配置没有估算预检。",
       "instruction-unknown": "估算器配置指定的估算指令版本，当前 Orca 不认识。",
+      "model-not-in-catalog": "所选模型不在 agent 的模型目录里：{{detail}}。请选一个目录列出的模型（在 agent 偏好或组上设置模型）。",
       "context-unavailable": "模型的上下文窗口未知。这通常说明该模型不在 agent 的模型目录里（对 codex 来说，就是 `codex debug models` 没有列出的第三方模型）；请选一个 agent 列出的模型。",
       "context-unreported": "agent 的模型目录列出了这个模型，但没有给出它的上下文窗口（第三方 codex provider 常见）。请在这个安装上声明窗口：在 agent 安装表（默认 ~/.orca/agents.json）里给它设 `declaredContextWindow`（模型的上下文窗口，单位 token）；ccloop 只在目录没给窗口时才用它。",
       "usage-unavailable": "这个 agent 无法报告一次调用用掉了多少 token。",
