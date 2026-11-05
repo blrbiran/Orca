@@ -16,10 +16,13 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText, refusalText } from "./i18n.js";
 import { TokenInput, parseTokens, shortTokens } from "./TokenInput.js";
+import {
+  DIMENSIONS, adviceOf as sharedAdviceOf, budgetFieldKey, loopOwned, suggestedLoopActions as sharedSuggestedLoopActions,
+  suggestedOperations as sharedSuggestedOperations, suggestionActions as sharedSuggestionActions, targetOf,
+} from "../../src/control/budgetSuggestions.js";
 import { Select } from "./ui/Select.js";
 import type {
-  AllocationViewV1,
-  Amount, BudgetAmount,
+  BudgetAmount,
   AmountDimensionV1,
   BudgetEstimateV1,
   ControlConfigV1,
@@ -28,17 +31,10 @@ import type {
   ProfileBindingV1,
   ProposalOperationV1,
   ProposalTargetV1,
-  SetTaskLoopPayloadV1,
-  WorkItemViewV1,
 } from "./controlTypes.js";
 
-export const DIMENSIONS: AmountDimensionV1[] = ["tokens", "activeMs", "attempts", "sessions"];
-
-export function budgetFieldKey(groupId: string, target: ProposalTargetV1): string {
-  return target.scope === "task"
-    ? `${groupId}:task:${target.taskId}:${target.allocation}:${target.dimension}`
-    : `${groupId}:goal-review:${target.dimension}`;
-}
+// Issue #156 (session 3cfc2e73): the suggestion transform moved to a module the CLI shares; re-exported under the same names.
+export { DIMENSIONS, budgetFieldKey, loopOwned };
 
 export function groupLimitKey(groupId: string, dimension: AmountDimensionV1): string {
   return `${groupId}:group-limit:${dimension}`;
@@ -49,19 +45,6 @@ export const CONTEXT_POLICY_KEY = (groupId: string): string => `${groupId}:conte
 export function provenanceText(provenance: FieldProvenanceV1): string {
   if (provenance.provenance === "model" && provenance.estimateId) return i18n.t("budget.provenanceModel", { estimateId: provenance.estimateId });
   return enumText("fieldProvenance", provenance.provenance);
-}
-
-/** Loop plans spec §4.3 (C6): a loop task's work budget is changed only through set-task-loop (its plan card, or a suggestion). */
-export const loopOwned = (item: WorkItemViewV1): boolean => item.loopPlan !== undefined && item.loopPlan !== null;
-
-function targetOf(view: GroupViewV1, ownerId: string, bucket: string, dimension: AmountDimensionV1): ProposalTargetV1 | null {
-  if (bucket === "review") return { scope: "goal-review", dimension };
-  if (bucket !== "work" && bucket !== "handoff") return null;
-  const task = view.workItems.find((item) => item.taskId === ownerId);
-  // Read-only here, so no edit and no suggestion ever sends proposal-edit for it (Drafter finding F14); its suggestions
-  // go through set-task-loop instead (suggestedLoopActions).
-  if (task !== undefined && bucket === "work" && loopOwned(task)) return null;
-  return task ? { scope: "task", taskId: ownerId, allocation: bucket, dimension } : null;
 }
 
 function valueFor(drafts: Record<string, string>, key: string, serverValue: number|null): string {
@@ -106,103 +89,14 @@ export type SuggestionScope =
   | { kind: "row"; ownerKind: "task" | "goal-review"; ownerId: string; bucket: "work" | "handoff" | "review" }
   | { kind: "all" };
 
-/**
- * The estimate that may advise this proposal, or null: the newest by version (the view lists estimates by id, drafter
- * finding F12), and only when it is ready, for this plan, and the proposal is still editable. Anything else and the
- * editor is exactly what it was before suggestions existed.
- */
-export function adviceOf(view: GroupViewV1): { estimateId: string; output: BudgetEstimateV1; stale: boolean } | null {
-  if (view.proposal.state !== "editable") return null;
-  let newest: GroupViewV1["estimates"][number] | null = null;
-  for (const estimate of view.estimates) if (newest === null || estimate.estimateVersion > newest.estimateVersion) newest = estimate;
-  if (newest === null || newest.state !== "ready" || newest.output === null || newest.output.planHash !== view.plan.planHash) return null;
-  return { estimateId: newest.estimateId, output: newest.output, stale: newest.stale === true };
-}
-
-function suggestedAmount(output: BudgetEstimateV1, allocation: AllocationViewV1): Amount | null {
-  if (allocation.ownerKind === "goal-review" && allocation.bucket === "review") return output.goalReviewReserve;
-  if (allocation.ownerKind !== "task" || (allocation.bucket !== "work" && allocation.bucket !== "handoff")) return null;
-  return output.tasks.find((task) => task.taskId === allocation.ownerId)?.[allocation.bucket] ?? null;
-}
-
-/**
- * The only place that decides which suggestions a control sends (the editedOperations of the model's advice): each
- * field in `scope` whose suggested value differs from the proposal's, as provenance "model" with the estimate's id --
- * the exact number the server re-checks (verifyModelField). A field already at its suggestion sends nothing.
- */
-export function suggestedOperations(view: GroupViewV1, scope: SuggestionScope): ProposalOperationV1[] {
-  const advice = adviceOf(view);
-  // W6: the server refuses a stale estimate's values (estimate-stale), so none is offered.
-  if (advice === null || advice.stale) return [];
-  const groupId = view.summary.groupId;
-  const operations: ProposalOperationV1[] = [];
-  for (const allocation of view.allocations) {
-    const suggested = suggestedAmount(advice.output, allocation);
-    if (suggested === null) continue;
-    if (scope.kind === "row" && (allocation.ownerKind !== scope.ownerKind || allocation.ownerId !== scope.ownerId || allocation.bucket !== scope.bucket)) continue;
-    for (const dimension of DIMENSIONS) {
-      const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
-      if (target === null) continue;
-      if (scope.kind === "field" && budgetFieldKey(groupId, target) !== budgetFieldKey(groupId, scope.target)) continue;
-      if (suggested[dimension] === allocation.amount[dimension]) continue;
-      operations.push({ target, value: suggested[dimension], provenance: "model", estimateId: advice.estimateId });
-    }
-  }
-  return operations;
-}
-
-const LOOP_WORK_DIMENSIONS = ["tokens", "activeMs", "attempts"] as const;
-
-/**
- * W5 (human ruling H6, superseding plan ruling R-F14): a loop task's work suggestion is applied through its one owner,
- * set-task-loop, keeping the task's current plan and inputs. The budget is the current work amount with each suggested
- * dimension in `scope` that differs replaced, and workProvenance names the estimate for exactly those dimensions (the
- * server re-checks each, verifyModelField). Sessions is not in set-task-loop's payload, so it is never suggested here.
- */
-export function suggestedLoopActions(view: GroupViewV1, scope: SuggestionScope): ControlAction[] {
-  const advice = adviceOf(view);
-  if (advice === null || advice.stale) return [];
-  const groupId = view.summary.groupId;
-  const actions: ControlAction[] = [];
-  for (const allocation of view.allocations) {
-    if (allocation.ownerKind !== "task" || allocation.bucket !== "work") continue;
-    const plan = view.workItems.find((item) => item.taskId === allocation.ownerId)?.loopPlan;
-    if (plan === undefined || plan === null) continue;
-    if (scope.kind === "row" && (scope.ownerKind !== "task" || scope.ownerId !== allocation.ownerId || scope.bucket !== "work")) continue;
-    const suggested = suggestedAmount(advice.output, allocation);
-    if (suggested === null) continue;
-    const work = { tokens: allocation.amount.tokens, activeMs: allocation.amount.activeMs, attempts: allocation.amount.attempts };
-    const workProvenance: NonNullable<SetTaskLoopPayloadV1["workProvenance"]> = {};
-    for (const dimension of LOOP_WORK_DIMENSIONS) {
-      if (scope.kind === "field" && budgetFieldKey(groupId, scope.target) !== budgetFieldKey(groupId, { scope: "task", taskId: allocation.ownerId, allocation: "work", dimension })) continue;
-      if (suggested[dimension] === allocation.amount[dimension]) continue;
-      work[dimension] = suggested[dimension];
-      workProvenance[dimension] = { provenance: "model", estimateId: advice.estimateId };
-    }
-    if (Object.keys(workProvenance).length === 0) continue;
-    actions.push({
-      verb: "set-task-loop", groupId, taskId: allocation.ownerId, expectedRevision: view.summary.commandRevision,
-      // Syncskill integration spec §10.4: the payload is the task's full desired state, so its skill set goes back unchanged.
-      payload: { baseLoopVersion: plan.loopVersion, plan: plan.planId, inputs: plan.inputs, work, workProvenance, ...(plan.skills === undefined ? {} : { skills: plan.skills }) },
-    });
-  }
-  return actions;
-}
-
-/**
- * Every command one suggestion control sends, in the order they must be sent: the proposal-edit first, then one
- * set-task-loop per loop task. A set-task-loop on a draft proposal advances proposalVersion (reopenProposal), which a
- * later proposal-edit's baseProposalVersion would miss; a proposal-edit does not touch any task's loopVersion, and one
- * task's set-task-loop does not touch another's. So in this order only expectedRevision changes between them.
- */
-export function suggestionActions(view: GroupViewV1, scope: SuggestionScope): ControlAction[] {
-  const operations = suggestedOperations(view, scope);
-  const edit: ControlAction[] = operations.length === 0 ? [] : [{
-    verb: "proposal-edit", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision,
-    payload: { baseProposalVersion: view.proposal.proposalVersion, operations },
-  }];
-  return [...edit, ...suggestedLoopActions(view, scope)];
-}
+/** The newest ready estimate for this plan while the proposal is editable, or null (shared: budgetSuggestions.ts). */
+export const adviceOf = (view: GroupViewV1): { estimateId: string; output: BudgetEstimateV1; stale: boolean } | null => sharedAdviceOf(view);
+/** The proposal-edit operations one suggestion control sends (shared: budgetSuggestions.ts). */
+export const suggestedOperations = (view: GroupViewV1, scope: SuggestionScope): ProposalOperationV1[] => sharedSuggestedOperations(view, scope);
+/** The set-task-loop commands a loop task's work suggestion sends (shared: budgetSuggestions.ts). */
+export const suggestedLoopActions = (view: GroupViewV1, scope: SuggestionScope): ControlAction[] => sharedSuggestedLoopActions(view, scope) as ControlAction[];
+/** Every command one suggestion control sends, in order (shared: budgetSuggestions.ts). */
+export const suggestionActions = (view: GroupViewV1, scope: SuggestionScope): ControlAction[] => sharedSuggestionActions(view, scope) as ControlAction[];
 
 function limitAmount(view: GroupViewV1, drafts: Record<string, string>): BudgetAmount {
   const groupId = view.summary.groupId;

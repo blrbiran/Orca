@@ -67,7 +67,7 @@ any command; `orca version` should equal this skill's version.
 | get one more clarification round, revise a round or a draft, or set the class | `orca requirement continue / revise / feedback / classify <g> …` | references/requirement.md |
 | import a plan file as a group | `orca project register-plan <path>`, then `orca group import <plan>` | references/project.md, group.md |
 | review or edit the proposal (budgets, agents, tasks) | `orca proposal show <g>`, `proposal set-budget / set-agent / replace` | references/proposal.md |
-| get budgets estimated, then confirm | `orca group estimate <g>`, `orca group confirm <g> [--hold]` | references/group.md |
+| get budgets estimated, apply them, then confirm | `orca group estimate <g>`, `orca group apply-estimate <g> [--dry-run]` (an estimate changes nothing until applied), `orca group confirm <g> [--hold]` | references/group.md |
 | start, pause, resume, stop or archive a group | `orca group start / pause / resume / stop-handoff / resume-handoff / archive / unarchive <g>` | references/group.md |
 | set a group's limit or where its work goes | `orca group set-limit`, `orca group set-integration`, `retry-integration`, `resolve-integration` | references/group.md |
 | answer a stopped folder placement or multi landing | `orca group folder-change <g> --take-folder / --recheck / --withhold`, `orca group multi-land <g> --retry-rest / --mark-resolved` | references/group.md |

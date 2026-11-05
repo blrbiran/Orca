@@ -197,6 +197,20 @@ remove that wait
 - `<group>`: a group id or a unique prefix
 - `--on <on>` (required): the group that must land first
 
+## `orca group apply-estimate <group> [--dry-run]`
+
+apply the newest ready estimate's suggestions to the proposal, as the panel's "Apply all" does (a loop task's sessions are never set: R10)
+
+- What it does: runs locally.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--dry-run`: print the commands it would send; send nothing
+
+```
+orca group apply-estimate g1 --dry-run
+orca group apply-estimate g1
+```
+
 ## `orca group schedule <group> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]`
 
 schedule this group from its archived plan: one library version pins the fires; needs a person token
