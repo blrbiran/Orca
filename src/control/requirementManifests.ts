@@ -4,12 +4,13 @@ import { GIT_READ_TIMEOUT_MS, readBlobs, treeOf, type TreeEntry } from "./requir
 
 /**
  * Task setup spec §4.1: what the split is told about how the repository builds -- for the root and every directory a
- * root `package.json` names in `workspaces`, that package's `name`, `scripts` and `workspaces` (nothing else), which
- * lockfile is there and which other build manifests are there. Entries are in directory order, the root (`""`) first.
+ * root `package.json` names in `workspaces`, that package's `name`, `scripts` and `workspaces`, and its `type` when it
+ * gives one (spec Correction §11, issue #135), which lockfile is there and which other build manifests are there.
+ * Entries are in directory order, the root (`""`) first.
  */
 export type ManifestsPart = {
   status: "ok";
-  entries: Array<{ dir: string; package: { name: string | null; scripts: Record<string, string>; workspaces: string[] | null } | null; lockfiles: string[]; present: string[] }>;
+  entries: Array<{ dir: string; package: { name: string | null; scripts: Record<string, string>; workspaces: string[] | null; type?: string } | null; lockfiles: string[]; present: string[] }>;
   cut: boolean;
 };
 type ManifestEntry = ManifestsPart["entries"][number];
@@ -23,12 +24,17 @@ const dirOf = (path: string): string => (path.includes("/") ? path.slice(0, path
 const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 const manifestPath = (dir: string): string => (dir === "" ? "package.json" : `${dir}/package.json`);
 
-/** The three fields the split is sent; null when the blob is not a JSON object. Non-string scripts and workspaces are left out. */
+/**
+ * The fields the split is sent; null when the blob is not a JSON object. Non-string scripts and workspaces are left out.
+ * Issue #135 (session 3cfc2e73): `type` ("module" or "commonjs") is sent when the package gives it as a string, so the
+ * split no longer guesses the module system (it wrote `require(...)` checks in an ESM repository); absent, the key is
+ * omitted and the bytes are what they were.
+ */
 export function packageOf(bytes: Buffer): ManifestEntry["package"] {
   let parsed: unknown;
   try { parsed = JSON.parse(bytes.toString("utf8")); } catch { return null; }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const { name, scripts, workspaces } = parsed as Record<string, unknown>;
+  const { name, scripts, workspaces, type } = parsed as Record<string, unknown>;
   const scriptsOut: Record<string, string> = {};
   if (scripts !== null && typeof scripts === "object" && !Array.isArray(scripts)) {
     for (const [key, body] of Object.entries(scripts as Record<string, unknown>)) if (typeof body === "string") scriptsOut[key] = body;
@@ -37,6 +43,7 @@ export function packageOf(bytes: Buffer): ManifestEntry["package"] {
     name: typeof name === "string" ? name : null,
     scripts: scriptsOut,
     workspaces: workspacePatterns(workspaces),
+    ...(typeof type === "string" ? { type } : {}),
   };
 }
 

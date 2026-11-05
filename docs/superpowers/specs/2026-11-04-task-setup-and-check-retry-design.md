@@ -324,3 +324,22 @@ ccloop `.superpowers/sdd/2026-11-04-task-setup-ccloop/progress.md`).
   inferred `setup: ["npm ci"]` and the existing check `npm run check --workspace web`; attempt 1 passed and landed. The
   target's `npm ci` prepare script set `core.hooksPath` in the clone's shared git config (§5.4, the command's own
   behaviour).
+
+## 11. Correction (session 3cfc2e73, issue #135, branch `fix/estimate-plan-split`, 2026-11-05)
+
+Appended on top of `3cdced36`; the sections above stay as committed (Rule 13). Where this section and §4.1 disagree,
+this section holds.
+
+1. **§4.1 `package.json` fields: `type` is sent too, when the package gives it.** §4.1 said "the `name`, `scripts`
+   (names and bodies) and `workspaces` fields, nothing else". The split has no tools, so with the module type stripped
+   it guessed, and a tester's split wrote `node -e "require(...)"` checks in a `"type": "module"` repository (issue
+   #135). `packageOf` (`src/control/requirementManifests.ts`) now adds `type` when it is a string; a package without one
+   is sent with the same bytes as before, so an existing overview's hash does not move. `main` and `exports` are not
+   added (`exports` can be large and nested; `type` alone decides how `node` loads a `.js` file).
+2. **Not done here, reported to the controller:** the split-prompt rule against ad-hoc `node -e require(...)` checks
+   (#135) and the "no lockfile ⇒ `npm install --no-package-lock` or no setup" instruction (#130). Any change to the
+   single split instruction's text moves the pinned prompt hash in `tests/control/multiDirOverview.test.ts`
+   (`PINNED.splitPrompt`), and a validator refusing `npm ci` without a lockfile reddens
+   `tests/control/requirementSplitItems.test.ts` ("checks every setup command too", which uses `npm ci` in a repository
+   with no lockfile). Existing criteria are not rewritten without the human's authorization.
+3. Criteria: `tests/control/requirementManifestsType.test.ts`.
