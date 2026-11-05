@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
+import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { ORCHESTRATION_ACTOR, readGroupOrchestration } from "../../src/control/orchestration.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
@@ -117,7 +118,11 @@ describe("running-group cap (kanban spec §3.2)", () => {
   it("defaults to 3, waits for a slot at the cap, and starts once the cap is raised", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);
-      for (const id of ["busy-1", "busy-2", "busy-3"]) h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,1,1,'{\"status\":\"running\"}')").run(id);
+      // Review-exit spec 2026-11-05 §3.1 (D1): a running group holds its slot by what it runs (here an active run), not by its status.
+      for (const id of ["busy-1", "busy-2", "busy-3"]) {
+        h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,1,1,'{\"status\":\"running\"}')").run(id);
+        h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,'a',1,1,'{\"phase\":\"work\"}')").run(`r-${id}`, id);
+      }
       await confirm(h, service, "g");
       // mutation: the cap check reads `running <= cap` -> started at 3 running, red
       expect(await service.autoStart()).toEqual({ started: [], refused: [] });
@@ -162,6 +167,8 @@ describe("running-group cap (kanban spec §3.2)", () => {
         const service = new WebControlService(h.deps);
         setCap(h, service, 1);
         h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('held',1,1,?)").run(JSON.stringify({ status }));
+        // Review-exit spec §3.1 (D1): the slot comes from what the group runs; a pause frees it, a handoff stop does not.
+        h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('rh','held','a',1,1,'{\"phase\":\"work\"}')").run();
         h.store.db.prepare("INSERT INTO stop_intents(group_id,mode,revision,body) VALUES ('held',?,1,'{}')").run(mode);
         await confirm(h, service, "g");
         // mutation: drop the pause clause of runningGroupIds -> waiting-slot for both paused cases, red
@@ -213,6 +220,66 @@ describe("running-group cap (kanban spec §3.2)", () => {
   });
 });
 
+// Review-exit spec 2026-11-05 §3.1, criteria 6-7 (D1): a group holds a slot while it has something to run.
+describe("who holds a slot (review-exit spec §3.1)", () => {
+  /** A started group (it has a delivered start wake) in `status` whose one task is `taskStatus`. */
+  const started = (h: H, id: string, status: string, taskStatus: string) => {
+    h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,1,1,?)").run(id, JSON.stringify({ groupId: id, planHash: "p".repeat(64), status, stopped: false }));
+    h.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,'t',1,?)").run(id, JSON.stringify({ workItemId: "t", taskId: "t", kind: "task", status: taskStatus, dependsOn: [] }));
+    h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,1)").run(`w-${id}`, id, JSON.stringify({ groupId: id, startRevision: 1 }));
+  };
+
+  it("with cap 1 a review group whose only task is blocked does not stop another group's auto-start", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      setCap(h, service, 1);
+      started(h, "rev", "review", "blocked");
+      await confirm(h, service, "g");
+      // mutation: restore counting every `review` group -> waiting-slot, red
+      expect(await service.autoStart()).toEqual({ started: ["g"], refused: [] });
+    } finally { await h.dispose(); }
+  });
+
+  it("with cap 1 a review group with a ready task does", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      setCap(h, service, 1);
+      started(h, "rev", "review", "ready");
+      await confirm(h, service, "g");
+      // mutation: drop the claimable-task clause -> started ["g"], red
+      expect(await service.autoStart()).toEqual({ started: [], refused: [] });
+    } finally { await h.dispose(); }
+  });
+
+  it("a spend-capped pending wake holds no slot", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      setCap(h, service, 1);
+      started(h, "capped", "ready", "ready");
+      h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES ('w2','capped','start','{}',0)").run();
+      h.store.db.prepare("INSERT INTO spend_cap_blocks(group_id,body) VALUES ('capped','{\"code\":\"spend-cap-reached\",\"claim\":\"start\"}')").run();
+      await confirm(h, service, "g");
+      // mutation: count any pending wake (drop the spend-cap gate) -> waiting-slot, red
+      expect(await service.autoStart()).toEqual({ started: ["g"], refused: [] });
+    } finally { await h.dispose(); }
+  });
+
+  it("regained work in a slotless group waits while the cap is full", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      setCap(h, service, 1);
+      h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('busy',1,1,'{\"status\":\"running\"}')").run();
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('rb','busy','a',1,1,'{\"phase\":\"work\"}')").run();
+      // A review group whose blocked task was retried: ready again, nothing running, no wake.
+      started(h, "rev", "review", "ready");
+      // mutation: arm the wake without the cap check -> ["drive:rev:1"], red
+      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual([]);
+      h.store.db.prepare("UPDATE runs SET active=0 WHERE id='rb'").run();
+      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual(["drive:rev:1"]);
+    } finally { await h.dispose(); }
+  });
+});
+
 describe("GET /api/control/orchestration (kanban spec §3.2)", () => {
   it("answers the cap, its revision and how many groups hold a slot", async () => {
     const { default: express } = await import("express");
@@ -220,6 +287,8 @@ describe("GET /api/control/orchestration (kanban spec §3.2)", () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);
       h.store.db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES ('busy',1,1,'{\"status\":\"running\"}')").run();
+      // Review-exit spec §3.1 (D1): it holds a slot by its active run.
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('rb','busy','a',1,1,'{\"phase\":\"work\"}')").run();
       setCap(h, service, 5);
       const app = express();
       registerControlReadRoutes(app, { store: h.store, epoch: "e", config: { readView: async () => ({}) } as never, service }, "web");

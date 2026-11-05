@@ -114,23 +114,37 @@ function groupFacts(store: ControlStore): GroupFacts[] {
 }
 
 /**
- * The groups holding a slot: not archived, not paused, and running, in review, or ready and executing (executionPending's
- * three facts: an undelivered start/no-start/resume wake, an active work run, a busy task). One query whatever the number
- * of groups, tasks or runs, so a summary that asks costs the same for every group (controlPollPerformance's bound).
- * Kanban spec 2026-10-20 §S2: "a blocked or paused group does not" hold a slot (issue #129).
+ * The groups holding a slot. One query whatever the number of groups, tasks or runs, so a summary that asks costs the same
+ * for every group (controlPollPerformance's bound). Never an archived, paused (issue #129) or flow-child group.
+ * Review-exit spec 2026-11-05 §3.1 (D1) -- a group holds a slot while it has something to run, not by its status:
+ * (a) a started group (any status but clarifying/draft) with an active run of any phase or a busy task; or
+ * (b) a ready/running/review group with no group-scope recovery blocker, no recorded spend-cap block and known usage
+ *     (a delivery that keeps pending for one of those waits for a person), that has an undelivered start/no-start/resume
+ *     wake, or -- once started (it has a start wake) -- a ready task whose dependsOn are all done and that has no active run.
+ * A review group whose tasks are all blocked or done holds none; it stays where the person sees it.
  */
 export function runningGroupIds(store: ControlStore): string[] {
   const wakeKinds = [...EXECUTION_WAKE_KINDS].map((kind) => `'${kind}'`).join(","), busy = [...BUSY_WORK].map((status) => `'${status}'`).join(",");
   // CASE json_valid: a body that does not parse holds no slot here (its own reads name it); json_extract would throw.
   const at = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column},'${path}') END`;
+  const status = at("g.body", "$.status");
   // Flow engine spec §6.2: a flow run holds one slot, through its parent, while the run is running; its children hold none.
   return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND ${flowRoleSql("g")} IS NOT 'child'
     AND NOT EXISTS (SELECT 1 FROM stop_intents s WHERE s.group_id=g.id AND s.mode='pause') AND (
     (${flowRoleSql("g")} = 'parent' AND EXISTS (SELECT 1 FROM flow_runs f WHERE f.group_id=g.id AND f.state='running')) OR
-    ${at("g.body", "$.status")} IN ('running','review') OR (${at("g.body", "$.status")}='ready' AND (
+    (${status} NOT IN ('clarifying','draft') AND (
+      EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.active=1)
+      OR EXISTS (SELECT 1 FROM work_items i WHERE i.group_id=g.id AND ${at("i.body", "$.kind")}='task' AND ${at("i.body", "$.status")} IN (${busy})))) OR
+    (${status} IN ('ready','running','review')
+      AND NOT EXISTS (SELECT 1 FROM recovery_blockers b WHERE b.group_id=g.id AND b.scope='group')
+      AND NOT EXISTS (SELECT 1 FROM spend_cap_blocks c WHERE c.group_id=g.id)
+      AND ${at("g.body", "$.ledger.usageUnknown")} IS NOT 1 AND (
       EXISTS (SELECT 1 FROM scheduler_wakes w WHERE w.group_id=g.id AND w.delivered=0 AND w.kind IN (${wakeKinds}))
-      OR EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.active=1 AND ${at("r.body", "$.phase")}='work')
-      OR EXISTS (SELECT 1 FROM work_items i WHERE i.group_id=g.id AND ${at("i.body", "$.kind")}='task' AND ${at("i.body", "$.status")} IN (${busy}))))) ORDER BY g.rowid`)
+      OR (EXISTS (SELECT 1 FROM scheduler_wakes w WHERE w.group_id=g.id AND w.kind='start')
+        AND EXISTS (SELECT 1 FROM work_items i WHERE i.group_id=g.id AND ${at("i.body", "$.kind")}='task' AND ${at("i.body", "$.status")}='ready'
+          AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.work_item_id=i.id AND r.active=1)
+          AND NOT EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(i.body) AND json_type(i.body,'$.dependsOn')='array' THEN json_extract(i.body,'$.dependsOn') ELSE '[]' END) d
+            WHERE NOT EXISTS (SELECT 1 FROM work_items p WHERE p.group_id=g.id AND p.id=d.value AND ${at("p.body", "$.status")}='done'))))))) ORDER BY g.rowid`)
     .all().map((row) => String(row.id));
 }
 
@@ -182,6 +196,14 @@ export interface AutoStartDeps {
   /** Sends a synthesized `start` (the service's start path); answers the command body. */
   start: (command: { schema: "orca-raw-command-v1"; commandId: string; actorId: string; expectedRevision: number; verb: "start"; target: { kind: "group"; groupId: string }; payload: Record<string, never> }) => Promise<unknown>;
   prerequisites?: PrerequisiteReader;
+}
+
+/**
+ * The pass's admission facts per group id: `rank` 0 a debug group, 1 an ordinary one, 2 a model review; `flowChild` runs
+ * under its parent's slot. Review-exit spec §3.1: regained work is admitted in the same order (replenishStartWakes).
+ */
+export function admissionFacts(store: ControlStore): Map<string, { rank: number; flowChild: boolean }> {
+  return new Map(groupFacts(store).map((group) => [group.id, { rank: group.review ? 2 : group.debug ? 0 : 1, flowChild: group.flowChild }]));
 }
 
 /**

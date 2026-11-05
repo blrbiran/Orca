@@ -38,6 +38,8 @@ import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
 import { placeDirGroups, type DirPlacementCrashPoint } from "./dirPlacement.js";
+import { admissionFacts, readOrchestrationSettings, runningGroupIds } from "./orchestration.js";
+import { groupExecutionPendingInStore } from "./executionPending.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { landMultiDirGroups, type MultiLandingCrashPoint, type MultiPrecheck } from "./multiLanding.js";
 import { DISPATCHED_PERSON_DIRNAME } from "./commandClient.js";
@@ -1321,6 +1323,11 @@ export const DISPATCHABLE_GROUP_STATES = new Set(["ready", "running", "review"])
  * dispatchable group with ready work and no wake pending, arm one `start` wake under the group's last
  * start revision; the pump claims one task per wake, so parallelism grows by one per round. A group
  * nobody started has no start wake to copy and gets nothing.
+ *
+ * Review-exit spec 2026-11-05 §3.1 (D1, controller decision): a group executing already (a run, a busy task or a pending
+ * wake) adds no slot by arming another claim. One that executes nothing -- it regained work by a retry, a continue, a
+ * resume -- takes a slot: it is armed only while fewer than the cap execute, debug groups first (the auto-start pass's
+ * order), flow children exempt. Otherwise the cap the explicit start keeps would be passed through this door (#129).
  */
 export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">): string[] {
   const { store } = deps;
@@ -1328,7 +1335,14 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
   const failed: string[] = [];
   const armedIds = write(deps, () => {
     const armed: string[] = [];
-    for (const row of store.db.prepare("SELECT id,body FROM groups ORDER BY id").all()) {
+    const admission = admissionFacts(store);
+    const executing = (groupId: string) => groupExecutionPendingInStore(store, groupId) || store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined;
+    let slotsTaken = runningGroupIds(store).filter(executing).length;
+    const cap = readOrchestrationSettings(store).maxRunningGroups;
+    const rows = store.db.prepare("SELECT id,body FROM groups ORDER BY id").all()
+      .map((row, index) => ({ row, index, rank: admission.get(String(row.id))?.rank ?? 1 }))
+      .sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.row);
+    for (const row of rows) {
       const groupId = String(row.id);
       // Backlog #3 (Orca handoff §9.0 挂账): a group whose wake cannot be armed -- a row that does not parse, a query
       // that throws -- is skipped and named on stderr below, like every failure the driver cannot pin on a run. It no
@@ -1347,6 +1361,8 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
         if (store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId)) continue;
         const last = store.db.prepare("SELECT body FROM scheduler_wakes WHERE group_id=? AND kind='start' ORDER BY rowid DESC LIMIT 1").get(groupId);
         if (!last || nextClaimableTask(store, groupId, group) === null) continue;
+        const takesSlot = admission.get(groupId)?.flowChild !== true && !executing(groupId);
+        if (takesSlot && slotsTaken >= cap) continue;
         const body = JSON.parse(String(last.body)) as { startRevision: number; executionSnapshotHash?: string };
         const ordinal = Number(store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id=? AND id LIKE ?").get(groupId, `drive:${groupId}:%`)!.n) + 1;
         const wakeId = `drive:${groupId}:${ordinal}`;
@@ -1354,6 +1370,7 @@ export function replenishStartWakes(deps: Pick<ExecutionDriverDeps, "store" | "a
           groupId, startRevision: body.startRevision, ...(body.executionSnapshotHash === undefined ? {} : { executionSnapshotHash: body.executionSnapshotHash }),
         }).toString("utf8"));
         armed.push(wakeId);
+        if (takesSlot) slotsTaken += 1;
       } catch (error) {
         open = false;
         try { store.db.exec("ROLLBACK TO replenish_group"); store.db.exec("RELEASE replenish_group"); } catch { throw error; }
@@ -1531,6 +1548,12 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     try {
       if (await placeDirGroups({ store: deps.store, admissionGate: deps.admissionGate, env: deps.env, stopped: () => context.stopped, ...(deps.crash === undefined ? {} : { crash: deps.crash }) })) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Review-exit spec 2026-11-05 §3.1 (D1): after integration, landing and placement, a group with everything delivered
+    // is done -- every round, so it covers every settle path and a group left in review before this existed.
+    // Loaded on first use, not imported: groupDone pulls in groupEdges, whose static import into this module's cycle reorders
+    // the control modules' evaluation (session 3cfc2e73, d69ec6c5).
+    try { const { markGroupsDone } = await import("./groupDone.js"); if (write(deps, () => markGroupsDone(deps.store)).length > 0) progressed = true; }
+    catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     return progressed;
   };
 
