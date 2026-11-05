@@ -9,11 +9,17 @@ export interface RunDiagnosis {
   step: "planning" | "executing" | "verifying" | null;
   cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown";
   attempt: number;
+  /**
+   * Issue #131 (session 3cfc2e73): ccloop's own run-level cause, when its drive record kept one (failure-cause spec
+   * 2026-10-21 §5) -- a setup failure is `{cause: "setup-failed", phase: "setup", detail: "<cmd> exit=1"}`. Omitted when
+   * none was stated. `cause` above stays Orca's decode axis; this says what ccloop reported.
+   */
+  failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null };
 }
 
 type DiagnosticRun = {
   groupId: string; workItemId: string; taskId: string | null; runId: string; generation: number; graphVersion: number; targetVersion: number; executionId: string | null;
-  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { envelopeHash?: string | null } | null; savedSource?: unknown; failureCode: string | null;
+  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { envelopeHash?: string | null; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null } | null } | null; savedSource?: unknown; failureCode: string | null;
 };
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const normalizationSchema = z.object({
@@ -49,5 +55,7 @@ export function readRunDiagnosis(store: ControlStore, run: DiagnosticRun): RunDi
   const step = run.progress?.status === "planning" || run.progress?.status === "executing" || run.progress?.status === "verifying" ? run.progress.status : null;
   let cause: RunDiagnosis["cause"] = run.failureCode === "usage-unsettled" ? "usage-unsettled" : "unknown";
   cause = savedFormatFailureEvidence(store, run)?.cause ?? cause;
-  return { phase: run.phase, step, cause, attempt: run.providerAttemptOrdinal };
+  const failure = run.drive?.failureCause ?? null;
+  return { phase: run.phase, step, cause, attempt: run.providerAttemptOrdinal,
+    ...(failure === null ? {} : { failureCause: { cause: failure.cause, phase: failure.phase, detail: failure.detail } }) };
 }

@@ -403,7 +403,7 @@ export type RunViewV1 = {
   grant?: BudgetAmount;
   tokenRemainingStatus?:"known"|"unlimited"|"unknown";
   failureCode: string | null;
-  diagnosis?: { phase: "estimate" | "work" | "handoff" | "single-call"; step: "planning" | "executing" | "verifying" | null; cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown"; attempt: number };
+  diagnosis?: { phase: "estimate" | "work" | "handoff" | "single-call"; step: "planning" | "executing" | "verifying" | null; cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown"; attempt: number; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null } };
   blockedReason?: string | null;
   /** Spec 2026-10-27 single-call unknown usage O3: ccloop's lower bound on a single call's usage, when kept. */
   usageLowerBound?: number;

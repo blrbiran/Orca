@@ -1792,7 +1792,9 @@ export const runViewSchema = z
     usageLowerBound: positiveSafeInteger.optional(),
     // Spec 2026-11-03 soft-mode approximate usage §2: the run's usage is the booked floor (null: the tool gave none).
     usageApproximate: z.object({ floorTokens: safeInteger.nullable() }).strict().optional(),
-    diagnosis: z.object({ phase: z.enum(["estimate", "work", "handoff", "single-call"]), step: z.enum(["planning", "executing", "verifying"]).nullable(), cause: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden", "usage-unsettled", "unknown"]), attempt: safeInteger }).strict().optional(),
+    diagnosis: z.object({ phase: z.enum(["estimate", "work", "handoff", "single-call"]), step: z.enum(["planning", "executing", "verifying"]).nullable(), cause: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden", "usage-unsettled", "unknown"]), attempt: safeInteger,
+      // Issue #131 (session 3cfc2e73): ccloop's run-level cause (setup-failed, its phase and detail), omitted when none was stated.
+      failureCause: runFailureCauseSchema.pick({ cause: true, phase: true, detail: true }).optional() }).strict().optional(),
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
