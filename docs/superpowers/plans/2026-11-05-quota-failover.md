@@ -79,3 +79,25 @@ reset has no cap.
   (resolution and the refusal again; no switch happens).
 - Reset-time shapes other than the two codex ones fall back to the default rest; claude's reset text is not parsed.
 - Paid acceptance (spec §7 step 3, a real codex quota hit routed to claude) not run: it needs an exhausted account.
+
+## As built — addendum 2026-11-06 (session 3cfc2e73, batch FB, branch `feat/failover-ui` from main `e783beee`)
+
+Who: Claude Code (Opus 5.5). Closes three items of "Not built (registered)" above; the rest of that list stands.
+
+- **Wake at rest expiry: not built as a timer (by decision).** The pump already runs `systemDebugPass` every
+  `--control-wake-ms` (default 5 s), and `failoverPass` reads the rests at the store's clock, so a candidate whose targets
+  all rested is switched on the first pass after a rest ends without any other event (existing criterion "waits while the
+  other installation rests, and switches back once its rest ends"). Spec correction appended (§ "no separate scheduler wake").
+  Still open: a quota-failed task whose only installation is its own is not retried on it when its rest ends (unless the
+  person set a quota wait) — retry routing, left to the failover-dispatch batch.
+- **Panel text.** The run view carries `quotaRest {installation, until, source}` when the run is its task's current run,
+  is terminally failed with cause `quota` (a switch retries the task and settles the run, so a switched run has none), and
+  its installation rests (`installationRests` at the store's clock). The run reason (group task table, run list, task page)
+  says "codex is out of quota until <time>." for a vendor-named reset, "codex is resting, retry around <time>." for the
+  default rest (en/zh).
+- **Agents page rest view.** `GET /api/control/agents` adds `rests [{installation, until, since, source, detail}]` for the
+  listed installations resting now (omitted when none rests, so the old shape is unchanged); `InstallationRest` gains
+  `since` (the streak's first quota failure) and `detail` (the CLI's text of the last). The agents page lists them under
+  "Quota rests", read-only.
+- **D7 web display** (not part of the failover plan, same batch): the run reason renders the run diagnosis's
+  `formatFailureWork` — each attempt ref, its commit, files and diff stat, refused issues, and "see it: git diff <base> <ref>".

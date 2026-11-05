@@ -53,3 +53,14 @@ Recorded by Claude Code (Opus 5.5), session e2ad4802; §1–§7 above are kept v
 
 - D1–D6: as recommended in §6 (human: 「其他同意」) -- on by default with more than one installation in the order; a hand-picked agent is never switched; rest without a reset time 15 min doubling to 8 h; a rest is per installation for every group; flow calls switch too; the order lives in the agent preferences.
 - **Amendment to §3 Route** (human, replying to "the switch never happens mid-run": 「如果是provider额度用完，且有备用provider，可以改provider并重试。」): a run that itself ends with `failureCause: "quota-exhausted"` is not left for the next ordinary dispatch or the retry ladder. When a fallback installation that is not resting fits the item (and the item was not hand-picked, D2), Orca switches the item to it (the same recorded re-selection as §3) and starts a new run at once. The switch still happens between runs, never inside one: the failed run ends as now (its worktree and evidence kept as for any failed run) and the new run starts from the item's base. This immediate retry does not consume the retry ladder's attempt (the cause is the provider's, not the task's). With no fallback, §3 "Nothing to switch to" applies.
+
+## Correction (session 3cfc2e73, 2026-11-06): no separate scheduler wake at the earliest `until` (batch FB)
+
+Recorded by Claude Code (Opus 5.5), session 3cfc2e73, batch FB, on `feat/failover-ui` from main `e783beee`; the text above is kept verbatim.
+§3 "Nothing to switch to ⇒ … a scheduler wake is set for then" is not built as a wake of its own. The panel's pump already
+runs every `--control-wake-ms` (default 5 s, `src/panel/controlOptions.ts` `DEFAULT_CONTROL_WAKE_MS`; armed by
+`src/panel/server.ts` `startPump`), and each pass runs `systemDebugPass` → `failoverPass`, which reads the rests at the
+store's clock (`src/panel/controlAssembly.ts` pump). A rest that ends is therefore seen at most one interval later with no
+other event; a timer at `until` would add a second path to the same pass and nothing a person could observe. Pinned by
+`tests/control/quotaFailover.test.ts` "waits while the other installation rests, and switches back once its rest ends".
+The panel text and the agents-page rest view (§3 "Show") are built as written (plan As built, addendum 2026-11-06).
