@@ -1187,6 +1187,9 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
 /** DR2: the estimate plan's name for the same step; existing criteria call it. */
 export const stepCEstimate = stepCSingleCall;
 
+/** Issues #153/#127: the blocked reason a D14 settle records on its run (no landing, so no acceptance, so the task is blocked). */
+export const EMPTY_RESULT_REASON = "empty-result";
+
 export async function savedReport(store: ControlStore, runId: string): Promise<ExecutionReport> {
   const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`);
   if (!row) throw new ControlError("control-terminal-pending");
@@ -1240,6 +1243,14 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
     await commitCandidate(store, candidate, archiveAdmission(deps));
     if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }
+    // Issues #153/#127: D14 left the task blocked (an empty or ledger-only result has no acceptance); the reason is
+    // recorded so the board card and the overview say why. The run stays `settled`; this is not a driver block.
+    if (!landed) write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.state !== "settled" || current.drive === undefined || current.drive.blockedReason !== null) return;
+      current.drive = { ...current.drive, blockedReason: EMPTY_RESULT_REASON };
+      saveDriverRun(store, current);
+    });
     settledJustNow = true;
   }
   const settled = readDriverRun(store, runId);

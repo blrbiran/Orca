@@ -472,14 +472,16 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   let firstFailure: { taskId: string; cause: string } | null = null;
   for (const taskId of taskIds) {
     // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).
-    let runId: unknown, run: { failureCode?: unknown; drive?: { blockedReason?: unknown; failureCause?: { cause?: unknown } } } | undefined;
+    let runId: unknown, run: { failureCode?: unknown; drive?: { blockedReason?: unknown; failureCause?: { cause?: unknown } } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
     try {
-      runId = (decodedValue(snapshot.decodeWork(taskId)) as { currentRunId?: unknown } | undefined)?.currentRunId;
+      work = decodedValue(snapshot.decodeWork(taskId)) as typeof work;
+      runId = work?.currentRunId;
       run = typeof runId === "string" ? decodedValue(snapshot.decodeRun(runId)) as typeof run : undefined;
     } catch { continue; }
-    if (run === undefined || run === null) continue;
     // Failure-cause spec 2026-10-21 §5: ccloop's typed cause first, when it stated one.
-    const cause = typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
+    const runCause = run === undefined || run === null ? null : typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
+    // Issue #153: a blocked task whose run names no cause still shows (the overview's own `task-blocked`), not nothing.
+    const cause = runCause ?? (work?.status === "blocked" ? "task-blocked" : null);
     if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200) }; break; }
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");

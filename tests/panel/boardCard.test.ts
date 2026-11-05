@@ -20,6 +20,25 @@ describe("a board card's facts (kanban spec §4)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Issue #153: a blocked task whose run fields name no cause (or that has no run) still gives the card a cause.
+  it("falls back to task-blocked for a blocked task whose run names no cause, and to nothing for one not blocked", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b" }]); try {
+      const setWork = (id: string, patch: Record<string, unknown>) => {
+        const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(id)!.body));
+        h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...work, ...patch }), id);
+      };
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('ra','g','a',1,0,?)").run(JSON.stringify({ failureCode: null, drive: { blockedReason: null } }));
+      setWork("a", { currentRunId: "ra" });
+      expect(readGroupSummary(h.store, "g").card!.firstFailure).toBeNull();
+      setWork("a", { status: "blocked" });
+      // mutation: drop the work-status fallback in cardFacts -> null, red
+      expect(readGroupSummary(h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "task-blocked" });
+      setWork("a", { status: "done" });
+      setWork("b", { status: "blocked" });
+      expect(readGroupSummary(h.store, "g").card!.firstFailure).toEqual({ taskId: "b", cause: "task-blocked" });
+    } finally { await h.dispose(); }
+  });
+
   // Checks spec 2026-10-22 §6.6, §7: a model-review finding's row is the review group's, so the badge on an involved
   // group's card is counted from the flag's involvedGroupIds -- waiting (not ratified) only, major and minor apart.
   it("counts the model-review findings waiting on a group it is involved in, major and minor apart", async () => {

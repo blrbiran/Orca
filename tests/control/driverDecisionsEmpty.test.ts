@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { hasPath } from "../../src/control/driverLanding.js";
 import { DriverCrash, createExecutionDriver } from "../../src/control/executionDriver.js";
 import { listPendingDecisions } from "../../src/control/pendingDecisions.js";
+import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Control run decisions plan Task 7: an empty result is not landed (deviation D14), yet the decisions its run reported
@@ -139,6 +140,26 @@ describe("E: an empty result's decisions land in a ledger-only commit (control r
       await expect(hasPath(t.repo, "0".repeat(40), ".decisions/run-x.jsonl")).rejects.toThrow();
     } finally { await t.h.dispose(); }
   }, 30000);
+
+  // Issues #153/#127: D14 is kept (the task is blocked), and the run now says why, so the board card names a cause.
+  it("records empty-result on a settled empty run, and the board card names it; a landed run records none", async () => {
+    const empty = await driverHarness([{ taskId: "a" }], { files: () => ({}), decisions: () => [good()] }); try {
+      const runId = await empty.claim();
+      await empty.until(empty.driver(), () => empty.body(runId).drive?.cleanedUp === true);
+      const work = JSON.parse(String(empty.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      // mutation: drop the empty-result write in stepE -> blockedReason null and firstFailure null, red
+      expect({ state: empty.body(runId).state, reason: empty.body(runId).drive.blockedReason, work: work.status })
+        .toEqual({ state: "settled", reason: "empty-result", work: "blocked" });
+      expect(readGroupSummary(empty.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "empty-result" });
+    } finally { await empty.h.dispose(); }
+    const landed = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await landed.claim();
+      await landed.until(landed.driver(), () => landed.body(runId).drive?.cleanedUp === true);
+      // mutation: write empty-result whatever landed -> "empty-result" on a landed run, red
+      expect({ state: landed.body(runId).state, reason: landed.body(runId).drive.blockedReason }).toEqual({ state: "settled", reason: null });
+      expect(readGroupSummary(landed.h.store, "g").card!.firstFailure).toBeNull();
+    } finally { await landed.h.dispose(); }
+  }, 60000);
 
   it("still blocks an out-of-bounds run and writes no decision", async () => {
     const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }), decisions: () => [good(), good({ kind: "opinion" })] }); try {
