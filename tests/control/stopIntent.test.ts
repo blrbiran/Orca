@@ -210,6 +210,44 @@ describe("stop command composition", () => {
     } finally { await h.dispose(); }
   });
 
+  // Issue #139: a resume that would arm a wake delivered idle says "resumed" instead of "scheduled"; a group with a run in
+  // flight, or one never started, still gets its wake.
+  it("answers resumed, with no wake, for a started group with nothing to claim and no run in flight", async () => {
+    const { h, service } = await startedFixture(); try {
+      const startWakes = () => Number(h.store.db.prepare("SELECT count(*) AS n FROM scheduler_wakes WHERE group_id='g' AND kind='start'").get()!.n);
+      const setTask = (status: string) => {
+        const row = h.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").get()!;
+        h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), status }), String(row.id));
+      };
+      // A run in flight: resume still arms the wake (mid-run pause -> resume keeps working).
+      await service.pauseDispatch(h.command("pause-dispatch", {}));
+      // mutation: drop the active-run clause of nothingToResume -> resumed, red
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
+      // The run has settled and the task is done (the group sits in review): nothing to claim, nothing in flight.
+      h.store.db.prepare("UPDATE runs SET active=0 WHERE group_id='g'").run();
+      setTask("done");
+      const group = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...group, status: "review" }));
+      await service.pauseDispatch(h.command("pause-dispatch", {}));
+      const before = startWakes();
+      const resumed = await service.resumeDispatch(h.command("resume-dispatch", {}));
+      // mutation: drop the nothingToResume branch -> scheduled with one more start wake, red
+      expect(resumed).toMatchObject({ result: { kind: "resumed", operation: "resume-dispatch" } });
+      expect(startWakes()).toBe(before);
+      expect(readStopIntent(h.store, "g")).toBeNull();
+    } finally { await h.dispose(); }
+  });
+
+  it("a never-started group with nothing to claim still gets its start wake on resume (it seeds later dispatch)", async () => {
+    const { h, service } = await stopFixture(); try {
+      const row = h.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g'").get()!;
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...JSON.parse(String(row.body)), status: "blocked" }), String(row.id));
+      await service.pauseDispatch(h.command("pause-dispatch", {}));
+      // mutation: drop the earlier-start-wake clause of nothingToResume -> resumed, red
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
+    } finally { await h.dispose(); }
+  });
+
   it("clears only a pause with resume-dispatch and rejects a handoff intent", async () => {
     const { h, service } = await stopFixture(); try {
       await service.start(h.command("start", {}));

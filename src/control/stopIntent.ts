@@ -17,8 +17,9 @@ import { recordProjectionChange } from "./projectionJournal.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
-import { rearmFailedContinuation } from "./continuation.js";
+import { continuationWakeBody, rearmFailedContinuation } from "./continuation.js";
 import { waitingPrerequisites } from "./groupEdges.js";
+import { nextClaimableTask } from "./webDispatch.js";
 import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
@@ -519,12 +520,25 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
           const unmet = waitingPrerequisites(store, groupId);
           if (unmet.length > 0) throw new ControlError("group-dependency-unmet", unmet.join(","));
         }
+        // Issue #139: a started group with nothing to claim, no run in flight and no continuation would get a wake that
+        // is delivered idle; the pause is lifted and the answer says so. replenishStartWakes re-arms from the group's
+        // earlier start wake once work becomes claimable (a retry, a new task).
+        if (nothingToResume(store, groupId)) {
+          deps.beforeCommit?.();
+          return commandSuccess(context, { kind: "resumed", operation: "resume-dispatch" });
+        }
         const wakeId = startSchedulerWake(store, groupId, context.nextCommandRevision);
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "scheduled", operation: "resume-dispatch", wakeId }, 202);
       },
     }).body;
   } finally { release?.(); }
+}
+
+function nothingToResume(store: ControlStore, groupId: string): boolean {
+  if (store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) === undefined) return false;
+  if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined) return false;
+  return continuationWakeBody(store, groupId) === null && nextClaimableTask(store, groupId) === null;
 }
 
 /** Arm one ordinary ready-work dispatch claim for the group under `startRevision`. */
