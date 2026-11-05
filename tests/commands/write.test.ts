@@ -163,3 +163,27 @@ describe("refusals made here", () => {
     expect(w.posts()).toEqual([]);
   });
 });
+
+// Issue 141 (session 3cfc2e73): group import took --project and ignored it -- the plan's (or library entry's) own
+// repository decided where the group landed, and the person who named another project was not told.
+describe("group import --project (issue 141)", () => {
+  const TWO_PROJECTS = { "GET projects": { status: 200, body: { source: "command-line", projects: [
+    { projectKey: "proj", name: "proj", path: "/repos/proj", controlRepoId: "repo-1" },
+    { projectKey: "other", name: "other", path: "/repos/other", controlRepoId: "repo-2" },
+  ] } }, "GET plan-library/pl-1": { status: 200, body: { entryId: "pl-1", projectId: "repo-1", head: { sha256: H.plan }, versions: [{ sha256: H.plan }] } } };
+
+  it.each([[["plan-a"], "plan plan-a"], [["--library", "pl-1"], "library entry pl-1"]])("%j with --project naming another project is refused naming both, nothing sent", async (source, what) => {
+    const w = await world({}, TWO_PROJECTS);
+    const out = await cli(["group", "import", ...source, "--group", "g-new", "--project", "other", "--json"], w.dir);
+    expect([out.code, out.json().body.error.code]).toEqual([1, "import-project-mismatch"]);
+    for (const name of ["other", "repo-2", "repo-1", what]) expect(out.json().body.error.message).toContain(name);
+    expect(w.posts()).toEqual([]);
+  });
+
+  it("--project naming the plan's own project imports as before", async () => {
+    const w = await world({}, TWO_PROJECTS);
+    const out = await cli(["group", "import", "plan-a", "--group", "g-new", "--project", "proj", "--json"], w.dir);
+    expect(out.code, out.stdout).toBe(0);
+    expect(w.posts().map((p) => p.payload)).toEqual([{ groupId: "g-new", repoId: "repo-1", planId: "plan-a" }]);
+  });
+});

@@ -135,6 +135,14 @@ export const WORK_ROWS: CommandDef[] = [
         const planId = resolveId("plan", c.ids.plan!, plans.map((p) => p.planId));
         source = { repoId: plans.find((p) => p.planId === planId)!.repoId, planId };
       }
+      // Issue 141: the plan (or library entry) decides the project; a --project naming another one is refused, not ignored.
+      if (c.args.global.project !== undefined) {
+        const named = await c.project();
+        if (named.repoId !== source.repoId) {
+          const what = library !== undefined ? `library entry ${library}` : `plan ${String(source.planId)}`;
+          throw new EntryRejection("import-project-mismatch", `--project names ${named.projectKey} (${named.repoId}), but ${what} belongs to ${String(source.repoId)}; drop --project or name that project`);
+        }
+      }
       return {
         groupId: newGroupIdOnce(c), ...source,
         ...(binding === null ? {} : { estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash }),
