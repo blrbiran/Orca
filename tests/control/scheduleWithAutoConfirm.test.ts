@@ -282,23 +282,19 @@ describe("C7a: a fired group meets R2's pass in the real pump order", () => {
     expect(commandsOf(w.h, fired(), "orca-auto-confirm-unlimited-v%")).toHaveLength(1);
   });
 
-  // Review finding 6 (session 7753e97d): step 9 runs before R2 in the pump. With nothing port-free blocking R2, a failed
-  // estimate must not be recorded as a write-once waiting reason ahead of the attempt R2 is about to book.
-  it("a failed estimate R2 has not tried yet records nothing; R2's booked attempt is what the fire copies", async () => {
+  // Ruling (session 86352010): 「都同意按你的建议走」. This test was "a failed estimate R2 has not tried yet records
+  // nothing" (review finding 6, session 7753e97d). Since spec 2026-11-05 §3.3 an unlimited import queues no estimate, so
+  // nothing can fail between the fire and R2, and R2 never confirms a limited group, so no token limit restores the
+  // premise. Its other assertions duplicate "records a booked selections-unresolved as auto-confirm-ineligible:10"; what
+  // only it pinned is kept: a fired unlimited group (the scheduled import path) queues no estimate.
+  it("a fired unlimited group queues no estimate, so nothing is recorded ahead of R2's attempt", async () => {
     const w = await world({ planAgents: null });
     const { entryId, sha256 } = w.save();
     w.schedule({ entryId, sha256, tokenLimit: null, integration: null });
     const first = await w.pump(at(1, 9));
     expect(first.crashes).toEqual([]);
-    // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 The fire's import has no token limit, so it queues no
-    // estimate at all (spec 2026-11-05 §3.3; was one blocked-capability estimate). Nothing can fail between the fire and
-    // R2 in one pump any more; what stays pinned is that step 9 records nothing and the fire copies R2's booked attempt.
+    // mutation: planImport treats every import as limited (estimate "preflight") -> one estimate row, red
     expect(w.h.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(fired())).toEqual([]);
     expect(fireAt(w.h, at(1, 9))).toMatchObject({ outcome: "started", reason: null });
-    expect(commandsOf(w.h, fired(), "orca-auto-confirm-unlimited-v%")).toHaveLength(1);
-    const second = await w.pump(at(2, 9));
-    expect(second.crashes).toEqual([]);
-    expect(fireAt(w.h, at(1, 9))).toMatchObject({ outcome: "waiting", reason: "auto-confirm-ineligible:10" });
-    skippedNext(w.h);
   });
 });
