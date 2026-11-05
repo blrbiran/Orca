@@ -11,18 +11,27 @@ import {
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 
-interface RequirementView { summary: { requirement?: { roundNo: number | null; draftNo: number | null } }; drafts: Array<{ draftNo: number; draftHash: string | null }> }
+interface RequirementView { summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } }; drafts: Array<{ draftNo: number; draftHash: string | null }> }
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
+/**
+ * Issue #132: a pin this CLI cannot fill is refused here, before the panel's archive gate could answer. On an archived
+ * group that refusal names the archive (the panel's own code), not the missing round or draft.
+ */
+function missing(c: WriteContext, view: RequirementView, code: string, message: string): EntryRejection {
+  if (view.summary.archived === true) return new EntryRejection("group-archived", `${group(c)} is archived; orca group unarchive ${group(c)} first`);
+  return new EntryRejection(code, message);
+}
 async function roundNo(c: WriteContext): Promise<number> {
-  const round = (await requirement(c)).summary.requirement?.roundNo ?? null;
-  if (round === null) throw new EntryRejection("requirement-no-round", `${group(c)} has no clarification round`);
+  const view = await requirement(c);
+  const round = view.summary.requirement?.roundNo ?? null;
+  if (round === null) throw missing(c, view, "requirement-no-round", `${group(c)} has no clarification round`);
   return round;
 }
 async function latestDraft(c: WriteContext): Promise<{ draftNo: number; draftHash: string | null }> {
   const view = await requirement(c);
   const draftNo = view.summary.requirement?.draftNo ?? null;
   const draft = draftNo === null ? undefined : view.drafts.find((d) => d.draftNo === draftNo);
-  if (draft === undefined) throw new EntryRejection("requirement-no-draft", `${group(c)} has no draft`);
+  if (draft === undefined) throw missing(c, view, "requirement-no-draft", `${group(c)} has no draft`);
   return draft;
 }
 const decision = (value: string, flag: string): { id: string; accept: boolean } => {
@@ -91,7 +100,7 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/feedback`, payload: async (c) => ({ draftNo: (await latestDraft(c)).draftNo, feedback: str(c, "text") }) }),
   verb({ domain: "requirement", action: "accept", summary: "accept the current draft: the group becomes a draft task group", verb: "requirement-draft-accept", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/accept`,
-    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw new EntryRejection("requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash }; } }),
+    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash }; } }),
   verb({ domain: "requirement", action: "classify", summary: "set the requirement's class (it sets the clarification caps)", verb: "requirement-classify", positionals: [GROUP],
     flags: [{ name: "scope", type: "string", required: true, summary: "small|medium|large" }, { name: "clarity", type: "string", required: true, summary: "the clarity class" }],
     route: (c) => `groups/${group(c)}/requirement/classify`, payload: (c) => ({ scope: str(c, "scope"), clarity: str(c, "clarity") }) }),
