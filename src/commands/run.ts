@@ -1,6 +1,6 @@
 import { EntryRejection, localError } from "../entry/envelope.js";
 import { renderHelp } from "./help.js";
-import { parseArgs, rawGlobals } from "./parse.js";
+import { GLOBAL_FLAGS, parseArgs, rawGlobals } from "./parse.js";
 import { findCommand, REGISTRY } from "./registry.js";
 import type { CommandDef, CommandIo, GlobalFlags, ParsedArgs } from "./types.js";
 
@@ -23,13 +23,41 @@ async function execute(def: CommandDef, args: ParsedArgs, io: CommandIo, registr
 }
 
 /**
+ * Issue #142: global flags written before the command (`orca --json group list`, `orca --project X project show`,
+ * `orca --help group list`) are moved behind the command words, so they mean exactly what the trailing form means.
+ * Only known global flags are moved, each with its value (`--x v` or `--x=v`); the first other word stops the scan.
+ */
+export function hoistGlobalFlags(argv: readonly string[], registry: readonly CommandDef[] = REGISTRY): string[] {
+  const leading: string[] = [];
+  let i = 0;
+  while (i < argv.length && argv[i]!.startsWith("--")) {
+    const arg = argv[i]!;
+    const eq = arg.indexOf("=");
+    const flag = GLOBAL_FLAGS.find((known) => known.name === arg.slice(2, eq === -1 ? undefined : eq));
+    if (flag === undefined) break;
+    const width = flag.type === "boolean" || eq !== -1 || i + 1 >= argv.length ? 1 : 2;
+    leading.push(...argv.slice(i, i + width));
+    i += width;
+  }
+  if (leading.length === 0) return [...argv];
+  const words = argv.slice(i);
+  const found = findCommand(words, registry);
+  // Flags go right after the command words (before any `--`), so parseArgs reads them as flags, not positionals.
+  if ("def" in found) return [...words.slice(0, words.length - found.rest.length), ...leading, ...found.rest];
+  return [...words, ...leading];
+}
+
+/**
  * CLI v2 spec §4, §11: run argv through the registry. null = no registered command matches, so the caller may still try
  * the `panel`, `user` and `mcp` arms (their own grammar) before answering with `unknownCommand`.
  */
-export async function runRegistered(argv: readonly string[], io: CommandIo, registry: readonly CommandDef[] = REGISTRY): Promise<number | null> {
-  if (argv[0] === "--help") { io.stdout(renderHelp([], registry)); return 0; }
+export async function runRegistered(typed: readonly string[], io: CommandIo, registry: readonly CommandDef[] = REGISTRY): Promise<number | null> {
+  const argv = hoistGlobalFlags(typed, registry);
   const found = findCommand(argv, registry);
-  if (!("def" in found)) return null;
+  if (!("def" in found)) {
+    if (typed[0] === "--help") { io.stdout(renderHelp([], registry)); return 0; }
+    return null;
+  }
   const { def, rest } = found;
   let global: GlobalFlags = rawGlobals(rest);
   try {
@@ -43,7 +71,8 @@ export async function runRegistered(argv: readonly string[], io: CommandIo, regi
 }
 
 /** Spec §4: an unknown command names the nearest registered one and exits 1; null when nothing is near. */
-export function unknownCommand(argv: readonly string[], io: Pick<CommandIo, "stderr">, registry: readonly CommandDef[] = REGISTRY): number | null {
+export function unknownCommand(typed: readonly string[], io: Pick<CommandIo, "stderr">, registry: readonly CommandDef[] = REGISTRY): number | null {
+  const argv = hoistGlobalFlags(typed, registry);
   const found = findCommand(argv, registry);
   if ("def" in found || found.suggestion === null) return null;
   io.stderr(`orca: unknown command ${JSON.stringify(argv.filter((word) => !word.startsWith("-")).slice(0, 2).join(" "))}; did you mean orca ${found.suggestion}?\n`);

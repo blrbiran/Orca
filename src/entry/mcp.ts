@@ -24,10 +24,12 @@ const invalid = (message: string): CliResponseV1 => localError(new EntryRejectio
 /** One call of the tool: validate, refuse the closed domains, run the registry with captured output. Exported for criteria. */
 export async function runTool(input: unknown, options: { client: string; stateDirFlag?: string; env: NodeJS.ProcessEnv }): Promise<{ text: string; isError: boolean }> {
   const answer = (response: CliResponseV1) => ({ text: JSON.stringify(response), isError: exitCodeFor(response) !== 0 });
-  const args = (input as { args?: unknown } | null)?.args;
-  if (!Array.isArray(args) || args.length === 0 || !args.every((word) => typeof word === "string")) return answer(invalid("the orca tool wants {args: string[]}, the argv after orca, e.g. [\"group\", \"list\"]"));
+  const typed = (input as { args?: unknown } | null)?.args;
+  if (!Array.isArray(typed) || typed.length === 0 || !typed.every((word) => typeof word === "string")) return answer(invalid("the orca tool wants {args: string[]}, the argv after orca, e.g. [\"group\", \"list\"]"));
+  const [{ findCommand, REGISTRY }, { hoistGlobalFlags, runRegistered, unknownCommand }] = await Promise.all([import("../commands/registry.js"), import("../commands/run.js")]);
+  // Issue #142: leading global flags move behind the command first, so the refused-domain check sees the real domain.
+  const args = hoistGlobalFlags(typed as string[], REGISTRY);
   if ((MCP_REFUSED_DOMAINS as readonly string[]).includes(args[0]!)) return answer(invalid(`orca ${args[0]} is not available over MCP; a person runs it in a terminal`));
-  const [{ findCommand, REGISTRY }, { runRegistered, unknownCommand }] = await Promise.all([import("../commands/registry.js"), import("../commands/run.js")]);
   const found = findCommand(args, REGISTRY);
   // `orca control` keeps its own grammar (no --json flag: it always answers JSON).
   const raw = "def" in found && found.def.raw === true;
