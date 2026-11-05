@@ -46,11 +46,13 @@ any command; `orca version` should equal this skill's version.
    command with a new id.
 6. **Some actions are a person's.** Group limits, spend caps and the usage calendar, applying an agent update,
    settling unknown usage, where a project's or group's work is carried, folder and multi-directory landing answers,
-   check and flow settings and their locks, re-running or answering a flow, its effects and its pool, plan-library and
-   schedule writes, orchestration limits, group dependencies and corrections are refused
+   check and flow settings and their locks, re-running or answering a flow, its effects and its pool, appending a
+   plan-library version (`plan save --entry`) or importing a file into the library, setting a schedule, making one from
+   a group or enabling one, orchestration limits, group dependencies and corrections are refused
    (`control-person-token-required`). Do not look for a way around it: ask the person (they run `orca login` and the
-   command with `--as-person`). A run Orca dispatched is refused even some open verbs (`control-dispatched-run-refused`,
-   e.g. `flow start`).
+   command with `--as-person`). A new `plan save`, `plan archive` and disabling, removing or resuming a schedule need no
+   person token. A run Orca dispatched is refused all plan-library and schedule writes, and even some open verbs
+   (`control-dispatched-run-refused`, e.g. `flow start`).
 7. **Parse `--json`.** One line: `{schema:"orca-cli-response-v1", status, commandId?, body, request?}`. Exit 0 = 2xx,
    1 = refused here before sending, 2 = the panel refused (`body.error.code` names why), 3 = crash.
    The text output is for people: it shortens long values with an ellipsis, so never parse it.
