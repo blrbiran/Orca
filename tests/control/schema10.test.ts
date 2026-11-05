@@ -61,11 +61,11 @@ describe("D9 migration preservation", () => {
       expect(added.map((t) => store.db.prepare(`SELECT count(*) AS n FROM ${t}`).get()!.n)).toEqual([0, 0, 0, 0]);
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
   });
-  it("refuses future schema22 before changing the database bytes", async () => {
+  it("refuses future schema23 before changing the database bytes", async () => {
     const root = await mkdtemp(join(tmpdir(), "s11-")), dir = join(root, "s");
     try {
       (await openControlStore({ stateDir: dir })).close(); const db = new DatabaseSync(join(dir, "control.sqlite"));
-      db.prepare("UPDATE meta SET value='22' WHERE key='schemaVersion'").run(); db.close();
+      db.prepare("UPDATE meta SET value='23' WHERE key='schemaVersion'").run(); db.close();
       const before = await readFile(join(dir, "control.sqlite"));
       await expect(openControlStore({ stateDir: dir })).rejects.toThrow("control-schema-unsupported");
       expect(await readFile(join(dir, "control.sqlite"))).toEqual(before);

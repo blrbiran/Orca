@@ -67,11 +67,11 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
   });
 
   // One-way (as 7 to 8 was): a store from a later build is refused, byte for byte unchanged.
-  it("refuses a version-22 store and leaves its bytes unchanged", async () => {
+  it("refuses a version-23 store and leaves its bytes unchanged", async () => {
     const dir = await stateDir();
     (await openControlStore({ stateDir: dir })).close();
     const raw = new DatabaseSync(join(dir, "control.sqlite"));
-    raw.prepare("UPDATE meta SET value='22' WHERE key='schemaVersion'").run();
+    raw.prepare("UPDATE meta SET value='23' WHERE key='schemaVersion'").run();
     raw.close();
     const bytes = await readFile(join(dir, "control.sqlite"));
     await expect(openControlStore({ stateDir: dir })).rejects.toThrow("control-schema-unsupported");
