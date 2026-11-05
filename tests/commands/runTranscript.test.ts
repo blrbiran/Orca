@@ -53,7 +53,7 @@ describe("orca run transcript", () => {
     const p = await panel();
     for (const argv of [["--before", "4"], ["--thinking"], ["--call", "plan/1"], ["--call", "1/plan/1/../x"], ["--call", "1/plan/1", "--before", "4", "--after", "2"]]) {
       const out = await cli(["run", "transcript", "run-1", ...argv, "--json"], p.dir);
-      expect([out.code, out.json().body.error.code], JSON.stringify(argv)).toEqual([1, "control-cli-argument-invalid"]);
+      expect([out.code, out.json().body?.error?.code], JSON.stringify(argv)).toEqual([1, "control-cli-argument-invalid"]);
     }
     expect(p.requests).toEqual([]);
   });
