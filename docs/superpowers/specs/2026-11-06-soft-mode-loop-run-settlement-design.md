@@ -492,3 +492,29 @@ Each finding was checked against the code at the commits named above before it w
     Q2 is no longer labelled.
 
 No finding was rejected.
+
+## 6. The human's answers to Q1–Q8 (session 86352010, 2026-11-06)
+
+The controller recommended an answer to each question; the human replied 「都同意按你的建议走」. The text above is
+unchanged (Rule 13); where it differs from the answers below, the answers rule.
+
+- **Q1: keep the recorded reply.** Runs blocked before the release are left for a person, loop runs and single calls
+  alike. §3.6's cutoff (`softLoopSince`) is built; O18 stays.
+- **Q2: follow the task's own budget.** A task with an **authored** finite token budget inside an unlimited group keeps
+  today's person path (blocks and flags, as O3 for a finite group). The pass's scope (§3.3 step 1) gains: the task has
+  no authored token budget. Reason: an authored task budget is a limit a person set, so D2's "reservation size, not a
+  limit the person set" does not carry over. New criterion **O3b** (same file, "authored task budget in an unlimited
+  group"): the run blocks and flags as today; mutation: drop the authored-budget check ⇒ settled, red. How the plan
+  reads "authored" (the task's import-time budget versus a grant Orca sized) is left to the plan, which must cite the
+  field it reads.
+- **Q3: (d).** The `orca-auto` panel-class command row, verb `settle-approximate-usage`, that the marker points at.
+- **Q4: separate design.** The token-allowance `usage-unknown` block and the succeeded-at-E shape are out of this change.
+- **Q5: keep.** ccloop does not admit `reservationDisposition: "recovered"`.
+- **Q6: finite ceiling only.** ccloop accepts an `approximate-floor` marker only when the run's work ceiling is finite;
+  an unlimited-grant run stays refused, as today. This changes §3.2's ccloop charge rule ("the ceiling is not
+  consulted, so it may be null") and criterion **C1**: a null work ceiling ⇒ `saved-result-settlement-invalid` (the code
+  ccloop gives a null ceiling today, `savedResultRecovery.ts:205-206` at `292ddb5`); a finite ceiling ⇒ `eligible`. Mutation for the new refusal: consult no ceiling for the method ⇒
+  eligible, red. Reason: making unlimited-grant runs recoverable is a new capability nobody asked for, and the floor
+  can only under-count.
+- **Q7: exclude.** Recovery and saved-result verification runs keep the person's path (§3.3 step 1 as written). No C7.
+- **Q8: `orca-auto`**, as orchestration, failover and schedules already write it.
