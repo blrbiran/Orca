@@ -362,3 +362,19 @@ describe("after retry-task: cleanup, a new run, success (spec §4.2(2), §4.4)",
     } finally { await t.h.dispose(); }
   }, 30000);
 });
+
+// Session 3cfc2e73, issue #150: a finished task answered task-not-retryable:run-state:settled-recoverable, which reads as
+// a broken run. It now answers work-already-done -- after CLI v2 §14 R2's stale-run guard, which keeps its place first.
+describe("retry on a finished task (#150)", () => {
+  it("answers work-already-done; a stale runId still answers task-run-moved first", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "succeed" }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => work(t, "a").status === "done");
+      expect(refusal(retry(t)).code).toBe("work-already-done");
+      expect(refusal(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }))).code).toBe("work-already-done");
+      expect(refusal(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId: "run-elsewhere" }))).code).toBe("task-run-moved");
+      expect(work(t, "a")).toMatchObject({ status: "done", currentRunId: runId });
+    } finally { await t.h.dispose(); }
+  }, 30000);
+});

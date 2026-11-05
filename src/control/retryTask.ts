@@ -80,6 +80,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const work = readWork(store, groupId, taskId) as unknown as RetriedWork;
         // CLI v2 spec §14 R2: the stale-retry guard the revision used to be -- before any eligibility check.
         if (command.payload.runId !== undefined && work.currentRunId !== command.payload.runId) throw new ControlError("task-run-moved", command.payload.runId);
+        // Issue #150: a finished task has nothing to retry; say so (after R2's guard, which stays first).
+        if (work.status === "done") throw new ControlError("work-already-done", taskId);
         if (typeof work.currentRunId !== "string") throw new ControlError("task-not-retryable", "no-run");
         const runId = work.currentRunId;
         const run = readRunBody(store, runId);

@@ -627,3 +627,20 @@ describe("an archived group with a queued continuation and a queued start (issue
     } finally { await h.dispose(); }
   });
 });
+
+// Session 3cfc2e73, issue #150: continue on a finished task answered continuation-predecessor-unrecoverable (or
+// work-already-active), which reads as a lost checkpoint. A done task now answers work-already-done before any of that.
+describe("continue on a finished task (#150)", () => {
+  it("answers work-already-done and changes nothing", async () => {
+    const ctx = await continuationFixture(); const { h, service } = ctx; try {
+      const a = await recoverablePredecessor(ctx, "a");
+      saveWorkRow(h.store, "a", { ...workRow(h.store, "a"), status: "done" });
+      const before = { revision: revisionOf(h.store), wakes: pendingWakes(h.store) };
+      const result = await service.continueTask(h.taskCommand("continue-task", "a", { predecessorRunId: a.runId, checkpointId: a.checkpointId }));
+      expect(result).toMatchObject({ error: { code: "work-already-done" } });
+      expect(revisionOf(h.store)).toBe(before.revision);
+      expect(pendingWakes(h.store)).toEqual(before.wakes);
+      expect(workRow(h.store, "a").status).toBe("done");
+    } finally { await h.dispose(); }
+  });
+});

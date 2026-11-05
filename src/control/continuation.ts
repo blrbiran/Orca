@@ -146,6 +146,8 @@ function runBody(store: ControlStore, runId: string): RunBody | null {
  */
 function assertPredecessor(store: ControlStore, groupId: string, work: ContinuationWork, predecessorRunId: string, checkpointId: string): RunBody {
   const unrecoverable = (): ControlError => new ControlError("continuation-predecessor-unrecoverable", `${groupId}:${work.workItemId}:${predecessorRunId}`);
+  // Issue #150: a finished task has nothing to continue; its complete checkpoint would otherwise read as "unrecoverable".
+  if (work.status === "done") throw new ControlError("work-already-done", work.workItemId);
   const run = runBody(store, predecessorRunId);
   if(run?.mode==="verify-saved-result"||run?.recoveryOf!==undefined)throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if (!run || run.groupId !== groupId || run.workItemId !== work.workItemId || run.taskId !== work.taskId) throw unrecoverable();
