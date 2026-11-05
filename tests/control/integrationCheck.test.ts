@@ -90,6 +90,8 @@ describe("the integration check (kanban spec §7 layer 1)", () => {
       h.importDeferred("busy");
       const busy = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='busy'").get()!.body)) as Record<string, unknown>;
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='busy'").run(JSON.stringify({ ...busy, status: "running" }));
+      // Review-exit spec 2026-11-05 §3.1 (D1): a running group holds its slot by what it runs (an active run), not its status.
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('r-busy','busy','a',1,1,'{\"phase\":\"work\"}')").run();
       // mutation: drop the idle test (always idle) -> started, red
       expect(await w.pass()).toEqual({ started: [] });
       w.advance(INTEGRATION_CHECK_MIN_INTERVAL_MS);

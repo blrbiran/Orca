@@ -142,9 +142,12 @@ describe("range facts from the store", () => {
       expect(await queueIdle()).toBe(true);
       w.h.importDeferred("sys");
       w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='sys'").run(JSON.stringify({ ...w.groupBody("sys"), status: "running", systemDebug: SYSTEM_MARK("ladder") }));
+      // Review-exit spec 2026-11-05 §3.1 (D1): a running group holds its slot by what it runs (an active run), not its status.
+      w.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('r-sys','sys','a',1,1,'{\"phase\":\"work\"}')").run();
       expect(await queueIdle()).toBe(true);
       w.h.importDeferred("busy");
       w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='busy'").run(JSON.stringify({ ...w.groupBody("busy"), status: "running" }));
+      w.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('r-busy','busy','a',1,1,'{\"phase\":\"work\"}')").run();
       expect(await queueIdle()).toBe(false);
     } finally { await w.h.dispose(); }
   });
