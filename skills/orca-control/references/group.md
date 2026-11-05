@@ -63,7 +63,7 @@ confirm the task plan as shown now; it starts when a slot is free unless --hold
 
 ## `orca group start <group>`
 
-start a confirmed group (one confirmed with --hold)
+start a confirmed group (one confirmed with --hold); at the running-group cap it is queued
 
 - What it does: sends control verb `start`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).

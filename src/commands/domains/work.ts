@@ -44,6 +44,15 @@ const decision = (value: string, flag: string): { id: string; accept: boolean } 
 const empty = (domain: string, action: string, summary: string, verbName: Parameters<typeof verb>[0]["verb"], path: string): CommandDef =>
   verb({ domain, action, summary, verb: verbName, positionals: [GROUP], route: (c) => `groups/${group(c)}/${path}`, payload: () => ({}) });
 
+/**
+ * Review-exit spec 2026-11-05 §3.4 (D4): a start (or a never-started group's resume) answered `queued-for-slot` says so in
+ * one line; every other answer prints as before.
+ */
+const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
+  const result = (body as { result?: { kind?: unknown; ahead?: unknown } } | null)?.result;
+  return result?.kind === "queued-for-slot" ? `queued: ${String(result.ahead)} ahead; it starts when a slot frees (orca orchestration show)` : row.format(body);
+} });
+
 export const WORK_ROWS: CommandDef[] = [
   // --- requirement
   verb({ domain: "requirement", action: "open", summary: "open a requirement from an idea; the group id is generated unless --group names one", verb: "requirement-open",
@@ -169,9 +178,9 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "handoff-at-context-tokens", type: "integer", summary: "hand off at this many context tokens" },
     ],
     route: (c) => `groups/${group(c)}/confirm`, payload: (c) => confirmPayload(c) }),
-  empty("group", "start", "start a confirmed group (one confirmed with --hold)", "start", "start"),
+  queuedFormat(empty("group", "start", "start a confirmed group (one confirmed with --hold); at the running-group cap it is queued", "start", "start")),
   empty("group", "pause", "stop dispatching new runs (running ones finish)", "pause-dispatch", "pause-dispatch"),
-  empty("group", "resume", "dispatch again after a pause", "resume-dispatch", "resume-dispatch"),
+  queuedFormat(empty("group", "resume", "dispatch again after a pause", "resume-dispatch", "resume-dispatch")),
   verb({ domain: "group", action: "stop-handoff", summary: "stop: running tasks hand off and stop", verb: "handoff-stop", positionals: [GROUP],
     flags: [{ name: "deadline", type: "string", summary: "UTC YYYY-MM-DDTHH:mm:ss.sssZ" }],
     route: (c) => `groups/${group(c)}/handoff-stop`, payload: (c) => (str(c, "deadline") === undefined ? {} : { handoffDeadlineAt: str(c, "deadline") }) }),

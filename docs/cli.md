@@ -49,7 +49,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group import [<plan>] [--group <group>] [--estimator-profile <estimator-profile>] [--estimate-mode <estimate-mode>] [--library <library>] [--version <version>]` — import a registered plan, or a plan library version (--library), as a new draft group
 - `orca group estimate <group> [--estimator-profile <estimator-profile>] [--mode <mode>]` — ask the estimator for budgets at the current proposal version
 - `orca group confirm <group> [--hold] [--budget-mode <budget-mode>] [--worker-profile <worker-profile>] [--handoff-profile <handoff-profile>] [--goal-review-profile <goal-review-profile>] [--handoff-at-context-tokens <handoff-at-context-tokens>]` — confirm the task plan as shown now; it starts when a slot is free unless --hold
-- `orca group start <group>` — start a confirmed group (one confirmed with --hold)
+- `orca group start <group>` — start a confirmed group (one confirmed with --hold); at the running-group cap it is queued
 - `orca group pause <group>` — stop dispatching new runs (running ones finish)
 - `orca group resume <group>` — dispatch again after a pause
 - `orca group stop-handoff <group> [--deadline <deadline>]` — stop: running tasks hand off and stop
