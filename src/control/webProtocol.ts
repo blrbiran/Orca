@@ -1797,7 +1797,11 @@ export const runViewSchema = z
     usageApproximate: z.object({ floorTokens: safeInteger.nullable() }).strict().optional(),
     diagnosis: z.object({ phase: z.enum(["estimate", "work", "handoff", "single-call"]), step: z.enum(["planning", "executing", "verifying"]).nullable(), cause: z.enum(["execution-format-invalid", "execution-format-ambiguous-or-hidden", "usage-unsettled", "unknown"]), attempt: safeInteger,
       // Issue #131 (session 3cfc2e73): ccloop's run-level cause (setup-failed, its phase and detail), omitted when none was stated.
-      failureCause: runFailureCauseSchema.pick({ cause: true, phase: true, detail: true }).optional() }).strict().optional(),
+      failureCause: runFailureCauseSchema.pick({ cause: true, phase: true, detail: true }).optional(),
+      // Session 3cfc2e73 D7 (#158): an omp execute format failure's attempt refs and what each changed (src/panel/formatFailureWork.ts).
+      formatFailureWork: z.object({ attempt: positiveSafeInteger, attemptBase: commitShaSchema.nullable(),
+        refs: z.array(z.object({ ref: nonemptyString, commit: commitShaSchema.nullable(), files: z.array(z.string()), filesMore: z.boolean(), stat: z.array(z.string()) }).strict()),
+        issues: z.array(z.object({ path: z.string(), message: z.string() }).strict()) }).strict().optional() }).strict().optional(),
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),

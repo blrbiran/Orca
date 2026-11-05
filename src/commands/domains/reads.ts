@@ -7,6 +7,7 @@ import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
 import { formatWithUnestimated, proposalDocument } from "./verbs.js";
+import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
@@ -112,6 +113,25 @@ function transcriptText(body: unknown): string {
   return [`${b.runtime ?? "?"} window [${b.start ?? "?"}, ${b.end ?? "?"})${b.final ? " final" : " live"}`, ...(lines.length === 0 ? ["(no events)"] : lines)].join("\n");
 }
 
+/**
+ * Session 3cfc2e73 D7 (#158): an omp execute format failure keeps the attempt's work only under ccloop's attempt refs.
+ * Name them, what each changed against the attempt's base, and the read-only git to look at it, so a person can take
+ * the work by hand.
+ */
+function formatFailureLines(work: FormatFailureWork | undefined): string[] {
+  if (work === undefined) return [];
+  const base = work.attemptBase;
+  return [
+    `execute format failure (attempt ${work.attempt}): the attempt's work is kept under ${work.refs.length === 1 ? "this ref" : "these refs"} in the project repository${base === null ? "" : `, on base ${base.slice(0, 12)}`}`,
+    ...work.issues.map((issue) => `  refused: ${issue.path === "" ? "(top level)" : issue.path}: ${issue.message}`),
+    ...work.refs.flatMap((ref) => ref.commit === null
+      ? [`  ${ref.ref}: not found in the project repository (not published yet, or removed)`]
+      : [`  ${ref.ref} = ${ref.commit.slice(0, 12)}: ${ref.files.length}${ref.filesMore ? "+" : ""} file${ref.files.length === 1 && !ref.filesMore ? "" : "s"} changed`,
+        ...ref.stat.map((line) => `    ${line.trim()}`),
+        ...(base === null ? [] : [`    see it: git diff ${base.slice(0, 12)} ${ref.ref}`])]),
+  ];
+}
+
 export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
@@ -158,7 +178,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { state?: string; stopReason?: string | null; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { state?: string; stopReason?: string | null; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -166,6 +186,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
         ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
+        ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
       ];
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");
     } }),

@@ -3,6 +3,8 @@ import { executionFormatFailureSchema, savedSourceSchema } from "../control/save
 import { settlementArtifact } from "../control/usageSettlement.js";
 import { z } from "zod";
 import type { ArtifactRef } from "../control/types.js";
+import { join } from "node:path";
+import { readFormatFailureWork, type FormatFailureWork } from "./formatFailureWork.js";
 
 export interface RunDiagnosis {
   phase: "estimate" | "work" | "handoff" | "single-call";
@@ -15,11 +17,13 @@ export interface RunDiagnosis {
    * none was stated. `cause` above stays Orca's decode axis; this says what ccloop reported.
    */
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null };
+  /** Session 3cfc2e73 D7 (#158): where an omp execute format failure's work is kept (formatFailureWork.ts); omitted when none. */
+  formatFailureWork?: FormatFailureWork;
 }
 
 type DiagnosticRun = {
   groupId: string; workItemId: string; taskId: string | null; runId: string; generation: number; graphVersion: number; targetVersion: number; executionId: string | null;
-  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { envelopeHash?: string | null; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null } | null } | null; savedSource?: unknown; failureCode: string | null;
+  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { sourceDir?: string; targetRepo?: string | null; envelopeHash?: string | null; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null } | null } | null; savedSource?: unknown; failureCode: string | null;
 };
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const normalizationSchema = z.object({
@@ -56,6 +60,9 @@ export function readRunDiagnosis(store: ControlStore, run: DiagnosticRun): RunDi
   let cause: RunDiagnosis["cause"] = run.failureCode === "usage-unsettled" ? "usage-unsettled" : "unknown";
   cause = savedFormatFailureEvidence(store, run)?.cause ?? cause;
   const failure = run.drive?.failureCause ?? null;
+  // ccloop's run directory is `<sourceDir>/run` (ccloop src/control/worker.ts); its attempt refs live in the target repository.
+  const formatFailureWork = run.drive?.sourceDir === undefined ? null : readFormatFailureWork(join(run.drive.sourceDir, "run"), run.drive.targetRepo ?? null);
   return { phase: run.phase, step, cause, attempt: run.providerAttemptOrdinal,
-    ...(failure === null ? {} : { failureCause: { cause: failure.cause, phase: failure.phase, detail: failure.detail } }) };
+    ...(failure === null ? {} : { failureCause: { cause: failure.cause, phase: failure.phase, detail: failure.detail } }),
+    ...(formatFailureWork === null ? {} : { formatFailureWork }) };
 }
