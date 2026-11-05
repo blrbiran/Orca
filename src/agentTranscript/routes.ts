@@ -3,9 +3,10 @@
  * `/api/control/runs/:runId/evidence` and `/activity`. All three web mounts (flow run page, task detail, group runs
  * table) call the same helpers.
  *
- * - Registered only when `channel === "web"` (v1 has no CLI reader, ruling 3); the socket listener answers
- *   `route-not-found` from its catch-all.
- * - An owner or a member reads; a principal carrying a run Orca dispatched is refused `control-dispatched-run-refused`.
+ * - Registered on the Web and the socket listener alike (spec Correction, session 3cfc2e73: `orca run transcript` reads
+ *   through these same handlers, so redaction, path containment and window semantics are one code path).
+ * - An owner or a member reads on the Web; on the socket an ordinary caller (with or without a person token) reads; a
+ *   principal carrying a run Orca dispatched is refused `control-dispatched-run-refused` on either listener.
  * - Another store's run is `run-not-found`. Paths resolve only from the stored listing or the archive manifest; no path is
  *   ever sent to the browser.
  * - Without ccloop's `features.transcripts: "v1"` the listing says why and nothing is served (§10.2.4).
@@ -33,7 +34,7 @@ export interface TranscriptRouteDeps {
 function refused(res: Response): boolean {
   const principal = res.locals.orcaPrincipal as Principal | undefined;
   if (principal?.kind === "agent" && principal.dispatchedRun !== undefined) {
-    sendControlError(res, 403, "control-dispatched-run-refused", `a transcript is not read by a run Orca dispatched (${principal.dispatchedRun}); a person reads it, from the Web UI.`);
+    sendControlError(res, 403, "control-dispatched-run-refused", `a transcript is not read by a run Orca dispatched (${principal.dispatchedRun}); a person reads it, from the Web UI or orca run transcript.`);
     return true;
   }
   return false;
@@ -57,8 +58,7 @@ function listingOf(store: ControlStore, runId: string): StoredListing | null {
 const queryKeys = (req: Request, allowed: readonly string[]): boolean => Object.keys(req.query).every((key) => allowed.includes(key) && typeof req.query[key] === "string");
 const intParam = (value: unknown): number | null => (typeof value === "string" && /^(0|[1-9][0-9]{0,15})$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : null);
 
-export function registerTranscriptRoutes(app: Express, deps: TranscriptRouteDeps, channel: "web" | "socket"): void {
-  if (channel !== "web") return;
+export function registerTranscriptRoutes(app: Express, deps: TranscriptRouteDeps): void {
   const cache = (): IndexCache => deps.indexCache ?? panelIndexCache;
   const redactor = (): Redactor => deps.redactor ?? panelRedactor();
 

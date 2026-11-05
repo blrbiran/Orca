@@ -599,8 +599,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
   });
 
-  // Live transcript spec §10.6.3 / §12.3: the transcript reads, on the Web listener only (registers nothing otherwise).
-  registerTranscriptRoutes(app, { store: deps.store, ...(deps.port === undefined ? {} : { port: deps.port }) }, channel);
+  // Live transcript spec §10.6.3 / §12.3: the transcript reads, on both listeners (spec Correction, session 3cfc2e73).
+  registerTranscriptRoutes(app, { store: deps.store, ...(deps.port === undefined ? {} : { port: deps.port }) });
 
   app.use("/api/control", (_req, res) => {
     sendControlError(res, 404, "route-not-found", "No control route matches this request.");
