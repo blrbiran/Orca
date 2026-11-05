@@ -52,14 +52,6 @@ export function runAgentAgrees(work: unknown, run: unknown): boolean {
   } catch { return false; }
 }
 
-/** A task the confirmation froze a skill set for: its skills were checked against the frozen agent's kind, so it is not switched. */
-export function taskHasFrozenSkills(store: ControlStore, groupId: string, taskId: string): boolean {
-  const proposal = readBudgetProposal(store, groupId);
-  if (!proposal.executionSnapshotHash) return false;
-  const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
-  return snapshot.skills?.some((entry) => entry.taskId === taskId) ?? false;
-}
-
 /**
  * Before the transaction (ccloop is asked asynchronously): the six frozen fields the task would carry on `installation`,
  * frozen as confirm freezes a task -- ccloop's resolution of the installation alone (model and window are its

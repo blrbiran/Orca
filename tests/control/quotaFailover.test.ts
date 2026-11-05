@@ -233,6 +233,23 @@ describe("the pass survives what it cannot do (independent review)", { timeout: 
     } finally { await w.t.h.dispose(); }
   });
 
+  it("tries the next installation when one cannot be resolved now", async () => {
+    const w = await world(); try {
+      // A third installation the fake ccloop resolves as claude's twin; claude itself is busy this pass.
+      const base = w.t.h.deps.port;
+      const port = { ...base,
+        listAgents: async () => ({ installations: [...(await base.listAgents()).installations, { id: "omp", kind: "omp", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
+        resolveAgent: async (partial: PartialSelection) => {
+          if (partial.agent === "claude") throw new Error("ccloop is busy");
+          if (partial.agent === "omp") { const twin = await base.resolveAgent({ agent: "claude" }); return { ...twin, selection: { ...twin.selection, agent: "omp" } }; }
+          return base.resolveAgent(partial);
+        } };
+      const service = new WebControlService({ ...w.t.h.deps, port, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => w.t.repo });
+      await service.systemDebugPass();
+      expect(w.work().agent.agent).toBe("omp");
+    } finally { await w.t.h.dispose(); }
+  });
+
   it("leaves a run whose failover command was already answered, even after the group revision moved", async () => {
     const w = await world(); try {
       const revision = () => Number(w.t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);

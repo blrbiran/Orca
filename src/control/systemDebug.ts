@@ -1,4 +1,3 @@
-import { taskHasFrozenSkills } from "./agentSwitch.js";
 import { z } from "zod";
 import { taskContractSchema, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { PartialSelection } from "./agentSelection.js";
@@ -376,7 +375,7 @@ export function failoverCommandId(taskId: string, runId: string): string { retur
 
 /**
  * Quota failover spec §8: an orchestrated group's task whose current run ended with cause `quota` on an installation the
- * task may leave (D2) and that has no frozen skill set, with no failover command for that run yet (a booked answer,
+ * task may leave (D2), with no failover command for that run yet (a booked answer,
  * applied or refused, is final: a resend at a later group revision would be command-id-conflict). The groups are chosen
  * as for the quota wait.
  */
@@ -392,7 +391,6 @@ export function failoverCandidates(store: ControlStore): Array<{ groupId: string
       const source = (work as { agentProvenance?: { agent?: unknown } }).agentProvenance?.agent;
       if (typeof source !== "string" || !SWITCHABLE_AGENT_SOURCES.has(source)) continue;
       if (store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, failoverCommandId(taskId, run.runId)) !== undefined) continue;
-      if (taskHasFrozenSkills(store, groupId, taskId)) continue;
       out.push({ groupId, taskId, runId: run.runId, installation: run.agent.agent });
     }
   }
