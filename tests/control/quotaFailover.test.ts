@@ -15,13 +15,13 @@ import { caps } from "./fixtures/store.js";
  * resting and retried at once -- unless a person or a plan chose its agent (a pin is a statement), or failover is off.
  * The switch keeps every earlier run valid: the view, the retry and the snapshot all still agree.
  */
-async function world(options: { agent?: PartialSelection } = {}) {
+async function world(options: { agent?: PartialSelection; detail?: string } = {}) {
   const clock = { value: Date.UTC(2026, 10, 5, 12, 0, 0) };
   let failing = true;
   const t = await driverHarness([{ taskId: "a", ...(options.agent ? { agent: options.agent } : {}) }], {
     storeNow: () => clock.value,
     behaviour: (id) => (id === "a" && failing ? "failed" : "succeed"),
-    failure: (id) => (id === "a" && failing ? { failureCause: { cause: "quota", phase: "plan", retries: 0, detail: "You've hit your usage limit" } } : undefined),
+    failure: (id) => (id === "a" && failing ? { failureCause: { cause: "quota", phase: "plan", retries: 0, detail: options.detail ?? "You've hit your usage limit" } } : undefined),
   });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
@@ -110,6 +110,11 @@ describe("a quota failure switches the task's installation and retries it (§8)"
 
   it("a person retries a failed task on another installation; the switch is theirs", async () => {
     const w = await world(); try {
+      // The installation the task is on is refused by name (nothing would change).
+      const same = await w.service.retryTaskOnAgent({ schema: "orca-raw-command-v1", commandId: "person-same", actorId: "operator",
+        expectedRevision: Number(w.t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
+        verb: "retry-task", target: { kind: "group", groupId: "g" }, payload: { taskId: "a", runId: w.runId, agent: "codex" } } as never);
+      expect((same as { error?: { code: string; message: string } }).error).toMatchObject({ code: "task-not-retryable", message: expect.stringContaining("agent-unchanged") });
       const revision = Number(w.t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
       const answer = await w.service.retryTaskOnAgent({ schema: "orca-raw-command-v1", commandId: "person-retry", actorId: "operator", expectedRevision: revision,
         verb: "retry-task", target: { kind: "group", groupId: "g" }, payload: { taskId: "a", runId: w.runId, agent: "claude" } } as never);
@@ -125,6 +130,16 @@ describe("a quota failure switches the task's installation and retries it (§8)"
 });
 
 describe("a resting installation is not switched to (D3, D4)", { timeout: 120_000 }, () => {
+  it("never switches to the installation the task is on, even when its named reset time has passed", async () => {
+    // The vendor's reset (Oct 22nd) is long past at the failure (Nov 5th): codex is not resting, yet it is the one that failed.
+    const w = await world({ detail: "You've hit your usage limit ... try again at Oct 22nd, 2026 2:13 PM" }); try {
+      expect(installationRests(w.t.h.store, w.clock.value).has("codex")).toBe(false);
+      await w.service.systemDebugPass();
+      expect(w.retries()).toEqual([[failoverCommandId("a", w.runId), "orca-auto"]]);
+      expect(w.work().agent.agent).toBe("claude");
+    } finally { await w.t.h.dispose(); }
+  });
+
   it("waits while the other installation rests, and switches back once its rest ends", async () => {
     const w = await world(); try {
       await w.service.systemDebugPass();
