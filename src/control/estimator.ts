@@ -13,9 +13,8 @@ import type { AgentResolution } from "./agentSelection.js";
 import { budgetEstimateRequestSchema, budgetEstimateSchema, controlPlanSchema, estimateExecutionContractSchema,
   type AmountProvenanceV1, type BudgetEstimateRequestV1, type BudgetEstimateV1, type EstimateExecutionContractV1 } from "./webProtocol.js";
 
-export const TASK_WORK: Amount = Object.freeze({ tokens: 3_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 });
-export const TASK_HANDOFF: Amount = Object.freeze({ tokens: 300_000, activeMs: 1_800_000, attempts: 0, sessions: 0 });
-export const GOAL_REVIEW: Amount = Object.freeze({ tokens: 1_000_000, activeMs: 3_600_000, attempts: 1, sessions: 1 });
+import { GOAL_REVIEW, TASK_HANDOFF, TASK_WORK } from "./defaultAmounts.js";
+export { GOAL_REVIEW, TASK_HANDOFF, TASK_WORK };
 /**
  * Tester round 2 spec §5.2.2 (ruling H2): the estimate grant's cap -- 1,000,000 tokens / 30 minutes. It is no longer the
  * preflight's input bound (the model's context window is); an estimate's own grant is `estimateGrantFor`.

@@ -3,7 +3,7 @@ import { taskContractSchema, type SchedulerControlPlanSource } from "../schedule
 import type { PartialSelection } from "./agentSelection.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { DEBUG_DIFF_INLINE_MAX_BYTES, debugDiffCommand, debugRunIdOf, type DebugInputV1 } from "./debugInput.js";
-import { TASK_WORK } from "./estimator.js";
+import { TASK_WORK } from "./defaultAmounts.js";
 import { correctionTargetOf } from "../corrections/target.js";
 
 type TaskContract = z.infer<typeof taskContractSchema>;
@@ -20,7 +20,7 @@ export const DEBUG_REPRODUCTION_CONDITION = "the reproduction test added by the 
 
 /**
  * Used only when the original contract is missing (§12.7). Every value is an existing default, none invented:
- * maxAttempts, totalRuntimeBudgetMs and tokenBudget are TASK_WORK's (src/control/estimator.ts:16);
+ * maxAttempts, totalRuntimeBudgetMs and tokenBudget are TASK_WORK's (src/control/defaultAmounts.ts);
  * perAttemptTimeoutMs is the current loop plans' phase timeout (src/control/loopPlans.ts:56, V2_DEFAULTS, also v3's);
  * partialOutcomeRecoveryWindowMs is the loop plans' (src/control/loopPlans.ts:113, EXECUTION_POLICY);
  * autonomyLevel and worktreeRequired are the only values the contract schema admits (src/scheduler/planFile.ts:208-210).
