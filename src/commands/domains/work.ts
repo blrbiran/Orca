@@ -280,13 +280,33 @@ function newGroupIdOnce(c: WriteContext): string {
   return id;
 }
 
+interface AgentPreview {
+  proposalVersion?: number; selectionsHash: string | null;
+  slots?: Array<{ key: string; slot: string; taskId: string | null; outcome: { kind: string; code?: string } }>;
+}
+
+/**
+ * Issue #144: name each slot that does not resolve, with its code and the command that sets it, instead of one line
+ * pointing at `orca agent list` (which only lists installations and fixes nothing).
+ */
+function unresolvedMessage(groupId: string, preview: AgentPreview): string {
+  const failed = (preview.slots ?? []).filter((slot) => slot.outcome.kind !== "resolved");
+  if (failed.length === 0) return "an agent slot does not resolve at this proposal version; see orca proposal show";
+  const lines = failed.map((slot) => {
+    const target = slot.taskId === null ? `--slot ${slot.slot}` : `--task ${slot.taskId}`;
+    const next = slot.outcome.kind === "unavailable" ? "ccloop could not be asked just now; retry" : `set it with orca proposal set-agent ${groupId} ${target} --agent <installation>`;
+    return `${`${slot.key}: ${slot.outcome.kind} ${slot.outcome.code ?? ""}`.trimEnd()}; ${next}`;
+  });
+  return `${failed.length} agent slot(s) do not resolve:\n  ${lines.join("\n  ")}`;
+}
+
 /** Spec §4: confirm's pins, as the Web's confirm builds them (BudgetEditor.tsx submitConfirm), read now. */
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
   const defaults = (await config(c)).defaults;
-  const preview = await c.read(`groups/${group(c)}/agent-preview`) as { proposalVersion?: number; selectionsHash: string | null };
+  const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;
   if (preview.selectionsHash === null || preview.proposalVersion !== view.proposal.proposalVersion) {
-    throw new EntryRejection("agent-selection-unresolved", "an agent slot does not resolve at this proposal version; see orca proposal show and orca agent list");
+    throw new EntryRejection("agent-selection-unresolved", unresolvedMessage(group(c), preview));
   }
   const flagFor = { worker: "worker-profile", handoff: "handoff-profile", goalReview: "goal-review-profile" } as const;
   const bind = async (kind: "estimator" | "worker" | "handoff" | "goalReview") => {
