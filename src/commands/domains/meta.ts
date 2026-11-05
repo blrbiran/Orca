@@ -25,9 +25,12 @@ export const META_ROWS: CommandDef[] = [
   // CLI v2 spec §15.3: a person token for an attended terminal session (sent only with --as-person).
   {
     domain: "login", action: null, summary: "store a person token for this terminal: the panel account's password, typed here; used only with --as-person",
-    positionals: [], flags: [{ name: "name", type: "string", required: true, summary: "the panel account to log in as" }], access: "open",
+    positionals: [], flags: [
+      { name: "name", type: "string", required: true, summary: "the panel account to log in as" },
+      { name: "password-stdin", type: "boolean", summary: "an isolated test panel only: read the password as one line from stdin (refused for any path under the real ~/.orca)" },
+    ], access: "open",
     mapsTo: { kind: "local", load: async () => (await import("../person.js")).runLogin },
-    examples: ["orca login --name ana", "orca usage set-cap --scope all --period week --tokens 500000 --as-person"], format: () => "",
+    examples: ["orca login --name ana", "printf '%s\\n' \"$PW\" | orca login --name tester --password-stdin --control-state-dir /tmp/test-panel/state", "orca usage set-cap --scope all --period week --tokens 500000 --as-person"], format: () => "",
   },
   {
     domain: "logout", action: null, summary: "revoke the stored person token and remove it",

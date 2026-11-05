@@ -429,3 +429,28 @@ as written (Rule 13); this section corrects it.
   person directory now also reach the agent-written commands Orca runs itself — the debug reproduction check, the
   criteria base re-run, the integration check — and chain sessions (a per-chain empty `0700` directory under the git
   dir, beside the chain's stop request).
+
+## Correction 2 (2026-11-05, session 3cfc2e73) — `--password-stdin` for an isolated test panel
+
+Recorded by Orca dev session 3cfc2e73 on `feat/password-stdin`. §15.3 ("typed at the terminal") and the accounts spec's
+§3.2 (`orca user` never reads a password from a pipe) are kept as written (Rule 13); this section narrows them.
+
+- **Why.** Session af2ceee1's self-hosting run (F6 in `.superpowers/sdd/2026-11-04-session-af2ceee1/progress.md`): an
+  agent that starts its own isolated panel under a scratch directory has to drive `orca login` / `orca user add` with
+  `expect`, for a panel whose first password is already in that scratch directory. There is no person there to protect.
+- **Human ruling (verbatim):** 「同意给隔离测试特殊处理。」 (on the proposal "a `--password-stdin` only for the isolated
+  test panel, or keep it as it is").
+- **What.** `orca login --password-stdin` and `orca user add|passwd <name> --password-stdin` read exactly one
+  non-empty line from stdin (one trailing `\n` or `\r\n` dropped; more lines, an empty line or a NUL ⇒
+  `password-stdin-invalid`). `user` reads it once (no second entry). Without the flag nothing changes.
+- **Isolated means outside the real `~/.orca`.** The real directory is `os.userInfo().homedir/.orca` (the password
+  database, not `$HOME`, which an isolated environment relocates). `login` refuses when the discovered panel socket or
+  the person token store is under it; `user` refuses when the control root is under it; paths are compared after
+  resolving symlinks on every existing ancestor. Refusal: `password-stdin-real-panel`, exit 1, nothing read, nothing
+  sent. Both refuse under the dispatched-run marker (`control-dispatched-run-refused`).
+- **What it does not change.** The person's own panel (the service under `~/.orca`) still takes passwords only at a
+  terminal; `--password` as an argument and passwords from the environment stay refused. Like §15.3 this is a
+  convention at Orca's interfaces: a process running as the person can set `ORCA_CONTROL_DIR` elsewhere, but then it
+  is talking to another panel, not the person's.
+- **Criteria.** `tests/commands/passwordStdin.test.ts` (real home, symlinks, one line), `tests/commands/person.test.ts`
+  "orca login --password-stdin" (3), `tests/panel/userCommand.test.ts` (2).

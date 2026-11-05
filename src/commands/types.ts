@@ -65,6 +65,8 @@ export interface CommandIo {
   client?: string;
   /** A secret typed at the terminal with echo off (`orca login`); a seam for the criteria. Default: ttySecret.ts. */
   readSecret?(prompt: string): Promise<string>;
+  /** The real ~/.orca --password-stdin refuses to touch (passwordStdin.ts); a seam for the criteria. Default: realOrcaDir(). */
+  realOrcaDir?: string;
 }
 
 export type LocalHandler = (args: ParsedArgs, io: CommandIo) => Promise<number>;

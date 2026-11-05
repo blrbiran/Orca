@@ -137,3 +137,40 @@ describe("orca login / logout and --as-person (CLI v2 spec §15.3)", { timeout: 
     expect([after.code, codeOf(after.out)]).toEqual([2, "control-person-token-invalid"]);
   });
 });
+
+// Human ruling, session 3cfc2e73 (「同意给隔离测试特殊处理。」), CLI v2 spec Correction 2: --password-stdin, only
+// when the socket and the token store both lie outside the real ~/.orca (os.userInfo's home, not $HOME).
+describe("orca login --password-stdin (isolated test panel only)", { timeout: 60_000 }, () => {
+  it("logs in from one stdin line without a terminal or a prompt, and the token it stores works", async () => {
+    const { personDir, run, prompts, tokenWrite, codeOf } = await setUp();
+    // Default real dir: these temp dirs are outside it. Mutation "accept only with a TTY" -> red here.
+    const login = await run(["login", "--name", "tester", "--password-stdin"], { stdinIsTTY: false, stdinText: `${TEST_PASSWORD}\n` });
+    expect([login.code, login.err]).toEqual([0, ""]);
+    expect(prompts).toEqual([]);
+    expect(existsSync(join(personDir, "token.json"))).toBe(true);
+    const write = await tokenWrite("cc-stdin", ["--as-person"]);
+    expect([write.code, codeOf(write.out)]).toEqual([0, undefined]);
+  });
+
+  it("refuses when the socket or the token store is under the real ~/.orca, before reading stdin or asking the panel", async () => {
+    const { w, env, personDir, run } = await setUp();
+    // Mutation "drop the real-panel check" -> logs in -> red.
+    const underSocket = await run(["login", "--name", "tester", "--password-stdin"], { stdinIsTTY: false, stdinText: `${TEST_PASSWORD}\n`, realOrcaDir: w.state });
+    expect([underSocket.code, underSocket.err]).toEqual([1, expect.stringContaining("password-stdin-real-panel: --password-stdin is only for an isolated test panel; the panel socket")]);
+    // Mutation "check only the socket" -> red here: the store alone is under the stand-in real dir.
+    const storeOnly = await run(["login", "--name", "tester", "--password-stdin"], { stdinIsTTY: false, stdinText: `${TEST_PASSWORD}\n`, realOrcaDir: personDir, env });
+    expect([storeOnly.code, storeOnly.err]).toEqual([1, expect.stringContaining("the person token store")]);
+    expect(existsSync(personDir)).toBe(false);
+  });
+
+  it("refuses empty or multi-line stdin, and the dispatched-run marker", async () => {
+    const { env, personDir, run } = await setUp();
+    for (const stdinText of ["", "\n", `${TEST_PASSWORD}\nsecond line\n`]) {
+      const bad = await run(["login", "--name", "tester", "--password-stdin"], { stdinIsTTY: false, stdinText });
+      expect([bad.code, bad.err]).toEqual([1, expect.stringContaining("password-stdin-invalid")]);
+    }
+    const marked = await run(["login", "--name", "tester", "--password-stdin"], { stdinIsTTY: false, stdinText: `${TEST_PASSWORD}\n`, env: { ...env, ORCA_DISPATCHED_RUN: "run-1" } });
+    expect([marked.code, marked.err]).toEqual([1, expect.stringContaining("control-dispatched-run-refused")]);
+    expect(existsSync(personDir)).toBe(false);
+  });
+});

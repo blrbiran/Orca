@@ -14,6 +14,8 @@ import { DISPATCHED_RUN_ENV } from "../control/commandClient.js";
 import { discoverSocketPath } from "../entry/discovery.js";
 import { EntryRejection } from "../entry/envelope.js";
 import { requestOverSocket } from "../entry/socketClient.js";
+import { readStdin } from "./local/stdin.js";
+import { PASSWORD_STDIN_FLAG, REAL_PANEL_REFUSAL, STDIN_INVALID_MESSAGE, STDIN_INVALID_REFUSAL, passwordFromStdin, realOrcaDir, realPanelMessage, realPanelPath } from "./passwordStdin.js";
 import type { CommandIo, ParsedArgs } from "./types.js";
 
 export const PERSON_TOKEN_SCHEMA = "orca-person-token-v1";
@@ -81,12 +83,23 @@ function fail(io: CommandIo, exit: 1 | 2, code: string, message: string): number
 export async function runLogin(args: ParsedArgs, io: CommandIo): Promise<number> {
   const name = args.flags.name as string;
   if (marked(io.env)) return fail(io, 1, "control-dispatched-run-refused", "orca login is not run by a run Orca dispatched");
-  if (!io.stdinIsTTY) return fail(io, 1, "person-login-needs-terminal", "orca login reads the password at a terminal; run it in a session you attend");
+  const fromStdin = args.flags[PASSWORD_STDIN_FLAG] === true;
+  if (!fromStdin && !io.stdinIsTTY) return fail(io, 1, "person-login-needs-terminal", "orca login reads the password at a terminal; run it in a session you attend (an isolated test panel may use --password-stdin)");
   // Resolved before the panel is asked, so a store that cannot be named leaves no live session behind.
   const dir = personDir(io.env);
   const socketPath = discoverSocketPath({ stateDirFlag: args.global.controlStateDir, env: io.env });
-  const read = io.readSecret ?? (async (prompt: string) => (await import("../panel/accounts/ttySecret.js")).readSecretFromTty(prompt));
-  const password = await read(`Password for ${name} on this panel: `);
+  let password: string;
+  if (fromStdin) {
+    const real = io.realOrcaDir ?? realOrcaDir();
+    const hit = realPanelPath({ "panel socket": socketPath, "person token store": dir }, real);
+    if (hit !== null) return fail(io, 1, REAL_PANEL_REFUSAL, realPanelMessage(hit, real));
+    const line = passwordFromStdin(io.stdinText ?? await readStdin());
+    if (line === null) return fail(io, 1, STDIN_INVALID_REFUSAL, STDIN_INVALID_MESSAGE);
+    password = line;
+  } else {
+    const read = io.readSecret ?? (async (prompt: string) => (await import("../panel/accounts/ttySecret.js")).readSecretFromTty(prompt));
+    password = await read(`Password for ${name} on this panel: `);
+  }
   const { status, body } = await requestOverSocket({ socketPath, method: "POST", path: "person/login", client: "cli", body: { name, password } });
   if (status !== 200) { const e = errorOf(body); return fail(io, 2, e.code, e.message); }
   const answer = body as { token: string; sid: string; user: { name: string }; expiresAt: number };

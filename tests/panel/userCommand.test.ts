@@ -143,4 +143,33 @@ describe("orca user (spec §3.2, §10)", () => {
     expect(run.status).toBe(1);
     expect(run.stderr).toContain("user-password-needs-tty");
   });
+
+  // Human ruling, session 3cfc2e73; CLI v2 spec Correction 2: an isolated test panel may pipe one line.
+  it("--password-stdin adds and resets from one stdin line when the control root is outside the real ~/.orca", async () => {
+    let h = io({ stdinIsTTY: false, readStdin: async () => "bobs own password\n", realOrcaDir: join(base, "real-orca") });
+    expect(await runUserCommand(["add", "bob", "--password-stdin"], h.io)).toBe(0);
+    expect(h.prompts).toEqual([]);
+    expect(withStore((s) => s.findByName("bob")?.roles)).toEqual(["member"]);
+    h = io({ stdinIsTTY: false, readStdin: async () => "bobs newer password\n", realOrcaDir: join(base, "real-orca") });
+    expect(await runUserCommand(["passwd", "bob", "--password-stdin"], h.io)).toBe(0);
+    expect(h.out.join("") + h.err.join("")).not.toContain("bobs newer password");
+  });
+
+  it("--password-stdin is refused under the real ~/.orca, under the dispatched-run marker, on other subcommands, and for a bad line", async () => {
+    const read = async () => "bobs own password\n";
+    // Mutation "drop the real-panel check" -> adds bob -> red.
+    let h = io({ stdinIsTTY: false, readStdin: read, realOrcaDir: base });
+    expect(await runUserCommand(["add", "bob", "--password-stdin"], h.io)).toBe(1);
+    expect(h.err.join("")).toContain("password-stdin-real-panel");
+    h = io({ stdinIsTTY: false, readStdin: read, realOrcaDir: join(base, "real-orca"), env: { ORCA_CONTROL_DIR: root, ORCA_DISPATCHED_RUN: "run-1" } });
+    expect(await runUserCommand(["add", "bob", "--password-stdin"], h.io)).toBe(1);
+    expect(h.err.join("")).toContain("control-dispatched-run-refused");
+    h = io({ stdinIsTTY: false, readStdin: async () => "two\nlines\n", realOrcaDir: join(base, "real-orca") });
+    expect(await runUserCommand(["add", "bob", "--password-stdin"], h.io)).toBe(1);
+    expect(h.err.join("")).toContain("password-stdin-invalid");
+    h = io({ readStdin: read, realOrcaDir: join(base, "real-orca") });
+    expect(await runUserCommand(["disable", "bob", "--password-stdin"], h.io)).toBe(1);
+    expect(h.err.join("")).toContain("user-argument-invalid");
+    expect(withStore((s) => s.findByName("bob"))).toBe(null);
+  });
 });

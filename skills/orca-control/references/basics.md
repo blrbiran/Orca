@@ -41,16 +41,18 @@ orca version
 orca version --json
 ```
 
-## `orca login --name <name>`
+## `orca login --name <name> [--password-stdin]`
 
 store a person token for this terminal: the panel account's password, typed here; used only with --as-person
 
 - What it does: runs locally.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `--name <name>` (required): the panel account to log in as
+- `--password-stdin`: an isolated test panel only: read the password as one line from stdin (refused for any path under the real ~/.orca)
 
 ```
 orca login --name ana
+printf '%s\n' "$PW" | orca login --name tester --password-stdin --control-state-dir /tmp/test-panel/state
 orca usage set-cap --scope all --period week --tokens 500000 --as-person
 ```
 

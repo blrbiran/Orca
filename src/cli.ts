@@ -46,7 +46,8 @@ const SERVICE_USAGE = `The service, its accounts, the raw socket client and the 
   orca panel logs [-f] [-n <lines>]
                                  the panel's log files (macOS, detached) or its journal (Linux)
   orca user add <name> [--role owner|member] | passwd <name> | disable <name> | list | rotate-key
-                                 (passwords are typed at a terminal, never passed as arguments)
+                                 (passwords are typed at a terminal, never passed as arguments; an isolated test
+                                 panel outside the real ~/.orca may pipe one line with --password-stdin)
                                  manage panel accounts in the control root's accounts store: the same
                                  ORCA_CONTROL_DIR as the service panel, or it refuses (user-store-missing).
                                  rotate-key logs every session out; restart the panel afterwards. Exit 1 = refused

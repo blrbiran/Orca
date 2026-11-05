@@ -23,7 +23,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca login`
 
-- `orca login --name <name>` — store a person token for this terminal: the panel account's password, typed here; used only with --as-person
+- `orca login --name <name> [--password-stdin]` — store a person token for this terminal: the panel account's password, typed here; used only with --as-person
 
 ### `orca logout`
 
