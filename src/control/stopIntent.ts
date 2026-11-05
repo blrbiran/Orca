@@ -18,7 +18,6 @@ import { noteRunWrite, recordActivity } from "./activity.js";
 import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { continuationWakeBody, rearmFailedContinuation } from "./continuation.js";
-import { waitingPrerequisites } from "./groupEdges.js";
 import { nextClaimableTask } from "./webDispatch.js";
 import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
@@ -58,6 +57,8 @@ export interface StopDeps {
   admissionGate?: AdmissionGate;
   now?: () => Date;
   beforeCommit?: () => void;
+  /** groupEdges.ts's, handed in by webService.ts (see WebDispatchDeps in webDispatch.ts for why it is not imported). */
+  waitingPrerequisites?: (store: ControlStore, groupId: string) => string[];
 }
 export type PauseCommand = Extract<RawAuthorityCommandV1, { verb: "pause-dispatch" }>;
 export type HandoffStopCommand = Extract<RawAuthorityCommandV1, { verb: "handoff-stop" }>;
@@ -517,7 +518,7 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
         // Issue #133: a ready group resumed before it ran arms a start, so it honours its edges as `start` does. The
         // refusal rolls the command back, so the pause stays.
         if (group.status === "ready") {
-          const unmet = waitingPrerequisites(store, groupId);
+          const unmet = deps.waitingPrerequisites?.(store, groupId) ?? [];
           if (unmet.length > 0) throw new ControlError("group-dependency-unmet", unmet.join(","));
         }
         // Issue #139: a started group with nothing to claim, no run in flight and no continuation would get a wake that

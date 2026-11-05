@@ -27,7 +27,6 @@ import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
 import { hasRequirementBlock, readRequirementGroup } from "./requirementRecords.js";
 import { archivedMarkOf, isGroupArchived } from "./archivedMark.js";
-import { waitingPrerequisites } from "./groupEdges.js";
 import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capStatuses } from "./spendCaps.js";
 import { noteRunWrite, recordActivity } from "./activity.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
@@ -36,7 +35,12 @@ import type { OperatorNote } from "./schema.js";
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
 /** `now` dates the spend caps' periods at a claim (accounts spec §6.3.1); the service's clock type, the wall clock unless given. */
-export interface WebDispatchDeps { store: ControlStore; profileRouter: ExecutionProfileRouter; admissionGate?: AdmissionGate; now?: () => Date }
+/**
+ * `waitingPrerequisites` (groupEdges.ts) is handed in rather than imported: a static import of groupEdges here changes
+ * the evaluation order of the control modules' import cycle and leaves module-level values undefined elsewhere (session
+ * 3cfc2e73: zod schemas read `_parse` of undefined in the multi landing). webService.ts, which already imports it, passes it.
+ */
+export interface WebDispatchDeps { store: ControlStore; profileRouter: ExecutionProfileRouter; admissionGate?: AdmissionGate; now?: () => Date; waitingPrerequisites?: (store: ControlStore, groupId: string) => string[] }
 export interface AttemptTuple { runId: string; generation: number; phase: Phase; providerAttemptOrdinal: number }
 export interface DispatchRun {
   runId: string; groupId: string; workItemId: string; taskId: string | null; generation: number;
@@ -174,7 +178,7 @@ export async function scheduleStart(deps: WebDispatchDeps, command: StartCommand
         if (group.status !== "ready") throw new ControlError("group-state-invalid");
         // Issue #133, kanban spec §3.1/§3.4: an explicit start honours the group's edges as the automatic start does,
         // with the same "done" (prerequisiteDone); otherwise the dependent runs on a base without its prerequisite's work.
-        const unmet = waitingPrerequisites(store, groupId);
+        const unmet = deps.waitingPrerequisites?.(store, groupId) ?? [];
         if (unmet.length > 0) throw new ControlError("group-dependency-unmet", unmet.join(","));
         refuseUnnamedDebugChecks(store, groupId, group);
         // N1 spec §9.3: a requirement's group starts only on top of its exported document.

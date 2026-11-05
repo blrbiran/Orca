@@ -672,7 +672,7 @@ export class WebControlService {
     completeEstimateInStore({ store: this.store, admissionGate: this.deps.admissionGate }, id, estimateId, rawOutput, commitTerminal);
   }
   async start(command: StartCommand): Promise<WebCommandResult> {
-    return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate }, command);
+    return scheduleStart({ store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate, waitingPrerequisites }, command);
   }
   /**
    * Kanban spec 2026-10-20 §3.1-§3.2: one pass of start-on-confirm. Each start is this service's own start path, sent as
@@ -1388,7 +1388,7 @@ export class WebControlService {
     return this.mutate(() => applySetOrchestrationSettings({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
   }
   private stopDeps(): StopDeps {
-    return { store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate, now: this.deps.now, beforeCommit: this.deps.beforeCommit };
+    return { store: this.store, profileRouter: this.deps.profileRouter, admissionGate: this.deps.admissionGate, now: this.deps.now, beforeCommit: this.deps.beforeCommit, waitingPrerequisites };
   }
   async pauseDispatch(command: PauseCommand): Promise<WebCommandResult> {
     return applyPauseDispatch(this.stopDeps(), command) as WebCommandResult;
