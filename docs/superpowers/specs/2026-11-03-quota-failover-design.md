@@ -46,3 +46,10 @@ Clarify, split and estimate calls follow the same routing (their agent is the es
 1. ccloop: `quota-exhausted` with reset parsing, from real error samples (codex sample is reachable now on this machine; claude's needs an exhausted account) -- registered in Orca's cause list first.
 2. Orca: rests table (schema bump, backup first), routing at dispatch, activity and ledger rows, panel text.
 3. Paid acceptance: one real codex quota hit routed to claude (after the human's go-ahead).
+
+## 8. Human rulings (session e2ad4802, 2026-11-05)
+
+Recorded by Claude Code (Opus 5.5), session e2ad4802; §1–§7 above are kept verbatim.
+
+- D1–D6: as recommended in §6 (human: 「其他同意」) -- on by default with more than one installation in the order; a hand-picked agent is never switched; rest without a reset time 15 min doubling to 8 h; a rest is per installation for every group; flow calls switch too; the order lives in the agent preferences.
+- **Amendment to §3 Route** (human, replying to "the switch never happens mid-run": 「如果是provider额度用完，且有备用provider，可以改provider并重试。」): a run that itself ends with `failureCause: "quota-exhausted"` is not left for the next ordinary dispatch or the retry ladder. When a fallback installation that is not resting fits the item (and the item was not hand-picked, D2), Orca switches the item to it (the same recorded re-selection as §3) and starts a new run at once. The switch still happens between runs, never inside one: the failed run ends as now (its worktree and evidence kept as for any failed run) and the new run starts from the item's base. This immediate retry does not consume the retry ladder's attempt (the cause is the provider's, not the task's). With no fallback, §3 "Nothing to switch to" applies.
