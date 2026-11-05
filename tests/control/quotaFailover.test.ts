@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { installationRests, parseResetAt, REST_CAP_MS, REST_DEFAULT_MS } from "../../src/control/quotaRest.js";
 import { failoverCommandId } from "../../src/control/systemDebug.js";
@@ -76,6 +76,9 @@ describe("a quota failure switches the task's installation and retries it (§8)"
       // The next run is claimed on claude and the task finishes.
       const next = await w.t.claim();
       expect((w.t.body(next) as { agent: { agent: string } }).agent.agent).toBe("claude");
+      // Stamped with the task's switch count at the claim; the first run (claimed before any switch) has none.
+      expect((w.t.body(next) as { agentEpoch?: number }).agentEpoch).toBe(1);
+      expect((w.t.body(w.runId) as { agentEpoch?: number }).agentEpoch).toBeUndefined();
       // One failover per failed run: a second pass does nothing.
       await w.service.systemDebugPass();
       expect(w.retries()).toHaveLength(1);
@@ -191,20 +194,60 @@ describe("rests from the stored runs (D3)", () => {
 });
 
 describe("which selection an earlier run must carry after switches (runAgentAgrees)", () => {
-  // Found in session e2ad4802: the lineage list is sorted by run id, not by claim, so ordering by it made the answer depend
-  // on random ids. Claim ordinals order the runs.
+  // Independent review (session e2ad4802): neither the lineage list (sorted by run id) nor the claim ordinal (a
+  // continuation resets it to 1) orders runs by claim; each run is stamped with the task's switch count instead.
   const frozen = (agent: string) => ({ agent: { agent, model: "m", contextWindow: "agent-default" }, agentProvenance: { agent: "operator", model: "descriptor", contextWindow: "descriptor" },
     configHash: "c".repeat(64), timeoutMs: 1, killGraceMs: 0, agentCapabilities: caps });
-  it("orders by claim ordinal whatever the run ids sort as", async () => {
+  it("reads each run's epoch, whatever its id or claim ordinal", async () => {
     const { runAgentAgrees } = await import("../../src/control/agentSwitch.js");
-    const work = { ...frozen("codex"), lineageRunIds: ["run-a", "run-b", "run-c"],
-      agentSwitches: [{ afterRunId: "run-c", afterClaimOrdinal: 1, previous: frozen("codex-old"), by: "orca-auto", at: 0, reason: "quota" },
-        { afterRunId: "run-a", afterClaimOrdinal: 2, previous: frozen("claude"), by: "orca-auto", at: 0, reason: "quota" }] };
-    // run-c was claimed first (ordinal 1), run-a second, run-b third -- the reverse of their id order for the first two.
+    const work = { ...frozen("codex"), lineageRunIds: ["run-a", "run-b", "run-c", "run-d"],
+      agentSwitches: [{ afterRunId: "run-c", previous: frozen("codex-old"), by: "orca-auto", at: 0, reason: "quota" },
+        { afterRunId: "run-a", previous: frozen("claude"), by: "orca-auto", at: 0, reason: "quota" }] };
     expect(runAgentAgrees(work, { runId: "run-c", claimOrdinal: 1, ...frozen("codex-old") })).toBe(true);
-    expect(runAgentAgrees(work, { runId: "run-a", claimOrdinal: 2, ...frozen("claude") })).toBe(true);
-    expect(runAgentAgrees(work, { runId: "run-b", claimOrdinal: 3, ...frozen("codex") })).toBe(true);
-    expect(runAgentAgrees(work, { runId: "run-a", claimOrdinal: 2, ...frozen("codex") })).toBe(false);
-    expect(runAgentAgrees(work, { runId: "run-b", claimOrdinal: 3, ...frozen("claude") })).toBe(false);
+    expect(runAgentAgrees(work, { runId: "run-a", claimOrdinal: 2, agentEpoch: 1, ...frozen("claude") })).toBe(true);
+    // A continuation after the second switch: claim ordinal reset to 1, epoch 2, the current selection.
+    expect(runAgentAgrees(work, { runId: "run-d", claimOrdinal: 1, agentEpoch: 2, ...frozen("codex") })).toBe(true);
+    expect(runAgentAgrees(work, { runId: "run-d", claimOrdinal: 1, agentEpoch: 2, ...frozen("codex-old") })).toBe(false);
+    expect(runAgentAgrees(work, { runId: "run-a", claimOrdinal: 2, agentEpoch: 1, ...frozen("codex") })).toBe(false);
+    // An epoch past the history is not a run of this task as it stands.
+    expect(runAgentAgrees(work, { runId: "run-b", claimOrdinal: 3, agentEpoch: 3, ...frozen("codex") })).toBe(false);
+    // A task never switched: every run carries the current selection, as before.
+    expect(runAgentAgrees(frozen("codex"), { runId: "run-x", claimOrdinal: 5, ...frozen("codex") })).toBe(true);
+  });
+});
+
+describe("the pass survives what it cannot do (independent review)", { timeout: 120_000 }, () => {
+  it("books nothing when the target cannot be resolved now, and switches on a later pass", async () => {
+    const w = await world(); try {
+      let refuse = true;
+      const port = { ...w.t.h.deps.port, resolveAgent: async (partial: PartialSelection) => {
+        if (refuse && partial.agent === "claude") throw new Error("ccloop is busy");
+        return w.t.h.deps.port.resolveAgent(partial);
+      } };
+      const service = new WebControlService({ ...w.t.h.deps, port, knownRepository: (repoId: string) => repoId === "repo", resolveRepository: () => w.t.repo });
+      await service.systemDebugPass();
+      expect(w.retries()).toEqual([]);
+      refuse = false;
+      await service.systemDebugPass();
+      expect(w.work().agent.agent).toBe("claude");
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("leaves a run whose failover command was already answered, even after the group revision moved", async () => {
+    const w = await world(); try {
+      const revision = () => Number(w.t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
+      // An answer booked under the run's failover id (here a refusal: the installation the task is on).
+      const refused = await w.service.retryTaskOnAgent({ schema: "orca-raw-command-v1", commandId: failoverCommandId("a", w.runId), actorId: "operator", expectedRevision: revision(),
+        verb: "retry-task", target: { kind: "group", groupId: "g" }, payload: { taskId: "a", runId: w.runId, agent: "codex" } } as never);
+      expect("error" in (refused as object)).toBe(true);
+      const limit = readWebGroup(w.t.h.store, "g").ledger.groupLimit;
+      expect("error" in (w.t.service.setLimit(w.t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 1 } })) as object)).toBe(false);
+      // Not resent (a resend at the new revision would be command-id-conflict, caught and logged per candidate).
+      const written: string[] = [];
+      const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; });
+      try { await expect(w.service.systemDebugPass()).resolves.toBeDefined(); } finally { spy.mockRestore(); }
+      expect(written.filter((line) => line.includes("failover"))).toEqual([]);
+      expect(w.work().agent.agent).toBe("codex");
+    } finally { await w.t.h.dispose(); }
   });
 });

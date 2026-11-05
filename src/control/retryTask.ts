@@ -149,7 +149,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // Quota failover spec §8: the switch, after every eligibility check above and before A2 re-reads the task, so the
         // re-issued snapshot and the work item's new selection are checked together; a refusal below rolls it back.
         const switched = deps.switchTo === undefined ? null
-          : applyAgentSwitch(store, groupId, taskId, { runId, claimOrdinal: typeof run.claimOrdinal === "number" ? run.claimOrdinal : null }, deps.switchTo.frozen, command.actorId, deps.switchTo.source === "failover" ? "quota" : "person");
+          : applyAgentSwitch(store, groupId, taskId, runId, deps.switchTo.frozen, command.actorId, deps.switchTo.source === "failover" ? "quota" : "person");
         if (switched !== null) Object.assign(work, readWork(store, groupId, taskId));
         validateRetryGrantSource(store, groupId, work);
         readConfirmedTaskExecution(store, groupId, taskId);

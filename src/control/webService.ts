@@ -783,15 +783,26 @@ export class WebControlService {
     const order = readOrchestrationSettings(this.store).failoverOrder ?? listed;
     const rests = installationRests(this.store, this.store.now());
     for (const candidate of candidates) {
-      const to = order.find((id) => id !== candidate.installation && listed.includes(id) && !rests.has(id));
-      if (to === undefined) continue;
-      const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
-      const answer = await this.retryTaskOnAgent({
-        schema: "orca-raw-command-v1", commandId: failoverCommandId(candidate.taskId, candidate.runId), actorId: ORCHESTRATION_ACTOR,
-        expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
-        payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
-      });
-      if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
+      // Independent review (session e2ad4802): a target ccloop cannot resolve now is skipped for this pass without booking
+      // anything, so the next one is tried and a transient failure is not final; the group revision is read after the
+      // resolution, so a command in between does not book a revision conflict; one candidate's error never stops the pass.
+      try {
+        for (const to of order.filter((id) => id !== candidate.installation && listed.includes(id) && !rests.has(id))) {
+          let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
+          try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, candidate.groupId, to, "failover"); }
+          catch { continue; }
+          const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
+          const answer = applyRetryTask({ ...this.stopDeps(), switchTo: { frozen, source: "failover" } }, {
+            schema: "orca-raw-command-v1", commandId: failoverCommandId(candidate.taskId, candidate.runId), actorId: ORCHESTRATION_ACTOR,
+            expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
+            payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
+          });
+          if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
+          break;
+        }
+      } catch (error) {
+        process.stderr.write(`orca: failover ${candidate.groupId}/${candidate.taskId}: ${error instanceof Error ? error.message : String(error)}\n`);
+      }
     }
   }
   async systemDebugPass(): Promise<{ redispatched: string[]; opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
@@ -1877,7 +1888,7 @@ export class WebControlService {
             // Spec §6.4 step 4: the work item carries exactly what the snapshot freezes for its task.
             const { taskId: _taskId, ...frozen } = agentTasks.find(entry => entry.taskId === derived.taskId)!;
             Object.assign(work, frozen);
-            work.derivedContractHash = derived.derivedContractHash; work.status = "ready"; work.claimOrdinal = 0; work.currentRunId = null; work.pendingRunId = null; work.lineageRunIds = [];
+            work.derivedContractHash = derived.derivedContractHash; work.status = "ready"; work.claimOrdinal = 0; work.currentRunId = null; work.pendingRunId = null; work.lineageRunIds = []; delete work.agentSwitches;
             this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, derived.taskId);
           }
           writeCanonicalRecord(this.store, id, built.snapshotHash, built.canonicalJson);

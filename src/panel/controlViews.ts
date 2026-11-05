@@ -218,6 +218,8 @@ const persistedRunSchema = z.object({
   purpose: z.enum(["clarify", "split"]).optional(),
   overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
   claimOrdinal: safeInteger.positive().nullable(),
+  // Quota failover spec 2026-11-03 §8: the task's switch count at this claim (agentSwitch.ts).
+  agentEpoch: safeInteger.positive().optional(),
   continuationIntentId: idSchema.nullable().optional(),
   providerAttemptOrdinal: safeInteger,
   failureCode: z.string().min(1).nullable(),

@@ -20,8 +20,8 @@ import type { ControlStore } from "./store.js";
 
 /** Who chose the new installation: a person's retry on another agent, or orca-auto's quota failover. */
 export type SwitchSource = "task" | "failover";
-/** `afterClaimOrdinal`: the claim ordinal of the run that was current at the switch; it and every earlier claim carry `previous`. */
-export interface AgentSwitchRecord { afterRunId: string; afterClaimOrdinal: number; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" }
+/** One switch: the run that was current when it happened (for reading), and the selection it replaced. */
+export interface AgentSwitchRecord { afterRunId: string; previous: FrozenWorkAgent; by: string; at: number; reason: "person" | "quota" }
 
 /** The work item's switch history; anything malformed is treated as no history (the comparisons then stay strict). */
 export function agentSwitchesOf(work: unknown): AgentSwitchRecord[] {
@@ -30,21 +30,34 @@ export function agentSwitchesOf(work: unknown): AgentSwitchRecord[] {
 }
 
 /**
- * I1 with switches: the selection `run` must carry. Runs are ordered by their claim ordinal (the lineage list is sorted by
- * id, not by claim; a continuation keeps its predecessor's ordinal): a run claimed at or before a switch's
- * `afterClaimOrdinal` carries that switch's `previous` (the first such switch), a later one the current selection.
+ * A run's `agentEpoch`: how many switches its task had had when it was claimed (stamped by createStartingRun, omitted at
+ * 0 so a task never switched keeps its run bytes). Neither the lineage list (sorted by id) nor the claim ordinal (a
+ * continuation resets it to 1) orders runs by claim, so the epoch is stamped instead (independent review, session e2ad4802).
+ */
+export function agentEpochOf(run: unknown): number {
+  const epoch = (run as { agentEpoch?: unknown } | null)?.agentEpoch;
+  return typeof epoch === "number" && Number.isSafeInteger(epoch) && epoch > 0 ? epoch : 0;
+}
+
+/**
+ * I1 with switches: the selection `run` must carry. A run of epoch k < the number of switches was claimed before switch
+ * k and carries the selection that switch replaced; a run of the current epoch carries the work item's selection.
  */
 export function runAgentAgrees(work: unknown, run: unknown): boolean {
   try {
-    const ordinal = (run as { claimOrdinal?: unknown }).claimOrdinal;
-    let expected: FrozenWorkAgent = frozenWorkAgent(work);
-    const switches = agentSwitchesOf(work);
-    if (switches.length > 0 && typeof ordinal === "number") {
-      const owner = switches.find((entry) => typeof entry.afterClaimOrdinal === "number" && ordinal <= entry.afterClaimOrdinal);
-      if (owner !== undefined) expected = owner.previous;
-    }
+    const switches = agentSwitchesOf(work), epoch = agentEpochOf(run);
+    if (epoch > switches.length) return false;
+    const expected: FrozenWorkAgent = epoch < switches.length ? switches[epoch]!.previous : frozenWorkAgent(work);
     return canonicalBytes(frozenWorkAgent(run)).equals(canonicalBytes(expected));
   } catch { return false; }
+}
+
+/** A task the confirmation froze a skill set for: its skills were checked against the frozen agent's kind, so it is not switched. */
+export function taskHasFrozenSkills(store: ControlStore, groupId: string, taskId: string): boolean {
+  const proposal = readBudgetProposal(store, groupId);
+  if (!proposal.executionSnapshotHash) return false;
+  const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
+  return snapshot.skills?.some((entry) => entry.taskId === taskId) ?? false;
 }
 
 /**
@@ -74,8 +87,7 @@ export async function resolveAgentSwitch(
  * and the confirmed snapshot is re-issued with only this task's agent entry replaced. A task with skills is refused
  * (its skill set was checked against the frozen agent's kind at confirm); so is a switch to the installation it is on.
  */
-export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, run: { runId: string; claimOrdinal: number | null }, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
-  if (typeof run.claimOrdinal !== "number") throw new ControlError("recovery-blocked", "agent-switch-claim-ordinal");
+export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
   const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown>;
   const previous = frozenWorkAgent(work);
   if (previous.agent.agent === next.agent.agent) throw new ControlError("task-not-retryable", "agent-unchanged");
@@ -94,7 +106,7 @@ export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: s
   writeCanonicalRecord(store, groupId, hash, canonicalJson);
   proposal.executionSnapshotHash = hash;
   saveWebAuthority(store, group, proposal);
-  const record: AgentSwitchRecord = { afterRunId: run.runId, afterClaimOrdinal: run.claimOrdinal, previous, by, at: store.now(), reason };
+  const record: AgentSwitchRecord = { afterRunId: runId, previous, by, at: store.now(), reason };
   Object.assign(work, next, { agentSwitches: [...agentSwitchesOf(work), record] });
   saveWork(store, groupId, work as never);
   return { from: previous.agent.agent, to: next.agent.agent };

@@ -31,7 +31,7 @@ export function reopenProposalBodies(group: Body, proposal: Body, works: Body[],
     work.status = "draft"; work.derivedContractHash = null;
     // Agent selection spec §6.4: a reopened proposal has no frozen selection; the next confirmation freezes one.
     work.configHash = null;
-    for (const key of ["agent", "agentProvenance", "timeoutMs", "killGraceMs", "agentCapabilities"]) delete work[key];
+    for (const key of ["agent", "agentProvenance", "timeoutMs", "killGraceMs", "agentCapabilities", "agentSwitches"]) delete work[key];
     const allocationOf = (bucket: string) => (proposal.allocations as Body[]).find(a => a.ownerId === work.workItemId && a.bucket === bucket);
     const workAmount = allocationOf("work"), handoffAmount = allocationOf("handoff");
     if (!workAmount || !handoffAmount) throw new Error("task-allocation-missing");

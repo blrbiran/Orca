@@ -21,6 +21,7 @@ import type { WakeHandler, WakeHandlers } from "./dispatch.js";
 import type { ControlStore } from "./store.js";
 import type { AgentSelection } from "./agentSelection.js";
 import { frozenWorkAgent } from "./agentFreeze.js";
+import { agentSwitchesOf } from "./agentSwitch.js";
 import { claimableContinuations, continuationAlreadyClaimed, continuationWakeBody, type RegisteredContinuation } from "./continuation.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
 import { claimRequirementCall } from "./requirementCalls.js";
@@ -427,6 +428,8 @@ export function createStartingRun(
     // Agent selection spec §6.4 / §3 I1: a run (and a continuation of it) carries its work item's frozen selection unchanged.
     configHash: frozen.configHash, agent: frozen.agent, agentProvenance: frozen.agentProvenance, timeoutMs: frozen.timeoutMs,
     killGraceMs: frozen.killGraceMs, agentCapabilities: frozen.agentCapabilities,
+    // Quota failover spec 2026-11-03 §8: the switches the task had had at this claim (agentSwitch.ts runAgentAgrees).
+    ...(agentSwitchesOf(work).length > 0 ? { agentEpoch: agentSwitchesOf(work).length } : {}),
     ...(allowance&&needsTokenPolicy(allowance,work)?{tokenPolicy:{authoredTokenCeiling:allowance.authoredTokenCeiling,bindingCauses:allowance.bindingCauses,inheritedUsage:allowance.inheritedUsage}}:{}),
     grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
