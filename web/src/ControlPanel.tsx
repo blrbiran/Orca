@@ -50,6 +50,8 @@ export interface ControlPanelProps {
   refusal: ControlRefusal | null;
   /** Each group's last refusal, shown at the top of that group's view. */
   groupRefusals?: Record<string, ControlRefusal>;
+  /** Review-exit spec 2026-11-05 §3.4 (D4): each group's queued start, how many go first. */
+  startQueued?: Record<string, number>;
   /** The last import's refusal, shown inside the import form. */
   importRefusal?: ControlRefusal | null;
   /** In-repo plan path spec 2026-10-21 (#65): present in file mode; registers a plan file of the chosen repository. */
@@ -382,6 +384,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           route={props.route?.groupId === view.summary.groupId ? props.route : null}
           onRouteChange={props.onRouteChange && ((region, taskId) => props.onRouteChange?.(view.summary.groupId, region, taskId))}
           refusal={props.groupRefusals?.[view.summary.groupId] ?? null}
+          {...(props.startQueued?.[view.summary.groupId] === undefined ? {} : { startQueued: props.startQueued[view.summary.groupId] })}
         />
       )}
       {view === undefined && selected !== null && <p role="status">{t("control.reading", { groupId: selected })}</p>}

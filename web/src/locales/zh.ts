@@ -428,6 +428,7 @@ export const zh: Translation<typeof en> = {
       retryableWork: "可重试的工作",
       unresolvedWork: "结果未明的工作",
       start: "开始",
+      startQueued: "已排队，前面有 {{ahead}} 个；有空位就自动开跑。",
       pause: "暂停启动新任务",
       handoffStop: "保存进度并停止",
       resume: "继续执行",

@@ -9,7 +9,7 @@
  * voids them; a typed draft and an unresolved command id are the person's own
  * context, so they are kept and re-sent or looked up after the reload.
  */
-import type { ControlSummaryV1, GroupSummaryV1, GroupViewV1, RecoveryViewV1 } from "./controlTypes.js";
+import type { CommandSuccessV1, ControlSummaryV1, GroupSummaryV1, GroupViewV1, RecoveryViewV1 } from "./controlTypes.js";
 
 export interface UncertainCommand {
   groupId: string;
@@ -55,6 +55,8 @@ export interface ControlClientState {
   uncertainCommandIds: UncertainCommand[];
   /** Spec 2026-10-08 §2.2(d): each group's last refusal, shown at the top of its view until a later success of that group. */
   refusals: Record<string, ControlRefusal>;
+  /** Review-exit spec 2026-11-05 §3.4 (D4): a start answered queued-for-slot, by group: how many groups go first. */
+  startQueued?: Record<string, number>;
   /** The last import's refusal, shown in the import form until an import succeeds. */
   importRefusal: ControlRefusal | null;
   /** A refusal that belongs to no group and no import (a poll, the agents table, a repository's settings): the panel's own line. */
@@ -75,7 +77,15 @@ export type ControlClientEvent =
   // groupId on a panel refusal is the scope a revision conflict voids (e.g. @repository:<id>), never where it is shown.
   | { type: "refusal"; place: "group"; groupId: string; value: ControlRefusal }
   | { type: "refusal"; place: "import" | "panel"; groupId: string | null; value: ControlRefusal }
-  | { type: "command-succeeded"; place: "group" | "import"; groupId: string };
+  | { type: "command-succeeded"; place: "group" | "import"; groupId: string }
+  | { type: "start-queued"; groupId: string; ahead: number };
+
+/** Review-exit spec 2026-11-05 §3.4 (D4): the event a successful answer brings when it queued the start at the cap; else null. */
+export function startQueuedEvent(groupId: string, status: number, body: unknown): ControlClientEvent | null {
+  if (status >= 400) return null;
+  const result = (body as CommandSuccessV1 | null)?.result;
+  return result?.kind === "queued-for-slot" ? { type: "start-queued", groupId, ahead: result.ahead } : null;
+}
 
 export function initialControlState(): ControlClientState {
   return {
@@ -217,10 +227,15 @@ export function reduceControlState(state: ControlClientState, event: ControlClie
     }
     case "command-succeeded": {
       if (event.place === "import") return { ...state, importRefusal: null };
-      if (!Object.prototype.hasOwnProperty.call(state.refusals, event.groupId)) return state;
+      // A later success of the group replaces its queued line (start-queued sets it again when that answer is one).
+      const queued = state.startQueued !== undefined && Object.prototype.hasOwnProperty.call(state.startQueued, event.groupId);
+      const next = queued ? { ...state, startQueued: Object.fromEntries(Object.entries(state.startQueued!).filter(([id]) => id !== event.groupId)) } : state;
+      if (!Object.prototype.hasOwnProperty.call(state.refusals, event.groupId)) return next;
       const refusals = { ...state.refusals };
       delete refusals[event.groupId];
-      return { ...state, refusals };
+      return { ...next, refusals };
     }
+    case "start-queued":
+      return { ...state, startQueued: { ...state.startQueued, [event.groupId]: event.ahead } };
   }
 }

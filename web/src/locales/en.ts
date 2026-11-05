@@ -554,6 +554,7 @@ export const en = {
       retryableWork: "Retryable work",
       unresolvedWork: "Unresolved work",
       start: "Start",
+      startQueued: "Queued: {{ahead}} ahead; it starts when a slot frees.",
       pause: "Pause new tasks",
       handoffStop: "Save progress and stop",
       resume: "Continue execution",

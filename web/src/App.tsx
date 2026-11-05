@@ -93,7 +93,7 @@ import {
 import type { ControlAction } from "./controlApi.js";
 import { AccountContext } from "./AuthGate.js";
 import { ControlPanel } from "./ControlPanel.js";
-import { initialControlState, reduceControlState, summaryView } from "./controlState.js";
+import { initialControlState, reduceControlState, startQueuedEvent, summaryView } from "./controlState.js";
 import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { UncertainOperations } from "./UncertainOperations.js";
@@ -600,6 +600,9 @@ export function App(): JSX.Element {
     dispatchControl({ type: "command-resolved", value: command });
     // A success clears the refusal shown where the person acted; another group's stays (spec 2026-10-08 §2.2(d)).
     if (answer.status < 400) dispatchControl({ type: "command-succeeded", place, groupId: action.groupId });
+    // Review-exit spec 2026-11-05 §3.4 (D4): a start at the cap is queued; the group view says how many go first.
+    const queued = startQueuedEvent(action.groupId, answer.status, answer.body);
+    if (queued !== null) dispatchControl(queued);
     // Loop plans spec §4.2: a loop draft is the person's own data, cleared only once set-task-loop succeeded. W7 ruling: an
     // estimate's suggestion (the only set-task-loop that carries workProvenance, BudgetEditor.tsx suggestedLoopActions)
     // leaves an open draft alone; the card then says the plan changed after the draft began.
@@ -1800,6 +1803,7 @@ export function App(): JSX.Element {
           uncertain={control.uncertainCommandIds.filter((command) => !command.parked)}
           refusal={control.panelRefusal}
           groupRefusals={control.refusals}
+          startQueued={control.startQueued}
           importRefusal={control.importRefusal}
           {...(projectsAnswer?.editable === true ? { onRegisterPlan: async (repoId: string, path: string) => {
             // In-repo plan path spec 2026-10-21 §2.5: the browser never derives a project from a repoId; it asks the list.

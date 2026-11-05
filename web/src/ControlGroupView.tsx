@@ -205,6 +205,8 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
   /** Spec 2026-10-08 §2.2(d): this group's last refusal, shown at the top until a later success of this group. */
   refusal?: ControlRefusal | null;
+  /** Review-exit spec 2026-11-05 §3.4 (D4): this group's start was queued at the cap; how many groups go first. */
+  startQueued?: number;
   /** Control run decisions plan Task 11: this group's decisions as last read (or its failed read); absent or null shows no badge and no section. */
   decisions?: GroupDecisionsRead | null;
   /** Open a decision's detail, where it is corrected (App.tsx). */
@@ -467,6 +469,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {/* Feedback #53: a Web-started group stays ready through its first run; executionPending is the server's "not startable". */}
           {view.summary.state === "ready" && view.summary.executionPending !== true && stopMode === null && (
             <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
+          )}
+          {view.summary.state === "ready" && view.summary.executionPending !== true && props.startQueued !== undefined && (
+            <p role="status" data-testid="start-queued">{t("control.group.startQueued", { ahead: props.startQueued })}</p>
           )}
           {/* Tester #15: a done group dispatches nothing more, so there is nothing to pause or hand off. A draft keeps both: a
               pause there holds the start that confirming would otherwise bring. */}
