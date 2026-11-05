@@ -14,7 +14,7 @@ type Row = {
   domain: string; action: string; summary: string; verb: CommandVerbV1; scope?: VerbMapping["scope"];
   positionals?: PositionalDef[]; flags?: FlagDef[]; access?: "open" | "token"; examples?: string[];
   route: VerbMapping["route"]; payload: VerbMapping["payload"]; scopeId?: VerbMapping["scopeId"]; requiresIfRevision?: boolean;
-  conflictDocument?: VerbMapping["conflictDocument"];
+  conflictDocument?: VerbMapping["conflictDocument"]; hint?: CommandDef["hint"];
 };
 
 export const verb = (row: Row): CommandDef => ({
@@ -24,7 +24,7 @@ export const verb = (row: Row): CommandDef => ({
     ...(row.scopeId === undefined ? {} : { scopeId: row.scopeId }), ...(row.requiresIfRevision ? { requiresIfRevision: true } : {}),
     ...(row.conflictDocument === undefined ? {} : { conflictDocument: row.conflictDocument }),
   },
-  examples: row.examples ?? [], format: (body) => text(body),
+  examples: row.examples ?? [], format: (body) => text(body), ...(row.hint === undefined ? {} : { hint: row.hint }),
 });
 
 export const invalid = (message: string): EntryRejection => new EntryRejection("control-cli-argument-invalid", message);

@@ -130,6 +130,8 @@ export interface CommandDef {
   examples: string[];
   /** Human text for a 2xx body. */
   format(body: unknown): string;
+  /** Issue #143: the next step for a panel error, printed after its error line (human output only); undefined = none. */
+  hint?(error: { code: string; message: string }): string | undefined;
 }
 
 export type FindResult = { def: CommandDef; rest: string[] } | { suggestion: string | null };

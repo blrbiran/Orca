@@ -114,7 +114,7 @@ async function runRead(def: CommandDef, mapping: ReadMapping, context: WriteCont
 /** Run one read or verb row; a refusal made here is exit 1, the panel's error answer exit 2 (spec §7). */
 export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: CommandIo): Promise<number> {
   const print = (response: CliResponseV1, request?: Parameters<typeof printResponse>[3]): number =>
-    printResponse(response, { json: args.global.json, quiet: args.global.quiet, format: def.format }, io, request);
+    printResponse(response, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(def.hint === undefined ? {} : { hint: def.hint }) }, io, request);
   try {
     // Spec §6.3: the one command refused without --if-revision, before anything is asked of the panel.
     if (def.mapsTo.kind === "verb" && def.mapsTo.requiresIfRevision && args.global.ifRevision === undefined) {

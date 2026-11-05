@@ -22,7 +22,7 @@ function errorOf(body: unknown): { code: string; message: string } | null {
  */
 export function printResponse(
   response: CliResponseV1,
-  options: { json: boolean; quiet: boolean; format(body: unknown): string },
+  options: { json: boolean; quiet: boolean; format(body: unknown): string; hint?(error: { code: string; message: string }): string | undefined },
   io: { stdout(text: string): void; stderr(text: string): void },
   request?: SentRequest,
 ): number {
@@ -40,6 +40,8 @@ export function printResponse(
   }
   const error = errorOf(response.body);
   io.stderr(`orca: ${error === null ? `status ${response.status}` : `${error.code}: ${error.message}`}\n`);
+  const hint = error === null ? undefined : options.hint?.(error);
+  if (hint !== undefined) io.stderr(`orca: ${hint}\n`);
   if (response.commandId !== undefined) io.stderr(`orca: command id ${response.commandId}\n`);
   if (request !== undefined) io.stderr(`orca: the outcome is uncertain; re-run with --json to keep the request for orca command retry\n`);
   return code;

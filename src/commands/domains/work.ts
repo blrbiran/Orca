@@ -42,13 +42,19 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "idea", type: "string", required: true, summary: "what to build" }, { name: "group", type: "string", summary: "the new group's id" },
       { name: "language", type: "string", summary: "en|zh: the requirement's content language" },
       { name: "limit", type: "string", humanOnly: true, summary: "the requirement's budget as JSON {tokens,activeMs,attempts,sessions}" },
+      // Issue #143: the Web's agent picker (RequirementsPanel.tsx) sends payload.agent; the CLI could not.
+      { name: "agent", type: "string", summary: "the installation that runs this requirement's agent calls (orca agent list); default: your agent preferences" },
     ],
     scopeId: (c) => newGroupIdOnce(c), route: () => "requirements",
     payload: async (c) => ({
       groupId: newGroupIdOnce(c), repoId: (await c.project()).repoId, idea: str(c, "idea"),
       ...(str(c, "language") === undefined ? {} : { contentLanguage: str(c, "language") }), ...(str(c, "limit") === undefined ? {} : { limit: json(c, "limit") }),
+      ...(str(c, "agent") === undefined ? {} : { agent: { agent: str(c, "agent") } }),
     }),
-    examples: ["orca requirement open --idea \"add a dark mode\""] }),
+    hint: (error) => error.code === "agent-selection-rejected" && error.message.startsWith("estimator:agent-unselected")
+      ? "no agent is selected: pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences"
+      : undefined,
+    examples: ["orca requirement open --idea \"add a dark mode\"", "orca requirement open --idea \"add a dark mode\" --agent claude-main"] }),
   verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words",
     verb: "requirement-answer", positionals: [GROUP],
     flags: [
