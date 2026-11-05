@@ -1,6 +1,6 @@
 /**
  * T5 (spec §10.6.3, §12.3 "Access"): who reads and what is opened. An owner and a member read on the Web; a principal
- * carrying a run Orca dispatched is refused; the socket listener has no route. Paths come only from the stored listing,
+ * carrying a run Orca dispatched is refused on either listener (the socket included). Paths come only from the stored listing,
  * resolve under `<sourceDir>/run/`, every directory component is lstat-checked and the file is opened O_NOFOLLOW: a
  * transcript replaced by a symlink is refused, and so is a listing path that leaves the run directory. No served answer
  * carries the source path.
@@ -39,7 +39,7 @@ const callDir = (sourceDir: string, call = "call-a") => join(sourceDir, "run", "
 const tail = (served: Served, runId: string, seq = 1, who: "owner" | "member" | "dispatched" | "socketAgent" = "owner") => served.get(`/api/control/runs/${runId}/transcripts/1/plan/${seq}?tail=1`, who);
 
 describe("T5: who reads", () => {
-  it("an owner and a member read on the Web; a dispatched run is refused; the socket listener has no route", async () => {
+  it("an owner and a member read on the Web; a dispatched run is refused on either listener", async () => {
     const w = await world(() => [entry({})]);
     mkdirSync(callDir(w.sourceDir), { recursive: true });
     writeFileSync(join(callDir(w.sourceDir), "transcript.jsonl"), jsonl([claude.text("hello"), claude.toolUse("t1", "ls")]));
@@ -51,8 +51,8 @@ describe("T5: who reads", () => {
       expect(JSON.stringify(answer.body)).not.toContain(w.sourceDir);
     }
     expect(await tail(w.web, w.runId, 1, "dispatched")).toMatchObject({ status: 403, body: { error: { code: "control-dispatched-run-refused" } } });
-    expect(await tail(w.socket, w.runId, 1, "socketAgent")).toMatchObject({ status: 404, body: { error: { code: "route-not-found" } } });
-    expect(await w.socket.get(`/api/control/runs/${w.runId}/transcripts/1/plan/1/expand?at=0&i=0&field=text`, "socketAgent")).toMatchObject({ status: 404, body: { error: { code: "route-not-found" } } });
+    expect(await tail(w.socket, w.runId, 1, "dispatched")).toMatchObject({ status: 403, body: { error: { code: "control-dispatched-run-refused" } } });
+    expect(await w.socket.get(`/api/control/runs/${w.runId}/transcripts/1/plan/1/expand?at=0&i=0&field=text`, "dispatched")).toMatchObject({ status: 403, body: { error: { code: "control-dispatched-run-refused" } } });
     expect(await w.web.get(`/api/control/runs/${w.runId}/transcripts/1/plan/1/expand?at=0&i=0&field=text`, "dispatched")).toMatchObject({ status: 403 });
   });
 });

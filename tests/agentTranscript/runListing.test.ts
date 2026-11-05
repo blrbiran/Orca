@@ -1,7 +1,7 @@
 /**
  * T13 (spec §12.3, §12.4 C8): the transcripts listing of a run of a group no flow started is stored at collect, and
  * `GET /api/control/runs/:runId/transcripts` serves it -- to an owner and a member on the Web, never to a run Orca
- * dispatched, never on the socket listener -- without any `path`. Plan D1: a live call's growth alone does not move the
+ * dispatched (on either listener) -- without any `path`. Plan D1: a live call's growth alone does not move the
  * group's projection; a change of `final` does, once.
  */
 import { describe, expect, it } from "vitest";
@@ -70,7 +70,7 @@ describe("T13: the listing of every collected run is stored and served", () => {
     } finally { await t.h.dispose(); }
   });
 
-  it("GET …/transcripts serves the rows (no path) to an owner and a member on the Web; a dispatched run is refused; the socket has no route", async () => {
+  it("GET …/transcripts serves the rows (no path) to an owner and a member on the Web; a dispatched run is refused on either listener", async () => {
     const t = await driverHarness([{ taskId: "a" }]);
     const web = await serve(t.h.store, "web"), socket = await serve(t.h.store, "socket"), old = await serve(t.h.store, "web", null);
     try {
@@ -91,7 +91,7 @@ describe("T13: the listing of every collected run is stored and served", () => {
         expect(JSON.stringify(answer.body)).not.toContain("path");
       }
       expect(await web.get(`/api/control/runs/${runId}/transcripts`, "dispatched")).toMatchObject({ status: 403, body: { error: { code: "control-dispatched-run-refused" } } });
-      expect(await socket.get(`/api/control/runs/${runId}/transcripts`, "socketAgent")).toMatchObject({ status: 404, body: { error: { code: "route-not-found" } } });
+      expect(await socket.get(`/api/control/runs/${runId}/transcripts`, "dispatched")).toMatchObject({ status: 403, body: { error: { code: "control-dispatched-run-refused" } } });
       expect(await web.get(`/api/control/runs/run-of-another-store/transcripts`)).toMatchObject({ status: 404, body: { error: { code: "run-not-found" } } });
       // §10.2.4: a ccloop without features.transcripts -- the page says why, nothing is served.
       expect(await old.get(`/api/control/runs/${runId}/transcripts`)).toEqual({ status: 200, body: { schema: "orca-run-transcripts-v1", runId, available: false, reason: "ccloop-transcripts-unsupported", calls: [] } });

@@ -1098,3 +1098,9 @@ What changes against the text above:
   `tests/agentTranscript/socketRead.test.ts` (socket read by a non-dispatched caller equal to the Web's answer,
   dispatched refused, symlink and outside-path refused, listing without path, window semantics) and
   `tests/commands/runTranscript.test.ts` (the CLI sends the Web's query and prints the panel's answer).
+- **T5 and T13, as rewritten (human ruling, same session, verbatim: 「这个session允许改写必要的判据」).** The rows in
+  §10 and §12 stay as written; read them with these substitutions. T5 assertion: "The socket listener has no route"
+  becomes "The socket route refuses a dispatched-run principal (`control-dispatched-run-refused`), window and expand".
+  T13 assertion: "the socket listener answers `route-not-found`" becomes "the socket route refuses a dispatched-run
+  principal (`control-dispatched-run-refused`)". Mutation column, both rows: "Registering on both listeners" becomes
+  "Dropping the dispatched-run refusal on the socket".
