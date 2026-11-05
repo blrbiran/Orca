@@ -9,7 +9,11 @@ import type { ControlStore } from "./store.js";
 
 export const REST_DEFAULT_MS = 15 * 60_000;
 export const REST_CAP_MS = 8 * 60 * 60_000;
-export interface InstallationRest { installation: string; until: number; source: "vendor" | "default"; runId: string }
+/**
+ * `since`: the first quota failure of the streak the rest comes from; `detail`: the CLI's own error text of the last one
+ * (ccloop's `failureCause.detail`), for the agents page (session 3cfc2e73, batch FB).
+ */
+export interface InstallationRest { installation: string; until: number; source: "vendor" | "default"; runId: string; since: number; detail: string | null }
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -74,7 +78,7 @@ export function installationRests(store: ControlStore, now: number): Map<string,
     if (last === undefined) continue;
     const vendor = parseResetAt(last.detail, last.at);
     const until = vendor ?? last.at + Math.min(REST_CAP_MS, REST_DEFAULT_MS * 2 ** Math.min(streak.length - 1, 10));
-    if (until > now) rests.set(installation, { installation, until, source: vendor === null ? "default" : "vendor", runId: last.runId });
+    if (until > now) rests.set(installation, { installation, until, source: vendor === null ? "default" : "vendor", runId: last.runId, since: streak[0]!.at, detail: last.detail });
   }
   return rests;
 }

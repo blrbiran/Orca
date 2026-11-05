@@ -123,6 +123,13 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
           ))}
         </tbody>
       </table>
+      {/* Quota failover spec 2026-11-03 §3 "Show" (session 3cfc2e73, batch FB): each resting installation, read-only. */}
+      {agents.rests !== undefined && agents.rests.length > 0 && <section aria-label={t("agents.rests.title")}>
+        <h4>{t("agents.rests.title")}</h4>
+        <ul>{agents.rests.map((rest) => <li key={rest.installation} data-testid="agent-rest">
+          {t("agents.rests.line", { installation: rest.installation, until: new Date(rest.until).toLocaleString(), since: new Date(rest.since).toLocaleString() })} · {t(`agents.rests.source.${rest.source}`)}{rest.detail !== null && <> <code style={{ overflowWrap: "anywhere" }}>{rest.detail}</code></>}
+        </li>)}</ul>
+      </section>}
       {props.onRefreshVersions && <button type="button" disabled={props.updateBusy} onClick={props.onRefreshVersions}>{t("agents.settings.refreshVersions")}</button>}
       {/* The detection section below shows the notice when it is there; without it, a refused refresh still says why. */}
       {!installation && props.updateNotice && <p role="alert">{props.updateNotice}</p>}

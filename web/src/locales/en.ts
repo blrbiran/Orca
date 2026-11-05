@@ -1021,6 +1021,11 @@ export const en = {
   },
   agents: {
     inheritLine_one: "{{count}} task uses the group worker: {{agent}}",
+    // Quota failover spec 2026-11-03 §3 "Show" (session 3cfc2e73, batch FB): each resting installation on the agents page.
+    rests: {
+      title: "Quota rests", line: "{{installation}} rests until {{until}} (since {{since}})",
+      source: { vendor: "until the reset time its CLI named", default: "a default rest: its CLI named no reset time" },
+    },
     inheritLine_other: "{{count}} tasks use the group worker: {{agent}}",
     overrideTask: "Override task {{taskId}}",
     noWorker: "No agent is chosen for the group worker. Choose one here, or set a default agent in",

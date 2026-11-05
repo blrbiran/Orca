@@ -28,6 +28,7 @@ import { resolveSelection, slotLayers, type PartialSelection } from "../control/
 import { idSchema } from "../control/schema.js";
 import { debugGroupIdFor, debugGroupIds } from "../control/debugGroup.js";
 import { orchestrationRevision, slotUse } from "../control/orchestration.js";
+import { installationRests } from "../control/quotaRest.js";
 import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
@@ -502,7 +503,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
           await refreshVersions();
           const listed = await port.listAgents();
           const installations = [...listed.installations].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
-          res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations }));
+          // Quota failover spec 2026-11-03 §3 "Show" (session 3cfc2e73, batch FB): each listed installation's rest.
+          const resting = installationRests(deps.store, deps.store.now());
+          const rests = installations.flatMap((entry) => { const rest = resting.get(entry.id); return rest === undefined ? [] : [{ installation: entry.id, until: rest.until, since: rest.since, source: rest.source, detail: rest.detail }]; });
+          res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations, ...(rests.length === 0 ? {} : { rests }) }));
         } catch (error) { sendMappedControlError(res, error); }
       }));
       // Spec 2026-10-15 §5 (R3, R4): the installation's models for the selection editor; ccloop's file cache serves a read.

@@ -2447,6 +2447,9 @@ export const agentsViewSchema = z
         })
         .strict(),
     ),
+    // Quota failover spec 2026-11-03 §3 "Show" (session 3cfc2e73, batch FB): the listed installations resting now
+    // (quotaRest.ts), by id; omitted when none rests. Read-only.
+    rests: z.array(z.object({ installation: idSchema, until: safeInteger, since: safeInteger, source: z.enum(["vendor", "default"]), detail: z.string().nullable() }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) => requireSortedUnique(value.installations, (entry) => entry.id, ctx, ["installations"]));

@@ -887,6 +887,10 @@ export const zh: Translation<typeof en> = {
   },
   agents: {
     inheritLine_one: "{{count}} 个任务沿用组执行：{{agent}}",
+    rests: {
+      title: "额度休息", line: "{{installation}} 休息到 {{until}}（自 {{since}} 起）",
+      source: { vendor: "到它的 CLI 给出的恢复时间", default: "默认休息时长：它的 CLI 没有给出恢复时间" },
+    },
     inheritLine_other: "{{count}} 个任务沿用组执行：{{agent}}",
     overrideTask: "覆盖任务 {{taskId}}",
     noWorker: "组执行还没有选定 agent。请在这里选择，或在此设置默认 agent：",
