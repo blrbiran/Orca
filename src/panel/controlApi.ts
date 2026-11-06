@@ -839,6 +839,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/settle-unknown-usage", verb: "settle-unknown-usage", target: fromParams },
     {path:"/api/control/groups/:groupId/tasks/:taskId/verify-saved-result",verb:"verify-saved-result",target:(params)=>{const groupId=idSchema.parse(params.groupId);return {groupId,target:{kind:"task",groupId,taskId:idSchema.parse(params.taskId)}};}},
     { path: "/api/control/groups/:groupId/retry-task", verb: "retry-task", target: fromParams },
+    // Terminal run closure #169: close a proved terminal failure's accounting, so the group can be archived.
+    { path: "/api/control/groups/:groupId/close-run", verb: "close-run", target: fromParams },
   ];
 }
 
@@ -881,6 +883,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "settle-unknown-usage": await service.settleUnknownUsage(command); break;
           case "verify-saved-result":await service.verifySavedResult(command);break;
           case "retry-task": if (command.payload.agent === undefined) service.retryTask(command); else await service.retryTaskOnAgent(command); break;
+          case "close-run": service.closeRun(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-check-settings": service.setCheckSettings(command); break;

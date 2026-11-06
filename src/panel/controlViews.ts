@@ -32,7 +32,7 @@ import { settlementAcknowledgeFor, settlementAdmission } from "../control/settle
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
-import { driveRecordSchema } from "../control/driveRecord.js";
+import { driveRecordSchema, terminalClosureSchema } from "../control/driveRecord.js";
 import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
 import { groupStopState, unresolvedStopRetryable } from "../control/stopIntent.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
@@ -243,6 +243,8 @@ const persistedRunSchema = z.object({
   // Spec 2026-11-03 soft-mode approximate usage §2: the floor booked for a run whose usage was not reported (approximateUsage.ts).
   usageApproximate: z.object({ floorTokens: safeInteger.nullable(), reason: z.string().min(1), at: safeInteger }).strict().optional(),
   drive: driveRecordSchema.optional(),
+  // Terminal run closure #169: present once the failed run's unused reservation was released; absent on a live block.
+  terminalClosure: terminalClosureSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
   transcripts: transcriptListingSchema.optional(),
 }).strict();

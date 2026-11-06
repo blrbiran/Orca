@@ -215,6 +215,13 @@ export const WORK_ROWS: CommandDef[] = [
     } }),
   empty("group", "archive", "archive a group: records stay, it refuses every command but unarchive", "archive-group", "archive"),
   empty("group", "unarchive", "unarchive a group", "unarchive-group", "unarchive"),
+  // Terminal run closure #169: a proved terminal failure's accounting ends without accepting its work; then archive works.
+  verb({ domain: "group", action: "close-run", summary: "close a proved terminal failed run's accounting (it stays failed; retry or archive next)", verb: "close-run", positionals: [GROUP],
+    flags: [{ name: "run", type: "string", required: true, summary: "the run to close (orca run show <run> names it)" }],
+    route: (c) => `groups/${group(c)}/close-run`, payload: (c) => ({ runId: str(c, "run") }),
+    hint: (error) => error.code === "run-closure-evidence" || error.code === "run-closure-not-terminal"
+      ? "this run has no proved terminal failure; retry the task, or settle unknown usage if the run reports it"
+      : undefined }),
   verb({ domain: "group", action: "set-limit", summary: "set the group's budget limit", verb: "set-limit", positionals: [GROUP], access: "token",
     flags: [{ name: "limit", type: "string", required: true, summary: "JSON {tokens,activeMs,attempts,sessions}" }],
     route: (c) => `groups/${group(c)}/set-limit`, payload: (c) => ({ limit: json(c, "limit") }) }),

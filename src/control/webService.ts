@@ -54,6 +54,7 @@ import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIn
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+import { applyCloseRun, type CloseRunCommand } from "./terminalRunClosure.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
@@ -1761,6 +1762,10 @@ export class WebControlService {
   }
   unarchiveGroup(command: UnarchiveGroupCommand): WebCommandResult {
     return this.mutate(() => applyUnarchiveGroup({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Terminal run closure #169: release a proved terminal failure's unused reservation without accepting its work. */
+  closeRun(command: CloseRunCommand): WebCommandResult {
+    return this.mutate(() => applyCloseRun({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
   }
   /**
    * Integration spec §7: an owner approves an agent's resolution of the conflict. The conflict's copy and pinned commit

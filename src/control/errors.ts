@@ -224,6 +224,13 @@ export const durableCommandErrorStatuses = {
   "run-owner-conflict": 409,
   // Issue fixes spec §4.2(3): recovery-retry on a run ccloop ended failed; only retry-task moves it.
   "run-terminal-failed": 409,
+  // Terminal run closure #169: the named run is not a proved terminal failure, or its evidence no longer supports authority.
+  "run-closure-not-terminal": 409,
+  "run-closure-not-current": 409,
+  "run-closure-request-open": 409,
+  "run-closure-process-live": 409,
+  "run-closure-evidence": 409,
+  "run-closure-invalid": 409,
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,

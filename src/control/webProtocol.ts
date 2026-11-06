@@ -628,6 +628,8 @@ export const commandVerbSchema = z.enum([
   "settle-unknown-usage",
   // Spec 2026-11-06 soft-mode loop run settlement (d): Orca books an approximate floor under orca-auto; no route sends it.
   "settle-approximate-usage",
+  // Terminal run closure #169: end a proved terminal failure's accounting so its group can be archived.
+  "close-run",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -812,6 +814,8 @@ export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), a
 export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional(), allowObservedPaths: z.literal(true).optional() }).strict();
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
 export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();
+/** Terminal run closure #169: the run whose accounting is closed; its group is the target. */
+export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -1214,6 +1218,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1314,6 +1319,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -2187,6 +2193,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("multi-dir-landing-set"), groupId: idSchema, action: multiDirLandingActionSchema }).strict(),
   // Issue-fixes spec §6.3: `at` is the archive mark's time (ms since the epoch).
   z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
+  // Terminal run closure #169: the accounting is closed; `alreadyClosed` is the idempotent replay.
+  z.object({ kind: z.literal("run-closed"), runId: idSchema, taskId: idSchema, alreadyClosed: z.boolean() }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),

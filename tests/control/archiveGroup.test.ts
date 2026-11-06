@@ -223,6 +223,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "settle-approximate-usage": { call: (s, c) => applySettleApproximateUsage({ store: s.store }, c), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1 } },
   "settle-unknown-usage": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.settleUnknownUsage(c)), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1, acknowledge: "charge-remaining-grant" } },
   "retry-task": { call: (s, c) => s.retryTask(c), target: "group", payload: { taskId: "a" } },
+  "close-run": { call: (s, c) => s.closeRun(c), target: "group", payload: { runId: "run-a" } },
   "verify-saved-result": { call: (s, c) => s.verifySavedResult(c), target: "task", payload: { sourceRunId: "run-a", sourceAttempt: 1, capsuleHash: "a".repeat(64) } },
   "archive-group": { call: (s, c) => s.archiveGroup(c), target: "group", payload: {} },
   "approve-pending-decision": { call: (s, c) => s.approvePendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` } },

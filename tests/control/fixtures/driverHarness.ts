@@ -44,6 +44,8 @@ export interface HarnessOptions {
   /** Syncskill integration plan Task 6: the syncskill both confirm (the freeze) and the driver (A2's injection) are given. */
   syncskill?: SyncskillOptions;
   agentKinds?: AgentsView;
+  /** Terminal-closure spec 2026-11-07: the synthetic ccloop's stop proof states the owner lease released and the worker sealed. */
+  sealedOwnerProof?: boolean;
   /** Issue fixes spec §4.4: the stop reason the synthetic ccloop states with a run's terminal (driverPort.ts). */
   stopReason?: (workItemId: string) => string | null;
   /** Issue-fixes spec §5.2: the control store's clock (ms); absent, Date.now. */
@@ -95,6 +97,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.debug ? { debug: options.debug } : {}),
     ...(options.budgetSnapshot ? { budgetSnapshot: options.budgetSnapshot } : {}),
     ...(options.toolRules ? { toolRules: options.toolRules } : {}),
+    ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   const deps: ExecutionDriverDeps = {

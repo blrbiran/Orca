@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
+import { artifactSchema, idSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
 import { lockSkillSchema } from "../skills/syncskill.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { pendingEntrySchema } from "./runLedger.js";
@@ -225,6 +225,18 @@ export function landedAnywhere(drive: { landedCommit?: unknown; landedDirs?: unk
 export const RESUME_STATE: Record<DriveStep, string> = {
   A1: "starting", A2: "start-pending", B: "start-pending", "B'": "unknown", C: "accepted", D: "collected", R: "reconciling", E: "landed",
 };
+
+/**
+ * Terminal run closure (#169): the immutable binding under which a proved terminal failure's unused reservation was
+ * released. A run that carries it is inactive and never retried in place; `validTerminalClosure` reopens the report and
+ * stop proof before retry, archive or a saved-result source may rely on it.
+ */
+export const terminalClosureSchema = z.object({
+  runId: idSchema, generation: safeInteger.positive(), executionId: z.string().min(1), highWater: safeInteger,
+  outcome: z.string().min(1), commandId: idSchema, ownerToken: idSchema,
+  report: artifactSchema, stopProof: artifactSchema, at: safeInteger,
+}).strict();
+export type TerminalClosure = z.infer<typeof terminalClosureSchema>;
 
 /**
  * Issue fixes spec §4.2(3): a run the driver blocked at C because its ccloop run ended with an outcome other than
