@@ -196,9 +196,9 @@ export const SETTINGS_ROWS: CommandDef[] = [
       { name: "quota-wait", type: "string", repeatable: true, summary: "an installation whose quota failures are retried after 30 min (repeatable)" },
       { name: "failover-order", type: "string", repeatable: true, summary: "the installations a quota failure switches a task to, in order (repeatable; unset = the agents table's order)" },
       { name: "failover-off", type: "boolean", summary: "never switch a task's installation after a quota failure (an empty failover order)" },
-      // Retry work top-up spec 2026-11-06 §2 "The cap" (a person token: humanOnly.ts).
-      { name: "agent-top-up-cap", type: "string", humanOnly: true, summary: "the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions}" },
-      { name: "agent-top-up-cap-off", type: "boolean", humanOnly: true, summary: "agents may not add work to a retry (the default)" },
+      // The operator's agent can set this global cap (session 86352010 follow-up); the sum is per group.
+      { name: "agent-top-up-cap", type: "string", summary: "the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions}" },
+      { name: "agent-top-up-cap-off", type: "boolean", summary: "agents may not add work to a retry (the default)" },
     ],
     route: () => "operator/set-orchestration-settings",
     payload: (c) => {

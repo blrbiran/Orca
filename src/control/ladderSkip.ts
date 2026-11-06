@@ -7,7 +7,7 @@ import { readTaskResultState, type TaskResultState } from "./taskResultStore.js"
  * Task setup and check retry spec 2026-11-04 §4.7: the ladder (systemDebugPass, both levels) leaves out a run another try
  * cannot fix, and records why once. Decided by code (Rule 5), never by a model.
  */
-export type LadderSkip = "setup-failed" | "could-not-run";
+export type LadderSkip = "setup-failed" | "could-not-run" | "authored-budget-exhausted" | "retry-funding-missing";
 
 /**
  * A ladder candidate's run, as ladderCandidates hands it on: `exempt` says its cause is in LADDER_EXEMPT_CAUSES (only

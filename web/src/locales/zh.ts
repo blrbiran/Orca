@@ -571,7 +571,8 @@ export const zh: Translation<typeof en> = {
       phase: "{{step}} · 第 {{attempt}} 次尝试",
     },
     ladder: {
-      skipped: { "setup-failed": "没有自动重试：准备步骤失败。", "could-not-run": "没有自动重试：检查命令根本没能运行。" },
+      skipped: { "setup-failed": "没有自动重试：准备步骤失败。", "could-not-run": "没有自动重试：检查命令根本没能运行。",
+        "authored-budget-exhausted": "没有自动重试：任务工作额度已用完。请在显式重试时追加额度。", "retry-funding-missing": "没有自动重试：无法验证重试额度。" },
     },
     diagnosis: {
       phaseLabel: "阶段：{{phase}}", stepLabel: "步骤：{{step}}", attempt: "第 {{attempt}} 次尝试", identity: "运行 {{runId}}",

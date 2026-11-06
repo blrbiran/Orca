@@ -22,5 +22,5 @@ how many groups run at once; the reviewer default; quota-wait installations; the
 - `--quota-wait <quota-wait>` (repeatable): an installation whose quota failures are retried after 30 min (repeatable)
 - `--failover-order <failover-order>` (repeatable): the installations a quota failure switches a task to, in order (repeatable; unset = the agents table's order)
 - `--failover-off`: never switch a task's installation after a quota failure (an empty failover order)
-- `--agent-top-up-cap <agent-top-up-cap>`: the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions} — human-only: needs a person token
-- `--agent-top-up-cap-off`: agents may not add work to a retry (the default) — human-only: needs a person token
+- `--agent-top-up-cap <agent-top-up-cap>`: the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions}
+- `--agent-top-up-cap-off`: agents may not add work to a retry (the default)

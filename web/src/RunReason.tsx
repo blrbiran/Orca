@@ -16,7 +16,7 @@ export type KnownFailureCause = typeof KNOWN_FAILURE_CAUSES[number];
 export const knownCause = (cause: string): KnownFailureCause => (KNOWN_FAILURE_CAUSES as readonly string[]).includes(cause) ? cause as KnownFailureCause : "unknown";
 
 /** Task setup and check retry spec 2026-11-04 §4.7: why the ladder left a run out (its `ladder-skipped` activity row). */
-export type LadderSkipReason = "setup-failed" | "could-not-run";
+export type LadderSkipReason = "setup-failed" | "could-not-run" | "authored-budget-exhausted" | "retry-funding-missing";
 /** The causes whose next step says Orca escalates the run itself -- untrue once the ladder left the run out. */
 const ESCALATING_CAUSES: ReadonlySet<KnownFailureCause> = new Set(["required-check-failed", "verifier-rejected"]);
 

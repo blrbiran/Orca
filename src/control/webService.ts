@@ -45,7 +45,7 @@ import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurpos
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
-import { applyRetryTask, type RetryTaskCommand } from "./retryTask.js";
+import { applyRetryTask, autoRetryFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
 import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
@@ -57,7 +57,7 @@ import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type 
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
-import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
+import { readSystemDebugMark, writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
 import { claimQuotaProbeInTransaction, probeStateOf, quotaProbeWorkItemId } from "./quotaProbeCall.js";
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
@@ -528,6 +528,26 @@ function reopenProposal(store: ControlStore, id: string, group: Group, proposal:
 }
 
 /** Web commands only publish durable authority. Provider invocation belongs to scheduler delivery. */
+/** One control store has one panel owner. Hold a fold across awaited Git calls, including an archive of its debug group. */
+const activeLadderFolds = new WeakMap<ControlStore, Set<string>>();
+function foldingLadders(store: ControlStore): Set<string> {
+  let set = activeLadderFolds.get(store);
+  if (set === undefined) { set = new Set(); activeLadderFolds.set(store, set); }
+  return set;
+}
+
+/** A confirmed ladder owns the source run until it folds or settles; a draft ladder remains supersedable. */
+function confirmedLadderFor(store: ControlStore, groupId: string, taskId: string, runId: string): string | null {
+  const debugGroupId = systemDebugGroupId({ kind: "ladder", groupId, taskId, runId: null });
+  if (foldingLadders(store).has(debugGroupId)) return debugGroupId;
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(debugGroupId);
+  if (row === undefined || isGroupArchived(store, debugGroupId)) return null;
+  const mark = readSystemDebugMark(JSON.parse(String(row.body)));
+  if (mark?.source.kind !== "ladder" || mark.source.groupId !== groupId || mark.source.taskId !== taskId
+    || mark.source.runId !== runId || mark.settled !== null) return null;
+  return readBudgetProposal(store, debugGroupId).state === "confirmed" ? debugGroupId : null;
+}
+
 export class WebControlService {
   private installationObservation: AgentObservation | null = null;
   private installationPreview: AgentPreview | null = null;
@@ -913,7 +933,7 @@ export class WebControlService {
           try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, candidate.groupId, to, "failover"); }
           catch { continue; }
           const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
-          const answer = applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, switchTo: { frozen, source: "failover" } }, {
+          const answer = applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ladderInProgress: confirmedLadderFor, switchTo: { frozen, source: "failover" } }, {
             schema: "orca-raw-command-v1", commandId: failoverCommandId(candidate.taskId, candidate.runId), actorId: ORCHESTRATION_ACTOR,
             expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
             payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
@@ -1056,6 +1076,10 @@ export class WebControlService {
       // re-examined next pass, bounded (ladderDecisionOf).
       if (decision === "held") { this.deps.scheduleTaskResults?.(candidate.run.runId); continue; }
       if (decision !== null) { this.noteLadderSkipped(candidate, decision); continue; }
+      let funding: ReturnType<typeof autoRetryFundingRefusal>;
+      try { funding = autoRetryFundingRefusal(this.store, candidate.groupId, candidate.taskId, candidate.run.runId); }
+      catch (error) { if (!(error instanceof ControlError)) throw error; funding = "retry-funding-missing"; }
+      if (funding !== null) { this.noteLadderSkipped(candidate, funding); continue; }
       // Kanban spec §6 level 1 (ccloop priorFailures spec §3): the first escalation of a task is one fresh re-dispatch
       // as orca-auto; its run carries the earlier runs' failures (A2, priorFailures.ts). The retry-task command row is
       // the level's record -- once it exists (applied or refused), the next failure goes to level 2.
@@ -1106,6 +1130,8 @@ export class WebControlService {
     }
     for (const group of systemDebugGroups(this.store)) {
       const { groupId, mark } = group;
+      // A fold owns this mark through its final settle write, not only while its Git child runs.
+      if (foldingLadders(this.store).has(groupId)) continue;
       // Checks spec 2026-10-22 §6.1: a review's group is settled into exactly one end of its own (modelReviewStep).
       if (mark.source.kind === "model-review" && mark.settled === null) {
         const step = await this.modelReviewStep(group);
@@ -1131,7 +1157,7 @@ export class WebControlService {
           profileGroup = newestConfirmedGroup(this.store, mark.source.repoId, involved) ?? newestConfirmedGroup(this.store, mark.source.repoId);
         } else continue;
         const refused = profileGroup === null ? "no-profiles" : await this.autoConfirmSystemDebug(groupId, profileGroup);
-        if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, "confirm-refused", refused); out.settled.push(groupId); }
+        if (refused === null) out.confirmed.push(groupId); else { settleSystemDebug(this.store, groupId, refused === "source-superseded" ? "superseded" : "confirm-refused", refused); out.settled.push(groupId); }
         continue;
       }
       // Protect-acceptance-criteria spec §5: the judge is settled by its run, not by its task -- an empty attempt (justified)
@@ -1146,9 +1172,13 @@ export class WebControlService {
       if (!allTasksDone(this.store, groupId)) continue;
       // Only a ladder group folds back; any other is done once its own work landed.
       if (mark.source.kind !== "ladder" || mark.stackOn === null) { settleSystemDebug(this.store, groupId, "done", null); out.settled.push(groupId); continue; }
-      const refused = await this.foldLadder(groupId, mark.stackOn, mark.source.taskId!, mark.source.runId!);
-      settleSystemDebug(this.store, groupId, refused === null ? "folded" : refused.state, refused?.detail ?? null);
-      (refused === null ? out.folded : out.settled).push(groupId);
+      const folds = foldingLadders(this.store);
+      folds.add(groupId);
+      try {
+        const refused = await this.foldLadder(groupId, mark.stackOn, mark.source.taskId!, mark.source.runId!);
+        settleSystemDebug(this.store, groupId, refused === null ? "folded" : refused.state, refused?.detail ?? null);
+        (refused === null ? out.folded : out.settled).push(groupId);
+      } finally { folds.delete(groupId); }
     }
     return out;
   }
@@ -1305,7 +1335,7 @@ export class WebControlService {
       },
     });
     const error = (answer as { error?: { code?: unknown } }).error;
-    return error === undefined ? null : String(error.code);
+    return error === undefined ? null : error.code === "task-run-moved" ? "source-superseded" : String(error.code);
   }
   /**
    * Protect-acceptance-criteria spec §5 (criteriaReview.ts): the judge's verdict. Justified (an empty attempt) or
@@ -1351,6 +1381,11 @@ export class WebControlService {
    * by an earlier pass is only retried.
    */
   private async foldLadder(debugGroupId: string, originalGroupId: string, taskId: string, failedRunId: string): Promise<{ state: string; detail: string | null } | null> {
+    if (terminallyFailedRun(this.store, originalGroupId, taskId)?.runId !== failedRunId) return { state: "superseded", detail: "source-run-moved" };
+    try {
+      const funding = autoRetryFundingRefusal(this.store, originalGroupId, taskId, failedRunId);
+      if (funding !== null) return { state: "retry-unfunded", detail: funding };
+    } catch (error) { if (!(error instanceof ControlError)) throw error; return { state: "retry-unfunded", detail: error.code }; }
     const refused = await this.fastForwardGroupBranch(debugGroupId, originalGroupId);
     if (refused !== null) return refused;
     const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(originalGroupId)?.revision ?? 0);
@@ -1992,7 +2027,7 @@ export class WebControlService {
   verifySavedResult(command:VerifySavedResultCommand){return applyVerifySavedResult(this.stopDeps(),command);}
   retryTask(command: RetryTaskCommand): WebCommandResult {
     if (command.payload.agent !== undefined) throw new ControlError("recovery-blocked", "agent-switch-needs-resolution");
-    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ladderInProgress: confirmedLadderFor }, command) as WebCommandResult;
   }
   /**
    * Quota failover spec 2026-11-03 §8: a retry on another installation. ccloop resolves the installation before the
@@ -2011,7 +2046,7 @@ export class WebControlService {
     } catch (error) {
       return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
-    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, switchTo: { frozen, source } }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ladderInProgress: confirmedLadderFor, switchTo: { frozen, source } }, command) as WebCommandResult;
   }
   /**
    * Session 3cfc2e73 ruling (「同意按你的建议走」): `retry-task --agent auto` hands the task's installation back to orca-auto
@@ -2036,7 +2071,7 @@ export class WebControlService {
       }
       if (frozen === null && !SWITCHABLE_AGENT_SOURCES.has(current.agentProvenance.agent)) frozen = unlockedAgent(current);
     } catch (error) { return book(error); }
-    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ...(frozen === null ? {} : { switchTo: { frozen, source: "failover" as const, auto: true as const } }) }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ladderInProgress: confirmedLadderFor, ...(frozen === null ? {} : { switchTo: { frozen, source: "failover" as const, auto: true as const } }) }, command) as WebCommandResult;
   }
   /**
    * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only
@@ -2064,6 +2099,13 @@ export class WebControlService {
         rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
         apply: context => {
           const id = groupId(command), group = readWebGroup(this.store, id), plan = readArchivedPlan(this.store, id), proposal = readBudgetProposal(this.store, id), payload = command.payload;
+          // A draft ladder may be superseded while its agent selections resolve. Recheck in the confirming write,
+          // so an obsolete debug group never starts spending after the person's retry.
+          const rawGroup = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(id);
+          const mark = rawGroup === undefined ? null : readSystemDebugMark(JSON.parse(String(rawGroup.body)));
+          if (mark?.source.kind === "ladder" && mark.settled === null
+            && terminallyFailedRun(this.store, mark.source.groupId, mark.source.taskId!)?.runId !== mark.source.runId)
+            throw new ControlError("task-run-moved", "ladder-source-superseded");
           if (payload.planHash !== plan.planHash) throw new ControlError("plan-version-conflict");
           if (payload.proposalVersion !== proposal.proposalVersion) throw new ControlError("proposal-version-conflict");
           prestart(group); refuseAfterTaskStarted(this.store, id);

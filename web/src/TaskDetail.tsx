@@ -140,7 +140,7 @@ function activityText(entry: ActivityEntryV1): string {
 
 /** A `ladder-skipped` row's reason, when it is one this panel words; null for any other row. */
 function ladderSkipOf(entry: ActivityEntryV1): LadderSkipReason | null {
-  return entry.kind === "ladder-skipped" && (entry.body.reason === "setup-failed" || entry.body.reason === "could-not-run") ? entry.body.reason : null;
+  return entry.kind === "ladder-skipped" && (entry.body.reason === "setup-failed" || entry.body.reason === "could-not-run" || entry.body.reason === "authored-budget-exhausted" || entry.body.reason === "retry-funding-missing") ? entry.body.reason : null;
 }
 
 /**

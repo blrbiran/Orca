@@ -70,6 +70,102 @@ async function ladderWorld(options: { debugFails?: boolean; humanBlock?: boolean
 }
 
 describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", { timeout: 180_000 }, () => {
+  it("skips an optional-budget ladder when no authored work remains for its required retry", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], tokenBudget: 150_000 }], {
+      tokenPolicy: "optional-v1", behaviour: () => "exhausted", workTokens: () => 10_000_000,
+    });
+    const service = new WebControlService({ ...t.h.deps, knownRepository: (id) => id === "repo", resolveRepository: () => t.repo });
+    try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      const pass = await service.systemDebugPass();
+      expect(pass).toMatchObject({ redispatched: [], opened: [] });
+      expect(t.h.store.db.prepare("SELECT id FROM groups WHERE id=?").get(LADDER)).toBeUndefined();
+      const note = t.h.store.db.prepare("SELECT body FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(runId);
+      expect(note && JSON.parse(String(note.body))).toMatchObject({ reason: "authored-budget-exhausted" });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("leaves a pre-existing debug fix off the parent branch when its automatic retry cannot be funded", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], tokenBudget: 150_000 }], {
+      tokenPolicy: "optional-v1", behaviour: (id) => id === "a" ? "exhausted" : "succeed",
+      workTokens: (id) => id === "a" ? 10_000_000 : 10,
+    });
+    const service = new WebControlService({ ...t.h.deps, knownRepository: (id) => id === "repo", resolveRepository: () => t.repo });
+    try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      const source = { kind: "ladder" as const, groupId: "g", taskId: "a", runId };
+      expect(await service.openSystemDebugGroup({ schema: "orca-raw-command-v1", commandId: "old-debug", actorId: "orca-auto", expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId: LADDER }, payload: { source, stackOn: "g", repoId: "repo", facts: ["exhausted"], checks: ["true"] } })).toMatchObject({ result: { created: true } });
+      expect((await service.systemDebugPass()).confirmed).toEqual([LADDER]);
+      expect((await service.autoStart()).started).toContain(LADDER);
+      const delivered = await deliverScheduledStart(t.dispatch, LADDER);
+      if (delivered.kind !== "claimed") throw new Error(JSON.stringify(delivered));
+      const debugStatus = () => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id='debug'").get(LADDER)!.body)).status;
+      await t.until(t.driver(), () => debugStatus() === "done", 120);
+      const parentHead = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      expect((await service.systemDebugPass()).settled).toContain(LADDER);
+      expect(readSystemDebugMark(JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(LADDER)!.body)))?.settled).toMatchObject({ state: "retry-unfunded", detail: "authored-budget-exhausted" });
+      expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(parentHead);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses a manual retry while the confirmed ladder owns the same failed run", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      const failedRunId = await w.failedThroughLevelOne();
+      expect((await w.service.systemDebugPass()).confirmed).toEqual([LADDER]);
+      const before = structuredClone(t.body(failedRunId));
+      const retry = () => t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId: failedRunId }));
+      expect(retry()).toMatchObject({ error: { code: "task-not-retryable", message: expect.stringContaining(`debug-in-progress:${LADDER}`) } });
+      expect(t.body(failedRunId)).toEqual(before);
+      await w.driveDebug((status) => status === "done");
+      expect(retry()).toMatchObject({ error: { code: "task-not-retryable", message: expect.stringContaining(`debug-in-progress:${LADDER}`) } });
+      const fold = await w.service.systemDebugPass();
+      expect(fold.folded, JSON.stringify({ fold, mark: readSystemDebugMark(w.body(LADDER)), failed: t.body(failedRunId).state, work: w.taskStatus("g", "a") })).toEqual([LADDER]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("keeps the retry guard while a fold awaits Git even if the debug group is archived", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      const failedRunId = await w.failedThroughLevelOne();
+      expect((await w.service.systemDebugPass()).confirmed).toEqual([LADDER]);
+      await w.driveDebug((status) => status === "done");
+      let entered!: () => void, release!: () => void;
+      const inGit = new Promise<void>((resolve) => { entered = resolve; });
+      const hold = new Promise<void>((resolve) => { release = resolve; });
+      const original = (w.service as any).fastForwardGroupBranch.bind(w.service);
+      (w.service as any).fastForwardGroupBranch = async (...args: unknown[]) => { entered(); await hold; return original(...args); };
+      const folding = w.service.systemDebugPass();
+      await inGit;
+      try {
+        const revision = Number(t.h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(LADDER)!.revision);
+        const archive = w.service.archiveGroup(t.h.rawCommand("archive-during-fold", revision, "archive-group", { kind: "group", groupId: LADDER }, {}) as never);
+        expect(archive).toMatchObject({ result: { kind: "archived" } });
+        expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId: failedRunId })))
+          .toMatchObject({ error: { code: "task-not-retryable", message: expect.stringContaining(`debug-in-progress:${LADDER}`) } });
+      } finally { release(); await folding; }
+    } finally { await t.h.dispose(); }
+  });
+
+  it("holds the fold guard through the settled mark against an overlapping pass", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      await w.failedThroughLevelOne();
+      expect((await w.service.systemDebugPass()).confirmed).toEqual([LADDER]);
+      await w.driveDebug((status) => status === "done");
+      const original = (w.service as any).foldLadder.bind(w.service);
+      let overlap: Awaited<ReturnType<typeof w.service.systemDebugPass>> | null = null;
+      (w.service as any).foldLadder = async (...args: unknown[]) => {
+        const answer = await original(...args);
+        overlap = await w.service.systemDebugPass();
+        return answer;
+      };
+      expect((await w.service.systemDebugPass()).folded).toEqual([LADDER]);
+      expect(overlap).toMatchObject({ folded: [], settled: [] });
+      expect(readSystemDebugMark(w.body(LADDER))?.settled?.state).toBe("folded");
+    } finally { await t.h.dispose(); }
+  });
+
   it("leaves a blocked_waiting_human run for a person without retrying its unchanged contract", async () => {
     const w = await ladderWorld({ humanBlock: true }); const { t } = w; try {
       const runId = await w.failedRun();
@@ -251,6 +347,30 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
       expect(readSystemDebugMark(w.body(LADDER))?.settled?.state).toBe("superseded");
       expect(readBudgetProposal(t.h.store, LADDER).state).not.toBe("confirmed");
       expect(escalationsOf(t.h.store, "g")).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("does not confirm a draft ladder if a manual retry wins during agent resolution", async () => {
+    const w = await ladderWorld(); const { t } = w; try {
+      const runId = await w.failedThroughLevelOne();
+      const source = { kind: "ladder" as const, groupId: "g", taskId: "a", runId };
+      expect(await w.service.openSystemDebugGroup({ schema: "orca-raw-command-v1", commandId: "draft-before-race", actorId: "orca-auto", expectedRevision: 0,
+        verb: "system-debug-open", target: { kind: "group", groupId: LADDER }, payload: { source, stackOn: "g", repoId: "repo", facts: ["failed"], checks: ["true"] } })).toMatchObject({ result: { created: true } });
+      let entered!: () => void, release!: () => void;
+      const inResolve = new Promise<void>((resolve) => { entered = resolve; });
+      const hold = new Promise<void>((resolve) => { release = resolve; });
+      const port = t.h.deps.port, original = port.resolveAgent.bind(port);
+      port.resolveAgent = async (selection) => { entered(); await hold; return original(selection); };
+      const pending = w.service.systemDebugPass();
+      await inResolve;
+      try {
+        expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }))).toMatchObject({ result: { kind: "task-retried" } });
+      } finally { release(); }
+      const answer = await pending;
+      expect(answer.confirmed).toEqual([]);
+      expect(answer.settled).toContain(LADDER);
+      expect(readSystemDebugMark(w.body(LADDER))?.settled?.state).toBe("superseded");
+      expect(readBudgetProposal(t.h.store, LADDER).state).not.toBe("confirmed");
     } finally { await t.h.dispose(); }
   });
 

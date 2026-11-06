@@ -56,6 +56,7 @@ export type RetryTaskResult = CommandSuccessV1 | CommandErrorBodyV1;
  * the control import cycle does not import groupEdges.ts; absent, a lifted block never lands on `done`.
  */
 export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource; auto?: true }; prerequisiteDone?: (store: ControlStore, groupId: string) => boolean;
+  ladderInProgress?: (store: ControlStore, groupId: string, taskId: string, runId: string) => string | null;
   applyObservedPaths?: (store: ControlStore, groupId: string, taskId: string, runId: string, misses: readonly PathPolicyMissV1[], commandId: string, actor: string) => unknown }
 
 interface RetriedWork { workItemId: string; taskId: string | null; targetVersion: number; lineageRunIds?: string[]; status: string; currentRunId?: string | null; grant: { work: Amount; handoff: Amount }; retryGrantSourceRunId?: string; pendingRunId?: string | null; continuation?: { continuationIntentId: string; pendingRunId: string } | null }
@@ -68,6 +69,18 @@ const topUpOf = (command: RetryTaskCommand): Amount | null => {
   const work = command.payload.work;
   return work === undefined ? null : { tokens: work.tokens ?? 0, activeMs: work.activeMs ?? 0, attempts: work.attempts ?? 0, sessions: work.sessions ?? 0 };
 };
+
+/** A ladder cannot finish its job if its required automatic retry has no authored budget left. */
+export function autoRetryFundingRefusal(store: ControlStore, groupId: string, taskId: string, runId: string): "authored-budget-exhausted" | "retry-funding-missing" | null {
+  if (!hasOptionalTaskPolicy(store, groupId, taskId)) return null;
+  const run = readRunBody(store, runId), work = readWork(store, groupId, taskId) as unknown as RetriedWork;
+  const funding = readFundedAllowance(store, run as never);
+  if (funding === null) return "retry-funding-missing";
+  const authored = withTopUp(work.grant.work, topUpSum(store, groupId, taskId, null));
+  const inherited = add(funding.inheritedUsage, lineageWorkUsage(run));
+  const left = remainingBudget(authored, inherited);
+  return dimensions.some((dimension) => left[dimension] === 0) ? "authored-budget-exhausted" : null;
+}
 
 /**
  * Retry work top-up spec 2026-11-06 §2 "Who may", inside the apply so every refusal is booked: a run Orca dispatched never;
@@ -123,6 +136,12 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (run.runId !== runId || run.groupId !== groupId || run.workItemId !== taskId || run.taskId !== taskId || work.taskId !== taskId
           || run.targetVersion !== work.targetVersion || newest?.id !== runId || !work.lineageRunIds?.includes(runId)
           || !runAgentAgrees(work, run)) throw new ControlError("recovery-blocked", "retry-identity");
+        // A confirmed ladder is already fixing this exact failed run. A competing manual retry can claim from the
+        // branch just as its fix folds, then finish with empty-result; draft ladders may still be superseded.
+        if (command.actorId !== "orca-auto") {
+          const ladder = deps.ladderInProgress?.(store, groupId, taskId, runId);
+          if (ladder !== undefined && ladder !== null) throw new ControlError("task-not-retryable", `debug-in-progress:${ladder}`);
+        }
         const claim = readWorkClaimEnvelope(store, groupId, runId);
         if (claim.runId !== runId || claim.groupId !== groupId || claim.workItemId !== taskId || claim.generation !== run.generation
           || claim.claimOrdinal !== run.claimOrdinal || claim.continuationIntentId !== (run.continuationIntentId ?? null)
