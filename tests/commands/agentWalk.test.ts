@@ -31,6 +31,9 @@ import { captureStreams } from "../scheduler/sandbox.js";
  * agent reads (run 1 still current), and the pump is let go between its read and its send: the re-run claims run 2, so
  * the second retry, naming run 1, is refused task-run-moved (spec §14 R2). Mutation: `task retry` stops filling runId ⇒
  * the second retry is judged against run 2 and that refusal is gone (red at the task-run-moved assertion).
+ * ERRATUM (Codex session 2026-11-06, issue #180): an explicit start now releases `hold` and enables the ladder. The
+ * fixture's first failure is therefore setup-failed (an exempt cause), with a check on the produced file; it still
+ * exercises the two-agent CLI retry race without depending on a disabled ladder.
  */
 // A short root prefix: the panel's control socket lives under it and a socket path is capped at ~104 bytes.
 const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "aw-", epochPrefix: "epoch-agent-walk-" });
@@ -42,7 +45,7 @@ const ROUND = { ...ROUND_ONE, frontierEmpty: true };
 /** One task; fake codex's execute also writes answer.txt, so it is a target (VALID_SPLIT does the same). */
 const splitFor = (flag: string) => ({
   tasks: [{ taskId: "exporter", title: "Write the exporter", labels: ["feature"], goal: "Export a note as CommonMark.", successCondition: "src/export.ts exports a note.",
-    targetPaths: ["src/export.ts", "answer.txt"], checks: [`test -e ${flag}`], dependsOn: [], traces: ["AC1"] }],
+    targetPaths: ["src/export.ts", "answer.txt"], checks: ["test -e src/export.ts"], setup: [`test -e ${flag}`], dependsOn: [], traces: ["AC1"] }],
   notes: "One task.",
 });
 const estimateFor = (planHash: string) => ({ schema: "budget-estimate-v1", planHash, groupRationale: "one small task",
@@ -132,6 +135,7 @@ describe("an agent's walk on v2 commands only (CLI v2 spec §12.2)", { timeout: 
       expect((await ok("group", "show", "g")).body.plan.planHash).toBe(planHash);
       // The profile declares a 1,000,000-token window, so confirm must name a handoff threshold within it (a null one is
       // execution-policy-unrepresentable); --hold so the person's retry below is the only one (no escalation ladder).
+      // ERRATUM (#180): --hold stops only the automatic start; the setup failure below is what exempts the ladder.
       await ok("group", "confirm", "g", "--hold", "--handoff-at-context-tokens", "1000000");
       await ok("group", "start", "g");
       const shown = await ok("group", "show", "g");

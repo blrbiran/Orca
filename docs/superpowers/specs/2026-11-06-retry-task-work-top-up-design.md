@@ -195,4 +195,13 @@ Review: `scratchpad/review-specs-probe-topup.md` (reviewer subagent, session 863
 | B-M4 empty or zero `work` | Refused `retry-top-up-empty`; T13. |
 | B-M5 payload schema and CLI | §2 The command names both. |
 | B-M6 how the cap sum is read | §2 The cap: rows with `personAuthority = false` plus the incoming one (refusals leave no row). |
+
+## Correction (owner ruling, 2026-11-06) — an attended agent may set the global cap
+
+The owner chose one global `agentTopUpCap`, summed separately for each group, and asked to let authorized agents set
+it. This replaces §2's person-only setter and T6's old expectation; the old text remains as history. The socket tier
+of `set-orchestration-settings.agentTopUpCap` is `open`, as for the rest of that verb. An Orca-dispatched run remains
+refused by the verb's existing dispatched-run rule. Web members remain refused by the human-only verb. Every accepted
+change has a command ledger row identifying its actor. The cap is therefore an adjustable operating limit, not an
+immutable ceiling on the agent that may change it. A top-up still cannot raise a run above its confirmed contract.
 | Simpler alternative (frozen ceiling per run) | Not taken: it drops the authority check and the record of who raised it. |

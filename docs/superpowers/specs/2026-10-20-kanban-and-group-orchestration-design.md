@@ -371,3 +371,11 @@ stopped for a person's decision, often because the frozen path allowlist exclude
 `retry-task` as `orca-auto` for that run or open a ladder debug group for it: the unchanged contract would meet the same
 gate again. The task stays visible for a person to resolve. A person's explicit retry remains a separate action. The
 regression criterion drives a real blocked run through `systemDebugPass` and checks that no automatic retry is booked.
+
+## 18. Correction (Codex session, 2026-11-06) — a person's start releases a confirmed hold
+
+The `hold` mode in §3.1 means "confirm, but do not start yet." Once a person explicitly starts that group, its
+orchestration record moves to `mode: "run"` while recording `startedRevision`. Otherwise the group can execute tasks
+but the ladder and quota failover both exclude it because they require `mode: "run"` (tester issue #180). A group that
+has only been confirmed with `hold` remains held until that start. The criterion starts a held group and checks its
+failover eligibility, while the existing held-before-start check remains.

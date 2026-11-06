@@ -79,7 +79,7 @@ export function recordStarted(store: ControlStore, groupId: string, startRevisio
   const current = readGroupOrchestration(store, groupId);
   if (current === null) return;
   const { queued: _queued, slotRaces: _slotRaces, ...rest } = current;
-  writeGroupOrchestration(store, groupId, { ...rest, startedRevision: startRevision, refusal: null });
+  writeGroupOrchestration(store, groupId, { ...rest, mode: "run", startedRevision: startRevision, refusal: null });
 }
 
 /** A refused automatic start: backoff 30 s, 60 s, … up to 10 min; the count says how many in a row. */

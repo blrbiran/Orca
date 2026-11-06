@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveGroupSelections } from "../../src/control/agentFreeze.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { ORCHESTRATION_ACTOR, readGroupOrchestration } from "../../src/control/orchestration.js";
+import { isFailoverGroup } from "../../src/control/systemDebug.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
@@ -57,6 +58,7 @@ describe("start on confirm (kanban spec §3.1)", () => {
       expect(readGroupSummary(h.store, "g").orchestration).toMatchObject({ mode: "hold", state: "held" });
       await service.start(h.command("start", {}));
       expect(readGroupOrchestration(h.store, "g")!.startedRevision).toBe(revisionOf(h, "g"));
+      expect(isFailoverGroup(h.store, "g")).toBe(true);
       expect(await service.autoStart()).toEqual({ started: [], refused: [] });
       expect(startCommands(h, "g").map(([, actor]) => actor)).toEqual(["human"]);
     } finally { await h.dispose(); }

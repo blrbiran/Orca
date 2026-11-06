@@ -169,11 +169,13 @@ describe("T5: the retry-time headroom check", { timeout: 120_000 }, () => {
   });
 });
 
-describe("T6: the cap is a person's", () => {
+describe("T6: an authorized agent may set the global cap", () => {
   const payload = { maxRunningGroups: 3, agentTopUpCap: { tokens: 1, activeMs: 0, attempts: 0, sessions: 0 } };
-  it("a Web member is refused control-verb-human-only; a socket agent without a person token is refused control-person-token-required", () => {
+  it("a Web member is refused, while a socket agent can set the cap without a person token", () => {
     expect(permissionRefusal(MEMBER, "set-orchestration-settings", payload)?.code).toBe("control-verb-human-only");
-    expect(permissionRefusal(AGENT, "set-orchestration-settings", payload)?.code).toBe("control-person-token-required");
+    expect(permissionRefusal(AGENT, "set-orchestration-settings", payload)).toBeNull();
+    expect(permissionRefusal(DISPATCHED, "set-orchestration-settings", payload)?.code).toBe("control-dispatched-run-refused");
+    expect(permissionRefusal(OWNER, "set-orchestration-settings", payload)).toBeNull();
     // The rest of the verb stays open on the socket.
     expect(permissionRefusal(AGENT, "set-orchestration-settings", { maxRunningGroups: 3 })).toBeNull();
   });

@@ -136,9 +136,6 @@ export const HUMAN_ONLY_FIELDS: Readonly<Partial<Record<CommandVerbV1, readonly 
   // Spec 2026-10-27 single-call unknown usage §9 R1: charging a blocked single call's grant is an owner's act, as
   // settle-unknown-usage is.
   "recovery-retry": ["acknowledge"],
-  // Retry work top-up spec 2026-11-06 §2 "The cap": the cap bounds what agents may add to a task's budget, so it is a
-  // person's even where the rest of the verb is open on the socket (SOCKET_TIER below: token).
-  "set-orchestration-settings": ["agentTopUpCap"],
 };
 /**
  * CLI v2 spec §15.1: the control socket's tier for each human-only entry (a verb, or `verb.field`), the table's code mirror.
@@ -172,8 +169,6 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "remove-group-dependency": "open",
   "set-criteria-review": "open",
   "set-orchestration-settings": "open",
-  // Retry work top-up spec 2026-11-06 §2: the cap agents top up under is a budget amount (as set-limit): a person token.
-  "set-orchestration-settings.agentTopUpCap": "token",
   // Moved to open by the human: Orca already dispatches conflict resolution itself (kanban S5).
   "retry-integration": "open",
   "resolve-integration-conflict": "open",
@@ -265,8 +260,10 @@ export function socketTier(verb: CommandVerbV1, payload: unknown): SocketTier | 
   }) ? "token" : "open";
 }
 
-/** Spec §5 / C19: an amount field an agent may send, with the reason. Empty until a reviewed exception exists. */
-export const AGENT_AMOUNT_FIELDS: Readonly<Record<string, string>> = {};
+/** Spec §5 / C19: an amount field an agent may send, with the reason. */
+export const AGENT_AMOUNT_FIELDS: Readonly<Record<string, string>> = {
+  "set-orchestration-settings:agentTopUpCap": "The owner allows attended agents to tune the global top-up cap; the command ledger records who changed it, and each retry remains bounded by its confirmed contract.",
+};
 
 /** The refusal for a principal that may not do human-only actions (permissions.ts decides who); null when it is not human-only. */
 export function humanOnlyRefusal(verb: CommandVerbV1, payload: unknown):
