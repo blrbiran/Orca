@@ -78,3 +78,24 @@ ccloop: C1 record write, C2 codex attach, C3 claude signals, C4 vocabulary filte
   Groups without a token limit book the approximate floor and complete. Needs a human decision.
 - No criterion runs the probe through the real ccloop binary (`ORCA_CCLOOP_BIN=<scratchpad>/ccloop-sc/dist/cli.js`);
   all probe criteria use a fake port. The ccloop side is covered by ccloop's own criteria.
+
+### Round 2 (controller decisions after the first report, session 86352010)
+- Gap 5 (controller decision): a probe whose record says failed with typed cause `quota` and whose work usage is unknown
+  books usage 0 and completes, in limited and unlimited groups alike (precedent: ccloop books a codex 429 before work as
+  0). Built as the handler hook `rejectedBeforeWork` + `bookRejectedZeroInTransaction` (quotaProbeCall.ts), taken in
+  stepCSingleCall before the approximate path. Any other unknown usage keeps the `quota-probe-usage-unknown` block.
+  Criterion "gap 5" (both arms): red at :265 with the hook removed, red at :272 with the hook true for every verdict.
+- P8 red at :212 (group check dropped from quotaProbeCandidates). P12 red at :229 (fit check dropped). P13 red at :241
+  (probe exclusion dropped in usage.ts).
+- P14: green under "drop the pass's re-check and the payload's runId". Not because the guard is absent: the person's
+  retry is claimed in the same driver rounds, so the task's current run is no longer the failed one, and the candidate
+  read (terminallyFailedRun) drops the task. The criterion pins what happens: no orca-auto retry, two runs for the task.
+- P7: the guard is the store's unique index `one_active_work` (runs(group_id, work_item_id) WHERE active=1). The pass's
+  pending check and the claim's active-run check are second and third layers. No further criterion (controller).
+- P11 not built.
+- ccloop: rebased onto 32163ed, merged `--ff-only` into ccloop main (now `1bfe3ce`), branch deleted, worktree removed
+  without force. Not pushed. `<scratchpad>/ccloop-sc` rebuilt at `1bfe3ce`. No probe criterion can use the real binary:
+  driverHarness drives with FAKE_CCLOOP_RUN and the single call is answered by the fake port. With ORCA_CCLOOP_BIN at
+  ccloop-sc, quotaRestProbe + singleCallFailureCause: 17 passed.
+- Orca: rebased onto a51a0058 (no migration on this branch). Gate `node scripts/test-affected.mjs --base main`:
+  exit 0; 817 files selected; root 636 files, 5536 passed, 32 skipped; web 181 files, 1666 passed.
