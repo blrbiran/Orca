@@ -243,3 +243,24 @@ D1 工作树跑 `npm test`，选中 552 个根测试文件：550 过、2 红；4
 
 全量日志在 `/private/tmp/orca-d1-kMINyw/affected.log`，四份单跑日志在同目录。对照支持负载敏感的判断，不能把
 全量两条红算成通过，也没有证据表明它们由 D1 改动引起。
+
+### Codex 会话 2026-11-06（D2 ccloop 生产端；基线 `c471b2e`）
+
+ccloop 工作树跑 `vitest run --reporter=json --outputFile=/private/tmp/orca-d1-kMINyw/ccloop-full.json`：2,554 条过、2 条红；
+`check-known-reds` RC 1（`runLoop` 在名单内，`ompPhase` 在名单外）。同一隔离 HOME/XDG/TMPDIR/cache、真实 `npm ci`
+依赖下，按「改动工作树 → 未改动 `c471b2e` clone」逐条交替单跑：
+
+| 全量红 | 改动工作树单跑 | 未改动 main clone 单跑 |
+|---|---|---|
+| `runLoop.integration`「persists phase usage evidence…」缺 `attempts/1/plan.json` | 1/1 | 1/1 |
+| `ompPhase`「keeps a stopped phase's completed-message tokens diagnostic…」1 秒等待超时 | 1/1 | 1/1 |
+
+全量日志、JSON 与四份单跑日志都在 `/private/tmp/orca-d1-kMINyw/`。后一条仍是名单外红；这里只记录对照证据，
+不把 RC 1 宣称为过门，也不改红名单。
+
+### Codex 会话 2026-11-06（Orca #180／追加额度上限；基线含 D1 `4c287445`）
+
+`npm test` 选中 635 个根测试文件：633 过、2 红；5,517 条过、32 条跳过。`agentWalk` 的红**不是负载**：
+旧 main clone 单跑 1/1，修复 #180 后的工作树单跑必红（自动阶梯先接走失败任务）；其夹具改成真正需要人工
+retry 的 `setup-failed` 后，工作树单跑 1/1。另一条 `startForm` 是已登记的 `ECONNRESET`，工作树与未改动
+`c65fe9d5` clone 交替单跑各 9/9。全量与单跑日志在 `/private/tmp/orca-d1-kMINyw/`。全量原始 RC 1 不改写。
