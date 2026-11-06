@@ -419,6 +419,8 @@ export type RunViewV1 = {
   /** Issue fixes spec §4.2(1), (5): ccloop's reason and the drive record's outcome; optional here so literal fixtures need no edit. */
   stopReason?: string | null;
   outcome?: string | null;
+  /** Git-observed allowlist misses, available only from a ccloop peer that reports typed evidence. */
+  pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>;
   /** Failure-cause spec 2026-10-21 §5: ccloop's run-level cause; optional so literal fixtures need no edit. */
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; retries: number; detail: string | null } | null;
   /** Quota failover spec §3 (session 3cfc2e73): the current run failed with quota, was not switched, and its installation rests. */
@@ -635,7 +637,7 @@ export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[]
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string; acknowledge?: "charge-remaining-grant" } | { scope: "group"; groupId: string };
 /** CLI v2 spec §14 R2: `runId` is the run the person saw failing; the panel refuses task-run-moved once it is not current. */
-export type RetryTaskPayloadV1 = { taskId: string; runId?: string };
+export type RetryTaskPayloadV1 = { taskId: string; runId?: string; allowObservedPaths?: true };
 /** N1 spec §11.1: the five requirement commands (src/control/webProtocol.ts, field for field). */
 export type RequirementOpenPayloadV1 = {
   groupId: string;

@@ -48,10 +48,11 @@ any command; `orca version` should equal this skill's version.
    settling unknown usage, where a project's or group's work is carried, folder and multi-directory landing answers,
    check and flow settings and their locks, re-running or answering a flow, its effects and its pool, appending a
    plan-library version (`plan save --entry`) or importing a file into the library, setting a schedule, making one from
-   a group or enabling one, orchestration limits, group dependencies and corrections are refused
+   a group or enabling one, most orchestration limits, group dependencies and corrections are refused
    (`control-person-token-required`). Do not look for a way around it: ask the person (they run `orca login` and the
    command with `--as-person`). A new `plan save`, `plan archive` and disabling, removing or resuming a schedule need no
-   person token. A run Orca dispatched is refused all plan-library and schedule writes, and even some open verbs
+   person token. An agent may set the global `agentTopUpCap` orchestration limit; it is summed per group, not set per
+   task. A run Orca dispatched is refused all plan-library and schedule writes, and even some open verbs
    (`control-dispatched-run-refused`, e.g. `flow start`).
 7. **Parse `--json`.** One line: `{schema:"orca-cli-response-v1", status, commandId?, body, request?}`. Exit 0 = 2xx,
    1 = refused here before sending, 2 = the panel refused (`body.error.code` names why), 3 = crash.
@@ -107,13 +108,13 @@ Ids: a full id or a unique prefix; projects also by name or path (default: the r
   command was accepted. To see what the agent itself did before it failed, `orca run transcript <r>` lists its calls and
   `orca run transcript <r> --call <attempt>/<phase>/<seq>` prints the tail of one (redacted as the Web shows it;
   `--before <start>` pages back). A run Orca dispatched is refused it: report that, do not work around it.
+- For a `blocked_waiting_human` run or a bugfix split, follow references/observed-path-retry.md before retry or acceptance.
 - Verifying a saved result skips execution, but validation and verification may still spend model usage. A flow's
   `plan`, `rerun` and `include` spend too.
 - A schedule fires on its own: a fired group either confirms itself (no token limit, no delivery scheme) or waits for
   the person, and a fired flow waits before any external or irreversible step.
 
 ## Escape hatch
-
 `orca control get <path>` / `orca control send <route> …` (hidden from `orca help`) talk to the socket directly and
 fill nothing for you. Use them only for what no command covers; the route table and their rules are in
 references/escape-hatch.md.

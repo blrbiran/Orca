@@ -25,6 +25,7 @@ import i18n, { enumText } from "./i18n.js";
 import { shortTokens } from "./TokenInput.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { RunTranscript } from "./AgentTranscript.js";
+import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import type { Role } from "./auth.js";
 
 /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
@@ -300,6 +301,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
                     {t("control.group.retryTask", { taskId: item.taskId })}
                   </button>
                   {run.runId === item.currentRunId && <span className="kbd-hint">{t("control.task.retryKey")}</span>}
+                  <p>{t("control.group.retryKeepsPaths")}</p>
+                  <ObservedPathRetry view={view} run={run} onCommand={onCommand} />
                 </>
               )}
               {/* Retry is hidden while usage is unknown (runFacts.ts retryRunOpen): show the way forward instead of nothing.

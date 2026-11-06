@@ -54,6 +54,7 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["requirement", "accept", "g-alpha"], "groups/g-alpha/requirement/accept", 5, { draftNo: 1, draftHash: H.draft }],
   [["requirement", "classify", "g-alpha", "--scope", "medium", "--clarity", "fair"], "groups/g-alpha/requirement/classify", 5, { scope: "medium", clarity: "fair" }],
   [["task", "retry", "g-alpha", "t1"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1" }],
+  [["task", "retry", "g-alpha", "t1", "--allow-observed-paths"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1", allowObservedPaths: true }],
   [["task", "continue", "g-alpha", "t1"], "groups/g-alpha/tasks/t1/continue", 5, { predecessorRunId: "run-1", checkpointId: "cp-1" }],
   [["task", "set-loop", "g-alpha", "t1", "--file", loopFile], "groups/g-alpha/tasks/t1/loop", 5,
     { baseLoopVersion: 4, plan: "standard", inputs: { goal: "g", successCondition: "s", targetPaths: ["src"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null }, work: { tokens: 500, activeMs: 600, attempts: 3 } }],

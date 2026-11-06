@@ -56,6 +56,19 @@ describe("human output (#140)", () => {
     expect(out.stdout).not.toMatch(/failureCause|detail:|stopReason|undefined/);
   });
 
+  it("run show lists each observed missed path and names the explicit retry flag", async () => {
+    const p = await fakePanel({
+      "GET summary": SUMMARY,
+      "GET groups/g-alpha": { status: 200, body: { ...GROUP, runs: [{ ...RUN, state: "blocked", outcome: "blocked_waiting_human", pathPolicyMisses: [{ repoKey: null, path: "tests/regression.test.ts" }, { repoKey: "docs", path: "notes/fix.md" }] }] } },
+      "GET runs/run-1/activity": { status: 200, body: { schema: "orca-run-activity-v1", runId: "run-1", entries: [] } },
+      "GET runs/run-1/evidence": { status: 200, body: { schema: "orca-run-evidence-v1", runId: "run-1", entries: [] } },
+    });
+    const out = await cli(["run", "show", "run-1", "--group", "g-alpha"], p.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("observed path misses:\n  tests/regression.test.ts\n  docs:notes/fix.md");
+    expect(out.stdout).toContain("task retry g-alpha t1 --allow-observed-paths");
+  });
+
   it("plan show without --version prints no `document: undefined`", async () => {
     const p = await fakePanel({ [`GET plan-library/${ENTRY}`]: { status: 200, body: { entryId: ENTRY, projectId: "repo-1", head: null, versions: [] } } });
     const out = await cli(["plan", "show", ENTRY], p.dir);

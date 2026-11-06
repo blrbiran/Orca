@@ -39,6 +39,7 @@ import type {
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
 import { RunTranscript } from "./AgentTranscript.js";
+import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
 import { Tokens, formatTokens, shortTokens } from "./TokenInput.js";
@@ -154,7 +155,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
       {t("control.group.retryRun", { id: run.taskId ?? run.runId })}
     </button>
   ) : null;
-  return archived ? null : <>{active && retryRunOpen(view, run) && <p>{t("control.group.retryFromHead")}</p>}{button}</>;
+  return archived ? null : <>{active && retryRunOpen(view, run) && <><p>{t("control.group.retryFromHead")}</p><p>{t("control.group.retryKeepsPaths")}</p></>}{button}{active && retryRunOpen(view, run) && <ObservedPathRetry view={view} run={run} onCommand={onCommand} />}</>;
 }
 
 import { overviewRegionId } from "./overviewNavigation.js";

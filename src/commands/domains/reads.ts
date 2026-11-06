@@ -183,7 +183,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { state?: string; stopReason?: string | null; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -191,6 +191,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
         ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
+        ...(b.run?.pathPolicyMisses?.length ? ["observed path misses:", ...b.run.pathPolicyMisses.map((miss) => `  ${miss.repoKey === null ? "" : `${miss.repoKey}:`}${miss.path}`), ...(b.run.taskId ? [`To allow only these paths: orca task retry ${b.groupId} ${b.run.taskId} --allow-observed-paths`] : [])] : []),
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
       ];
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");

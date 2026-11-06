@@ -202,6 +202,10 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `no-chose-instead` | 400 |
 | `no-op-command` | 422 |
 | `numeric-overflow` | 422 |
+| `observed-paths-conflict` | 409 |
+| `observed-paths-invalid` | 422 |
+| `observed-paths-not-allowed` | 422 |
+| `observed-paths-unavailable` | 422 |
 | `original-decision-not-found` | 404 |
 | `original-pending-decision-not-found` | 404 |
 | `owner-required` | 403 |
