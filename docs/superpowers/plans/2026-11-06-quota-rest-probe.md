@@ -35,3 +35,46 @@ Who: Claude Code (Opus 5.5), implementer subagent of session 86352010, 2026-11-0
 
 src/control/{executionDriver,singleCall,singleCallPurposes,quotaProbeCall,quotaProbe,quotaRest,usage,overGrantBlock,
 stopIntent,webProtocol,webService}.ts, src/panel/controlViews.ts, web/src/controlTypes.ts, web/src/controlApi.ts, locales.
+
+## As built (implementer subagent, session 86352010, 2026-11-06)
+
+Commits on `feat/quota-probe` (base `fa593909`): `cd3c1c3f` R0, `912316ca` probe, `48fd500e` + `7052119e` criteria,
+`be80db14` enum-count Ruling, and this note. ccloop: branch `feat/single-call-failure-cause` (`ae46036`, `095b55e`), built
+clone at `<scratchpad>/ccloop-sc`. Orca's pin is unchanged (292ddb5).
+
+### Decisions (reversible, with why)
+- D1 `failureCause.cause` is a bounded string, not ccloop's enum (as `runFailureCauseSchema`): a cause a newer ccloop adds
+  must not make a record `single-call-record-invalid`.
+- D2 ccloop: the adapters attach a new `singleCallCause` property, not the existing `failureCause` (which the stalled
+  paths already attach, omp included): so omp's record stays byte-identical (spec "omp unchanged") and
+  `ompSingleCallStall.test.ts:129` needs no rewrite. Only `failed` records carry it (not aborted, not output-invalid).
+- D3 ccloop claude: a single call now records its signals file (needed to classify); a completed call removes it, so
+  `singleCall.test.ts` W5 (exact file list) holds unchanged.
+- D4 Probe profile: the failed run's own `executionProfile` binding; slot: the task's frozen work agent.
+- D5 Verdict stored on the probe run (`probeVerdict`, `endedAt`, and `drive.failureCause` when ccloop named a cause) by
+  code, both on completion and when the run is blocked on unknown usage (`SingleCallHandler.blockedRunFields`); the
+  driver passes `{outcome, failureCause}` to `evaluate` as `facts`.
+- D6 The migrations' purpose list (`migrations.ts` 18->19 repair) is not changed: a probe exists only in a group with a
+  task run, which that repair already leaves alone (its condition 5). Editing a historic migration is not needed.
+- D7 One activity kind `quota-probe` with `body.reason` = `quota-probe-failed` (names `probeRunId`, `cause`, `errorCode`)
+  or `quota-probe-unfunded:<dimension|spend-cap>`; added to the protocol, web kinds and both locales.
+- D8 Spend cap is read with `claimCapBlocking` (read-only): an unfunded probe never writes a group-level cap block.
+
+### Criteria and mutations (clone `<scratchpad>/mutQP`, restore proved by `git diff` / `--cached` = 0 / 0 bytes)
+R0 red at singleCallFailureCause.test.ts:29 (schema without the field). P1 :93, P2 :106, P3 :117, P4 :181, P5 :131,
+P6/P19 :148, P9 :136, P15 :168, P16 :170, P17 :193, P18 :205 -- each red on its named mutation.
+P7: NOT red-able as written -- with the pass's pending check and the claim's active-run check both removed it stays
+green, because the store's unique index `one_active_work` refuses a second active run on the work item (caught per
+candidate). The guard exists three times; none of my mutations isolates one.
+Not built as criteria (open): P8 (paused/stopped group), P11 (readFundedAllowance after the retry), P12 (unfunded
+group), P13 (probe over grant does not block), P14 (person's retry races the probe). P10 is two tasks in ONE group
+(the harness builds one group), not two groups. P15 uses an aborted record, not a real stop/resume.
+ccloop: C1 record write, C2 codex attach, C3 claude signals, C4 vocabulary filter, C5 signals removal -- all red.
+
+### Open items
+- A codex quota rejection reports no usage, so a probe that hits quota in a group WITH a token limit is blocked at C
+  `quota-probe-usage-unknown:<code>` (verdict still recorded, so the pass still decides). That block is not settleable
+  by the existing single-call settlement (estimate/clarify/split/flow only) and may keep the group's usage unknown.
+  Groups without a token limit book the approximate floor and complete. Needs a human decision.
+- No criterion runs the probe through the real ccloop binary (`ORCA_CCLOOP_BIN=<scratchpad>/ccloop-sc/dist/cli.js`);
+  all probe criteria use a fake port. The ccloop side is covered by ccloop's own criteria.
