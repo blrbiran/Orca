@@ -312,6 +312,8 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
     for (const { id: taskId } of tasksOf(store, groupId)) {
       const run = terminallyFailedRun(store, groupId, taskId);
       if (run === null) continue;
+      // ccloop stopped for a person's decision. Replaying the frozen contract would meet the same gate again.
+      if (run.drive?.outcome === "blocked_waiting_human") continue;
       // Failure-cause spec 2026-10-21 §4-§5: a debug run cannot fix the agent's credentials, quota or program, and would only
       // fail the same way at the same cost; such a task stays with the person (a quota wait may retry it, quotaWaitCandidates).
       // Task setup and check retry spec 2026-11-04 §4.7: `setup-failed` is exempt too, but handed on marked `exempt` so

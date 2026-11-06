@@ -23,10 +23,11 @@ const gitIn = (cwd: string, input: string, ...args: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8", input }).trim();
 const LADDER = systemDebugGroupId({ kind: "ladder", groupId: "g", taskId: "a", runId: null });
 
-async function ladderWorld(options: { debugFails?: boolean } = {}) {
+async function ladderWorld(options: { debugFails?: boolean; humanBlock?: boolean } = {}) {
   let failing = true;
   const t = await driverHarness([{ taskId: "a" }], {
-    behaviour: (id) => (id === "a" && failing) || (id === "debug" && options.debugFails === true) ? "failed" : "succeed",
+    behaviour: (id) => (id === "a" && failing) ? (options.humanBlock ? "blocked-waiting-human" : "failed")
+      : (id === "debug" && options.debugFails === true) ? "failed" : "succeed",
     stopReason: (id) => (id === "a" && failing ? "Error: check failed: node check.js" : null),
   });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
@@ -69,6 +70,18 @@ async function ladderWorld(options: { debugFails?: boolean } = {}) {
 }
 
 describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", { timeout: 180_000 }, () => {
+  it("leaves a blocked_waiting_human run for a person without retrying its unchanged contract", async () => {
+    const w = await ladderWorld({ humanBlock: true }); const { t } = w; try {
+      const runId = await w.failedRun();
+      expect(t.body(runId).drive.outcome).toBe("blocked_waiting_human");
+      const pass = await w.service.systemDebugPass();
+      expect(pass.redispatched).toEqual([]);
+      expect(pass.opened).toEqual([]);
+      expect(t.h.store.db.prepare("SELECT id FROM commands WHERE group_id='g' AND actor_id='orca-auto' AND verb='retry-task'").all()).toEqual([]);
+      expect(t.body(runId).state).toBe("blocked");
+    } finally { await t.h.dispose(); }
+  });
+
   // Ruling: human approved rewriting all necessary criteria, Orca session 9ec98639, 2026-10-21 -- level 1 (one re-dispatch)
   // now comes first, so each level-2 case reaches the ladder through failedThroughLevelOne instead of a single failure.
   it("opens a stacked debug group as orca-auto, confirms it, folds its fix into the group's branch and reruns the task from there", async () => {

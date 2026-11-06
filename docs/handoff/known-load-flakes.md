@@ -229,3 +229,17 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `tests/setup/relocateUserData.ts` 报真实 `~/.orca` 被写 | **不是测试写的**：是 7777 的 launchd 服务在跑时自己写 `control.sqlite`／日志；持有者 pid 可查（`lsof`） |
 | ccloop › `savedResultRecovery.native`（`ENOTEMPTY`、worker did not seal、30 s）、`phasesCompleted`、`setupRunLoop` continuation、`endToEnd`、`ompPhase` grandchild、`cli`／`endToEnd`（main clone 软链依赖时两边都挂） | 负载 40–110；与未改动 main clone 交替单跑，两边同形 |
 | Orca › `tests/control/criteriaBaseRun.test.ts`「a restart while the re-run is in flight restores the workspace and runs it again」(`blocked` vs `landed`) | **新形状 n＝1**：repin 门全量负载约 20 时红；新旧 ccloop pin 交替单跑 4/4 绿 |
+
+### Codex 会话 2026-11-06（D1；基线 `c65fe9d5`，D1 未提交 diff）
+
+D1 工作树跑 `npm test`，选中 552 个根测试文件：550 过、2 红；4,882 条过、32 条跳过。两条红都是上文已登记的形状。
+用同一份 fake-codex `integration` 表、pin 的 ccloop clone build 和 scratch cache，按「D1 工作树 → 未改动
+`c65fe9d5` clone」的顺序逐文件单跑：
+
+| 文件／全量红的形状 | D1 工作树单跑 | 未改动 main clone 单跑 |
+|---|---|---|
+| `tests/flow/startForm.test.ts` — `fetch failed`, `ECONNRESET` | 9/9 | 9/9 |
+| `tests/control/criteriaBaseRun.test.ts` — `index.lock`, `blocked` instead of `landed` | 18/18 | 18/18 |
+
+全量日志在 `/private/tmp/orca-d1-kMINyw/affected.log`，四份单跑日志在同目录。对照支持负载敏感的判断，不能把
+全量两条红算成通过，也没有证据表明它们由 D1 改动引起。

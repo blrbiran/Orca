@@ -363,3 +363,11 @@ the text above is kept as written (Rule 13).
   #133 correction above: an explicit start does not exceed `maxRunningGroups` (flow children excepted).
 - A started group that held no slot and regains claimable work is armed by `replenishStartWakes` only while fewer than
   the cap groups execute (controller decision, reversible).
+
+## 17. Correction (Codex session, 2026-11-06) — a human-blocked run is not an automatic ladder candidate
+
+The level-1 description in §14 is narrowed for a ccloop terminal `blocked_waiting_human`. That outcome means ccloop
+stopped for a person's decision, often because the frozen path allowlist excludes a necessary test. Orca must not send
+`retry-task` as `orca-auto` for that run or open a ladder debug group for it: the unchanged contract would meet the same
+gate again. The task stays visible for a person to resolve. A person's explicit retry remains a separate action. The
+regression criterion drives a real blocked run through `systemDebugPass` and checks that no automatic retry is booked.
