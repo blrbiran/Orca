@@ -31,18 +31,97 @@ const NO_OP = /^\s*(?:exit\s+0|true|:|echo(?:\s.*)?)\s*;?\s*$/;
 
 const count = (text: string, pattern: RegExp): number => (text.match(pattern) ?? []).length;
 
-/**
- * The path-like words of the required check commands, as repository paths (`./x` is `x`). Task setup spec 2026-11-04
- * §4.6: the task's setup commands are read too -- a file setup runs shapes what the checks see.
- */
-export function checkPaths(requiredChecks: readonly string[], setupCommands: readonly string[] = []): Set<string> {
-  const out = new Set<string>();
-  for (const command of [...requiredChecks, ...setupCommands]) {
-    for (const word of command.split(/\s+/)) {
-      const token = word.replace(/^['"]|['"]$/g, "").replace(/^\.\//, "");
-      if (token.includes("/") || /\.[A-Za-z0-9]+$/.test(token)) if (!token.startsWith("-") && !token.includes("://")) out.add(token);
+/** Paths run as check/setup code, not files merely read by a check (issue #198: `grep ... README.md`). */
+const INTERPRETERS = new Set(["node", "nodejs", "bun", "deno", "tsx", "ts-node", "python", "python3", "ruby", "perl", "php", "bash", "sh", "zsh", "fish"]);
+const WRAPPERS = new Set(["npx", "bunx"]);
+const SHELLS = new Set(["bash", "sh", "zsh", "fish"]);
+const CONFIG_FLAGS = new Set(["--config", "--config-file", "--project", "-p"]);
+const INLINE_CODE = new Set(["-e", "--eval", "-p", "--print", "-c", "-lc", "-m"]);
+const VALUE_OPTIONS = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader"]);
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const sourceToken = (word: string): string => word.replace(/^['"]+|['"]+$/g, "").replace(/^\.\//, "");
+const pathLike = (word: string): boolean => (word.includes("/") || /\.[A-Za-z0-9]+$/.test(word)) && !word.startsWith("-") && !word.includes("://");
+
+/** Split only literal shell words and operators; never execute or expand a command. */
+function commandSegments(command: string): string[][] {
+  const segments: string[][] = [[]];
+  let word = "", quote: "'" | '"' | null = null, escaped = false;
+  const push = (): void => { if (word !== "") segments.at(-1)!.push(word); word = ""; };
+  for (let i = 0; i < command.length; i += 1) {
+    const char = command[i]!;
+    if (escaped) { word += char; escaped = false; continue; }
+    if (char === "\\" && quote !== "'") { escaped = true; continue; }
+    if (quote !== null) { if (char === quote) quote = null; else word += char; continue; }
+    if (char === "'" || char === '"') { quote = char; continue; }
+    if (/\s/.test(char)) { push(); continue; }
+    if (char === ";" || char === "|" || char === "&") {
+      push();
+      if (command[i + 1] === char) i += 1;
+      if (segments.at(-1)!.length > 0) segments.push([]);
+      continue;
+    }
+    word += char;
+  }
+  push();
+  return segments.filter((segment) => segment.length > 0);
+}
+
+function scanCheckCommand(command: string, out: Set<string>, depth = 0): void {
+  if (depth > 2) return;
+  for (const words of commandSegments(command)) {
+    let i = 0;
+    while (ASSIGNMENT.test(words[i] ?? "")) i += 1;
+    if (words[i] === "env") {
+      i += 1;
+      while (words[i]?.startsWith("-")) i += words[i] === "-u" || words[i] === "--unset" ? 2 : 1;
+      while (ASSIGNMENT.test(words[i] ?? "")) i += 1;
+    }
+    let program = sourceToken(words[i] ?? "");
+    if (WRAPPERS.has(program) || ((program === "npm" || program === "pnpm") && words[i + 1] === "exec")) {
+      i += program === "npm" || program === "pnpm" ? 2 : 1;
+      while (words[i]?.startsWith("-")) i += words[i] === "-p" || words[i] === "--package" ? 2 : 1;
+      program = sourceToken(words[i] ?? "");
+    }
+    const basename = program.split("/").at(-1)!;
+    if (program === "source" || program === ".") {
+      const script = sourceToken(words[i + 1] ?? "");
+      if (pathLike(script)) out.add(script);
+    } else if (INTERPRETERS.has(basename)) {
+      let j = i + 1;
+      if ((basename === "bun" || basename === "deno") && words[j] === "run") j += 1;
+      while (j < words.length) {
+        const option = words[j]!;
+        if (SHELLS.has(basename) && (option === "-c" || option === "-lc")) {
+          scanCheckCommand(words[j + 1] ?? "", out, depth + 1);
+          break;
+        }
+        if (INLINE_CODE.has(option)) break;
+        if (VALUE_OPTIONS.has(option)) {
+          const preload = sourceToken(words[j + 1] ?? "");
+          if (pathLike(preload)) out.add(preload);
+          j += 2;
+          continue;
+        }
+        if (option === "--") { j += 1; continue; }
+        if (option.startsWith("-")) { j += 1; continue; }
+        const script = sourceToken(option);
+        if (pathLike(script)) out.add(script);
+        break;
+      }
+    } else if (pathLike(program)) out.add(program);
+    for (let j = i + 1; j < words.length; j += 1) {
+      if (!CONFIG_FLAGS.has(words[j - 1]!)) continue;
+      if (words[j - 1] === "-p" && basename !== "tsc") continue;
+      const config = sourceToken(words[j]!);
+      if (pathLike(config)) out.add(config);
     }
   }
+}
+
+/** Task setup commands count too: their own script can change the meaning of the checks. */
+export function checkPaths(requiredChecks: readonly string[], setupCommands: readonly string[] = []): Set<string> {
+  const out = new Set<string>();
+  for (const command of [...requiredChecks, ...setupCommands]) scanCheckCommand(command, out);
   return out;
 }
 

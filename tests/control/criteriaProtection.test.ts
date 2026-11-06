@@ -18,15 +18,18 @@ const g = (cwd: string, ...args: string[]): string =>
 
 const TEST = "import { expect, it } from 'vitest';\nit('adds', () => {\n  expect(1 + 1).toBe(2);\n  expect(2 + 2).toBe(4);\n});\n";
 const BASE: Record<string, string> = {
+  "README.md": "Install this package.\n",
   "src/add.ts": "export const add = (a: number, b: number) => a + b;\n",
   "tests/add.test.ts": TEST,
   "tests/helpers/sum.js": "module.exports = (xs) => xs.reduce((a, b) => a + b, 0);\n",
   "check.js": "process.exit(require('./src/add').add(1, 1) === 2 ? 0 : 1);\n",
+  "register.js": "module.exports = {};\n",
+  "scripts/setup.sh": "echo setup\n",
   "package.json": JSON.stringify({ name: "x", version: "1.0.0", scripts: { test: "vitest run", lint: "eslint ." } }, null, 2) + "\n",
 };
 
 /** base: BASE committed; attempt: `change` applied on top (null deletes). Answers the classification. */
-async function classify(change: Record<string, string | null>): Promise<{ kind: CriteriaChangeKind; signals: string[]; files: string[] }> {
+async function classify(change: Record<string, string | null>, checks: string[] = ["node check.js", "npm test"]): Promise<{ kind: CriteriaChangeKind; signals: string[]; files: string[] }> {
   const repo = await mkdtemp(join(tmpdir(), "orca-criteria-"));
   try {
     g(repo, "init", "-q", "-b", "main");
@@ -38,11 +41,38 @@ async function classify(change: Record<string, string | null>): Promise<{ kind: 
       await mkdir(dirname(join(repo, path)), { recursive: true }); await writeFile(join(repo, path), text);
     }
     g(repo, "add", "-A"); g(repo, "commit", "-qm", "attempt", "--allow-empty");
-    return await classifyCriteriaChange(repo, base, g(repo, "rev-parse", "HEAD"), ["node check.js", "npm test"]);
+    return await classifyCriteriaChange(repo, base, g(repo, "rev-parse", "HEAD"), checks);
   } finally { await rm(repo, { recursive: true, force: true }); }
 }
 
 describe("classifying an attempt's change to its checks (spec §3-§4.1)", () => {
+  it("does not treat a README checked by grep as the file defining that check (#198)", async () => {
+    const checks = ["grep -q 'npm link' README.md"];
+    expect([...checkPaths(checks)]).toEqual([]);
+    const result = await classify({ "README.md": "Install this package with npm link.\n" }, checks);
+    expect(result).toEqual({ kind: "none", files: [], signals: [] });
+    expect(flagged(result)).toBe(false);
+  });
+
+  it.each(["FOO=1 node check.js", "env FOO=1 node check.js", "npx --yes tsx check.js", "npm exec -- tsx check.js"])(
+    "protects a check script behind %s", async (command) => {
+      expect([...checkPaths([command])]).toContain("check.js");
+      expect((await classify({ "check.js": "process.exit(0);\n" }, [command])).kind).toBe("modified");
+    });
+
+  it.each(["node --require register.js check.js", "node --import tsx check.js", "node -r register.js check.js"])(
+    "protects the check script after interpreter options in %s", async (command) => {
+      expect([...checkPaths([command])]).toContain("check.js");
+      expect((await classify({ "check.js": "process.exit(0);\n" }, [command])).kind).toBe("modified");
+    });
+
+  it.each(["sh -c 'node check.js'", "bash -lc 'source ./scripts/setup.sh'"])(
+    "protects a statically named script in %s", async (command) => {
+      const path = command.includes("setup") ? "scripts/setup.sh" : "check.js";
+      expect([...checkPaths([command])]).toContain(path);
+      expect((await classify({ [path]: "echo changed\n" }, [command])).kind).toBe("modified");
+    });
+
   // Must not flag: growth of the tests, code-only changes, package.json changes outside `scripts`, a new script.
   it.each([
     ["only code changed", { "src/add.ts": "export const add = (a: number, b: number) => b + a;\n" }, "none"],
@@ -81,6 +111,9 @@ describe("the files a task's setup names (task setup spec §4.6)", () => {
     // Mutation A4-M4 (ignore setup in checkPaths) -> the set lacks scripts/setup.sh, red.
     expect([...checkPaths(["node check.js"], ["sh ./scripts/setup.sh --fast", "npm ci"])].sort()).toEqual(["check.js", "scripts/setup.sh"]);
     expect([...checkPaths(["node check.js"])]).toEqual(["check.js"]);
+    expect([...checkPaths(["./scripts/check", "npx tsx scripts/verify.ts", "tsc -p tsconfig.json", "grep -q npm README.md"])].sort())
+      .toEqual(["scripts/check", "scripts/verify.ts", "tsconfig.json"]);
+    expect([...checkPaths(["node -p 'README.md'"])]).toEqual([]);
     // The classification reads them: an edit to the setup script is a modification of the checks, not a code change.
     const repo = await mkdtemp(join(tmpdir(), "orca-criteria-setup-"));
     try {
@@ -109,6 +142,21 @@ describe("the landing writes the criteria decision and flags it, without blockin
     await t.until(driver, () => t.body(runId).drive?.landedCommit != null || t.body(runId).state === "blocked", 120);
     return { t, runId };
   }
+
+  it("lands a README task checked by grep without opening a criteria flag (#198)", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["README.md"] }], {
+      files: () => ({ "README.md": "Install with npm link.\n" }), requiredChecks: ["grep -q 'npm link' README.md"],
+    });
+    try {
+      await writeFile(join(t.repo, "README.md"), "Install this package.\n");
+      git(t.repo, "add", "README.md"); git(t.repo, "commit", "-qm", "readme-base");
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).drive?.landedCommit != null || t.body(runId).state === "blocked", 120);
+      expect(t.body(runId).drive.landedCommit).not.toBeNull();
+      expect(listFlaggedDecisions(t.h.store, "g")).toEqual([]);
+      expect(readControlGroup(t.h.store, "epoch-test", "g").summary.card?.pendingDecisions ?? 0).toBe(0);
+    } finally { await t.h.dispose(); }
+  });
 
   it("lands a weakened test, writes a major criteria decision in the run's ledger and flags it as a test change", async () => {
     const { t, runId } = await landing({ "tests/add.test.ts": TEST.replace("  expect(2 + 2).toBe(4);\n", "") }); try {
