@@ -100,9 +100,9 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
  * traces) and the slug `markdown-export` (controller ruling PR-B2), consensus on round 1, and draft 1 queued -- what
  * requirement-consensus leaves behind.
  */
-function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"]): void {
+function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"], override?: { statement: string; acceptanceCriteria: Array<{ id: string; text: string }> }): void {
   const group = readRequirementGroup(store, "r");
-  const classified = classifyClarifyOutput({ ...ROUND_TWO, slug: "markdown-export", classification: CLASSIFICATION }, { roundNo: 1, requirementId: group.requirement.requirementId, earlierQuestionIds: [] });
+  const classified = classifyClarifyOutput({ ...ROUND_TWO, ...override, slug: "markdown-export", classification: CLASSIFICATION }, { roundNo: 1, requirementId: group.requirement.requirementId, earlierQuestionIds: [] });
   if (!classified.ok) throw new Error(`requirementHarness: ROUND_TWO did not classify: ${classified.reason}`);
   writeRound(store, "r", { ...newRound(1), state: "answered", result: classified.result, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: "2026-10-02T08:05:00.000Z" });
   group.requirement.slug = classified.result.slug;
@@ -117,7 +117,7 @@ function seedConsensus(store: Awaited<ReturnType<typeof openTestStore>>["store"]
  * (or, with `startAt: "split"`, draft 1 queued after consensus; with `startAt: "none"`, no group), a driver over the
  * queued single-call port, the pump's real wake handlers, and the service for commands.
  */
-export async function requirementHarness(options: { answers: QueuedAnswer[]; stoppable?: boolean; limit?: Amount; startAt?: "round" | "split" | "none" } = { answers: [] }) {
+export async function requirementHarness(options: { answers: QueuedAnswer[]; stoppable?: boolean; limit?: Amount; startAt?: "round" | "split" | "none"; consensus?: { statement: string; acceptanceCriteria: Array<{ id: string; text: string }> } } = { answers: [] }) {
   const h = await openTestStore();
   const repo = join(h.root, "repo");
   await mkdir(join(repo, "src"), { recursive: true });
@@ -144,7 +144,7 @@ export async function requirementHarness(options: { answers: QueuedAnswer[]; sto
     h.store.db.prepare("UPDATE token_policies SET mode='finite-legacy' WHERE group_id='r'").run();
     updateRevision(h.store, "r", 1);
     h.store.db.prepare("UPDATE groups SET projection_seq=1 WHERE id='r'").run();
-    if (options.startAt === "split") seedConsensus(h.store);
+    if (options.startAt === "split") seedConsensus(h.store, options.consensus);
     else { writeRound(h.store, "r", newRound(1)); queueRequirementCall(h.store, "r", "open"); }
   });
   const admissionGate = createAdmissionGate();

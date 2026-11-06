@@ -52,6 +52,13 @@ async function store(): Promise<ControlStore> {
 }
 
 describe("orca-plan-v1 codec (§5.2, C8)", () => {
+  it("preserves a long requirement goal and all 23 acceptance conditions under the 2 MiB bound (#190)", () => {
+    const goal = "g".repeat(2_231), successConditions = Array.from({ length: 23 }, (_, index) => `criterion ${index + 1}`);
+    const encoded = canonicalPlanDoc({ ...doc(), goal, successConditions }, REPO);
+    expect(encoded.doc.goal).toBe(goal);
+    expect(encoded.doc.successConditions).toEqual(successConditions);
+    expect(encoded.bytes.length).toBeLessThan(PLAN_DOC_MAX_BYTES);
+  });
   it("accepts a contract task and a loop task, and names the bytes by their sha256", () => {
     const loop = { schema: "orca-loop-recipe-v1", planId: "standard", planVersion: 3, chosenBy: "explicit",
       inputs: { goal: "g", successCondition: "s", targetPaths: ["src/**"], checks: ["true"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null } };
@@ -79,6 +86,10 @@ describe("orca-plan-v1 codec (§5.2, C8)", () => {
   it("refuses a document over 2 MiB canonical (plan-library-doc-too-large)", () => {
     const big = { ...contract("a"), context: { ...contract("a").context, constraints: ["x".repeat(PLAN_DOC_MAX_BYTES)] } };
     expect(refusal(() => canonicalPlanDoc(doc([{ taskId: "a", dependsOn: [], targetVersion: 1, contract: big }]), REPO)).code).toBe("plan-library-doc-too-large");
+  });
+
+  it("keeps the 2 MiB total bound when the excess is in a requirement goal (#190)", () => {
+    expect(refusal(() => canonicalPlanDoc({ ...doc(), goal: "x".repeat(PLAN_DOC_MAX_BYTES) }, REPO)).code).toBe("plan-library-doc-too-large");
   });
 });
 
@@ -251,6 +262,29 @@ describe("plan-library-save from a group, then import-plan from the entry (§5.3
 });
 
 describe("plan-library-save from a requirement split (§5.3 (a), C8)", () => {
+  it("saves a seven-task split with 23 criteria and a 2,231-character statement without losing any (#190)", async () => {
+    const acceptanceCriteria = Array.from({ length: 23 }, (_, index) => ({ id: `AC${index + 1}`, text: `Criterion ${index + 1}` }));
+    const statement = "A".repeat(2_231);
+    const tasks = Array.from({ length: 7 }, (_, index) => ({ ...VALID_SPLIT.tasks[0]!, taskId: `task-${index + 1}`,
+      title: `Task ${index + 1}`, targetPaths: [`src/task-${index + 1}.ts`],
+      dependsOn: index === 0 ? [] : [`task-${index}`], traces: index === 0 ? acceptanceCriteria.map((criterion) => criterion.id) : ["AC1"] }));
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: { ...VALID_SPLIT, tasks } }], startAt: "split",
+      consensus: { statement, acceptanceCriteria } });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const draftHash = readDraft(x.store, "r", 1).draftHash!;
+      const command = lib("save-large-r", "plan-library-save", { source: { kind: "requirement-draft", groupId: "r", draftNo: 1, draftHash }, name: "large split" });
+      const saved = withCommandContext(command.commandId, PERSON, () => applyPlanLibraryCommand({ store: x.store, resolveRepository: () => x.repo }, command)) as Answer;
+      expect(saved.result, JSON.stringify(saved)).toMatchObject({ kind: "plan-library-saved", version: 1 });
+      const version = readVersion(x.store, saved.result!.entryId!, saved.result!.sha256!)!;
+      const stored = JSON.parse(version.doc) as { goal: string; successConditions: string[]; tasks: unknown[] };
+      expect(stored.goal).toBe(statement);
+      expect(stored.successConditions).toEqual(acceptanceCriteria.map((criterion) => criterion.text));
+      expect(stored.tasks).toHaveLength(7);
+      expect(canonicalPlanDoc(stored, x.repo).source.tasks).toHaveLength(7);
+    } finally { await x.dispose(); }
+  });
+
   async function reviewed() {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
     await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");

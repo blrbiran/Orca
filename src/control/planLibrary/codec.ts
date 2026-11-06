@@ -36,8 +36,10 @@ const planDocTaskSchema = z.object({
 
 export const planDocSchema = z.object({
   schema: z.literal(PLAN_DOC_SCHEMA),
-  goal: z.string().min(1).max(2000),
-  successConditions: z.array(z.string().min(1)).min(1).max(20),
+  // A requirement split copies its full statement and every acceptance criterion. The canonical 2 MiB ceiling below
+  // bounds the whole document without making a valid split impossible to save (tester #190).
+  goal: z.string().min(1),
+  successConditions: z.array(z.string().min(1)).min(1),
   agent: partialSelectionSchema.optional(),
   reconcileAgent: partialSelectionSchema.optional(),
   tasks: z.array(planDocTaskSchema).min(1).max(200),
