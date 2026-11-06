@@ -201,6 +201,18 @@ describe("soft mode: a loop run's unknown usage is booked at its floor by Orca",
     } finally { await driver.stop(); await t.h.dispose(); }
   });
 
+  it("O16: a permanent admission code is booked too (a failed optional-v1 run a handoff stopped, allocations unknown)", async () => {
+    const { t, runId, driver } = await loopUnknown({ tokenPolicy: "optional-v1", floor: 500 }); try {
+      await handoff(t, runId, driver);
+      since(t);
+      expect(pass(t)).toBe(false);
+      const rows = approximateRows(t);
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(String(rows[0]!.body_json)).error).toMatchObject({ code: "run-usage-not-settleable", message: "run-usage-not-settleable:released-handoff" });
+      expect(t.body(runId).unknown.work).toBe(true);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  });
+
   it("O17: saved-result verification and recovery runs are out of scope", async () => {
     const { t, runId, driver } = await loopUnknown({ tokenPolicy: "optional-v1", floor: 500 }); try {
       since(t);
