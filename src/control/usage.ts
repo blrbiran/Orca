@@ -44,11 +44,13 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
           // Tester round 2 spec §4.2.1 (ruling H1): an estimate run's breach is recorded on the run only, too -- it is
           // advice, and never changes the group's status. §4.2.5 (N3): its non-token excess grows the group's limit.
           const estimateRun=(run as {phase?:string}).phase==="estimate";
+          // Quota rest probe spec 2026-11-06 §2 "No over-grant block": a probe's breach is recorded on the run only.
+          const probeRun=(run as {phase?:string;purpose?:string}).phase==="single-call"&&(run as {purpose?:string}).purpose==="quota-probe";
           if(estimateRun)growForEstimateOverrun(store,group as never,run,next.eventSeq,appliedAt);
           // Session 3cfc2e73 D2 (spec 2026-11-05 §3.2): a Web group with no token limit is not blocked by any dimension's
           // breach -- the breach stays recorded on the run (RunViewV1.overGrant). A limited group still blocks.
           const unlimitedWeb="planHash" in group&&(group as {limit?:{tokens?:number|null}}).limit?.tokens===null;
-          if((group as {status?:string}).status!=="clarifying"&&!estimateRun&&!unlimitedWeb){if("planHash" in group)group.status="blocked";else group.stopped=true;}
+          if((group as {status?:string}).status!=="clarifying"&&!estimateRun&&!probeRun&&!unlimitedWeb){if("planHash" in group)group.status="blocked";else group.stopped=true;}
         }
       }
       run.highWater=next.eventSeq;

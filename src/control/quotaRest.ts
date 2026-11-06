@@ -75,19 +75,31 @@ interface RunRow { runId: string; installation: string; at: number; quota: boole
 
 /** Every installation resting at `now`, from the task runs in store order. */
 export function installationRests(store: ControlStore, now: number): Map<string, InstallationRest> {
+  const rests = new Map<string, InstallationRest>();
+  for (const [installation, streak] of installationStreaks(store)) if (streak.rest !== null && streak.rest.until > now) rests.set(installation, streak.rest);
+  return rests;
+}
+
+/**
+ * Quota rest probe spec 2026-11-06 §2: per installation, its last quota streak's rest -- also one that has ended (`until`
+ * may be past) -- and when a run on it last succeeded (null: never). A `quota-probe` run whose verdict is `back` counts
+ * as a success (the provider answered); one whose verdict is `quota` carries the typed cause on its drive record and
+ * counts as a quota failure, as a task run does.
+ */
+export function installationStreaks(store: ControlStore): Map<string, { rest: InstallationRest | null; lastSuccessAt: number | null }> {
   const rows: RunRow[] = [];
-  for (const row of store.db.prepare("SELECT id, body FROM runs WHERE json_extract(body,'$.drive.failureCause.cause')='quota' OR json_extract(body,'$.drive.outcome')='succeeded' ORDER BY rowid").all()) {
-    let body: { agent?: { agent?: unknown }; endedAt?: unknown; drive?: { outcome?: unknown; failureCause?: { cause?: unknown; detail?: unknown } } };
+  for (const row of store.db.prepare("SELECT id, body FROM runs WHERE json_extract(body,'$.drive.failureCause.cause')='quota' OR json_extract(body,'$.drive.outcome')='succeeded' OR json_extract(body,'$.probeVerdict.verdict')='back' ORDER BY rowid").all()) {
+    let body: { agent?: { agent?: unknown }; endedAt?: unknown; probeVerdict?: { verdict?: unknown }; drive?: { outcome?: unknown; failureCause?: { cause?: unknown; detail?: unknown } } };
     try { body = JSON.parse(String(row.body)); } catch { continue; }
     const installation = body.agent?.agent;
     if (typeof installation !== "string") continue;
-    const quota = body.drive?.failureCause?.cause === "quota", succeeded = body.drive?.outcome === "succeeded";
+    const quota = body.drive?.failureCause?.cause === "quota", succeeded = body.drive?.outcome === "succeeded" || body.probeVerdict?.verdict === "back";
     if (!quota && !succeeded) continue;
     const ended = typeof body.endedAt === "number" ? body.endedAt : Number(store.db.prepare("SELECT MAX(at) AS at FROM activity WHERE run_id=?").get(String(row.id))?.at ?? 0);
     const detail = typeof body.drive?.failureCause?.detail === "string" ? body.drive.failureCause.detail : null;
     rows.push({ runId: String(row.id), installation, at: ended, quota, succeeded, detail });
   }
-  const rests = new Map<string, InstallationRest>();
+  const streaks = new Map<string, { rest: InstallationRest | null; lastSuccessAt: number | null }>();
   const byInstallation = new Map<string, RunRow[]>();
   for (const row of rows) byInstallation.set(row.installation, [...(byInstallation.get(row.installation) ?? []), row]);
   for (const [installation, list] of byInstallation) {
@@ -96,11 +108,12 @@ export function installationRests(store: ControlStore, now: number): Map<string,
     const lastSuccess = list.map((row) => row.succeeded).lastIndexOf(true);
     const streak = list.slice(lastSuccess + 1).filter((row) => row.quota);
     const last = streak.at(-1);
-    if (last === undefined) continue;
+    const lastSuccessAt = lastSuccess < 0 ? null : list[lastSuccess]!.at;
+    if (last === undefined) { streaks.set(installation, { rest: null, lastSuccessAt }); continue; }
     const named = parseResetAt(last.detail, last.at);
     const vendor = named === null ? null : Math.min(named, last.at + REST_VENDOR_CAP_MS);
     const until = vendor ?? last.at + Math.min(REST_CAP_MS, REST_DEFAULT_MS * 2 ** Math.min(streak.length - 1, 10));
-    if (until > now) rests.set(installation, { installation, until, source: vendor === null ? "default" : "vendor", runId: last.runId, since: streak[0]!.at, detail: last.detail });
+    streaks.set(installation, { rest: { installation, until, source: vendor === null ? "default" : "vendor", runId: last.runId, since: streak[0]!.at, detail: last.detail }, lastSuccessAt });
   }
-  return rests;
+  return streaks;
 }

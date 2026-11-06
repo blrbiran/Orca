@@ -372,7 +372,7 @@ export const dispatchEnvelopeSchema = z
     schema: z.literal("orca-dispatch-envelope-v1"),
     phase: z.enum(["estimate", "work", "handoff", "single-call"]),
     /** N1 DR1: what a `single-call` phase claim is for; an estimate's stored envelope has none. Flow engine §6.2: a flow run's. */
-    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage"]).optional(),
+    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage", "quota-probe"]).optional(),
     groupId: idSchema,
     workItemId: idSchema,
     runId: idSchema,
@@ -1757,7 +1757,7 @@ export const workItemViewSchema = z
 
 // Issue-fixes spec §5.2 (ruling H5): one row of Orca's activity record as the views show it (src/control/activity.ts).
 export const activityKindSchema = z.enum([
-  "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done",
+  "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -1791,7 +1791,8 @@ export const runViewSchema = z
     ]),
     phase: z.enum(["estimate", "work", "handoff", "single-call"]),
     // N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase.
-    purpose: z.enum(["clarify", "split"]).optional(),
+    // Quota rest probe spec 2026-11-06: a group's probe call (quotaProbeCall.ts) shows among its runs.
+    purpose: z.enum(["clarify", "split", "quota-probe"]).optional(),
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,

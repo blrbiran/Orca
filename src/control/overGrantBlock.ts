@@ -17,6 +17,8 @@ export function overGrantBlockRuns(db: DatabaseSync, groupId: string): string[] 
     const run = JSON.parse(String(row.body)) as { phase?: unknown; purpose?: unknown; breaches?: unknown };
     if (!Array.isArray(run.breaches) || run.breaches.length === 0 || run.phase === "estimate") continue;
     if (run.phase === "single-call" && (run.purpose === "clarify" || run.purpose === "split")) continue;
+    // Quota rest probe spec 2026-11-06 §2: a probe's breach never blocks its group (usage.ts).
+    if (run.phase === "single-call" && run.purpose === "quota-probe") continue;
     runIds.push(String(row.id));
   }
   return runIds.sort();

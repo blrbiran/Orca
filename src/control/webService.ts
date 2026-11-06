@@ -28,7 +28,7 @@ import { estimatorSlotFor, importControlPlanAsync, rejectedEstimatorRequest, typ
 import { readAgentPreferences } from "./agentPreferences.js";
 import { applyAgentSwitch, AUTO_AGENT, resolveAgentSwitch, unlockedAgent } from "./agentSwitch.js";
 import { frozenWorkAgent } from "./agentFreeze.js";
-import { failoverTargets, installationRests } from "./quotaRest.js";
+import { failoverTargets, installationRests, installationStreaks } from "./quotaRest.js";
 import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
 import { allWork, effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
@@ -59,7 +59,8 @@ import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
 import { writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
+import { claimQuotaProbeInTransaction, probeStateOf, quotaProbeWorkItemId } from "./quotaProbeCall.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -795,7 +796,7 @@ export class WebControlService {
    * outside the retry ladder (`quota` is ladder-exempt). With nothing to switch to the task stays as it is: the quota wait,
    * if set for the installation, or the person. A listing that fails skips this pass.
    */
-  private async failoverPass(out: { redispatched: string[] }): Promise<void> {
+  private async failoverPass(out: { redispatched: string[] }, unmoved: Set<string> = new Set()): Promise<void> {
     const candidates = failoverCandidates(this.store);
     if (candidates.length === 0) return;
     let listed: string[];
@@ -811,6 +812,8 @@ export class WebControlService {
       // Independent review (session e2ad4802): a target ccloop cannot resolve now is skipped for this pass without booking
       // anything, so the next one is tried and a transient failure is not final; the group revision is read after the
       // resolution, so a command in between does not book a revision conflict; one candidate's error never stops the pass.
+      // Quota rest probe spec 2026-11-06 §2 Scope 2: a candidate this pass booked nothing for was not moved.
+      unmoved.add(candidate.runId);
       try {
         for (const to of failoverTargets(order, listed, rests, candidate.installation)) {
           let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
@@ -822,6 +825,7 @@ export class WebControlService {
             expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
             payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
           });
+          unmoved.delete(candidate.runId);
           if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
           break;
         }
@@ -829,6 +833,68 @@ export class WebControlService {
         process.stderr.write(`orca: failover ${candidate.groupId}/${candidate.taskId}: ${error instanceof Error ? error.message : String(error)}\n`);
       }
     }
+  }
+  /**
+   * Quota rest probe spec 2026-11-06 §2 (human: 「都同意按你的建议走」): after failover, a quota-failed task failover did
+   * not move, on an installation whose rest ended and that is not set to wait, is retried once on it -- at once when a run
+   * on it succeeded since the failure (the shortcut), else after one small probe call per installation and rest end
+   * (keyed by the streak's last quota run) answered. A probe that hit quota again starts the next rest; any other probe
+   * failure leaves the task for the person, recorded once on the failed run (activity `quota-probe`). One candidate's
+   * error never stops the pass.
+   */
+  private quotaProbePass(out: { redispatched: string[] }, unmoved: ReadonlySet<string>): void {
+    const settings = readOrchestrationSettings(this.store);
+    const streaks = installationStreaks(this.store);
+    const resting = new Set([...streaks].filter(([, streak]) => streak.rest !== null && streak.rest.until > this.store.now()).map(([id]) => id));
+    const claimed = new Set<string>();
+    for (const candidate of quotaProbeCandidates(this.store, { waiting: new Set(settings.quotaWait ?? []), resting, unmoved })) {
+      try {
+        const streak = streaks.get(candidate.installation);
+        // The shortcut: a run on the installation succeeded after this task's failed run -- the quota is back.
+        if (streak?.lastSuccessAt != null && streak.lastSuccessAt > candidate.failedAt) { this.sendQuotaProbeRetry(candidate, out); continue; }
+        if (streak?.rest == null) continue;
+        const key = quotaProbeWorkItemId(candidate.installation, streak.rest.runId);
+        const state = probeStateOf(this.store, key);
+        if (state.kind === "pending") continue;
+        if (state.kind === "done") {
+          if (state.verdict.verdict === "back") { if (state.endedAt >= candidate.failedAt) this.sendQuotaProbeRetry(candidate, out); }
+          else if (state.verdict.verdict === "failed") this.noteQuotaProbe(candidate, "quota-probe-failed", { probeRunId: state.runId, cause: state.verdict.cause, errorCode: state.verdict.errorCode });
+          continue;
+        }
+        if (claimed.has(candidate.installation)) continue;
+        const release = this.deps.admissionGate?.enter();
+        let answer: ReturnType<typeof claimQuotaProbeInTransaction>;
+        try {
+          answer = this.store.transaction(() => claimQuotaProbeInTransaction(this.store, { groupId: candidate.groupId, taskId: candidate.taskId, installation: candidate.installation,
+            restRunId: streak.rest!.runId, failedRunId: candidate.runId, at: this.store.now() }));
+        } finally { release?.(); }
+        if (answer !== null && "unfunded" in answer) { this.noteQuotaProbe(candidate, `quota-probe-unfunded:${answer.unfunded}`, { key }); continue; }
+        if (answer !== null) { claimed.add(candidate.installation); recordProjectionChange(this.store, [candidate.groupId]); }
+      } catch (error) {
+        process.stderr.write(`orca: quota probe ${candidate.groupId}/${candidate.taskId}: ${error instanceof Error ? error.message : String(error)}\n`);
+      }
+    }
+  }
+  /** §2 The retry: sent only while the group is still a failover group and the task's current run is still the failed run. */
+  private sendQuotaProbeRetry(candidate: { groupId: string; taskId: string; runId: string }, out: { redispatched: string[] }): void {
+    const commandId = `orca-auto-quota-probe-retry-${candidate.taskId}-${candidate.runId}`;
+    if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(candidate.groupId, commandId) !== undefined) return;
+    if (!isFailoverGroup(this.store, candidate.groupId) || terminallyFailedRun(this.store, candidate.groupId, candidate.taskId)?.runId !== candidate.runId) return;
+    const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
+    const answer = this.retryTask({
+      schema: "orca-raw-command-v1", commandId, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision, verb: "retry-task",
+      target: { kind: "group", groupId: candidate.groupId }, payload: { taskId: candidate.taskId, runId: candidate.runId },
+    });
+    if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
+  }
+  /** Why a task stays with the person, once per failed run and reason, for the task page (as ladder-skipped). Never throws. */
+  private noteQuotaProbe(candidate: { groupId: string; taskId: string; runId: string }, reason: string, detail: Record<string, unknown>): void {
+    try {
+      this.mutate(() => this.store.transaction(() => {
+        if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='quota-probe' AND json_extract(body,'$.reason')=?").get(candidate.runId, reason) !== undefined) return;
+        recordActivity(this.store, { groupId: candidate.groupId, taskId: candidate.taskId, runId: candidate.runId, kind: "quota-probe", body: { reason, ...detail } });
+      }));
+    } catch (error) { process.stderr.write(`orca-control: quota-probe note for ${candidate.runId}: ${String(error)}\n`); }
   }
   /**
    * Quota failover spec §3 Route (registered "Not built" in the 2026-11-05 plan; session 3cfc2e73): before a start wake is
@@ -875,7 +941,9 @@ export class WebControlService {
   }
   async systemDebugPass(): Promise<{ redispatched: string[]; opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
     const out = { redispatched: [] as string[], opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
-    await this.failoverPass(out);
+    const unmoved = new Set<string>();
+    await this.failoverPass(out, unmoved);
+    this.quotaProbePass(out, unmoved);
     // Failure-cause spec 2026-10-21 §5: a quota failure on an installation set to wait is retried once per failed run, as
     // orca-auto, after the re-probe interval; the retry's ledger row and its task-retried activity are its record.
     for (const candidate of quotaWaitCandidates(this.store, new Set(readOrchestrationSettings(this.store).quotaWait ?? []), this.store.now())) {

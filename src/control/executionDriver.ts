@@ -1158,7 +1158,8 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
   // N1 spec §8.3: a purpose that must read the target repository to judge its output does so before the transaction.
   // §4.5: "the call failed" means outcome !== complete; the handler is told ccloop's (normalised) code, rawOutput is unchanged.
   const failure = record.outcome === "complete" ? null : normalizeSingleCallErrorCode(record.errorCode);
-  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput, failure);
+  const settled = handler.evaluate === undefined ? rawOutput
+    : await handler.evaluate(deps, run, rawOutput, failure, { outcome: record.outcome, failureCause: record.failureCause ?? null });
   try {
     // Spec 2026-10-27 single-call unknown usage §9 R2: one commit, shared with a person's usage settlement.
     handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, singleCallCommitTerminal(store, run), failure);
@@ -1180,7 +1181,9 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
       }
       // Same spec O1, R4: ccloop's lower bound stays on the blocked run for the view and the settlement marker.
       const bound = record.usageLowerBound === undefined ? {} : { singleCallUsageLowerBound: record.usageLowerBound };
-      blockRun(deps, runId, "C", reason, {}, bound);
+      // Quota probe spec 2026-11-06 §2 Outcome: a purpose may keep what its record told, though the usage is unknown.
+      const kept = handler.blockedRunFields?.(settled, (deps.now?.() ?? new Date()).getTime()) ?? { run: {}, drive: {} };
+      blockRun(deps, runId, "C", reason, kept.drive, { ...bound, ...kept.run });
       return true;
     }
     if (error instanceof ControlError && error.code === "handoff-request-conflict" && error.detail === "estimate-yields-to-handoff") return false;

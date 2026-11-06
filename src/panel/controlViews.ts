@@ -42,6 +42,7 @@ import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
+import { QUOTA_PROBE_MAX_OUTPUT_TOKENS } from "../control/quotaProbeCall.js";
 import { CLARIFY_CAPS } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { activeChain, chainRounds } from "../control/clarifyChain.js";
@@ -219,7 +220,7 @@ const persistedRunSchema = z.object({
   predecessorRunId: idSchema.optional(),
   phase: z.enum(["estimate", "work", "handoff", "single-call"]),
   // N1 DR1: a `single-call` run names its purpose, and the overview its prompt was built from once A2 stored it.
-  purpose: z.enum(["clarify", "split"]).optional(),
+  purpose: z.enum(["clarify", "split", "quota-probe"]).optional(),
   overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
   claimOrdinal: safeInteger.positive().nullable(),
   // Quota failover spec 2026-11-03 §8: the task's switch count at this claim (agentSwitch.ts).
@@ -1062,7 +1063,8 @@ function outputBoundView(store: ControlStore, groupId: string, run: { runId: str
   let bound: number;
   if (run.phase === "estimate") {
     try { bound = readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens; } catch { return blocked(`run-estimate-contract:${run.runId}`); }
-  } else bound = readRequirementGroup(store, groupId).requirement.maxOutputTokens;
+  } else if ((run as { purpose?: string }).purpose === "quota-probe") bound = QUOTA_PROBE_MAX_OUTPUT_TOKENS;
+  else bound = readRequirementGroup(store, groupId).requirement.maxOutputTokens;
   // Task 12 review fix 2: byModel is cumulative, so only the newest work event counts; without a breakdown there is no
   // observed output to compare (never an older event's breakdown).
   const event = store.db.prepare("SELECT body FROM usage_events WHERE run_id=? ORDER BY seq DESC").all(run.runId)
@@ -1097,7 +1099,12 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
 
     let profile: RunViewV1["profile"];
     let quotaRest: RunViewV1["quotaRest"];
-    if (run.phase === "single-call") {
+    if (run.phase === "single-call" && run.purpose === "quota-probe") {
+      // Quota rest probe spec 2026-11-06 §2: a probe runs on the failed task's own agent and profile, on its own work item.
+      if (run.taskId !== null || run.estimateId !== null || run.claimOrdinal !== null || run.handoffProfile !== null
+        || !run.workItemId.startsWith("quota-probe-") || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-quota-probe-identity:${runId}`);
+      profile = profileView(run.executionProfile);
+    } else if (run.phase === "single-call") {
       // N1 DR26: a clarify or split call of the requirement this group was, frozen with the requirement's profile and agent.
       const requirement = readRequirementGroup(store, groupId).requirement;
       if (run.taskId !== null || run.estimateId !== null || run.claimOrdinal !== null || run.handoffProfile !== null || run.purpose === undefined

@@ -398,6 +398,37 @@ export function failoverCandidates(store: ControlStore): Array<{ groupId: string
 }
 
 /**
+ * Quota rest probe spec 2026-11-06 §2 Scope: an orchestrated group's task (the groups failoverCandidates reads) whose
+ * current run ended with cause `quota` on installation I, where I is not set to wait (quotaWait keeps today's retry), I
+ * is not resting at `now`, and failover did not move it -- its source may not be switched; or a failover command for the
+ * run was refused; or, with none booked, this pass's failoverPass tried it and moved nothing (`unmoved`: no target, or
+ * none resolved). A switchable task with no command and not in `unmoved` is failover's, never a probe's. `failedAt`:
+ * when the failed run ended (its endedAt, else its last activity).
+ */
+export function quotaProbeCandidates(store: ControlStore, input: { waiting: ReadonlySet<string>; resting: ReadonlySet<string>; unmoved: ReadonlySet<string> }): Array<{ groupId: string; taskId: string; runId: string; installation: string; failedAt: number }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; installation: string; failedAt: number }> = [];
+  for (const row of store.db.prepare(`SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
+    const groupId = String(row.id);
+    if (!isFailoverGroup(store, groupId)) continue;
+    for (const { id: taskId, work } of tasksOf(store, groupId)) {
+      const run = terminallyFailedRun(store, groupId, taskId) as (ReturnType<typeof terminallyFailedRun> & { agent?: { agent?: unknown }; endedAt?: unknown }) | null;
+      if (run === null || run.drive?.failureCause?.cause !== "quota" || typeof run.agent?.agent !== "string") continue;
+      const installation = run.agent.agent;
+      if (input.waiting.has(installation) || input.resting.has(installation)) continue;
+      const source = (work as { agentProvenance?: { agent?: unknown } }).agentProvenance?.agent;
+      if (typeof source === "string" && SWITCHABLE_AGENT_SOURCES.has(source)) {
+        // A booked command's status is HTTP-like (commandLedger.ts): 400 and above is a refusal.
+        const booked = store.db.prepare("SELECT original_status AS status FROM commands WHERE group_id=? AND id=?").get(groupId, failoverCommandId(taskId, run.runId));
+        if (booked === undefined ? !input.unmoved.has(run.runId) : !(Number(booked.status) >= 400)) continue;
+      }
+      const failedAt = typeof run.endedAt === "number" ? run.endedAt : Number(store.db.prepare("SELECT MAX(at) AS at FROM activity WHERE run_id=?").get(run.runId)?.at ?? 0);
+      out.push({ groupId, taskId, runId: run.runId, installation, failedAt });
+    }
+  }
+  return out;
+}
+
+/**
  * Quota failover spec §3 Route (session 3cfc2e73): whether orca-auto may route `groupId`'s tasks off a resting installation
  * before their first claim -- the groups failoverCandidates reads (orchestrated, not a flow child, not archived, not stopped).
  */

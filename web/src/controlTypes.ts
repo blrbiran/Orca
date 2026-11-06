@@ -396,7 +396,7 @@ export type RunViewV1 = {
   state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "collected" | "landed" | "reconciling" | "blocked";
   phase: "estimate" | "work" | "handoff" | "single-call";
   /** N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase. */
-  purpose?: "clarify" | "split";
+  purpose?: "clarify" | "split" | "quota-probe";
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
   profile: ProfileBindingV1;
@@ -566,7 +566,7 @@ export type EvidenceManifestV1 = {
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
 };
 /** Issue-fixes spec §5.2: one row of Orca's activity record. */
-export type ActivityKindV1 = "usage-settled" | "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived" | "correction-closed" | "debug-open-failed" | "ladder-skipped" | "group-done";
+export type ActivityKindV1 = "usage-settled" | "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived" | "correction-closed" | "debug-open-failed" | "ladder-skipped" | "group-done" | "quota-probe";
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
 /** GET /api/control/runs/:runId/activity -- the run's newest 200 rows, newest first. */
 export type RunActivityV1 = { schema: "orca-run-activity-v1"; runId: string; entries: ActivityEntryV1[] };

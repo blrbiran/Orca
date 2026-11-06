@@ -23,6 +23,7 @@ import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from 
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
+import { interruptQuotaProbe } from "./quotaProbeCall.js";
 import type { SettleSingleCallUsage } from "./singleCallSettlement.js";
 import { dispatchEnvelopeSchema, RECOVERY_WAITING_ON, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
@@ -961,6 +962,8 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   // ledger (never releaseCommitment, which needs a proposal; survey S28).
   // Flow engine spec §6.2: a flow run's call gives its grant back to the parent and the pool, and its execution learns it.
   if (purpose !== null && purpose !== "estimate" && isFlowCallRun(run)) { interruptFlowCall(store, settled as never); return; }
+  // Quota rest probe spec 2026-11-06 §2: a stopped probe gives its grant back to its group; aborted is not an outcome.
+  if (purpose === "quota-probe") { interruptQuotaProbe(store, settled as never); return; }
   if (purpose !== null && purpose !== "estimate") { interruptRequirementCall(store, groupId, settled as never); return; }
   const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
   if(hasTokenPolicy(store,groupId)&&purpose===null&&outcome!=="settled-restartable") {

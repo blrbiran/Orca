@@ -11,12 +11,16 @@ import type { WorkspaceRoots } from "./workspace.js";
 import { completeEstimateInStore, completeEstimateInTransaction } from "./estimateSettlement.js";
 import { ControlError } from "./errors.js";
 import { CLARIFY_HANDLER, SPLIT_HANDLER } from "./requirementCalls.js";
+import { QUOTA_PROBE_HANDLER } from "./quotaProbeCall.js";
+import type { DriveRecord } from "./driveRecord.js";
 
 /**
  * N1 spec §5.1: each purpose registers four things -- build the request and prompt, the JSON schema, classify the output,
  * complete in the store. Claim plumbing, the protocol-3 envelope, steps A1/A2/B/Ce, the record check, accounting,
  * handoff-stop, stop intents and recovery are written once, in the driver, for every single call.
  */
+/** What Ce read in ccloop's single-call record besides the output and the normalised code. */
+export interface SingleCallRecordFacts { outcome: "complete" | "aborted" | "failed"; failureCause: { cause: string; detail: string | null } | null }
 export interface SingleCallRequest { prompt: string; responseSchema: Record<string, unknown>; maxOutputTokens: number }
 export interface SingleCallRunRow { runId: string; groupId: string; workItemId: string; estimateId?: unknown; purpose?: unknown; [key: string]: unknown }
 /** What A2 of a single call may use besides the store (phase 2's purposes read the target repository through it). */
@@ -39,8 +43,11 @@ export interface SingleCallHandler {
   readonly purpose: SingleCallPurpose;
   /** A2: the prompt, the hand-written response schema and the output cap -- or the reason the run is blocked at A2. */
   prepare(deps: SingleCallPrepareDeps, run: SingleCallRunRow): Promise<SingleCallRequest | { blocked: string }>;
-  /** Ce, before the transaction: work that reads outside the store (the target repository); its result reaches `complete`. */
-  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown, failure?: string | null): Promise<unknown>;
+  /**
+   * Ce, before the transaction: work that reads outside the store (the target repository); its result reaches `complete`.
+   * `facts` (quota probe spec 2026-11-06 §2 Outcome): ccloop's record outcome and its typed cause, when it names one.
+   */
+  evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown, failure?: string | null, facts?: SingleCallRecordFacts): Promise<unknown>;
   /** Ce: the purpose's own classifier of the raw output (code, never the model). */
   readonly classify: (...args: never[]) => unknown;
   /** Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back. */
@@ -50,6 +57,11 @@ export interface SingleCallHandler {
    * transaction of its own); `complete` wraps it. Absent: the purpose's call cannot be settled by a person (flow calls, R1).
    */
   completeInTransaction?(store: ControlStore, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
+  /**
+   * Quota probe spec 2026-11-06 §2 Outcome: what a run blocked at C on unknown usage keeps of `evaluate`'s result, on the
+   * run and its drive record (a probe's verdict is known from the record even when its usage is not). Absent: nothing.
+   */
+  blockedRunFields?(settled: unknown, at: number): { run: Record<string, unknown>; drive: Partial<DriveRecord> };
   /** Ce: the block reason when the call's usage is not known (completion answered run-stop-unconfirmed). */
   readonly usageUnknownReason: string;
 }
@@ -95,7 +107,7 @@ const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpos
 const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.freeze({
   estimate: ESTIMATE, clarify: CLARIFY_ANY, split: SPLIT_HANDLER,
   "flow-draft": flowHandler("flow-draft"), "flow-review": flowHandler("flow-review"), "flow-ask": flowHandler("flow-ask"), "rerun-proposal": flowHandler("rerun-proposal"),
-  "feedback-triage": flowHandler("feedback-triage"),
+  "feedback-triage": flowHandler("feedback-triage"), "quota-probe": QUOTA_PROBE_HANDLER,
 });
 
 export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {
