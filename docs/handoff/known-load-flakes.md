@@ -216,3 +216,15 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › web 多个轮询类（`resultsApp`、`overviewDecisionNavigation`、`projectScope*`、`requirementsApp` 等 18 个文件） | 负载约 125 时 37 条红；负载 16 时 247/247 两边全绿 |
 | ccloop › `updates`、`savedResultRecovery.native`、`phasesCompleted`、`skillsController`、`setupCommands`（time limit）、`extractFinalObject`（3 s perf）、`parseArgs` | 负载 50–116 时红；未改动 963b856 上同形状或更多；负载约 10 单跑分支 39/39 绿 |
 | **不是 flake** › Orca 90 个文件加载失败（`TypeError … 'attempts'`）与 25 条 `multiDir*`（`multi-dir-precheck-failed`，`… reading '_parse'`） | 真回归：`webDispatch.ts`／`stopIntent.ts` 新加对 `groupEdges` 的静态 import 改变了控制模块 import 环的求值顺序。`git bisect` 定位，修在 `fix(control): the default allocations live in a leaf module…` 与 `fix(control): start and resume get the prerequisite reader from webService…`。**教训：控制模块（estimator→commands→fundedAllowance→budget→stopIntent→webDispatch→…）上不要新加静态 import，函数经 deps 传入；改完必跑按改动选测试的整套** |
+
+### 会话 `86352010`（2026-11-06，八个门、五个实施 agent 并行；负载 10–150）
+
+> 每条都在分支与**未改动 main 的 clone** 上交替单跑对照过（台账 `.superpowers/sdd/2026-11-06-session-86352010/progress.md`）。新见的环境假红一并记下。
+
+| 测试 | 形状与判别 |
+|---|---|
+| Orca › worktree 里约 30 个面板测试文件（`controlMount`、`integrationApi`、`person`、`controlSocket*` 等）`panel-dist-missing` | **环境，不是 flake**：worktree 里没有 `web/dist`。`ln -s <主仓>/web/dist web/dist` 后 30/30 绿 |
+| Orca › `tests/control/handoffE2E.test.ts`（`afterAll` hook 10 s 超时；H2 wait timed out；H5 `['collected','collected']`）、`multiDirLandingD`「swaps nothing…」(`'C'` vs `'D'`) | 负载 20–60 时红；单跑 18/18 绿 |
+| Orca › `driverReconcile`／`driverReconcileN`（`ENOTEMPTY`、deadline）、`multiDirDue`、`schedulerBridge`（30 s）、`panel/chainsApi` C1（500）、`flow/startForm`（timeout／`fetch failed`／ECONNRESET）、`taskResultPaired`（revision） | 负载 28–150 时红；单跑两边全绿；`startForm` 在未改动 main 的 fresh clone 上也红过 |
+| Orca › `tests/setup/relocateUserData.ts` 报真实 `~/.orca` 被写 | **不是测试写的**：是 7777 的 launchd 服务在跑时自己写 `control.sqlite`／日志；持有者 pid 可查（`lsof`） |
+| ccloop › `savedResultRecovery.native`（`ENOTEMPTY`、worker did not seal、30 s）、`phasesCompleted`、`setupRunLoop` continuation、`endToEnd`、`ompPhase` grandchild、`cli`／`endToEnd`（main clone 软链依赖时两边都挂） | 负载 40–110；与未改动 main clone 交替单跑，两边同形 |
