@@ -10,6 +10,7 @@ import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bind
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody, planLibraryImportBody } from "./controlApi.js";
 import { bindControlSocket, buildControlSocketApp, controlSocketPath, type ControlSocketHandle } from "./controlSocket.js";
+import { CONTROL_SOCKET_MAX_BYTES, CONTROL_SOCKET_NAME } from "./controlSocketPath.js";
 import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
 import { migrateAgentTimeouts } from "../agents/timeoutMigration.js";
@@ -343,7 +344,10 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     if ("code" in bound) {
       // Plan D13: a service with no socket would answer `status` as not running forever; exit 78 instead.
       if (mode.service === true) throw await bindFailed(`control socket: ${bound.code}: ${bound.detail}`);
-      process.stderr.write(`orca-panel: control socket unavailable: ${bound.code}: ${bound.detail}\n`);
+      // Agent entry spec §3 (line 57): the foreground panel still starts and serves the Web UI. Dogfood run 3 F13 (session
+      // 86352010): the line also says what that costs -- no CLI or MCP reaches this panel -- and, for a long path, the fix.
+      const fix = bound.code === "control-socket-path-too-long" ? `; use a --control-state-dir whose ${CONTROL_SOCKET_NAME} path is at most ${CONTROL_SOCKET_MAX_BYTES} bytes` : "";
+      process.stderr.write(`orca-panel: control socket unavailable: ${bound.code}: ${bound.detail}. The orca CLI and MCP cannot reach this panel; only the Web UI is served${fix}\n`);
     } else socket = bound;
   }
 

@@ -7,3 +7,5 @@ const SUN_PATH_BYTES = process.platform === "darwin" ? 104 : 108;
 
 export const controlSocketPath = (stateDir: string): string => join(stateDir, CONTROL_SOCKET_NAME);
 export const socketPathTooLong = (path: string): boolean => Buffer.byteLength(path) >= SUN_PATH_BYTES;
+/** The longest socket path this platform binds, in bytes (sun_path less its NUL). */
+export const CONTROL_SOCKET_MAX_BYTES = SUN_PATH_BYTES - 1;

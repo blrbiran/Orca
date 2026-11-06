@@ -99,6 +99,9 @@ describe("the control socket (spec §3)", () => {
     const panel = trackSocketPanel(await createPanelServer(opts, w.env));
     expect(panel.socketPath).toBe(null);
     expect(lines.join("")).toContain("control-socket-path-too-long");
+    // Dogfood run 3 F13 (session 86352010): the line names the consequence and the fix, not only the code.
+    // mutation: restore the bare `unavailable: <code>: <detail>` line -> red
+    expect(lines.join("")).toContain(`. The orca CLI and MCP cannot reach this panel; only the Web UI is served; use a --control-state-dir whose control.sock path is at most ${process.platform === "darwin" ? 103 : 107} bytes\n`);
     const web = await (await sessionFor(panel, w.env)).fetch("/api/control/config");
     expect(web.status).toBe(200);
   });
