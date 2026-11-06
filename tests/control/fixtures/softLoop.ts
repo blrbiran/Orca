@@ -36,8 +36,13 @@ export async function loopUnknown(options: { tasks?: Array<{ taskId: string; tok
 }
 
 /** A run handoff-stopped while working whose usage was never reported (handoffStopUnknownUsage.test.ts's shape). */
-export async function stoppedUnknown(tokenPolicy: "optional-v1" | undefined, tokenBudget: number | null) {
+export async function stoppedUnknown(tokenPolicy: "optional-v1" | undefined, tokenBudget: number | null, floor?: number) {
   const t = await driverHarness([{ taskId: "a", tokenBudget }] as never, { ...(tokenPolicy ? { tokenPolicy } : {}), killGraceMs: 0, behaviour: () => "stoppable-usage-unknown" });
+  if (floor !== undefined) {
+    const collect = t.fake.port.collect;
+    t.fake.port.collect = async (envelope, after) => ({ ...(await collect(envelope, after)), usageLowerBound: { tokens: floor } });
+    t.deps.router = createExecutionProfileRouter([resolveProfile(profileSnapshot(), t.fake.port)]);
+  }
   const driver = t.driver();
   const runId = await t.claim();
   await t.until(driver, () => t.body(runId).state === "accepted");

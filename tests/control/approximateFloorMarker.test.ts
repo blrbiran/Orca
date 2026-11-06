@@ -34,10 +34,10 @@ describe("approximate-floor marker", { timeout: 60_000 }, () => {
       expect(forged(t, runId, r => { r.usageSettlement.floorTokens += 1; r.usageApproximate.floorTokens += 1; })).toBe(false);
       // A person's principal on Orca's method.
       expect(forged(t, runId, r => { r.usageSettlement.principal = "user:x"; })).toBe(false);
-      // A handoff charge (with a receipt that agrees, so only the charge rule can refuse it).
+      // A handoff charge the run's cumulative does not carry (with a receipt that agrees): only the charge rule refuses it.
       const receipt = JSON.parse(String(t.h.store.db.prepare("SELECT body_json FROM commands WHERE id=?").get(id)!.body_json));
       receipt.result.charged.handoff.tokens = 1;
-      withRow(t, id, "body_json", JSON.stringify(receipt), () => expect(forged(t, runId, r => { r.usageSettlement.charged.handoff.tokens = 1; r.cumulative.handoff.tokens += 1; })).toBe(false));
+      withRow(t, id, "body_json", JSON.stringify(receipt), () => expect(forged(t, runId, r => { r.usageSettlement.charged.handoff.tokens = 1; })).toBe(false));
       withRow(t, id, "principal", "user:x", () => expect(valid(t, t.body(runId))).toBe(false));
       withRow(t, id, "verb", "settle-unknown-usage", () => expect(valid(t, t.body(runId))).toBe(false));
       expect(valid(t, t.body(runId))).toBe(true);

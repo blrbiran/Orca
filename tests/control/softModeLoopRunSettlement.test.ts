@@ -106,13 +106,13 @@ describe("soft mode: a loop run's unknown usage is booked at its floor by Orca",
   });
 
   it("O10: recovered optional-v1 -- the whole remainder is released as for a known-usage stop, then it continues", async () => {
-    const { t, runId, driver } = await stoppedUnknown("optional-v1", null); try {
+    const { t, runId, driver } = await stoppedUnknown("optional-v1", null, 700); try {
       since(t);
       const before = groupBody(t), remaining = t.body(runId).remaining, allocations = readBudgetProposal(t.h.store, "g").allocations.filter(a => a.ownerKind === "task");
       expect(pass(t)).toBe(true);
       const after = groupBody(t);
       expect(t.body(runId)).toMatchObject({ state: "settled-recoverable", recoverable: true, usageSettlement: { method: "approximate-floor", reservationDisposition: "recovered" } });
-      expect(after.used).toEqual(before.used);
+      expect(after.used).toEqual({ ...before.used, tokens: before.used.tokens + 700 });
       const released = { tokens: remaining.work.tokens ?? 0, activeMs: remaining.work.activeMs, attempts: remaining.work.attempts, sessions: remaining.work.sessions };
       for (const d of ["tokens", "activeMs", "attempts", "sessions"] as const) expect(after.reserved[d]).toBe(before.reserved[d] - released[d] - remaining.handoff[d]);
       expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "held", fundingReleased: true });
@@ -124,14 +124,15 @@ describe("soft mode: a loop run's unknown usage is booked at its floor by Orca",
   });
 
   it("O11: recovered finite-legacy -- the continuation is parked at the remainder after the floor", async () => {
-    const { t, runId, driver } = await stoppedUnknown(undefined, 99_000); try {
+    const { t, runId, driver } = await stoppedUnknown(undefined, 99_000, 700); try {
       unlimit(t, 8); const restore = estimatorSized(t, "a"); since(t);
       const before = groupBody(t), run = t.body(runId);
       expect(pass(t)).toBe(true);
       restore();
       const parked = t.body(runId).remaining;
       expect(t.body(runId).usageSettlement).toMatchObject({ method: "approximate-floor", reservationDisposition: "recovered" });
-      expect(parked.work.tokens).toBe(run.grant.work.tokens - run.cumulative.work.tokens);
+      expect(t.body(runId).cumulative.work.tokens).toBe(run.cumulative.work.tokens + 700);
+      expect(parked.work.tokens).toBe(run.grant.work.tokens - run.cumulative.work.tokens - 700);
       expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "held", grant: parked });
       expect(Object.fromEntries(readBudgetProposal(t.h.store, "g").allocations.filter(a => a.ownerKind === "task").map(a => [a.bucket, [a.state, a.amount]]))).toEqual({ work: ["held", parked.work], handoff: ["held", parked.handoff] });
       for (const d of ["tokens", "activeMs", "attempts", "sessions"] as const) expect(groupBody(t).reserved[d]).toBe(before.reserved[d] + parked.work[d] + parked.handoff[d]);
