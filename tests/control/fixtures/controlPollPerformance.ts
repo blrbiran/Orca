@@ -78,6 +78,9 @@ export async function buildControlPollFixture(options: {liveGroups:number;archiv
  checked(applySetAgentPreferences({store},{schema:"orca-raw-command-v1",commandId:"preferences",expectedRevision:0,actorId:"human",verb:"set-agent-preferences",target:{kind:"operator",operatorId:"human"},payload:{preferences:{defaultAgent:"codex",perAgent:{}}}}));
  const deps={store,port,profileRouter:router,admissionGate,now:()=>new Date(options.now),trustedConfig:{resolveTarget:()=>({repositoryPath:repo,planPath,validatePlanDescriptor(){}})},defaults:()=>({estimatorProfileId:"all",estimatorProfileHash:frozen.profileHash,estimateMode:"soft" as const})};
  const service=new WebControlService(deps);
+ // Ruling (session 86352010): 「这次批准改写所有必要的判据。」 D4 (session 3cfc2e73) queues an explicit start at the
+ // running-group cap (default 3, schema max 64); every live group here holds a current run, so the cap is the live count.
+ if(options.liveGroups>3)checked(service.setOrchestrationSettings({schema:"orca-raw-command-v1",commandId:"cap",expectedRevision:0,actorId:"human",verb:"set-orchestration-settings",target:{kind:"orchestration"},payload:{maxRunningGroups:options.liveGroups}} as never));
  const liveGroupIds=Array.from({length:options.liveGroups},(_,i)=>`live-${String(i).padStart(3,"0")}`), archivedGroupIds=Array.from({length:options.archivedGroups},(_,i)=>`archive-${String(i).padStart(3,"0")}`);
  try {
  const planTasks=[];
@@ -136,7 +139,9 @@ export function connectFixture(store:ControlStore,service:WebControlService,wake
  async dispose(){store.close();}}
 }
 export function assertMeasurementCoverage(fixture:ControlPollFixture):void {
- const m=fixture.manifest();assert.equal(m.liveGroups,100);assert.equal(m.archivedGroups,100);assert.equal(m.tasks,5000);assert.equal(m.dependencies,9700);assert.equal(m.runs,100);assert.equal(m.pendingTargetWakes,300);
+ // Ruling (session 86352010): 「这次批准改写所有必要的判据。」 64 live groups (the running-group cap's schema max, D4);
+ // was 100 / 5000 / 9700 / 100. Dependencies are 97 per 50-task group, as before.
+ const m=fixture.manifest();assert.equal(m.liveGroups,64);assert.equal(m.archivedGroups,100);assert.equal(m.tasks,64*50);assert.equal(m.dependencies,64*97);assert.equal(m.runs,64);assert.equal(m.pendingTargetWakes,300);
  for(const groupId of fixture.liveGroupIds) {
   const tasks=fixture.store.db.prepare("SELECT id,body FROM work_items WHERE group_id=? ORDER BY id").all(groupId);assert.equal(tasks.length,50);
   tasks.forEach((row,i)=>assert.deepEqual(JSON.parse(String(row.body)).dependsOn,[...dagTasks(50)[i].dependsOn].sort()));

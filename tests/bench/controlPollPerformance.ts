@@ -48,20 +48,23 @@ const sameIds=(actual:readonly {groupId:string}[],expected:readonly string[])=>a
 const epoch="performance-fixed-epoch",now=1791518400000;
 type Workload={name:string;prepare:()=>void;run:(handlers:WakeHandlers)=>unknown|Promise<unknown>;validate:(result:any)=>void;scope:Record<string,unknown>};
 export function makeWorkloads(f:ControlPollFixture):Workload[] {
- const store=f.store,all=[...f.liveGroupIds,...f.archivedGroupIds];let cursor=0;
+ // Ruling (session 86352010): 「这次批准改写所有必要的判据。」 Since D4 (session 3cfc2e73) at most maxRunningGroups (schema
+ // max 64) groups hold a current run, so the fixture seeds 64 live groups, not 100; every count below is derived from
+ // the fixture (L live, A archived, 50 tasks each) instead of the literals it used to be, with the same invariants.
+ const store=f.store,all=[...f.liveGroupIds,...f.archivedGroupIds],L=f.liveGroupIds.length,A=f.archivedGroupIds.length;let cursor=0;
  const full=(r:any)=>{assert.equal(r.resetRequired,true);sameIds(r.groups,all);};
  const insertWake=(groupId:string)=>store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?,?,'start',?,0)").run(`mixed:${groupId}`,groupId,JSON.stringify({groupId,startRevision:3}));
  return [
- {name:"full-reset",prepare(){},run:()=>readControlSummary(store,epoch,null),validate:full,scope:{groups:200,liveTasks:5000,archivedTasks:100,resetRequired:true}},
- {name:"forced-reset",prepare(){cursor=readProjectionState(store).changeSeq;},run:()=>readControlSummary(store,epoch,cursor,true),validate:full,scope:{groups:200,liveTasks:5000,archivedTasks:100,resetRequired:true,forceComplete:true}},
- {name:"retention-reset",prepare(){cursor=readProjectionState(store).changeSeq;for(let i=0;i<projectionJournalRetention+1;i++)store.transaction(()=>recordActivity(store,{groupId:f.liveGroupIds[0],kind:"command",body:{retention:i}}));},run:()=>readControlSummary(store,epoch,cursor),validate:full,scope:{groups:200,liveTasks:5000,archivedTasks:100,resetRequired:true,transactions:projectionJournalRetention+1}},
- {name:"all-live-changed-incremental",prepare(){cursor=readProjectionState(store).changeSeq;store.transaction(()=>{for(const groupId of f.liveGroupIds)recordActivity(store,{groupId,kind:"command",body:{benchmark:"changed"}});});assert.equal(readProjectionState(store).changeSeq,cursor+1);},run:()=>readControlSummary(store,epoch,cursor),validate(r){assert.equal(r.resetRequired,false);sameIds(r.groups,f.liveGroupIds);},scope:{groups:100,tasks:5000,resetRequired:false,changeTransactions:1,changedGroups:100}},
+ {name:"full-reset",prepare(){},run:()=>readControlSummary(store,epoch,null),validate:full,scope:{groups:L+A,liveTasks:L*50,archivedTasks:A,resetRequired:true}},
+ {name:"forced-reset",prepare(){cursor=readProjectionState(store).changeSeq;},run:()=>readControlSummary(store,epoch,cursor,true),validate:full,scope:{groups:L+A,liveTasks:L*50,archivedTasks:A,resetRequired:true,forceComplete:true}},
+ {name:"retention-reset",prepare(){cursor=readProjectionState(store).changeSeq;for(let i=0;i<projectionJournalRetention+1;i++)store.transaction(()=>recordActivity(store,{groupId:f.liveGroupIds[0],kind:"command",body:{retention:i}}));},run:()=>readControlSummary(store,epoch,cursor),validate:full,scope:{groups:L+A,liveTasks:L*50,archivedTasks:A,resetRequired:true,transactions:projectionJournalRetention+1}},
+ {name:"all-live-changed-incremental",prepare(){cursor=readProjectionState(store).changeSeq;store.transaction(()=>{for(const groupId of f.liveGroupIds)recordActivity(store,{groupId,kind:"command",body:{benchmark:"changed"}});});assert.equal(readProjectionState(store).changeSeq,cursor+1);},run:()=>readControlSummary(store,epoch,cursor),validate(r){assert.equal(r.resetRequired,false);sameIds(r.groups,f.liveGroupIds);},scope:{groups:L,tasks:L*50,resetRequired:false,changeTransactions:1,changedGroups:L}},
  {name:"empty-incremental",prepare(){cursor=readProjectionState(store).changeSeq;},run:()=>readControlSummary(store,epoch,cursor),validate(r){assert.equal(r.resetRequired,false);assert.deepEqual(r.groups,[]);},scope:{groups:0,tasks:0,resetRequired:false}},
  {name:"one-group-detail",prepare(){},run:()=>readControlGroup(store,epoch,f.liveGroupIds[0]),validate(r){assert.equal(r.workItems.length,50);assert.equal(r.runs.length,1);},scope:{groups:1,tasks:50,currentRuns:1}},
- {name:"all-live-detail",prepare(){},run:()=>f.liveGroupIds.map(id=>readControlGroup(store,epoch,id)),validate(r){assert.equal(r.length,100);for(const view of r){assert.equal(view.workItems.length,50);assert.equal(view.runs.length,1);}},scope:{groups:100,tasks:5000,currentRuns:100}},
- {name:"replenish",prepare(){},run:()=>replenishStartWakes(f.driverDeps),validate(r){assert.deepEqual(r,["drive:live-000:1"]);},scope:{scannedGroups:200,armedGroups:1,armedTask:"t01"}},
- {name:"archived-only-pump",prepare(){},run:h=>deliverSchedulerWakes(store,h),validate(r){assert.deepEqual(r.delivered,[]);assert.equal(r.deferred.length,300);},scope:{pendingWakes:300,archivedGroups:100,kinds:["start","no-start","resume"]}},
- {name:"mixed-pump",prepare(){for(const id of f.liveGroupIds.slice(1))insertWake(id);},run:h=>deliverSchedulerWakes(store,h),validate(r){assert.deepEqual(r.delivered,f.liveGroupIds.slice(1).map(id=>`mixed:${id}`));assert.equal(r.deferred.length,300);},scope:{pendingWakes:399,archivedGroups:100,liveGroups:99,existingCurrentRuns:99}}
+ {name:"all-live-detail",prepare(){},run:()=>f.liveGroupIds.map(id=>readControlGroup(store,epoch,id)),validate(r){assert.equal(r.length,L);for(const view of r){assert.equal(view.workItems.length,50);assert.equal(view.runs.length,1);}},scope:{groups:L,tasks:L*50,currentRuns:L}},
+ {name:"replenish",prepare(){},run:()=>replenishStartWakes(f.driverDeps),validate(r){assert.deepEqual(r,["drive:live-000:1"]);},scope:{scannedGroups:L+A,armedGroups:1,armedTask:"t01"}},
+ {name:"archived-only-pump",prepare(){},run:h=>deliverSchedulerWakes(store,h),validate(r){assert.deepEqual(r.delivered,[]);assert.equal(r.deferred.length,3*A);},scope:{pendingWakes:3*A,archivedGroups:A,kinds:["start","no-start","resume"]}},
+ {name:"mixed-pump",prepare(){for(const id of f.liveGroupIds.slice(1))insertWake(id);},run:h=>deliverSchedulerWakes(store,h),validate(r){assert.deepEqual(r.delivered,f.liveGroupIds.slice(1).map(id=>`mixed:${id}`));assert.equal(r.deferred.length,3*A);},scope:{pendingWakes:3*A+L-1,archivedGroups:A,liveGroups:L-1,existingCurrentRuns:L-1}}
  ];
 }
 function hooks(f:ControlPollFixture) {
@@ -73,12 +76,12 @@ function hooks(f:ControlPollFixture) {
  return {handlers,reset(){handler=0;probe=0;accept=0;},snapshot:()=>({handler,probe,accept}),restore(){port.accept=original;}};
 }
 function assertOptimizedBounds(c:ReadCounters,name:string,f:ControlPollFixture) {
- const groups=name==="one-group-detail"?1:name==="empty-incremental"?0:100;
+ const L=f.liveGroupIds.length,A=f.archivedGroupIds.length,groups=name==="one-group-detail"?1:name==="empty-incremental"?0:L;
  if(["full-reset","forced-reset","retention-reset","all-live-changed-incremental","empty-incremental","one-group-detail","all-live-detail"].includes(name)) {
- for(const table of ["work_items","runs"]){const rows=c.executions.filter(r=>new RegExp(`SELECT .*body FROM ${table}\\b`).test(r.sql));assert.equal(rows.filter(r=>r.method==="get").length,0);assert.equal(rows.filter(r=>r.method==="all"&&/WHERE group_id=\?/.test(r.sql)).length,name.endsWith("reset")?200:groups);}
- const count=summarizeCounters(c);assert.ok(count.targetBodyParses<=(name.endsWith("reset")?5200:groups*51));for(const p of count.parses.filter(r=>r.aliases.every(a=>a.startsWith("work_items:")||a.startsWith("runs:"))))assert.ok(p.count<=p.aliases.length,JSON.stringify(p));
+ for(const table of ["work_items","runs"]){const rows=c.executions.filter(r=>new RegExp(`SELECT .*body FROM ${table}\\b`).test(r.sql));assert.equal(rows.filter(r=>r.method==="get").length,0);assert.equal(rows.filter(r=>r.method==="all"&&/WHERE group_id=\?/.test(r.sql)).length,name.endsWith("reset")?L+A:groups);}
+ const count=summarizeCounters(c);assert.ok(count.targetBodyParses<=(name.endsWith("reset")?L*50+L+A:groups*51));for(const p of count.parses.filter(r=>r.aliases.every(a=>a.startsWith("work_items:")||a.startsWith("runs:"))))assert.ok(p.count<=p.aliases.length,JSON.stringify(p));
  }
- if(name==="archived-only-pump"){assert.equal(summarizeCounters(c).groupBodyParses,100);assert.equal(c.executions.filter(r=>r.method==="get"&&r.sql==="SELECT body FROM groups WHERE id=?").length,100);}
+ if(name==="archived-only-pump"){assert.equal(summarizeCounters(c).groupBodyParses,A);assert.equal(c.executions.filter(r=>r.method==="get"&&r.sql==="SELECT body FROM groups WHERE id=?").length,A);}
 }
 async function main() {
  const args=process.argv.slice(2),arg=(key:string,fallback:string)=>{const i=args.indexOf(key);return i<0?fallback:args[i+1];};
@@ -86,7 +89,7 @@ async function main() {
  assert.ok(Number.isSafeInteger(warmup)&&warmup>=0&&Number.isSafeInteger(samples)&&samples>0);
  await mkdir(output,{recursive:true,mode:0o700});
  let f:ControlPollFixture;
- if(args.includes("--seed")){f=await buildControlPollFixture({liveGroups:100,archivedGroups:100,tasksPerGroup:50,now});await writeFile(snapshotPath,JSON.stringify(captureDatabase(f.store)),{mode:0o600});}else f=await openExistingControlPollFixture(now);
+ if(args.includes("--seed")){f=await buildControlPollFixture({liveGroups:64,archivedGroups:100,tasksPerGroup:50,now});await writeFile(snapshotPath,JSON.stringify(captureDatabase(f.store)),{mode:0o600});}else f=await openExistingControlPollFixture(now);
  try {
  const initial=JSON.parse(await readFile(snapshotPath,"utf8")) as SavedTable[];restoreDatabase(f.store,initial);assertMeasurementCoverage(f);
  const initialDigest=sha(captureDatabase(f.store));assert.equal(initialDigest,sha(initial));
@@ -94,7 +97,7 @@ async function main() {
  const manifest=f.manifest(),workloads=makeWorkloads(f),observations:any[]=[];
  // Install before any view or pump, including the first cached statement creation. Counter pass is separate.
  const counter=installControlReadCounters(f.store),h=hooks(f);
- try {for(const w of workloads){restoreDatabase(f.store,initial);w.prepare();counter.reset();h.reset();const value=await w.run(h.handlers);w.validate(value);const counts=counter.snapshot(),callCounts=h.snapshot();if(args.includes("--expect-optimized")){assertOptimizedBounds(counts,w.name,f);if(w.name==="archived-only-pump")assert.deepEqual(callCounts,{handler:0,probe:0,accept:0});if(w.name==="mixed-pump")assert.equal(callCounts.handler,99);}
+ try {for(const w of workloads){restoreDatabase(f.store,initial);w.prepare();counter.reset();h.reset();const value=await w.run(h.handlers);w.validate(value);const counts=counter.snapshot(),callCounts=h.snapshot();if(args.includes("--expect-optimized")){assertOptimizedBounds(counts,w.name,f);if(w.name==="archived-only-pump")assert.deepEqual(callCounts,{handler:0,probe:0,accept:0});if(w.name==="mixed-pump")assert.equal(callCounts.handler,f.liveGroupIds.length-1);}
  observations.push({name:w.name,scope:w.scope,counters:summarizeCounters(counts),calls:callCounts,output:normalizeOutput(value,f.canonicalRunIds),outputDigest:sha(normalizeOutput(value,f.canonicalRunIds)),effect:{pending:storePending(f.store),runs:f.manifest().runs}});}}
  finally{counter.restore();h.restore();}
  let replayEvidence:unknown=null;
