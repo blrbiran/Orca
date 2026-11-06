@@ -526,8 +526,12 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
         // is delivered idle; the pause is lifted and the answer says so. replenishStartWakes re-arms from the group's
         // earlier start wake once work becomes claimable (a retry, a new task).
         if (nothingToResume(store, groupId)) {
+          // Pause leaves earlier wakes in the table. Once no task or run can use one, retire it in this same command;
+          // otherwise it would still occupy a slot and its later delivery would silently answer idle (#172).
+          store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id=? AND delivered=0 AND kind IN ('start','no-start','resume')").run(groupId);
           deps.beforeCommit?.();
-          return commandSuccess(context, { kind: "resumed", operation: "resume-dispatch" });
+          return commandSuccess(context, { kind: "resumed", operation: "resume-dispatch",
+            ...(blockedRunWaiting(store, groupId) ? { waitingOn: "blocked-task" as const } : {}) });
         }
         // Review-exit spec 2026-11-05 §3.4 (D4): resuming a group that never started is its start, so it waits for a slot
         // as an explicit start does. A started group's claims wait in replenishStartWakes instead.
@@ -548,8 +552,13 @@ export function applyResumeDispatch(deps: StopDeps, command: ResumeDispatchComma
 
 function nothingToResume(store: ControlStore, groupId: string): boolean {
   if (store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) === undefined) return false;
-  if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined) return false;
+  // `blocked` is outside executionDriver's DRIVEN states; keep malformed rows conservative rather than hiding them.
+  if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1 AND (CASE WHEN json_valid(body) THEN json_extract(body,'$.state') END) IS NOT 'blocked'").get(groupId) !== undefined) return false;
   return continuationWakeBody(store, groupId) === null && nextClaimableTask(store, groupId) === null;
+}
+
+function blockedRunWaiting(store: ControlStore, groupId: string): boolean {
+  return store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1 AND json_valid(body) AND json_extract(body,'$.state')='blocked'").get(groupId) !== undefined;
 }
 
 /** Arm one ordinary ready-work dispatch claim for the group under `startRevision`. */

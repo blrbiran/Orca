@@ -147,13 +147,16 @@ export function runningGroupIds(store: ControlStore): string[] {
   // CASE json_valid: a body that does not parse holds no slot here (its own reads name it); json_extract would throw.
   const at = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column},'${path}') END`;
   const status = at("g.body", "$.status");
+  // A blocked run is terminal to the driver even while its row remains active for retry/settlement authority (#169/#172).
+  const runState = at("r.body", "$.state");
   // Flow engine spec §6.2: a flow run holds one slot, through its parent, while the run is running; its children hold none.
   return store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${at("g.body", "$.archived")} IS NULL AND ${flowRoleSql("g")} IS NOT 'child'
     AND NOT EXISTS (SELECT 1 FROM stop_intents s WHERE s.group_id=g.id AND s.mode='pause') AND (
     (${flowRoleSql("g")} = 'parent' AND EXISTS (SELECT 1 FROM flow_runs f WHERE f.group_id=g.id AND f.state='running')) OR
     (${status} NOT IN ('clarifying','draft') AND (
-      EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.active=1)
-      OR EXISTS (SELECT 1 FROM work_items i WHERE i.group_id=g.id AND ${at("i.body", "$.kind")}='task' AND ${at("i.body", "$.status")} IN (${busy})))) OR
+      EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.active=1 AND (${runState} IS NULL OR ${runState}<>'blocked'))
+      OR EXISTS (SELECT 1 FROM work_items i WHERE i.group_id=g.id AND ${at("i.body", "$.kind")}='task' AND ${at("i.body", "$.status")} IN (${busy})
+        AND NOT EXISTS (SELECT 1 FROM runs r WHERE r.group_id=g.id AND r.work_item_id=i.id AND r.active=1 AND ${runState}='blocked')))) OR
     (${status} IN ('ready','running','review')
       AND NOT EXISTS (SELECT 1 FROM recovery_blockers b WHERE b.group_id=g.id AND b.scope='group')
       AND NOT EXISTS (SELECT 1 FROM spend_cap_blocks c WHERE c.group_id=g.id)
