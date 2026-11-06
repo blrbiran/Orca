@@ -21,7 +21,7 @@ describe("the split instruction's setup and check rules (#130, #135)", () => {
     expect(instruction).toContain(CHECK_SOURCE_RULE);
   });
 
-  it("stays instruction version 3", () => {
-    expect(instruction.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 3.");
+  it("uses instruction version 4", () => {
+    expect(instruction.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 4.");
   });
 });

@@ -15,9 +15,9 @@ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 let root = "", repo = "", commit = "";
 beforeAll(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), "orca-split-")));
-  repo = join(root, "repo"); await mkdir(join(repo, "src"), { recursive: true });
+  repo = join(root, "repo"); await mkdir(join(repo, "src"), { recursive: true }); await mkdir(join(repo, "qa"), { recursive: true });
   const g = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, encoding: "utf8" }).trim();
-  g("init", "-q", "-b", "main"); await writeFile(join(repo, "README.md"), "r"); await writeFile(join(repo, "src", "a.ts"), "a"); g("add", "-A"); g("commit", "-qm", "base");
+  g("init", "-q", "-b", "main"); await writeFile(join(repo, "README.md"), "r"); await writeFile(join(repo, "src", "a.ts"), "a"); await writeFile(join(repo, "qa", "a.spec.ts"), "test"); g("add", "-A"); g("commit", "-qm", "base");
   commit = g("rev-parse", "HEAD");
 });
 afterAll(async () => { await rm(root, { recursive: true, force: true }); });
@@ -38,6 +38,24 @@ describe("expanding a split (N1 spec §8.2)", () => {
 });
 
 describe("validating a split (N1 spec §8.3)", () => {
+  it("refuses a bugfix whose source-only scope cannot hold its regression test", async () => {
+    const out = await validate(task({ loopPlan: "bugfix", targetPaths: ["src/a.ts"], goal: "Fix the bug and add a regression test" }));
+    expect(out).toMatchObject({ ok: false, layers: null });
+    expect(out.reasons).toContain("bugfix-test-scope:exporter");
+  });
+
+  it("accepts bugfix scope for an existing test or a new test in a repository-specific directory", async () => {
+    for (const path of ["qa/a.spec.ts", "qa/new.spec.ts", "qa/**"]) {
+      const out = await validate(task({ loopPlan: "bugfix", targetPaths: ["src/a.ts", path], goal: "Fix the bug and add a regression test" }));
+      expect(out.reasons, path).not.toContain("bugfix-test-scope:exporter");
+      expect(out.ok, `${path}: ${out.reasons}`).toBe(true);
+    }
+  });
+
+  it("keeps a source-only standard loop valid", async () => {
+    expect((await validate(task({ loopPlan: "standard", targetPaths: ["src/a.ts"] }))).ok).toBe(true);
+  });
+
   it("passes a valid draft and computes the layers buildGraph computes", async () => {
     const out = await validate(VALID_SPLIT);
     expect(out).toMatchObject({ ok: true, reasons: [], layers: [["exporter"], ["images"]], implicitEdges: [] });
@@ -106,11 +124,20 @@ describe("the split instruction names Orca's own files in the target (version 2)
       const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], ...(multi ? { multi: true } : {}) });
       const instruction = prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); these lines are unchanged in version 3, so the criterion now pins that version 3 kept them.
-      expect(instruction.split("\n", 1)[0]).toMatch(/instruction version 3\.$/);
+      expect(instruction.split("\n", 1)[0]).toMatch(/instruction version 4\.$/);
       expect(instruction).toContain(`Orca commits the agreed requirement document to the ${multi ? "primary directory" : "repository"} at \`${exportDir}<date>-<slug>.md\``);
       expect(instruction).toContain("`.decisions/` when present");
       expect(instruction).toContain("A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist");
       expect(instruction).toContain("prefer checks that read the delivered files");
     });
   }
+});
+
+describe("bugfix split guidance (#188)", () => {
+  it("tells the splitter to make a regression test writable or use a loop without reproduce-first", () => {
+    const prompt = buildSplitPrompt({ document: "Fix a bug.", overview: { canonicalJson: "{}", hash: "a".repeat(64) }, earlierDrafts: [] });
+    expect(prompt).toContain("bugfix");
+    expect(prompt).toContain("writable regression test");
+    expect(prompt).toContain("without reproduce-first");
+  });
 });

@@ -18,8 +18,8 @@ describe("split instruction version 3 states what the validator enforces (#107)"
   for (const multi of [false, true]) {
     describe(multi ? "several directories" : "one repository", () => {
       const instruction = instructionOf(multi);
-      it("is version 3", () => {
-        expect(instruction.split("\n", 1)[0]).toBe(multi ? "Orca requirement split (several directories), instruction version 3." : "Orca requirement split, instruction version 3.");
+      it("is version 4", () => {
+        expect(instruction.split("\n", 1)[0]).toBe(multi ? "Orca requirement split (several directories), instruction version 4." : "Orca requirement split, instruction version 4.");
       });
 
       it("states the investigate rule: exactly one target path, an exact path", () => {

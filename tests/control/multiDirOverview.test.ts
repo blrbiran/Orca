@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V3, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V4, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -39,7 +39,7 @@ const PINNED = {
   // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」 (controller ruling, Part C final review): the setup and check lines reworded (null allowed, the repository's own scripts, install at the workspace root, checks that are not package scripts are fine).
   // Ruling: 「这个session允许改写必要的判据」 (human, session 3cfc2e73, 2026-11-05): issues #130 and #135 add the no-lockfile setup rule and the check-source rule to the single instruction; version stays 3.
   // Ruling: 「D1-D8其余都同意。」 (human, session 3cfc2e73, 2026-11-05, on the controller's proposals): issue #136 adds the no-verify-only rule to the single instruction; version stays 3.
-  splitPrompt: "d50e936ae96f1015e7271ebd022e1760e5d7e8df1d80eb5bb612f3b9ae5ed380",
+  splitPrompt: "8f6ec14c42fb1b1149aa02dc0629de658faf1061890224a0b047616026737452",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
@@ -167,8 +167,8 @@ describe("the split prompt across directories (M5, §6.4)", () => {
       const prompt = envelope.work.prompt;
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a multi group gets the multi instruction.
-      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 3.")).toBe(true);
-      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V3.split("\n", 1)[0]!);
+      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 4.")).toBe(true);
+      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V4.split("\n", 1)[0]!);
       expect(prompt).toContain("`writes[].targetPaths` are paths relative to that directory's root");
       expect(prompt).toContain("`writes[].checks` are shell commands, run in that directory");
       expect(prompt).toContain("`dir` is a directory's `key`");
@@ -251,7 +251,7 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
       expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA);
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a single-repository group is sent the single instruction.
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 3.")).toBe(true);
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 4.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");

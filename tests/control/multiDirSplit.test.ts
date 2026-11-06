@@ -83,6 +83,15 @@ describe("a multi task's qualified write set (§6.2)", () => {
 });
 
 describe("a multi split's reasons (§6.1, §6.4)", () => {
+  it("refuses source-only bugfix scope and accepts a test in another registered directory", async () => {
+    const source = { dir: "alpha", targetPaths: ["src/a.ts"], checks: ["true"] };
+    const blocked = await validate(output("t", [source], { loopPlan: "bugfix" }));
+    expect(blocked.reasons).toContain("bugfix-test-scope:t");
+    const corrected = await validate(output("t", [source, { dir: "beta", targetPaths: ["docs/new.test.md"], checks: [] }], { loopPlan: "bugfix" }));
+    expect(corrected.reasons, corrected.reasons.join(", ")).not.toContain("bugfix-test-scope:t");
+    expect(corrected.ok, corrected.reasons.join(", ")).toBe(true);
+  });
+
   it("names a directory the project does not have", async () => {
     const validated = await validate(output("t", [{ dir: "gamma", targetPaths: ["README.md"], checks: ["true"] }]));
     expect(validated).toMatchObject({ ok: false, reasons: ["dir:t:gamma"] });

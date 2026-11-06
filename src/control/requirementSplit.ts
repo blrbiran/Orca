@@ -1,6 +1,6 @@
 import { ControlError } from "./errors.js";
 import { SYSTEM_LABELS } from "./labels.js";
-import { documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
+import { choosePlanByLabels, documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
 import { classifyNpmCommand, npmCommandReason } from "./npmCommand.js";
 import { normalizeControlPlan } from "./planImport.js";
 import { deepFreeze, fence } from "./requirementClarify.js";
@@ -10,9 +10,9 @@ import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
 import { normalizeClaim, qualifiedWriteSetOf } from "../scheduler/writeSet.js";
 
-export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 3.";
+export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 4.";
 /** Multi-directory projects spec §6.4: the multi instruction's own head line. */
-export const SPLIT_PROMPT_HEAD_MULTI = "Orca requirement split (several directories), instruction version 3.";
+export const SPLIT_PROMPT_HEAD_MULTI = "Orca requirement split (several directories), instruction version 4.";
 
 /** Version 3 (#107): the label table choosePlanByLabels reads, in its order, as one sentence. */
 const LABEL_TABLE = LABEL_PRIORITY.map((row) => `${row.labels.length === 1 ? row.labels[0] : `${row.labels.slice(0, -1).join(", ")} or ${row.labels.at(-1)}`} -> ${row.planId}`).join("; ");
@@ -25,6 +25,7 @@ const PLAN_RULES = [
   `- A task's plan is its \`loopPlan\`; without one, the first of these its labels match chooses it: ${LABEL_TABLE}; no match -> standard.`,
   "- An `investigate` task names exactly one target path, and it is an exact path (the report file the task writes): never `<directory>/**` or `**`.",
   "- A `design` task's target paths do not include `**`; exact paths and `<directory>/**` are allowed.",
+  "- A `bugfix` task uses reproduce-first: first write a failing regression test. Its writable target paths must include an existing test or a new test file in an existing directory, inferred from the repository overview, as well as the source it fixes. If the task cannot grant a writable regression test, choose a loop without reproduce-first (for example `standard`) and make the goal and labels agree. Checks alone never grant write access.",
 ];
 const TRACE_RULE = "- `traces` names the acceptance criteria (and decisions) each task serves, by the ids the requirement document gives them: an acceptance criterion's id as its list of acceptance criteria writes it (such as AC1), or an accepted decision's id as its heading under decisions starts (such as R1.ADR1). Nothing else can be traced: not a question's id (such as R1.Q1), a glossary entry's (such as R1.G1) or a round. Every acceptance criterion must be traced by at least one task.";
 const PATH_SHAPES = "each one of: an exact path (no leading `/`, no `*`, no empty, `.` or `..` segment) naming an existing file or a new file in an existing directory; `<directory>/**` for a directory that exists in the overview's commit; or `**`. Name every path a task may write.";
@@ -59,9 +60,9 @@ export const NO_LOCKFILE_RULE = "When \"manifests\" shows no lockfile, omit \"se
  * that. A call already started under version 1 keeps its stored envelope (stepC compares the prompt's hash against it).
  * Version 3 (#107, Orca tester feedback round 2026-10-28): PLAN_RULES, TRACE_RULE, PATH_SHAPES and EARLIER_DRAFTS above.
  * A call already started keeps the prompt frozen in its envelope at A2 (stepA2SingleCall), whatever version built it.
- * Changing it means version 4.
+ * Version 4 (#188) adds the bugfix test-scope rule; in-flight calls keep their frozen envelope.
  */
-const SPLIT_INSTRUCTION_V3 = [
+const SPLIT_INSTRUCTION_V4 = [
   SPLIT_PROMPT_HEAD,
   "",
   "A person and you agreed a requirement for one software repository. Split it into loop tasks that an agent will carry out one by one. You have no tools. Answer with one JSON object and nothing else.",
@@ -102,12 +103,12 @@ const str = { type: "string" }, strings = { type: "array", items: str };
 /**
  * Multi-directory projects spec §6.4: the instruction for a project of several directories. A task names the
  * directories it changes as `writes` entries (each with `dir`, `targetPaths` and `checks`) instead of one
- * `targetPaths`/`checks` pair. Version 2 (spec §22, correcting §6.4; Orca session 7753e97d): as SPLIT_INSTRUCTION_V2's, the
+ * `targetPaths`/`checks` pair. Version 2 (spec §22, correcting §6.4; Orca session 7753e97d): as the single-repo instruction's, the
  * requirement document Orca commits to the primary directory and Orca's own files there. Version 3 (#107): as
- * SPLIT_INSTRUCTION_V3's, the plan rules applying to the first `writes` entry, the one expansion reads (loopOfMulti).
- * Changing it means version 4.
+ * the single-repo instruction's, the plan rules applying to the first `writes` entry, the one expansion reads (loopOfMulti).
+ * Version 4 (#188) adds the bugfix test-scope rule.
  */
-export const SPLIT_INSTRUCTION_MULTI_V3 = [
+export const SPLIT_INSTRUCTION_MULTI_V4 = [
   SPLIT_PROMPT_HEAD_MULTI,
   "",
   "A person and you agreed a requirement for a project made of several directories (repositories or folders), listed in order; the first is the primary. Split it into loop tasks that an agent will carry out one by one. You have no tools. Answer with one JSON object and nothing else.",
@@ -195,6 +196,23 @@ export interface SplitPlanFile {
 export interface SplitValidation {
   ok: boolean; reasons: string[]; layers: string[][] | null;
   implicitEdges: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null;
+}
+
+/** A bugfix's reproduce-first step needs an actual writable test, not merely a command that runs tests. */
+function usesBugfixLoop(task: { loopPlan?: string; labels: string[] }): boolean {
+  return (task.loopPlan ?? choosePlanByLabels(task.labels).planId) === "bugfix";
+}
+
+/** Infer test files from the committed tree and proposed exact file names, without fixing a language or test directory. */
+function testFile(path: string): boolean {
+  return /(?:^|[._/-])(?:test|tests|spec|specs)(?:[._/-]|$)/i.test(path);
+}
+
+function writableTestScope(declared: readonly string[], committedPaths: readonly string[]): boolean {
+  return declared.some((claim) => claim === "**" ||
+    (claim.endsWith("/**")
+      ? committedPaths.some((path) => path.startsWith(claim.slice(0, -2)) && testFile(path))
+      : testFile(claim)));
 }
 
 const loopOf = (task: SplitOutput["tasks"][number]): LoopPlanFileInput => ({
@@ -312,6 +330,17 @@ export async function validateMultiSplitDraft(input: {
       if (!(await overviewPathExists(input.paths.get(write.dir)!, input.commits.get(write.dir)!, path))) reasons.push(`path:${task.taskId}:${write.dir}:${path}`);
     }
   }
+  const committedByDir = new Map<string, string[]>();
+  for (const task of output.tasks) if (usesBugfixLoop(task)) {
+    let writable = false;
+    for (const write of task.writes) {
+      const path = input.paths.get(write.dir), commit = input.commits.get(write.dir);
+      if (path === undefined || commit === undefined) continue;
+      if (!committedByDir.has(write.dir)) committedByDir.set(write.dir, (await treeOf(path, commit).catch(() => [])).map((entry) => entry.path));
+      if (writableTestScope(write.targetPaths, committedByDir.get(write.dir)!)) writable = true;
+    }
+    if (!writable) reasons.push(`bugfix-test-scope:${task.taskId}`);
+  }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -364,6 +393,8 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   for (const task of output.tasks) for (const path of task.targetPaths) {
     if (!(await overviewPathExists(input.repo, input.commit, path))) reasons.push(`path:${task.taskId}:${path}`);
   }
+  const committedPaths = output.tasks.some(usesBugfixLoop) ? (await treeOf(input.repo, input.commit).catch(() => [])).map((entry) => entry.path) : [];
+  for (const task of output.tasks) if (usesBugfixLoop(task) && !writableTestScope(task.targetPaths, committedPaths)) reasons.push(`bugfix-test-scope:${task.taskId}`);
   // Task setup spec §4.3: each distinct npm setup or check command against the commit (npmCommand.ts); others pass.
   // The commit's tree is read once, and only when some command is npm; an unreadable tree leaves them all unverifiable.
   // Each distinct command is checked once; its reason names every task giving it: `command:<taskId>[,<taskId>]:<command>: ...`.
@@ -414,7 +445,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
   const latest = withTasks ?? sent.at(-1);
   const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V3 : SPLIT_INSTRUCTION_V3;
+  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V4 : SPLIT_INSTRUCTION_V4;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
     draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback,
@@ -449,6 +480,7 @@ export function explainSplitReason(reason: string): string | null {
     case "dir": return "this is not a directory key the project overview lists";
     case "checks-primary": return "the task's first writes entry (its primary directory) has no checks";
     case "ledger-path": return "only the task's first writes entry (its primary directory) may name `.decisions` as a target path";
+    case "bugfix-test-scope": return "this bugfix uses reproduce-first but its writable target paths include no regression test; add a test path or choose a loop without reproduce-first";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";
       if (parts[1] === "dangling-dependency") return "the task depends on a taskId no task in this split has";
