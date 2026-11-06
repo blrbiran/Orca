@@ -27,7 +27,7 @@ function world() {
     add: (e) => { calls.push(`add:${e.repoId}:${e.displayName}`); },
     rename: (id, name) => { calls.push(`rename:${id}:${name}`); },
   };
-  const repos: Array<{ projectKey: string; path: string }> = [];
+  const repos: Array<{ projectKey: string; path: string; kind?: "dir" }> = [];
   const boot = (config: ProjectsFileV1 | null) => {
     if (config !== null) writeProjectsFile(file, config);
     for (const p of config?.projects ?? []) repos.push({ projectKey: p.id, path: p.path });
@@ -236,5 +236,33 @@ describe("the project registry", () => {
     expect(w.code(() => reg2.add("Bad", bad))).toBe("other:boom");
     expect(repos).toEqual([]);
     expect(reg2.list().projects).toEqual([]);
+  });
+
+  // Issue #134 (flow engine spec §5.1): a dir project is not required to be a git repository, and a hand-added one is a
+  // dir project before any restart (the dir guards key on repos[].kind, controlAssembly.ts flowProjects / dirProjectOf).
+  it("R17: a hand-added kind:dir folder that is not a git repository joins, and keeps its kind in the live repos array", () => {
+    const w = world();
+    const a = w.gitRepo("a");
+    const reg = w.boot({ version: 1, projects: [{ id: "a", name: "A", path: a }] });
+    const folder = join(w.root, "articles");
+    mkdirSync(folder);
+    handEdit(w.file, { version: 1, projects: [{ id: "a", name: "A", path: a }, { id: "articles", name: "Articles", path: folder, kind: "dir" }] });
+    // mutation: checkedPath ignores kind -> fileError names project-path-not-repository-root, articles absent, red
+    expect(reg.list()).toMatchObject({ fileError: null, projects: [{ id: "a" }, { id: "articles", kind: "dir", path: folder }] });
+    // mutation: join pushes { projectKey, path } only -> no kind, red
+    expect(w.repos).toEqual([{ projectKey: "a", path: a }, { projectKey: "articles", path: folder, kind: "dir" }]);
+    expect(w.calls).toEqual([`rename:${controlRepoKey("a")}:A`, `add:${controlRepoKey("articles")}:Articles`]);
+  });
+
+  it("R18: a hand-added folder without kind (a repo) that is not a git top level is still refused by name", () => {
+    const w = world();
+    const a = w.gitRepo("a");
+    const reg = w.boot({ version: 1, projects: [{ id: "a", name: "A", path: a }] });
+    const folder = join(w.root, "plain");
+    mkdirSync(folder);
+    handEdit(w.file, { version: 1, projects: [{ id: "a", name: "A", path: a }, { id: "plain", name: "Plain", path: folder }] });
+    // mutation: skip the top-level check for every kind -> joined, red
+    expect(reg.list().fileError).toContain("not the top level of a git repository");
+    expect(w.repos).toEqual([{ projectKey: "a", path: a }]);
   });
 });

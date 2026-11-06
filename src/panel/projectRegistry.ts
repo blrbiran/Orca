@@ -21,7 +21,7 @@ import { controlRepoKey } from "./controlOptions.js";
 import {
   deriveProjectId, isFiledPlanPath, projectKindOf, readProjectsFile, sameSignature, writeProjectsFile,
   type FileSignature, type MultiDirMember, type MultiDirProjectEntryV1, type ProjectEntryV1, type ProjectPlanV1,
-  type ProjectsFileRead, type ProjectsFileV1,
+  type ProjectKind, type ProjectsFileRead, type ProjectsFileV1,
 } from "./projectsFile.js";
 
 export interface RegistryControl {
@@ -93,7 +93,7 @@ function gitTopLevel(dir: string): string | null {
 export function createProjectRegistry(input: {
   file: string;
   boot: ProjectsFileRead;
-  repos: Array<{ projectKey: string; path: string }>;
+  repos: Array<{ projectKey: string; path: string; kind?: "dir" }>;
   control: RegistryControl | null;
   /** Injected only by criteria; the real one asks `git rev-parse --show-toplevel`. */
   topLevel?: (dir: string) => string | null;
@@ -117,8 +117,12 @@ export function createProjectRegistry(input: {
 
   const fail = (code: string, status: number, message: string): never => { throw new ProjectRegistryError(code, status, message); };
 
-  /** The canonical directory a new project names, or a refusal; the same checks for the API and for a hand edit. */
-  const checkedPath = (path: string): string => {
+  /**
+   * The canonical directory a new project names, or a refusal; the same checks for the API and for a hand edit.
+   * Issue #134 (flow engine spec §5.1): a `dir` project is not required to be a git repository, so it skips the
+   * top-level check, as the boot path (server.ts) already does.
+   */
+  const checkedPath = (path: string, kind: ProjectKind = "repo"): string => {
     if (!isAbsolute(path)) fail("project-path-missing", 422, `${JSON.stringify(path)} is not an absolute path`);
     let real: string;
     try {
@@ -127,6 +131,7 @@ export function createProjectRegistry(input: {
     } catch {
       return fail("project-path-missing", 422, `${path} is not an existing directory`);
     }
+    if (kind === "dir") return real;
     const top = topLevel(real);
     let topReal: string | null = null;
     try { topReal = top === null ? null : realpathSync(top); } catch { topReal = null; }
@@ -250,7 +255,8 @@ export function createProjectRegistry(input: {
   const join = (p: ProjectEntryV1): void => {
     control?.add(controlEntry(p));
     running.push({ ...p });
-    repos.push({ projectKey: p.id, path: p.path });
+    // Issue #134: the kind travels with the entry, so a hot-added dir project is a dir project before any restart.
+    repos.push({ projectKey: p.id, path: p.path, ...(p.kind === "dir" ? { kind: "dir" as const } : {}) });
   };
 
   /** Diff a valid file against the running list and apply what may apply (spec §5). */
@@ -269,10 +275,10 @@ export function createProjectRegistry(input: {
     for (const f of config.projects) {
       if (running.some((r) => r.id === f.id)) continue;
       try {
-        const real = checkedPath(f.path);
+        const real = checkedPath(f.path, projectKindOf(f));
         const holder = running.find((r) => realOf(r.path) === real);
         if (holder !== undefined) fail("project-path-taken", 409, `${real} is already project ${holder.id}`);
-        const entry: ProjectEntryV1 = { id: f.id, name: f.name, path: real, ...(f.plans === undefined ? {} : { plans: f.plans.map((plan) => ({ ...plan })) }) };
+        const entry: ProjectEntryV1 = { id: f.id, name: f.name, path: real, ...(f.kind === undefined ? {} : { kind: f.kind }), ...(f.plans === undefined ? {} : { plans: f.plans.map((plan) => ({ ...plan })) }) };
         precheck(entry);
         join(entry);
         errors.push(...joinPlans(entry));
