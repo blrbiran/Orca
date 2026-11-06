@@ -54,6 +54,18 @@ const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) 
   return result?.kind === "queued-for-slot" ? `queued: ${String(result.ahead)} ahead; it starts when a slot frees (orca orchestration show)` : row.format(body);
 } });
 
+/**
+ * Issue #144(d)/#140 (dogfood run 3, session 86352010): the result line is cut at 160 characters, which hid a blocked
+ * estimate's state and reason. Import and estimate print both on their own lines after it; their JSON is unchanged. The
+ * import result names the reason `estimateReasonCode` (planImport.ts), the estimate result `reasonCode`.
+ */
+const estimateFormat = (row: CommandDef, reasonField: "estimateReasonCode" | "reasonCode"): CommandDef => ({ ...row, format: (body) => {
+  const result = (body as { result?: Record<string, unknown> } | null)?.result;
+  if (result === undefined || result === null || typeof result.estimateState !== "string") return row.format(body);
+  const reason = result[reasonField];
+  return `${row.format(body)}\nestimate: ${result.estimateState}\nreason: ${typeof reason === "string" ? reason : "none"}`;
+} });
+
 export const WORK_ROWS: CommandDef[] = [
   // --- requirement
   verb({ domain: "requirement", action: "open", summary: "open a requirement from an idea; the group id is generated unless --group names one", verb: "requirement-open",
@@ -116,7 +128,7 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/classify`, payload: (c) => ({ scope: str(c, "scope"), clarity: str(c, "clarity") }) }),
 
   // --- group
-  verb({ domain: "group", action: "import", summary: "import a registered plan, or a plan library version (--library), as a new draft group", verb: "import-plan",
+  estimateFormat(verb({ domain: "group", action: "import", summary: "import a registered plan, or a plan library version (--library), as a new draft group", verb: "import-plan",
     positionals: [{ name: "plan", summary: "a plan id (or unique prefix) from orca project show / config; not with --library", required: false }],
     flags: [
       { name: "group", type: "string", summary: "the new group's id" }, { name: "estimator-profile", type: "string", summary: "estimate with this profile" },
@@ -158,8 +170,8 @@ export const WORK_ROWS: CommandDef[] = [
         ...(binding === null ? {} : { estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash }),
         ...(str(c, "estimate-mode") === undefined ? {} : { estimateMode: str(c, "estimate-mode") }),
       };
-    } }),
-  verb({ domain: "group", action: "estimate", summary: "ask the estimator for budgets at the current proposal version", verb: "estimate", positionals: [GROUP],
+    } }), "estimateReasonCode"),
+  estimateFormat(verb({ domain: "group", action: "estimate", summary: "ask the estimator for budgets at the current proposal version", verb: "estimate", positionals: [GROUP],
     flags: [{ name: "estimator-profile", type: "string", summary: "default: the panel's estimator" }, { name: "mode", type: "string", summary: "strict|soft; default: the panel's" }],
     route: (c) => `groups/${group(c)}/estimates`,
     payload: async (c) => {
@@ -169,7 +181,7 @@ export const WORK_ROWS: CommandDef[] = [
       const mode = str(c, "mode") ?? defaults?.estimateMode;
       if (binding === null || mode === undefined) throw new EntryRejection("estimator-unconfigured", "the panel has no estimator default; pass --estimator-profile and --mode");
       return { proposalVersion: (await groupView(c)).proposal.proposalVersion, estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash, estimateMode: mode };
-    } }),
+    } }), "reasonCode"),
   { ...verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
     flags: [
       { name: "hold", type: "boolean", summary: "confirm only; start it later with orca group start" },
