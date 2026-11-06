@@ -2351,7 +2351,7 @@ export const enErrors: Record<string, string> = {
   "run-usage-not-settleable": "This current failed run cannot be settled.",
   "run-stop-proof-required": "A complete isolated stop proof is required.",
   "run-usage-pending": "Apply pending usage before settlement.",
-  "run-usage-settled": "This run was already conservatively settled.",
+  "run-usage-settled": "This run's usage is already settled: by a person (conservatively), or by Orca at the reported lower bound.",
   "run-usage-not-unknown": "This run has no unknown usage.",
   "run-already-settled": "This run has already settled.",
   "run-generation-conflict": "The run's attempt number conflicts with the recorded one.",

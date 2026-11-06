@@ -2257,7 +2257,7 @@ export const zhErrors: Record<string, string> = {
   "run-usage-not-settleable": "当前失败运行不满足结清条件。",
   "run-stop-proof-required": "需要完整且已隔离的停止证据。",
   "run-usage-pending": "请先应用待处理用量。",
-  "run-usage-settled": "此运行已经保守结清。",
+  "run-usage-settled": "此运行的用量已经结清：由人保守结清，或由 Orca 按报告的下界结清。",
   "run-usage-not-unknown": "此运行没有未知用量。",
   "run-already-settled": "这个运行已经结算。",
   "run-generation-conflict": "运行代次冲突。",
