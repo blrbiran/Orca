@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { chmod, cp, mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises";
+import { chmod, cp, mkdtemp, readFile, realpath, rm, stat, symlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
@@ -51,6 +51,17 @@ describe("control storage", () => {
       await symlink(root, join(root, "link"));
       await expect(openControlStore({ stateDir: join(root, "link") })).rejects.toThrow("control-path-symlink");
       await expect(openControlStore({ stateDir: join(root, "link", "nested") })).rejects.toThrow("control-path-symlink");
+    } finally { await rm(root, {recursive:true, force:true}); }
+  });
+  // Dogfood run 3 F15 (session 86352010): the refusal stays (a state directory is not redirected through a link), but it
+  // names the link and the real path to pass instead of a bare `control-path-symlink`.
+  it("names the symlink and the real path when it refuses a state directory under one", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "orca-links-")));
+    try {
+      await symlink(root, join(root, "link"));
+      // mutation: privateDirectory throws its ControlError with no detail -> the bare code, red
+      await expect(openControlStore({ stateDir: join(root, "link", "nested") })).rejects.toThrow(
+        `control-path-symlink:${join(root, "link")} is a symlink; pass the real path ${join(root, "nested")}`);
     } finally { await rm(root, {recursive:true, force:true}); }
   });
   it("rejects a second writer including recovery while the first owner is alive", async () => {

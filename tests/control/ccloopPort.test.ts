@@ -144,6 +144,18 @@ describe("production ccloop execution port",()=>{
     const linkedDir=join(h.root,"linked-dir");await symlink(h.root,linkedDir);
     expect(()=>createCcloopExecutionPort({binary:h.binary,agentsTablePath:join(linkedDir,"agents.json"),timeoutMs:1})).toThrow("control-agents-table-invalid");
   });
+  // Dogfood run 3 F14 (session 86352010): the refusal stays, but it names the path, why, and the real path to pass --
+  // an operator who met a bare `control-agents-table-invalid` could not tell which check refused or what to do instead.
+  it("names the path, the reason and the real path when it refuses an agents table behind a symlink",async()=>{
+    const h=await fixture(),link=join(h.root,"table-link");await symlink(h.table,link);
+    const linkedDir=join(h.root,"linked-dir");await symlink(h.root,linkedDir);
+    const message=(path:string)=>{try{createCcloopExecutionPort({binary:h.binary,agentsTablePath:path,timeoutMs:1});}catch(error){return (error as Error).message;}return "built";};
+    // mutation: agentsTablePath throws its ControlError with no detail -> the bare code, red
+    expect(message(link)).toBe(`control-agents-table-invalid:${link} is a symlink; pass the real path ${h.table}`);
+    expect(message(join(linkedDir,"agents.json"))).toBe(`control-agents-table-invalid:${join(linkedDir,"agents.json")} is under a symlink; pass the real path ${h.table}`);
+    expect(message("deleted-agents.json")).toBe("control-agents-table-invalid:deleted-agents.json is not an absolute path");
+    expect(message(h.root)).toBe(`control-agents-table-invalid:${h.root} is not a regular file`);
+  });
   // Wave-2 review m-1 (2026-09-26): real ccloop refuses a partial selection with no agent as agent-unselected, exit 2
   // (measured against the ccloop build); it is a refusal of the selection, so it comes back under its own name rather
   // than as a transient control-peer-exit.

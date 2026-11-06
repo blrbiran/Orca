@@ -14,10 +14,19 @@ export function privateDirectory(input: string): string {
     try { mkdirSync(cursor, {mode:0o700}); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
     const stat = lstatSync(cursor);
-    if (stat.isSymbolicLink()) throw new ControlError("control-path-symlink");
+    if (stat.isSymbolicLink()) throw new ControlError("control-path-symlink", symlinkDetail(cursor, path));
     if (!stat.isDirectory()) throw new ControlError("control-path-not-directory");
   }
   return realpathSync(path);
+}
+/**
+ * Dogfood run 3 F15 (session 86352010): the detail of a `control-path-symlink` refusal -- which component is the link,
+ * and the real path to pass instead (the link's target joined with the rest of `full`), when the link resolves.
+ */
+export function symlinkDetail(link: string, full: string): string {
+  let target: string;
+  try { target = realpathSync(link); } catch { return `${link} is a symlink whose target does not exist`; }
+  return `${link} is a symlink; pass the real path ${target}${full.slice(link.length)}`;
 }
 export function syncDirectory(path: string): void {
   const fd = openSync(path, "r");

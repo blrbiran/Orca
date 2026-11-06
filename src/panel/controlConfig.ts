@@ -5,6 +5,7 @@ import { z } from "zod";
 import { durableCommandErrorStatuses } from "../control/errors.js";
 import { ControlError } from "../control/errors.js";
 import { agentsTablePath } from "../control/ccloopPort.js";
+import { symlinkDetail } from "../control/paths.js";
 import type { ExecutionProfileRouter } from "../control/profiles.js";
 import type { PartialSelection } from "../control/agentSelection.js";
 import { compareText, controlConfigSchema, type ControlConfigV1 } from "../control/webProtocol.js";
@@ -124,7 +125,7 @@ function checkedPath(input: string, kind: "directory" | "file"): PathWitness {
     let stat;
     try { stat = lstatSync(cursor, { bigint: true }); }
     catch { invalid("path-missing"); }
-    if (stat.isSymbolicLink()) throw new ControlError("control-path-symlink");
+    if (stat.isSymbolicLink()) throw new ControlError("control-path-symlink", symlinkDetail(cursor, input));
     components.push({ path: cursor, dev: String(stat.dev), ino: String(stat.ino) });
   }
   const stat = lstatSync(input);

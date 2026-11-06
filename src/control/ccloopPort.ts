@@ -160,11 +160,16 @@ function regularAbsolute(path:string,code:NonDurableControlErrorCode,executable=
  * this same shape check rather than a second copy of it, so the two checks cannot drift again.
  */
 export function agentsTablePath(path:string):string {
- const invalid=()=>new ControlError("control-agents-table-invalid");
- if(!isAbsolute(path))throw invalid();
+ // Dogfood run 3 F14 (session 86352010): each refusal names the path, why, and (behind a link) the real path to pass.
+ const invalid=(why:string)=>new ControlError("control-agents-table-invalid",`${path} ${why}`);
+ if(!isAbsolute(path))throw invalid("is not an absolute path");
  let stat;
- try{stat=lstatSync(path);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return path;throw invalid();}
- try{if(stat.isSymbolicLink()||!stat.isFile()||realpathSync(path)!==path)throw new Error();}catch{throw invalid();}
+ try{stat=lstatSync(path);}catch(error){const code=(error as NodeJS.ErrnoException).code;if(code==="ENOENT")return path;throw invalid(`cannot be read (${String(code)})`);}
+ const real=()=>{try{return realpathSync(path);}catch{return null;}};
+ if(stat.isSymbolicLink()){const target=real();throw invalid(target===null?"is a symlink whose target does not exist":`is a symlink; pass the real path ${target}`);}
+ if(!stat.isFile())throw invalid("is not a regular file");
+ const target=real();
+ if(target!==path)throw invalid(target===null?"cannot be resolved":`is under a symlink; pass the real path ${target}`);
  return path;
 }
 /** ccloop's drift detail (src/agents/materialize.ts): `<installation>: table <recorded>, observed <installed>`. */

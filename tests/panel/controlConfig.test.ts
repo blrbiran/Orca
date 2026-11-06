@@ -110,6 +110,27 @@ describe("trusted panel control config", () => {
     expect(() => createTrustedControlConfig({ ...base, plans: [{ planId: "link", repoId: "repo", displayName: "Link", path: link }] }, h.router)).toThrow("control-path-symlink");
   });
 
+  // Dogfood run 3 F15 (session 86352010): a state directory behind a link is still refused, by the link's name and the
+  // real path to pass instead.
+  it("names the symlink and the real path when it refuses a state directory behind one", async () => {
+    const h = await setup();
+    const link = join(h.root, "state-link");
+    await symlink(h.repo, link);
+    let message = "accepted";
+    try {
+      createTrustedControlConfig({
+        epoch: "epoch-1", stateDir: join(link, "plans"), executablePath: h.binary, agentsTablePath: h.agentsTable,
+        executionPort: "configured" as const,
+        archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
+        repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }],
+        plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
+        defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
+      }, h.router);
+    } catch (error) { message = (error as Error).message; }
+    // mutation: checkedPath throws its ControlError with no detail -> the bare code, red
+    expect(message).toBe(`control-path-symlink:${link} is a symlink; pass the real path ${join(h.repo, "plans")}`);
+  });
+
   it("rejects a plan or ancestor swapped to a symlink after startup", async () => {
     const h = await setup();
     const config = createTrustedControlConfig({
