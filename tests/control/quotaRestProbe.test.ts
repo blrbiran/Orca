@@ -250,7 +250,9 @@ describe("quota rest probe (spec 2026-11-06 §5)", { timeout: 180_000 }, () => {
       expect(w.t.service.retryTask(w.t.h.command("retry-task", { taskId: "a" }))).not.toHaveProperty("error");
       await w.pass(); await w.pass();
       const sent = w.retries();
-      expect(sent.every(([, status]) => Number(status) >= 400)).toBe(true);
+      // The person's retry is claimed by the driver in the same rounds, so the task's current run is no longer the failed
+      // one and orca-auto sends nothing (a retry it had sent would be refused task-run-moved by its runId).
+      expect(sent).toEqual([]);
       await w.t.claim();
       expect(taskRuns(w)).toBe(2);
     } finally { await w.t.h.dispose(); }
