@@ -102,7 +102,11 @@ const withLines = (base: string, lines: string[]): string => (lines.length === 0
 export function formatWithUnestimated(body: unknown): string {
   const b = body as (UnestimatedSource & { summary?: { groupId?: string }; groupId?: string }) | null;
   const groupId = b?.summary?.groupId ?? b?.groupId;
-  return withLines(text(body), typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []);
+  const live = new Set(["starting", "unknown", "attempt-unknown", "running", "collected", "landed", "reconciling"]);
+  const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown }> }).runs ?? [];
+  const count = runs.filter((run) => typeof run.taskId === "string" && typeof run.state === "string" && live.has(run.state)).length;
+  return withLines(text(body), [...(count > 0 ? [`execution: ${count} task run${count === 1 ? "" : "s"} in progress`] : []),
+    ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : [])]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

@@ -21,6 +21,18 @@ const ENTRY = "pl-0123456789abcdef";
 const SUMMARY = { status: 200, body: { schema: "orca-control-summary-v1", groups: [{ groupId: "g-alpha", state: "running", commandRevision: 5 }] } };
 
 describe("human output (#140)", () => {
+  it("names active execution beside a stored ready group in list and show (dogfood D9)", async () => {
+    const summary = { groupId: "g-alpha", repoId: "repo-1", state: "ready", commandRevision: 5, goal: "Ship", counts: { running: 1 } };
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", groups: [summary] } },
+      "GET groups/g-alpha": { status: 200, body: { ...GROUP, summary, runs: [{ ...RUN, state: "running" }] } },
+    });
+    const listed = await cli(["group", "list"], p.dir);
+    const shown = await cli(["group", "show", "g-alpha"], p.dir);
+    expect(listed.stdout).toContain("ready · running 1 task");
+    expect(shown.stdout).toContain("execution: 1 task run in progress");
+  });
+
   it("text() leaves out an undefined field and keeps null ones", () => {
     expect(text({ a: 1, gone: undefined, empty: null })).toBe("a: 1\nempty: null");
   });
