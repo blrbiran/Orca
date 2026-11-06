@@ -258,9 +258,30 @@ ccloop 工作树跑 `vitest run --reporter=json --outputFile=/private/tmp/orca-d
 全量日志、JSON 与四份单跑日志都在 `/private/tmp/orca-d1-kMINyw/`。后一条仍是名单外红；这里只记录对照证据，
 不把 RC 1 宣称为过门，也不改红名单。
 
+同代码／同隔离环境的第二次全量：2,555 条过、仅上表 `runLoop` 一条名单内红；`check-known-reds` RC 0，
+`unexpected: 0`（`/private/tmp/orca-d1-kMINyw/ccloop-full2.json`）。第一轮的名单外红保留为现场证据。
+
 ### Codex 会话 2026-11-06（Orca #180／追加额度上限；基线含 D1 `4c287445`）
 
 `npm test` 选中 635 个根测试文件：633 过、2 红；5,517 条过、32 条跳过。`agentWalk` 的红**不是负载**：
 旧 main clone 单跑 1/1，修复 #180 后的工作树单跑必红（自动阶梯先接走失败任务）；其夹具改成真正需要人工
 retry 的 `setup-failed` 后，工作树单跑 1/1。另一条 `startForm` 是已登记的 `ECONNRESET`，工作树与未改动
 `c65fe9d5` clone 交替单跑各 9/9。全量与单跑日志在 `/private/tmp/orca-d1-kMINyw/`。全量原始 RC 1 不改写。
+
+### Codex 会话 2026-11-07（D2 接收端；Orca 基线含 D1／#180／额度上限）
+
+`npm test` 选中 637 个根测试文件：635 过、2 红；5,537 条过、32 条跳过。两条全量红分别为
+`driverReconcileN`「lands all three…」的 deadline，以及 `schedulerBridge`「…success」30 秒超时。
+用户在对照前告知另一个 agent 正重装三仓与 Node；对照时两棵树已各自 `npm ci`、不再依赖主仓
+`node_modules` 软链，Node 现测 v22.13.1。按「D2 工作树 → 未改动 `c65fe9d5` clone」逐条单跑，四次都 1/1 绿。
+全量日志 `/private/tmp/orca-d1-kMINyw/orca-evidence-affected.log`，四份单跑日志同目录。此证据支持已登记的
+负载形状，不把原始全量 RC 1 改称通过；重装对全量跑时环境的影响无法从这份日志完全排除。
+
+### Codex 会话 2026-11-07（D2 合同修订；Node 22.23.4 隔离重跑）
+
+用私有 HOME/XDG/TMPDIR、fake-codex 表、pin 的 ccloop clone build、独立 `npm ci`，且无并行大门跑 `npm test`：
+638 个文件中 637 过、1 红；5,547 条过、32 条跳过。唯一红是已登记的 `flow/startForm` `fetch failed`/
+`ECONNRESET`；随后按「D2 工作树 → 未改动 `c65fe9d5` clone」交替单跑各 9/9。原始全量 RC 1 不改写；
+日志 `/private/tmp/orca-d1-kMINyw/orca-path-task3-clean-affected.log` 与同目录 `{branch,main}-startform3.log`。
+前一轮与外部重装测试并跑的全量曾有 26 个文件红（包括真实 `~/.orca` 快照守卫与 `git ENOENT`），
+没有逐文件对照，**不登记为产品 flake**；原始日志仍保留在 `orca-path-task3-affected.log`。

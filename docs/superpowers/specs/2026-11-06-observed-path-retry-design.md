@@ -107,3 +107,11 @@ an allowlist block, inspect `run show` then use `--allow-observed-paths` when th
   is opened for `blocked_waiting_human` (D1).
 - A split with `bugfix` and no writable test scope is rejected before confirm; a corrected split is accepted.
 - ccloop and Orca tests use synthetic runs and isolated data. A paid live dogfood run needs separate owner approval.
+
+## Correction (Codex implementation, 2026-11-07) — multi-directory work-item mirror
+
+The original transaction list above named the contract, snapshot and work hashes but omitted the multi-directory
+work item's stored `writes[]`. The driver uses this array to choose the directories it prepares. The path amendment
+also verifies each entry's old `targetPaths` against the prior contract and updates only the matching entry's
+`targetPaths` in the same transaction. `writes[].checks` and directory order stay unchanged. This keeps the stored
+dispatch mirror consistent with the amended primary or additional repository contract.

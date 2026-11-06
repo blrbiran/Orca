@@ -8,6 +8,8 @@ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import type { ControlStore } from "./store.js";
 import type { ControlPlanV1 } from "./webProtocol.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
+import { applyObservedPathChain } from "./observedPathAmendment.js";
+export { appendObservedPaths, mirrorObservedWrites, observedPathAmendmentSchema, readObservedPathChain } from "./observedPathAmendment.js";
 
 /**
  * Loop plans spec §5.1 (C5; independent review R1). A change to a loop task never rewrites the archived plan: its
@@ -70,10 +72,23 @@ export function effectivePlanTask(store: ControlStore, groupId: string, archived
   const detail = `task-amendment-invalid:${archived.taskId}`;
   const invalid = (): never => { throw new ControlError("recovery-blocked", detail); };
   if (typeof work !== "object" || work === null || Array.isArray(work)) return archived;
+  const withObservedPaths = (task: ArchivedPlanTask): ArchivedPlanTask => {
+    if (!Object.hasOwn(work, "observedPathAmendmentHash") && !Object.hasOwn(work, "observedPathsVersion")) return task;
+    if (task.loop !== undefined) {
+      let contract: z.infer<typeof taskContractSchema>;
+      try { contract = taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson)); }
+      catch { return invalid(); }
+      // A multi-dir loop recipe expands the primary contract; the extra repositories were attached after expansion.
+      const primary = contract.context.additionalRepos === undefined ? contract
+        : (() => { const { repoKey: _key, additionalRepos: _extras, ...context } = contract.context; return { ...contract, context }; })();
+      if (!recipeExpandsTo(task.taskId, contract.context.repoPath, task.loop, canonicalBytes(primary).toString("utf8"))) return invalid();
+    }
+    return { ...task, ...applyObservedPathChain(store, groupId, task.taskId, task, work) };
+  };
   const state = workAmendmentStateSchema.safeParse(work);
   if (!state.success) return invalid();
   const amendmentHash = state.data.amendmentHash ?? null;
-  if (amendmentHash === null) return archived;
+  if (amendmentHash === null) return withObservedPaths(archived);
   try {
     // A hand-written task has no recipe to amend (spec §0.1: its contract is never changed).
     if (archived.loop === undefined) return invalid();
@@ -82,7 +97,7 @@ export function effectivePlanTask(store: ControlStore, groupId: string, archived
     const contract = taskContractSchema.parse(JSON.parse(record.originalContractCanonicalJson));
     if (sha256Canonical(contract) !== record.originalContractHash) return invalid();
     if (!recipeExpandsTo(archived.taskId, contract.context.repoPath, record.recipe, record.originalContractCanonicalJson)) return invalid();
-    return { ...archived, loop: record.recipe, originalContractHash: record.originalContractHash, originalContractCanonicalJson: record.originalContractCanonicalJson };
+    return withObservedPaths({ ...archived, loop: record.recipe, originalContractHash: record.originalContractHash, originalContractCanonicalJson: record.originalContractCanonicalJson });
   } catch (error) {
     if (error instanceof ControlError && error.detail === detail) throw error;
     return invalid();

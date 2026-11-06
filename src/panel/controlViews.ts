@@ -890,14 +890,16 @@ function currentProgress(snapshot: GroupReadSnapshot, currentRunId: string | nul
  */
 function taskPlanView(
   task: ReturnType<typeof readArchivedPlan>["plan"]["tasks"][number],
-  body: { loopVersion?: number; planChanged?: true },
+  body: { loopVersion?: number; planChanged?: true; observedPathsVersion?: number },
   importedContractHash: string | undefined,
   frozenSkillNames: string[] | undefined,
 ): { loopPlan: WorkItemViewV1["loopPlan"]; objective: WorkItemViewV1["objective"] } {
   const contract = parseStored(taskContractSchema, task.originalContractCanonicalJson, `original-contract-invalid:${task.taskId}`);
   const objective = { goal: contract.objective.goal, successCondition: contract.objective.successCondition };
   if (task.loop === undefined) return { loopPlan: null, objective };
-  if (!recipeExpandsTo(task.taskId, contract.context.repoPath, task.loop, task.originalContractCanonicalJson)) return blocked(`loop-plan-recipe-mismatch:${task.taskId}`);
+  // effectivePlanTask already proved a path overlay against the original recipe and its observed run evidence.
+  if (!recipeExpandsTo(task.taskId, contract.context.repoPath, task.loop, task.originalContractCanonicalJson)
+    && !(body.observedPathsVersion !== undefined && body.observedPathsVersion > 0)) return blocked(`loop-plan-recipe-mismatch:${task.taskId}`);
   // The recipe re-expanded, so its plan version exists. Panel i18n spec §3.1: the contract's own file cap, and whether the
   // version has a discipline line; the words are the panel's.
   const plan = loopPlanDefinition(task.loop.planId, task.loop.planVersion)!;

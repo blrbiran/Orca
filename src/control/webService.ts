@@ -109,12 +109,13 @@ import { recordProjectionChange } from "./projectionJournal.js";
 import { capStatuses, claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
-import { TASK_AMENDMENT_SCHEMA, effectivePlanTask, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
+import { TASK_AMENDMENT_SCHEMA, appendObservedPaths, effectivePlanTask, mirrorObservedWrites, observedPathAmendmentSchema, readObservedPathChain, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
 import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { profileMembers, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import type { Amount } from "./types.js";
 import type { ControlStore } from "./store.js";
+import type { PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import type { CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, RawAuthorityCommandV1, ProfileBindingV1 } from "./webProtocol.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance, isTerminalRunState } from "./budget.js";
@@ -277,6 +278,66 @@ function refuseConfirmedProposal(proposal: BudgetProposalRecord): void {
 function prestart(group: Group): void {
   if (group.status === "running" || group.status === "review" || group.status === "done") throw new ControlError("grant-amendment-unsupported");
   if (group.status !== "draft" && group.status !== "ready") throw new ControlError("group-state-invalid");
+}
+
+/** An observed path extension is written only inside the retry command's transaction. */
+export function applyObservedPathAmendment(store: ControlStore, groupId: string, taskId: string, sourceRunId: string,
+  misses: readonly PathPolicyMissV1[], commandId: string, actor: string):
+  { originalContractHash: string; derivedContractHash: string; executionSnapshotHash: string } {
+  const proposal = readBudgetProposal(store, groupId), archived = readArchivedPlan(store, groupId).plan.tasks.find(task => task.taskId === taskId);
+  const work = workBodyOf(store, groupId, taskId) as Record<string, any> | null;
+  const row = store.db.prepare("SELECT active,body FROM runs WHERE id=?").get(sourceRunId);
+  if (proposal.state !== "confirmed" || proposal.executionSnapshotHash === null || archived === undefined || work === null
+    || work.currentRunId !== sourceRunId || work.status !== "ready" || row === undefined || Number(row.active) !== 0)
+    throw new ControlError("recovery-blocked", "observed-path-source-state");
+  const run = JSON.parse(String(row.body)) as { runId: string; groupId: string; taskId: string; state: string;
+    drive?: { outcome?: string; pathPolicyMisses?: PathPolicyMissV1[] } };
+  if (run.runId !== sourceRunId || run.groupId !== groupId || run.taskId !== taskId || run.state !== "settled-failed"
+    || run.drive?.outcome !== "blocked_waiting_human" || !canonicalBytes(run.drive.pathPolicyMisses).equals(canonicalBytes(misses)))
+    throw new ControlError("recovery-blocked", "observed-path-source-evidence");
+  const earlier = readObservedPathChain(store, groupId, taskId, work);
+  if (earlier.some(record => record.sourceRunId === sourceRunId)) throw new ControlError("recovery-blocked", "observed-path-source-reused");
+  const beforeTask = effectivePlanTask(store, groupId, archived, work);
+  const before = readConfirmedTaskExecution(store, groupId, taskId);
+  if (work.originalContractHash !== beforeTask.originalContractHash || work.contract?.contentAddressedHash !== beforeTask.originalContractHash
+    || work.derivedContractHash !== before.derivedContractHash) throw new ControlError("recovery-blocked", "observed-path-work-identity");
+  const original = taskContractSchema.parse(JSON.parse(beforeTask.originalContractCanonicalJson));
+  let changed: ReturnType<typeof appendObservedPaths>;
+  try { changed = appendObservedPaths(original, misses); }
+  catch { throw new ControlError("recovery-blocked", "observed-path-invalid"); }
+  const originalJson = canonicalBytes(changed).toString("utf8"), originalHash = sha256Canonical(changed);
+  const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
+  const workAllocation = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
+  const handoffAllocation = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
+  if (workAllocation === undefined || handoffAllocation === undefined) throw new ControlError("recovery-blocked", "observed-path-allocations");
+  const derived = deriveContract({ ...beforeTask, originalContractHash: originalHash, originalContractCanonicalJson: originalJson,
+    work: workAllocation.amount, handoff: amountSchema.parse(handoffAllocation.amount) }, proposal.proposalVersion);
+  const frozenSkill = snapshot.skills?.find(entry => entry.taskId === taskId);
+  const rebuilt = replaceTaskInSnapshot(snapshot, taskId, derived.derivedContractHash,
+    { work: workAllocation, handoff: handoffAllocation }, frozenSkill === undefined ? null : { profile: frozenSkill.profile, names: [...frozenSkill.names] });
+  const version = (work.observedPathsVersion ?? 0) + 1;
+  if (!Number.isSafeInteger(version)) throw new ControlError("numeric-overflow");
+  const record = observedPathAmendmentSchema.parse({ schema: "orca-observed-path-amendment-v1", groupId, taskId, version,
+    previousAmendmentHash: work.observedPathAmendmentHash ?? null, sourceRunId, misses: [...misses],
+    previousOriginalContractHash: beforeTask.originalContractHash, nextOriginalContractHash: originalHash,
+    previousDerivedContractHash: before.derivedContractHash, nextDerivedContractHash: derived.derivedContractHash, commandId, actor });
+  const recordHash = sha256Canonical(record);
+  writeCanonicalRecord(store, groupId, originalHash, originalJson);
+  writeCanonicalRecord(store, groupId, derived.derivedContractHash, derived.canonicalJson);
+  writeCanonicalRecord(store, groupId, recordHash, canonicalBytes(record).toString("utf8"));
+  writeCanonicalRecord(store, groupId, rebuilt.snapshotHash, rebuilt.canonicalJson);
+  try {
+    const writes = mirrorObservedWrites(work.writes, original, misses);
+    if (writes !== undefined) work.writes = writes;
+  } catch { throw new ControlError("recovery-blocked", "observed-path-writes"); }
+  Object.assign(work, { originalContractHash: originalHash, contract: { ...work.contract, contentAddressedHash: originalHash },
+    derivedContractHash: derived.derivedContractHash, observedPathsVersion: version, observedPathAmendmentHash: recordHash, planChanged: true });
+  store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), groupId, taskId);
+  proposal.executionSnapshotHash = rebuilt.snapshotHash;
+  saveWebAuthority(store, readWebGroup(store, groupId), proposal);
+  recordProjectionChange(store, [groupId]);
+  readConfirmedTaskExecution(store, groupId, taskId);
+  return { originalContractHash: originalHash, derivedContractHash: derived.derivedContractHash, executionSnapshotHash: rebuilt.snapshotHash };
 }
 /**
  * For the commands that reopen the proposal or reset task state (edit, set-agent, confirm). Nothing on the Web path

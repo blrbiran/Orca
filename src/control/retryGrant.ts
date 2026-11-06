@@ -5,6 +5,7 @@ import { ControlError } from "./errors.js";
 import { readArchivedPlan, readBudgetProposal } from "./queries.js";
 import { idSchema } from "./schema.js";
 import { readCanonicalRecord } from "./snapshot.js";
+import { readObservedPathChain } from "./observedPathAmendment.js";
 import { latestRequestForRun } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import { hasValidUsageSettlement, settlementSame } from "./usageSettlement.js";
@@ -42,6 +43,20 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
     if (index < 0 || rows.at(-1)?.id !== work.currentRunId || !Array.isArray(work.lineageRunIds)
       || work.lineageRunIds.length !== rows.length || new Set(work.lineageRunIds).size !== rows.length || rows.some(row => !work.lineageRunIds.includes(row.id))) bad("lineage");
     const source = decode(rows[index]!);
+    const amendments = readObservedPathChain(store, groupId, String(work.workItemId), work);
+    const bySource = new Map(amendments.map(record => [record.sourceRunId, record]));
+    const derivedAtRun = new Map<string, string>();
+    let historicalHash = amendments[0]?.previousDerivedContractHash ?? String(work.derivedContractHash);
+    for (const row of rows) {
+      derivedAtRun.set(String(row.id), historicalHash);
+      const amendment = bySource.get(String(row.id));
+      if (amendment !== undefined) {
+        if (amendment.previousDerivedContractHash !== historicalHash) bad("amendment-lineage");
+        historicalHash = amendment.nextDerivedContractHash;
+      }
+    }
+    if (bySource.size !== amendments.length || amendments.some(record => !derivedAtRun.has(record.sourceRunId))
+      || historicalHash !== work.derivedContractHash) bad("amendment-current");
     if (Number(rows[index]!.active) !== 0 || source.state !== "settled-failed" || source.drive?.outcome == null || source.drive.outcome === "succeeded"
       || source.unknown.work || source.unknown.handoff || !settlementSame(work.grant, source.grant)) bad("source-state");
     if (source.usageSettlement !== undefined && !hasValidUsageSettlement(store, source)) bad("settlement");
@@ -60,7 +75,7 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
       const envelope = dispatchEnvelopeSchema.parse(JSON.parse(readCanonicalRecord(store, hash)));
       if (sha256Canonical(envelope) !== hash || envelope.runId !== run.runId || envelope.groupId !== groupId || envelope.workItemId !== work.workItemId
         || envelope.generation !== run.generation || envelope.claimOrdinal !== run.claimOrdinal
-        || envelope.continuationIntentId !== (run.continuationIntentId ?? null) || envelope.derivedContractHash !== work.derivedContractHash
+        || envelope.continuationIntentId !== (run.continuationIntentId ?? null) || envelope.derivedContractHash !== derivedAtRun.get(run.runId)
         || !proposal.profiles || !settlementSame(run.executionProfile, { workKind: "task", ...proposal.profiles.worker })
         || !settlementSame(run.handoffProfile, { workKind: "handoff", ...proposal.profiles.handoff })
         || !settlementSame(envelope.profiles.worker, proposal.profiles.worker) || !settlementSame(envelope.profiles.handoff, proposal.profiles.handoff)
