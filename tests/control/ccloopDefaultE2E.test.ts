@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -30,7 +29,9 @@ afterAll(async () => { for (const root of roots) await rm(root, { recursive: tru
 type World = { bin: string; repo: string; table: string; env: NodeJS.ProcessEnv };
 
 async function world(): Promise<World> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "ccd-")));
+  // The formal pin gate nests TMPDIR under its own scratch clone; that can exceed macOS sun_path before the panel
+  // starts. This entire world remains disposable, but its control socket needs a short system-temp root (F13).
+  const root = await realpath(await mkdtemp(join("/tmp", "ccd-")));
   roots.push(root);
   const bin = join(root, "bin");
   await mkdir(bin);
