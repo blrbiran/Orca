@@ -2,6 +2,9 @@ import {currentSavedResultSource} from "../../src/control/savedResultRecovery.js
 import {beforeEach,describe,it,expect} from 'vitest';
 import {savedResultWorld,schema11Reader} from './fixtures/savedResultWorld.js';
 import {readDriverRun,readStartEnvelope,replenishStartWakes} from '../../src/control/executionDriver.js';
+import {softLoopSettlementPass} from '../../src/control/softLoopSettlement.js';
+import {canonicalBytes} from '../../src/control/canonicalJson.js';
+import {createCcloopExecutionPort} from '../../src/control/ccloopPort.js';
 
 beforeEach(ctx=>{if(process.env.ORCA_SAVED_RESULT_VERIFY!=='1')ctx.skip();});
 describe('genuine schema10 owner → paired saved verification',()=>{
@@ -22,6 +25,26 @@ describe('genuine schema10 owner → paired saved verification',()=>{
   }finally{await f.cleanup();}
  },60000);
 });
+
+it('O19: the pinned ccloop accepts a saved candidate after Orca books an approximate codex floor',async()=>{
+ const f=await savedResultWorld({optional:true,settle:'none',omitExecuteUsage:true,sourcePaired:true,toolRules:{commands:[],network:false,secretEnv:[]}});try{
+  expect((f.source.unknown as {work:boolean}).work).toBe(true);
+  // Emulate the estimator's model provenance for the scope check; the run's grant and saved ccloop capsule are real.
+  const proposalRow=f.store.db.prepare("SELECT body FROM budget_proposals WHERE group_id='g'").get()!;
+  const proposal=JSON.parse(String(proposalRow.body));
+  const work=proposal.allocations.find((a:any)=>a.ownerKind==='task'&&a.ownerId==='a'&&a.bucket==='work');
+  work.fieldProvenance.tokens={provenance:'model',estimateId:'estimate-fixture'};
+  f.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(canonicalBytes(proposal).toString('utf8'));
+  expect(softLoopSettlementPass({store:f.store})).toBe(true);
+  f.store.db.prepare("UPDATE budget_proposals SET body=? WHERE group_id='g'").run(proposalRow.body);
+  const settled=readDriverRun(f.store,f.source.runId);
+  expect(settled.usageSettlement).toMatchObject({method:'approximate-floor',principal:'orca-auto'});
+  const resolved=await createCcloopExecutionPort({binary:process.env.ORCA_SAVED_RESULT_CCLOOP_BIN!,agentsTablePath:f.w.table,timeoutMs:60000}).resolveAgent({agent:'codex'});
+  expect(resolved.configHash,JSON.stringify({source:settled.configHash,resolved:resolved.configHash})).toBe(settled.configHash);
+  const eligibility=await f.service.savedResultEligibility(f.source.runId);
+  expect(eligibility,JSON.stringify(eligibility)).toMatchObject({status:'eligible'});
+ }finally{await f.cleanup();}
+},120000);
 
 import {existsSync,readFileSync} from 'node:fs';
 import {rm} from 'node:fs/promises';
