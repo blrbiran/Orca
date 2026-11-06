@@ -6,6 +6,7 @@ import type { CommandVerbV1 } from "../../control/webProtocol.js";
 import { EntryRejection } from "../../entry/envelope.js";
 import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
+import { adviceOf, type SuggestionView } from "../../control/budgetSuggestions.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
 export const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
@@ -65,24 +66,43 @@ export interface ConfigView {
   defaults: { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" } | null;
 }
 
+/** What the unestimated-default lines read: a group view, or `orca proposal show`'s document (no estimates in it). */
+export interface UnestimatedSource {
+  allocations?: GroupView["allocations"];
+  plan?: { planHash: string };
+  proposal?: { state?: string; proposalVersion?: number };
+  estimates?: SuggestionView["estimates"];
+}
+
 /**
  * Session 3cfc2e73 D3 (spec 2026-11-05 §3.3): one line per task whose work tokens are unlimited by default -- no person
  * set them and no estimate was applied -- then the path to an estimate. Empty when there is none. `orca group confirm`,
  * `orca group show` and `orca proposal show` print it under their human output; their JSON is unchanged.
+ * Dogfood run 3 F23 (session 86352010): the lines follow the state. A ready estimate for the current plan that was not
+ * applied is named, and the path is `apply-estimate`, not a new estimate; an editable proposal is not told to reopen --
+ * only a confirmed one (`afterConfirm`: confirm's own lines, read from the view before the confirm it reports) is.
  */
-export function unestimatedLines(groupId: string, allocations: GroupView["allocations"] | undefined): string[] {
-  const tasks = (allocations ?? []).filter((a) => a.ownerKind === "task" && a.bucket === "work" && a.amount.tokens === null
+export function unestimatedLines(groupId: string, source: UnestimatedSource, opts: { afterConfirm?: boolean } = {}): string[] {
+  const tasks = (source.allocations ?? []).filter((a) => a.ownerKind === "task" && a.bucket === "work" && a.amount.tokens === null
     && a.fieldProvenance?.tokens?.provenance === "complex-1m-default");
   if (tasks.length === 0) return [];
-  return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (default, not estimated)`),
-    `to estimate: before the group starts, reopen its proposal with a proposal edit (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>), then orca group estimate ${groupId}, orca group apply-estimate ${groupId}, orca group confirm ${groupId}`];
+  // adviceOf answers only for an editable proposal; a confirmed one keeps its ready estimate for after a reopen.
+  const ready = source.plan === undefined || source.estimates === undefined ? null
+    : adviceOf({ plan: source.plan, proposal: { state: "editable", proposalVersion: source.proposal?.proposalVersion ?? 0 }, estimates: source.estimates } as SuggestionView);
+  const editable = opts.afterConfirm !== true && source.proposal?.state === "editable";
+  const reopen = `before the group starts, reopen its proposal with a proposal edit (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>), then `;
+  const path = ready === null
+    ? `to estimate: ${editable ? "" : reopen}orca group estimate ${groupId}, orca group apply-estimate ${groupId}, orca group confirm ${groupId}`
+    : `to apply it: ${editable ? "" : reopen}orca group apply-estimate ${groupId} (--dry-run shows what it sets), orca group confirm ${groupId}`;
+  const state = ready === null ? "default, not estimated" : `default; estimate ${ready.estimateId} is ready but not applied`;
+  return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${state})`), path];
 }
 const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 export function formatWithUnestimated(body: unknown): string {
-  const b = body as { summary?: { groupId?: string }; groupId?: string; allocations?: GroupView["allocations"] } | null;
+  const b = body as (UnestimatedSource & { summary?: { groupId?: string }; groupId?: string }) | null;
   const groupId = b?.summary?.groupId ?? b?.groupId;
-  return withLines(text(body), typeof groupId === "string" ? unestimatedLines(groupId, b?.allocations) : []);
+  return withLines(text(body), typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

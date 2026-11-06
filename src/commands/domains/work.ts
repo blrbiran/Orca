@@ -325,7 +325,7 @@ function unresolvedMessage(groupId: string, preview: AgentPreview): string {
 let confirmNote: string[] = [];
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
-  confirmNote = unestimatedLines(group(c), view.allocations);
+  confirmNote = unestimatedLines(group(c), view, { afterConfirm: true });
   const defaults = (await config(c)).defaults;
   const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;
   if (preview.selectionsHash === null || preview.proposalVersion !== view.proposal.proposalVersion) {

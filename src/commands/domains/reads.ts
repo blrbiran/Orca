@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { formatWithUnestimated, proposalDocument } from "./verbs.js";
+import { formatWithUnestimated, proposalDocument, unestimatedLines } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
@@ -22,6 +22,8 @@ const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique p
 const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
 const RUN: PositionalDef = { name: "run", summary: "a run id", required: true };
 const ids = (context: WriteContext, name: string): string => context.ids[name]!;
+/** `orca proposal show`'s unestimated-default lines, read in compose from the group view (Dogfood run 3 F23). */
+let proposalNote: string[] = [];
 
 interface GroupView { summary: { groupId: string; commandRevision: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
 interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string }> }
@@ -158,7 +160,10 @@ export const READ_ROWS: CommandDef[] = [
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
     paths: (c) => [`groups/${ids(c, "group")}`],
-    compose: ([view]) => proposalDocument(view as Parameters<typeof proposalDocument>[0]), format: formatWithUnestimated }),
+    // Dogfood run 3 F23: the document carries no estimates, so its lines are read from the view it is composed from (the
+    // confirm row's pattern, one command per CLI process); its JSON is unchanged.
+    compose: ([view]) => { const v = view as Parameters<typeof proposalDocument>[0]; proposalNote = unestimatedLines(v.summary.groupId, v); return proposalDocument(v); },
+    format: (body) => { const lines = proposalNote; proposalNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   read({ domain: "task", action: "show", summary: "one task of a group and its runs", positionals: [GROUP, TASK], paths: (c) => [`groups/${ids(c, "group")}`],
     compose: ([view], c) => {
       const v = view as GroupView;
