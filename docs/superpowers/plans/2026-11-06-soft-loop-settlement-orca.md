@@ -158,3 +158,19 @@ not the test (it opens only temp stores). Recorded, not suppressed.
   Orca and old ccloop roots it needs are not prepared in this session's scratchpad, and the fixture always books a
   person's settlement (`:89-90`), so the case also needs a `settle: "none"` fixture option. Left for the repin round.
 - §3.5 refusal wording (decision 9).
+
+### Gate (Rule 18; never `npm run verify`)
+
+- Rebased on main `efc789b7` (controller's message; no migration on this branch). `npx tsc --noEmit -p tsconfig.json`
+  rc 0, `-p web` rc 0, `npm run gen:cli-docs` idempotent (0 files changed on the second run).
+- Final gate, `node scripts/test-affected.mjs --base main > scratchpad/slo-gate2.txt 2>&1` at `4b278c81`: 823 files selected
+  (642 root, 181 web); root 4 failed | 638 passed files (4 failed | 5555 passed | 32 skipped tests), web 181/181
+  (1666 tests), rc 1. The four reds -- `driverReconcileN` (hook timeout), `multiDirDue` (driver deadline), `schedulerBridge`
+  (timeout), `flow/startForm` (`fetch failed`) -- each ran alone on the branch and on a fresh `git clone --local` at main
+  `efc789b7`, alternately: 8/8 green (load 12-35; `scratchpad/slo-rerun2-summary.txt`). Classified as load.
+- First gate at `8c09d592` (pre-rebase, `scratchpad/slo-gate1.txt`): root 31 failed files, web 23. One real red,
+  `tests/control/archiveGroup.test.ts` (the archive walk did not cover the new verb), fixed in `4b278c81` with a Ruling
+  line. Eight suite-level reds were `tests/setup/relocateUserData.ts` reporting the user's live panel growing its own
+  `~/.orca/control/panel/control.sqlite` and logs during the run; the rest were timeouts. 33 of those files were rerun
+  alone on both trees before the rebase (`scratchpad/slo-rerun-summary.txt`): all green on the branch, `schedulerBridge`
+  once red on main.
