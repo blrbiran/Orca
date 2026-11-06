@@ -1183,6 +1183,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(run.usageApproximate === undefined ? {} : { usageApproximate: { floorTokens: run.usageApproximate.floorTokens } }),
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
+      ...(run.drive?.pathPolicyMisses === undefined ? {} : { pathPolicyMisses: run.drive.pathPolicyMisses }),
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
       failureCause: run.drive?.failureCause ?? null,
       ...(quotaRest === undefined ? {} : { quotaRest }),

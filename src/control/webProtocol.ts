@@ -11,6 +11,7 @@ import { CHECK_KINDS, LOCKABLE_PATHS, globalChecksLayerSchema, integrationCheckL
 import { FLOW_LOCKABLE_PATHS, FLOW_SETTING_FIELDS, flowsLayerSchema, globalFlowsLayerSchema } from "../flow/settingsSchema.js";
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
 import { CORRECTION_KINDS } from "../corrections/schema.js";
+import { pathPolicyMissesSchema } from "./pathPolicyMisses.js";
 import { DECISION_IMPORTANCES } from "../ledger/types.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
@@ -1821,6 +1822,7 @@ export const runViewSchema = z
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
+    pathPolicyMisses: pathPolicyMissesSchema.optional(),
     outcome: nonemptyString.nullable().optional(),
     // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (driveRecord.ts runFailureCauseSchema); optional like stopReason.
     failureCause: runFailureCauseSchema.nullable().optional(),

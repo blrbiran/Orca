@@ -334,6 +334,39 @@ describe("collect's failure cause and last rejection through the real port",()=>
   });
 });
 
+describe("collect's observed allowlist misses through the real port", () => {
+  const terminal = { ...FAILED_TERMINAL, status: "blocked_waiting_human", waitingOnHuman: true, stopReason: "allowlist miss: tests/a.test.ts" };
+  const misses = [{ repoKey: null, path: "tests/a.test.ts" }, { repoKey: null, path: "tests/b.test.ts" }];
+  it("accepts concrete misses on protocol 3 and 4 while an older peer leaves them absent", async () => {
+    const v3 = await fixture("ok", { terminal, collectExtra: { pathPolicyMisses: misses } });
+    expect((await v3.port.collect(v3.envelope, 0)).pathPolicyMisses).toEqual(misses);
+    const v4 = await fixture("ok", { terminal: { ...terminal, budgetSnapshot: { ...terminal.budgetSnapshot, tokenRemainingStatus: "known" } },
+      collectExtra: { pathPolicyMisses: misses }, features: { protocol: 1, tokenPolicy: "optional-v1" } });
+    expect((await v4.port.collect({ ...v4.envelope, protocol: 4 }, 0)).pathPolicyMisses).toEqual(misses);
+    const old = await fixture("ok", { terminal });
+    expect((await old.port.collect(old.envelope, 0)).pathPolicyMisses).toBeUndefined();
+  });
+
+  it("refuses task-path evidence on a single-call work item", async () => {
+    const h = await fixture("ok", { terminal, collectExtra: { pathPolicyMisses: misses } });
+    const single = { ...h.envelope, work: { kind: "single-call", prompt: "p", responseSchema: {}, maxOutputTokens: 1, sourceDir: h.root } } as StartEnvelope;
+    await expect(h.port.collect(single, 0)).rejects.toThrow("control-response-invalid");
+  });
+
+  it("refuses duplicate, non-relative, unknown-repository and wrong-terminal evidence", async () => {
+    for (const [reported, status, reason] of [
+      [[misses[0], misses[0]], "blocked_waiting_human", terminal.stopReason],
+      [[{ repoKey: null, path: "../outside" }], "blocked_waiting_human", terminal.stopReason],
+      [[{ repoKey: "ghost", path: "tests/a.test.ts" }], "blocked_waiting_human", terminal.stopReason],
+      [misses, "failed", terminal.stopReason],
+      [misses, "blocked_waiting_human", "denylist match: tests/a.test.ts"],
+    ] as const) {
+      const h = await fixture("ok", { terminal: { ...terminal, status, stopReason: reason }, collectExtra: { pathPolicyMisses: reported } });
+      await expect(h.port.collect(h.envelope, 0)).rejects.toThrow("control-response-invalid");
+    }
+  });
+});
+
 // ccloop declared-context-window spec 2026-10-21 §2.3 (#70): a resolution whose window is the installation's declared value
 // says so; Orca's strict parse accepts the marker and returns it, so frozenSlotOf can keep it.
 it("accepts and returns a resolution's installation-declared window marker",async()=>{

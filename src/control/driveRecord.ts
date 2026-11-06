@@ -5,6 +5,7 @@ import { recordProjectionChange } from "./projectionJournal.js";
 import { pendingEntrySchema } from "./runLedger.js";
 import { toolRulesReportSchema } from "./toolRules.js";
 import type { ControlStore } from "./store.js";
+import { pathPolicyMissesSchema } from "./pathPolicyMisses.js";
 
 /**
  * Execution driver spec §2.2. The five run states only the driver writes. Its `running` is the
@@ -151,6 +152,7 @@ export const driveRecordSchema = z.object({
   // units), stored when the run blocks on a terminal other than `succeeded`. Optional: absent when ccloop stated none and
   // in every drive record written before it existed; the v9 store keeps an older Orca from reading one.
   stopReason: z.string().min(1).optional(),
+  pathPolicyMisses: pathPolicyMissesSchema.optional(),
   // Failure-cause spec 2026-10-21 §3 and ccloop priorFailures spec §3: ccloop's run-level cause and the terminal's last
   // recorded rejection, stored with `stopReason` when the run blocks on a terminal other than `succeeded`. Optional: absent
   // when ccloop stated none (an older ccloop, or a run with no rejection) and in every drive record written before them.

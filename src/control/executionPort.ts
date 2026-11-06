@@ -7,6 +7,7 @@ import type { OperatorNote, PriorFailure, RunProgress, TranscriptEntry } from ".
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import type { LastFailure, RunFailureCause } from "./driveRecord.js";
+import type { PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import { createCcloopExecutionPort } from "./ccloopPort.js";
 import type { AgentResolution, ContextWindow, PartialSelection } from "./agentSelection.js";
 import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } from "./agentInstallationProtocol.js";
@@ -34,6 +35,8 @@ export interface ExecutionReport {
  transcripts?:TranscriptEntry[];
  /** Tester round 3 spec §3: the observed floor of calls that ended without a usage report. Shown to a person, never booked. */
  usageLowerBound?:{tokens:number};
+ /** Exact Git-observed paths a human-blocked ccloop attempt could not write under its allowlist. */
+ pathPolicyMisses?:PathPolicyMissV1[];
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }

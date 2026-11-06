@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
+import type { PathPolicyMissV1 } from "../../../src/control/pathPolicyMisses.js";
 import type { ToolRulesReport } from "../../../src/control/toolRules.js";
 import { writeFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -49,6 +50,7 @@ export interface HarnessOptions {
   storeNow?: () => number;
   /** Failure-cause spec 2026-10-21 §3: the cause and last rejection the synthetic ccloop maps onto a terminal (driverPort.ts). */
   failure?: (workItemId: string) => { failureCause?: RunFailureCause; lastFailure?: LastFailure } | undefined;
+  pathPolicyMisses?: (workItemId: string) => PathPolicyMissV1[] | undefined;
   /** Control run decisions: the `decisions` the synthetic ccloop reports with a terminal (driverPort.ts); absent or undefined = not reported. */
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: the `debug` the synthetic ccloop reports with a terminal (driverPort.ts); absent = not reported. */
@@ -88,6 +90,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.acceptedConfigHash ? { acceptedConfigHash: options.acceptedConfigHash } : {}),
     ...(options.stopReason ? { stopReason: options.stopReason } : {}),
     ...(options.failure ? { failure: options.failure } : {}),
+    ...(options.pathPolicyMisses ? { pathPolicyMisses: options.pathPolicyMisses } : {}),
     ...(options.decisions ? { decisions: options.decisions } : {}),
     ...(options.debug ? { debug: options.debug } : {}),
     ...(options.budgetSnapshot ? { budgetSnapshot: options.budgetSnapshot } : {}),

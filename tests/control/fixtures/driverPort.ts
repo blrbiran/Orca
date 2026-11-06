@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
+import type { PathPolicyMissV1 } from "../../../src/control/pathPolicyMisses.js";
 import type { ToolRulesReport } from "../../../src/control/toolRules.js";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -55,6 +56,7 @@ export function fakeCcloopPort(input: {
   stopReason?: (workItemId: string) => string | null;
   /** Failure-cause spec 2026-10-21 §3: the cause and last rejection the port maps onto the terminal; undefined = neither. */
   failure?: (workItemId: string) => { failureCause?: RunFailureCause; lastFailure?: LastFailure } | undefined;
+  pathPolicyMisses?: (workItemId: string) => PathPolicyMissV1[] | undefined;
   /** Control run decisions: what the run reports as `decisions` on its terminal report; undefined = the field is absent. */
   decisions?: (workItemId: string) => unknown;
   /** Debug task plan Task 8: what the run reports as `debug` on its terminal report; undefined = the field is absent. */
@@ -127,7 +129,8 @@ export function fakeCcloopPort(input: {
     const failure = stop.terminal ? input.failure?.(claim.workItemId) : undefined;
     const budgetSnapshot = stop.terminal ? input.budgetSnapshot?.(claim.workItemId) : undefined;
     const toolRules = input.toolRules?.(claim.workItemId);
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }) };
+    const pathPolicyMisses = stop.terminal ? input.pathPolicyMisses?.(claim.workItemId) : undefined;
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }) };
   };
 
   const port: ExecutionPort = {
