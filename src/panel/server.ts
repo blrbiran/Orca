@@ -342,12 +342,10 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {
-      // Plan D13: a service with no socket would answer `status` as not running forever; exit 78 instead.
-      if (mode.service === true) throw await bindFailed(`control socket: ${bound.code}: ${bound.detail}`);
-      // Agent entry spec §3 (line 57): the foreground panel still starts and serves the Web UI. Dogfood run 3 F13 (session
-      // 86352010): the line also says what that costs -- no CLI or MCP reaches this panel -- and, for a long path, the fix.
+      // F13: a foreground panel with no control socket cannot serve its CLI/MCP clients. Fail with the service's same
+      // exit-78 cleanup path instead of printing a ready line for a half-usable panel (human's 2026-11-07 ruling).
       const fix = bound.code === "control-socket-path-too-long" ? `; use a --control-state-dir whose ${CONTROL_SOCKET_NAME} path is at most ${CONTROL_SOCKET_MAX_BYTES} bytes` : "";
-      process.stderr.write(`orca-panel: control socket unavailable: ${bound.code}: ${bound.detail}. The orca CLI and MCP cannot reach this panel; only the Web UI is served${fix}\n`);
+      throw await bindFailed(`control socket: ${bound.code}: ${bound.detail}${fix}`);
     } else socket = bound;
   }
 

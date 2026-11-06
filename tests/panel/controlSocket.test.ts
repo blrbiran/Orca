@@ -45,17 +45,14 @@ describe("the control socket (spec §3)", () => {
     expect((await overSocket(second.socketPath!, "GET", "/api/control/summary")).status).toBe(200);
   });
 
-  it("C2: a regular file at the path is not removed; the panel still serves the Web UI and says why on stderr", async () => {
+  it("C2: a regular file at the path is kept and the foreground panel refuses before readiness", async () => {
     const w = await workspace();
     await mkdir(w.state, { recursive: true, mode: 0o700 });
     await writeFile(join(w.state, "control.sock"), "not a socket", { mode: 0o600 });
-    const lines = captureStderr();
-    const panel = await boot(w);
-    expect(panel.socketPath).toBe(null);
-    expect(lines.join("")).toContain("orca-panel: control socket unavailable: control-socket-path-occupied");
+    const answer = await boot(w).then(async (panel) => { await panel.close(); untrackSocketPanel(panel); return { code: "unexpected-ready" }; }, (error: unknown) => error);
+    expect(answer).toMatchObject({ code: "panel-bind-failed", exitCode: 78 });
+    expect((answer as Error).message).toContain("control-socket-path-occupied");
     expect((await stat(join(w.state, "control.sock"))).isFile()).toBe(true);
-    const web = await (await sessionFor(panel, w.env)).fetch("/api/control/config");
-    expect(web.status).toBe(200);
   });
 
   it("C3: close() removes the socket file", async () => {
@@ -89,21 +86,16 @@ describe("the control socket (spec §3)", () => {
     expect((await overSocket(panel.socketPath!, "GET", "/")).status).toBe(404);
   });
 
-  it("C15: a path over the sun_path limit is refused by name, and the panel still starts", async () => {
+  it("C15: a foreground panel refuses a control socket path over sun_path instead of claiming readiness", async () => {
     expect(socketPathTooLong("/" + "a".repeat(120))).toBe(true);
     expect(socketPathTooLong("/tmp/x/control.sock")).toBe(false);
     const w = await workspace();
     const deep = join(w.root, "d".repeat(100));
-    const lines = captureStderr();
     const opts = parsePanelArgs(["--by", "tester", "--repo", `proj=${w.repo}`, "--control-state-dir", deep], w.env);
-    const panel = trackSocketPanel(await createPanelServer(opts, w.env));
-    expect(panel.socketPath).toBe(null);
-    expect(lines.join("")).toContain("control-socket-path-too-long");
-    // Dogfood run 3 F13 (session 86352010): the line names the consequence and the fix, not only the code.
-    // mutation: restore the bare `unavailable: <code>: <detail>` line -> red
-    expect(lines.join("")).toContain(`. The orca CLI and MCP cannot reach this panel; only the Web UI is served; use a --control-state-dir whose control.sock path is at most ${process.platform === "darwin" ? 103 : 107} bytes\n`);
-    const web = await (await sessionFor(panel, w.env)).fetch("/api/control/config");
-    expect(web.status).toBe(200);
+    const answer = await createPanelServer(opts, w.env).then(async (panel) => { await panel.close(); return { code: "unexpected-ready" }; }, (error: unknown) => error);
+    expect(answer).toMatchObject({ code: "panel-bind-failed", exitCode: 78 });
+    expect((answer as Error).message).toContain("control-socket-path-too-long");
+    expect((answer as Error).message).toContain(`use a --control-state-dir whose control.sock path is at most ${process.platform === "darwin" ? 103 : 107} bytes`);
   });
 
   it("C16: close() waits for a request in flight on the socket, which is answered before the store is released (spec §3.3)", async () => {

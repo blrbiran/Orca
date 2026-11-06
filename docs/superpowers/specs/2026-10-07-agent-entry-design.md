@@ -54,7 +54,7 @@ A second express app on a second `http.Server`, built in `createPanelServer`, sh
 ### 3.3 Lifecycle and failure
 
 - Shutdown: the socket server stops accepting in the same path as the TCP server (signal handler and `close()`), before `control.close()` releases the store, so no socket request reaches a closed store; in-flight requests meet the same admission gate as Web requests. `control.sock` is unlinked once the socket server has closed. Clients send `Connection: close`, so no idle keep-alive connection holds the close open. A crash leaves the file; the next owner unlinks it (§3.1).
-- If the socket cannot be bound (path longer than the platform's `sun_path` limit — 104 bytes on macOS, 108 on Linux — or a non-socket file at the path, or a listen error), the panel still starts and serves the Web UI, and writes one stderr line `orca-panel: control socket unavailable: <code>` with code `control-socket-path-too-long`, `control-socket-path-occupied` or `control-socket-listen-failed`. Rationale: the socket is an additional entry; refusing to start would take the human's own UI away over it. The line is the loud failure (Rule 12).
+- **2026-11-07 F13 correction, owner authorized rewriting necessary criteria:** if control is enabled and its socket cannot bind (overlong path, occupied path or listen failure), both foreground and service panels close the HTTP listener and store, then refuse with `panel-bind-failed` / exit 78. The message includes the socket's typed code and, for an overlong path, the short `--control-state-dir` remedy. A Web-ready line when CLI/MCP cannot reach the same control plane misstates the panel's health. `--no-control` and a panel that did not acquire the store retain their existing Web-only behavior.
 - The stdout ready line gains a field: `orca-panel ready url=… token=… socket=<path>` when bound, unchanged otherwise. (Any test that parses the ready line must keep passing; the field is appended.)
 
 ### 3.4 Out-of-repo writer registration (Rule 17)
@@ -161,7 +161,7 @@ All criteria use a temporary `ORCA_CONTROL_DIR` and HOME under a short `TMPDIR`,
 | # | Criterion |
 |---|---|
 | C1 | Panel with control: `control.sock` exists, is a socket, mode 0600; ready line ends with `socket=<path>`. |
-| C2 | Stale socket: a leftover socket file at the path is replaced and the new socket answers; a regular file at the path yields the `control-socket-path-occupied` stderr line and a working Web UI. |
+| C2 | Stale socket: a leftover socket file at the path is replaced and the new socket answers; a regular file at the path yields `panel-bind-failed` with `control-socket-path-occupied`, exit 78, and no ready line. |
 | C3 | Shutdown (signal and `close()`) removes `control.sock`. |
 | C4 | `--no-control` and a panel that lost the store: no socket; existing panel criteria unchanged. |
 | C5 | Socket serves no token-protected non-control route (e.g. `/api/reviews` → 404) and no static page. |
@@ -174,7 +174,7 @@ All criteria use a temporary `ORCA_CONTROL_DIR` and HOME under a short `TMPDIR`,
 | C12 | Attribution: a socket command's row has `client` = the header value; a Web command's row has `web`; the same command (same commandId, revision and payload) sent once over each channel to two fresh stores yields byte-equal `raw_request_hash` and `authority_command_hash`; a row written by background work after the route returns has `client` null. |
 | C13 | Migration: a version-6 store upgrades to 7 with existing rows' `client` null; a fresh store has the column. |
 | C14 | No panel: CLI and `orca_read` answer `panel-not-running`, exit 1, and no process is spawned. |
-| C15 | Socket path over the limit → local `control-socket-path-too-long` (CLI) and the stderr line (panel). |
+| C15 | Socket path over the limit → `panel-bind-failed` / exit 78 before readiness; its detail names `control-socket-path-too-long` and the short state-dir remedy. |
 | C16 | CLI output: stdout is exactly one JSON line in every outcome, including local errors. |
 | C17 | MCP: an SDK client over stdio lists exactly `orca_read` and `orca_send`; both round-trip against the panel; a human-only refusal comes back with `isError: true` and the panel's code. |
 | C18 | Skill file exists with valid frontmatter and every route it lists exists in `controlApi.ts`'s table (a mechanical check, so the table cannot drift). |
