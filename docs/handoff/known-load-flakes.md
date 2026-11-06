@@ -228,3 +228,4 @@ web 测试默认超时现为 15 s（`web/vite.config.ts`），上表 web 两条�
 | Orca › `driverReconcile`／`driverReconcileN`（`ENOTEMPTY`、deadline）、`multiDirDue`、`schedulerBridge`（30 s）、`panel/chainsApi` C1（500）、`flow/startForm`（timeout／`fetch failed`／ECONNRESET）、`taskResultPaired`（revision） | 负载 28–150 时红；单跑两边全绿；`startForm` 在未改动 main 的 fresh clone 上也红过 |
 | Orca › `tests/setup/relocateUserData.ts` 报真实 `~/.orca` 被写 | **不是测试写的**：是 7777 的 launchd 服务在跑时自己写 `control.sqlite`／日志；持有者 pid 可查（`lsof`） |
 | ccloop › `savedResultRecovery.native`（`ENOTEMPTY`、worker did not seal、30 s）、`phasesCompleted`、`setupRunLoop` continuation、`endToEnd`、`ompPhase` grandchild、`cli`／`endToEnd`（main clone 软链依赖时两边都挂） | 负载 40–110；与未改动 main clone 交替单跑，两边同形 |
+| Orca › `tests/control/criteriaBaseRun.test.ts`「a restart while the re-run is in flight restores the workspace and runs it again」(`blocked` vs `landed`) | **新形状 n＝1**：repin 门全量负载约 20 时红；新旧 ccloop pin 交替单跑 4/4 绿 |
