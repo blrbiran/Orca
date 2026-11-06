@@ -11,8 +11,9 @@ import type { Amount, ArtifactRef, Candidate, Grant } from "./types.js";
 const pair = z.object({ work: amountSchema, handoff: amountSchema }).strict();
 /** Spec 2026-10-13-unmetered-usage-settlement-design.md §A.3: only the unlimited work token dimension is unmetered. */
 export const unmeteredChargeSchema = z.object({ work: amountSchema.extend({ tokens: z.null() }).strict(), handoff: amountSchema }).strict();
+const personFields = { commandId: idSchema, principal: z.string().regex(/^user:.+/) };
 const markerFields = {
-  commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
+  at: safeInteger,
   groupId: idSchema, taskId: idSchema, workItemId: idSchema, runId: idSchema, generation: safeInteger.positive(), highWater: safeInteger,
   // "recovered": spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2, a handoff-stopped run settled back to recoverable.
   reservationDisposition: z.enum(["committed", "released", "recovered"]), report: artifactSchema,
@@ -20,8 +21,12 @@ const markerFields = {
   handoffResolution: z.object({ requestId: idSchema, previousState: z.literal("settled-unrecoverable"), previousFailureCode: z.literal("usage-unsettled"), checkpointId: idSchema, checkpointHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
 };
 export const usageSettlementSchema = z.union([
-  z.object({ method: z.literal("remaining-grant"), charged: pair, ...markerFields }).strict(),
-  z.object({ method: z.literal("owner-acknowledged-unmetered"), charged: unmeteredChargeSchema, ...markerFields }).strict(),
+  z.object({ method: z.literal("remaining-grant"), charged: pair, ...personFields, ...markerFields }).strict(),
+  z.object({ method: z.literal("owner-acknowledged-unmetered"), charged: unmeteredChargeSchema, ...personFields, ...markerFields }).strict(),
+  // Spec 2026-11-06 soft-mode loop run settlement §3.2 (option (d), human's answer Q3): Orca's booking of a loop run's
+  // observed floor in a group with no token limit, backed by its own `settle-approximate-usage` row under orca-auto.
+  z.object({ method: z.literal("approximate-floor"), commandId: idSchema, principal: z.literal("orca-auto"), charged: pair,
+    floorTokens: safeInteger.nullable(), reason: z.string().min(1), ...markerFields }).strict(),
 ]).superRefine((v, ctx) => {
   if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
@@ -29,6 +34,7 @@ export type UsageSettlement = z.infer<typeof usageSettlementSchema>;
 /**
  * Spec 2026-10-27 single-call unknown usage §5 O1, §9 R4: ccloop's lower bound on a failed single call's usage (record key
  * `usageLowerBound`), kept on the blocked run as `singleCallUsageLowerBound`. Shown to the person, never charged (D3).
+ * (In a group with no token limit a floor is booked: spec 2026-11-03 soft mode, and for loop runs spec 2026-11-06.)
  */
 export const singleCallUsageLowerBoundSchema = z.object({ tokens: safeInteger.positive() }).strict();
 /**
@@ -133,9 +139,27 @@ export function lineageWorkUsage(run: { cumulative: { work: Amount }; usageSettl
   const m = run.usageSettlement as UsageSettlement | undefined, work = run.cumulative.work;
   // A run settled back to recoverable (spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2) is continued, so the same
   // ruling holds for its remaining-grant charge: otherwise the charge exhausts the authored budget the continuation needs.
-  if (m === undefined || (m.method !== "owner-acknowledged-unmetered" && m.reservationDisposition !== "recovered")) return work;
+  // Spec 2026-11-06 §3.2: an approximate floor is provider-observed usage, so it stays in the lineage, recovered or not.
+  if (m === undefined || m.method === "approximate-floor" || (m.method !== "owner-acknowledged-unmetered" && m.reservationDisposition !== "recovered")) return work;
   const c = m.charged.work;
   return { tokens: c.tokens === null ? work.tokens : work.tokens - c.tokens, activeMs: work.activeMs - c.activeMs, attempts: work.attempts - c.attempts, sessions: work.sessions - c.sessions };
+}
+
+/**
+ * Spec 2026-11-06 §3.2 (finding 1): ccloop's floor counts only the calls that ended without a report and the baseline only
+ * the reported ones, so the floor itself is booked: `charged.work.tokens = floorTokens ?? 0`, every other charge 0, and
+ * the run's work token remainder is `max(grant - cumulative, 0)` (null when unlimited). The marker matches the run's
+ * `usageApproximate`. Whether the group's limit is still null is never asked: a later set-limit leaves the marker valid.
+ */
+function approximateFloorBooked(run: SettlementRun, m: Extract<UsageSettlement, { method: "approximate-floor" }>, baseline: {work:Amount;handoff:Amount}): boolean {
+  const floor = m.floorTokens ?? 0;
+  if (!settlementSame(run.usageApproximate, { floorTokens: m.floorTokens, reason: m.reason, at: m.at })) return false;
+  for (const b of ["work", "handoff"] as const) for (const d of ds) {
+    const charge = b === "work" && d === "tokens" ? floor : 0;
+    if (m.charged[b][d] !== charge || run.cumulative[b][d] !== baseline[b][d] + charge) return false;
+  }
+  const grant = run.grant.work.tokens;
+  return run.remaining.work.tokens === (grant === null ? null : Math.max(grant - run.cumulative.work.tokens, 0));
 }
 
 /** A persisted marker must be backed by the authority receipt, unchanged provider highWater and immutable proof. */
@@ -152,7 +176,9 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
       const e = JSON.parse(String(row.body)); if (e.cumulative === null) unknown = true; else baseline[e.bucket as keyof Grant] = e.cumulative;
     }
     if (!unknown) return false;
-    for (const b of ["work", "handoff"] as const) for (const d of ds) {
+    if (m.method === "approximate-floor") {
+      if (!approximateFloorBooked(run, m, baseline)) return false;
+    } else for (const b of ["work", "handoff"] as const) for (const d of ds) {
       if (m.method === "owner-acknowledged-unmetered" && b === "work" && d === "tokens") {
         // m.charged.work.tokens is null by unmeteredChargeSchema (parsed above), so it is not checked again here.
         if (run.grant.work.tokens !== null || run.remaining.work.tokens !== null || run.cumulative.work.tokens !== baseline.work.tokens) return false;
@@ -164,8 +190,12 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     const proof = settlementProof(store, run);
     if (!settlementSame(proof.report, m.report) || !settlementSame(proof.stopProof, m.stopProof)) return false;
     const row = store.db.prepare("SELECT principal,client,person_principal,verb,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, m.commandId);
+    if (!row) return false;
+    // Spec 2026-11-06 §2 (d): Orca's row backs only Orca's method, and a person's row only a person's, so neither verb can
+    // stand in for the other.
+    if (m.method === "approximate-floor") { if (row.verb !== "settle-approximate-usage" || row.principal !== "orca-auto") return false; }
     // A Web owner's row names the account as its principal; a socket row (spec 2026-10-29 §2) names it as person_principal.
-    if (!row || row.verb !== "settle-unknown-usage" || (row.client === "web" ? row.principal !== m.principal : row.person_principal !== m.principal)) return false;
+    else if (row.verb !== "settle-unknown-usage" || (row.client === "web" ? row.principal !== m.principal : row.person_principal !== m.principal)) return false;
     const receipt = JSON.parse(String(row.body_json)).result;
     if (receipt?.kind !== "usage-settled" || receipt.runId !== run.runId || receipt.taskId !== run.taskId || receipt.generation !== run.generation
       || receipt.method !== m.method || receipt.at !== m.at || !settlementSame(receipt.charged, m.charged)) return false;

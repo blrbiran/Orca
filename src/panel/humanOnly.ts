@@ -22,6 +22,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "retry-task": "any",
   "verify-saved-result": "any",
   "settle-unknown-usage": "human-only",
+  // Spec 2026-11-06 soft-mode loop run settlement (d): Orca's own booking of an approximate floor (orca-auto); no route sends it.
+  "settle-approximate-usage": "panel",
   "shutdown": "panel",
   "set-workspace-mode": "any",
   "set-agent-preferences": "any",

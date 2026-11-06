@@ -2,7 +2,7 @@
 
 Hand-written. Use the `orca <domain> <action>` commands first (SKILL.md, the other references): they fill revisions,
 hashes and pins from a fresh read. `orca control get|send` is the raw socket client, kept for what no command covers —
-the two escape-hatch-only verbs (`shutdown`, `system-debug-open`), a route a command does not reach yet, debugging.
+the escape-hatch-only verbs (`shutdown`, `system-debug-open`, `settle-approximate-usage`), a route a command does not reach yet, debugging.
 It sends exactly what you give it; nothing is filled for you.
 
 What follows is the text the orca-control skill carried before CLI v2 (moved here verbatim on 2026-10-22, plan Task 13),

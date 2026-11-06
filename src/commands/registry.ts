@@ -23,7 +23,7 @@ export const REGISTRY: readonly CommandDef[] = [...META_ROWS, ...READ_ROWS, ...W
  * Spec §11: the control verbs with no command, reachable only through `orca control send` (references/escape-hatch.md).
  * tests/commands/verbCoverage.test.ts fails on any other verb the panel knows that no row maps.
  */
-export const ESCAPE_HATCH_ONLY = ["shutdown", "system-debug-open"] as const;
+export const ESCAPE_HATCH_ONLY = ["shutdown", "system-debug-open", "settle-approximate-usage"] as const;
 
 const words = (def: CommandDef): string[] => [def.domain, ...(def.action === null ? [] : def.action.split(" "))];
 

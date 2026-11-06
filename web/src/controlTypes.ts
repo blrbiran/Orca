@@ -384,10 +384,11 @@ export type SettleAcknowledgeV1 = "charge-remaining-grant" | "release-unmetered"
 export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: SettleAcknowledgeV1 };
 /** The unlimited work token dimension of an unmetered release is booked as nothing (null), never as 0. */
 export type UnmeteredChargeV1 = { work: Omit<Amount, "tokens"> & { tokens: null }; handoff: Amount };
-export type UsageSettlementV1 = ({ method: "remaining-grant"; charged: { work: Amount; handoff: Amount } } | { method: "owner-acknowledged-unmetered"; charged: UnmeteredChargeV1 }) & { commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; reservationDisposition: "committed" | "released" | "recovered"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
+/** Spec 2026-11-06 §3.5: `approximate-floor` is Orca's booking of a loop run's observed floor (principal orca-auto). */
+export type UsageSettlementV1 = ({ method: "remaining-grant"; charged: { work: Amount; handoff: Amount } } | { method: "owner-acknowledged-unmetered"; charged: UnmeteredChargeV1 } | { method: "approximate-floor"; principal: "orca-auto"; charged: { work: Amount; handoff: Amount }; floorTokens: number | null; reason: string }) & { commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; reservationDisposition: "committed" | "released" | "recovered"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
 export type RunViewV1 = {
   recoveryOf?:RecoveryOf;savedResultOrdinaryRetry?:boolean;
-  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; acknowledge: SettleAcknowledgeV1; settlement?: UsageSettlementV1 };
+  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; acknowledge: SettleAcknowledgeV1; settlement?: UsageSettlementV1; approximateRefusal?: string };
   runId: string;
   taskId: string | null;
   estimateId: string | null;
@@ -678,7 +679,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
@@ -698,7 +699,7 @@ export type CommandSuccessV1 = {
   result:
     | {kind:"saved-result-verification-started";taskId:string;runId:string;recoveryOf:RecoveryOf}
 
-    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount }; at: number; method: "remaining-grant" | "owner-acknowledged-unmetered" }
+    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount }; at: number; method: "remaining-grant" | "owner-acknowledged-unmetered" | "approximate-floor" }
     | { kind: "imported"; groupId: string; estimateId: string | null; estimateState: "queued" | "blocked-capability" | "input-too-large" | "none"; estimateReasonCode: string | null }
     | { kind: "proposal-edited"; proposalVersion: number }
     | { kind: "estimate-created"; estimateId: string; estimateVersion: number; estimateState: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null; wakeId: string | null }

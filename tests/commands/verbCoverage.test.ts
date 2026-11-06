@@ -12,7 +12,9 @@ describe("verb coverage (spec §11)", () => {
   });
 
   it("the escape-hatch list names only real verbs that have no command (it cannot hide a mapped verb)", () => {
-    expect([...ESCAPE_HATCH_ONLY]).toEqual(["shutdown", "system-debug-open"]);
+    // Ruling: 「这次批准改写所有必要的判据。」 (session 86352010) -- spec 2026-11-06 soft-mode loop run settlement (d) adds
+    // Orca's own panel-class verb settle-approximate-usage, which no command sends.
+    expect([...ESCAPE_HATCH_ONLY]).toEqual(["shutdown", "system-debug-open", "settle-approximate-usage"]);
     const mapped = new Set(REGISTRY.flatMap((def) => (def.mapsTo.kind === "verb" ? [def.mapsTo.verb] : [])));
     for (const verb of ESCAPE_HATCH_ONLY) {
       expect(Object.keys(VERB_ACCESS)).toContain(verb);

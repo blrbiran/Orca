@@ -119,6 +119,7 @@ function activityText(entry: ActivityEntryV1): string {
     });
     return `${kind} · ${i18n.t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method")} · ${buckets.join(" · ")}`;
   }
+  if (entry.kind === "usage-settled" && body.method === "approximate-floor") return `${kind} · ${i18n.t("control.settlement.methodApproximate")}${typeof body.floorTokens === "number" ? ` · ${body.floorTokens}` : ""}`;
   if (entry.kind === "phase" && typeof body.step === "string") {
     const step = enumText("progressStep", CCLOOP_STEP[body.step] ?? body.step);
     return `${kind} · ${typeof body.attempt === "number" ? i18n.t("control.activity.phase", { step, attempt: body.attempt }) : step}`;

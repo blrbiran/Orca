@@ -625,6 +625,8 @@ export const commandVerbSchema = z.enum([
   "retry-task",
   "verify-saved-result",
   "settle-unknown-usage",
+  // Spec 2026-11-06 soft-mode loop run settlement (d): Orca books an approximate floor under orca-auto; no route sends it.
+  "settle-approximate-usage",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -808,6 +810,7 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), activeMs: safeInteger.optional(), attempts: safeInteger.optional(), sessions: safeInteger.optional() }).strict();
 export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional() }).strict();
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
+export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -1209,6 +1212,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1308,6 +1312,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1821,7 +1826,7 @@ export const runViewSchema = z
     // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the task's current run failed with quota, was not
     // switched, and its installation rests (quotaRest.ts) until `until`; omitted otherwise.
     quotaRest: z.object({ installation: nonemptyString, until: safeInteger, source: z.enum(["vendor", "default"]) }).strict().optional(),
-    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]), settlement: usageSettlementSchema.optional() }).strict().optional(),
+    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
@@ -2211,7 +2216,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
   // The receipt copies the marker (usageSettlement.ts), whose schema ties a null work token charge to the unmetered method.
-  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered"]) }).strict(),
+  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor"]) }).strict(),
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema }).strict(),
   z
     .object({

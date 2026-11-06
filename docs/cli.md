@@ -243,7 +243,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca control get <path>` — read one control path over the socket: get <path> [--control-state-dir <dir>] [--client-name <name>]
 - `orca control send <route>` — send one control command: send <route> --expected-revision <n> (--payload <json> | --payload-file <file>) [--command-id <id>]
 
-Escape-hatch only (no command; `orca control send`): `shutdown`, `system-debug-open`.
+Escape-hatch only (no command; `orca control send`): `shutdown`, `system-debug-open`, `settle-approximate-usage`.
 
 <!-- /generated:commands -->
 

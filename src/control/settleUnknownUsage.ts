@@ -9,7 +9,7 @@ import { settlingPersonFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
-import { releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun } from "./usageSettlement.js";
+import { releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun, type UsageSettlement } from "./usageSettlement.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -92,6 +92,38 @@ export function chargeRunRemainder(
     if (tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens, appliedAt: options.at });
   }
 }
+/**
+ * The disposition tail of a settlement, after its booking: shared by a person's settlement and Orca's approximate one
+ * (spec 2026-11-06 soft-mode loop run settlement §3.3 step 4, extracted rather than copied). `parked` is the finite-legacy
+ * continuation's commitment (a person's: the remainder before the charge; Orca's: the remainder after the floor).
+ */
+export function finishUsageSettlement(store: ControlStore, input: {
+  groupId: string; run: SettlementRun; group: GroupRecord; marker: UsageSettlement; disposition: "committed" | "released" | "recovered";
+  requestId: string | null; legacy: boolean; parked: { work: unknown; handoff: Amount }; activity: Record<string, unknown>;
+}): void {
+  const { groupId, run, group, marker, disposition, legacy, parked } = input;
+  run.usageSettlement = marker;
+  // Preserve endedAt/activity: this is manual accounting, not another provider terminalisation/release.
+  if (disposition === "released") { run.state = "settled-failed"; run.recoverable = false; }
+  if (disposition === "recovered") Object.assign(run, { state: "settled-recoverable", recoverable: true, failureCode: null });
+  if (disposition !== "committed") store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), run.runId);
+  else saveRun(store, run as never);
+  syncWebBudget(store, group, run as never);
+  if (group.budgetVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
+  group.budgetVersion += 1; saveGroup(store, group);
+  if (disposition === "released") settleManuallyFailedRequestInTransaction(store, groupId, input.requestId!, marker);
+  if (disposition === "recovered") {
+    // §3.2: where terminaliseRun puts a recoverable stop with known usage. A finite-legacy continuation is funded from
+    // the parked commitment.
+    const task = readWork(store, groupId, run.workItemId) as unknown as Record<string, unknown>;
+    Object.assign(task, { status: "held" }, legacy ? { grant: parked } : { fundingReleased: true });
+    saveWork(store, groupId, task as never);
+    setAllocationStates(store, groupId, run.workItemId, "held", legacy ? parked as never : undefined);
+    if (legacy) reserveCommitment(store, groupId, add(parked.work as never, parked.handoff));
+    settleRecoveredRequestInTransaction(store, groupId, input.requestId!, marker);
+  }
+  recordActivity(store, { groupId, taskId: run.taskId, runId: run.runId, kind: "usage-settled", body: input.activity });
+}
 /** A run the owner's handoff stop ended while it was still working: no outcome, and only its usage kept it unrecoverable. */
 const stoppedWorking = (run: SettlementRun): boolean => run.drive?.outcome === null && run.state === "settled-unrecoverable";
 export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, command: SettleUnknownUsageCommand): Promise<CommandSuccessV1 | CommandErrorBodyV1> {
@@ -133,27 +165,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         // §3.2: an optional-v1 stop kept its reservation (allocations `unknown`); a finite-legacy stop already released it.
         const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId), parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
         chargeRunRemainder(store, run, group, charged, { unmetered, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy), at });
-        run.usageSettlement = marker;
-        // Preserve endedAt/activity: this is manual accounting, not another provider terminalisation/release.
-        if (disposition === "released") { run.state = "settled-failed"; run.recoverable = false; }
-        if (disposition === "recovered") Object.assign(run, { state: "settled-recoverable", recoverable: true, failureCode: null });
-        if (disposition !== "committed") store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), run.runId);
-        else saveRun(store, run as never);
-        syncWebBudget(store, group, run as never);
-        if (group.budgetVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");
-        group.budgetVersion += 1; saveGroup(store, group);
-        if (disposition === "released") settleManuallyFailedRequestInTransaction(store, groupId, request!.requestId, marker);
-        if (disposition === "recovered") {
-          // §3.2: where terminaliseRun puts a recoverable stop with known usage. A finite-legacy continuation is funded from
-          // the parked commitment: the grant minus observed usage, i.e. the remainder as it stood before the charge.
-          const task = readWork(store, groupId, run.workItemId) as unknown as Record<string, unknown>;
-          Object.assign(task, { status: "held" }, legacy ? { grant: parked } : { fundingReleased: true });
-          saveWork(store, groupId, task as never);
-          setAllocationStates(store, groupId, run.workItemId, "held", legacy ? parked as never : undefined);
-          if (legacy) reserveCommitment(store, groupId, add(parked.work as never, parked.handoff));
-          settleRecoveredRequestInTransaction(store, groupId, request!.requestId, marker);
-        }
-        recordActivity(store, { groupId, taskId: run.taskId, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged, principal, at } });
+        finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked, activity: { method: marker.method, charged, principal, at } });
         deps.beforeCommit?.();
         const receipt = { kind: "usage-settled" as const, taskId: run.taskId!, runId: run.runId, generation: run.generation, at };
         return commandSuccess(context, { ...receipt, charged: marker.charged, method: marker.method });

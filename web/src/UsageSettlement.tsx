@@ -31,6 +31,11 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   if (preview.settlement) {
     if (compact) return null;
     const marker = preview.settlement;
+    // Spec 2026-11-06 §3.5: Orca's approximate floor is not a person's charge; it names the floor it booked.
+    if (marker.method === "approximate-floor") {
+      const at = new Date(marker.at).toISOString();
+      return <div><p>{marker.floorTokens === null ? t("control.settlement.approximateReceiptNone", { at }) : t("control.settlement.approximateReceipt", { at, tokens: marker.floorTokens.toLocaleString("en-US") })}</p></div>;
+    }
     const unmetered = marker.method === "owner-acknowledged-unmetered";
     return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
   }
@@ -39,12 +44,14 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   const release = preview.acknowledge === "release-unmetered";
   const offered = !archived && owner && preview.allowed && run.taskId !== null;
   const refusal = preview.refusalReason ? <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p> : null;
+  const automatic = preview.approximateRefusal ? <p role="status" data-tone="warn" data-testid="approximate-refused">{t("control.settlement.approximateRefused", { code: preview.approximateRefusal })}</p> : null;
   if (compact && !offered) return !active ? null : refusal ?? (!owner ? <p>{t("control.settlement.contactOwner")}</p> : null);
   return <div>
     {!compact && <p>{t("control.settlement.unknown")}</p>}
     {!compact && run.usageLowerBound != null && <p>{t("chargeRetry.lowerBound", { tokens: run.usageLowerBound.toLocaleString("en-US") })}</p>}
     {!compact && !owner && <p>{t("control.settlement.contactOwner")}</p>}
     {!compact && refusal}
+    {!compact && automatic}
     {offered && (!open ? <button type="button" onClick={() => setOpen(true)}>{t(release ? "control.settlement.releaseOpen" : "control.settlement.open")}</button> : <div role="group" aria-label={t("control.settlement.confirmation")}>
       <ChargeTable amounts={preview.remaining} settled={false} />
       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>

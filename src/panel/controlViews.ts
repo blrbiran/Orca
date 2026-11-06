@@ -26,6 +26,7 @@ import { escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
+import { approximateCommandId } from "../control/softLoopSince.js";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
 import { settlementAcknowledgeFor, settlementAdmission } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
@@ -1488,6 +1489,9 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
     if (result === undefined) throw new ControlError("work-not-found");
     return decodedValue(result);
   } }); settlementProof(store, run); if (disposition !== "committed") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
+  // Spec 2026-11-06 §3.3 (finding 6): Orca's refused attempt is named on the run; the person's path stays offered.
+  const auto = store.db.prepare("SELECT original_status,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, approximateCommandId(run.runId, run.generation));
+  const approximateRefusal: unknown = auto !== undefined && Number(auto.original_status) >= 400 ? JSON.parse(String(auto.body_json))?.error?.code : undefined;
   return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason, acknowledge: settlementAcknowledgeFor(run),
-    ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }) } };
+    ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }), ...(typeof approximateRefusal === "string" && approximateRefusal !== "" ? { approximateRefusal } : {}) } };
 }

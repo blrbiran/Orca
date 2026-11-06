@@ -1530,6 +1530,13 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
         }
       }
     }
+    // Spec 2026-11-06 soft-mode loop run settlement §3.3: after the runs moved (a run just blocked at C is settled in this
+    // round), before the claims (the pump's), a loop run of an unlimited group with unknown usage is booked at its floor.
+    // Loaded on first use, not imported (the import-cycle rule, as groupDone below).
+    try {
+      const { softLoopSettlementPass } = await import("./softLoopSettlement.js");
+      if (softLoopSettlementPass(deps)) { progressed = true; deps.kickPump?.(); }
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // N1 spec §9.2 (DR14): a requirement's export has git side effects, so it is the driver's, once per round. It runs
     // after the runs: an await before them would let a stop() issued with the round land before the round's first step.
     try { if (await exportPendingRequirements(deps)) progressed = true; }

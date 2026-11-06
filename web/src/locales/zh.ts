@@ -553,6 +553,10 @@ export const zh: Translation<typeof en> = {
       releaseWarning: "此运行的工作 token 不设上限，未知的工作 token 无法按额度记入。放行不记入任何工作 token 数，组的 token 总数因此只是下限。其他各项上限照剩余额度记入。放行不能撤销，也不会重新运行任务。",
       releaseApprove: "我理解并同意此次放行",
       releaseConfirm: "确认不可撤销的放行",
+      approximateReceipt: "Orca 于 {{at}} 记入：至少 {{tokens}} 个工作 token（用量未上报）",
+      approximateReceiptNone: "Orca 于 {{at}} 记入：未知，至少 0 个工作 token（用量未上报）",
+      methodApproximate: "由 Orca 按下限记入（用量未上报）",
+      approximateRefused: "Orca 未能自动结清用量：{{code}}",
     },
     activity: {
       region: "{{runId}} 的近期活动",
