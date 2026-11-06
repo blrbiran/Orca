@@ -297,6 +297,16 @@ export const durableCommandErrorStatuses = {
   // Loop plans spec §5.2 (step 6): a raise the group's reserve cannot cover; the detail is `<dimension>:<shortfall>`.
   "group-reserve-insufficient": 422,
   "group-review-budget-unavailable": 422,
+  // Retry work top-up spec 2026-11-06 §2: retry-task `work` refusals, booked. unsupported: the task's branch (detail
+  // finite-legacy | saved-result-no-dispatch); empty: no dimension above 0; no-effect: a token top-up on an unbounded
+  // task (detail tokens); not-authorized: an agent while agentTopUpCap is null; cap-exceeded: the group's agent top-ups
+  // would pass the cap (detail the dimension); dispatched-run: a run Orca dispatched sent it.
+  "retry-top-up-unsupported": 422,
+  "retry-top-up-empty": 400,
+  "retry-top-up-no-effect": 422,
+  "retry-top-up-not-authorized": 422,
+  "retry-top-up-cap-exceeded": 422,
+  "retry-top-up-dispatched-run": 422,
   "group-state-invalid": 422,
   // Issue #147 (session 3cfc2e73): an estimate asked for on a confirmed proposal, whose answer could never apply.
   "proposal-confirmed": 422,

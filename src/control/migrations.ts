@@ -3,7 +3,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { overGrantBlockRuns } from "./overGrantBlock.js";
 
-export const schemaVersion = "22";
+export const schemaVersion = "23";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -232,6 +232,14 @@ CREATE INDEX IF NOT EXISTS plan_library_by_project ON plan_library(project_id);
 export const schema20To21 = `ALTER TABLE commands ADD COLUMN person_principal TEXT;
 `;
 
+// Retry work top-up spec 2026-11-06 §2 "Record": a `retry-task` with `work` appends one row; no row is ever rewritten.
+// `from_run_id` is the run the retry retried; a top-up applies to every later run of the work item (rowid order, workTopUp.ts).
+// IF NOT EXISTS: a store a criterion downgraded by dropping only the marker keeps working.
+export const schema22To23WorkTopUps = `CREATE TABLE IF NOT EXISTS work_grant_top_ups(group_id TEXT NOT NULL REFERENCES groups(id),
+  work_item_id TEXT NOT NULL, from_run_id TEXT NOT NULL REFERENCES runs(id), body TEXT NOT NULL) STRICT;
+CREATE INDEX IF NOT EXISTS work_grant_top_ups_by_task ON work_grant_top_ups(group_id, work_item_id);
+`;
+
 /** 20 → 21: idempotent, so a store a criterion downgraded by dropping only the marker keeps working. */
 function migrate20To21(store: DatabaseSync): void {
   if (!store.prepare("PRAGMA table_info(commands)").all().some((row) => row.name === "person_principal")) store.exec(schema20To21);
@@ -245,7 +253,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -372,7 +380,7 @@ export function repairOverGrantUnlimitedGroups(store: DatabaseSync, now: () => n
   }
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, then the version marker. */
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, 22 → 23, then the version marker. */
 function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
@@ -382,6 +390,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema19To20);
   migrate20To21(store);
   repairOverGrantUnlimitedGroups(store, now);
+  store.exec(schema22To23WorkTopUps);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -399,8 +408,14 @@ function migrate7To8(store: DatabaseSync): void {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
+  if (fromVersion === "22") {
+    store.exec(schema22To23WorkTopUps);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "21") {
     repairOverGrantUnlimitedGroups(store, now);
+    store.exec(schema22To23WorkTopUps);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -409,6 +424,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
   if (fromVersion === "20") {
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
+    store.exec(schema22To23WorkTopUps);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -416,6 +432,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema19To20);
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
+    store.exec(schema22To23WorkTopUps);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -424,6 +441,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema19To20);
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
+    store.exec(schema22To23WorkTopUps);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -433,6 +451,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema19To20);
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
+    store.exec(schema22To23WorkTopUps);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -443,6 +462,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema19To20);
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
+    store.exec(schema22To23WorkTopUps);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

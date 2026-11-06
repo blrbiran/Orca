@@ -374,6 +374,8 @@ export type WorkItemViewV1 = {
   objective?: { goal: string; successCondition: string };
   /** Issue-fixes spec §6.1: the server's display category; optional so literal fixtures need no edit. */
   category?: WorkItemCategoryV1;
+  /** Retry work top-up spec 2026-11-06 §2 "The board": every top-up of the task, oldest first; absent when none. */
+  topUps?: Array<{ amount: Amount; by: string; at: number; fromRunId: string }>;
 };
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;

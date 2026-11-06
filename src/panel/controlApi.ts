@@ -990,5 +990,6 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
  */
 export function routedCommandContext(client: string, principal: Principal, attribution: Attribution): Parameters<typeof withCommandContext>[1] {
   return { client, principal: principalLabel(principal), attribution, personAuthority: hasPersonAuthority(principal), pauseAuthority: hasPauseAuthority(principal),
-    ...(principal.kind === "agent" && principal.person !== undefined ? { personPrincipal: `user:${principal.person.userId}` } : {}) };
+    ...(principal.kind === "agent" && principal.person !== undefined ? { personPrincipal: `user:${principal.person.userId}` } : {}),
+    ...(principal.kind === "agent" && principal.dispatchedRun !== undefined ? { dispatchedRun: principal.dispatchedRun } : {}) };
 }

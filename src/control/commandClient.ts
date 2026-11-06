@@ -35,7 +35,9 @@ export interface Attribution { by: string; via: string }
  */
 // Tester #103 (2026-10-28): `personPrincipal` -- the `user:<id>` of the person token's account on the socket, set by the
 // routes beside `personAuthority`; a settlement is booked to it (settlingPersonFor).
-type CommandContext = { client: string; principal: string; attribution?: Attribution; personAuthority?: boolean; pauseAuthority?: boolean; personPrincipal?: string };
+// Retry work top-up spec 2026-11-06 §2 "Who may": `dispatchedRun` -- the run id a socket request from a run Orca dispatched
+// carries (CLI v2 spec §15.4), set by the routes, so a booked refusal inside an apply can name it.
+type CommandContext = { client: string; principal: string; attribution?: Attribution; personAuthority?: boolean; pauseAuthority?: boolean; personPrincipal?: string; dispatchedRun?: string };
 const current = new AsyncLocalStorage<{ commandId: string } & CommandContext>();
 
 /** Accounts spec §3.5, D3: client (spec §6) and principal ride beside the command, outside the raw command, so in neither hash. */
@@ -66,6 +68,8 @@ export function commandAttributionFor(commandId: string, fallbackBy: string): At
 export function routedAttributionFor(commandId: string): Attribution | null { return forCommand(commandId)?.attribution ?? null; }
 /** Gaps spec §6.3: whether the routed principal of this command has person authority; false when none was routed. */
 export function routedPersonAuthorityFor(commandId: string): boolean { return forCommand(commandId)?.personAuthority === true; }
+/** Retry work top-up spec 2026-11-06 §2: the run Orca dispatched that sent this command, or null. */
+export function routedDispatchedRunFor(commandId: string): string | null { return forCommand(commandId)?.dispatchedRun ?? null; }
 /**
  * Tester #103 (2026-10-28): who a usage settlement is booked to -- a Web account (`user:<id>`), or on the socket the owner
  * whose person token the request carries (person authority: never a run Orca dispatched); null for anyone else.

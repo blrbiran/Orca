@@ -3,6 +3,7 @@ import { z } from "zod";
 import { flowRoleSql } from "../flow/groups.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { ControlError } from "./errors.js";
+import { amountSchema } from "./schema.js";
 import { globalChecksLayerSchema } from "./checks/settingsSchema.js";
 import { BUSY_WORK, EXECUTION_WAKE_KINDS, groupExecutionPendingInStore } from "./executionPending.js";
 import type { ControlStore } from "./store.js";
@@ -49,7 +50,10 @@ const settingsSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(
   // table's order (on whenever there is more than one), empty turns failover off.
   failoverOrder: z.array(z.string().min(1).max(200)).max(64).optional(), checks: globalChecksLayerSchema.optional(),
   // Flow engine spec §11.2: the global layer of the flow settings, with the locks.
-  flows: globalFlowsLayerSchema.optional() }).strict();
+  flows: globalFlowsLayerSchema.optional(),
+  // Retry work top-up spec 2026-11-06 §2 "The cap": the most an agent may add to one group's tasks (summed per group);
+  // absent or null: agents may not top up. workTopUp.ts readAgentTopUpCap reads it inside retry-task's transaction.
+  agentTopUpCap: amountSchema.nullable().optional() }).strict();
 export type OrchestrationSettings = z.infer<typeof settingsSchema>;
 
 export function readGroupOrchestration(store: ControlStore, groupId: string): GroupOrchestration | null {

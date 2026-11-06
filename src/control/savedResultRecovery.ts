@@ -11,6 +11,7 @@ import {readStopIntent,readRunBody,saveRunBody,releaseCommitment,reserveCommitme
 import {hasValidUsageSettlement,lineageWorkUsage,settlementProof,settlementArtifact,settlementSame} from './usageSettlement.js';
 import {hasOptionalTaskPolicy,decideFundedAllowance,readFundedAllowance} from './fundedAllowance.js';
 import {finiteCommitment} from './tokenPolicy.js';
+import {topUpSum,withTopUp} from './workTopUp.js';
 import {groupUsageUnknown,add} from './budget.js';
 import {zero,dimensions} from './commands.js';
 import {claimCapBlocking} from './spendCaps.js';
@@ -161,7 +162,8 @@ export async function applyVerifySavedResult(deps:StopDeps,command:VerifySavedRe
    const allocations=readBudgetProposal(deps.store,current.run.groupId).allocations.filter(a=>a.ownerKind==='task'&&a.ownerId===work.taskId);
    if(allocations.length!==2||allocations.some(a=>!settlementSame(a.amount,(optional?work.grant:grant)[a.bucket as 'work'|'handoff'])||a.state!=='confirmed'))throw new ControlError('recovery-blocked','saved-result-reservation');
    const run=createStartingRun(deps.store,current.run.groupId,work,current.snapshot,context.nextCommandRevision!,undefined,undefined,{commandId:command.commandId,grant,initialize:newRun=>{
-    if(optional)newRun.tokenPolicy={authoredTokenCeiling:work.grant.work.tokens,bindingCauses:decision!.allowance!.bindingCauses,inheritedUsage:inherited};
+    // Retry work top-up spec 2026-11-06 §2 "Saved-result recovery": the run's policy names the authored grant plus every top-up.
+    if(optional)newRun.tokenPolicy={authoredTokenCeiling:withTopUp(work.grant.work,topUpSum(deps.store,current.run.groupId,work.workItemId,null)).tokens,bindingCauses:decision!.allowance!.bindingCauses,inheritedUsage:inherited};
     const fundedTotal={...grant.work};for(const d of dimensions)fundedTotal[d]=grant.work[d]===null?null:inherited[d]+grant.work[d]!;
     const funding=recoveryFundingSchema.parse({kind:optional?'optional-cumulative-v1':'legacy-fresh-grant-v1',historicalPolicy:{accountingMode:optional?'optional-v1':'finite-legacy',authoredWork:current.confirmed.grant.work,contractHash:current.source.contractHash,authority:policy},inheritedUsage:inherited,freshGrant:grant,fundedTotal,reservation:{runId:newRun.runId,revision:context.nextCommandRevision,workAllocationId:`allocation-${sha256Canonical({runId:newRun.runId,revision:context.nextCommandRevision,groupId:current.run.groupId,taskId:work.taskId,bucket:'work',grant:grant.work})}`,handoffAllocationId:`allocation-${sha256Canonical({runId:newRun.runId,revision:context.nextCommandRevision,groupId:current.run.groupId,taskId:work.taskId,bucket:'handoff',grant:grant.handoff})}`}});
     const predecessor=current.predecessor?{runId:old.runId,recoveryOf:of,outcome:'interrupted' as const,record:old.savedInterruption}:null;

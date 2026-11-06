@@ -242,6 +242,12 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `resume-handoff-invalid` | 422 |
 | `resume-predecessor-unrecoverable` | 422 |
 | `resume-source-dir-not-absolute` | 422 |
+| `retry-top-up-cap-exceeded` | 422 |
+| `retry-top-up-dispatched-run` | 422 |
+| `retry-top-up-empty` | 400 |
+| `retry-top-up-no-effect` | 422 |
+| `retry-top-up-not-authorized` | 422 |
+| `retry-top-up-unsupported` | 422 |
 | `revision-conflict` | 409 |
 | `revision-unchanged` | 422 |
 | `role-unresolved` | 422 |

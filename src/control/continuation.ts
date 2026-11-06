@@ -2,6 +2,7 @@ import { hasTokenPolicy, inheritedWorkUsage } from "./fundedAllowance.js";
 import { refuseFlowChild } from "../flow/groups.js";
 import type { Grant } from "./types.js";
 import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
+import { topUpSum, withTopUp } from "./workTopUp.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { ControlStore } from "./store.js";
@@ -182,7 +183,8 @@ function registerContinuation(store: ControlStore, groupId: string, selection: {
   }
   const inherited=hasTokenPolicy(store,groupId)?inheritedWorkUsage(store,groupId,work.workItemId):undefined;
   if(inherited===null)throw new ControlError("recovery-blocked","usage-unknown");
-  const available=inherited?remainingBudget(work.grant.work,inherited):work.grant.work;
+  // Retry work top-up spec 2026-11-06 §2: an allowance continuation is a later run, so every top-up of the task applies.
+  const available=inherited?remainingBudget(withTopUp(work.grant.work,topUpSum(store,groupId,work.workItemId,null)),inherited):work.grant.work;
   if (dimensions.some((dimension) => available[dimension]!==null&&available[dimension]! <= 0)) throw new ControlError("budget-overrun", work.workItemId);
   const { desiredIntentId, continuationIntentId } = continuationIdentity(groupId, resumeRevision, work.workItemId, selection.predecessorRunId);
   const registered: RegisteredContinuation = {

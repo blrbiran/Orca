@@ -12,7 +12,8 @@ import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { FrozenWorkAgent } from "./agentFreeze.js";
 import { applyAgentSwitch, AUTO_AGENT, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
-import { commandPrincipalFor } from "./commandClient.js";
+import { commandPrincipalFor, routedDispatchedRunFor, routedPersonAuthorityFor } from "./commandClient.js";
+import { agentTopUpSum, appendTopUp, readAgentTopUpCap, topUpSum, withTopUp } from "./workTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
@@ -60,6 +61,27 @@ interface RetriedWork { workItemId: string; taskId: string | null; targetVersion
 /** A grant-shaped pair summed per dimension: what the group's committed amount holds for it. */
 const both = (amount: { work: Amount; handoff: Amount }): Amount => add(amount.work, amount.handoff);
 
+/** Retry work top-up spec 2026-11-06 §2 "The command": the payload's `work`, an absent dimension 0; null when not sent. */
+const topUpOf = (command: RetryTaskCommand): Amount | null => {
+  const work = command.payload.work;
+  return work === undefined ? null : { tokens: work.tokens ?? 0, activeMs: work.activeMs ?? 0, attempts: work.attempts ?? 0, sessions: work.sessions ?? 0 };
+};
+
+/**
+ * Retry work top-up spec 2026-11-06 §2 "Who may", inside the apply so every refusal is booked: a run Orca dispatched never;
+ * a person (routed person authority: an owner on the Web, an owner's person token on the socket) always; anyone else
+ * (an agent, a Web member) only while the group's agent top-ups plus this one stay within the global agentTopUpCap.
+ */
+function authorizeTopUp(store: ControlStore, groupId: string, command: RetryTaskCommand, incoming: Amount): boolean {
+  if (routedDispatchedRunFor(command.commandId) !== null) throw new ControlError("retry-top-up-dispatched-run", routedDispatchedRunFor(command.commandId)!);
+  if (routedPersonAuthorityFor(command.commandId)) return true;
+  const cap = readAgentTopUpCap(store);
+  if (cap === null) throw new ControlError("retry-top-up-not-authorized");
+  const spent = agentTopUpSum(store, groupId);
+  for (const d of dimensions) if (spent[d] + incoming[d] > cap[d]) throw new ControlError("retry-top-up-cap-exceeded", d);
+  return false;
+}
+
 /** Normal failed-recovery retry keeps its real failure; no-dispatch consumption has separate proof and authority. */
 function recordSavedOrdinaryRetry(store:ControlStore,runId:string,commandId:string):void {
   const run=readRunBody(store,runId);
@@ -80,6 +102,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
       apply: context => {
         const groupId = groupCommandTarget(command);
         const taskId = command.payload.taskId;
+        const incoming = topUpOf(command);
         // Spec §4.2(2), in the spec's order. Archived groups are refused by Part E (group-archived).
         const group = readGroupBody(store, groupId);
         refuseFlowChild(store, groupId);
@@ -116,6 +139,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           if(hasOptionalTaskPolicy(store,groupId,taskId)||run.grant.work.tokens===null)throw new ControlError("task-not-retryable","saved-result-no-dispatch-funding");
           if(claimCapBlocking(store,groupId,run.grant.work.tokens+run.grant.handoff.tokens,store.now()))throw new ControlError("task-not-retryable","spend-cap-reached");
           readConfirmedTaskExecution(store,groupId,taskId);
+          if(incoming!==null)throw new ControlError("retry-top-up-unsupported","saved-result-no-dispatch");
           saveRunBody(store,{...run,state:"settled-failed",savedNoDispatchConsumedBy:command.commandId,drive:{...run.drive!,outcome:"not-started",stopReason:"saved-result-not-dispatched"}},false);
           Object.assign(work,{status:"ready",retryGrantSourceRunId:runId,pendingRunId:null});setAllocationStates(store,groupId,taskId,"retrying",run.grant);saveWork(store,groupId,work as never);
           recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,reason:"saved-result-not-dispatched"}});deps.beforeCommit?.();return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
@@ -172,14 +196,27 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if(hasOptionalTaskPolicy(store,groupId,taskId)) {
           const funding=readFundedAllowance(store,run as never);if(!funding)throw new ControlError("recovery-blocked","retry-funding-missing");
           const inherited=add(funding.inheritedUsage,lineageWorkUsage(run));
-          const left=remainingBudget(work.grant.work,inherited);
+          // Retry work top-up spec 2026-11-06 §2: the new run (the newest) reads the authored grant plus every top-up, and this one.
+          if(incoming!==null&&dimensions.every(d=>incoming[d]===0))throw new ControlError("retry-top-up-empty");
+          if(incoming!==null&&incoming.tokens>0&&work.grant.work.tokens===null)throw new ControlError("retry-top-up-no-effect","tokens");
+          const authored=withTopUp(work.grant.work,add(topUpSum(store,groupId,taskId,null),incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}));
+          const left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
+          const personAuthority=incoming===null?false:authorizeTopUp(store,groupId,command,incoming);
           if(!released){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
+          if(incoming!==null){
+            // Spec §2 "Headroom": the claim's own non-token fit (fundedAllowance.ts decideFundedAllowance, fundingReleased), read
+            // after the failed run's remainder is released as the claim will see it; refused here so the task is never left
+            // ready and unclaimable. A refusal rolls back the release above with the command's savepoint.
+            const live=readGroup(store,groupId),limit=live.limit,handoff=work.grant.handoff;
+            for(const d of ["activeMs","attempts","sessions"] as const)if(live.used[d]+live.reserved[d]+left[d]+handoff[d]>limit[d])throw new ControlError("group-budget-unavailable",d);
+            appendTopUp(store,groupId,taskId,runId,{amount:incoming,commandId:command.commandId,by:commandPrincipalFor(command.commandId)??command.actorId,personAuthority,at:store.now()});
+          }
           Object.assign(work,{status:"ready",fundingReleased:true,pendingRunId:null});
           delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
-          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched})}});deps.beforeCommit?.();
+          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming})}});deps.beforeCommit?.();
           return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
         }
         const retrying = held || released || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
@@ -190,6 +227,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           const shortfall = grant[d] - remaining[d] - reserve[d]!;
           if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
         }
+        // Retry work top-up spec 2026-11-06 §2 "Scope": this branch re-grants the failed run's full grant; it takes no top-up.
+        if (incoming !== null) throw new ControlError("retry-top-up-unsupported", "finite-legacy");
         // Effect 1: the run alone moves; `remaining` stays on it (the view checks remaining == max(grant - cumulative, 0)).
         if (!released) saveRunBody(store, { ...run, state: "settled-failed", recoverable: false, drive: { ...drive, cleanedUp: false } }, false);
         if (!released) releaseCommitment(store, groupId, remaining);

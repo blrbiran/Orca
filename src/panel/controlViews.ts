@@ -3,6 +3,7 @@ import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
 import { flowRoleSql } from "../flow/groups.js";
 import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
 import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
+import { groupTopUps, type TopUpRow } from "../control/workTopUp.js";
 import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
 import { budgetAmountSchema } from "../control/schema.js";
 import { listFlagsInvolving } from "../control/flaggedDecisions.js";
@@ -925,6 +926,8 @@ function workViews(
   readSnapshot: GroupReadSnapshot,
 ): WorkItemViewV1[] {
   const runs = readSnapshot.runsByRowid;
+  // Retry work top-up spec 2026-11-06 §2 "The board": one read of the group's top-ups, oldest first.
+  const topUps = groupTopUps(store, groupId);
   const derivedByTask = new Map(snapshot?.derivedContracts.map(contract => [contract.taskId, contract.derivedContractHash]) ?? []);
   if (snapshot && (derivedByTask.size !== plan.tasks.length || plan.tasks.some(task => !derivedByTask.has(task.taskId)))) {
     return blocked("execution-snapshot-task-set");
@@ -976,8 +979,15 @@ function workViews(
       progress: currentProgress(readSnapshot, body.currentRunId ?? null),
       category: categoryOf(readSnapshot, body),
       ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash, snapshot?.skills?.find(entry => entry.taskId === task.taskId)?.names),
+      ...topUpsView(topUps, task.taskId),
     };
   });
+}
+
+/** The task's top-up lines (spec §2 "The board"); absent when it has none, so a view without one is as it was. */
+function topUpsView(rows: readonly TopUpRow[], taskId: string): { topUps?: NonNullable<WorkItemViewV1["topUps"]> } {
+  const mine = rows.filter(row => row.workItemId === taskId).map(row => ({ amount: row.amount, by: row.by, at: row.at, fromRunId: row.fromRunId }));
+  return mine.length === 0 ? {} : { topUps: mine };
 }
 
 function artifactIdsForRun(store: ControlStore, runId: string, run: z.infer<typeof persistedRunSchema>): string[] {

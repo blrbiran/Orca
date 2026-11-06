@@ -31,8 +31,8 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
   it("a fresh store is version 10 with the activity table: STRICT, group-referencing, both indexes", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
-      expect(schemaVersion).toBe("22");
-      expect(version(store.db)).toBe("22");
+      expect(schemaVersion).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
+      expect(version(store.db)).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
       expect(String(store.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity'").get()!.sql)).toMatch(/STRICT\s*$/);
       expect(store.db.prepare("PRAGMA table_info(activity)").all().map((row) => [row.name, row.type, row.notnull])).toEqual([
         ["seq", "INTEGER", 0], ["group_id", "TEXT", 1], ["task_id", "TEXT", 0], ["run_id", "TEXT", 0], ["at", "INTEGER", 1], ["kind", "TEXT", 1], ["body", "TEXT", 1],
@@ -59,7 +59,7 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
     raw.close();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(version(store.db)).toBe("22");
+      expect(version(store.db)).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
       expect(dump(store.db)).toEqual(before);
       expect(hasActivity(store.db)).toBe(true);
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM activity").get()).toMatchObject({ n: 0 });
@@ -67,11 +67,11 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
   });
 
   // One-way (as 7 to 8 was): a store from a later build is refused, byte for byte unchanged.
-  it("refuses a version-23 store and leaves its bytes unchanged", async () => {
+  it("refuses a version-24 store and leaves its bytes unchanged", async () => { // Ruling: 「这次批准改写所有必要的判据。」 (the future version moves 23 -> 24 with schema 23)
     const dir = await stateDir();
     (await openControlStore({ stateDir: dir })).close();
     const raw = new DatabaseSync(join(dir, "control.sqlite"));
-    raw.prepare("UPDATE meta SET value='23' WHERE key='schemaVersion'").run();
+    raw.prepare("UPDATE meta SET value='24' WHERE key='schemaVersion'").run(); // Ruling: 「这次批准改写所有必要的判据。」 (the future version moves 23 -> 24 with schema 23)
     raw.close();
     const bytes = await readFile(join(dir, "control.sqlite"));
     await expect(openControlStore({ stateDir: dir })).rejects.toThrow("control-schema-unsupported");

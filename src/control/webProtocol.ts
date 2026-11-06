@@ -802,7 +802,11 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
 // CLI v2 spec §14 R2: `runId`, when present, is the run the sender saw failing; refused task-run-moved unless it is current.
 // Quota failover spec 2026-11-03 §8: `agent` retries the task on another installation (the switch is recorded on the task).
-export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional() }).strict();
+// Retry work top-up spec 2026-11-06 §2 "The command": `work` adds to the task's authored work ceiling for the retried run and
+// every later run (an append-only row, workTopUp.ts). Each dimension a non-negative safe integer or omitted (= 0); an
+// all-zero or empty `work` reaches the apply so its refusal (retry-top-up-empty) is booked.
+export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), activeMs: safeInteger.optional(), attempts: safeInteger.optional(), sessions: safeInteger.optional() }).strict();
+export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional() }).strict();
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
@@ -1126,7 +1130,10 @@ export const rejectPendingDecisionPayloadSchema = z.object({ pendingId: idSchema
 export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonemptyString, note: z.string().min(1).max(2048).optional() }).strict();
 // Kanban spec §3.2: at most this many groups run at once (default 3; the human asked for it for CPU load and conflicts).
 // Protect-acceptance-criteria spec §5: `criteriaReview` is the reviewer's global default (absent: unchanged; never set: on).
-export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional(), failoverOrder: z.array(z.string().min(1).max(200)).max(64).optional() }).strict();
+export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional(), failoverOrder: z.array(z.string().min(1).max(200)).max(64).optional(),
+  // Retry work top-up spec 2026-11-06 §2 "The cap": what an agent may add to one group's tasks by retry-task `work`, summed
+  // per group; null = agents may not top up (the default); omitted keeps the stored value.
+  agentTopUpCap: amountSchema.nullable().optional() }).strict();
 // Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
 export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
@@ -1737,6 +1744,9 @@ export const workItemViewSchema = z
     // Issue-fixes spec §6.1: the item's display category, computed once on the server. Optional on the wire like labels;
     // the server always gives it.
     category: z.enum(WORK_ITEM_CATEGORIES).optional(),
+    // Retry work top-up spec 2026-11-06 §2 "The board": every top-up of the task, oldest first, so a run's grant above the
+    // confirmed allocation is never unexplained. Absent when the task has none.
+    topUps: z.array(z.object({ amount: amountSchema, by: nonemptyString, at: safeInteger, fromRunId: idSchema }).strict()).min(1).optional(),
   })
   .strict();
 

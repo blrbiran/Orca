@@ -13,7 +13,7 @@ one task of a group and its runs
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 
-## `orca task retry <group> <task> [--agent <agent>]`
+## `orca task retry <group> <task> [--agent <agent>] [--work <work>]`
 
 start again a task whose current run failed (the run read now is the one retried), optionally on another installation
 
@@ -22,6 +22,7 @@ start again a task whose current run failed (the run read now is the one retried
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 - `--agent <agent>`: retry on this agent installation instead (quota failover spec §8; not for a task with skills); `auto` hands the choice back to orca-auto (unlocks a task a switch pinned); refused to a run Orca dispatched
+- `--work <work>`: add work to the task's budget for this retry and every later run, as JSON {tokens?,activeMs?,attempts?,sessions?} (an omitted dimension adds 0); a person may always, an agent up to the orchestration agent top-up cap; refused to a run Orca dispatched; only a task under the optional token policy
 
 ## `orca task continue <group> <task>`
 

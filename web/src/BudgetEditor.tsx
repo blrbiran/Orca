@@ -405,6 +405,22 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         </tbody>
       </table>
       </details>
+      {/* Retry work top-up spec 2026-11-06 §2 "The board": a run's grant above the confirmed allocation is never unexplained. */}
+      {view.workItems.filter((item) => (item.topUps?.length ?? 0) > 0).map((item) => (
+        <section className="budget-top-ups" key={`top-ups:${item.taskId}`} aria-label={t("budget.topUps", { taskId: item.taskId })}>
+          <p className="my-[6px]">{t("budget.topUps", { taskId: item.taskId })}</p>
+          <ul>
+            {item.topUps!.map((topUp, index) => (
+              <li key={`${topUp.fromRunId}:${index}`}>
+                {t("budget.topUp", {
+                  amount: DIMENSIONS.filter((dimension) => topUp.amount[dimension] > 0).map((dimension) => `${enumText("dimension", dimension)} ${topUp.amount[dimension]}`).join(", "),
+                  by: topUp.by, at: new Date(topUp.at).toISOString(),
+                })}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
       {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
       {allSuggested.length > 0 && !archived && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
       {advice !== null && (

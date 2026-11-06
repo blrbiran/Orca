@@ -62,8 +62,8 @@ describe("schema 18: flow_feedback", () => {
     const { root, dir } = await temp();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(schemaVersion).toBe("22");
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22");
+      expect(schemaVersion).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
       expect((await readdir(dir)).filter((name) => name.includes(".pre-"))).toEqual([]);
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
   });
@@ -105,7 +105,7 @@ describe("schema 18: flow_feedback", () => {
         expect(name === "meta" ? now.filter((r) => r.key !== "schemaVersion") : now).toEqual(name === "meta" ? rows[name]!.filter((r) => (r as { key: string }).key !== "schemaVersion") : rows[name]);
       }
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM flow_feedback").get()!.n).toBe(0);
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22");
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
   });
 
@@ -172,7 +172,7 @@ describe("the backup before a migration", () => {
       } finally { raw.close(); }
       expect((await readdir(dir)).filter((name) => name.startsWith("service-lock"))).toEqual([]);
       const store = await openControlStore({ stateDir: dir, now: () => 3000 });   // not control-writer-active
-      try { expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("22"); } finally { store.close(); }
+      try { expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("23"); } finally { store.close(); } // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

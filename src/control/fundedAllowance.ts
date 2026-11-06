@@ -19,6 +19,7 @@ import type { ControlStore } from "./store.js";
 import { remainingBudget, type TokenPolicy } from "./tokenPolicy.js";
 import type { Amount, Grant } from "./types.js";
 import { groupRepoIdOf } from "./usageLedger.js";
+import { topUpSum, withTopUp } from "./workTopUp.js";
 
 export interface FundedAllowance extends TokenPolicy { grant: Grant }
 export function saveTokenPolicy(store:ControlStore,groupId:string,workItemId:string,tokens:number|null,mode:"finite-legacy"|"optional-v1"="optional-v1"):void {
@@ -81,7 +82,8 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
    const fixed=!hasOptionalTaskPolicy(store,id,work.workItemId);
    const observed=inheritedWorkUsage(store,id,work.workItemId);if(observed===null)continue;
    const inheritedUsage=fixed?zero():observed;
-   const authored=budgetAmountSchema.parse(work.grant.work),remaining=fixed?amountSchema.parse(authored):remainingBudget(authored,inheritedUsage),handoff=amountSchema.parse(work.grant.handoff);
+   // Retry work top-up spec 2026-11-06 §2: the claim sizes the new (newest) run from the authored grant plus every top-up.
+   const authored=fixed?budgetAmountSchema.parse(work.grant.work):withTopUp(work.grant.work,topUpSum(store,id,work.workItemId,null)),remaining=fixed?amountSchema.parse(authored):remainingBudget(authored,inheritedUsage),handoff=amountSchema.parse(work.grant.handoff);
    if(remaining.tokens===0||remaining.activeMs===0||remaining.attempts===0||remaining.sessions===0)continue;
    if((work as {fundingReleased?:boolean}).fundingReleased&&["activeMs","attempts","sessions"].some(key=>{const k=key as "activeMs"|"attempts"|"sessions";return group.used[k]+group.reserved[k]+remaining[k]+handoff[k]>limit[k];}))continue;
    const minimum=fixed?remaining.tokens!:1;
@@ -132,7 +134,8 @@ export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId
  if(!row){if(run.tokenPolicy!==undefined)throw new ControlError("recovery-blocked","funded-allowance-missing");return null;}
  const parsed=tokenPolicySchema.extend({grant:grantSchema}).safeParse(JSON.parse(String(row.body)));
  if(!parsed.success||row.group_id!==run.groupId||row.work_item_id!==run.workItemId||!canonicalBytes(parsed.data.grant).equals(canonicalBytes(run.grant)))throw new ControlError("recovery-blocked","funded-allowance-identity");
- const work=readWork(store,run.groupId,run.workItemId),authored=budgetAmountSchema.parse(work.grant.work);
+ // Retry work top-up spec 2026-11-06 §2 "Ordering": only the top-ups retried from a run before this one apply to it.
+ const work=readWork(store,run.groupId,run.workItemId),authored=withTopUp(work.grant.work,topUpSum(store,run.groupId,run.workItemId,run.runId));
  if(parsed.data.authoredTokenCeiling!==authored.tokens)throw new ControlError("recovery-blocked","funded-authored-policy");
  let inherited=zero();
  for(const previous of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND rowid<(SELECT rowid FROM runs WHERE id=?) ORDER BY rowid").all(run.groupId,run.workItemId,run.runId)){

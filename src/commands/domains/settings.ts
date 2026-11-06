@@ -190,21 +190,29 @@ export const SETTINGS_ROWS: CommandDef[] = [
     route: () => "operator/set-usage-calendar", payload: (c) => ({ timeZone: str(c, "time-zone"), weekStart: c.args.flags["week-start"] }) }),
 
   // --- orchestration
-  verb({ domain: "orchestration", action: "set", summary: "how many groups run at once; the reviewer default; quota-wait installations; the quota failover order", verb: "set-orchestration-settings", scope: "orchestration",
+  verb({ domain: "orchestration", action: "set", summary: "how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap", verb: "set-orchestration-settings", scope: "orchestration",
     flags: [
       { name: "max-running-groups", type: "integer", required: true, summary: "1..64" }, { name: "criteria-review", type: "string", summary: "on|off: the reviewer's global default" },
       { name: "quota-wait", type: "string", repeatable: true, summary: "an installation whose quota failures are retried after 30 min (repeatable)" },
       { name: "failover-order", type: "string", repeatable: true, summary: "the installations a quota failure switches a task to, in order (repeatable; unset = the agents table's order)" },
       { name: "failover-off", type: "boolean", summary: "never switch a task's installation after a quota failure (an empty failover order)" },
+      // Retry work top-up spec 2026-11-06 §2 "The cap" (a person token: humanOnly.ts).
+      { name: "agent-top-up-cap", type: "string", humanOnly: true, summary: "the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions}" },
+      { name: "agent-top-up-cap-off", type: "boolean", humanOnly: true, summary: "agents may not add work to a retry (the default)" },
     ],
     route: () => "operator/set-orchestration-settings",
     payload: (c) => {
       const review = str(c, "criteria-review");
       if (review !== undefined && review !== "on" && review !== "off") throw invalid("--criteria-review wants on|off");
+      const cap = str(c, "agent-top-up-cap");
+      if (cap !== undefined && c.args.flags["agent-top-up-cap-off"] === true) throw invalid("give one of --agent-top-up-cap and --agent-top-up-cap-off");
+      let parsedCap: unknown;
+      if (cap !== undefined) { try { parsedCap = JSON.parse(cap); } catch { throw invalid("--agent-top-up-cap wants JSON"); } }
       return {
         maxRunningGroups: c.args.flags["max-running-groups"], ...(review === undefined ? {} : { criteriaReview: review === "on" }),
         ...(list(c, "quota-wait").length === 0 ? {} : { quotaWait: list(c, "quota-wait") }),
         ...(c.args.flags["failover-off"] === true ? { failoverOrder: [] } : list(c, "failover-order").length === 0 ? {} : { failoverOrder: list(c, "failover-order") }),
+        ...(c.args.flags["agent-top-up-cap-off"] === true ? { agentTopUpCap: null } : cap === undefined ? {} : { agentTopUpCap: parsedCap }),
       };
     } }),
 

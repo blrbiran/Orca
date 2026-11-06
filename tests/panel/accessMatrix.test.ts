@@ -40,6 +40,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "remove-group-dependency", payload: {}, tier: "open", member: V },
   { entry: "set-criteria-review", payload: { enabled: false }, tier: "open", member: V },
   { entry: "set-orchestration-settings", payload: {}, tier: "open", member: V },
+  // Retry work top-up spec 2026-11-06 §2 "The cap" (criterion T6): the agent top-up cap is a person's even on the socket.
+  { entry: "set-orchestration-settings.agentTopUpCap", payload: { maxRunningGroups: 3, agentTopUpCap: { tokens: 1, activeMs: 0, attempts: 0, sessions: 0 } }, tier: "token", member: V },
   { entry: "retry-integration", payload: {}, tier: "open", member: V },
   { entry: "resolve-integration-conflict", payload: {}, tier: "open", member: V },
   { entry: "resolve-folder-change", payload: { action: "take-folder" }, tier: "token", member: V },
