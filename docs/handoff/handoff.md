@@ -76,10 +76,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - 33 个孤儿 ccloop `worker.js`（父进程 1、各自一个进程组，来自会话 `86352010` scratch 下的 afr-main／afr-mut／ccloop-wt／ccloop-main）按进程组发 TERM，全部退出，现数 0；人看到的 36 里有 3 个是查询命令自己。
   - 为付费真跑先备份了 `~/.codex/config.toml`（备份在上面同一目录下的 `codex-config.toml.before-paid-run`）。
 - ⚠️ **`orca doctor` 的 `agent-path` 跟调用者的 shell 走**：`agentPathDirs`（`src/service/config.ts`）用**调用者的 PATH** 解析 agent 的 `#!/usr/bin/env node`，再要求服务 PATH 含那个目录 ⇒ 旧终端（22.13.1 在前）里报 fail「lacks …/v22.13.1/bin」，换成 22.23.4 在前的 PATH 就是 ok；服务本身没坏（它 PATH 首位是 `/usr/local/bin`）。登记未修：措辞让人以为服务坏了。
-- **等人**：
-  - doctor 剩两项（都早于本轮）：`stale-sockets`＝`~/.orca/control/orca-e0c92460/control.sock`（10-07，没有进程持有）；`orca-modes`＝`~/.orca/control.sqlite`（0 字节、644、10-24）。人同意清理，但 agent 的删除／chmod 被自动模式拦下，命令已交给人。
-  - codex 0.167.0 真跑：人批了「跑」，但 agent 发起的付费调用被自动模式拦下，命令已交给人。**ccloop 的 codex 隔离、strict schema、MCP 关闭仍只在 0.163.0 及更早版本下真跑过。**
-  - 22.13.1 可以卸：Orca、ccmem、ccloop 的现配置都不再引用它，只剩备份和 10-20 的历史 run 还提到它。卸之前先关掉旧终端开的会话（本会话就是其中之一）。
+- **doctor 两项早于本轮的问题已清**：残留的 `~/.orca/control/orca-e0c92460/control.sock`（10-07，没有进程持有）已删，`~/.orca/control.sqlite`（0 字节）的权限从 644 改成 600。这两步 agent 被自动模式拦下，由人执行。之后用 22.23.4 在前的 PATH 跑 `orca doctor`，全部 ok，rc=0。
+- **codex 0.167.0 付费真跑通过**：人在自己的终端跑了 `/private/tmp/claude-501/codex0167/run-paid.sh`；agent 发起的付费调用被自动模式拦下。
+  - 配置：用 Orca 装的 ccloop（a49ab7b）跑一个 loop，codex 单独一张 agents 表，`gpt-6-luna`，contract 设 `maxAttempts` 1、`tokenBudget` 300k，目标仓库是一个演示 repo，任务是让它写 `src/greeting.txt`。
+  - 结果：状态 `succeeded`，1 个 attempt 用时 51 s。diff 只有一个文件，verify 有字节级证据。工具报的用量是 plan 13,745、execute 35,355、verify 44,618，合计 93,718，与 `tokenBudgetRemaining` 206,282 对得上。
+  - 每个阶段都用隔离的 `HOME`／`CODEX_HOME`，带 `--output-schema` 和 `--ephemeral`。plan 与 verify 跑在 `read-only` 沙箱，execute 跑在 `workspace-write`。参数里有 `notify=[]`、`features.hooks=false`，关掉的 MCP 恰好是真 config 里的三个（`computer-use`、`figma`、`node_repl`）。各阶段 stderr 都是 0 B，跑完没有残留进程，`auth.json` 哈希前后一致。
+  - 每个阶段有 2 个 `error` item，都是 0.167.0 提示人自己的 `~/.codex/config.toml` 里 `features.rmcp_client` 已失效、被忽略。按惯例这只当诊断看，不算失败。删不删这一行由人定。
+  - codex 照旧往真 `~/.codex/config.toml` 追加了这个演示 repo 的 `trust_level`。已按人裁删掉，删完与跑前备份逐字节相同（sha256 前 16 位 `10513ff638acdc98`），mode 仍是 0600。
+  - **仍未在 0.167.0 下测的**：Orca 拆分需求和估算用的 codex single call。
+- **等人**：22.13.1 可以卸。Orca、ccmem、ccloop 的现有配置都不再引用它，只有备份和 10-20 的历史 run 还提到它。卸之前先关掉旧终端开的会话，本会话就是其中之一。
 
 ### 3.000000000000000000000000 会话 `86352010`（2026-11-06）：repin、soft loop 自动结算、额度探针、retry-task 追加额度、dogfood 摩擦修复、#134／#126／#119、两次付费自举 —— **工作状态先读这一节**（上一节只是环境轮）
 
