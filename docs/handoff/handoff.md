@@ -63,7 +63,25 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.000000000000000000000000 会话 `86352010`（2026-11-06）：repin、soft loop 自动结算、额度探针、retry-task 追加额度、dogfood 摩擦修复、#134／#126／#119、两次付费自举 —— **先读这一节**
+### 3.0000000000000000000000000 会话 `b5e3c5a8`（2026-11-07）：人把 nvm 默认 node 升到 22.23.4 —— 环境轮，三仓代码无改动（工作状态仍看下一节）
+
+> 人的话（原话）：「当前我升级了 node 的版本，你看下orca 、ccmem、ccloop是不是要重装一下。」「orca、syncskill => 已重新npm build && npm link」「面板现在还靠着 22.13.1 目录下的几个可执行文件 => 帮我修改相关配置」「有 36 个 ccloop 的 worker.js 进程还在跑… => 帮我清掉」；之后「codex 0.167.0 的真跑验证（要付费）… => 跑」「orca doctor 还报一红一黄… => 不用的话，你可以清理，如果你清理遇到权限问题，可以把命令给我执行」「三份 handoff… 要我顺手更新并提交吗？ => 同意」。
+
+- **本机 node（2026-11-07 现测；命令：每个 node 跑 `new (require("node:sqlite").DatabaseSync)(":memory:").exec("create virtual table t using fts5(x)")`、`npm -v`）**：nvm default **v22.23.4**（ABI 127，**有 fts5**，npm 10.9.9）；v22.13.1 仍装着（ABI 127，无 fts5，npm 10.9.2），**旧终端开的会话 PATH 里它仍在最前**；`/usr/local/bin/node` v24.13.0（fts5，npm 11.6.2）；homebrew node 仍坏。
+- **三仓都不用重装**：服务（面板、ccmem daemon、Codex 钩子、OMP 扩展）都写死 `/usr/local/bin/node`；22.23.4 与 22.13.1 同 ABI。人已在 22.23.4 下重新 build 并 link 了 orca 与 syncskill。
+- **仓库外的写（Rule 17，人授权；备份在 `~/.orca/backups/node-22.23.4-switch-1793982205000/`）**：
+  - `~/.orca/agents.json`：claude、codex 的 `command[0]` 改到 `…/v22.23.4/bin/`，codex `version` 0.163.0→0.167.0（`codex --version` 现测）；mode 仍 0600。这几项不进 ccloop 的 `agentConfigHash`（`src/agents/materialize.ts`），已确认的组不会被拒。
+  - 重跑 `orca panel install`（用干净 env，不带会话里的 `ORCA_CCMEM_BIN`／`CCMEM_CONFIG_PATH`）：只有 `ORCA_SYNCSKILL_BIN` 和 `PATH` 变了，`run.sh` 与 plist 一字未改。`orca status` 全 ok。
+  - ccmem daemon 的 plist 改指 22.23.4 的 claude，细节见 ccmem handoff §1.000000。
+  - 33 个孤儿 ccloop `worker.js`（父进程 1、各自一个进程组，来自会话 `86352010` scratch 下的 afr-main／afr-mut／ccloop-wt／ccloop-main）按进程组发 TERM，全部退出，现数 0；人看到的 36 里有 3 个是查询命令自己。
+  - 为付费真跑先备份了 `~/.codex/config.toml`（备份在上面同一目录下的 `codex-config.toml.before-paid-run`）。
+- ⚠️ **`orca doctor` 的 `agent-path` 跟调用者的 shell 走**：`agentPathDirs`（`src/service/config.ts`）用**调用者的 PATH** 解析 agent 的 `#!/usr/bin/env node`，再要求服务 PATH 含那个目录 ⇒ 旧终端（22.13.1 在前）里报 fail「lacks …/v22.13.1/bin」，换成 22.23.4 在前的 PATH 就是 ok；服务本身没坏（它 PATH 首位是 `/usr/local/bin`）。登记未修：措辞让人以为服务坏了。
+- **等人**：
+  - doctor 剩两项（都早于本轮）：`stale-sockets`＝`~/.orca/control/orca-e0c92460/control.sock`（10-07，没有进程持有）；`orca-modes`＝`~/.orca/control.sqlite`（0 字节、644、10-24）。人同意清理，但 agent 的删除／chmod 被自动模式拦下，命令已交给人。
+  - codex 0.167.0 真跑：人批了「跑」，但 agent 发起的付费调用被自动模式拦下，命令已交给人。**ccloop 的 codex 隔离、strict schema、MCP 关闭仍只在 0.163.0 及更早版本下真跑过。**
+  - 22.13.1 可以卸：Orca、ccmem、ccloop 的现配置都不再引用它，只剩备份和 10-20 的历史 run 还提到它。卸之前先关掉旧终端开的会话（本会话就是其中之一）。
+
+### 3.000000000000000000000000 会话 `86352010`（2026-11-06）：repin、soft loop 自动结算、额度探针、retry-task 追加额度、dogfood 摩擦修复、#134／#126／#119、两次付费自举 —— **工作状态先读这一节**（上一节只是环境轮）
 
 > 人裁（原话）：对上轮审阅项与三件待定「都同意按你的建议走」（建议原文在台账开头）；顺序「同意」；「我已经push了」（Orca、ccloop D6＋D5）；收尾指令「这次批准改写所有必要的判据。这一轮允许必要的付费真跑。」「所有事情做完后，orca 使用 cli + skill的方式再跑一次从"需求拆分"到"group所有task跑完" 的dogfooding，继续找问题」「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」会话台账 `.superpowers/sdd/2026-11-06-session-86352010/progress.md`（每次门、对照、变异、裁定、两次自举的数）。
 
@@ -451,11 +469,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **谱系与用量**：`lineageWorkUsage()`（`src/control/usageSettlement.ts`）是谱系求和唯一规则；work 剩余为 null 只在三层上限都缺时出现；spawn 前中止 ⇒ `neverStarted` 记 0，目录行不可解析 ⇒ 用量 null。
 - **Rule 17 事故遗留**：会话 `4de777f4` Task 7 往真 `~/.cache/ccloop/agent-catalog/` 写过路径，该删的只剩两项（§4.1）。**人用真面板时跑门**会让 Rule 17 守卫在文件级报红（面板写 `~/.orca/control/panel`），挑人不用面板时跑；门脚本的 `~/.cache/ccloop` 比对会被运行中的面板服务改写（服务按设计用真缓存）。
 - ⚠️ `ORCA_CCLOOP_BIN` **不能**指 `node_modules/ccloop/dist/cli.js`（npm 包不带 `tests/fixtures`）⇒ 指一份 build 过的 ccloop `clone --local`。`taskResultPaired` 两条硬编码 `/private/tmp/…`，**不设变量也红**，是固定环境红。
-- **repin 的做法**：只在装了真实 `node_modules` 的工作树里 `node scripts/pin-ccloop.mjs <40 位 sha>`（它会 `npm install`；**别在软链 `node_modules` 的树或主仓跑**），且只在人推了 ccloop 之后；必须用 npm 10（nvm Node 22.13.1）跑——npm 11 会重写锁文件里与本 pin 无关的 `peer` 标记，锁检查因此红；repin 门要拿那个 sha 的 ccloop build 作 `ORCA_CCLOOP_BIN` 跑 `verify:scheduler` 与真 ccloop 特性文件（JSON reporter 证明 passed 不是 skipped；会话 `3d229487` 的做法：`tests/scheduler`＋`grep -rl ORCA_CCLOOP_BIN tests` 的全部文件，再带 fake 表、`ORCA_CONTROL_VERIFY=1` 跑 `ccloopProtocol.integration`＋`webCcloopSmoke`）；全新 clone 跑门先 `npm run build --workspace web`。`ORCA_CCLOOP_BIN` **别指姊妹仓工作树的 `dist`**（不等于 pin，真 ccloop 文件会假红）。
+- **repin 的做法**：只在装了真实 `node_modules` 的工作树里 `node scripts/pin-ccloop.mjs <40 位 sha>`（它会 `npm install`；**别在软链 `node_modules` 的树或主仓跑**），且只在人推了 ccloop 之后；必须用 npm 10 跑（原来实测的是 nvm Node 22.13.1 的 npm 10.9.2；2026-11-07 起 nvm default 22.23.4 带 npm 10.9.9，它下面锁文件是否同样只动 root 与 ccloop **未实测**，会话 `b5e3c5a8`）——npm 11 会重写锁文件里与本 pin 无关的 `peer` 标记，锁检查因此红；repin 门要拿那个 sha 的 ccloop build 作 `ORCA_CCLOOP_BIN` 跑 `verify:scheduler` 与真 ccloop 特性文件（JSON reporter 证明 passed 不是 skipped；会话 `3d229487` 的做法：`tests/scheduler`＋`grep -rl ORCA_CCLOOP_BIN tests` 的全部文件，再带 fake 表、`ORCA_CONTROL_VERIFY=1` 跑 `ccloopProtocol.integration`＋`webCcloopSmoke`）；全新 clone 跑门先 `npm run build --workspace web`。`ORCA_CCLOOP_BIN` **别指姊妹仓工作树的 `dist`**（不等于 pin，真 ccloop 文件会假红）。
 - **Codex 隔离的付费教训**（P1／P1b，会话 `a852f96a`）：MCP 名单必须在**同一套隔离**下列（在真 `~/.codex` 下列出的名字给隔离配置下关闭项会让 codex 配置加载失败、零请求）；codex 的 `error` item 当诊断、不当失败；按已装 codex 的 `features list` 过滤要关的 flag。
 - known-reds 名单只加了 `codexAdapter` outer watchdog；`verifySavedResult`「r1 command interruption…」已查清并在 ccloop 修掉（会话 `9ec98639`：macOS 对已退出未回收的进程组 `kill()` 回 EPERM）。
 - **仓库外由 agent 经人授权改过的**（Rule 17 记录）：`~/.orca/agents.json`（备份 `~/.orca/backups/agents.json.bak.20261017`；claude／codex 保留 nvm 稳定路径，不用 cmux 临时 shim）、新建 `~/.orca/projects.json`（0600）、`~/.orca/profile.json`（备份 `profile.json.bak-20261017-v1`）；ccmem 的 `core.hooksPath` 已 unset；三仓 Qoder `post-commit`／`post-checkout` 钩子已备份后删除。
-- 本机：`/opt/homebrew/bin/node` 坏（缺 libsimdjson）；nvm Node 22.13.1 在 PATH 首位；`/usr/local/bin/node` 是 24.13.0（正式服务用它）。真 Codex 只用 `gpt-6-luna`（`gpt-6-sol` 无额度），每次付费先问人。
+- 本机：`/opt/homebrew/bin/node` 坏（缺 libsimdjson）；nvm default 是 22.23.4（有 fts5；2026-11-07 起，会话 `b5e3c5a8` 现测；旧终端里 22.13.1 仍在 PATH 首位）；`/usr/local/bin/node` 是 24.13.0（正式服务用它）。真 Codex 只用 `gpt-6-luna`（`gpt-6-sol` 无额度），每次付费先问人。
 
 ### 3.4 最近一次可引的门（**历史观测，引用前现测**）
 
