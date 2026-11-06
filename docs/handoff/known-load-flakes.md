@@ -295,3 +295,12 @@ retry 的 `setup-failed` 后，工作树单跑 1/1。另一条 `startForm` 是�
 负载波动登记，**不把原始全套改称通过**。另一条是新增 `observedPathRetryE2E` 的测试错误：按随机 run ID 的
 字典序取“第二条”，而实际后继已经结算；已改为按源 run ID 排除查找，修后单跑 1/1 绿
 （`task7-e2e-fixed.log`）。它是判据错误，不登记为产品 flake。
+
+### Codex 会话 2026-11-07（D2＋O19 最终 pin，Node 22.23.4）
+
+最终 ccloop clone build、私有 HOME/XDG/TMPDIR 下的 `npm test`：根 740 文件中 739 过、1 红，6,945 条过、
+35 跳过；Web 182/182 文件、1,669 条全过。唯一红是已登记的 `flow/startForm` `fetch failed`/
+`ECONNRESET`，在分支与未改动 `c65fe9d5` main clone 上交替单跑各 2/2 绿；四份同环境日志是
+`/private/tmp/orca-d1-kMINyw/o19-startform-{branch1,main1,branch2,main2-corrected}.log`。整套原始 RC 1
+保持原样，`/private/tmp/orca-d1-kMINyw/o19-orca-final-full.log`；D2 的真实 ccloop 用例和 O19 的默认跳过
+条件均按预期，O19 另用 `ORCA_SAVED_RESULT_VERIFY=1` 单跑通过（`o19-final-pin-e2e.log`）。
