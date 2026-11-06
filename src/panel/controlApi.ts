@@ -77,6 +77,17 @@ export const planLibraryImportBody: (req: Request, res: Response, next: NextFunc
 });
 
 /** Validate control JSON before the parser discards duplicate object keys. */
+
+/**
+ * Dogfood run 3 F22 (session 86352010): a body that fails the closed schema is answered with each failing field's path and
+ * zod's message (the first three; then how many more), so a caller can tell which field to fix.
+ */
+function zodIssueList(error: ZodError): string {
+  const shown = error.issues.slice(0, 3).map((issue) => `${issue.path.length === 0 ? "(body)" : issue.path.join(".")}: ${issue.message}`);
+  const more = error.issues.length - shown.length;
+  return `${shown.join("; ")}${more > 0 ? `; and ${more} more` : ""}`;
+}
+
 export function verifyControlJsonBody(req: { url?: string; method?: string }, _res: unknown, bytes: Buffer): void {
   if (req.method !== "POST" || !req.url?.startsWith("/api/control/")) return;
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -930,7 +941,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
         return;
       }
       const context = id === null ? undefined : readErrorContext(store, id);
-      if (error instanceof ZodError) sendControlError(res, 400, "control-non-json-payload", "The command body does not match the closed V1 schema.", context);
+      if (error instanceof ZodError) sendControlError(res, 400, "control-non-json-payload", `The command body does not match the closed V1 schema: ${zodIssueList(error)}`, context);
       else sendMappedControlError(res, error, context);
     }
   }));

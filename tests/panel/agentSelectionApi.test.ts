@@ -107,6 +107,19 @@ describe("agent selection over a real panel (agent selection spec §6.8)", () =>
     await panel.close();
   });
 
+  // Dogfood run 3 F22 (session 86352010): a wrongly shaped field was answered "does not match the closed V1 schema" with no
+  // field named; the operator could not tell `estimator` wants a selection object, not an installation id.
+  it("names the failing field when the preferences do not match the schema", async () => {
+    const panel = await boot("epoch-agents-prefs-shape");
+    const bad = await command(panel, PREFS, { commandId: "prefs-bad", expectedRevision: 0, payload: { preferences: { perAgent: {}, estimator: "codex" } } });
+    expect(bad.status).toBe(400);
+    const error = (bad.body as { error: { code: string; message: string } }).error;
+    expect(error.code).toBe("control-non-json-payload");
+    // mutation: the ZodError branch keeps its fixed message -> no path in it, red
+    expect(error.message).toBe("The command body does not match the closed V1 schema: payload.preferences.estimator: Expected object, received string");
+    await panel.close();
+  });
+
   it("previews every task's worker slot and the reconcile slot with the layer each field came from, and a confirm carrying that selectionsHash is accepted", async () => {
     const panel = await boot("epoch-agents-preview");
     expect((await setPreferences(panel, "prefs-a", { defaultAgent: "claude", perAgent: {} })).status).toBe(200);
