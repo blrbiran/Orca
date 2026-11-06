@@ -27,11 +27,11 @@ describe.skipIf(!realBinary)("observed paths through the pinned ccloop binary", 
       const amended = readConfirmedTaskExecution(runtime.store, "g", "a");
       expect(amended.contract.context.targetPaths).toEqual(["shared.txt", ...paths]);
       expect(readControlGroup(runtime.store, runtime.epoch, "g").runs[0]?.pathPolicyMisses).toEqual(paths.map((path) => ({ repoKey: null, path })));
-      await until(() => workRuns(runtime).length === 2 && workRuns(runtime)[1]?.body.state === "settled", 240_000, "amended retry to settle");
-      const after = workRuns(runtime);
-      expect(after[1]?.body.drive.outcome).toBe("succeeded");
-      expect(after[0]!.body.state).toBe("settled-failed");
-      expect({ misses: after[0]!.body.drive.pathPolicyMisses, reason: after[0]!.body.drive.stopReason, claim: after[0]!.body.claim }).toEqual(frozenEvidence);
+      await until(() => workRuns(runtime).find((run) => run.runId !== first.runId)?.body.state === "settled", 240_000, "amended retry to settle");
+      const after = workRuns(runtime), original = after.find((run) => run.runId === first.runId)!, second = after.find((run) => run.runId !== first.runId)!;
+      expect(second.body.drive.outcome).toBe("succeeded");
+      expect(original.body.state).toBe("settled-failed");
+      expect({ misses: original.body.drive.pathPolicyMisses, reason: original.body.drive.stopReason, claim: original.body.claim }).toEqual(frozenEvidence);
       expect(w.show(paths[0]!)).toBe("one");
       expect(w.show(paths[1]!)).toBe("two");
     } finally { await w.teardown(); }

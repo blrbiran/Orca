@@ -285,3 +285,13 @@ retry 的 `setup-failed` 后，工作树单跑 1/1。另一条 `startForm` 是�
 日志 `/private/tmp/orca-d1-kMINyw/orca-path-task3-clean-affected.log` 与同目录 `{branch,main}-startform3.log`。
 前一轮与外部重装测试并跑的全量曾有 26 个文件红（包括真实 `~/.orca` 快照守卫与 `git ENOENT`），
 没有逐文件对照，**不登记为产品 flake**；原始日志仍保留在 `orca-path-task3-affected.log`。
+
+### Codex 会话 2026-11-07（D2 最终 ccloop repin；Node 22.23.4）
+
+隔离 HOME/XDG/TMPDIR、fake-codex 表、ccloop 远端提交的独立 clone build 下，`npm test` 根测试 740 文件：738 过、
+2 红；6,944 条过、34 跳过；Web 182/182 文件、1,669 条全过。根测试原始 RC 1、日志
+`/private/tmp/orca-d1-kMINyw/task7-full.log`。`criteriaBaseRun` 的 Git `index.lock` 时序红在 D2 分支与未改动
+`c65fe9d5` main clone 上交替单跑各 2/2 绿，四份日志 `task7-criteria-{branch,main}{1,2}.log`；按既有锁时序
+负载波动登记，**不把原始全套改称通过**。另一条是新增 `observedPathRetryE2E` 的测试错误：按随机 run ID 的
+字典序取“第二条”，而实际后继已经结算；已改为按源 run ID 排除查找，修后单跑 1/1 绿
+（`task7-e2e-fixed.log`）。它是判据错误，不登记为产品 flake。
