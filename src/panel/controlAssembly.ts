@@ -12,7 +12,8 @@ import { createUnconfiguredControlPort } from "../control/unconfiguredPort.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { deliverSchedulerWakes } from "../control/dispatch.js";
 import { recoverControl } from "../control/recovery.js";
-import { createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
+import { archiveAdmission, createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
+import { publishPending } from "../control/projection.js";
 import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { resolveAstGrepBin } from "../control/requirementOverview.js";
@@ -358,6 +359,11 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     const pass = autoStart.then(() => withAdmission({ admissionGate }, () => deliverSchedulerWakes(store, wakeHandlers)))
       // A delivered wake is a claimed run the driver can now start (spec §2.1).
       .then((delivery) => { if (delivery.delivered.length > 0) driver?.kick(); }, () => undefined)
+      // Issue #126: a usage event of a requirement call or a blocked run queues a group-handoff projection that only a
+      // task settle (or a restart) used to deliver; every pass now drains what is pending (one SELECT when nothing is).
+      .then(() => publishPending(store, archiveAdmission({ admissionGate })).catch((error: unknown) => {
+        process.stderr.write(`orca-control: projection pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      }))
       .finally(() => { inFlight = null; });
     inFlight = pass;
     return pass;
