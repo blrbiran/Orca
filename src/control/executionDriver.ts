@@ -63,7 +63,7 @@ import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
+import { FAILURE_DETAIL_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ExecutionReport } from "./executionPort.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
@@ -1098,6 +1098,9 @@ const singleCallRecordSchema = z.object({
   errorCode: z.string().min(1).nullable(),
   // Spec 2026-10-27 single-call unknown usage §5 C2/O1: what ccloop observed of a call that did not complete (never usage).
   usageLowerBound: singleCallUsageLowerBoundSchema.optional(),
+  // Spec 2026-11-06 quota probe §4 step 1 (R0): ccloop's typed cause of a call that did not complete -- `cause` a bounded
+  // string as runFailureCauseSchema's (a cause a newer ccloop adds is no wire break), `detail` ccloop's causeDetail head.
+  failureCause: z.object({ cause: z.string().min(1).max(64), detail: z.string().max(FAILURE_DETAIL_MAX).nullable() }).strict().optional(),
 }).strict();
 
 /**
