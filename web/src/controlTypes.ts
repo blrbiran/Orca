@@ -412,6 +412,8 @@ export type RunViewV1 = {
     /** Session 3cfc2e73 D7 (#158): an omp execute format failure's attempt refs, what each changed, and the refused issues. */
     formatFailureWork?: { attempt: number; attemptBase: string | null; refs: Array<{ ref: string; commit: string | null; files: string[]; filesMore: boolean; stat: string[] }>; issues: Array<{ path: string; message: string }> } };
   blockedReason?: string | null;
+  /** Terminal run closure #169: the failed run's accounting is closed and a fresh retry is admissible. */
+  terminalClosed?: boolean;
   /** Spec 2026-10-27 single-call unknown usage O3: ccloop's lower bound on a single call's usage, when kept. */
   usageLowerBound?: number;
   /** Spec 2026-11-03 soft-mode approximate usage: the run's usage is the booked floor, not a reported figure (null: no floor). */

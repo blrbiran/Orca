@@ -1814,6 +1814,8 @@ export const runViewSchema = z
     remaining: budgetAmountSchema,
     failureCode: nonemptyString.nullable(),
     blockedReason: nonemptyString.nullable(),
+    // Terminal run closure #169: the failed run's accounting is closed and a fresh retry is admissible.
+    terminalClosed: z.boolean().optional(),
     // Spec 2026-10-27 single-call unknown usage §5 O3 (code review m1): ccloop's lower bound on a single call's usage, when kept.
     usageLowerBound: positiveSafeInteger.optional(),
     // Spec 2026-11-03 soft-mode approximate usage §2: the run's usage is the booked floor (null: the tool gave none).

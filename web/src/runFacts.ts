@@ -60,6 +60,7 @@ export function retryRunOpen(view: GroupViewV1, run: RunViewV1): boolean {
   if (run.state === "settled-recoverable") return work.status === "held" && allocated("held")
     && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-recoverable")
     && view.checkpoints.some(checkpoint => checkpoint.runId === run.runId && checkpoint.state === "complete" && checkpoint.snapshotHash !== null);
+  if (run.state === "settled-failed" && run.terminalClosed === true) return work?.status === "blocked" && allocated("terminal");
   return run.state === "settled-failed" && work.status === "blocked" && allocated("terminal")
     && run.unknownUsageSettlement?.settlement?.reservationDisposition === "released"
     && view.handoffRequests.some(request => request.runId === run.runId && request.state === "settled-failed");

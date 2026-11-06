@@ -233,7 +233,7 @@ export const RESUME_STATE: Record<DriveStep, string> = {
  */
 export const terminalClosureSchema = z.object({
   runId: idSchema, generation: safeInteger.positive(), executionId: z.string().min(1), highWater: safeInteger,
-  outcome: z.string().min(1), commandId: idSchema, ownerToken: idSchema,
+  outcome: z.string().min(1), commandId: idSchema, closeCommandId: idSchema, ownerToken: idSchema,
   report: artifactSchema, stopProof: artifactSchema, at: safeInteger,
 }).strict();
 export type TerminalClosure = z.infer<typeof terminalClosureSchema>;

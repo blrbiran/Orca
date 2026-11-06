@@ -33,6 +33,7 @@ import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
 import { driveRecordSchema, terminalClosureSchema } from "../control/driveRecord.js";
+import { validTerminalClosure } from "../control/terminalRunClosure.js";
 import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
 import { groupStopState, unresolvedStopRetryable } from "../control/stopIntent.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
@@ -1183,6 +1184,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       grant: run.grant[bucket],
       diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
+      // Terminal run closure #169: a closed failure whose evidence still verifies; a shape-only marker is refused here.
+      ...(run.terminalClosure === undefined ? {} : validTerminalClosure(store, run as never) ? { terminalClosed: true } : blocked(`run-closure-invalid:${run.runId}`)),
       ...((run.singleCallUsageLowerBound ?? run.usageLowerBound) === undefined ? {} : { usageLowerBound: (run.singleCallUsageLowerBound ?? run.usageLowerBound)!.tokens }),
       ...(run.usageApproximate === undefined ? {} : { usageApproximate: { floorTokens: run.usageApproximate.floorTokens } }),
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.

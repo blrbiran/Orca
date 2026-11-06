@@ -38,7 +38,10 @@ export function validTerminalClosure(store: ControlStore, run: TerminalRun): boo
     if (run.state !== "settled-failed" || Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(run.runId)?.active) !== 0
       || !isWebWorkRun(store, run.runId) || run.drive?.outcome === null || run.drive?.outcome === "succeeded" || run.drive?.blockedAt !== "C") return false;
     const marker = terminalClosureSchema.parse(run.terminalClosure), proof = sealedProof(store, run);
-    return proof !== null && marker.runId === run.runId && marker.generation === run.generation && marker.executionId === run.executionId
+    const row = store.db.prepare("SELECT verb, body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, marker.closeCommandId) as { verb?: string; body_json?: string } | undefined;
+    const receipt = row === undefined ? null : (JSON.parse(String(row.body_json)) as { result?: { kind?: unknown; runId?: unknown; alreadyClosed?: unknown } }).result;
+    return proof !== null && row?.verb === "close-run" && receipt?.kind === "run-closed" && receipt.runId === run.runId
+      && marker.runId === run.runId && marker.generation === run.generation && marker.executionId === run.executionId
       && marker.highWater === run.highWater && marker.outcome === run.drive.outcome && marker.commandId === run.commandId
       && marker.ownerToken === run.ownerToken && settlementSame(marker.report, proof.report) && settlementSame(marker.stopProof, proof.stopProof);
   } catch { return false; }
@@ -74,7 +77,7 @@ export function applyCloseRun(deps: CloseRunDeps, command: CloseRunCommand): Com
         if (proof === null) throw new ControlError("run-closure-evidence");
         if (run.executionId === null || run.drive?.outcome === null || run.drive?.outcome === undefined) throw new ControlError("run-closure-evidence");
         run.terminalClosure = terminalClosureSchema.parse({ runId, generation: run.generation, executionId: run.executionId, highWater: run.highWater,
-          outcome: run.drive.outcome, commandId: run.commandId, ownerToken: run.ownerToken, ...proof, at: deps.store.now() });
+          outcome: run.drive.outcome, commandId: run.commandId, closeCommandId: context.rawCommand.commandId, ownerToken: run.ownerToken, ...proof, at: deps.store.now() });
         run.state = "settled-failed";
         (run as unknown as { recoverable: boolean }).recoverable = false;
         saveRunBody(deps.store, run, false);

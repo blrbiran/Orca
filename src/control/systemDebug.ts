@@ -7,6 +7,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
 import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
+import { validTerminalClosure } from "./terminalRunClosure.js";
 import { groupStopped } from "./executionDriver.js";
 import { ControlError } from "./errors.js";
 import { buildModelReviewPlanSource } from "./modelReview/plan.js";
@@ -275,7 +276,10 @@ function runBody(store: ControlStore, runId: unknown): { runId: string; state: s
 export function terminallyFailedRun(store: ControlStore, groupId: string, taskId: string): { runId: string; state: string; drive?: DriveRecord; failureCode?: unknown } | null {
   const task = tasksOf(store, groupId).find((entry) => entry.id === taskId);
   const run = task === undefined ? null : runBody(store, task.work.currentRunId);
-  return run !== null && isTerminallyFailedRun(run) ? run : null;
+  if (run === null || !isTerminallyFailedRun(run)) return null;
+  // Terminal-closure spec 2026-11-07: routing never acts on a shape-only marker; a forged closure is not a candidate.
+  if ((run as { terminalClosure?: unknown }).terminalClosure !== undefined && !validTerminalClosure(store, run as never)) return null;
+  return run;
 }
 
 export function allTasksDone(store: ControlStore, groupId: string): boolean {

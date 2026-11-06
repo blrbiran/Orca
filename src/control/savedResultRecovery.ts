@@ -10,6 +10,7 @@ import {createStartingRun,readFrozenSnapshot,probeBlocksDispatch} from './webDis
 import {readStopIntent,readRunBody,saveRunBody,releaseCommitment,reserveCommitment,setAllocationStates,commandSuccess,latestRequestForRun,ADOPTABLE_STATES} from './stopIntent.js';
 import {hasValidUsageSettlement,lineageWorkUsage,settlementProof,settlementArtifact,settlementSame} from './usageSettlement.js';
 import {hasOptionalTaskPolicy,decideFundedAllowance,readFundedAllowance} from './fundedAllowance.js';
+import {validTerminalClosure} from './terminalRunClosure.js';
 import {finiteCommitment} from './tokenPolicy.js';
 import {topUpSum,withTopUp} from './workTopUp.js';
 import {groupUsageUnknown,add} from './budget.js';
@@ -59,6 +60,7 @@ export function currentSavedResultSource(store:ControlStore,sourceRunId:string){
    ||!['saved-result-verification-interrupted','saved-result-before-entry-interrupted'].includes(current.drive?.stopReason))throw Error('saved-result-source-stale');
   interruptedSavedResultSchema.parse(JSON.parse(settlementArtifact(store,current.savedInterruption).toString()));
  }else if(current.runId!==run.runId)throw Error('saved-result-source-stale');
+ if(run.terminalClosure!==undefined&&!validTerminalClosure(store as never,run as never))throw Error('saved-result-source-stale');
  if(!['blocked','settled-failed','settled-recoverable'].includes(run.state)||run.drive?.outcome!=='failed'||run.drive?.blockedAt!=='C'&&run.state==='blocked')throw Error('saved-result-source-stale');
  const graph=(()=>{try{return readArchivedPlan(store,run.groupId);}catch{throw Error('saved-result-source-stale');}})(),task=graph.plan.tasks.find(t=>t.taskId===run.taskId);
  if(!task||!settlementSame(work.dependsOn,task.dependencyTaskIds)||Number(store.db.prepare('SELECT graph_version FROM groups WHERE id=?').get(run.groupId)?.graph_version)!==run.graphVersion||Number(store.db.prepare('SELECT target_version FROM work_items WHERE group_id=? AND id=?').get(run.groupId,run.taskId)?.target_version)!==run.targetVersion)throw Error('saved-result-source-stale');

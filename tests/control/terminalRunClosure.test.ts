@@ -4,7 +4,8 @@ import { withCommandContext } from "../../src/control/commandClient.js";
 import { isTerminallyFailedRun } from "../../src/control/driveRecord.js";
 import { readBudgetProposal, readGroup, readWork } from "../../src/control/queries.js";
 import { validTerminalClosure } from "../../src/control/terminalRunClosure.js";
-import { readControlRecovery } from "../../src/panel/controlViews.js";
+import { readControlRecovery, readControlGroup } from "../../src/panel/controlViews.js";
+import { terminallyFailedRun } from "../../src/control/systemDebug.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 /** Deleting the terminal-closure scan must leave the failed run active and make these criteria RED. */
@@ -22,6 +23,8 @@ describe("terminal run closure (#169)", () => {
       expect(run.drive).toMatchObject({ outcome, blockedAt: "C", blockedReason: `terminal:${outcome}` });
       expect(run.terminalClosure).toMatchObject({ runId, outcome, generation: run.generation, highWater: run.highWater });
       expect(validTerminalClosure(t.h.store, run)).toBe(true);
+      expect(readControlGroup(t.h.store, "epoch-test", "g").runs.find((r) => r.runId === runId)).toMatchObject({ terminalClosed: true });
+      expect(terminallyFailedRun(t.h.store, "g", "a")?.runId).toBe(runId);
       expect(Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active)).toBe(0);
       expect(readControlRecovery(t.h.store, "epoch-test").terminalRuns ?? []).toEqual([]);
       expect(readWork(t.h.store, "g", "a").status).toBe("blocked");
@@ -78,6 +81,10 @@ describe("terminal run closure (#169)", () => {
         t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
       });
       expect(validTerminalClosure(t.h.store, t.body(runId))).toBe(false);
+      // Routing refuses a forged closure, and the read model says so rather than showing a clean settled failure.
+      expect(terminallyFailedRun(t.h.store, "g", "a")).toBeNull();
+      expect(() => readControlGroup(t.h.store, "epoch-test", "g")).toThrow(/run-closure-invalid/);
+      expect(await (t.service as any).savedResultEligibility(runId)).toMatchObject({ status: "unavailable", reason: "saved-result-source-stale" });
     } finally { await t.h.dispose(); }
   });
 
