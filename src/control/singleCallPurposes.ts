@@ -62,6 +62,11 @@ export interface SingleCallHandler {
    * run and its drive record (a probe's verdict is known from the record even when its usage is not). Absent: nothing.
    */
   blockedRunFields?(settled: unknown, at: number): { run: Record<string, unknown>; drive: Partial<DriveRecord> };
+  /**
+   * Quota probe spec 2026-11-06 (controller decision): whether `evaluate`'s result says the provider refused the call
+   * before any work, so its unknown work usage is booked 0 (bookRejectedZeroInTransaction) instead of blocking the run.
+   */
+  rejectedBeforeWork?(settled: unknown): boolean;
   /** Ce: the block reason when the call's usage is not known (completion answered run-stop-unconfirmed). */
   readonly usageUnknownReason: string;
 }

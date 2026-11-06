@@ -196,6 +196,83 @@ describe("quota rest probe (spec 2026-11-06 §5)", { timeout: 180_000 }, () => {
     } finally { await w.t.h.dispose(); }
   });
 
+  const limitTokens = (w: Awaited<ReturnType<typeof world>>, headroom: number) => {
+    const group = readWebGroup(w.t.h.store, "g");
+    const used = group.ledger.used.tokens + group.ledger.committedRemaining.tokens;
+    const raised = w.t.service.setLimit(w.t.h.command("set-limit", { limit: { ...group.ledger.groupLimit, tokens: used + headroom } }));
+    if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
+  };
+  const taskRuns = (w: Awaited<ReturnType<typeof world>>) => Number(w.t.h.store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id='g' AND work_item_id='a'").get()!.n);
+
+  it("P8: a paused group gets no probe; a group paused after its probe answered gets no retry", async () => {
+    const before = await world(); try {
+      expect(await before.t.service.pauseDispatch(before.t.h.command("pause-dispatch", {}))).toMatchObject({ result: { kind: "paused" } });
+      before.restEnds();
+      await before.pass();
+      expect(before.probes()).toEqual([]);
+    } finally { await before.t.h.dispose(); }
+    const after = await world(); try {
+      after.restEnds();
+      await after.pass();
+      expect(after.probes()).toHaveLength(1);
+      expect(await after.t.service.pauseDispatch(after.t.h.command("pause-dispatch", {}))).toMatchObject({ result: { kind: "paused" } });
+      await after.pass();
+      expect(after.retries()).toEqual([]);
+    } finally { await after.t.h.dispose(); }
+  });
+
+  it("P12: a limited group without room for the grant is not probed, and the task says why", async () => {
+    const w = await world(); try {
+      limitTokens(w, 10_000);
+      w.restEnds();
+      await w.pass();
+      expect(w.probes()).toEqual([]);
+      expect(w.notes()).toEqual([{ runId: w.failed.a, reason: "quota-probe-unfunded:tokens", key: quotaProbeWorkItemId("codex", w.failed.a!) }]);
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("P13: a probe over its grant in a limited group never blocks the group", async () => {
+    const w = await world({ answers: [{ outcome: "complete", tokens: 60_000 }] }); try {
+      limitTokens(w, 500_000);
+      w.restEnds();
+      const status = readWebGroup(w.t.h.store, "g").status;
+      await w.pass();
+      expect(w.probes()[0]!.body).toMatchObject({ breaches: [1], probeVerdict: { verdict: "back" } });
+      expect(readWebGroup(w.t.h.store, "g").status).toBe(status);
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("P14: a person retries the task while the probe runs -- orca-auto adds no second retry and no second run", async () => {
+    const w = await world(); try {
+      w.restEnds();
+      await w.t.service.systemDebugPass();
+      expect(w.probes()).toHaveLength(1);
+      expect(w.t.service.retryTask(w.t.h.command("retry-task", { taskId: "a" }))).not.toHaveProperty("error");
+      await w.pass(); await w.pass();
+      const sent = w.retries();
+      expect(sent.every(([, status]) => Number(status) >= 400)).toBe(true);
+      await w.t.claim();
+      expect(taskRuns(w)).toBe(2);
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("gap 5: a probe refused for quota with unknown usage books 0 and completes in a limited group; unknown usage for another cause stays blocked", async () => {
+    const quota = await world({ answers: [{ outcome: "failed", failureCause: { cause: "quota", detail: "You've hit your usage limit" }, tokens: null }] }); try {
+      limitTokens(quota, 500_000);
+      quota.restEnds();
+      await quota.pass();
+      const [probe] = quota.probes();
+      expect(probe!.body).toMatchObject({ state: "settled-restartable", unknown: { work: false }, cumulative: { work: { tokens: 0 } }, probeVerdict: { verdict: "quota" } });
+      expect(readWebGroup(quota.t.h.store, "g").ledger.usageUnknown).toBe(false);
+    } finally { await quota.t.h.dispose(); }
+    const auth = await world({ answers: [{ outcome: "failed", failureCause: { cause: "auth", detail: "last status: 401" }, tokens: null }] }); try {
+      limitTokens(auth, 500_000);
+      auth.restEnds();
+      await auth.pass();
+      expect(auth.probes()[0]!.body).toMatchObject({ state: "blocked", drive: { blockedReason: "quota-probe-usage-unknown:codex-exit-error" }, probeVerdict: { verdict: "failed", cause: "auth" } });
+    } finally { await auth.t.h.dispose(); }
+  });
+
   it("P18: a completed probe ends the streak -- the next quota failure on the installation rests 15 minutes, not 30", async () => {
     const w = await world(); try {
       w.restEnds();

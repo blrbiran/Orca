@@ -63,6 +63,7 @@ import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
 import type { AdmissionGate } from "./admissionGate.js";
+import { bookRejectedZeroInTransaction } from "./quotaProbeCall.js";
 import { FAILURE_DETAIL_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ExecutionReport } from "./executionPort.js";
@@ -1171,6 +1172,16 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
       // Review (session 43913afc) m2: verifyStoppedSingleCall also says run-stop-unconfirmed for a ledger that does not
       // match; only a run whose usage is in fact unknown takes the approximate path, the rest are blocked by name as before.
       const current = readRun(store, runId);
+      // Quota probe spec 2026-11-06 (controller decision, session 86352010): a purpose may know from its record that the
+      // provider refused the call before any work (a probe's typed `quota`), and book its usage 0 -- as ccloop books a
+      // codex 429 before work -- then complete as a call with known usage does. Any other unknown usage is unchanged.
+      if (handler.completeInTransaction !== undefined && handler.rejectedBeforeWork?.(settled) === true && current.unknown.work && !current.unknown.handoff) {
+        write(deps, () => {
+          bookRejectedZeroInTransaction(store, runId);
+          handler.completeInTransaction!(store, readRun(store, runId) as never, settled, singleCallCommitTerminal(store, run), failure);
+        });
+        return true;
+      }
       if (handler.completeInTransaction !== undefined && (current.unknown.work || current.unknown.handoff) && approximateUsageApplies(store, run)) {
         const at = (deps.now?.() ?? new Date()).getTime();
         write(deps, () => {

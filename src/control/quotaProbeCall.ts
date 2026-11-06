@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { frozenWorkAgent } from "./agentFreeze.js";
-import { add, subtract, syncWebBudget } from "./budget.js";
+import { add, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import type { DriveRecord } from "./driveRecord.js";
@@ -99,6 +99,7 @@ export const QUOTA_PROBE_HANDLER: SingleCallHandler = {
     store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), run.runId);
     closeSingleCall(store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
   },
+  rejectedBeforeWork: (settled) => isProbeVerdict(settled) && settled.verdict === "quota",
   blockedRunFields(settled, at) {
     return isProbeVerdict(settled) ? verdictFields(settled, at) : { run: {}, drive: {} };
   },
@@ -152,6 +153,21 @@ export function claimQuotaProbeInTransaction(store: ControlStore, input: { group
   syncWebBudget(store, group, null);
   saveGroup(store, group);
   return { runId };
+}
+
+/**
+ * Controller decision (session 86352010, gap 5): a probe the provider refused for quota spent nothing -- as ccloop books a
+ * codex 429 before work as 0 -- so its unknown work bucket is booked as known 0 (nothing was added to `cumulative`, and
+ * `remaining` is still the whole grant), and the group's usage-unknown mirror is recomputed. In the caller's transaction.
+ */
+export function bookRejectedZeroInTransaction(store: ControlStore, runId: string): void {
+  const run = readRun(store, runId);
+  if (!run.unknown.work) throw new ControlError("run-usage-not-unknown");
+  run.unknown = { ...run.unknown, work: false };
+  saveRun(store, run);
+  const group = readGroup(store, run.groupId);
+  syncWebBudget(store, group, run);
+  saveGroup(store, group);
 }
 
 /** The probe run's identity, for the stop path and the view. */
