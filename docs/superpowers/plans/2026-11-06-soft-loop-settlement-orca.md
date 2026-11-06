@@ -83,3 +83,78 @@ another agent) and O19 (needs the new ccloop pinned).
 | O16 | do not issue the command on a permanent code; separately, drop the row-exists skip (second pass throws) |
 | O17 | drop the `mode`/`recoveryOf` check |
 | O18 | drop the cutoff |
+
+## As built (session 86352010, implementer subagent)
+
+Commits on `feat/soft-loop-settlement-orca` (base `fa593909`): `8c09d592` feature, `a074250b` O16 admission case,
+`539457e3` O4/O10/O11 criteria fixes (see mutations below). Not merged, not pushed.
+
+### Decisions (each reversible; reported for review)
+
+1. Authored task budget = task work allocation `amount.tokens !== null` and `fieldProvenance.tokens.provenance !== "model"`
+   (plan reading 1); a missing allocation reads as authored. Consequence with §6 Q6: the only loop runs whose
+   approximate settlement ccloop will accept for saved-result recovery are **estimator-sized finite** codex grants
+   (null grant ⇒ ccloop refuses on the null ceiling; authored finite ⇒ person path).
+2. Row context `{ client: "panel", principal: "orca-auto" }` (plan reading 2). **ccloop's receipt branch must accept
+   `client: "panel"`** -- told to the controller for the ccloop agent.
+3. Recovered optional-v1 releases the whole pre-booking remainder (plan reading 3), diverging from §3.4's row; O10 restated
+   (resume-from-handoff continues, not retry-task).
+4. Cutoff measured on `endedAt`, else the first `run-blocked` at C (plan reading 5); no cutoff row ⇒ the pass is off.
+5. Evidence read and apply in one synchronous stretch, no recheck (plan reading 7).
+6. Transient preflight codes: the spec's three plus `group-archived` (an archived group would otherwise book a permanent
+   refusal that survives unarchiving).
+7. Refusal visibility: `unknownUsageSettlement.approximateRefusal` (the refused row's error code) on the run view, shown by
+   `UsageSettlement.tsx` as "Orca could not settle the usage automatically: <code>".
+8. Activity `reason` = the run's `drive.blockedReason`, else `failureCode`, else `usage-unknown`.
+9. Not done: §3.5's last bullet (a person's refusal reading "settled approximately by Orca"): the refusal code stays
+   `run-usage-settled` with the existing wording. Open item.
+
+### Criteria and mutations (clone `scratchpad/sloMut2`, runner `scratchpad/slo-mutate.py`, logs `scratchpad/slo-mut/`; every restore `git diff` 0 bytes)
+
+Files: `tests/control/softModeLoopRunSettlement.test.ts` (15 cases), `tests/control/approximateFloorMarker.test.ts` (6).
+Red line = the first failing assertion vitest reported.
+
+| # | Mutation | Result |
+|---|---|---|
+| O1 | `approximateUsageApplies` false for task runs / pass call deleted | red, both at softModeLoopRunSettlement.test.ts:30 (marker) |
+| O1 (row context, controller request) | apply without `withCommandContext` | red :32 (row `client`/`principal` null; the marker at :30 stays green) |
+| O2 | `?? 0` for a null floor | red :43 |
+| O3 | limit check dropped | red :69 |
+| O3b | authored check dropped | red :83 |
+| O4 | usageApproximate check / charge check / principal `z.string()` / row principal / row verb / branch on row verb | red :32, :40 (after fix `539457e3`; first run green because the forgery also moved cumulative), :36, :41, :42, O4 second case |
+| O5 | validator branch removed | red :58 (`recovery-blocked:run-usage-settlement`) |
+| O6 | recovered subtracts | red :68 |
+| O7 | `run-usage-settled` guard deleted | red (code `run-usage-not-unknown`) |
+| O8 | `max(F - B, 0)` | red :56 |
+| O9 | committed reserve rule applied always | red :101 |
+| O10 | release only `min(F, held)` | red :117 |
+| O11 | park the pre-booking remainder | red :136 (after `539457e3`; first run green: fixture floor was 0) |
+| O12 | row-exists skip removed / candidate filter removed / both | green / green / red (`command-id-conflict`). Two independent guards; each alone is covered by the other |
+| O13 | person's in-transaction admission removed | red (code `run-usage-not-settleable` instead of `run-usage-settled`; still refused: evidence-changed is the second layer) |
+| O14 | candidate filter removed / preflight removed | red :179 / green (the filter excludes a settled run first) |
+| O15 | `approximateUsageApplies`-like limit check in validator | red approximateFloorMarker.test.ts:90 |
+| O16 | proof preflight skips / permanent admission code skipped / row-exists removed | red :190 / red :210 / red (`command-id-conflict`) |
+| O17 | mode/recoveryOf check dropped | red :221 |
+| O18 | cutoff dropped | red :232 |
+
+Environment note: in the O4g run `tests/setup/relocateUserData.ts` also reported a change in the real `~/.orca`
+(`control/panel/control.sqlite` and `panel/logs/*` sizes): the user's live panel writing its own files during the run,
+not the test (it opens only temp stores). Recorded, not suppressed.
+
+### Rewrites (Ruling: 「这次批准改写所有必要的判据。」)
+
+- `tests/commands/verbCoverage.test.ts`: the escape-hatch list gains `settle-approximate-usage`.
+
+### Open items
+
+- **O19** (needs the new ccloop pinned). The case to add to `tests/control/savedResultRecovery.paired.test.ts`, run with
+  `ORCA_SAVED_RESULT_VERIFY=1 npx vitest run tests/control/savedResultRecovery.paired.test.ts`: a codex run whose task
+  grant is estimator-sized finite (provenance `model`) in an unlimited group fails with unknown usage; `since(t)` and
+  `softLoopSettlementPass` book it; `readSavedResultEligibility` answers `eligible`. Mutation: the old pin ⇒
+  `saved-result-evidence-invalid`.
+  Non-merged-gate attempt (controller's suggestion, ccloop 32163ed): not run. `savedResultWorld`
+  (`tests/control/fixtures/savedResultWorld.ts:27`) throws `saved-result-integration-prerequisites-missing` unless
+  `ORCA_SAVED_RESULT_OLD_ORCA_ROOT`, `ORCA_SAVED_RESULT_OLD_CCLOOP_ROOT` and `ORCA_SAVED_RESULT_CCLOOP_BIN` are set; the old
+  Orca and old ccloop roots it needs are not prepared in this session's scratchpad, and the fixture always books a
+  person's settlement (`:89-90`), so the case also needs a `settle: "none"` fixture option. Left for the repin round.
+- §3.5 refusal wording (decision 9).

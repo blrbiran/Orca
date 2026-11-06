@@ -12,6 +12,7 @@ import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { createWebWakeHandlers, deliverScheduledStart, nextClaimableTask } from "../../src/control/webDispatch.js";
 import { commandVerbSchema, rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
+import { applySettleApproximateUsage } from "../../src/control/softLoopSettlement.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { clarifyingInput } from "./fixtures/requirement.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
@@ -218,6 +219,8 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "requirement-clarify-more": { call: (s, c) => s.requirementClarifyMore(c), target: "group", payload: { roundNo: 1 } },
   "requirement-classify": { call: (s, c) => s.requirementClassify(c), target: "group", payload: { scope: "small", clarity: "clear" } },
   "requirement-revise": { call: (s, c) => s.requirementRevise(c), target: "group", payload: { roundNo: 1, answers: [], glossaryDecisions: [], adrDecisions: [] } },
+  // Ruling: 「这次批准改写所有必要的判据。」 (session 86352010) -- spec 2026-11-06 (d): Orca's own verb, applied in-process.
+  "settle-approximate-usage": { call: (s, c) => applySettleApproximateUsage({ store: s.store }, c), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1 } },
   "settle-unknown-usage": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.settleUnknownUsage(c)), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1, acknowledge: "charge-remaining-grant" } },
   "retry-task": { call: (s, c) => s.retryTask(c), target: "group", payload: { taskId: "a" } },
   "verify-saved-result": { call: (s, c) => s.verifySavedResult(c), target: "task", payload: { sourceRunId: "run-a", sourceAttempt: 1, capsuleHash: "a".repeat(64) } },
