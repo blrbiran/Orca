@@ -71,7 +71,7 @@ export interface Task {
  * One fake codex script entry: the files execute writes; ccloop C5 adds how long each phase sleeps first,
  * and ccloop C-3 whether the phase reports its usage before that sleep.
  */
-export interface ScriptEntry { files: Record<string, string>; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean }
+export interface ScriptEntry { files: Record<string, string>; reportedChangedFiles?: string[]; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean }
 /**
  * Agent selection (plan T16): a world may also carry ccloop's CLI-level fake claude (tests/fixtures/fake-claude-cli.mjs) as a
  * `claude` installation beside the fake codex, with its own marker and script.
