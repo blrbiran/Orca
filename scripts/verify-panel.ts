@@ -340,7 +340,8 @@ async function snapshotHomeOrca(): Promise<HomeOrcaSnapshot> {
  * step cannot forget it. It wins over any ORCA_CONTROL_DIR in the ambient env: the panels this script starts create
  * an owner with a known password (accounts spec §3.2), which must never land in a person's real store.
  */
-const VERIFY_CONTROL_ROOT = mkdtempSync(join(tmpdir(), "orca-panel-verify-control-"));
+// The formal gate may nest TMPDIR several levels deep; the control.sock path must still fit macOS sun_path (F13).
+const VERIFY_CONTROL_ROOT = mkdtempSync(join("/tmp", "opv-"));
 
 function spawnOrcaCli(args: string[], env: NodeJS.ProcessEnv): ChildProcess {
   env = { ...env, ORCA_CONTROL_DIR: VERIFY_CONTROL_ROOT };
@@ -597,7 +598,7 @@ async function main(): Promise<number> {
   // each run of this script left the directory behind in $TMPDIR (measured 2026-09-28).
   cleanups.push({
     what: "remove the relocated ORCA_CONTROL_DIR",
-    run: () => guardedRmRecursive(VERIFY_CONTROL_ROOT, "orca-panel-verify-control-"),
+    run: () => guardedRmRecursive(VERIFY_CONTROL_ROOT, "opv-"),
   });
   let exitCode = 0;
 
