@@ -1127,7 +1127,10 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // current run's claim grant -- or, while that run is the parked predecessor, its remaining -- and an older
       // run of the task's lineage keeps the grant it was claimed with.
       const current = work.currentRunId === runId;
-      const funded=readFundedAllowance(store,run);
+      // Poll bench bound: the work body and earlier runs this view already holds, not per-run reads (fundedAllowance.ts preRead).
+      const position = createdOrdinal.get(runId)! - 1;
+      const earlierRuns = snapshot.runsByRowid.slice(0, position).filter(entry => String(entry.work_item_id) === run.workItemId).map(entry => decodedValue(snapshot.decodeRun(String(entry.id))));
+      const funded=readFundedAllowance(store,run,{ work: work as never, earlierRuns });
       const claimed = current && run.state === "settled-recoverable" ? run.remaining : run.grant;
       // Agent selection spec §6.4 / §3 I1: the run carries its work item's frozen selection, byte for byte -- after a
       // switch (quota failover spec 2026-11-03 §8), the selection frozen when the run was claimed.

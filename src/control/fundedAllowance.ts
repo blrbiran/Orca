@@ -113,13 +113,18 @@ export function persistFundedAllowance(store:ControlStore,runId:string,groupId:s
  store.db.prepare("INSERT INTO funded_allowances VALUES (?,?,?,?)").run(runId,groupId,workId,JSON.stringify(allowance));
 }
 
-export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId:string;workItemId:string;grant:unknown;tokenPolicy?:unknown;savedRecovery?:unknown;mode?:unknown;recoveryOf?:unknown;generation?:number;configHash?:string;commandId?:string;ownerToken?:string}):FundedAllowance|null {
+/**
+ * `preRead` (poll bench bound, session 86352010): the run's work item body and the bodies of the work item's earlier runs
+ * (rowid order) when the caller already holds them (the group view's read snapshot), so a view of N runs does no per-run
+ * work_items or runs read; absent, they are read here. Same checks either way.
+ */
+export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId:string;workItemId:string;grant:unknown;tokenPolicy?:unknown;savedRecovery?:unknown;mode?:unknown;recoveryOf?:unknown;generation?:number;configHash?:string;commandId?:string;ownerToken?:string},preRead?:{work:{taskId:string|null;grant:{work:unknown}};earlierRuns:readonly unknown[]}):FundedAllowance|null {
  if(run.savedRecovery!==undefined){
   const record=savedRecoverySchema.parse(run.savedRecovery),admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifact(store,record.admission).toString())),funding=record.funding;
   const policy=recoveryPolicyAuthoritySchema.parse(JSON.parse(settlementArtifact(store,funding.historicalPolicy.authority).toString()));
   const source=store.db.prepare("SELECT body FROM runs WHERE id=?").get(record.recoveryOf.sourceRunId);if(!source)throw new ControlError("recovery-blocked","saved-result-funding-source");
   const frozen=JSON.parse(readCanonicalRecord(store,admission.contractHash));if(frozen.schema!=="orca-derived-contract-record-v1"||sha256Canonical(frozen)!==admission.contractHash)throw new ControlError("recovery-blocked","saved-result-frozen-policy");
-  const old=JSON.parse(String(source.body));const work=readWork(store,run.groupId,run.workItemId);
+  const old=JSON.parse(String(source.body));const work=preRead?.work??readWork(store,run.groupId,run.workItemId);
   if(run.mode!=="verify-saved-result"||!settlementSame(run.recoveryOf,record.recoveryOf)||!settlementSame(admission.funding,funding)||!settlementSame(admission.recoveryOf,record.recoveryOf)||!settlementSame(admission.claim,{runId:run.runId,generation:run.generation,commandId:run.commandId,ownerToken:run.ownerToken,configHash:run.configHash})||admission.revision!==record.revision
    ||funding.reservation.runId!==run.runId||funding.reservation.revision!==record.revision||!settlementSame(funding.freshGrant,run.grant)||policy.sourceRunId!==old.runId||policy.groupId!==run.groupId||policy.workItemId!==run.workItemId||policy.contractHash!==admission.contractHash
    ||policy.accountingMode!==funding.historicalPolicy.accountingMode||!settlementSame(policy.authoredWork,funding.historicalPolicy.authoredWork)||!settlementSame(policy.authoredWork,frozen.confirmedGrant.work)
@@ -135,11 +140,12 @@ export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId
  const parsed=tokenPolicySchema.extend({grant:grantSchema}).safeParse(JSON.parse(String(row.body)));
  if(!parsed.success||row.group_id!==run.groupId||row.work_item_id!==run.workItemId||!canonicalBytes(parsed.data.grant).equals(canonicalBytes(run.grant)))throw new ControlError("recovery-blocked","funded-allowance-identity");
  // Retry work top-up spec 2026-11-06 §2 "Ordering": only the top-ups retried from a run before this one apply to it.
- const work=readWork(store,run.groupId,run.workItemId),authored=withTopUp(work.grant.work,topUpSum(store,run.groupId,run.workItemId,run.runId));
+ const work=preRead?.work??readWork(store,run.groupId,run.workItemId),authored=withTopUp(budgetAmountSchema.parse(work.grant.work),topUpSum(store,run.groupId,run.workItemId,run.runId));
  if(parsed.data.authoredTokenCeiling!==authored.tokens)throw new ControlError("recovery-blocked","funded-authored-policy");
  let inherited=zero();
- for(const previous of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND rowid<(SELECT rowid FROM runs WHERE id=?) ORDER BY rowid").all(run.groupId,run.workItemId,run.runId)){
-  const source=JSON.parse(String(previous.body));if(source.unknown.work||source.unknown.handoff)throw new ControlError("recovery-blocked","funded-unknown-lineage");
+ const earlier=preRead?.earlierRuns??store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND rowid<(SELECT rowid FROM runs WHERE id=?) ORDER BY rowid").all(run.groupId,run.workItemId,run.runId).map(row=>JSON.parse(String(row.body)));
+ for(const previous of earlier){
+  const source=previous as {unknown:{work:boolean;handoff:boolean};cumulative:{work:Amount};usageSettlement?:unknown};if(source.unknown.work||source.unknown.handoff)throw new ControlError("recovery-blocked","funded-unknown-lineage");
   inherited=add(inherited,amountSchema.parse(lineageWorkUsage(source)));
  }
  if(!canonicalBytes(inherited).equals(canonicalBytes(parsed.data.inheritedUsage)))throw new ControlError("recovery-blocked","funded-lineage");
