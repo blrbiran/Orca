@@ -243,8 +243,12 @@ export type TerminalClosure = z.infer<typeof terminalClosureSchema>;
  * `succeeded`. Sending it back to C would only collect the same terminal again, so recovery-retry refuses it; retry-task
  * (retryTask.ts, which names each failed condition in its refusal) is its way out.
  */
-export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord }): boolean {
-  return run.state === "blocked" && run.drive !== undefined && run.drive.blockedAt === "C" && run.drive.outcome !== null && run.drive.outcome !== "succeeded";
+export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord; terminalClosure?: unknown }): boolean {
+  const live = run.state === "blocked" && run.drive !== undefined && run.drive.blockedAt === "C" && run.drive.outcome !== null && run.drive.outcome !== "succeeded";
+  // Terminal-closure spec 2026-11-07: an explicitly closed failure keeps its identity for ladder/quota routing.
+  const closed = run.state === "settled-failed" && run.drive !== undefined && run.drive.blockedAt === "C"
+    && run.drive.outcome !== null && run.drive.outcome !== "succeeded" && terminalClosureSchema.safeParse(run.terminalClosure).success;
+  return live || closed;
 }
 
 /**

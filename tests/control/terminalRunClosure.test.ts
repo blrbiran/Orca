@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readRunActivity } from "../../src/control/activity.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
+import { isTerminallyFailedRun } from "../../src/control/driveRecord.js";
 import { readBudgetProposal, readGroup, readWork } from "../../src/control/queries.js";
 import { validTerminalClosure } from "../../src/control/terminalRunClosure.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
@@ -73,6 +74,41 @@ describe("terminal run closure (#169)", () => {
         t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
       });
       expect(validTerminalClosure(t.h.store, t.body(runId))).toBe(false);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("retries a closed failure as a fresh run without changing the closed run's accounting", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", sealedOwnerProof: true, tokenPolicy: "optional-v1" });
+    try {
+      const runId = await t.claim(), driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ result: { kind: "run-closed", alreadyClosed: false } });
+      const before = t.body(runId);
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).toMatchObject({ result: { kind: "task-retried", fromRunId: runId } });
+      const after = t.body(runId);
+      expect(after).toMatchObject({ state: before.state, grant: before.grant, cumulative: before.cumulative, terminalClosure: before.terminalClosure });
+      expect(Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active)).toBe(0);
+      // Ladder, quota wait and failover read the same predicate; the closed run keeps its terminal identity.
+      expect(isTerminallyFailedRun(t.body(runId))).toBe(true);
+      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ result: { kind: "run-closed", alreadyClosed: true } });
+      await driver.round();
+      const next = await t.claim();
+      expect(next).not.toBe(runId);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses a retry whose closed run's marker no longer verifies", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", sealedOwnerProof: true, tokenPolicy: "optional-v1" });
+    try {
+      const runId = await t.claim(), driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ result: { kind: "run-closed", alreadyClosed: false } });
+      t.h.store.transaction(() => {
+        const body = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
+        body.terminalClosure.stopProof.hash = "0".repeat(64);
+        t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
+      });
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).toMatchObject({ error: { code: "recovery-blocked", message: "recovery-blocked:retry-closure-invalid" } });
     } finally { await t.h.dispose(); }
   });
 });

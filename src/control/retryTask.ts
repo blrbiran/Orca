@@ -17,6 +17,7 @@ import { commandPrincipalFor, routedDispatchedRunFor, routedPersonAuthorityFor }
 import { agentTopUpSum, appendTopUp, readAgentTopUpCap, topUpSum, withTopUp } from "./workTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
+import { validTerminalClosure } from "./terminalRunClosure.js";
 import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { recordActivity } from "./activity.js";
@@ -171,7 +172,13 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const released = !live && run.state === "settled-failed" && work.status === "blocked" && run.recoverable === false
           && allocations.length === 2 && allocations.every(a => a.state === "terminal") && settlementSame(work.grant, run.grant)
           && (run.usageSettlement as { reservationDisposition?: string } | undefined)?.reservationDisposition === "released" && hasValidUsageSettlement(store, run);
-        if ((!live || run.state !== "blocked") && !held && !released) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
+        // Terminal-closure spec 2026-11-07: an explicit closure released this run's remainder already. A malformed marker
+        // refuses by name instead of falling through to the ordinary live-failure branch.
+        if (run.terminalClosure !== undefined && !validTerminalClosure(store, run as never)) throw new ControlError("recovery-blocked", "retry-closure-invalid");
+        const closed = !live && run.state === "settled-failed" && run.recoverable === false && run.terminalClosure !== undefined
+          && validTerminalClosure(store, run as never) && work.status === "blocked" && allocations.length === 2
+          && allocations.every(a => a.state === "terminal") && settlementSame(work.grant, run.grant);
+        if ((!live || run.state !== "blocked") && !held && !released && !closed) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
         const drive = run.drive as DriveRecord | undefined;
         if (drive === undefined || (live && drive.blockedAt !== "C")) throw new ControlError("task-not-retryable", `blocked-at:${drive?.blockedAt ?? "none"}`);
         // A codex-skills-* failure sets an outcome too (review C3), so it is retryable like any other ccloop failure.
@@ -234,7 +241,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           const left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
           const personAuthority=incoming===null?false:authorizeTopUp(store,groupId,command,incoming);
-          if(!released){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
+          if(!released && !closed){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
           if(incoming!==null){
             // Spec §2 "Headroom": the claim's own non-token fit (fundedAllowance.ts decideFundedAllowance, fundingReleased), read
             // after the failed run's remainder is released as the claim will see it; refused here so the task is never left
@@ -252,8 +259,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           deps.beforeCommit?.();
           return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
         }
-        const retrying = held || released || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
-        const grant = both(retrying ? run.grant : work.grant), remaining = released ? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } : both(run.remaining);
+        const retrying = held || released || closed || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
+        const grant = both(retrying ? run.grant : work.grant), remaining = released || closed ? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } : both(run.remaining);
         const reserve = readBudgetProposal(store, groupId).explicitUnallocatedReserve;
         for (const d of dimensions) {
           if(reserve[d]===null)continue;
@@ -263,8 +270,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // Retry work top-up spec 2026-11-06 §2 "Scope": this branch re-grants the failed run's full grant; it takes no top-up.
         if (incoming !== null) throw new ControlError("retry-top-up-unsupported", "finite-legacy");
         // Effect 1: the run alone moves; `remaining` stays on it (the view checks remaining == max(grant - cumulative, 0)).
-        if (!released) saveRunBody(store, { ...run, state: "settled-failed", recoverable: false, drive: { ...drive, cleanedUp: false } }, false);
-        if (!released) releaseCommitment(store, groupId, remaining);
+        if (!released && !closed) saveRunBody(store, { ...run, state: "settled-failed", recoverable: false, drive: { ...drive, cleanedUp: false } }, false);
+        if (!released && !closed) releaseCommitment(store, groupId, remaining);
         reserveCommitment(store, groupId, grant);
         // Effect 2.
         work.status = "ready";
