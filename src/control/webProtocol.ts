@@ -809,7 +809,7 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 // every later run (an append-only row, workTopUp.ts). Each dimension a non-negative safe integer or omitted (= 0); an
 // all-zero or empty `work` reaches the apply so its refusal (retry-top-up-empty) is booked.
 export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), activeMs: safeInteger.optional(), attempts: safeInteger.optional(), sessions: safeInteger.optional() }).strict();
-export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional() }).strict();
+export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional(), allowObservedPaths: z.literal(true).optional() }).strict();
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
 export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();
 

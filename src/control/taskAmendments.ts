@@ -9,7 +9,7 @@ import type { ControlStore } from "./store.js";
 import type { ControlPlanV1 } from "./webProtocol.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { applyObservedPathChain } from "./observedPathAmendment.js";
-export { appendObservedPaths, mirrorObservedWrites, observedPathAmendmentSchema, readObservedPathChain } from "./observedPathAmendment.js";
+export { appendObservedPaths, mirrorObservedWrites, observedPathAmendmentSchema, observedPathOverlaps, readObservedPathChain, validateObservedPathScopes } from "./observedPathAmendment.js";
 
 /**
  * Loop plans spec §5.1 (C5; independent review R1). A change to a loop task never rewrites the archived plan: its

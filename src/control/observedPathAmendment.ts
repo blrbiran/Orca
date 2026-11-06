@@ -1,10 +1,14 @@
 import { z } from "zod";
+import { lstatSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import type { taskContractSchema } from "../scheduler/planFile.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
 import { exactObservedPath, pathPolicyMissesSchema, type PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import { readCanonicalRecord } from "./snapshot.js";
 import type { ControlStore } from "./store.js";
+import { normalizeClaim, writeSetOf } from "../scheduler/writeSet.js";
+import { intersect } from "../scheduler/pathTrie.js";
 
 type TaskContract = z.infer<typeof taskContractSchema>;
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -45,6 +49,46 @@ export function appendObservedPaths(source: TaskContract, misses: readonly PathP
 }
 
 type MirroredWrite = { dir: string; targetPaths: string[]; checks: string[] };
+
+export interface ObservedPathScope { repoKey: string | null; repoPath: string; path: string }
+
+/** A newly added exact path meets another task's declared write set in the same physical repository. */
+export function observedPathOverlaps(original: TaskContract, miss: ObservedPathScope, other: TaskContract): boolean {
+  const scope = miss.repoKey === null ? { targetPaths: original.context.targetPaths, allowlistPaths: original.safetyPolicy.allowlistPaths }
+    : original.context.additionalRepos?.find((entry) => entry.key === miss.repoKey);
+  if (scope === undefined) throw new Error("observed-path-invalid:repository");
+  const claim = [normalizeClaim(miss.path)];
+  if (intersect(claim, writeSetOf({ context: { targetPaths: scope.targetPaths }, safetyPolicy: { allowlistPaths: scope.allowlistPaths ?? [] } })).length > 0) return false;
+  const others = [{ repoPath: other.context.repoPath, targetPaths: other.context.targetPaths, allowlistPaths: other.safetyPolicy.allowlistPaths },
+    ...(other.context.additionalRepos ?? [])];
+  return others.some((entry) => realpathSync(entry.repoPath) === miss.repoPath
+    && intersect(claim, writeSetOf({ context: { targetPaths: entry.targetPaths }, safetyPolicy: { allowlistPaths: entry.allowlistPaths ?? [] } })).length > 0);
+}
+
+/** Fail closed on a denylist match or a path that crosses an existing symlink. */
+export function validateObservedPathScopes(contract: TaskContract, misses: readonly PathPolicyMissV1[]): ObservedPathScope[] {
+  if (misses.length === 0 || misses.length > contract.safetyPolicy.maxFilesTouched) throw new Error("observed-path-invalid:file-count");
+  const matches = (pattern: string, path: string) => pattern === "**"
+    || (pattern.endsWith("/**") ? path.startsWith(pattern.slice(0, -2)) : pattern === path);
+  return misses.map(({ repoKey, path }) => {
+    if (!exactObservedPath(path)) throw new Error(`observed-path-invalid:path:${path}`);
+    const extra = repoKey === null ? null : contract.context.additionalRepos?.find((entry) => entry.key === repoKey);
+    if (repoKey !== null && extra === undefined) throw new Error(`observed-path-invalid:repository:${repoKey}`);
+    const repoPath = extra?.repoPath ?? contract.context.repoPath;
+    const denylist = extra?.denylistPaths ?? contract.safetyPolicy.denylistPaths;
+    if (denylist.some((pattern) => matches(pattern, path))) throw new Error(`observed-path-invalid:denylist:${path}`);
+    let cursor = realpathSync(repoPath);
+    for (const segment of path.split("/")) {
+      cursor = join(cursor, segment);
+      try { if (lstatSync(cursor).isSymbolicLink()) throw new Error(`observed-path-invalid:symlink:${path}`); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+        throw error;
+      }
+    }
+    return { repoKey, repoPath: realpathSync(repoPath), path };
+  });
+}
 
 /** A multi-directory work item's dispatch mirror advances with the contract, without changing its checks or order. */
 export function mirrorObservedWrites(writes: unknown, original: TaskContract, misses: readonly PathPolicyMissV1[]): MirroredWrite[] | undefined {

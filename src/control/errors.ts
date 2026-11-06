@@ -307,6 +307,10 @@ export const durableCommandErrorStatuses = {
   "retry-top-up-not-authorized": 422,
   "retry-top-up-cap-exceeded": 422,
   "retry-top-up-dispatched-run": 422,
+  "observed-paths-unavailable": 422,
+  "observed-paths-not-allowed": 422,
+  "observed-paths-invalid": 422,
+  "observed-paths-conflict": 409,
   "group-state-invalid": 422,
   // Issue #147 (session 3cfc2e73): an estimate asked for on a confirmed proposal, whose answer could never apply.
   "proposal-confirmed": 422,

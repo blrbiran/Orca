@@ -8,6 +8,7 @@ import { readWorkClaimEnvelope } from "./webDispatch.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { DriveRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
+import type { PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { FrozenWorkAgent } from "./agentFreeze.js";
@@ -54,7 +55,8 @@ export type RetryTaskResult = CommandSuccessV1 | CommandErrorBodyV1;
  * `prerequisiteDone` (session 3cfc2e73 D2): D1's done rule (groupEdges.ts), passed in by webService.ts so this module on
  * the control import cycle does not import groupEdges.ts; absent, a lifted block never lands on `done`.
  */
-export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource; auto?: true }; prerequisiteDone?: (store: ControlStore, groupId: string) => boolean }
+export interface RetryTaskDeps { store: ControlStore; admissionGate?: AdmissionGate; beforeCommit?: () => void; switchTo?: { frozen: FrozenWorkAgent; source: SwitchSource; auto?: true }; prerequisiteDone?: (store: ControlStore, groupId: string) => boolean;
+  applyObservedPaths?: (store: ControlStore, groupId: string, taskId: string, runId: string, misses: readonly PathPolicyMissV1[], commandId: string, actor: string) => unknown }
 
 interface RetriedWork { workItemId: string; taskId: string | null; targetVersion: number; lineageRunIds?: string[]; status: string; currentRunId?: string | null; grant: { work: Amount; handoff: Amount }; retryGrantSourceRunId?: string; pendingRunId?: string | null; continuation?: { continuationIntentId: string; pendingRunId: string } | null }
 
@@ -155,6 +157,16 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (drive === undefined || (live && drive.blockedAt !== "C")) throw new ControlError("task-not-retryable", `blocked-at:${drive?.blockedAt ?? "none"}`);
         // A codex-skills-* failure sets an outcome too (review C3), so it is retryable like any other ccloop failure.
         if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}`);
+        const observed = command.payload.allowObservedPaths === true ? drive.pathPolicyMisses : null;
+        if (command.payload.allowObservedPaths === true) {
+          if (command.payload.runId === undefined) throw new ControlError("observed-paths-invalid", "run-id-required");
+          if (command.actorId === "orca-auto" || commandPrincipalFor(command.commandId) === "orca-auto" || routedDispatchedRunFor(command.commandId) !== null)
+            throw new ControlError("observed-paths-not-allowed", "dispatched-or-auto");
+          if (drive.outcome !== "blocked_waiting_human" || !drive.stopReason?.startsWith("allowlist miss: "))
+            throw new ControlError("observed-paths-not-allowed", "not-an-allowlist-block");
+          if (observed == null || observed.length === 0) throw new ControlError("observed-paths-unavailable");
+          if (deps.applyObservedPaths === undefined) throw new ControlError("recovery-blocked", "observed-path-writer-missing");
+        }
         // releaseRunReserve's conditions (budget.ts): no request still owns the run, and its usage is known and complete.
         const request = latestRequestForRun(store, groupId, runId);
         if (request !== null && ADOPTABLE_STATES.includes(request.state)) throw new ControlError("task-not-retryable", `handoff-request-open:${request.requestId}`);
@@ -216,7 +228,9 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
-          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming})}});deps.beforeCommit?.();
+          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming})}});
+          if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, commandPrincipalFor(command.commandId) ?? command.actorId);
+          deps.beforeCommit?.();
           return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
         }
         const retrying = held || released || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
@@ -248,6 +262,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (overGrantBlocked) { const lifted = readGroup(store, groupId); lifted.status = unblockedStatus(store, groupId, deps.prerequisiteDone ?? (() => false)); saveGroup(store, lifted); }
         // Effect 4 (the command revision advances in applyWebCommand).
         recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, ...(switched === null ? {} : { agent: switched }) } });
+        if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, commandPrincipalFor(command.commandId) ?? command.actorId);
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "task-retried", taskId, fromRunId: runId });
       },

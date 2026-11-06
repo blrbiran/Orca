@@ -109,7 +109,7 @@ import { recordProjectionChange } from "./projectionJournal.js";
 import { capStatuses, claimCapBlocking, clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { effectiveTaskLabels, normalizeInputLabels, readTaskLabelState } from "./labels.js";
-import { TASK_AMENDMENT_SCHEMA, appendObservedPaths, effectivePlanTask, mirrorObservedWrites, observedPathAmendmentSchema, readObservedPathChain, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
+import { TASK_AMENDMENT_SCHEMA, appendObservedPaths, effectivePlanTask, mirrorObservedWrites, observedPathAmendmentSchema, observedPathOverlaps, readObservedPathChain, validateObservedPathScopes, workBodyOf, writeTaskAmendment } from "./taskAmendments.js";
 import { expandLoopPlan, expandRecipe, normalizeLoopSkills, type LoopRecipe, type LoopSkills, type LoopTaskExpansion } from "./loopPlans.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { profileMembers, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
@@ -302,9 +302,41 @@ export function applyObservedPathAmendment(store: ControlStore, groupId: string,
   if (work.originalContractHash !== beforeTask.originalContractHash || work.contract?.contentAddressedHash !== beforeTask.originalContractHash
     || work.derivedContractHash !== before.derivedContractHash) throw new ControlError("recovery-blocked", "observed-path-work-identity");
   const original = taskContractSchema.parse(JSON.parse(beforeTask.originalContractCanonicalJson));
-  let changed: ReturnType<typeof appendObservedPaths>;
-  try { changed = appendObservedPaths(original, misses); }
-  catch { throw new ControlError("recovery-blocked", "observed-path-invalid"); }
+  let changed: ReturnType<typeof appendObservedPaths>, scopes: ReturnType<typeof validateObservedPathScopes>;
+  try { changed = appendObservedPaths(original, misses); scopes = validateObservedPathScopes(original, misses); }
+  catch (error) { throw new ControlError("observed-paths-invalid", error instanceof Error ? error.message : "path-invalid"); }
+  const groupTasks = readArchivedPlan(store, groupId).plan.tasks;
+  const byTask = new Map(groupTasks.map((task) => [task.taskId, workBodyOf(store, groupId, task.taskId) as { status?: string; dependsOn?: string[] } | null]));
+  const ordered = (later: string, earlier: string, seen = new Set<string>()): boolean => {
+    if (seen.has(later)) return false;
+    seen.add(later);
+    return (byTask.get(later)?.dependsOn ?? []).some((dependency) => dependency === earlier || ordered(dependency, earlier, seen));
+  };
+  for (const other of groupTasks) {
+    if (other.taskId === taskId || ["done", "completed"].includes(byTask.get(other.taskId)?.status ?? "")) continue;
+    const contract = taskContractSchema.parse(JSON.parse(effectivePlanTask(store, groupId, other, workBodyOf(store, groupId, other.taskId)).originalContractCanonicalJson));
+    for (const scope of scopes) {
+      let overlap: boolean;
+      try { overlap = observedPathOverlaps(original, scope, contract); }
+      catch { throw new ControlError("observed-paths-conflict", `unreadable:${other.taskId}`); }
+      if (overlap && !ordered(other.taskId, taskId) && !ordered(taskId, other.taskId))
+        throw new ControlError("observed-paths-conflict", `${other.taskId}:${scope.path}`);
+    }
+  }
+  for (const row of store.db.prepare("SELECT group_id,body FROM runs WHERE active=1 AND group_id<>?").all(groupId)) {
+    const otherRun = JSON.parse(String(row.body)) as { phase?: unknown; state?: unknown; taskId?: unknown };
+    if (otherRun.phase !== "work" || otherRun.state === "blocked" || typeof otherRun.taskId !== "string") continue;
+    const otherGroupId = String(row.group_id);
+    let contract: z.infer<typeof taskContractSchema>;
+    try { contract = readConfirmedTaskExecution(store, otherGroupId, otherRun.taskId).contract; }
+    catch { throw new ControlError("observed-paths-conflict", `unreadable:${otherGroupId}:${otherRun.taskId}`); }
+    for (const scope of scopes) {
+      let overlap: boolean;
+      try { overlap = observedPathOverlaps(original, scope, contract); }
+      catch { throw new ControlError("observed-paths-conflict", `unreadable:${otherGroupId}:${otherRun.taskId}`); }
+      if (overlap) throw new ControlError("observed-paths-conflict", `${otherGroupId}:${otherRun.taskId}:${scope.path}`);
+    }
+  }
   const originalJson = canonicalBytes(changed).toString("utf8"), originalHash = sha256Canonical(changed);
   const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));
   const workAllocation = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
@@ -881,7 +913,7 @@ export class WebControlService {
           try { frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, candidate.groupId, to, "failover"); }
           catch { continue; }
           const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(candidate.groupId)?.revision ?? 0);
-          const answer = applyRetryTask({ ...this.stopDeps(), prerequisiteDone, switchTo: { frozen, source: "failover" } }, {
+          const answer = applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, switchTo: { frozen, source: "failover" } }, {
             schema: "orca-raw-command-v1", commandId: failoverCommandId(candidate.taskId, candidate.runId), actorId: ORCHESTRATION_ACTOR,
             expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId },
             payload: { taskId: candidate.taskId, runId: candidate.runId, agent: to },
@@ -1960,7 +1992,7 @@ export class WebControlService {
   verifySavedResult(command:VerifySavedResultCommand){return applyVerifySavedResult(this.stopDeps(),command);}
   retryTask(command: RetryTaskCommand): WebCommandResult {
     if (command.payload.agent !== undefined) throw new ControlError("recovery-blocked", "agent-switch-needs-resolution");
-    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment }, command) as WebCommandResult;
   }
   /**
    * Quota failover spec 2026-11-03 §8: a retry on another installation. ccloop resolves the installation before the
@@ -1979,7 +2011,7 @@ export class WebControlService {
     } catch (error) {
       return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
-    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, switchTo: { frozen, source } }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, switchTo: { frozen, source } }, command) as WebCommandResult;
   }
   /**
    * Session 3cfc2e73 ruling (「同意按你的建议走」): `retry-task --agent auto` hands the task's installation back to orca-auto
@@ -2004,7 +2036,7 @@ export class WebControlService {
       }
       if (frozen === null && !SWITCHABLE_AGENT_SOURCES.has(current.agentProvenance.agent)) frozen = unlockedAgent(current);
     } catch (error) { return book(error); }
-    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, ...(frozen === null ? {} : { switchTo: { frozen, source: "failover" as const, auto: true as const } }) }, command) as WebCommandResult;
+    return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ...(frozen === null ? {} : { switchTo: { frozen, source: "failover" as const, auto: true as const } }) }, command) as WebCommandResult;
   }
   /**
    * Agent selection spec §6.4 (§12 C4): resolve every slot through ccloop outside the transaction, then freeze only
