@@ -4,6 +4,7 @@ import { withCommandContext } from "../../src/control/commandClient.js";
 import { isTerminallyFailedRun } from "../../src/control/driveRecord.js";
 import { readBudgetProposal, readGroup, readWork } from "../../src/control/queries.js";
 import { validTerminalClosure } from "../../src/control/terminalRunClosure.js";
+import { readControlRecovery } from "../../src/panel/controlViews.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 /** Deleting the terminal-closure scan must leave the failed run active and make these criteria RED. */
@@ -13,6 +14,7 @@ describe("terminal run closure (#169)", () => {
     try {
       const runId = await t.claim(), driver = t.driver();
       await t.until(driver, () => t.body(runId).state === "blocked");
+      expect(readControlRecovery(t.h.store, "epoch-test").terminalRuns).toEqual([{ groupId: "g", taskId: "a", runId, outcome, next: "close-run" }]);
       const closed = t.service.closeRun(t.h.command("close-run", { runId }));
       if ("error" in closed) throw new Error(JSON.stringify(closed.error));
       const run = t.body(runId);
@@ -21,6 +23,7 @@ describe("terminal run closure (#169)", () => {
       expect(run.terminalClosure).toMatchObject({ runId, outcome, generation: run.generation, highWater: run.highWater });
       expect(validTerminalClosure(t.h.store, run)).toBe(true);
       expect(Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active)).toBe(0);
+      expect(readControlRecovery(t.h.store, "epoch-test").terminalRuns ?? []).toEqual([]);
       expect(readWork(t.h.store, "g", "a").status).toBe("blocked");
       expect(readBudgetProposal(t.h.store, "g").allocations.filter((a) => a.ownerKind === "task" && a.ownerId === "a").map((a) => a.state)).toEqual(["terminal", "terminal"]);
       expect(group.used.tokens).toBe(run.cumulative.work.tokens + run.cumulative.handoff.tokens);
@@ -37,6 +40,7 @@ describe("terminal run closure (#169)", () => {
       await t.until(driver, () => t.body(runId).state === "blocked");
       const before = readGroup(t.h.store, "g");
       expect(t.body(runId).unknown.work).toBe(true);
+      expect(readControlRecovery(t.h.store, "epoch-test").terminalRuns).toEqual([{ groupId: "g", taskId: "a", runId, outcome: "failed", next: "settle-usage" }]);
       expect(Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active)).toBe(1);
       expect(before.reserved.tokens).toBeGreaterThan(0);
       await driver.round();

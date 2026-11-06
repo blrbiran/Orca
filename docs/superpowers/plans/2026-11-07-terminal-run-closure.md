@@ -28,22 +28,22 @@
 
 ---
 
-### Task 1: Terminal proof and closure pass
+### Task 1: Terminal proof and the explicit close command
 
 **Files:**
 - Create: `src/control/terminalRunClosure.ts`
-- Modify: `src/control/executionDriver.ts` (round after softLoopSettlementPass)
-- Modify: `tests/control/fixtures/driverPort.ts` (fake real-shaped sealed owner proof)
+- Modify: `src/control/{webProtocol,webService,errors,driveRecord}.ts`, `src/panel/{controlApi,humanOnly,controlViews}.ts`, `src/commands/domains/work.ts`, `web/src/controlTypes.ts`
+- Modify: `tests/control/fixtures/{driverPort,driverHarness}.ts` (optional sealed owner proof)
 - Test: `tests/control/terminalRunClosure.test.ts`
 
 **Interfaces:**
-- Produces: `terminalClosureSchema`, `validTerminalClosure(store: ControlStore, run: RunRecord): boolean`, `terminalClosurePass(deps: Pick<ExecutionDriverDeps, 'store' | 'admissionGate'>): number`.
+- Produces: `terminalClosureSchema`, `validTerminalClosure(store: ControlStore, run): boolean`, `applyCloseRun(deps, command): CommandSuccessV1 | CommandErrorBodyV1`.
 - Consumes: `settlementProof`, `hasObservedUsage`, `hasValidUsageSettlement`, `releaseCommitment`, `setAllocationStates`, `saveRunBody`, `saveWork`, `recordActivity`, `finiteCommitment`.
 
-- [ ] Write a failing real-driver criterion: failed and exhausted known-usage fake runs become `settled-failed/active=0`, work blocked, allocation terminal, used unchanged, reserved falls by exactly the remaining grant; a paused group archives; original outcome remains. Run it and check RED on the missing transition.
-- [ ] Implement strict proof validation and one transactional close; require current work/run ownership, sealed owner proof, usage and immutable terminal proof. Enumerate eligible blocked runs per round even if the run is not in `driverRunIds`. Isolate each refusal; never rewrite old rows to satisfy proof.
-- [ ] Run the criterion GREEN. Add and run independent RED→GREEN cases for unknown/pending usage, forged settlement, missing owner seal, adoptable handoff, transient block, repeated round/crash and pause settlement ordering. Each tests the production gate, not a synthetic restatement.
-- [ ] Commit only Task 1 files and the spec/plan once targeted tests and typecheck pass, after inspecting the diff.
+- [x] Write a failing real-driver criterion: a proved failed/exhausted run becomes `settled-failed/active=0` through the close command, work blocked, allocation terminal, used unchanged, reserved falls by exactly the remaining grant; a paused group archives; original outcome remains. Run it RED before the command exists.
+- [x] Implement strict proof validation and one transactional close; require current work/run ownership, sealed owner proof, usage and immutable terminal proof. Reworked after RED: an automatic driver pass broke existing blocked-run criteria, so the transition is an explicit `close-run` command (Ruling in the ledger).
+- [x] Run the criterion GREEN. Add and run independent cases for unknown/pending usage, forged settlement, missing owner seal, adoptable handoff, idempotent replay and corrupt marker. Each tests the production gate, not a synthetic restatement.
+- [x] Commit only Task 1 files and the spec/plan once targeted tests and typecheck pass, after inspecting the diff.
 
 ### Task 2: Preserve retry, ladder, quota and saved recovery authority
 
@@ -54,10 +54,10 @@
 **Interfaces:**
 - Consumes Task 1 `validTerminalClosure` and the existing source/funding validators. A terminal failure is either live blocked/C or closed with a valid marker.
 
-- [ ] Write failing tests: closed source optional/top-up and finite retry without double reserve release; old grant and cumulative stay unchanged; failed or forged closure rejects; a closed source still qualifies for source-side saved-result checks if its capsule is otherwise valid.
-- [ ] Implement the separate terminal release branch in retry and guard saved recovery before admission. Preserve exact latest-run, stop, cap and lineage guards.
-- [ ] Write failing tests for existing ladder ownership, quota wait, failover and probe with a closed current run; fix their shared candidate predicate and the debug-fold check without scheduling blocked_waiting_human.
-- [ ] Run focused files GREEN and typecheck, inspect diff, commit Task 2.
+- [x] Write failing tests: closed source optional/top-up and finite retry without double reserve release; old grant and cumulative stay unchanged; failed or forged closure rejects; a closed source still qualifies for source-side saved-result checks if its capsule is otherwise valid.
+- [x] Implement the separate terminal release branch in retry and guard saved recovery before admission. Preserve exact latest-run, stop, cap and lineage guards.
+- [x] Write failing tests for existing ladder ownership, quota wait, failover and probe with a closed current run; fix their shared candidate predicate and the debug-fold check without scheduling blocked_waiting_human.
+- [x] Run focused files GREEN and typecheck, inspect diff, commit Task 2.
 
 ### Task 3: Operator visibility and archive route
 
@@ -69,7 +69,7 @@
 - Produces: optional `terminalRuns` list on recovery view, with group/task/run/outcome and one of `needs-usage`, `needs-proof`, `ready-for-retry-or-archive`; preserves `blockers` as dispatch blockers.
 - Consumes Task 1 proof and closure readers.
 
-- [ ] Write failing read tests: blocked known/unknown/closed states produce distinct next steps; malformed closure is an explicit read refusal, not 'done'; archive refuses genuinely active execution and succeeds for closed run after pause.
-- [ ] Extend the strict recovery schema and operator output, keeping previous consumers compatible with absent optional field. Tell the owner to settle unknown usage before pause; link eligible saved result separately.
-- [ ] Run focused files GREEN, `npm test` with affected base `main` and root typecheck; compare each red to untouched main if load sensitive. Run named mutations in a local clone and re-run them after the final implementation change.
-- [ ] Inspect diff and commit Task 3. Then integrate to main only with `--ff-only`, leaving user-owned push untouched.
+- [x] Write failing read tests: blocked known/unknown/closed states produce distinct next steps; malformed closure is an explicit read refusal, not 'done'; archive refuses genuinely active execution and succeeds for closed run after pause.
+- [x] Extend the strict recovery schema and operator output, keeping previous consumers compatible with absent optional field. Tell the owner to settle unknown usage before pause; link eligible saved result separately.
+- [x] Run focused files GREEN, `npm test` with affected base `main` and root typecheck; compare each red to untouched main if load sensitive. Run named mutations in a local clone and re-run them after the final implementation change.
+- [x] Inspect diff and commit Task 3. Then integrate to main only with `--ff-only`, leaving user-owned push untouched.

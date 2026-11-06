@@ -217,6 +217,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/tasks/<taskId>/labels` | set-task-labels | `{"labels":["area:cli"],"baseLabelsVersion":0}` |
 | `POST groups/<groupId>/tasks/<taskId>/loop` | set-task-loop | `{"baseLoopVersion":0,"plan":"standard","inputs":{"goal":"g","successCondition":"s","targetPaths":["src"],"checks":["npm test"],"nonGoals":[],"relevantDocs":[],"protectedPaths":[],"maxFilesTouched":null},"work":{"tokens":500000,"activeMs":600000,"attempts":3}}` |
 | `POST groups/<groupId>/retry-task` | retry-task | `{"taskId":"t1"}` |
+| `POST groups/<groupId>/close-run` | close-run | `{"runId":"run-0123456789abcdef"}` |
 | `POST groups/<groupId>/tasks/<taskId>/verify-saved-result` | verify-saved-result | `{"sourceRunId":"run1","sourceAttempt":1,"capsuleHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST groups/<groupId>/settle-unknown-usage` | settle-unknown-usage | `{"taskId":"a","runId":"run-a","generation":1,"acknowledge":"charge-remaining-grant"}` |
 | `POST requirements` | requirement-open | `{"groupId":"g1","repoId":"r1","idea":"what to build"}` |

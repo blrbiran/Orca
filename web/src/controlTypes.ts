@@ -561,6 +561,7 @@ export type RecoveryViewV1 = {
   epoch: string;
   dispatchBlocked: boolean;
   blockers: Array<{ scope: "global" | "group" | "run"; groupId: string; runId: string | null; code: string; evidenceIds: string[] }>;
+  terminalRuns?: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }>;
 };
 export type EvidenceManifestV1 = {
   schema: "orca-run-evidence-v1";

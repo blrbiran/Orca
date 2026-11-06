@@ -56,6 +56,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group resume-handoff <group> [--continue <continue>]` — resume after a completed handoff; --continue <task> continues that task from its checkpoint
 - `orca group archive <group>` — archive a group: records stay, it refuses every command but unarchive
 - `orca group unarchive <group>` — unarchive a group
+- `orca group close-run <group> --run <run>` — close a proved terminal failed run's accounting (it stays failed; retry or archive next)
 - `orca group set-limit <group> --limit <limit>` — set the group's budget limit (person token)
 - `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where this group's finished work goes
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle

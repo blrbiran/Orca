@@ -109,10 +109,10 @@ Ids: a full id or a unique prefix; projects also by name or path (default: the r
   `orca run transcript <r> --call <attempt>/<phase>/<seq>` prints the tail of one (redacted as the Web shows it;
   `--before <start>` pages back). A run Orca dispatched is refused it: report that, do not work around it.
 - For a `blocked_waiting_human` run or a bugfix split, follow references/observed-path-retry.md before retry or acceptance.
+- A terminal failed run stays `blocked` until someone ends its accounting: `orca recovery list` names it in `terminalRuns` with `next`; settle unknown usage first when asked, then `orca group close-run <g> --run <r>` and retry or archive. Closing keeps the failure and is not acceptance.
 - Verifying a saved result skips execution, but validation and verification may still spend model usage. A flow's
   `plan`, `rerun` and `include` spend too.
-- A schedule fires on its own: a fired group either confirms itself (no token limit, no delivery scheme) or waits for
-  the person, and a fired flow waits before any external or irreversible step.
+- A schedule fires on its own: a fired group either confirms itself (no token limit, no delivery scheme) or waits for the person, and a fired flow waits before any external or irreversible step.
 
 ## Escape hatch
 `orca control get <path>` / `orca control send <route> …` (hidden from `orca help`) talk to the socket directly and

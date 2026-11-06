@@ -1352,10 +1352,23 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
 }
 
 export function readControlRecovery(store: ControlStore, epoch: string): RecoveryViewV1 {
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store) };
+  const terminalRuns = terminalRunRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
+}
+
+/** Terminal runs whose accounting a person or agent still has to end, with the one command each needs (#169). */
+function terminalRunRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }> = [];
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
+    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; unknown?: { work?: unknown; handoff?: unknown }; drive?: { blockedAt?: unknown; outcome?: unknown } };
+    if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
+    if (run.drive?.blockedAt !== "C" || typeof run.drive.outcome !== "string" || run.drive.outcome === "succeeded") continue;
+    out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, outcome: run.drive.outcome, next: run.unknown?.work === true || run.unknown?.handoff === true ? "settle-usage" : "close-run" });
+  }
+  return out;
 }
 
 type EvidenceRef = { evidenceId: string; kind: string; sha256: string };

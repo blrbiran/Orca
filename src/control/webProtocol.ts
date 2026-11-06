@@ -2065,6 +2065,8 @@ export const recoveryViewSchema = z
     epoch: nonemptyString,
     dispatchBlocked: z.boolean(),
     blockers: z.array(recoveryViewBlockerSchema),
+    // Terminal run closure #169: current terminal failures and the one step that ends their accounting.
+    terminalRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, outcome: z.string().min(1), next: z.enum(["settle-usage", "close-run"]) }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) =>

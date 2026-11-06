@@ -119,6 +119,15 @@ unarchive a group
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca group close-run <group> --run <run>`
+
+close a proved terminal failed run's accounting (it stays failed; retry or archive next)
+
+- What it does: sends control verb `close-run`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--run <run>` (required): the run to close (orca run show <run> names it)
+
 ## `orca group set-limit <group> --limit <limit>`
 
 set the group's budget limit
