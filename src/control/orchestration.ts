@@ -133,10 +133,13 @@ function factsOf(id: string, parsed: unknown): GroupFacts {
  * (b) a ready/running/review group with no group-scope recovery blocker, no recorded spend-cap block and known usage
  *     (a delivery that keeps pending for one of those waits for a person), that has an undelivered start/no-start/resume
  *     wake, or -- once started (it has a start wake) -- a ready task whose dependsOn are all done and that has no active run.
- * A review group whose tasks are all blocked or done holds none; it stays where the person sees it.
+ * A review group whose tasks are all blocked, held or done holds none; it stays where the person sees it.
  */
 export function runningGroupIds(store: ControlStore): string[] {
-  const wakeKinds = [...EXECUTION_WAKE_KINDS].map((kind) => `'${kind}'`).join(","), busy = [...BUSY_WORK].map((status) => `'${status}'`).join(",");
+  // Dogfood run 3 F20 (session 86352010): a `held` task (a handoff stop settled, recoverable) runs nothing and waits for a
+  // person's continue or resume-from-handoff, which §3.1 "regained work" then makes wait for a slot; so it holds none here.
+  // BUSY_WORK keeps `held` for the start gate (a held group is continued, not started).
+  const wakeKinds = [...EXECUTION_WAKE_KINDS].map((kind) => `'${kind}'`).join(","), busy = [...BUSY_WORK].filter((status) => status !== "held").map((status) => `'${status}'`).join(",");
   // CASE json_valid: a body that does not parse holds no slot here (its own reads name it); json_extract would throw.
   const at = (column: string, path: string) => `CASE WHEN json_valid(${column}) THEN json_extract(${column},'${path}') END`;
   const status = at("g.body", "$.status");

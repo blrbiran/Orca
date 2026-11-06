@@ -251,6 +251,22 @@ describe("who holds a slot (review-exit spec §3.1)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Dogfood run 3 F20 (session 86352010): after a handoff stop settles, the task is `held` (stopIntent.ts) with no active run:
+  // it waits for a person's continue or resume-from-handoff, which §3.1 "regained work" says then waits for a slot. Seen
+  // live: such a group still counted in runningGroups. `held` stays in BUSY_WORK for the start gate.
+  it("with cap 1 a group whose only task is held after a handoff stop does not stop another group's auto-start", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      setCap(h, service, 1);
+      started(h, "handed", "ready", "held");
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('rh','handed','t',1,0,'{\"phase\":\"work\"}')").run();
+      h.store.db.prepare("INSERT INTO stop_intents(group_id,mode,revision,body) VALUES ('handed','handoff',1,'{}')").run();
+      await confirm(h, service, "g");
+      // mutation: count `held` among the busy statuses of runningGroupIds again -> waiting-slot, red
+      expect(await service.autoStart()).toEqual({ started: ["g"], refused: [] });
+    } finally { await h.dispose(); }
+  });
+
   it("a spend-capped pending wake holds no slot", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);
