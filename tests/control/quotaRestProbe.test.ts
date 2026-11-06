@@ -154,6 +154,8 @@ describe("quota rest probe (spec 2026-11-06 §5)", { timeout: 180_000 }, () => {
     const w = await world({ tasks: ["a", "b"] }); try {
       // Two quota failures in a row: the rest doubles to 30 minutes.
       w.clock.value += 2 * REST_DEFAULT_MS + 60_000;
+      // Two passes before the driver runs: the second finds the first's probe pending on its work item.
+      await w.t.service.systemDebugPass();
       await w.pass(); await w.pass(); await w.pass();
       expect(w.probes()).toHaveLength(1);
       expect(w.retries().map(([id]) => id).sort()).toEqual([`orca-auto-quota-probe-retry-a-${w.failed.a}`, `orca-auto-quota-probe-retry-b-${w.failed.b}`].sort());
