@@ -19,6 +19,14 @@ one group's full view
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca group brief <group>`
+
+one group's state, completion, counts and blockers, without the full view
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+
 ## `orca group import [<plan>] [--group <group>] [--estimator-profile <estimator-profile>] [--estimate-mode <estimate-mode>] [--library <library>] [--version <version>]`
 
 import a registered plan, or a plan library version (--library), as a new draft group

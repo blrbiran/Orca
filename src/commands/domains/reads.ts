@@ -25,7 +25,7 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
 /** `orca proposal show`'s unestimated-default lines, read in compose from the group view (Dogfood run 3 F23). */
 let proposalNote: string[] = [];
 
-interface GroupView { summary: { groupId: string; commandRevision: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
+interface GroupView { summary: { groupId: string; repoId?: string; state?: string; commandRevision: number; completion?: { done: number; total: number }; counts?: Record<string, number>; stopState?: string | null; executionPending?: boolean; overGrant?: boolean; archived?: boolean; recoveryBlockerCount?: number; projectionSeq?: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
 interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string; counts?: { running?: number } }> }
 
 /** Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it. */
@@ -57,6 +57,11 @@ async function commandScope(context: WriteContext): Promise<string> {
     default: return `@${chosen[0]}`;
   }
 }
+
+const groupBrief = (view: GroupView): Record<string, unknown> => ({
+  schema: "orca-group-brief-v1",
+  ...view.summary,
+});
 
 const groupList = (body: unknown): string => {
   const groups = (body as Summary).groups ?? [];
@@ -161,6 +166,10 @@ export const READ_ROWS: CommandDef[] = [
     },
     format: groupList }),
   read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`], format: formatWithUnestimated }),
+  // Issue #199: the fields an agent polls, without the full view (a 6-task group's JSON is ~100 KB). No --json cost
+  // beyond the summary itself; the panel still reads the group view, the CLI prints only what changed hands.
+  read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],
+    paths: (c) => [`groups/${ids(c, "group")}`], compose: ([view]) => groupBrief(view as GroupView) }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
     paths: (c) => [`groups/${ids(c, "group")}`],

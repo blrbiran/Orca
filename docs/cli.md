@@ -46,6 +46,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 - `orca group list` — every group (with --project, that project's): id, repository, state, revision, goal
 - `orca group show <group>` — one group's full view
+- `orca group brief <group>` — one group's state, completion, counts and blockers, without the full view
 - `orca group import [<plan>] [--group <group>] [--estimator-profile <estimator-profile>] [--estimate-mode <estimate-mode>] [--library <library>] [--version <version>]` — import a registered plan, or a plan library version (--library), as a new draft group
 - `orca group estimate <group> [--estimator-profile <estimator-profile>] [--mode <mode>]` — ask the estimator for budgets at the current proposal version
 - `orca group confirm <group> [--hold] [--budget-mode <budget-mode>] [--worker-profile <worker-profile>] [--handoff-profile <handoff-profile>] [--goal-review-profile <goal-review-profile>] [--handoff-at-context-tokens <handoff-at-context-tokens>]` — confirm the task plan as shown now; it starts when a slot is free unless --hold
