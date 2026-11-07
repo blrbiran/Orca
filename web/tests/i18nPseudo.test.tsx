@@ -370,7 +370,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling: 2026-11-05 session e2ad4802, human 「这次批准改写所有必要的判据」: the selectionSource `failover` (quota failover spec 2026-11-03 §8) adds one: 201 + 1.
     // Ruling: 2026-11-05 session 3cfc2e73, human 「这次批准改写所有必要的判据」: the activityKind `group-done` (review-exit spec 2026-11-05 §3.1, D1) adds one: 202 + 1.
     // Ruling: 2026-11-06 session 86352010, human 「这次批准改写所有必要的判据。」: the activityKind `quota-probe` (quota rest probe spec 2026-11-06 §2) adds one: 203 + 1.
-    expect(ENUM_VALUES.length).toBe(204);
+    // Ruling: 2026-11-08 session fe1f3fa6, human 「这次批准改写所有必要的判据」: the activityKind `saved-result-top-up` (the writer already inserts it; the wire enum had no words for it) adds one: 204 + 1.
+    expect(ENUM_VALUES.length).toBe(205);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
