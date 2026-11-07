@@ -9,6 +9,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 |---|---|
 | `active-unbounded-budget-conflict` | 409 |
 | `agent-context-unsupported` | 422 |
+| `agent-group-cap-invalid` | 422 |
 | `agent-installation-missing` | 422 |
 | `agent-installation-update-conflict` | 409 |
 | `agent-installation-update-invalid` | 422 |

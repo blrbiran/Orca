@@ -102,7 +102,7 @@ const progressStep = {
 const activityKind = {
   "usage-settled": "usage settled",
   command: "command", "run-claimed": "claimed", "run-started": "started", phase: "phase", "run-blocked": "blocked", "run-resumed": "resumed",
-  "run-settled": "settled", "task-retried": "task retried", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
+  "run-settled": "settled", "task-retried": "task retried", "saved-result-top-up": "saved-result top-up", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
   archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed", "debug-open-failed": "debug group not opened",
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
 } as const satisfies Record<ActivityKindV1, string>;
@@ -2069,6 +2069,7 @@ export const en = {
  */
 export const enErrors: Record<string, string> = {
   // Spec §3.2, §6.4: every code of controlErrorCatalog() (src/panel/controlErrors.ts); refusalCoverage.test.ts pins the count.
+  "agent-group-cap-invalid": "Only a lower finite token ceiling can be set this way: an agent may cap a group, never raise or remove its ceiling.",
   "agent-context-unsupported": "The agent does not support this context window: {{detail}}",
   "agent-installation-missing": "The agents table has no installation of this agent: {{detail}}",
   "agent-installation-update-stale": "The installation table changed. Detect again before applying.",

@@ -21,7 +21,15 @@ const readEntry = async (c: WriteContext, entryId = entryOf(c)): Promise<EntryVi
 /** `--version` as given (it must be one of the entry's), else the entry's newest version. */
 async function versionOf(c: WriteContext, entry: EntryView): Promise<string> {
   const named = str(c, "version");
-  if (named !== undefined) return resolveId("version", named, entry.versions.map((v) => v.sha256));
+  if (named !== undefined) {
+    try { return resolveId("version", named, entry.versions.map((v) => v.sha256)); }
+    catch (error) {
+      // Tester #181: a miss named neither the entry's versions nor how many it has.
+      if (error instanceof EntryRejection && error.code === "id-not-found")
+        throw new EntryRejection("id-not-found", `no version ${JSON.stringify(named)} in ${entry.entryId}; it has ${entry.versions.length} version(s): ${entry.versions.map((v) => v.sha256.slice(0, 12)).join(", ")} (orca plan show ${entry.entryId} lists them in full)`);
+      throw error;
+    }
+  }
   if (entry.head === null) throw new EntryRejection("plan-library-entry-not-found", `${entry.entryId} has no version`);
   return entry.head.sha256;
 }

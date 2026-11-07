@@ -53,7 +53,8 @@ export function file(c: WriteContext, flag = "file"): unknown {
 export interface GroupView {
   summary: { groupId: string; commandRevision: number };
   plan: { planHash: string };
-  proposal: { proposalVersion: number; budgetMode: "strict" | "soft" | null; contextPolicy: { handoffAtContextTokens: number | null }; profiles: null | Record<"estimator" | "worker" | "handoff" | "goalReview", { profileId: string; profileHash: string } | null> };
+  proposal: { state?: string; proposalVersion: number; budgetMode: "strict" | "soft" | null; contextPolicy: { handoffAtContextTokens: number | null }; profiles: null | Record<"estimator" | "worker" | "handoff" | "goalReview", { profileId: string; profileHash: string } | null> };
+  ledger: { groupLimit: { tokens: number | null; activeMs: number; attempts: number; sessions: number } };
   allocations: Array<{ ownerKind: string; ownerId: string; bucket: string; amount: Record<string, number | null>; fieldProvenance?: Record<string, { provenance: string; estimateId: string | null }> }>;
   workItems: Array<{ taskId: string; currentRunId: string | null; labelsVersion?: number; loopPlan?: { loopVersion: number } | null }>;
   runs: Array<{ runId: string; taskId: string | null; unknownUsageSettlement?: { generation: number } }>;

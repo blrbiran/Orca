@@ -583,6 +583,12 @@ export class WebControlService {
         const payload = context.effectiveCommand.payload as EffectiveProposalEditPayload;
         if (proposal.proposalVersion !== payload.baseProposalVersion) throw new ControlError("proposal-version-conflict");
         prestart(group); refuseAfterTaskStarted(this.store, id);
+        if (payload.capOnly === true) {
+          const next = payload.proposedGroupLimit, current = proposal.groupLimit;
+          if (proposal.state !== "editable" || payload.operations.length !== 0 || next === null || next.tokens === null
+            || (current.tokens !== null && next.tokens >= current.tokens)
+            || dimensions.some(d => d !== "tokens" && next[d] !== current[d])) throw new ControlError("agent-group-cap-invalid");
+        }
         assertKnownConservation(this.store, group, proposal, payload.proposedGroupLimit ?? undefined);
         // Loop plans spec §4.3 (C6, Rule 7): a loop task's work allocation has one owner, set-task-loop.
         const loopTasks = new Set(readArchivedPlan(this.store, id).plan.tasks.filter(task => task.loop !== undefined).map(task => task.taskId));

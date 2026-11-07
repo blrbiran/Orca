@@ -145,6 +145,19 @@ set the group's budget limit
 - `<group>`: a group id or a unique prefix
 - `--limit <limit>` (required): JSON {tokens,activeMs,attempts,sessions}
 
+## `orca group cap <group> --tokens <tokens>`
+
+lower a draft group's token ceiling; raising or removing it requires a person
+
+- What it does: sends control verb `proposal-edit`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--tokens <tokens>` (required): finite token ceiling below the current one
+
+```
+orca group cap g1 --tokens 300000
+```
+
 ## `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]`
 
 where this group's finished work goes

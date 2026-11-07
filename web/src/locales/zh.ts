@@ -1949,7 +1949,7 @@ export const zh: Translation<typeof en> = {
     activityKind: {
       "usage-settled": "用量已保守结清",
       command: "命令", "run-claimed": "已认领", "run-started": "已开始", phase: "阶段", "run-blocked": "受阻", "run-resumed": "已恢复",
-      "run-settled": "已结束", "task-retried": "任务重试", integration: "集成", stop: "已停止", "stop-cleared": "停止已解除",
+      "run-settled": "已结束", "task-retried": "任务重试", "saved-result-top-up": "已存结果追加额度", integration: "集成", stop: "已停止", "stop-cleared": "停止已解除",
       archived: "已归档", unarchived: "已取消归档", "correction-closed": "纠正已关闭", "debug-open-failed": "调试组未能打开",
       "ladder-skipped": "未自动重试", "group-done": "组已完成", "quota-probe": "额度探针",
     },
@@ -1977,6 +1977,7 @@ export const zh: Translation<typeof en> = {
 
 export const zhErrors: Record<string, string> = {
   // Spec §3.2, §6.4: every code of controlErrorCatalog() (src/panel/controlErrors.ts), 124 at ac969bb.
+  "agent-group-cap-invalid": "这种写法只能设置更低的有限 token 上限：agent 可以给组封顶，但不能提高或取消上限。",
   "agent-context-unsupported": "agent 不支持这个上下文窗口：{{message}}",
   "agent-installation-missing": "安装表里没有这个 agent：{{message}}",
   "agent-installation-update-stale": "安装表已变化。请重新检测后再应用。",

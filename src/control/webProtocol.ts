@@ -838,7 +838,7 @@ const proposalOperationSchema = z
   });
 
 export const proposalEditPayloadSchema = z
-  .object({ baseProposalVersion: positiveSafeInteger, operations: z.array(proposalOperationSchema), proposedGroupLimit: budgetAmountSchema.optional() })
+  .object({ baseProposalVersion: positiveSafeInteger, operations: z.array(proposalOperationSchema), proposedGroupLimit: budgetAmountSchema.optional(), capOnly: z.literal(true).optional() })
   .strict();
 
 // Agent selection spec §6.2 (W6-6/W6-20): replace one selection layer of the proposal, or clear it with null.
@@ -909,6 +909,7 @@ export const effectiveProposalEditPayloadSchema = z
     baseProposalVersion: positiveSafeInteger,
     operations: z.array(effectiveProposalOperationSchema),
     proposedGroupLimit: budgetAmountSchema.nullable(),
+    capOnly: z.literal(true).optional(),
   })
   .strict();
 export const effectiveHandoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema }).strict();
@@ -1769,7 +1770,7 @@ export const workItemViewSchema = z
 
 // Issue-fixes spec §5.2 (ruling H5): one row of Orca's activity record as the views show it (src/control/activity.ts).
 export const activityKindSchema = z.enum([
-  "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
+  "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
 ]);
 export const activityEntrySchema = z
   .object({

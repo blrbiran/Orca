@@ -10,6 +10,7 @@ import {
   checkpointOf, config, currentRun, file, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
+import { SYSTEM_LABELS } from "../../control/labels.js";
 import { text } from "./format.js";
 
 interface RequirementView { summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } }; drafts: Array<{ draftNo: number; draftHash: string | null }> }
@@ -225,6 +226,15 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "group", action: "set-limit", summary: "set the group's budget limit", verb: "set-limit", positionals: [GROUP], access: "token",
     flags: [{ name: "limit", type: "string", required: true, summary: "JSON {tokens,activeMs,attempts,sessions}" }],
     route: (c) => `groups/${group(c)}/set-limit`, payload: (c) => ({ limit: json(c, "limit") }) }),
+  verb({ domain: "group", action: "cap", summary: "lower a draft group's token ceiling; raising or removing it requires a person", verb: "proposal-edit", positionals: [GROUP],
+    flags: [{ name: "tokens", type: "string", required: true, summary: "finite token ceiling below the current one" }],
+    route: (c) => `groups/${group(c)}/proposal/edit`, payload: async (c) => {
+      const raw = str(c, "tokens")!;
+      if (!/^(0|[1-9][0-9]*)$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw invalid("--tokens wants a non-negative safe integer");
+      const tokens = Number(raw), view = await groupView(c), current = view.ledger.groupLimit;
+      if (view.proposal.state !== "editable" || (current.tokens !== null && tokens >= current.tokens)) throw invalid("group cap needs an editable proposal and a lower token ceiling");
+      return { baseProposalVersion: view.proposal.proposalVersion, operations: [], proposedGroupLimit: { ...current, tokens }, capOnly: true };
+    }, examples: ["orca group cap g1 --tokens 300000"] }),
   verb({ domain: "group", action: "set-integration", summary: "where this group's finished work goes", verb: "set-group-integration", positionals: [GROUP], flags: SCHEME_FLAGS,
     route: (c) => `groups/${group(c)}/integration`, payload: (c) => ({ integration: schemeFromFlags(c) }) }),
   empty("group", "retry-integration", "a blocked or conflicted integration back to idle", "retry-integration", "integration/retry"),
@@ -297,7 +307,9 @@ export const WORK_ROWS: CommandDef[] = [
     payload: async (c) => {
       if (c.args.flags.clear === true && list(c, "label").length > 0) throw invalid("--clear takes no --label");
       return { labels: c.args.flags.clear === true ? null : list(c, "label"), baseLabelsVersion: (await workItem(c)).labelsVersion ?? 0 };
-    } }),
+    },
+    // Tester #186: the refusal named the bad value but not one it could use instead.
+    hint: (error) => error.code === "labels-invalid" ? `valid labels: ${SYSTEM_LABELS.join(", ")}, or custom:<text>` : undefined }),
   verb({ domain: "task", action: "verify-saved-result", summary: "verify the current run's saved result instead of re-running (after run eligibility says eligible)",
     verb: "verify-saved-result", positionals: [GROUP, TASK],
     flags: [{ name: "work", type: "string", summary: "add work for the verification run as JSON {tokens?,activeMs?,attempts?,sessions?}; a person may always, an agent within the top-up cap; refused to a run Orca dispatched" }],

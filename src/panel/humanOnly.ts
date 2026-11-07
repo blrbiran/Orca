@@ -218,7 +218,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "set-group-integration": deliveryTier,
   "set-limit": "token",
   "requirement-open.limit": "token",
-  "proposal-edit.proposedGroupLimit": "token",
+  "proposal-edit.proposedGroupLimit": (p) => p.capOnly === true && Array.isArray(p.operations) && p.operations.length === 0
+    ? "open" : "token",
   "set-spend-cap": "token",
   "clear-spend-cap": "token",
   "set-usage-calendar": "token",

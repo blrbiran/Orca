@@ -299,6 +299,7 @@ export const durableCommandErrorStatuses = {
   "graph-cycle": 422,
   "graph-dangling-dependency": 422,
   "group-budget-unavailable": 422,
+  "agent-group-cap-invalid": 422,
   "group-deadline-expired": 422,
   "group-project-binding-required": 422,
   // Loop plans spec §5.2 (step 6): a raise the group's reserve cannot cover; the detail is `<dimension>:<shortfall>`.

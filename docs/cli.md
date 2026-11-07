@@ -59,6 +59,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group unarchive <group>` — unarchive a group
 - `orca group close-run <group> --run <run>` — close a proved terminal failed run's accounting (it stays failed; retry or archive next)
 - `orca group set-limit <group> --limit <limit>` — set the group's budget limit (person token)
+- `orca group cap <group> --tokens <tokens>` — lower a draft group's token ceiling; raising or removing it requires a person
 - `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where this group's finished work goes
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle
 - `orca group resolve-integration <group>` — approve an agent resolving the group's integration conflict

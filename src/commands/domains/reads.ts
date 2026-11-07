@@ -26,7 +26,7 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
 let proposalNote: string[] = [];
 
 interface GroupView { summary: { groupId: string; repoId?: string; state?: string; commandRevision: number; completion?: { done: number; total: number }; counts?: Record<string, number>; stopState?: string | null; executionPending?: boolean; overGrant?: boolean; archived?: boolean; recoveryBlockerCount?: number; projectionSeq?: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
-interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string; counts?: { running?: number } }> }
+interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string; counts?: { running?: number; blocked?: number; done?: number; idle?: number; waiting?: number }; completion?: { done: number; total: number }; stopState?: string | null; overGrant?: boolean; archived?: boolean }> }
 
 /** Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it. */
 async function groupOfRun(context: WriteContext, runId: string): Promise<string> {
@@ -63,7 +63,15 @@ const groupList = (body: unknown): string => {
   return groups.length === 0 ? "no groups" : groups.map((g) => {
     const count = g.counts?.running ?? 0;
     const state = count > 0 && (g.state === "ready" || g.state === "review") ? `${g.state} · running ${count} task${count === 1 ? "" : "s"}` : g.state ?? "";
-    return `${g.groupId}  ${g.repoId ?? ""}  ${state}  rev ${g.commandRevision ?? "?"}${g.goal ? `  ${g.goal}` : ""}`;
+    // Tester #166: the list used to hide a paused, over-grant or blocked group behind its state word.
+    const flags = [
+      g.stopState !== null && g.stopState !== undefined ? (g.stopState === "paused" ? "paused" : `stopping (${g.stopState})`) : "",
+      g.overGrant === true ? "over grant" : "",
+      (g.counts?.blocked ?? 0) > 0 ? `blocked ${g.counts!.blocked}` : "",
+      g.archived === true ? "archived" : "",
+    ].filter((flag) => flag !== "").join(", ");
+    const completion = g.completion === undefined ? "" : `  done ${g.completion.done}/${g.completion.total}`;
+    return `${g.groupId}  ${g.repoId ?? ""}  ${state}${flags === "" ? "" : ` · ${flags}`}${completion}  rev ${g.commandRevision ?? "?"}${g.goal ? `  ${g.goal}` : ""}`;
   }).join("\n");
 };
 
