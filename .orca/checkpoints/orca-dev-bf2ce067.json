@@ -1,0 +1,75 @@
+{
+  "v": 1,
+  "runId": "orca-dev-bf2ce067",
+  "runtime": "claude-code",
+  "sessionRef": "bf2ce067-9076-4ab5-bda3-49a296ca44da",
+  "writtenAt": "2026-11-07T10:09:01.276Z",
+  "head": "0e767a0f2e072a630a9cc512acc79354efb2dc65",
+  "level": {
+    "kind": "reading",
+    "level": 472121,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Review and merge Orca chore/repin-exhausted-source; push Orca and ccloop/ccmem handoff commits by the human.",
+    "Decide and implement a funding path for an exhausted verify-only run; the paired test currently pins the refusal boundary.",
+    "Apply estimate instruction v3 in the human's ~/.orca/profile.json, then live-check estimate accuracy against ledger usage.",
+    "Address criteria-review spend cap and parent visibility (#174/#179); do not redo #188/#189/#190/#198, which current code fixes already cover.",
+    "Re-run Orca npm test after the branch changes; prior full run predates the new estimate/group-brief/usage commits."
+  ],
+  "open": [
+    "Orca branch chore/repin-exhausted-source is committed but not merged into main or pushed: repin, paired exhausted funding-boundary test, estimate instruction v3, group brief, usage scope refusal, and handoff.",
+    "ccloop main has an authorized test-fixture fix (multiRepoPathPolicy temp root realpath) plus rolling handoff, not pushed; full suite 2567/2567 and check-known-reds RC 0 after the fix.",
+    "ccmem has only a rolling handoff pointer commit, not pushed; no code changes.",
+    "Exhausted completion source is eligible end-to-end, but verify-only admission refuses with saved-result-authored-budget-exhausted once the authored work allowance is spent.",
+    "Estimate v3 is opt-in via human profile configuration; the installed profile still says instructionVersion 2.",
+    "ccloop full suite first rerun had one unrelated OMP grandchild.pid ENOENT under load; the isolated file passed 23/23 and the next full run was 2567/2567."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "tied-evidence",
+      "what": "Choose the product path for funding a verify-only run from an eligible exhausted source while preserving source lineage; current gates refuse when the authored work allowance is exhausted."
+    },
+    {
+      "kind": "named-authorization",
+      "what": "Review and merge the Orca branch; push Orca, ccloop and ccmem handoff commits, and opt the real profile into estimate instruction v3."
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "Set a finite criteria-review token cap and decide how a failed review becomes visible on the parent group (#174/#179)."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca status --short --branch",
+      "exitCode": 0,
+      "commit": "0e767a0f2e072a630a9cc512acc79354efb2dc65",
+      "observedAt": "2026-11-07T10:08:39.261Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-bf2ce067-yhP92k/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccloop status --short --branch",
+      "exitCode": 0,
+      "commit": "0e767a0f2e072a630a9cc512acc79354efb2dc65",
+      "observedAt": "2026-11-07T10:08:39.294Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-bf2ce067-yhP92k/2.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/ccmem status --short --branch",
+      "exitCode": 0,
+      "commit": "0e767a0f2e072a630a9cc512acc79354efb2dc65",
+      "observedAt": "2026-11-07T10:08:39.326Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-bf2ce067-yhP92k/3.txt"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "commit": "0e767a0f2e072a630a9cc512acc79354efb2dc65",
+      "observedAt": "2026-11-07T10:09:01.210Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-bf2ce067-yhP92k/4.txt"
+    }
+  ]
+}
