@@ -101,3 +101,7 @@ must fail.
 - Existing runs without the completion source remain unrecoverable (`saved-result-exhausted`).
 - Orca's strict readers must accept the new refusal codes and the optional `work` payload before this
   ships; the two repositories change their mirrors together.
+
+## Correction 1 — V8 refusal ordering (2026-11-07, implementation session `79d7713b`)
+
+V8's promise of `group-reserve-insufficient` for an optional-policy task with too little group headroom is too specific. `decideFundedAllowance` checks that the prospective funded work and handoff fit the group's non-token limit *before* the explicit reserve check. In a valid optional-policy fixture with insufficient attempts, it returns no allowance, and the existing recovery command answers `saved-result-unavailable:saved-result-authored-budget-exhausted`. Both checks remain intact: the command savepoint rolls the tentative top-up row and any source release back. V8 must assert that the source and accounting are unchanged, the answer is booked, and no row or verification run exists; it cannot require the later reserve code for this input. Evidence: `TMPDIR=/tmp ./node_modules/.bin/vitest run tests/control/retryTopUpSavedResult.test.ts -t 'V8:'` on branch `feat/verify-only-work-top-up` based on `34d6d058` (red at the old expected code; after correcting the assertion, green). This correction does not alter the original design's funding checks.

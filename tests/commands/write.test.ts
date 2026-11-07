@@ -61,6 +61,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["task", "set-labels", "g-alpha", "t1", "--label", "area:cli", "--label", "kind:bug"], "groups/g-alpha/tasks/t1/labels", 5, { labels: ["area:cli", "kind:bug"], baseLabelsVersion: 2 }],
   [["task", "set-labels", "g-alpha", "t1", "--clear"], "groups/g-alpha/tasks/t1/labels", 5, { labels: null, baseLabelsVersion: 2 }],
   [["task", "verify-saved-result", "g-alpha", "t1"], "groups/g-alpha/tasks/t1/verify-saved-result", 5, { sourceRunId: "run-0", sourceAttempt: 1, capsuleHash: H.capsule }],
+  [["task", "verify-saved-result", "g-alpha", "t1", "--work", '{"tokens":50000,"attempts":1}'], "groups/g-alpha/tasks/t1/verify-saved-result", 5,
+    { sourceRunId: "run-0", sourceAttempt: 1, capsuleHash: H.capsule, work: { tokens: 50000, attempts: 1 } }],
   [["task", "settle-usage", "g-alpha", "t1", "--acknowledge", "charge-remaining-grant"], "groups/g-alpha/settle-unknown-usage", 5,
     { taskId: "t1", runId: "run-1", generation: 3, acknowledge: "charge-remaining-grant" }],
 ];

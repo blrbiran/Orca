@@ -96,7 +96,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca task continue <group> <task>` — continue a task's current run from its newest complete checkpoint
 - `orca task set-loop <group> <task> --file <file>` — set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}
 - `orca task set-labels <group> <task> [--label <label>] [--clear]` — set a task's labels (--label repeatable), or --clear back to the plan's
-- `orca task verify-saved-result <group> <task>` — verify the current run's saved result instead of re-running (after run eligibility says eligible)
+- `orca task verify-saved-result <group> <task> [--work <work>]` — verify the current run's saved result instead of re-running (after run eligibility says eligible)
 - `orca task settle-usage <group> <task> --acknowledge <acknowledge>` — settle a run's unknown usage (cannot be undone) (person token)
 
 ### `orca run`

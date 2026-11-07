@@ -44,6 +44,32 @@ it('a real exhausted completion remains unfunded when its authored work allowanc
  }finally{await f.cleanup();}
 },120000);
 
+it('V10: a person funds an exhausted source for one verification without another execute',async()=>{
+ const f=await savedResultWorld({exhausted:true});try{
+  const source=readDriverRun(f.store,f.source.runId),before=JSON.stringify((source as unknown as {cumulative:{work:unknown}}).cumulative.work);
+  expect(source.drive?.outcome).toBe('exhausted');expect(f.calls()).toEqual(['plan','execute']);
+  const eligibility=await f.service.savedResultEligibility(source.runId);
+  expect(eligibility).toMatchObject({status:'eligible'});
+  if(eligibility.status!=='eligible')throw Error(JSON.stringify(eligibility));
+  const c=f.command('verify-saved-result',{sourceRunId:source.runId,sourceAttempt:eligibility.recoveryOf.sourceAttempt,capsuleHash:eligibility.recoveryOf.capsuleHash,work:{tokens:100_000,activeMs:1_000_000,attempts:2,sessions:2}},{kind:'task',groupId:'g',taskId:'a'});
+  const result=await withCommandContext(c.commandId,{client:'web',principal:'user:owner',personAuthority:true},()=>f.service.verifySavedResult(c));
+  expect(result).toHaveProperty('result.kind','saved-result-verification-started');
+  if(!('result' in result)||result.result.kind!=='saved-result-verification-started')throw Error(JSON.stringify(result));
+  expect(await withCommandContext(c.commandId,{client:'web',principal:'user:owner',personAuthority:true},()=>f.service.verifySavedResult(c))).toEqual(result);
+  const id=result.result.runId;
+  for(let i=0;i<120;i++){await f.driver.round();if(readDriverRun(f.store,id).state==='settled')break;await new Promise(r=>setTimeout(r,50));}
+  const finalRun=readDriverRun(f.store,id);
+  // Acceptance gate: the pinned ccloop must verify the saved attempt after Orca deleted the source workspace. A red here is
+  // the ccloop reader still validating published.sha/tree/parent against that deleted path; do not weaken the assertion.
+  expect(finalRun.state,JSON.stringify({drive:(finalRun as unknown as {drive:unknown}).drive})).toBe('settled');
+  expect(f.calls()).toEqual(['plan','execute','verify']);
+  expect(readDriverRun(f.store,source.runId).drive?.outcome).toBe('exhausted');
+  expect(JSON.stringify((readDriverRun(f.store,source.runId) as unknown as {cumulative:{work:unknown}}).cumulative.work)).toBe(before);
+  expect(f.store.db.prepare('SELECT count(*) AS n FROM work_grant_top_ups').get()!.n).toBe(1);
+  expect(f.store.db.prepare("SELECT count(*) AS n FROM activity WHERE kind='saved-result-top-up'").get()!.n).toBe(1);
+ }finally{await f.cleanup();}
+},120000);
+
 it('O19: the pinned ccloop accepts a saved candidate after Orca books an approximate codex floor',async()=>{
  const f=await savedResultWorld({optional:true,settle:'none',omitExecuteUsage:true,sourcePaired:true,toolRules:{commands:[],network:false,secretEnv:[]}});try{
   expect((f.source.unknown as {work:boolean}).work).toBe(true);

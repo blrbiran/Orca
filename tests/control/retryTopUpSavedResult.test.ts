@@ -8,6 +8,8 @@ import { profileSnapshot } from "./fixtures/web.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { readFundedAllowance } from "../../src/control/fundedAllowance.js";
+import { appendTopUp } from "../../src/control/workTopUp.js";
+import { readGroupActivity } from "../../src/control/activity.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { routedCommandContext } from "../../src/panel/controlApi.js";
@@ -144,6 +146,128 @@ describe("T11: a saved-result recovery after a top-up", () => {
       expect(t.body(recovery).tokenPolicy.authoredTokenCeiling).toBe(base + 1000);
       expect(readFundedAllowance(t.h.store, t.body(recovery))).not.toBeNull();
       expect(readFundedAllowance(t.h.store, t.body(first))).not.toBeNull();
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+});
+
+/** V1–V9: exercise the real command ledger against a saved-result-speaking synthetic port, without a paid provider. */
+describe('verify-only work top-up admission', () => {
+  let oldTmp: string | undefined, short = '';
+  beforeEach(() => { oldTmp = process.env.TMPDIR; short = mkdtempSync(join(realpathSync('/private/tmp'), 'orca-vtu-')); process.env.TMPDIR = short; });
+  afterEach(() => { if (oldTmp === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = oldTmp; rmSync(short, { recursive: true, force: true }); });
+  const addition = { tokens: 100_000, activeMs: 1_000_000, attempts: 2, sessions: 2 };
+  async function exhaustedAllowance() {
+    const { t, service } = await world();
+    const first = await t.claim(), driver = t.driver();
+    await t.until(driver, () => t.body(first).state === 'blocked');
+    expect(await release(t, service, first)).not.toHaveProperty('error');
+    raiseLimit(t);
+    return { t, service, driver, first };
+  }
+  async function verifyWith(t: Harness, service: WebControlService, first: string, work?: Record<string, number>, context: {client:string;principal:string;personAuthority?:boolean;dispatchedRun?:string} = {client: 'web', principal: 'user:owner', personAuthority: true}) {
+    const eligible = await service.savedResultEligibility(first);
+    if (eligible.status !== 'eligible') throw new Error(JSON.stringify(eligible));
+    const c = t.h.taskCommand('verify-saved-result', 'a', {sourceRunId: first, sourceAttempt: 1, capsuleHash: eligible.recoveryOf.capsuleHash, ...(work === undefined ? {} : {work})});
+    return {c, result: await withCommandContext(c.commandId, context, () => service.verifySavedResult(c))};
+  }
+  const rows = (t: Harness) => Number(t.h.store.db.prepare('SELECT count(*) AS n FROM work_grant_top_ups').get()!.n);
+  const activities = (t: Harness) => Number(t.h.store.db.prepare("SELECT count(*) AS n FROM activity WHERE kind='saved-result-top-up'").get()!.n);
+
+  it('V1: a person funds only the new verification run, keeping the source allowance and failure unchanged', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      const before = JSON.stringify(readFundedAllowance(t.h.store, t.body(first)));
+      const {c, result} = await verifyWith(t, service, first, addition);
+      expect(result).toHaveProperty('result.kind', 'saved-result-verification-started');
+      if (!('result' in result) || result.result.kind !== 'saved-result-verification-started') return;
+      const run = t.body(result.result.runId);
+      expect(rows(t)).toBe(1);
+      expect(readFundedAllowance(t.h.store, run)).not.toBeNull();
+      expect(JSON.stringify(readFundedAllowance(t.h.store, t.body(first)))).toBe(before);
+      expect(run.tokenPolicy.authoredTokenCeiling).toBe((t.body(first).grant.work.tokens as number) + addition.tokens);
+      expect(t.body(first).drive.outcome).toBe('failed');
+      expect(await withCommandContext(c.commandId, {client:'web',principal:'user:owner',personAuthority:true}, () => service.verifySavedResult(c))).toEqual(result);
+      expect(rows(t)).toBe(1);
+      expect(activities(t)).toBe(1);
+      expect(readGroupActivity(t.h.store, 'g', 10).find(a => a.kind === 'saved-result-top-up')?.body).toEqual({sourceRunId:first,amount:addition,by:'user:owner',commandId:c.commandId});
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('V2: without work, spent authored work refuses and writes no top-up or run', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      const {result} = await verifyWith(t, service, first);
+      expect(result).toHaveProperty('error.message', 'saved-result-unavailable:saved-result-authored-budget-exhausted');
+      expect(rows(t)).toBe(0);
+      expect(t.h.store.db.prepare("SELECT id FROM runs WHERE json_extract(body,'$.mode')='verify-saved-result'").all()).toEqual([]);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('V3/V5: an agent without a cap and a dispatched run cannot add work, with booked refusals', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      const agent = await verifyWith(t, service, first, addition, {client:'cli',principal:'agent:cli',personAuthority:false});
+      expect(agent.result).toHaveProperty('error.code', 'saved-result-top-up-not-authorized');
+      const dispatched = await verifyWith(t, service, first, addition, {client:'cli',principal:'agent:cli',personAuthority:false,dispatchedRun:'run-owner'});
+      expect(dispatched.result).toHaveProperty('error.code', 'saved-result-top-up-dispatched-run');
+      expect(rows(t)).toBe(0);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('V4: an agent cap counts the group total while a person may still fund verification', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      const command = t.h.rawCommand('set-cap-v4', 0, 'set-orchestration-settings', {kind:'orchestration'}, {maxRunningGroups: 3, agentTopUpCap: {tokens: 100_000, activeMs: 1_000_000, attempts: 2, sessions: 2}});
+      expect(t.service.setOrchestrationSettings(command as never)).not.toHaveProperty('error');
+      appendTopUp(t.h.store, 'g', 'a', first, {amount:{tokens:60_000,activeMs:0,attempts:0,sessions:0},commandId:'earlier-agent',by:'agent:cli',personAuthority:false,at:1});
+      const request = {tokens:50_000,activeMs:1_000_000,attempts:2,sessions:2};
+      expect((await verifyWith(t,service,first,request,{client:'cli',principal:'agent:cli'})).result).toHaveProperty('error.code','saved-result-top-up-cap-exceeded');
+      expect(rows(t)).toBe(1);
+      expect((await verifyWith(t,service,first,request)).result).toHaveProperty('result.kind','saved-result-verification-started');
+      expect(rows(t)).toBe(2);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('V8: insufficient group headroom rolls back the appended grant and source release', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      const group=JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      const limit={...group.limit,attempts:group.used.attempts+group.reserved.attempts+addition.attempts-1};
+      expect(t.service.setLimit(t.h.command('set-limit',{limit}))).not.toHaveProperty('error');
+      const before=JSON.stringify(t.body(first));
+      const answer=(await verifyWith(t,service,first,addition)).result;
+      expect(answer,JSON.stringify(answer)).toHaveProperty('error.code','saved-result-unavailable');
+      expect(answer).toHaveProperty('error.message','saved-result-unavailable:saved-result-authored-budget-exhausted');
+      expect(rows(t)).toBe(0);
+      expect(JSON.stringify(t.body(first))).toBe(before);
+      expect(t.h.store.db.prepare("SELECT id FROM runs WHERE json_extract(body,'$.mode')='verify-saved-result'").all()).toEqual([]);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('V6: empty and ineffectual grants are refused by name', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      expect((await verifyWith(t, service, first, {})).result).toHaveProperty('error.code', 'saved-result-top-up-empty');
+      const task = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      task.grant.work.tokens = null;
+      t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify(task));
+      expect((await verifyWith(t, service, first, {tokens: 1})).result).toHaveProperty('error.code', 'saved-result-top-up-no-effect');
+      expect(rows(t)).toBe(0);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('V7: a finite-legacy policy refuses a verification top-up without changing the grant', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      t.h.store.db.prepare("UPDATE token_policies SET mode='finite-legacy' WHERE group_id='g' AND work_item_id='a'").run();
+      const grant=JSON.stringify(t.body(first).grant);
+      const answer=(await verifyWith(t,service,first,addition)).result;
+      expect(answer,JSON.stringify(answer)).toHaveProperty('error.code','saved-result-top-up-unsupported');
+      expect(rows(t)).toBe(0);
+      expect(JSON.stringify(t.body(first).grant)).toBe(grant);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 60_000);
+
+  it('rejects a forged source attempt before adding a work grant', async () => {
+    const {t, service, driver, first} = await exhaustedAllowance(); try {
+      const evidence = await service.savedResultEligibility(first);
+      if(evidence.status!=='eligible')throw Error(JSON.stringify(evidence));
+      const c=t.h.taskCommand('verify-saved-result','a',{sourceRunId:first,sourceAttempt:2,capsuleHash:evidence.recoveryOf.capsuleHash,work:addition});
+      expect(await withCommandContext(c.commandId,{client:'web',principal:'user:owner',personAuthority:true},()=>service.verifySavedResult(c))).toHaveProperty('error.code','saved-result-source-stale');
+      expect(rows(t)).toBe(0);
     } finally { await driver.stop(); await t.h.dispose(); }
   }, 60_000);
 });

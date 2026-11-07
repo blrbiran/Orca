@@ -1196,7 +1196,7 @@ export const correctionClosePayloadSchema = z.object({
   undoCost: nonemptyString.optional(), undoBlastRadius: nonemptyString.optional(),
 }).strict();
 export const correctionWithdrawPayloadSchema = z.object({ correctionId: correctionIdSchema }).strict();
-export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema}).strict();
+export const verifySavedResultPayloadSchema=z.object({sourceRunId:idSchema,sourceAttempt:positiveSafeInteger,capsuleHash:hashSchema,work:retryTopUpWorkSchema.optional()}).strict();
 export const savedResultEligibilityViewSchema=savedResultSourceEligibilitySchema;
 const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("import-plan"), target: groupCommandTargetSchema, payload: importPlanPayloadSchema }).strict(),

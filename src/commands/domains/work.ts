@@ -300,12 +300,15 @@ export const WORK_ROWS: CommandDef[] = [
     } }),
   verb({ domain: "task", action: "verify-saved-result", summary: "verify the current run's saved result instead of re-running (after run eligibility says eligible)",
     verb: "verify-saved-result", positionals: [GROUP, TASK],
+    flags: [{ name: "work", type: "string", summary: "add work for the verification run as JSON {tokens?,activeMs?,attempts?,sessions?}; a person may always, an agent within the top-up cap; refused to a run Orca dispatched" }],
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/verify-saved-result`,
     payload: async (c) => {
+      const work = json(c, "work");
+      if (work !== undefined && (work === null || typeof work !== "object" || Array.isArray(work))) throw invalid("--work wants a JSON object {tokens?,activeMs?,attempts?,sessions?}");
       const answer = await c.read(`runs/${await currentRun(c)}/saved-result-eligibility`) as { status: string; reason?: string; recoveryOf?: { sourceRunId: string; sourceAttempt: number; capsuleHash: string } };
       if (answer.status !== "eligible" || answer.recoveryOf === undefined) throw new EntryRejection("saved-result-unavailable", `the saved result is not eligible: ${answer.reason ?? answer.status}`);
       const { sourceRunId, sourceAttempt, capsuleHash } = answer.recoveryOf;
-      return { sourceRunId, sourceAttempt, capsuleHash };
+      return { sourceRunId, sourceAttempt, capsuleHash, ...(work === undefined ? {} : { work }) };
     } }),
   verb({ domain: "task", action: "settle-usage", summary: "settle a run's unknown usage (cannot be undone)", verb: "settle-unknown-usage", positionals: [GROUP, TASK], access: "token",
     flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|release-unmetered" }],

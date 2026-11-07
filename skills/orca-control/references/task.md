@@ -55,7 +55,7 @@ set a task's labels (--label repeatable), or --clear back to the plan's
 - `--label <label>` (repeatable): a label
 - `--clear`: drop the operator's labels
 
-## `orca task verify-saved-result <group> <task>`
+## `orca task verify-saved-result <group> <task> [--work <work>]`
 
 verify the current run's saved result instead of re-running (after run eligibility says eligible)
 
@@ -63,6 +63,7 @@ verify the current run's saved result instead of re-running (after run eligibili
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
+- `--work <work>`: add work for the verification run as JSON {tokens?,activeMs?,attempts?,sessions?}; a person may always, an agent within the top-up cap; refused to a run Orca dispatched
 
 ## `orca task settle-usage <group> <task> --acknowledge <acknowledge>`
 

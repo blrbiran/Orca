@@ -13,8 +13,9 @@ import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { FrozenWorkAgent } from "./agentFreeze.js";
 import { applyAgentSwitch, AUTO_AGENT, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
-import { commandPrincipalFor, routedDispatchedRunFor, routedPersonAuthorityFor } from "./commandClient.js";
-import { agentTopUpSum, appendTopUp, readAgentTopUpCap, topUpSum, withTopUp } from "./workTopUp.js";
+import { commandPrincipalFor, routedDispatchedRunFor } from "./commandClient.js";
+import { appendTopUp, topUpSum, withTopUp } from "./workTopUp.js";
+import { authorizeWorkTopUp } from "./authorizeWorkTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { validTerminalClosure } from "./terminalRunClosure.js";
@@ -81,21 +82,6 @@ export function autoRetryFundingRefusal(store: ControlStore, groupId: string, ta
   const inherited = add(funding.inheritedUsage, lineageWorkUsage(run));
   const left = remainingBudget(authored, inherited);
   return dimensions.some((dimension) => left[dimension] === 0) ? "authored-budget-exhausted" : null;
-}
-
-/**
- * Retry work top-up spec 2026-11-06 §2 "Who may", inside the apply so every refusal is booked: a run Orca dispatched never;
- * a person (routed person authority: an owner on the Web, an owner's person token on the socket) always; anyone else
- * (an agent, a Web member) only while the group's agent top-ups plus this one stay within the global agentTopUpCap.
- */
-function authorizeTopUp(store: ControlStore, groupId: string, command: RetryTaskCommand, incoming: Amount): boolean {
-  if (routedDispatchedRunFor(command.commandId) !== null) throw new ControlError("retry-top-up-dispatched-run", routedDispatchedRunFor(command.commandId)!);
-  if (routedPersonAuthorityFor(command.commandId)) return true;
-  const cap = readAgentTopUpCap(store);
-  if (cap === null) throw new ControlError("retry-top-up-not-authorized");
-  const spent = agentTopUpSum(store, groupId);
-  for (const d of dimensions) if (spent[d] + incoming[d] > cap[d]) throw new ControlError("retry-top-up-cap-exceeded", d);
-  return false;
 }
 
 /** Normal failed-recovery retry keeps its real failure; no-dispatch consumption has separate proof and authority. */
@@ -240,7 +226,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           const authored=withTopUp(work.grant.work,add(topUpSum(store,groupId,taskId,null),incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}));
           const left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
-          const personAuthority=incoming===null?false:authorizeTopUp(store,groupId,command,incoming);
+          const personAuthority=incoming===null?false:authorizeWorkTopUp(store,groupId,command.commandId,incoming,'retry-top-up');
           if(!released && !closed){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
           if(incoming!==null){
             // Spec §2 "Headroom": the claim's own non-token fit (fundedAllowance.ts decideFundedAllowance, fundingReleased), read

@@ -12,7 +12,10 @@ import {hasValidUsageSettlement,lineageWorkUsage,settlementProof,settlementArtif
 import {hasOptionalTaskPolicy,decideFundedAllowance,readFundedAllowance} from './fundedAllowance.js';
 import {validTerminalClosure} from './terminalRunClosure.js';
 import {finiteCommitment} from './tokenPolicy.js';
-import {topUpSum,withTopUp} from './workTopUp.js';
+import {appendTopUp,topUpSum,withTopUp} from './workTopUp.js';
+import {authorizeWorkTopUp} from './authorizeWorkTopUp.js';
+import {commandPrincipalFor} from './commandClient.js';
+import {recordActivity} from './activity.js';
 import {groupUsageUnknown,add} from './budget.js';
 import {zero,dimensions} from './commands.js';
 import {claimCapBlocking} from './spendCaps.js';
@@ -147,12 +150,18 @@ export async function applyVerifySavedResult(deps:StopDeps,command:VerifySavedRe
    let inherited=inheritedBase;
    if(current.predecessor){if(!settlementSame(current.predecessor.recoveryOf,of))throw new ControlError('saved-result-source-stale');inherited=add(current.predecessor.funding.inheritedUsage,lineageWorkUsage(current.current));}
    const originalAccounting=savedRecoveryAccounting(deps.store,current.run);
+   const incoming=command.payload.work===undefined?null:{tokens:command.payload.work.tokens??0,activeMs:command.payload.work.activeMs??0,attempts:command.payload.work.attempts??0,sessions:command.payload.work.sessions??0};
+   const optional=hasOptionalTaskPolicy(deps.store,current.run.groupId,current.work.workItemId);
+   if(incoming!==null&&!optional)throw new ControlError('saved-result-top-up-unsupported','finite-legacy');
+   if(incoming!==null&&dimensions.every(d=>incoming[d]===0))throw new ControlError('saved-result-top-up-empty');
+   if(incoming!==null&&incoming.tokens>0&&current.work.grant.work.tokens===null)throw new ControlError('saved-result-top-up-no-effect','tokens');
+   const personAuthority=incoming===null?false:authorizeWorkTopUp(deps.store,current.run.groupId,command.commandId,incoming,'saved-result-top-up');
    const old=current.current;
    if(Number(deps.store.db.prepare('SELECT active FROM runs WHERE id=?').get(old.runId)?.active)===1){
     saveRunBody(deps.store,{...old,state:'settled-failed',recoverable:false},false);releaseCommitment(deps.store,old.groupId,add(finiteCommitment(old.remaining.work),old.remaining.handoff));
    }
    const work={...current.work,status:'ready',fundingReleased:true};saveWork(deps.store,current.run.groupId,work);
-   const optional=hasOptionalTaskPolicy(deps.store,current.run.groupId,work.workItemId);
+   if(incoming!==null)appendTopUp(deps.store,current.run.groupId,work.workItemId,current.run.runId,{amount:incoming,commandId:command.commandId,by:commandPrincipalFor(command.commandId)??command.actorId,personAuthority,at:deps.store.now()});
    const decision=optional?decideFundedAllowance(deps.store,current.run.groupId,work.workItemId,(deps.now?.()??new Date()).getTime()):null;
    const grant=decision?.allowance?.grant??(optional?null:structuredClone(work.grant));
    if(!grant||dimensions.some(d=>grant.work[d]===0))throw new ControlError('saved-result-unavailable','saved-result-authored-budget-exhausted');
@@ -176,6 +185,7 @@ export async function applyVerifySavedResult(deps:StopDeps,command:VerifySavedRe
     newRun.mode='verify-saved-result';newRun.recoveryOf=of;newRun.savedDispatch={state:'never-submitted',admissionHash:ref.hash,fundingHash:sha256Canonical(funding),revision:context.nextCommandRevision,envelopeHash:null};
     newRun.savedRecovery=savedRecoverySchema.parse({recoveryOf:of,source,sourceEnvelope:sourceRef,admission:ref,funding,currentRunId:old.runId,predecessor,artifacts:[sourceRef,...(predecessor?[predecessor.record]:[])],revision:context.nextCommandRevision});
    }});
+   if(incoming!==null)recordActivity(deps.store,{groupId:current.run.groupId,taskId:work.taskId,runId:run.runId,kind:'saved-result-top-up',body:{sourceRunId:current.run.runId,amount:incoming,by:commandPrincipalFor(command.commandId)??command.actorId,commandId:command.commandId}});
    return commandSuccess(context,{kind:'saved-result-verification-started',taskId:work.taskId,runId:run.runId,recoveryOf:of});
   }}).body;
  }catch(error){if(error instanceof Error&&error.message.startsWith('saved-result-')){

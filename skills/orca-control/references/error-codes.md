@@ -275,6 +275,12 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `run-usage-pending` | 409 |
 | `run-usage-settled` | 409 |
 | `saved-result-source-stale` | 409 |
+| `saved-result-top-up-cap-exceeded` | 422 |
+| `saved-result-top-up-dispatched-run` | 422 |
+| `saved-result-top-up-empty` | 400 |
+| `saved-result-top-up-no-effect` | 422 |
+| `saved-result-top-up-not-authorized` | 422 |
+| `saved-result-top-up-unsupported` | 422 |
 | `saved-result-unavailable` | 409 |
 | `saved-result-usage-unsettled` | 409 |
 | `schedule-limit` | 409 |
