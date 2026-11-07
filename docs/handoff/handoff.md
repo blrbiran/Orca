@@ -63,6 +63,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
+### 3.最新（2026-11-07，Claude，测试者反馈轮续）—— repin 已提交、三项反馈修复、exhausted 资金边界
+
+> 人裁（原话）：「按你的建议走」「允许修改必要的测试」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「如果需要 repin ccloop，这个session临时允许你 push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」；要求收尾更新三仓 handoff 并在对话里给 ≤10 行接手摘要。本轮**没有付费真跑**。工作分支 `chore/repin-exhausted-source`，**未合入 main、未 push**。
+
+- **repin**：`package.json`／锁文件指向 ccloop 远端 `60c554b4`（含 exhausted completion source）；`verify:ccloop-pin` 3/3 绿。配对测试从真实 exhausted run 得到 `execution-complete-before-verification-v1`，eligibility 通过；随后在 authored work allowance 已花完时被 `saved-result-authored-budget-exhausted` 挡住，没有创建 verify run。**「零 plan/execute、只跑一次 verify」仍未验成**：这需要一条保留来源归属、同时给 verify-only run 新额度的显式产品路径；不要靠放宽资金守卫通过。
+- **#173 估算口径**：新增可选指令 v3，把 `tokens` 改成 ledger 的 input+output+cacheRead+cacheWrite；v1/v2 字节不变，答案键 `budget-estimate-answer-v3`。聚焦测试 42/42、typecheck 0。**本机 `~/.orca/profile.json` 仍是 instructionVersion "2"（人配置，未改）**；要让生产估算真正用 v3，需人把它改为 "3"。
+- **#199 轮询成本**：新增 `orca group brief <g>`，只输出 group summary（state／completion／counts／blockers／revision），不输出 workItems／runs／proposal；`group show` 字节不变。`skills/orca-control` 的 Core rule 3 改为轮询 brief。判据 2/2、生成 CLI 文档 drift 绿。
+- **#185 usage scope**：`scope=repo:<既未注册、也从未被 ledger／group 记录>` 现在 404 `control-target-not-allowed`，不再返回全 0；已注册但无行仍是合法的空范围。判据 `usageRoute` 6/6。
+- **#189/#188/#190** 经当前代码核对已修（`retryTask` 的 observed-path 入口、split 的 bugfix/targetPaths 校验、plan library 2 MiB），**不要重做**；#198 的 README 误报也已在 `criteriaProtection` 修掉。#174（criteria review 无 token 上限、失败对父组不可见）与 #179（review 成功却 `done 0/1`）仍是主要未修项；#173 的 v3 只解决单位，不解决固定开销与 run-to-run 波动。
+- **门（现测）**：typecheck RC 0；本轮聚焦 54/54；上一轮 Orca `npm test` 6,889 过／125 跳／1 红（既有 `orchestration.ladder-source-superseded`，未改动 main 同样红），本分支新增改动后整套未重跑。ccloop 全套重跑 **2,567/2,567**、`check-known-reds` RC 0；`multiRepoPathPolicy` 被授权的夹具修复已在 ccloop 本地 main（未 push）。
+- **待人**：审改本分支并合入；把 profile 指令版本升到 "3"；决定 verify-only run 的追加额度产品路径；criteria review 的额度上限与父组可见性。
+
 ### 3.最新（2026-11-07，Codex）：D1–D5、O19、测试者高优先级与两次真 dogfood
 
 > 人本轮明确授权改必要判据、必要付费真跑、临时由 agent 推 ccloop；遇到须等人的项继续做独立部分，最后给审核。D2 的精确漏报路径边界经独立 subagent 复审、本人批准修订设计。Orca push 仍归人。开工与收尾三仓远端均用 `ls-remote` 现核；提交本文会改 HEAD，故这里不写活哈希。
