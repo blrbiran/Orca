@@ -26,6 +26,24 @@ describe('genuine schema10 owner → paired saved verification',()=>{
  },60000);
 });
 
+it('a real exhausted completion remains unfunded when its authored work allowance is spent',async()=>{
+ const f=await savedResultWorld({exhausted:true});try{
+  expect(f.source.drive?.outcome).toBe('exhausted');
+  expect((f.source.savedSource as {authorityKind?:string}|undefined)?.authorityKind).toBe('execution-complete-before-verification-v1');
+  expect(f.calls()).toEqual(['plan','execute']);
+  const eligible=await f.service.savedResultEligibility(f.source.runId);
+  expect(eligible,JSON.stringify(eligible)).toMatchObject({status:'eligible'});
+  if(eligible.status!=='eligible')throw Error(JSON.stringify(eligible));
+  const result=await f.service.verifySavedResult(f.command('verify-saved-result',{
+   sourceRunId:f.source.runId,sourceAttempt:eligible.recoveryOf.sourceAttempt,capsuleHash:eligible.recoveryOf.capsuleHash,
+  },{kind:'task',groupId:'g',taskId:'a'}));
+  expect(result).toHaveProperty('error.message','saved-result-unavailable:saved-result-authored-budget-exhausted');
+  expect(f.store.db.prepare("SELECT id FROM runs WHERE json_extract(body,'$.mode')='verify-saved-result'").all()).toEqual([]);
+  expect(f.calls()).toEqual(['plan','execute']);
+  expect(readDriverRun(f.store,f.source.runId).drive?.outcome).toBe('exhausted');
+ }finally{await f.cleanup();}
+},120000);
+
 it('O19: the pinned ccloop accepts a saved candidate after Orca books an approximate codex floor',async()=>{
  const f=await savedResultWorld({optional:true,settle:'none',omitExecuteUsage:true,sourcePaired:true,toolRules:{commands:[],network:false,secretEnv:[]}});try{
   expect((f.source.unknown as {work:boolean}).work).toBe(true);

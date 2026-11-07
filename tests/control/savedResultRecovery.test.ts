@@ -43,7 +43,8 @@ describe('saved result controller authority', () => {
    t.h.store.transaction(()=>{const body=JSON.parse(String(t.h.store.db.prepare('SELECT body FROM runs WHERE id=?').get(runId)!.body));
     body.savedSource={authorityKind:'execution-complete-before-verification-v1',source:{artifactId:`saved-result-${'a'.repeat(64)}`,hash:'a'.repeat(64)},attempt:1};
     t.h.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(body),runId);});
-   expect((await t.service.savedResultEligibility(runId)).reason).not.toBe('saved-result-exhausted');
+   const eligibility=await t.service.savedResultEligibility(runId);
+   expect(eligibility.status==='unavailable'?eligibility.reason:null).not.toBe('saved-result-exhausted');
   } finally {await t.h.dispose();}
  });
  it('refuses a settled historical source once an ordinary retry has replaced its task membership', async () => {
