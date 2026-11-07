@@ -48,6 +48,10 @@ it('V10: a person funds an exhausted source for one verification without another
  const f=await savedResultWorld({exhausted:true});try{
   const source=readDriverRun(f.store,f.source.runId),before=JSON.stringify((source as unknown as {cumulative:{work:unknown}}).cumulative.work);
   expect(source.drive?.outcome).toBe('exhausted');expect(f.calls()).toEqual(['plan','execute']);
+  const sourceCapsule=JSON.parse(settlementArtifact(f.store,(source.savedSource as any).source).toString());
+  const sourceSnapshot=JSON.parse(settlementArtifact(f.store,sourceCapsule.snapshot).toString());
+  const sourceBundle=join(f.w.root,'source.bundle');await writeFile(sourceBundle,settlementArtifact(f.store,sourceSnapshot.bundle));
+  expect(execFileSync('/usr/bin/git',['bundle','list-heads',sourceBundle],{cwd:f.w.repo,encoding:'utf8'})).toContain(sourceCapsule.published.ref);
   const eligibility=await f.service.savedResultEligibility(source.runId);
   expect(eligibility).toMatchObject({status:'eligible'});
   if(eligibility.status!=='eligible')throw Error(JSON.stringify(eligibility));
@@ -59,8 +63,8 @@ it('V10: a person funds an exhausted source for one verification without another
   const id=result.result.runId;
   for(let i=0;i<120;i++){await f.driver.round();if(readDriverRun(f.store,id).state==='settled')break;await new Promise(r=>setTimeout(r,50));}
   const finalRun=readDriverRun(f.store,id);
-  // Acceptance gate: the pinned ccloop must verify the saved attempt after Orca deleted the source workspace. A red here is
-  // the ccloop reader still validating published.sha/tree/parent against that deleted path; do not weaken the assertion.
+  // The real ccloop verifies the archived attempt after Orca deletes its source workspace. This also checks that the
+  // source's final usage, funded verifier runtime, bundle ref and published index survive the handoff unchanged.
   expect(finalRun.state,JSON.stringify({drive:(finalRun as unknown as {drive:unknown}).drive})).toBe('settled');
   expect(f.calls()).toEqual(['plan','execute','verify']);
   expect(readDriverRun(f.store,source.runId).drive?.outcome).toBe('exhausted');
@@ -91,7 +95,7 @@ it('O19: the pinned ccloop accepts a saved candidate after Orca books an approxi
 },120000);
 
 import {existsSync,readFileSync} from 'node:fs';
-import {rm} from 'node:fs/promises';
+import {rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {WebControlService} from '../../src/control/webService.js';
 import {withCommandContext} from '../../src/control/commandClient.js';
