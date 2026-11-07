@@ -69,7 +69,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **根因与修复**：原来源胶囊在 execute 结束时只存 2 条 work 事件，worker 封存前追加第 3 条机械 handoff；Orca 的 highWater=3 正确。ccloop 在租约内把最终事件、ledger 和证据副本补进候选，读侧的逐项一致性守卫不放宽。Orca 的恢复资金证明改为记录冻结原 grant 加已授权且排在新 run 前的 top-up；`readFundedAllowance` 从冻结授权和数据库顺序重算。ccloop 将来源 runtime 原始上限与新 verifier 已验证的 fresh grant 分开校验。恢复从 bundle 中取已核验的真实发布 ref，而非假设 ref 一定带 Orca runId；按发布提交的 Git 树恢复 index，逐文件核对内容、模式。无法发布或未补齐最终会计证据的候选不能授权恢复，worker 仍结清。独立 TypeScript reviewer 找到含换行文件名的合法路径被 index 正则拒，已先红后绿修正。
 - **判据**：ccloop `exhaustedSource` 新增最终 handoff、未发布候选、未补齐会计及换行文件名判据，全部先红后绿；`savedResultRecovery` 新增 fresh grant 边界判据先红后绿。ccloop 恢复 3 文件 70/70＋控制器 2 文件 34/34（在换行与未发布收尾补丁之前），之后 `exhaustedSource` 8/8、typecheck/build 0。Orca 5 文件 90/90、root/Web typecheck 0；最终改动后真实本地 ccloop 构建配对 `V10:` **1 过／22 跳过**：来源仍 exhausted，新 run 只 verify 一次并 settled。**这还不是正式 pin 的验收**；没有跑全量门或付费真 provider。spec `2026-11-07-verify-only-work-top-up-design.md` 新增 Correction 2。
 - **反馈复核**：`orca_archived_files/issue-20261023.md` 的 11-06 审计是旧快照。#163/#183 的新来源配对在本地代码已通，但历史无胶囊的 run 仍不能恢复、OMP 坏 final（#158）仍无完整成果；#169/#172 的关闭/占槽有代码修复但旧实例须显式结算；#173 改了 token 单位，未校准固定开销；#174 名义 200k 非 soft provider 硬上限；#145/#160 的未估算默认无限额度仍允许 confirm（见 `unestimatedDefault.test.ts`），其旧裁定与反馈的用户成本冲突，待人定保护方式；#159 三适配器解码仍不一致。#188/#189/#190、#185 已有代码修复，不照旧清单重做。
-- **接手顺序**：完成审阅后安全提交/快进两分支；只有 ccloop 新提交能从远端取得时才跑 `scripts/pin-ccloop.mjs`，再测正式 pin；写获授权的检查点（`dev checkpoint write` 要工作树干净）；后续设计 #145/#160 的服务端确认边界，再处理 #174/#159。不要用本地旁支二进制声称正式 pin 已更新。
+- **接手顺序（本轮已推进到「等人」）**：两个分支已 `--ff-only` 合入各自本地 main（ccloop 先变基到它的 main），按人本次「之后再做」未跑全量门与付费真跑。**push 仍归人**：ccloop 本地 main 领先 origin、Orca 本地 main 也领先；`origin` 上还没有新 ccloop 提交，所以 `scripts/pin-ccloop.mjs` **不能**执行、正式 pin 仍指旧提交，`ORCA_CCLOOP_BIN` 本地覆盖不能算 pin 验收。检查点写入已按人口头授权尝试，但被自动审批按「会话记录使用需用户明确授权」拦下（不是检查点内容问题）；要落盘请人在自己的终端跑 `dev checkpoint write`，或为该命令加一条允许规则。后续：#145/#160 的服务端确认边界先请人定，再 #174/#159。
 
 ### 3.上一节（2026-11-07，Claude，会话 `2f5eef42`）—— 分支已合入并推远端；#174/#179 已修；verify-only 追加额度只有设计稿
 
@@ -769,7 +769,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
 - **2026-11-07 这轮待人／外部状态**：
-  1. **push 归人**：Orca 本地 main 的本轮功能、repin 与 handoff 提交，ccmem 本地 main 的滚动 handoff 提交；ccloop 本轮代码和 handoff 已依临时授权推到 origin main。远端以 `ls-remote` 现核，不信这里的陈述。ccloop 的 prunable 测试 worktree 仍归人按本轮给出的命令处理；本轮未替人 prune。
+  1. **push 归人（2026-11-07 收尾现核）**：ccloop 本地 main 领先 origin（本轮 exhausted 修复与其交接提交），Orca 本地 main 领先 origin（verify-only 与恢复资金证明），ccmem 本地 main 一条滚动交接提交。**先把 ccloop main 推上去，之后才能 repin Orca**（`scripts/pin-ccloop.mjs` 只认远端已有的提交）。检查点写入被自动审批按会话记录来源拦下，需人本人在终端跑或加允许规则。ccloop 的 prunable 测试 worktree 仍归人按本轮给出的命令处理；本轮未替人 prune。
   2. **最终审核（均可撤回，已按人在本轮的授权执行）**：D1–D5、agent 可设全局 `agentTopUpCap`（按组求和）、F13 前台 socket 失败即退出 78、#172 blocked 不占槽／resume 点名、#190 保留完整需求、#198 README 误报、自动 ladder 在无重试额度时跳过，以及 CLI D9 执行状态补字。设计和验证路径在 §三最新一节，边界 #169／#173／#174 留在 §四。
   3. **只能等真实外部事件**：额度用完时的真 `quota-probe` 验收没有自然触发；本轮没有为制造 quota 失败而烧额度。第三方 provider 的 `structuredOutput:"prompt"` 仍缺真实对应 provider。UI #70 的完整排版／项目设置方案仍需人的设计审定。
 - ~~会话 `3cfc2e73` 待人~~ **会话 `86352010` 已了结**（三仓人已推；分支人已删；审阅项、三件待定人答「都同意按你的建议走」并已实施，见 §三 最新一节）。
