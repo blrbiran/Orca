@@ -63,8 +63,8 @@ function repair(raw: unknown, ctx: RepairContext): RepairResult {
   const planIds = new Set(ctx.taskIds);
   let top: Obj = { ...raw }, entries: unknown[] | null = null;
 
-  // 1. v2 keyed answer -> v1 array, walking the plan's ids (never Object.keys order of the plan).
-  if (ctx.instructionVersion === "2" && isObject(raw.tasks)) {
+  // 1. v2/v3 keyed answer -> v1 array, walking the plan's ids (never Object.keys order of the plan).
+  if ((ctx.instructionVersion === "2" || ctx.instructionVersion === "3") && isObject(raw.tasks)) {
     const keyed = raw.tasks;
     entries = ctx.taskIds.filter(id => Object.hasOwn(keyed, id)).map(id => {
       const entry = keyed[id];

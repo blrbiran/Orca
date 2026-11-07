@@ -108,9 +108,24 @@ const INSTRUCTION_V2 = [
   "- every taskId of the plan is a key of \"tasks\", copied exactly.",
 ].join("\n");
 
-export const ESTIMATE_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({ "1": INSTRUCTION_V1, "2": INSTRUCTION_V2 });
+/**
+ * Issue #173: v2's answer, with the ledger's token definition. Orca bills a run's tokens as input + output +
+ * cacheRead + cacheWrite (`usageLedger.ts` entryTotal), and a loop task's second call re-reads its prompt mostly from
+ * cache. An estimate that counts only input and output is therefore one to four times too low.
+ */
+const INSTRUCTION_V3 = INSTRUCTION_V2
+  .replace(
+    "- \"tokens\": every model token the task will consume, input and output, over every call and every attempt;",
+    "- \"tokens\": every token the ledger will bill for the task, over every call and every attempt: the sum of input, output, cacheRead and cacheWrite. A later call re-reads most of its prompt from cache, so count cacheRead at its full token count too; do not count only new input plus output;",
+  )
+  .replace("- \"schema\": \"budget-estimate-answer-v2\",", "- \"schema\": \"budget-estimate-answer-v3\",");
+
+export const ESTIMATE_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({ "1": INSTRUCTION_V1, "2": INSTRUCTION_V2, "3": INSTRUCTION_V3 });
 
 export interface EstimatePromptOptions { taskIds: readonly string[]; retryProblems?: readonly string[] }
+
+/** v2 and v3 both key the answer by taskId; their instructions carry the shape. */
+const keyedInstruction = (instructionVersion: string): boolean => instructionVersion === "2" || instructionVersion === "3";
 
 /**
  * Spec §4.2: instruction, "\n\n", request bytes. v2 then appends the task list; a retry appends the feedback (spec §4.3).
@@ -119,7 +134,7 @@ export interface EstimatePromptOptions { taskIds: readonly string[]; retryProble
 export function buildEstimatePrompt(instructionVersion: string, requestCanonicalJson: string, options?: EstimatePromptOptions): string {
   if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, instructionVersion)) throw new ControlError("recovery-blocked", `estimate-instruction-unknown:${instructionVersion}`);
   let prompt = `${ESTIMATE_INSTRUCTIONS[instructionVersion]}\n\n${requestCanonicalJson}`;
-  if (instructionVersion === "2") {
+  if (keyedInstruction(instructionVersion)) {
     if (!options) throw new ControlError("recovery-blocked", "estimate-task-ids-missing");
     const ids = options.taskIds;
     prompt += `\n\nThis plan has ${ids.length} tasks: ${ids.map(id => JSON.stringify(id)).join(", ")}. Answer each exactly once, as a key of "tasks".`;
@@ -190,7 +205,7 @@ export const BUDGET_ESTIMATE_JSON_SCHEMA: Readonly<Record<string, unknown>> = de
 });
 
 /** Spec §4.1: v2's keyed answer, built per request so "each task exactly once, none extra" is structural. */
-function keyedSchema(taskIds: readonly string[]): Record<string, unknown> {
+function keyedSchema(taskIds: readonly string[], answerVersion: "v2" | "v3" = "v2"): Record<string, unknown> {
   const entry = (): Record<string, unknown> => ({
     type: "object",
     properties: {
@@ -209,7 +224,7 @@ function keyedSchema(taskIds: readonly string[]): Record<string, unknown> {
   return {
     type: "object",
     properties: {
-      schema: { type: "string", enum: ["budget-estimate-answer-v2"] },
+      schema: { type: "string", enum: [`budget-estimate-answer-${answerVersion}`] },
       tasks: { type: "object", properties, required: [...taskIds], additionalProperties: false },
       goalReviewReserve: amount(),
       groupRationale: { type: "string" },
@@ -222,5 +237,6 @@ function keyedSchema(taskIds: readonly string[]): Record<string, unknown> {
 export function estimateResponseSchema(instructionVersion: string, taskIds: readonly string[]): Record<string, unknown> {
   if (instructionVersion === "1") return BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>;
   if (instructionVersion === "2") return keyedSchema(taskIds);
+  if (instructionVersion === "3") return keyedSchema(taskIds, "v3");
   throw new ControlError("recovery-blocked", `estimate-instruction-unknown:${instructionVersion}`);
 }

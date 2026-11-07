@@ -77,7 +77,18 @@ describe("the v2 estimate prompt and schema", () => {
     const odd = estimateResponseSchema("2", ["constructor", "__proto__", "10"]) as any;
     expect(Object.keys(odd.properties.tasks.properties)).toEqual(expect.arrayContaining(["constructor", "__proto__", "10"]));
     expect(odd.properties.tasks.required).toEqual(["constructor", "__proto__", "10"]);
-    expect(() => estimateResponseSchema("3", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:3" }));
+    expect(() => estimateResponseSchema("4", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:4" }));
+  });
+
+  it("v3 names the ledger's token unit and keeps v2's keyed answer shape", () => {
+    expect(ESTIMATE_INSTRUCTIONS["3"]).toContain("input, output, cacheRead and cacheWrite");
+    expect(ESTIMATE_INSTRUCTIONS["3"]).not.toContain("every model token the task will consume, input and output");
+    const prompt = buildEstimatePrompt("3", "{\"x\":1}", { taskIds: ["a"] });
+    expect(prompt.startsWith(`${ESTIMATE_INSTRUCTIONS["3"]}\n\n{"x":1}\n\n`)).toBe(true);
+    const schema = estimateResponseSchema("3", ["a"]) as any;
+    expect(schema.properties.schema).toEqual({ type: "string", enum: ["budget-estimate-answer-v3"] });
+    expect(Object.keys(schema.properties.tasks.properties)).toEqual(["a"]);
+    expect(() => estimateResponseSchema("4", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:4" }));
   });
 
   it("retryProblems append the feedback paragraph in both versions, after the task line", () => {
