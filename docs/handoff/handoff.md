@@ -63,29 +63,24 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-07，本会话）—— verify-only 配对真二进制判据通过；正式 repin 等新 ccloop 提交上远端
+### 3.最新（2026-11-07，本会话）—— verify-only 配对在正式 pin 上通过；三仓已推
 
-- 人本次说明三仓 main 已推、授权 Orca 检查点，要求全量门和付费真跑之后再做。开工 `/usr/bin/git ls-remote origin refs/heads/main` 现核：Orca／ccloop／ccmem 的 main 均与各自远端一致；后续改动在 `feat/verify-only-work-top-up` 和 `fix/saved-exhausted-source-repo`，当前状态收尾再现查。
-- **根因与修复**：原来源胶囊在 execute 结束时只存 2 条 work 事件，worker 封存前追加第 3 条机械 handoff；Orca 的 highWater=3 正确。ccloop 在租约内把最终事件、ledger 和证据副本补进候选，读侧的逐项一致性守卫不放宽。Orca 的恢复资金证明改为记录冻结原 grant 加已授权且排在新 run 前的 top-up；`readFundedAllowance` 从冻结授权和数据库顺序重算。ccloop 将来源 runtime 原始上限与新 verifier 已验证的 fresh grant 分开校验。恢复从 bundle 中取已核验的真实发布 ref，而非假设 ref 一定带 Orca runId；按发布提交的 Git 树恢复 index，逐文件核对内容、模式。无法发布或未补齐最终会计证据的候选不能授权恢复，worker 仍结清。独立 TypeScript reviewer 找到含换行文件名的合法路径被 index 正则拒，已先红后绿修正。
-- **判据**：ccloop `exhaustedSource` 新增最终 handoff、未发布候选、未补齐会计及换行文件名判据，全部先红后绿；`savedResultRecovery` 新增 fresh grant 边界判据先红后绿。ccloop 恢复 3 文件 70/70＋控制器 2 文件 34/34（在换行与未发布收尾补丁之前），之后 `exhaustedSource` 8/8、typecheck/build 0。Orca 5 文件 90/90、root/Web typecheck 0；最终改动后真实本地 ccloop 构建配对 `V10:` **1 过／22 跳过**：来源仍 exhausted，新 run 只 verify 一次并 settled。**这还不是正式 pin 的验收**；没有跑全量门或付费真 provider。spec `2026-11-07-verify-only-work-top-up-design.md` 新增 Correction 2。
-- **反馈复核**：`orca_archived_files/issue-20261023.md` 的 11-06 审计是旧快照。#163/#183 的新来源配对在本地代码已通，但历史无胶囊的 run 仍不能恢复、OMP 坏 final（#158）仍无完整成果；#169/#172 的关闭/占槽有代码修复但旧实例须显式结算；#173 改了 token 单位，未校准固定开销；#174 名义 200k 非 soft provider 硬上限；#145/#160 的未估算默认无限额度仍允许 confirm（见 `unestimatedDefault.test.ts`），其旧裁定与反馈的用户成本冲突，待人定保护方式；#159 三适配器解码仍不一致。#188/#189/#190、#185 已有代码修复，不照旧清单重做。
-- **接手顺序（本轮已推进到「等人」）**：两个分支已 `--ff-only` 合入各自本地 main（ccloop 先变基到它的 main），按人本次「之后再做」未跑全量门与付费真跑。**push 仍归人**：ccloop 本地 main 领先 origin、Orca 本地 main 也领先；`origin` 上还没有新 ccloop 提交，所以 `scripts/pin-ccloop.mjs` **不能**执行、正式 pin 仍指旧提交，`ORCA_CCLOOP_BIN` 本地覆盖不能算 pin 验收。检查点写入已按人口头授权尝试，但被自动审批按「会话记录使用需用户明确授权」拦下（不是检查点内容问题）；要落盘请人在自己的终端跑 `dev checkpoint write`，或为该命令加一条允许规则。后续：#145/#160 的服务端确认边界先请人定，再 #174/#159。
+- 人本次说明三仓 main 已推、授权 Orca 检查点，并要求全量门／付费真跑留到之后。收尾 `ls-remote` 现核：Orca／ccloop／ccmem 的 main 与各自远端一致；两个功能分支已变基后 `--ff-only` 合入本地 main 并已推，分支已删。
+- **里那处「2 对 3」的真相**：来源胶囊在 execute 结束时只存 2 条 work 事件，worker 封存前追加第 3 条机械 handoff，Orca 的 `highWater=3` 正确。ccloop 现在在 worker 租约内把最终事件、ledger 与证据副本补进候选；读侧事件数／序号一致性守卫一字未放宽。
+- **配对又暴露三个真实边界**（都在产生错误值的一侧修）：新 verifier 的追加额度超过旧来源合同上限 ⇒ Orca 的资金证明改为「冻结原 grant ＋ 已授权且排在新 run 前的 top-up」，读回时用冻结授权与数据库顺序重算，**来源原 grant 不动**；恢复按已核验的真实 bundle ref 取提交（现场是 `refs/ccloop/run/attempts/1`，不是按 runId 拼）；exhausted 分支原来把 Git 索引写成空数组 ⇒ 改为按验证过的发布提交树重建索引并逐文件核对内容／模式。独立审阅提的含换行文件名被正则误拒也已修正。
+- **验收（现测）**：`node scripts/pin-ccloop.mjs <已推的 ccloop main>` 六项检查全 ok（E2E 12/12、typecheck 0、`npm ci` 可复现锁）；随后用 **该 pin 提交的克隆**构建的二进制跑配对 `V10:` **1 过／22 跳过**（来源仍 `exhausted`，新 run 零 plan/execute、只 verify 一次并 settled）。ccloop 恢复类 5 文件 106/106，Orca 追加额度 5 文件 90/90，root／Web typecheck 0。**未跑全量门、未付费真跑。** spec `2026-11-07-verify-only-work-top-up-design.md` 有 Correction 2。
+- **反馈复核**：`orca_archived_files/issue-20261023.md` 的 11-06 审计是旧快照，不能按 86/8/90 累计。#163/#183：有胶囊的 exhausted 来源现在可恢复，**历史无胶囊的 run 仍不可恢复**，OMP 坏 final（#158）仍无完整成果。#169/#172 有代码修复但旧实例须显式结算。#173 只统一了口径、固定开销未校准；#174 的 200k 是名义 grant，soft provider 可单次超出；#159 三适配器解码仍不一致。#188/#189/#190、#185、#180/#187 已有代码修复，不要重做。**待人定的一条**：#145/#160 —— 未估算任务带 `complex-1m-default`＋`tokens:null`（无限）仍可 confirm，`tests/commands/unestimatedDefault.test.ts` 钉着这个现行为；建议有明确 `human` 上限者照旧、`complex-1m-default` 的无限额必须先应用估算或显式接受默认成本、自动确认不得默许无限额。
+- **仍待人的**：检查点写入被自动审批按「会话记录来源需用户明确授权」拦下（与内容无关，聊天授权不解除），需人在终端跑或加允许规则；`/private/tmp/pinccloop-*` 的 pin 验证克隆待人删；repin 后若要换面板正在跑的那份，需 `npm ci` 再 `build`＋重启服务。
 
-### 3.上一节（2026-11-07，Claude，会话 `2f5eef42`）—— 分支已合入并推远端；#174/#179 已修；verify-only 追加额度只有设计稿
+### 3.上一节（2026-11-07，Claude，会话 `2f5eef42`）—— 分支已合入并推远端；#174/#179 已修
 
-> 人裁（原话）：「同意改写」（profile 升 v3）；「同意。建议不要做全量test，仅测必要的部分」；「资金路径建议 => 同意」；「#174 / #179 => 同意」。**未付费真跑。** 收尾时三仓远端均已由人 push（`ls-remote` 现核：远端 main 即本地 main），`chore/repin-exhausted-source` 由人 `branch -d`。
+> 人裁（原话）：「同意改写」（profile 升 v3）；「同意。建议不要做全量test，仅测必要的部分」；「资金路径建议 => 同意」；「#174 / #179 => 同意」。**未付费真跑。** 收尾时三仓远端均已由人 push，`chore/repin-exhausted-source` 由人 `branch -d`。过程细节在提交与本节标题所指的 plan 里。
 
-- **`chore/repin-exhausted-source` 已 `--ff-only` 合入 main 并已推**（主题行 `chore(deps): repin ccloop to 60c554b4 …` 至 `fix(control): brief reads the summary route…`）。合入前审阅发现并修掉两处：`group brief` 原来取整份 group view（澄清中的组会被 `requirement-not-split` 拒，且轮询仍传 plan/runs/proposal）；现在走新的 `GET /api/control/groups/:id/brief`（= `readGroupSummary` 加 `orca-group-brief-v1`），`group show` 字节不变。usage scope 的「仓库是否存在」改用 `groupRepoIdOf`（plan.repoId → requirement.repoId → projectKey），保留组在注册被移除后其 plan 仓库仍是合法范围，陈旧 projectKey 则 404。
-- **profile 已升 v3**：`~/.orca/profile.json` 的 `profile.estimatorPreflight.instructionVersion` 2→3，模式 0600 保持，备份 `~/.orca/profile.json.bak.1794052467224`（同目录）。生产估算自此按 ledger 口径（input+output+cacheRead+cacheWrite）。
-- **#174（真实缺陷，已修）**：criteria-review judge 原来继承被标记任务的执行策略，源契约 token 上限为 null 时判官组**无上限**。现在 `criteriaReviewWorkTokens(contract)` 只在这种情况给有限 200k 工作授权（组上限同值，`stripped` 路径），有明确预算的契约一字不改。**200k 是拍的常量、未校准**。
-- **#174 可见性（已修）**：父组 summary 新增可选 `criteriaReviews[{taskId,debugGroupId,state:debugging|justified|restored|failed,reason}]`（`criteriaReviewsOf`），Board 对 `failed`／`debugging` 各出一行提示（中英文案已加）；不再只在判官自己的组上可见。
-- **#179（部分修，改动刻意收窄）**：判定为 justified／restored 的判官组，其自身 summary 的 completion／counts 现在读 `done 全量`，不再显示被 D14 挡住的 `done 0/1`；判官失败仍保持 `done 0/1`，普通任务的空结果语义一字未改（没有把空结果一律当成功）。
-- **verify-only 追加额度：只有设计稿**（人已批准方向）：`docs/superpowers/specs/2026-11-07-verify-only-work-top-up-design.md`。做法是给 `verify-saved-result` 加可选 `work`，复用 `work_grant_top_ups`（`from_run_id`＝来源 run，rowid 规则不变）与 retry 的人／`agentTopUpCap` 授权规则，同一准入事务内追加后再走既有资金门；V1–V10 判据与变异清单在文末。**代码未实现。**
-- **门（现测，非全量）**：`npm run typecheck` RC 0；web `tsc --noEmit -p web/tsconfig.json` RC 0。针对性 vitest（`TMPDIR=/tmp`）：`groupBrief`+`usageRoute`+`reads`+`estimatePrompt`+`estimatePromptV2`+`savedResultRecovery` 72/72；`criteriaReview`+`groupDone`+`systemDebug`+`modelReviewE2E`+`groupSummaryFields`+`projectGroupScope`+`boardCard`+`controlReadApi`+`controlPollPerformance` 114/114。**未跑全量门。**
-- ⚠️ **本会话一次全量 `npm test` 的 101 红里有 97 条同因**：`control-socket-path-too-long`（本机 `TMPDIR` 约 64 字符，测试再拼 `control/proj-*/control.sock` 超 103 字节上限）。**跑全量必须 `TMPDIR=/tmp npm test`**；其余 2 条是既有/负载红（`orchestration` 的 `ladder-source-superseded`、`criteriaBaseRun` 的 `index.lock`），1 条 `readyHint` 60 s 超时。
-- **上一节（测试者反馈轮续）的四个待人项已全部结清**：分支已合入并推、profile 已升 v3、#174／#179 已修（边界如上）、追加额度已定方向。该节其余结论仍成立。
-- ⚠️ **本会话没能写 Orca 检查点**：`dev checkpoint write` 被自动审批拦下（理由：会把会话转录复制进仓库）；要留检查点需人单独授权那条命令。
-
+- **已推**（主题行 `chore(deps): repin ccloop to 60c554b4 …` 至 `fix(control): brief reads the summary route…`）：`group brief` 走新的 `GET /api/control/groups/:id/brief`（= `readGroupSummary` ＋ `orca-group-brief-v1`；原来取整份 group view，澄清中的组会被 `requirement-not-split` 拒且轮询传 plan/runs/proposal）；usage scope 的「仓库是否存在」改用 `groupRepoIdOf`（plan.repoId → requirement.repoId → projectKey）：组在注册被移除后其 plan 仓库仍是合法范围，陈旧 projectKey 则 404。`group show` 字节不变。
+- **`~/.orca/profile.json` 的 `profile.estimatorPreflight.instructionVersion` 2→3**（0600 保持，备份 `.bak.1794052467224`）：生产估算自此按 ledger 口径（input+output+cacheRead+cacheWrite）。
+- **#174 已修**：判官原来继承被标记任务的执行策略，源契约 token 上限为 null 时判官组**无上限**；现在只在这种情况给有限 200k 工作授权（**拍的常量、未校准**，且不是 soft provider 的硬上限）。父组 summary 新增可选 `criteriaReviews[{taskId,debugGroupId,state,reason}]`，Board 对 `failed`／`debugging` 各出一行提示。
+- **#179 部分修（刻意收窄）**：justified／restored 的判官组 summary 读 `done 全量`，不再显示被 D14 挡住的 `done 0/1`；判官失败仍 `done 0/1`，普通任务的空结果语义未动。
+- ⚠️ **跑全量必须 `TMPDIR=/tmp npm test`**：本机 `TMPDIR` 约 64 字符时测试拼出的 `control/proj-*/control.sock` 超 103 字节上限，曾一次造出 101 红里的 97 条（其余为既有／负载红）。
 
 
 > 人裁（原话）：「按你的建议走」「允许修改必要的测试」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「如果需要 repin ccloop，这个session临时允许你 push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」；要求收尾更新三仓 handoff 并在对话里给 ≤10 行接手摘要。本轮**没有付费真跑**。工作分支 `chore/repin-exhausted-source`，**未合入 main、未 push**。
@@ -565,7 +560,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.0 2026-11-07 当前接手顺序（人已同意；旧 §4.1／§4.2 是历史清单）
 
-1. **先收本轮配对**：§3 最新一节的 V10 在本地 ccloop 构建已通，安全提交／快进后仍须远端有新 ccloop 提交才可用 `npm run pin-ccloop` repin，再核 `verify:ccloop-pin` 和正式 pin 的配对判据；不要拿 `ORCA_CCLOOP_BIN` 本地覆盖冒充 pin。资金和会计守卫保持严格。
+1. **verify-only 配对：已结清**（见 §3 最新一节）：ccloop 修复与其 pin 已推，Orca 已按 pin 脚本 repin，配对 `V10:` 在 **pin 提交的克隆**上 1 过／22 跳过。不要再用本地 `ORCA_CCLOOP_BIN` 覆盖冒充验收。
 2. **测试者 #145/#160（先议保护边界）**：未估算却可确认默认无限额度仍在，`unestimatedDefault.test.ts` 目前明确钉住该行为。建议让有明确 `human` 上限的用户继续确认，`complex-1m-default` 的无限额必须先应用估算或由人明确接受默认成本；自动确认不得默许无限额。此建议与旧默认行为及既有判据相冲突，先请人定交互和迁移边界。
 3. **#174/#173 成本**：判官 200k 只限名义 grant，soft provider 可以单次超出，固定开销和用量波动仍未校准；别把 v3 提示当成 ±30% 实测。#159 三适配器的 execute 解码仍不一致，保留严格坏 final 拒绝同时另立设计。
 4. **#179/#167/#168 与体验**：#179 completion 的 summary 已修，CLI next-step 与 Web 入口未做；#167 agent 在 CLI 无法给导入组设总额，#168 拆分可能生成对当前基线不可满足的 npm test，按现场复核后分开处理。#191/#192 成本与延迟排在正确性和支出边界之后。
@@ -769,9 +764,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
 - **2026-11-07 这轮待人／外部状态**：
-  1. **push 归人（2026-11-07 收尾现核）**：ccloop 本地 main 领先 origin（本轮 exhausted 修复与其交接提交），Orca 本地 main 领先 origin（verify-only 与恢复资金证明），ccmem 本地 main 一条滚动交接提交。**先把 ccloop main 推上去，之后才能 repin Orca**（`scripts/pin-ccloop.mjs` 只认远端已有的提交）。检查点写入被自动审批按会话记录来源拦下，需人本人在终端跑或加允许规则。ccloop 的 prunable 测试 worktree 仍归人按本轮给出的命令处理；本轮未替人 prune。
-  2. **最终审核（均可撤回，已按人在本轮的授权执行）**：D1–D5、agent 可设全局 `agentTopUpCap`（按组求和）、F13 前台 socket 失败即退出 78、#172 blocked 不占槽／resume 点名、#190 保留完整需求、#198 README 误报、自动 ladder 在无重试额度时跳过，以及 CLI D9 执行状态补字。设计和验证路径在 §三最新一节，边界 #169／#173／#174 留在 §四。
-  3. **只能等真实外部事件**：额度用完时的真 `quota-probe` 验收没有自然触发；本轮没有为制造 quota 失败而烧额度。第三方 provider 的 `structuredOutput:"prompt"` 仍缺真实对应 provider。UI #70 的完整排版／项目设置方案仍需人的设计审定。
+  1. **检查点写入**：`dev checkpoint write` 被自动审批按「使用会话记录需用户明确授权」拦下（聊天里的授权不解除该规则，与检查点内容无关）。要落盘请人在自己终端跑一次，或给该命令加一条 Bash 允许规则；命令与 draft 见本会话对话。
+  2. **待人定**：#145/#160 的未估算默认无限额保护方式（见 §四.2）；UI #70 的排版／项目设置方案；criteria-review 判官的额度是否要在父组 needs-you 汇总里出现。
+  3. **待人清（可选）**：`/private/tmp/pinccloop-*`（本轮 pin 验证用的 ccloop 克隆）；ccloop 的 prunable 测试 worktree 按本轮给出的命令处理。本轮未替人 prune。
+  4. **只能等真实外部事件**：额度用完时的真 `quota-probe` 验收没有自然触发；本轮没有为制造 quota 失败而烧额度。第三方 provider 的 `structuredOutput:"prompt"` 仍缺真实对应 provider。
+  5. **本轮已执行、可撤回的**（人授权范围内）：verify-only 追加额度、恢复资金证明按授权上限重算、ccloop 的 exhausted 恢复四边界修复、Orca repin 到含它们的 ccloop 提交。设计与证据在 §三最新一节。
 - ~~会话 `3cfc2e73` 待人~~ **会话 `86352010` 已了结**（三仓人已推；分支人已删；审阅项、三件待定人答「都同意按你的建议走」并已实施，见 §三 最新一节）。
 - ~~会话 `e2ad4802` 待人~~ **会话 `3cfc2e73` 已了结**（三仓已推；failover 偏离「同意」；retry-task 权限、F5、F6 人已定并已实施）。原文：
   1. 做：**push ccloop main**（本地含 `fix(setup): the verdict is taken at the shell's exit…`＋plan 跟进；agent 的 push 被 Tier 0 闸门拦，没重试）；推完下一位 agent repin（§4.2 ⓪）。Orca main 的 push 也归人。
