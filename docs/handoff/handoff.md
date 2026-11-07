@@ -63,7 +63,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-07，Claude，会话 `2f5eef42`）—— 分支已合入并推远端；#174/#179 已修；verify-only 追加额度只有设计稿
+### 3.最新（2026-11-07，Claude，会话 `79d7713b`）—— verify-only 追加额度已实现；配对验收卡在会计口径（新发现）
+
+> 人裁（原话）：「同意，继续」「这次批准改写所有必要的判据。这一轮允许必要的付费真跑。」「这一轮执行过程中如果有问题，先按你的建议执行。」本轮**未付费真跑**。工作分支在本地（未 push）：Orca `feat/verify-only-work-top-up`、ccloop `fix/saved-exhausted-source-repo`。
+
+- **Orca 侧已实现**（实现前先写设计稿与计划：`docs/superpowers/specs/2026-11-07-verify-only-work-top-up-design.md`、`docs/superpowers/plans/2026-11-07-verify-only-work-top-up.md`）：`verify-saved-result` 新增可选 `work`（CLI `--work`），在既有命令事务内追加工一行 `work_grant_top_ups`（`from_run_id`＝来源 run），授权判定与 `retry-task` 抽成共用函数 `src/control/authorizeWorkTopUp.ts`；拒绝码 6 个、中英文提示与生成文档已补。判据 `tests/control/verifyTopUp.test.ts` 与 `retryTopUpSavedResult.test.ts` 的新块覆盖 person／agent／member／dispatched、组内 cap 累计、空与无效追加、finite-legacy、伪造来源、余额不足回滚、命令重放、来源额度不变与 activity 恰一行。
+- **门（现测）**：针对 5 个文件 **87/87**；root 与 web typecheck 各 RC 0。**未跑全量门。**
+- **设计稿更正**：V8 原写的 `group-reserve-insufficient` 在可选额度任务上不成立——`decideFundedAllowance` 先以 `saved-result-unavailable:saved-result-authored-budget-exhausted` 拒绝，回滚语义不变；spec 已追加 Correction 1，判据按实际拒绝顺序钉。
+- **ccloop 侧已修两处真缺陷**（人已授权改并测该仓；分支 `fix/saved-exhausted-source-repo`，本地提交）：① 已发布 attempt 的校验原来读**来源 envelope 的 `repoPath`**，而 Orca 结清来源 run 后会删掉那个 workspace ⇒ 校验报 `/usr/bin/git ENOENT`、run 卡 `inspect-unknown`；现在清理时（租约内、worktree 还在）把 attempt ref 打成 bundle 存入 saved-result evidence 并把候选 `snapshot` 指向它，读取端从 bundle 校验 sha／tree／parent／diff（旧候选退化回活仓库）。② 读取端把来源终态硬当 `failed`，exhausted 来源因此在会计校验被判 `saved-result-accounting-invalid`；现在按权威种类取 `exhausted`。判据 `tests/control/exhaustedSource.test.ts` 新增「来源 envelope 指名的 workspace 消失后仍 eligible」（先红后绿）；恢复类 5 个文件 **123/123**、typecheck 0。
+- **仍卡住的一处（下一个接手人就从这个开始）**：配对真跑（`ORCA_SAVED_RESULT_VERIFY=1 ORCA_SAVED_RESULT_CCLOOP_BIN=<ccloop>/dist/cli.js`）现在走到 ccloop 读取器的会计口径一致性检查失败——`ledger.events.length(2) !== a.highWater(3)`（同一次失败里 `nextSeq=3`，即 ccloop 自己的账是自洽的 2 条事件）。**未定论**：是 Orca 侧 booked 事件比 ccloop 的台账多一条（候选怀疑：配对夹具 `savedResultWorld` 的 `loseUsage` 会往 collect 里塞一条 `cumulative:null` 的 seq-3 事件），还是 exhausted 生产者该按台账改写 `usage.highWater`。**先查清这条再动任何一侧**，不要为了过判据放宽该检查。
+- **未做**：付费真跑、全量门、把两个分支推远端/pin、检查点写入（被自动审批拦，需人单独授权）。
+
+### 3.上一节（2026-11-07，Claude，会话 `2f5eef42`）—— 分支已合入并推远端；#174/#179 已修；verify-only 追加额度只有设计稿
 
 > 人裁（原话）：「同意改写」（profile 升 v3）；「同意。建议不要做全量test，仅测必要的部分」；「资金路径建议 => 同意」；「#174 / #179 => 同意」。**未付费真跑。** 收尾时三仓远端均已由人 push（`ls-remote` 现核：远端 main 即本地 main），`chore/repin-exhausted-source` 由人 `branch -d`。
 
@@ -557,7 +568,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.0 2026-11-07 当前接手顺序（人已同意；旧 §4.1／§4.2 是历史清单）
 
-1. **实现 verify-only 的追加额度**（人已批准方向，设计稿在 `docs/superpowers/specs/2026-11-07-verify-only-work-top-up-design.md`）：给 `verify-saved-result` 加可选 `work`，复用 `work_grant_top_ups` 与 retry 的人／`agentTopUpCap` 授权规则，同一准入事务内追加后再走既有资金门。做完才谈得上跑那条验收——**零 plan/execute、只跑一次 verify**（paired 测试默认 skip，需 `ORCA_SAVED_RESULT_VERIFY=1` 加真 ccloop 二进制）。**不要靠放宽资金守卫通过。**
+1. **verify-only 追加额度**：Orca 半边**已实现**（见 §3 最新一节；分支本地未推）。剩下的是**配对验收**：先查清 ccloop 读取器的 `ledger.events.length` 与 Orca `highWater` 的口径差（那一条），再跑「零 plan/execute、只跑一次 verify」的 paired 测试（`ORCA_SAVED_RESULT_VERIFY=1` 加真 ccloop 二进制；默认 skip）。**不要靠放宽资金或会计守卫通过。**
 2. **先确认基线**：`TMPDIR=/tmp npm test` 跑一次全量（上一轮的 97 条红全是本机 `TMPDIR` 过长造成的假红，正确环境下全量绿不绿还没验过）。它是后面所有改动的起点。
 3. **#174 收尾**：判官的 200k 是拍的常量、未按真实记录校准；判官失败目前只在父组卡片上一行提示，是否要进 needs-you 汇总由人定。
 4. **#179 剩余**：判定语义已在 summary 上正了（见 §3 最新一节）；CLI 的 next-step 文案与判官详情在 Web 的入口未做。
