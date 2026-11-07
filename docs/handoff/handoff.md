@@ -81,7 +81,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **Orca 本地 main 已提交、未推**：主题行 `fix(control): name an exhausted source, and drop a socket row no verb table owns`（`saved-result-exhausted` 只读诊断；`SOCKET_TIER` 里那行没有 `HUMAN_ONLY_VERBS` 归属的 `close-run` 死数据删除，行为不变；六个 `run-closure-*` 的中英文案补齐——后两项是上一轮遗留的两条真红）、`docs(plan): stage the exhausted recovery's proof, and its implementation plan`（spec Correction 1 + 计划）。随后未提交的这一笔：新权威种类 `execution-complete-before-verification-v1` 的严格镜像、driver collect 按 schema 区分并记录真实 kind、closure 遍历、以及 `currentSavedResultSource` 只在 run 带该来源时才放行 exhausted（否则仍是 `saved-result-exhausted`）。
 - **#183 的措辞已修**：真实 exhausted run 从 `saved-result-source-stale` 改为 `saved-result-exhausted`；准入没有放宽。新增判据先红后绿（真实 exhausted run），第二条判据钉「门是来源种类，不是 outcome」：伪造一个读不到的同种类来源时，理由变成证据类拒绝而不是“没有生产者证据”。
 - **close-run 权限档：本轮人裁「暂时不用收窄」**。独立只读审阅结论：按现行授权策略无绕过；已登录的 Web member 与本机无 person token 的 socket 客户端都能关闭满足证据条件的 terminal run。这是产品选择，不是缺陷。
-- **诚实边界**：ccloop 的生产者已在本地分支（见 ccloop handoff），**尚未 push、Orca 也未 repin**；OMP 成功执行路径只有代码级支持、无真 OMP 回归；「新 run 零 plan/execute、只跑一次 verify」的 paired 端到端**未跑**（需要 ccloop 已推并在 Orca 侧设置 `ORCA_CCLOOP_BIN`）。历史那些没有胶囊的 exhausted run 仍然不可恢复。
+- **门（现测）**：Orca `TMPDIR=/tmp npm test` 选中 629 文件，根 **5,382 过、122 跳过、1 红**＝已登记的 `orchestration.test.ts`「admits a debug group Orca opened itself」（在未改动 main 的 clone 上同样红）；typecheck RC 0。ccloop 全量 **2,567 条、2,566 过、1 红**＝`multiRepoPathPolicy`「reports an extra-repository-only miss…」`control-path-invalid`，**在未改动的 `4cdc1ab` 副本上单跑同样红**（`check-known-reds` 因此 RC 1；名单未改）。
+- **诚实边界**：ccloop 的生产者已在本地 main（见 ccloop handoff），**尚未 push、Orca 也未 repin**；OMP 成功执行路径只有代码级支持、无真 OMP 回归；「新 run 零 plan/execute、只跑一次 verify」的 paired 端到端**未跑**（需要 ccloop 已推并在 Orca 侧设置 `ORCA_CCLOOP_BIN`）。历史那些没有胶囊的 exhausted run 仍然不可恢复。
 
 ### 3.前一轮（2026-11-07，Claude）—— #169 终止结算落地；#163/#183/#158 当时只到设计与可见性
 
