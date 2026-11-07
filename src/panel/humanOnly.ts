@@ -227,7 +227,6 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // Multi-directory projects spec §9.7: as resolve-folder-change.
   "multi-dir-landing": "token",
   "settle-unknown-usage": "token",
-  "close-run": "open",
   "recovery-retry.acknowledge": "token",
   "apply-agent-update": "token",
   // Scheduled flows and groups spec §11.1 (I-3): a new entry copies data Orca already holds (open); appending a version

@@ -23,6 +23,15 @@ describe('saved result controller authority', () => {
    expect(t.h.store.db.prepare('SELECT COUNT(*) AS n FROM commands').get()?.n).toBe(commands);
   } finally {t.h.store.close();}
  });
+ it('names an exhausted current run without execution proof instead of calling it stale', async () => {
+  const t=await driverHarness([{taskId:'a'}],{behaviour:()=> 'exhausted',sealedOwnerProof:true});
+  try {
+   const runId=await t.claim();
+   await t.until(t.driver(),()=>t.body(runId).state==='blocked');
+   expect(t.body(runId).drive?.outcome).toBe('exhausted');
+   expect(await t.service.savedResultEligibility(runId)).toEqual({status:'unavailable',reason:'saved-result-exhausted'});
+  } finally {await t.h.dispose();}
+ });
  it('refuses a settled historical source once an ordinary retry has replaced its task membership', async () => {
   const {t,runId}=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
   try {

@@ -61,7 +61,7 @@ export function currentSavedResultSource(store:ControlStore,sourceRunId:string){
   interruptedSavedResultSchema.parse(JSON.parse(settlementArtifact(store,current.savedInterruption).toString()));
  }else if(current.runId!==run.runId)throw Error('saved-result-source-stale');
  if(run.terminalClosure!==undefined&&!validTerminalClosure(store as never,run as never))throw Error('saved-result-source-stale');
- if(!['blocked','settled-failed','settled-recoverable'].includes(run.state)||run.drive?.outcome!=='failed'||run.drive?.blockedAt!=='C'&&run.state==='blocked')throw Error('saved-result-source-stale');
+ if(!['blocked','settled-failed','settled-recoverable'].includes(run.state)||!['failed','exhausted'].includes(run.drive?.outcome)||run.drive?.blockedAt!=='C'&&run.state==='blocked')throw Error('saved-result-source-stale');
  const graph=(()=>{try{return readArchivedPlan(store,run.groupId);}catch{throw Error('saved-result-source-stale');}})(),task=graph.plan.tasks.find(t=>t.taskId===run.taskId);
  if(!task||!settlementSame(work.dependsOn,task.dependencyTaskIds)||Number(store.db.prepare('SELECT graph_version FROM groups WHERE id=?').get(run.groupId)?.graph_version)!==run.graphVersion||Number(store.db.prepare('SELECT target_version FROM work_items WHERE group_id=? AND id=?').get(run.groupId,run.taskId)?.target_version)!==run.targetVersion)throw Error('saved-result-source-stale');
  const source=sourceEnvelope(store,run);let confirmed:ReturnType<typeof readConfirmedTaskExecution>,snapshot:ReturnType<typeof readFrozenSnapshot>;
@@ -76,6 +76,7 @@ export function currentSavedResultSource(store:ControlStore,sourceRunId:string){
  const request=latestRequestForRun(store,run.groupId,current.runId);if(request&&ADOPTABLE_STATES.includes(request.state))throw Error('saved-result-source-stale');
  assertKnown(store,run);if(current.runId!==run.runId)assertKnown(store,current);
  if(groupUsageUnknown(store,run.groupId))throw Error('saved-result-usage-unsettled');
+ if(run.drive.outcome==='exhausted')throw Error('saved-result-exhausted');
  return {run,work,current,group,source,confirmed,snapshot,predecessor};
 }
 function assertKnown(store:ControlStore,run:any):void {
