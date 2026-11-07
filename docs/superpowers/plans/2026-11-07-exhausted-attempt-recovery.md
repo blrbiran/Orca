@@ -81,3 +81,14 @@
 - [ ] Run each repository's prescribed gates on the exact observed commits; compare remote tips at start and finish, and record skips and load flakes by name.
 - [ ] Fast-forward merge clean branches only when their code and tests are complete. Keep the formal Orca ccloop pin unchanged until its commit exists on the remote; do not push from an agent session.
 - [ ] State explicitly that historical OMP malformed finals and already-recorded exhausted runs without a capsule remain unavailable; explain the separate human decision needed for any new result-forming action.
+
+## As built (2026-11-07)
+
+Implemented in ccloop (local main, theme line `feat(recovery): a successful execute the budget gate stopped keeps a verified completion source`) and mirrored in Orca's working tree. Deviations from the tasks above, all recorded here rather than edited in place:
+
+- **Task 1** lives in `src/controller/exhaustedCompletion.ts`; it reuses `captureWorktreeSnapshot` (exported from `executionFormatFailure.ts`) and adds the tree `git add -A` would commit, computed through a temporary `GIT_INDEX_FILE` so the attempt's own index is untouched. A failure writes `exhausted-candidate-unavailable.json` and an event, never changing the run's outcome.
+- **Task 2** binds the published commit in the existing cleanup wrapper (`bindExhaustedCandidate` right after `publishAttemptCommit`, before removal) instead of a second publish. The read-side finalizer derives the capsule on every call and writes nothing after the lease; the capsule carries a stable `stop:{executionId,generation,isolated}` instead of the `proveStopped` artifact ref, whose `probedAt` made the derived bytes non-deterministic. `proveStopped` must still pass at derivation.
+- **Task 3** adds `execution-complete-before-verification-v1` beside the two existing authority kinds and projects the execution snapshot into the legacy snapshot shape the materializer expects. `rawExecutionTokens` is the execute call's own tokens (as the legacy reader defines it).
+- **Task 4** mirrors the strict schema in Orca, records the real authority kind at collect, traverses it in `recoveryClosure`, and opens the exhausted gate in `currentSavedResultSource` only when the run carries that kind; every other exhausted run still answers `saved-result-exhausted`.
+
+Not done: OMP against a real provider, the paired "zero plan/execute, one verify" end-to-end, and the full refusal matrix (only the tree/commit forgery, malformed-final and partial/timeout refusals have criteria so far).

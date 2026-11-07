@@ -74,7 +74,16 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **CLI＋skill 真 dogfood（隔离面板／Codex 0.167.0 `gpt-6-sol`，任务检查只用 Node 内建 test，不开 Unix socket）**：第一组 `dogfood-20261107` 2 个任务落地 1 个、父组仍 blocked；父组用 **512,497** token，另开的 ladder debug **195,035**，合计 **707,532**。估算器给每项 5k，实际首轮 plan 各约 44k；`multiply` 在 150k grant 下花 198,756 后 `exhausted`，debug 花 195,035 修好并折叠，却因 `authored-budget-exhausted` 不能自动重试；后续 agent top-up 重试在已修分支上 134,354 token 的成功 run 被判 `empty-result`，形成旧状态。**本轮代码修了新流程，不追写这组历史状态**。第二组 `dogfood-complete-20261107` 走 clarify→split→accept→设额度→hold confirm→start→`done 1/1`，总用 **165,593**（任务 **138,805**）；落地分支独立 clone 的 `npm test` **7/7**。两组 scratch 证据在 `/private/tmp/orca-dogfood.Ckkspc/logs/`；隔离面板已停、无残留 worker，复制的认证文件已删，真实 `~/.codex/config.toml` 前后 SHA-256 相同。
 - **诚实边界／下一件**：未等到自然额度耗尽，真 `quota-probe` 未验；#169 终止失败 run 的完整结算／归档、第一组的历史 `empty-result` 解救、#173 估算缓存口径与固定开销校准、#174 自动 review 的真实限费与父组可见性、D6 的落地后结算尾巴与 staging、D10／D17／D19／D21、#183／#199、单次调用／flow failover、UI #70 仍待做。#173 不能只靠把提示数字乘 2 就宣称 ±30%；soft provider 单次调用阶段末才上报，写 50k grant 也不是 #174 的硬上限。§四是建议顺序，§八列等人的项。
 
-### 3.最新（2026-11-07，Claude）—— #169 终止结算落地；#163/#183/#158 只到设计与可见性
+### 3.最新（2026-11-07，Claude，续）—— exhausted 恢复的生产者与消费者已落地；只在本地，未推
+
+> 人裁（原话）：「尽量将这些要做的task都完整做完，这个session暂时不要考虑context大小」「暂时不用收窄（close-run）」「同意（提交）」「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」「遇到卡住必须等人的事情，请继续做不必等人的部分」。本轮**没有付费真跑**。逐条结果见本节与 ccloop handoff 同名小节。
+
+- **Orca 本地 main 已提交、未推**：主题行 `fix(control): name an exhausted source, and drop a socket row no verb table owns`（`saved-result-exhausted` 只读诊断；`SOCKET_TIER` 里那行没有 `HUMAN_ONLY_VERBS` 归属的 `close-run` 死数据删除，行为不变；六个 `run-closure-*` 的中英文案补齐——后两项是上一轮遗留的两条真红）、`docs(plan): stage the exhausted recovery's proof, and its implementation plan`（spec Correction 1 + 计划）。随后未提交的这一笔：新权威种类 `execution-complete-before-verification-v1` 的严格镜像、driver collect 按 schema 区分并记录真实 kind、closure 遍历、以及 `currentSavedResultSource` 只在 run 带该来源时才放行 exhausted（否则仍是 `saved-result-exhausted`）。
+- **#183 的措辞已修**：真实 exhausted run 从 `saved-result-source-stale` 改为 `saved-result-exhausted`；准入没有放宽。新增判据先红后绿（真实 exhausted run），第二条判据钉「门是来源种类，不是 outcome」：伪造一个读不到的同种类来源时，理由变成证据类拒绝而不是“没有生产者证据”。
+- **close-run 权限档：本轮人裁「暂时不用收窄」**。独立只读审阅结论：按现行授权策略无绕过；已登录的 Web member 与本机无 person token 的 socket 客户端都能关闭满足证据条件的 terminal run。这是产品选择，不是缺陷。
+- **诚实边界**：ccloop 的生产者已在本地分支（见 ccloop handoff），**尚未 push、Orca 也未 repin**；OMP 成功执行路径只有代码级支持、无真 OMP 回归；「新 run 零 plan/execute、只跑一次 verify」的 paired 端到端**未跑**（需要 ccloop 已推并在 Orca 侧设置 `ORCA_CCLOOP_BIN`）。历史那些没有胶囊的 exhausted run 仍然不可恢复。
+
+### 3.前一轮（2026-11-07，Claude）—— #169 终止结算落地；#163/#183/#158 当时只到设计与可见性
 
 > 人裁（原话）：「按这个顺序继续，先处理 #169、#163、#183、#158。」随后授权：「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「这一轮 session 如果需要 repin ccloop，临时允许你 push ccloop」。本轮未付费、未 repin。台账 `.superpowers/sdd/2026-11-07-terminal-run-closure/progress.md`（全部 Ruling、测试命令与结果）。
 
@@ -520,7 +529,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.0 2026-11-07 当前接手顺序（旧 §4.1／§4.2 是历史清单）
 
-1. **先解用户死路**：#169 的显式 `close-run` 已在本地 main（见 §3 最新一节），待人审与推远端；用它处理历史 paused 组，不要直接改 DB 涂绿。#163／#183／#158 的“不重跑 execute、只验证已有产物”仍要 ccloop 先产出 `execution-complete-before-verification` 胶囊（设计已写，未实施），Orca 只能消费，不能单边放宽。
+1. **先解用户死路**：#169 的显式 `close-run` 已在本地 main（见 §3 最新一节），待人审与推远端；用它处理历史 paused 组，不要直接改 DB 涂绿。`execution-complete-before-verification` 来源两侧都已实现（2026-11-07 续；ccloop 本地 main、Orca 工作树），但**必须由人推 ccloop 后**才能 repin 并跑真正的 paired 端到端；在那之前不要把哪条历史 exhausted run 当成可恢复。
 2. **再控隐藏花费**：#173 统一 estimator 与 ledger 的 cacheRead/cacheWrite 口径，按本轮真实 5k→44k plan／150k→198,756 exhausted 数据校准固定开销；#174 的 criteria review／ladder debug 必须有可执行的限费和父组失败提示。soft provider 阶段末才报 usage，单写 50k grant 不是硬上限。#198 README 输入误报已经修，不重做。
 3. **用户可见收尾**：D6 落地后 6–15 分钟尾巴与 staging 清理；D10 落地提交带 task 身份；D17 被拒 verify 的 CLI 可见性；D19 `agent list` 默认模型与实际模型区分；D21 CLI 项目注册；#199 阻塞等待；测试者文档其余项按实际代码复核。优先利用 `orca_archived_files/issue-20261023.md` 的真实现场，不照抄建议。
 4. **外部事件／设计**：自然额度耗尽时才真验 quota-probe（别为制造失败烧额度）；failover 单次调用／flow 改派待独立设计；UI #70 先给人看布局／项目设置方案。Orca／ccmem push 归人；ccloop 的 prunable 测试 worktree 按 §八命令由人处理。
