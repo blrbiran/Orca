@@ -63,7 +63,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-07，Claude，测试者反馈轮续）—— repin 已提交、三项反馈修复、exhausted 资金边界
+### 3.最新（2026-11-07，Claude，会话 `2f5eef42`）—— 分支已合入 main；#174/#179 已修；verify-only 追加额度只有设计稿
+
+> 人裁（原话）：「同意改写」（profile 升 v3）；「同意。建议不要做全量test，仅测必要的部分」；「资金路径建议 => 同意」；「#174 / #179 => 同意」。**未付费真跑、未 push。**
+
+- **`chore/repin-exhausted-source` 已 `--ff-only` 合入 main**（主题行 `chore(deps): repin ccloop to 60c554b4 …` 至 `fix(control): brief reads the summary route…`）。合入前审阅发现并修掉两处：`group brief` 原来取整份 group view（澄清中的组会被 `requirement-not-split` 拒，且轮询仍传plan/runs/proposal）；现在走新的 `GET /api/control/groups/:id/brief`（= `readGroupSummary` 加 `orca-group-brief-v1`），`group show` 字节不变。usage scope 的「仓库是否存在」改用 `groupRepoIdOf`（plan.repoId → requirement.repoId → projectKey），保留组在注册被移除后其 plan 仓库仍是合法范围，陈旧 projectKey 则 404。
+- **profile 已升 v3**：`~/.orca/profile.json` 的 `profile.estimatorPreflight.instructionVersion` 2→3，模式 0600 保持，备份 `~/.orca/profile.json.bak.1794052467224`（同目录）。生产估算自此按 ledger 口径（input+output+cacheRead+cacheWrite）。
+- **#174（真实缺陷，已修）**：criteria-review judge 原来继承被标记任务的执行策略，源契约 token 上限为 null 时判官组**无上限**。现在 `criteriaReviewWorkTokens(contract)` 只在这种情况给有限 200k 工作授权（组上限同值，`stripped` 路径），有明确预算的契约一字不改。
+- **#174 可见性（已修）**：父组 summary 新增可选 `criteriaReviews[{taskId,debugGroupId,state:debugging|justified|restored|failed,reason}]`（`criteriaReviewsOf`），Board 对 `failed`／`debugging` 各出一行提示（中英文案已加）；不再只在判官自己的组上可见。
+- **#179（部分修，改动刻意收窄）**：判定为 justified／restored 的判官组，其自身 summary 的 completion／counts 现在读 `done 全量`，不再显示被 D14 挡住的 `done 0/1`；判官失败仍保持 `done 0/1`，普通任务的空结果语义一字未改（没有把空结果一律当成功）。
+- **verify-only 追加额度：只有设计稿**（人已批准方向）：`docs/superpowers/specs/2026-11-07-verify-only-work-top-up-design.md`。做法是给 `verify-saved-result` 加可选 `work`，复用 `work_grant_top_ups`（`from_run_id`＝来源 run，rowid 规则不变）与 retry 的人／`agentTopUpCap` 授权规则，同一准入事务内追加后再走既有资金门；V1–V10 判据与变异清单在文末。**代码未实现。**
+- **门（现测，非全量）**：`npm run typecheck` RC 0；web `tsc --noEmit -p web/tsconfig.json` RC 0。针对性 vitest（`TMPDIR=/tmp`）：`groupBrief`+`usageRoute`+`reads`+`estimatePrompt`+`estimatePromptV2`+`savedResultRecovery` 72/72；`criteriaReview`+`groupDone`+`systemDebug`+`modelReviewE2E`+`groupSummaryFields`+`projectGroupScope`+`boardCard`+`controlReadApi`+`controlPollPerformance` 114/114。
+- ⚠️ **本会话一次全量 `npm test` 的 101 红里有 97 条同因**：`control-socket-path-too-long`（本机 `TMPDIR` 约 64 字符，测试再拼 `control/proj-*/control.sock` 超 103 字节上限）。**跑全量必须 `TMPDIR=/tmp npm test`**；其余 2 条是既有/负载红（`orchestration` 的 `ladder-source-superseded`、`criteriaBaseRun` 的 `index.lock`），1 条 `readyHint` 60 s 超时。
+- **待人**：Orca push（本地 main 领先 origin）；本会话**没能写 Orca 检查点**（`dev checkpoint write` 被自动审批拦下，理由是它会把会话转录复制进仓库）；`chore/repin-exhausted-source` 分支尚未删（main 已领先，`branch -d` 会拒，等 push 后再删或人裁）；全量门未跑（人明确只跑必要部分）。
+
+
 
 > 人裁（原话）：「按你的建议走」「允许修改必要的测试」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「如果需要 repin ccloop，这个session临时允许你 push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」；要求收尾更新三仓 handoff 并在对话里给 ≤10 行接手摘要。本轮**没有付费真跑**。工作分支 `chore/repin-exhausted-source`，**未合入 main、未 push**。
 
