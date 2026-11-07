@@ -66,3 +66,29 @@ recovery.
   usage/report identity checks and the funded-grant check. Each is seen RED.
 - Legacy and OMP format-failure sources keep their current precise refusals; no test fixture is retagged to manufacture
   authority.
+
+## Correction 1 — staged proof and actual provider scope (2026-11-07)
+
+The original wording requires one capsule both *before cleanup* and with a sealed worker stop proof. These events cannot
+occur together: the worker publishes the attempt commit during cleanup, creates the terminal candidate afterward, and
+releases its lease only on exit. The producer therefore has two immutable stages. At the post-execute budget gate it
+records the decision, the unique decoded result and verifier-not-entered fact. The cleanup path publishes exactly one
+attempt commit, then captures its tree and process/usage evidence before removing the worktree. A separate finalizer,
+only after the worker has stopped, binds that pre-cleanup record to the original terminal report, its candidate and the
+sealed stop proof. Only the final content-addressed closure is advertised by collect; an orphaned first stage grants no
+recovery authority. Because the worker lease has ended, finalization derives immutable bytes from sealed evidence on
+read instead of writing a new owner-controlled index. Recheck the published ref against the captured commit and tree
+when finalizing and on admission. A failure to capture or finalize leaves the original `exhausted` run intact and
+reports a named refusal.
+
+The successful strict execute result may originate with either Codex or OMP. Both must prove a single normally completed
+execute call through their respective original process and stream records; accepting an adapter's in-memory result or a
+commit alone is insufficient. A partial result is ineligible initially, as are allowance parking, handoff and any
+verifier entry. A malformed OMP final remains ineligible even if its worktree contains useful edits. This explicitly
+covers the tester's OMP exhausted examples while keeping the #158 bad-format case separate.
+
+The new source authority is independent of the legacy failed-source rules. Existing source and admission wire fields
+retain their meanings; add the new authority kind to the two repositories' strict mirrors together. For unknown raw
+execute usage, require the same verified `approximate-floor` settlement receipt already required by the recovery reader;
+missing or corrupt positive usage is never treated as an unknown number. The consumer keeps the original exhausted
+outcome visible and funds a new verify-only run through the existing gates.
