@@ -215,9 +215,23 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 
   // Accounts spec §5.3: every principal reads usage (the permission table's reading is open to every row).
   app.get("/api/control/usage", (req, res) => {
-    try { res.json(usageViewSchema.parse(readUsageView(deps.store, usageQuery(req), Date.now()))); }
+    try {
+      const query = usageQuery(req);
+      // Issue #185: a typo must not read as a valid zero-spend view. A scope naming neither a registered repository nor
+      // one the ledger has ever recorded is refused; a registered repository with no rows is still a real empty range.
+      if (query.scope !== "all") {
+        const repoId = query.scope.slice(5);
+        const seen = deps.store.db.prepare("SELECT 1 FROM usage_ledger WHERE repo_id=? LIMIT 1").get(repoId) !== undefined
+          || deps.store.db.prepare("SELECT 1 FROM groups WHERE json_extract(body,'$.projectKey')=? LIMIT 1").get(repoId) !== undefined;
+        if (!deps.service?.repositoryKnown(repoId) && !seen) {
+          throw new ControlError("control-target-not-allowed", `no registered project is ${JSON.stringify(repoId)}`);
+        }
+      }
+      res.json(usageViewSchema.parse(readUsageView(deps.store, query, Date.now())));
+    }
     catch (error) {
       if (error instanceof ControlError && error.code === "usage-query-invalid") { sendControlError(res, 400, error.code, "The usage query is not valid."); return; }
+      if (error instanceof ControlError && error.code === "control-target-not-allowed") { sendControlError(res, 404, error.code, error.message); return; }
       sendMappedControlError(res, error);
     }
   });

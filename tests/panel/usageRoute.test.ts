@@ -100,6 +100,12 @@ describe("GET /api/control/usage (spec §5.3)", () => {
     }
   });
 
+  it("U3b: a scope naming no registered repository is a 404 target refusal, never a zero-spend view (issue 185)", async () => {
+    const w = await workspace(); const panel = await boot(w);
+    const socket = await overSocket(panel.socketPath!, "GET", "/api/control/usage?scope=repo:nope");
+    expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([404, "control-target-not-allowed"]);
+  });
+
   it("U4: a model named \"unattributed\" and the NULL-model bucket are two groups, never summed; pre-ledger rows belong to no range", async () => {
     const w = await workspace(); const panel = await boot(w);
     insertRows(w.state, [
