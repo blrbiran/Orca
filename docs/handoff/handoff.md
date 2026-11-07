@@ -63,7 +63,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-07，本会话）—— verify-only 配对在正式 pin 上通过；三仓已推
+### 3.最新（2026-11-08，本会话 `fe1f3fa6`）—— 测试者反馈批：#167 落地、三条 CLI 体验修复、一条 wire 缺陷；**本地 main，未推**
+
+> 人的话（原话）：「这个session中，尽量将这些要做的task都完整做完」「这次批准改写所有必要的判据」「这一轮如果需要 repin ccloop，临时允许你 push ccloop 到 origin main」「遇到卡住必须等人的事情，请继续做不必等人的部分」。三项产品裁定走 AskUserQuestion：**#145/#160 保留现行为**、**agent 可设有限额**、**#174 接受软额度**。收尾 `ls-remote` 现核三仓本地＝远端（Orca／ccmem 一致）；**ccloop 本地 main 领先 1 笔，push 被 Tier 0 闸门拦下（等人）**。
+
+- **#167（新功能）**：`orca group cap <group> --tokens <n>`。走 `proposal-edit` 的窄形式（`capOnly:true` + 空 operations + 完整 limit）：**只能把 token 上限调低**，服务端在同一事务里拒绝提高、把有限额改回无限、改其它维度、夹带 allocation 修改（`agent-group-cap-invalid`，422）；`set-limit` 与普通 `proposal-edit` 仍是 human-only；对 dispatched run 仍拒。socket 授权只在 `capOnly` 这一形式上放行（`humanOnly.ts` 的 `proposal-edit.proposedGroupLimit` 谓词）。判据：`tests/control/agentGroupCap.test.ts`（5，含「原本无限 → 有限」「过期版本」「普通编辑仍要人」）、`tests/commands/agentGroupCap.test.ts`（2）、`tests/panel/accessMatrix.test.ts`。
+- **#166**：`orca group list` 每行补 `paused/stopping`、`over grant`、`blocked n`、`done x/y`、`archived` —— 只用 summary 已有的字段，服务端未加字段。判据 `tests/commands/groupListStatus.test.ts`（先验红）。
+- **#186**：`task set-labels` 的 `labels-invalid` 拒因补一行「valid labels: …／custom:<text>」；服务端错误码与 message 一字未改。判据 `tests/commands/taskLabelsHint.test.ts`。
+- **#181**：`plan show/export --version <x>` 未命中时列出该 entry 已有版本的短 sha 与数量（原来只说 `no version "<x>"`）。判据 `tests/commands/planVersionMiss.test.ts`。
+- **顺手修的真缺陷**：wire 的 `activityKindSchema` 少了 `saved-result-top-up` —— 写侧能插入该行，读侧会拒（活动流被一条合法行打断）。三个适配器都补齐（web 类型、en/zh 文案），并**改写** `web/tests/i18nPseudo.test.tsx` 的枚举计数 204→205（带 Ruling 行，走人本次的一揽子判据授权）。
+- **ccloop 侧（#159 收口，等推）**：Claude 的 execute 改为与另两个适配器共用严格解码（先剥 runner 记账键，再 `normalizeExecutionFinal`）；扁平／多义的最终消息现在整次失败，合法嵌套 `taskResult` 与 runner 用量保留。细节在 ccloop handoff。
+- **门（现测）**：`TMPDIR=/tmp npm test` 根 **2 红／5690 过／124 跳过**（662 文件），两条都是既有：`flow/startForm` 的 `ECONNRESET`（known-load-flakes 已登记）与 `control/orchestration.test.ts`「admits a debug group Orca opened itself」——**本会话用 `1418df46` 的临时 worktree 单跑同样红**（该 worktree 已删），是既有红不是本轮；web **182 文件全过（1669）**；typecheck RC 0。**全量门、付费真跑未做。**
+- **诚实边界**：#167 只给 agent「封顶」的能力，**不**提供绕过估算的路径，也不改变默认无限额仍可确认（人裁定）；`capOnly` 是新的 wire 可选键，**Orca 自己的 Web 与 CLI 都认识它，ccloop 不涉及**；`group cap` 需要组已有可编辑 proposal（澄清中的组还不能用）。#168（拆分给文档任务配不可满足 check）需要改拆分指令版本，本轮**未做**；#158 的 OMP 坏 final 胶囊仍**未做**。
+- **待人**：**push Orca**、**push ccloop**（本地 main 领先 1 笔，闸门拦）、**ccloop 推完再 repin Orca**（pin 仍 `6a5c5d8`）；`/private/tmp/orca-base-check` 已删。
+
+### 3.前一轮（2026-11-07，本会话）—— verify-only 配对在正式 pin 上通过；三仓已推
 
 - 人本次说明三仓 main 已推、授权 Orca 检查点，并要求全量门／付费真跑留到之后。收尾 `ls-remote` 现核：Orca／ccloop／ccmem 的 main 与各自远端一致；两个功能分支已变基后 `--ff-only` 合入本地 main 并已推，分支已删。
 - **里那处「2 对 3」的真相**：来源胶囊在 execute 结束时只存 2 条 work 事件，worker 封存前追加第 3 条机械 handoff，Orca 的 `highWater=3` 正确。ccloop 现在在 worker 租约内把最终事件、ledger 与证据副本补进候选；读侧事件数／序号一致性守卫一字未放宽。
@@ -558,13 +572,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 2026-11-07 当前接手顺序（人已同意；旧 §4.1／§4.2 是历史清单）
+### 4.0 2026-11-08 当前接手顺序（人 2026-11-08 三项裁定已落；旧 §4.1／§4.2 是历史清单）
 
-1. **verify-only 配对：已结清**（见 §3 最新一节）：ccloop 修复与其 pin 已推，Orca 已按 pin 脚本 repin，配对 `V10:` 在 **pin 提交的克隆**上 1 过／22 跳过。不要再用本地 `ORCA_CCLOOP_BIN` 覆盖冒充验收。
-2. **测试者 #145/#160（先议保护边界）**：未估算却可确认默认无限额度仍在，`unestimatedDefault.test.ts` 目前明确钉住该行为。建议让有明确 `human` 上限的用户继续确认，`complex-1m-default` 的无限额必须先应用估算或由人明确接受默认成本；自动确认不得默许无限额。此建议与旧默认行为及既有判据相冲突，先请人定交互和迁移边界。
-3. **#174/#173 成本**：判官 200k 只限名义 grant，soft provider 可以单次超出，固定开销和用量波动仍未校准；别把 v3 提示当成 ±30% 实测。#159 三适配器的 execute 解码仍不一致，保留严格坏 final 拒绝同时另立设计。
-4. **#179/#167/#168 与体验**：#179 completion 的 summary 已修，CLI next-step 与 Web 入口未做；#167 agent 在 CLI 无法给导入组设总额，#168 拆分可能生成对当前基线不可满足的 npm test，按现场复核后分开处理。#191/#192 成本与延迟排在正确性和支出边界之后。
-5. **全量和真 provider**：人本次要求之后再做；若做全量，`TMPDIR=/tmp npm test`，付费每次单独授权。自然额度耗尽时再真验 quota-probe。push 归人。
+1. **verify-only 配对：已结清**（见 §3）：ccloop 修复与其 pin 已推、Orca 已 repin、配对 `V10:` 在 **pin 提交的克隆**上 1 过／22 跳过。不要再用本地 `ORCA_CCLOOP_BIN` 覆盖冒充验收。
+2. **本会话已落地的**（见 §3 最新一节）：#167 `orca group cap`（agent 只能设更低的有限 token 上限）、#166 列表状态、#186 label 候选、#181 plan 版本未命中列版本、以及 wire 活动种类缺 `saved-result-top-up` 的缺陷。**未推**（分支在本地，等 §八 的 push）。
+3. **#145/#160：人 2026-11-08 裁定「保留现行为」** —— 未估算的默认无限额度仍可确认（只打提示），`unestimatedDefault.test.ts` 不动。不要再按「必须先应用估算或人明确接受」改。
+4. **#174：人 2026-11-08 裁定「接受软额度」** —— 判官维持现行 200k 名义额度与可见性，本轮不改；真实限费要另立设计。**#173** 只剩校准（口径已统一，需代表性真跑数据）。
+5. **#159：本会话已收口**（ccloop 侧，等推）：三个适配器的 execute 都走同一份严格解码（Claude 也走 `normalizeExecutionFinal`）。剩余是 #158 的 OMP 坏 final 胶囊（另立设计，本轮不做）。
+6. **仍在牌桌上的**：#168（拆分可能给文档任务配不可满足的 check —— 需先改拆分指令版本，未做）、#179 的 CLI next-step 与 Web 入口、#157 skill 的状态／错误表、#191/#192 成本与延迟、#170/#171 历史 outbox／wake 残留的收尾。**全量门与付费真跑**：人本次说之后再做；若做全量，`TMPDIR=/tmp npm test`；付费每次单独授权。push 归人。
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
@@ -762,6 +777,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 八、什么在等人（awaitingHuman）
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
+
+- **2026-11-08 这轮待人／外部状态**：
+  1. **push**：Orca main（本地 2 笔）与 ccloop main（本地领先 1 笔）都归人推。**ccloop 的 push 被 Tier 0 闸门机械拦下**——人本轮在对话里授权过，闸门不认对话授权，agent 没重试。
+  2. **repin**：人推完 ccloop 后，按 `scripts/pin-ccloop.mjs` 把 Orca 的 pin 换到含 `fix(claude): an execute answer passes the shared strict result decoder` 的那笔，再 `npm ci`（pin 未变，本会话没有 repin）。
+  3. **检查点写入**（与 2026-11-07 同一条规则）：`dev checkpoint write` 被自动审批拦，需人在终端跑或加允许规则。
+  4. **待人定**：#168 拆分给文档任务配不可满足 check 的修法（要动拆分指令版本）、#179 的 CLI next-step 与 Web 入口要不要做、#157 skill 的状态／错误表。
+  5. **只能等真实外部事件**：自然额度耗尽时的真 `quota-probe`；第三方 provider 的 `structuredOutput:"prompt"` 真实对应 provider。
 
 - **2026-11-07 这轮待人／外部状态**：
   1. **检查点写入**：`dev checkpoint write` 被自动审批按「使用会话记录需用户明确授权」拦下（聊天里的授权不解除该规则，与检查点内容无关）。要落盘请人在自己终端跑一次，或给该命令加一条 Bash 允许规则；命令与 draft 见本会话对话。
