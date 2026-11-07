@@ -1,0 +1,59 @@
+{
+  "v": 1,
+  "runId": "orca-dev-03bb48b6",
+  "runtime": "claude-code",
+  "sessionRef": "03bb48b6-a027-45aa-801f-22c5758f6391",
+  "writtenAt": "2026-11-07T02:34:17.062Z",
+  "head": "c7dc0d2830d4211379f94de309dff7da3f8a65d3",
+  "level": {
+    "kind": "reading",
+    "level": 594370,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Orca: commit the uncommitted work now green: src/control/savedResultRecovery.ts (saved-result-exhausted diagnostic), tests/control/savedResultRecovery.test.ts (new criterion), src/panel/humanOnly.ts (removed the spurious SOCKET_TIER close-run row that made SOCKET_TIER disagree with HUMAN_ONLY_VERBS while VERB_ACCESS says any), web/src/locales/{zh,en}.ts (six run-closure entries), docs/superpowers/specs/2026-11-07-exhausted-attempt-recovery-design.md (Correction 1), docs/superpowers/plans/2026-11-07-exhausted-attempt-recovery.md.",
+    "Re-run TMPDIR=/tmp npm test to confirm only the known-red orchestration.test.ts remains (it also fails on unmodified main: task-run-moved:ladder-source-superseded).",
+    "ccloop worktree /private/tmp/orca-20261107-exhausted-ccloop on branch feat/exhausted-attempt-recovery: implement Task 1 of docs/superpowers/plans/2026-11-07-exhausted-attempt-recovery.md. The RED test tests/control/exhaustedSource.test.ts already fails on capsule null.",
+    "Then Task 2 read-side finalizer, Task 3 ccloop authority kind, Task 4 Orca admission."
+  ],
+  "open": [
+    "Task 1 producer: reuse/extract snapshot() from src/controller/executionFormatFailure.ts; capture after publishAttemptCommit and before cleanup, keyed on the post-execute budget gate (runLoop.ts:2182-2194) with a genuine decoded ExecutionResult and verifierEntered false.",
+    "Task 2: derive canonical closure bytes from sealed evidence without writing after the worker lease ends (spec Correction 1).",
+    "Task 3: new authority kind execution-complete-before-verification-v1; legacy failed-source and OMP bad-final refusals untouched.",
+    "Task 4: Orca admission of the new kind; keep saved-result-exhausted for runs without producer evidence.",
+    "OMP success has no Codex schema.json; validate its own process/stream proof before it may produce a capsule."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Whether close-run stays open to any Web member and any local socket client, or is narrowed to owner/person-token. Independent review found no policy bypass; product call."
+    },
+    {
+      "kind": "ccloop-change",
+      "what": "Push of the ccloop feature branch once implementation is complete (agent never pushes)."
+    },
+    {
+      "kind": "irreversible",
+      "what": "Any forced worktree/branch cleanup beyond the clean main worktree."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca && TMPDIR=/tmp ./node_modules/.bin/vitest run tests/panel/accessMatrix.test.ts tests/panel/refusalCoverage.test.ts tests/control/savedResultRecovery.test.ts",
+      "exitCode": 0,
+      "commit": "c7dc0d2830d4211379f94de309dff7da3f8a65d3",
+      "observedAt": "2026-11-07T02:34:16.997Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-03bb48b6-tO8ANM/1.txt"
+    },
+    {
+      "command": "cd /private/tmp/orca-20261107-exhausted-ccloop && TMPDIR=/tmp ./node_modules/.bin/vitest run tests/control/exhaustedSource.test.ts",
+      "exitCode": 1,
+      "commit": "c7dc0d2830d4211379f94de309dff7da3f8a65d3",
+      "observedAt": "2026-11-07T02:34:17.005Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-03bb48b6-tO8ANM/2.txt"
+    }
+  ]
+}
