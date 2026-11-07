@@ -106,6 +106,21 @@ describe("GET /api/control/usage (spec §5.3)", () => {
     expect([socket.status, JSON.parse(socket.text).error.code]).toEqual([404, "control-target-not-allowed"]);
   });
 
+  it("U3c: a retained group's plan repository remains a valid scope after registration is removed", async () => {
+    const w = await workspace(); const panel = await boot(w);
+    const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+    const db = new DatabaseSync(join(w.state, "control.sqlite"));
+    try {
+      db.prepare("INSERT INTO groups(id,revision,graph_version,body) VALUES (?,?,?,?)")
+        .run("g-retained", 1, 1, JSON.stringify({ projectKey: "old-project", plan: { repoId: "real-repo" } }));
+    } finally { db.close(); }
+    const real = await overSocket(panel.socketPath!, "GET", "/api/control/usage?scope=repo:real-repo");
+    expect(real.status, real.text).toBe(200);
+    expect(JSON.parse(real.text).range.tokens).toBe(0);
+    const stale = await overSocket(panel.socketPath!, "GET", "/api/control/usage?scope=repo:old-project");
+    expect([stale.status, JSON.parse(stale.text).error?.code]).toEqual([404, "control-target-not-allowed"]);
+  });
+
   it("U4: a model named \"unattributed\" and the NULL-model bucket are two groups, never summed; pre-ledger rows belong to no range", async () => {
     const w = await workspace(); const panel = await boot(w);
     insertRows(w.state, [

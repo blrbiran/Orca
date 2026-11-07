@@ -31,6 +31,7 @@ import { orchestrationRevision, slotUse } from "../control/orchestration.js";
 import { installationRests } from "../control/quotaRest.js";
 import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
+import { groupRepoIdOf } from "../control/usageLedger.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
@@ -44,7 +45,7 @@ import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
-import { readControlGroup, readControlRecovery, readControlSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
+import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -222,7 +223,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       if (query.scope !== "all") {
         const repoId = query.scope.slice(5);
         const seen = deps.store.db.prepare("SELECT 1 FROM usage_ledger WHERE repo_id=? LIMIT 1").get(repoId) !== undefined
-          || deps.store.db.prepare("SELECT 1 FROM groups WHERE json_extract(body,'$.projectKey')=? LIMIT 1").get(repoId) !== undefined;
+          || deps.store.db.prepare("SELECT body FROM groups").all().some(row => groupRepoIdOf(JSON.parse(String(row.body))) === repoId);
         if (!deps.service?.repositoryKnown(repoId) && !seen) {
           throw new ControlError("control-target-not-allowed", `no registered project is ${JSON.stringify(repoId)}`);
         }
@@ -255,6 +256,20 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     if(!deps.store.db.prepare("SELECT id FROM runs WHERE id=?").get(runId)){sendControlError(res,404,"run-not-found","No control run was found.");return;}
     res.json(savedResultEligibilityViewSchema.parse(deps.service?await deps.service.savedResultEligibility(runId):{status:"unavailable",reason:"control-saved-result-unsupported"}));
   }));
+  // Issue #199 follow-up: a poller gets the summary alone -- never the full view -- so a large group costs neither
+  // the server's plan/run reads nor the socket transfer, and a clarifying group answers (its full view is refused).
+  app.get("/api/control/groups/:groupId/brief", (req, res) => {
+    const groupId = String(req.params.groupId);
+    try { res.json({ schema: "orca-group-brief-v1", ...readGroupSummary(deps.store, groupId) }); }
+    catch (error) {
+      if (error instanceof ControlError && error.code === "group-not-found") {
+        sendControlError(res, 404, error.code, "No control group was found.");
+        return;
+      }
+      sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
+    }
+  });
+
   app.get("/api/control/groups/:groupId", (req, res) => {
     const groupId = String(req.params.groupId);
     try { res.json(readControlGroup(deps.store, deps.epoch, groupId)); }

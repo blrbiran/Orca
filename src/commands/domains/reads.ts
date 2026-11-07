@@ -58,11 +58,6 @@ async function commandScope(context: WriteContext): Promise<string> {
   }
 }
 
-const groupBrief = (view: GroupView): Record<string, unknown> => ({
-  schema: "orca-group-brief-v1",
-  ...view.summary,
-});
-
 const groupList = (body: unknown): string => {
   const groups = (body as Summary).groups ?? [];
   return groups.length === 0 ? "no groups" : groups.map((g) => {
@@ -166,10 +161,10 @@ export const READ_ROWS: CommandDef[] = [
     },
     format: groupList }),
   read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`], format: formatWithUnestimated }),
-  // Issue #199: the fields an agent polls, without the full view (a 6-task group's JSON is ~100 KB). No --json cost
-  // beyond the summary itself; the panel still reads the group view, the CLI prints only what changed hands.
+  // Issue #199: the summary route answers the compact body itself, so a poll ships neither the full view's plan and
+  // runs nor a clarifying group's refusal (its full view is refused; its summary is not).
   read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],
-    paths: (c) => [`groups/${ids(c, "group")}`], compose: ([view]) => groupBrief(view as GroupView) }),
+    paths: (c) => [`groups/${ids(c, "group")}/brief`] }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
     paths: (c) => [`groups/${ids(c, "group")}`],
