@@ -32,6 +32,20 @@ describe('saved result controller authority', () => {
    expect(await t.service.savedResultEligibility(runId)).toEqual({status:'unavailable',reason:'saved-result-exhausted'});
   } finally {await t.h.dispose();}
  });
+ it('opens the exhausted gate only for a producer-captured completion source, and still refuses evidence it cannot read', async () => {
+  const t=await driverHarness([{taskId:'a'}],{behaviour:()=> 'exhausted',sealedOwnerProof:true});
+  try {
+   const runId=await t.claim();
+   await t.until(t.driver(),()=>t.body(runId).state==='blocked');
+   expect(await t.service.savedResultEligibility(runId)).toEqual({status:'unavailable',reason:'saved-result-exhausted'});
+   // The gate is the source kind, not the outcome: a captured completion source is read, and its missing artifact is a
+   // different refusal than "no producer evidence".
+   t.h.store.transaction(()=>{const body=JSON.parse(String(t.h.store.db.prepare('SELECT body FROM runs WHERE id=?').get(runId)!.body));
+    body.savedSource={authorityKind:'execution-complete-before-verification-v1',source:{artifactId:`saved-result-${'a'.repeat(64)}`,hash:'a'.repeat(64)},attempt:1};
+    t.h.store.db.prepare('UPDATE runs SET body=? WHERE id=?').run(JSON.stringify(body),runId);});
+   expect((await t.service.savedResultEligibility(runId)).reason).not.toBe('saved-result-exhausted');
+  } finally {await t.h.dispose();}
+ });
  it('refuses a settled historical source once an ordinary retry has replaced its task membership', async () => {
   const {t,runId}=await unknownFailure([{taskId:'a'}],true,{extraReserve:true});
   try {

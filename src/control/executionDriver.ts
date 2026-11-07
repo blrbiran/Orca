@@ -7,7 +7,7 @@ import { dirTargetRepoId, isMultiGroup, multiDirOf, multiPrimaryRepoId, type Fro
 import { withSkillDirs } from "../flow/template/vars.js";
 import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultRecovery.js";
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
-import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
+import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,executionFormatFailureSchema,exhaustedCompletionSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
 import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
 import { validateAllowanceCheckpoint } from "./fundedAllowance.js";
 import { verifySnapshot } from "./snapshot.js";
@@ -774,10 +774,11 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
     if(page.identity.runId!==runId||page.identity.envelopeHash!==run.drive?.envelopeHash||page.identity.executionId!==run.executionId)throw new ControlError("report-identity-conflict");
     if(page.capsule){
       const retain=async(ref:import("./types.js").ArtifactRef):Promise<Buffer>=>{const bytes=await port.readSavedResultEvidence!(readStartEnvelope(store,run),page.capsule!,ref);await writeArtifact(store,ref.artifactId,bytes,archiveAdmission(deps));return bytes;};
-      const capsule=executionFormatFailureSchema.parse(JSON.parse((await retain(page.capsule)).toString())),snapshot=savedExecutionSnapshotSchema.parse(JSON.parse((await retain(capsule.snapshot)).toString()));
+      const parsed=JSON.parse((await retain(page.capsule)).toString()),exhaustedSource=parsed.schema==="ccloop-execution-complete-before-verification-v1";
+      const capsule=exhaustedSource?exhaustedCompletionSchema.parse(parsed):executionFormatFailureSchema.parse(parsed),snapshot=savedExecutionSnapshotSchema.parse(JSON.parse((await retain(capsule.snapshot)).toString()));
       const {usageObservations,...artifacts}=capsule.artifacts;
-      for(const ref of [capsule.verifier.proof,...Object.values(artifacts),...usageObservations.flatMap(a=>[a.source,a.copy]),snapshot.index,snapshot.bundle,snapshot.status,...snapshot.files.map(f=>f.ref)])await retain(ref);
-      write(deps,()=>{const current=readDriverRun(store,runId);current.savedSource={authorityKind:"execution-format-failure-v1",source:page.capsule,attempt:page.attempt};saveDriverRun(store,current);});
+      for(const ref of [capsule.verifier.proof,...Object.values(artifacts).filter((r):r is import("./types.js").ArtifactRef=>r!==null&&typeof r==="object"&&"artifactId" in r),...(usageObservations??[]).flatMap(a=>[a.source,a.copy]),snapshot.index,snapshot.bundle,snapshot.status,...snapshot.files.map(f=>f.ref)])await retain(ref);
+      write(deps,()=>{const current=readDriverRun(store,runId);current.savedSource={authorityKind:exhaustedSource?"execution-complete-before-verification-v1":"execution-format-failure-v1",source:page.capsule,attempt:page.attempt};saveDriverRun(store,current);});
     }
   }
   }catch(error){const line=peerFailureLogLine(runId,error);if(line!==null)process.stderr.write(line);write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}

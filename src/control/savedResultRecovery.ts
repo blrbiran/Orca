@@ -36,7 +36,7 @@ const sourceEnvelope=(store:ControlStore,run:any):StartEnvelope=>{
 };
 function sourceRecord(store:ControlStore,run:any){
  if(run.savedSourceUnavailable)throw Error(run.savedSourceUnavailable);
- if(run.savedSource?.authorityKind==='execution-format-failure-v1')return savedSourceSchema.parse(run.savedSource);
+ if(run.savedSource?.authorityKind==='execution-format-failure-v1'||run.savedSource?.authorityKind==='execution-complete-before-verification-v1')return savedSourceSchema.parse(run.savedSource);
  const rows=store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC").all(run.runId);
  for(const row of rows){const value=JSON.parse(String(row.body));const root=value.artifacts?.find((r:ArtifactRef)=>r?.artifactId.startsWith('archive-'));if(root&&value.snapshot&&value.missing?.length===0){
   const archive=JSON.parse(settlementArtifact(store,artifactSchema.parse(root)).toString());const stateRef=archive.logs.find((e:any)=>e.path==='run/loop-state.json')?.ref;if(!stateRef)continue;
@@ -76,7 +76,8 @@ export function currentSavedResultSource(store:ControlStore,sourceRunId:string){
  const request=latestRequestForRun(store,run.groupId,current.runId);if(request&&ADOPTABLE_STATES.includes(request.state))throw Error('saved-result-source-stale');
  assertKnown(store,run);if(current.runId!==run.runId)assertKnown(store,current);
  if(groupUsageUnknown(store,run.groupId))throw Error('saved-result-usage-unsettled');
- if(run.drive.outcome==='exhausted')throw Error('saved-result-exhausted');
+ // Only an exhausted run whose producer left the new completion source may be verified; the others say why by name.
+ if(run.drive.outcome==='exhausted'&&run.savedSource?.authorityKind!=='execution-complete-before-verification-v1')throw Error('saved-result-exhausted');
  return {run,work,current,group,source,confirmed,snapshot,predecessor};
 }
 function assertKnown(store:ControlStore,run:any):void {

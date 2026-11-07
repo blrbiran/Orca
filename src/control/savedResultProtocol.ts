@@ -29,7 +29,7 @@ export const savedResultAdmissionSchema=z.object({
 }).strict();
 export type SavedResultAdmission=z.infer<typeof savedResultAdmissionSchema>;
 export const savedResultPackageSchema=z.object({schema:z.literal("ccloop-saved-result-package-v1"),
- authorityKind:z.enum(["execution-format-failure-v1","legacy-published-candidate-v1"]),source:artifactRefSchema,admission:artifactRefSchema,
+ authorityKind:z.enum(["execution-format-failure-v1","legacy-published-candidate-v1","execution-complete-before-verification-v1"]),source:artifactRefSchema,admission:artifactRefSchema,
  artifacts:z.array(z.object({ref:artifactRefSchema,file:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/)}).strict()).max(20000),
 }).strict();
 export type SavedResultPackage=z.infer<typeof savedResultPackageSchema>;
@@ -58,6 +58,29 @@ export const executionFormatFailureSchema=z.object({
   capturedAt:z.string().datetime({offset:true}),captureOwner:z.string().min(1),
 }).strict();
 export type ExecutionFormatFailureCapsule=z.infer<typeof executionFormatFailureSchema>;
+const exhaustedArtifacts=z.object({envelope:ref,config:ref,acceptedContract:ref,runtimeContract:ref,plan:ref,outcome:ref,final:ref,events:ref,process:ref,
+  schema:ref.optional(),usage:ref.optional(),usageLowerBound:ref.optional(),usageLedger:ref,owner:ref,
+  usageObservations:z.array(z.object({source:ref,copy:ref}).strict()).optional()}).strict();
+/** A successful execute the post-execute budget gate stopped before verification; derived by ccloop, never written after its lease. */
+export const exhaustedCompletionSchema=z.object({
+  schema:z.literal("ccloop-execution-complete-before-verification-v1"),
+  identity:taskResultIdentitySchema,attempt:positive,
+  executor:z.object({kind:z.enum(["codex","omp"]),configHash:hash}).strict(),
+  frozenContractHash:hash,
+  outcome:z.literal("exhausted"),
+  gate:z.object({stage:z.literal("post-execute"),decision:z.literal("budget-exceeded")}).strict(),
+  published:z.object({sha:oid,base:oid,ref:z.string().startsWith("refs/ccloop/"),tree:oid}).strict(),
+  decoder:z.literal("strict-execution-v1"),normalizedExecutionHash:hash,
+  attemptStartHead:oid,resolvedBase:oid,
+  usage:z.object({tokenUsage:safe.nullable(),highWater:safe}).strict(),
+  process:z.object({reason:z.literal("completed"),code:z.literal(0),signal:z.null(),isolated:z.literal(true)}).strict(),
+  verifier:z.object({entered:z.literal(false),proof:ref}).strict(),
+  artifacts:exhaustedArtifacts,
+  snapshot:ref,
+  stop:z.object({executionId:idSchema,generation:positive,isolated:z.literal(true)}).strict(),
+  capturedAt:z.string().datetime({offset:true}),
+}).strict();
+export type ExhaustedCompletionCapsule=z.infer<typeof exhaustedCompletionSchema>;
 export const savedResultCollectionSchema=z.object({
   schema:z.literal("ccloop-saved-result-evidence-v1"),identity:taskResultIdentitySchema,attempt:safe,capsule:ref.nullable(),reason:z.string().nullable(),
 }).strict();
