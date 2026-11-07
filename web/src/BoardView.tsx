@@ -117,6 +117,12 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
             : t("board.card.escalationExhausted", { taskId: entry.taskId, reason: entry.reason ?? "" })}
         </p>
       ))}
+      {(group.criteriaReviews ?? []).filter((entry) => entry.state === "failed" || entry.state === "debugging").map((entry) => (
+        <p key={entry.debugGroupId} className="detail-note" data-testid="board-card-criteria-review">
+          {entry.state === "debugging" ? t("board.card.criteriaReviewDebugging", { taskId: entry.taskId })
+            : t("board.card.criteriaReviewFailed", { taskId: entry.taskId, reason: entry.reason ?? "" })}
+        </p>
+      ))}
       {group.stopState !== null && <span className={`badge ${cardBadge}`}>{enumText("stopState", group.stopState)}</span>}
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}

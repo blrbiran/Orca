@@ -22,7 +22,7 @@ import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
-import { escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
+import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
@@ -551,7 +551,16 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites, executing);
   const dependsOn = prerequisitesOf(store, groupId);
   const systemDebugMark = readSystemDebugMark(body);
+  // Tester #179: a judge that reached its verdict is a success, not a blocked task. The review group is done by its
+  // verdict (groupDone.ts), so its completion must say so too instead of the D14-blocked judge task's `done 0/1`.
+  const verdictGroup = systemDebugMark?.source.kind === "criteria-review" && (systemDebugMark.settled?.state === "justified" || systemDebugMark.settled?.state === "restored");
+  const completion = verdictGroup && archived !== null ? { done: archived.plan.tasks.length, total: archived.plan.tasks.length } : tally?.completion;
+  const counts = verdictGroup && archived !== null
+    ? { idle: 0, running: 0, waiting: 0, blocked: 0, done: archived.plan.tasks.length }
+    : tally?.counts;
   const escalation = archived === null ? [] : escalationsOf(store, groupId);
+  // Tester #174: a judge's outcome (a failed one especially) is shown on the group whose task was flagged.
+  const criteriaReviews = criteriaReviewsOf(store, groupId);
   // Dir-requirements spec §9.4: a dir group's placement record, without the journal's `from/to` (not the panel's business).
   const placement = dirWorkspaceOf(body) === null ? null : readPlacement((body as { placement?: unknown }).placement);
   // Multi-directory projects spec §12: a multi group's directories and landing, as its integration region shows them. The
@@ -598,7 +607,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     stopState: stop?.state ?? null,
     claimBlocked: blockers.length > 0,
     recoveryBlockerCount: blockers.length,
-    ...(tally === null ? {} : { completion: tally.completion, counts: tally.counts }),
+    ...(completion === undefined || counts === undefined ? {} : { completion, counts }),
     goal: archived !== null ? archived.plan.goal : readRequirementGroup(store, groupId).requirement.idea,
     branch: workBranchRef(groupId).slice("refs/heads/".length),
     updatedAt: latestGroupActivityAt(store, groupId),
@@ -611,6 +620,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(orchestration === null ? {} : { orchestration }),
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
     ...(escalation.length === 0 ? {} : { escalation }),
+    ...(criteriaReviews.length === 0 ? {} : { criteriaReviews }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(multiSummary === null ? {} : { multiDir: multiSummary }),
     ...(debugMark === null ? {} : { debug: {

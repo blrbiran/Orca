@@ -2,6 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { criteriaReviewEnabled } from "../../src/control/criteriaReview.js";
+import { CRITERIA_REVIEW_TOKEN_BUDGET, criteriaReviewWorkTokens } from "../../src/control/systemDebug.js";
+import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { flagDecision, listFlaggedDecisions, readFlaggedDecision } from "../../src/control/flaggedDecisions.js";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
 import { newGroupIntegration } from "../../src/control/integrationScheme.js";
@@ -70,6 +72,10 @@ describe("the automatic reviewer of a flagged test change (spec §5)", { timeout
       const settle = await w.service.systemDebugPass();
       expect(settle.settled).toEqual([w.judgeId]);
       expect(readSystemDebugMark(w.body(w.judgeId))?.settled?.state).toBe("justified");
+      expect(readGroupSummary(t.h.store, "g").criteriaReviews).toEqual([{ taskId: "a", debugGroupId: w.judgeId, state: "justified", reason: null }]);
+      // #179: the judge's verdict is a success, so its group reads done instead of a D14-blocked `done 0/1`.
+      expect(readGroupSummary(t.h.store, w.judgeId).completion).toEqual({ done: 1, total: 1 });
+      expect(readGroupSummary(t.h.store, w.judgeId).counts).toEqual({ idle: 0, running: 0, waiting: 0, blocked: 0, done: 1 });
       expect(readFlaggedDecision(t.h.store, w.decisionId)).toEqual(expect.objectContaining({ state: "ratified", ratifiedBy: "orca-auto" }));
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(gHead);
 
@@ -98,6 +104,9 @@ describe("the automatic reviewer of a flagged test change (spec §5)", { timeout
       expect((await w.service.systemDebugPass()).settled).toEqual([w.judgeId]);
       expect(readSystemDebugMark(w.body(w.judgeId))?.settled?.state).toBe("debug-failed");
       expect(readFlaggedDecision(t.h.store, w.decisionId)?.state).toBe("flagged");
+      expect(readGroupSummary(t.h.store, "g").criteriaReviews).toEqual([{ taskId: "a", debugGroupId: w.judgeId, state: "failed", reason: null }]);
+      // A failed judge is no verdict: its completion stays the blocked task's.
+      expect(readGroupSummary(t.h.store, w.judgeId).completion).toEqual({ done: 0, total: 1 });
     } finally { await t.h.dispose(); }
   });
 
@@ -138,5 +147,11 @@ describe("the automatic reviewer of a flagged test change (spec §5)", { timeout
       expect((await w.service.systemDebugPass()).opened).toEqual([]);
       expect(readFlaggedDecision(t.h.store, w.decisionId)?.state).toBe("flagged");
     } finally { await t.h.dispose(); }
+  });
+
+  it("caps a judge whose source contract states no token ceiling, and leaves a stated budget alone (#174)", () => {
+    expect(criteriaReviewWorkTokens({ executionPolicy: { tokenBudget: null } })).toBe(CRITERIA_REVIEW_TOKEN_BUDGET);
+    expect(criteriaReviewWorkTokens(null)).toBe(CRITERIA_REVIEW_TOKEN_BUDGET);
+    expect(criteriaReviewWorkTokens({ executionPolicy: { tokenBudget: 99_000 } })).toBeNull();
   });
 });

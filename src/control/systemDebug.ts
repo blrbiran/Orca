@@ -31,6 +31,16 @@ export type SystemDebugSource = z.infer<typeof systemDebugSourceSchema>;
 export const SYSTEM_DEBUG_INPUT_SCHEMA = "orca-system-debug-input-v1";
 /** §2: the debug task's write set, the whole repository (the original's denylist still applies). */
 export const SYSTEM_DEBUG_TARGET_PATH = "**";
+/**
+ * Tester #174: a criteria-review judge inherits the flagged task's execution policy, so a task with no authored token
+ * ceiling gave the judge an unlimited group -- a hidden, unbounded spend. A judge opened over such a contract gets this
+ * finite work grant (and group limit) instead. A contract that states a budget keeps it unchanged.
+ */
+export const CRITERIA_REVIEW_TOKEN_BUDGET = 200_000;
+/** The judge's explicit grant when the source contract has no token ceiling; null when its own budget stands. */
+export function criteriaReviewWorkTokens(contract: { executionPolicy: { tokenBudget: number | null } } | null): number | null {
+  return contract === null || contract.executionPolicy.tokenBudget === null ? CRITERIA_REVIEW_TOKEN_BUDGET : null;
+}
 const settledSchema = z.object({ state: z.string().min(1), at: z.number().int(), detail: z.string().nullable() }).strict();
 const systemDebugMarkSchema = z.object({
   source: systemDebugSourceSchema, stackOn: z.string().min(1).nullable(), inputHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -210,11 +220,14 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
       const input: SystemDebugInputV1 = { schema: SYSTEM_DEBUG_INPUT_SCHEMA, source, stackOn, repoId, facts: [...facts], checks: [...checks], ...(setup === undefined ? {} : { setup: [...setup] }) };
       const inputJson = canonicalBytes(input).toString("utf8"), inputHash = sha256Canonical(input);
       const planId = debugPlanId(groupId);
+      const contract = sourceContract(deps.store, source);
       // Checks spec §6.1 step 0: a review has its own read-only plan builder (the debug builder's write set is `**`).
       const planSource = source.kind === "model-review" && review !== undefined
         ? buildModelReviewPlanSource({ source, inputDir: review.inputDir, inputSha256: review.inputSha256, groups: [...review.groups], budgetTokens: review.budgetTokens, denylistPaths: [...review.denylistPaths] }, repoPath!, reviewAgent)
-        : buildSystemDebugPlanSource(input, sourceContract(deps.store, source), repoPath!, source.kind === "model-review-finding" ? reviewAgent : sourceAgent(deps.store, source));
+        : buildSystemDebugPlanSource(input, contract, repoPath!, source.kind === "model-review-finding" ? reviewAgent : sourceAgent(deps.store, source));
       const plan = normalizeControlPlan({ ...planSource, repoId, planId });
+      // Tester #174: a judge over a contract with no token ceiling is capped; every other group keeps its grant.
+      const criteriaTokens = source.kind === "criteria-review" ? criteriaReviewWorkTokens(contract) : null;
       const defaults = deps.defaults();
       writeImportedPlan({
         ...deps, estimatorSlot: { kind: "rejected", partial: null, code: "control-estimator-unconfigured" },
@@ -222,7 +235,9 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
       }, {
         groupId, repoId, planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
         estimatorProfileId: defaults?.estimatorProfileId ?? null, estimatorProfileHash: defaults?.estimatorProfileHash ?? null, estimateMode: defaults?.estimateMode ?? "strict",
-      }, null, { estimate: "deferred", ...(review === undefined ? {} : { stripped: { workTokens: review.budgetTokens } }) });
+      }, null, { estimate: "deferred", ...(review === undefined
+        ? criteriaTokens === null ? {} : { stripped: { workTokens: criteriaTokens } }
+        : { stripped: { workTokens: review.budgetTokens } }) });
       writeCanonicalRecord(deps.store, groupId, inputHash, inputJson);
       const body = groupBody(deps.store, groupId)!;
       // A review never lands (integration keep, spec §6.1); a ladder group folds back into its original instead.
@@ -489,6 +504,28 @@ export function escalationsOf(store: ControlStore, groupId: string): Array<{ tas
     } else {
       out.push({ taskId, debugGroupId, state: "exhausted", reason: mark.settled.state });
     }
+  }
+  return out;
+}
+
+export type CriteriaReviewState = "debugging" | "justified" | "restored" | "failed";
+
+/**
+ * Tester #174: the criteria-review judges opened for a group's flagged tasks, for the parent's summary. A failed judge
+ * must be visible where the person looks (the parent), not only on the judge's own debug group. One read for groups
+ * with no judge; the mark is the same one `readSystemDebugMark` validates everywhere else.
+ */
+export function criteriaReviewsOf(store: ControlStore, groupId: string): Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> {
+  const out: Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> = [];
+  for (const row of store.db.prepare("SELECT id, body FROM groups WHERE id LIKE 'sysdebug-criteria-review-%' ORDER BY rowid").all()) {
+    let mark: SystemDebugMark | null;
+    try { mark = readSystemDebugMark(JSON.parse(String(row.body))); } catch { continue; }
+    if (mark === null || mark.source.kind !== "criteria-review" || mark.source.groupId !== groupId || mark.source.taskId === null) continue;
+    const debugGroupId = String(row.id);
+    const state: CriteriaReviewState = mark.settled === null
+      ? anyTaskFailed(store, debugGroupId) ? "failed" : "debugging"
+      : mark.settled.state === "justified" || mark.settled.state === "restored" ? mark.settled.state : "failed";
+    out.push({ taskId: mark.source.taskId, debugGroupId, state, reason: mark.settled?.detail ?? null });
   }
   return out;
 }

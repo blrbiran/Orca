@@ -279,6 +279,8 @@ export const en = {
       escalating: "{{taskId}}: Orca is debugging it in {{debugGroupId}}",
       rerunning: "{{taskId}}: rerunning after Orca's fix",
       escalationExhausted: "{{taskId}}: Orca could not fix it ({{reason}})",
+      criteriaReviewDebugging: "{{taskId}}: criteria review running",
+      criteriaReviewFailed: "{{taskId}}: criteria review failed ({{reason}})",
       budget: "{{used}} of {{limit}} tokens",
       budgetUnlimited: "{{used}} tokens (no limit)",
       decisions_one: "{{count}} decision to review",

@@ -1545,6 +1545,11 @@ export const groupSummarySchema = z
     escalation: z.array(z.object({
       taskId: idSchema, debugGroupId: idSchema, state: z.enum(["debugging", "rerunning", "exhausted"]), reason: z.string().nullable(),
     }).strict()).min(1).optional(),
+    // Tester #174: the criteria-review judges opened for this group's flagged tasks; a failed judge stays visible here,
+    // on the parent, instead of only on the judge's own group. Optional so a group without one parses unchanged.
+    criteriaReviews: z.array(z.object({
+      taskId: idSchema, debugGroupId: idSchema, state: z.enum(["debugging", "justified", "restored", "failed"]), reason: z.string().nullable(),
+    }).strict()).min(1).optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),

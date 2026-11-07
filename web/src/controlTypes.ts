@@ -121,6 +121,8 @@ export type GroupSummaryV1 = {
   multiDir?: GroupMultiDirV1;
   /** §3.5: tasks of this group the escalation ladder took over; `exhausted` is level 3 (needs you). */
   escalation?: GroupEscalationV1[];
+  /** Tester #174: criteria-review judges for this group's flagged tasks; a failed judge stays visible on the parent. */
+  criteriaReviews?: GroupCriteriaReviewV1[];
   /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
   scheduleStart?: { scheduleId: string; name: string; slot: number; waitingReason: string | null };
 };
@@ -173,6 +175,7 @@ export type GroupSystemDebugV1 = {
   settled: { state: string; at: number; detail: string | null } | null;
 };
 export type GroupEscalationV1 = { taskId: string; debugGroupId: string; state: "debugging" | "rerunning" | "exhausted"; reason: string | null };
+export type GroupCriteriaReviewV1 = { taskId: string; debugGroupId: string; state: "debugging" | "justified" | "restored" | "failed"; reason: string | null };
 export type GroupOrchestrationV1 = {
   mode: "run" | "hold";
   state: "held" | "started" | "stopped" | "waiting-prerequisite" | "backoff" | "waiting-slot" | "queued";

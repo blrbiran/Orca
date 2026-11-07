@@ -141,6 +141,8 @@ export const zh: Translation<typeof en> = {
       escalating: "{{taskId}}：Orca 正在 {{debugGroupId}} 里排查",
       rerunning: "{{taskId}}：Orca 修完后在重跑",
       escalationExhausted: "{{taskId}}：Orca 没修好（{{reason}}）",
+      criteriaReviewDebugging: "{{taskId}}：判据审查进行中",
+      criteriaReviewFailed: "{{taskId}}：判据审查失败（{{reason}}）",
       budget: "已用 {{used}} / {{limit}} token",
       budgetUnlimited: "已用 {{used}} token（不限额）",
       decisions_one: "{{count}} 条决定待审",
