@@ -54,3 +54,12 @@ escape from the gate, it is the gate recognizing the only honest undo for a no-o
 **Open question:** whether the ledger schema should carry a structured `kind` (a format change for every reader of
 `.decisions/`) or whether the existing `undo.how` string may use a reserved literal such as `no change (proved by
 <attempt sha>)`. The former is cleaner and touchier; the latter is smaller and easier for third-party directories.
+
+## 3. What this note does not change
+
+- `normalizeExecutionFinal` stays strict. No flat `taskResult`, candidate array, or hidden final is accepted.
+- `execution-format-failure-v1` stays non-recoverable. Reinterpreting a recorded failure as a success remains
+  `saved-result-normalizer-provenance-unavailable`.
+- A successful empty result still records `empty-result` and leaves ordinary work blocked (D14); only a criteria-review
+  judge treats that as a justified verdict (webService.ts, groupDone.ts). The archive's claim that every such group
+  clogs a slot is obsolete: blocked tasks without runnable work hold no orchestration slot.

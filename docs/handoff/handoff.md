@@ -63,7 +63,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-08，本会话续）—— 测试者反馈批与随后四笔（#179 尾项／#184／#182／#192）都已在 `origin/main`（人已推）；另出 UI 信息架构设计稿；#191 只做了代码级定位
+### 3.最新（2026-11-08，本会话 `8c916c3a`）—— 反馈文档全量复核；#164 与 `multiDirLandingD` 已落地；#158／#138 只出设计
+
+- **人的话（原话）**：「先读 handoff…站在用户的角度看应该如何做」「部分可能已经解决了你需要基于当前最新代码分析一下」「合理的部分采纳」；随后续：「尽量将这些要做的task都完整做完，这个session暂时不要考虑context大小」「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」「如果需要 repin ccloop，临时允许你 push ccloop 到 origin main」「遇到卡住必须等人的事情，请继续做不必等人的部分」。**本轮没有付费真跑，也没有 repin ccloop**（ccloop 零改动）。工作分支 `fix/tester-followup-20261108b`，**未合入 main、未推**。
+- **反馈文档逐条复核的结论**（`orca_archived_files/issue-20261023.md` 的「90 个新发现待处理」是 `a5d892f2`／2026-11-06 的旧快照，**不要按它的计数接手**）。按今天代码判定已修／已变味的：#157（`references/workflow.md` 现在有 Golden path、`State → read → next`、`Error → reason → action` 三表）、#190（plan-library 只留 2 MiB 全文档上限，20 条 `successConditions` 与 2000 字 `goal` 上限都没了，见 `planLibrary/codec.ts:37-46`）、#198（检查文件与被检查输入已分开，`criteriaProtection.ts:34` 的 `INTERPRETERS`／`checkPaths`＋`criteriaProtection.test.ts` 的 README 判据）、#199（`group brief` 已是紧凑路由，`reads.ts:183`）、#149／#187／#171（分别有 `output.ts:48` 的指引、`webService.ts:1076` 的额度预检、`stopIntent.ts:525` 的 resume 清 wake）。
+- **#164 已做**（主题行 `feat(cli): a plan import names the checks it cannot carry`）：plan-library 版本只存 plan 文档，不带源组的 panel 覆盖与已应用预算 ⇒ 导入后的组可能要重选 agent、重设额度。导入的人类输出现在紧跟既有的 `estimate:`／`reason:` 两行再打一行 `next: … orca control get groups/<g>/agent-preview; orca proposal show <g>`；`--json` 是面板答案，一字未改。判据 `tests/commands/estimateLines.test.ts` 4/4（新增一条）。
+- **`multiDirLandingD` 的间歇红查清了，是判据陈旧，不是负载**（主题行 `test(control): the multi ledger criterion executes its check file`）。该判据要证「第一条 written 目录按任务契约自己的 checks 判定」，其夹具用 `verification.requiredChecks = ["true src/check.ts"]`；而 `1e050b9d` 起 `checkPaths` 只把**命令真正执行**的路径算作检查文件（`#198` 的修复），`true` 的参数不算 ⇒ `classifyCriteriaChange` 返回 `none`，ledger 里只有 `<runId>/agent-0`。改成 `node src/check.ts` 后同一条判据仍然承重、语义不变。**#198 的修复是对的，改的是夹具不是产品**。⚠️ 该文件**必须用 ccloop 工作树构建的二进制跑**：装进 `node_modules/ccloop` 的包只有 `dist`，缺 `tests/fixtures/fake-codex.mjs`，用它跑会造出 56 条假红（夹具 spawn 假 codex 失败）＋`findCcloopRoot` 回溯不到仓库根，**那不是业务红**。
+- **门（现测）**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/ccloop/dist/cli.js` 下 `multiDirLandingD` 6/6、`estimateLines` 4/4、`outboxKinds` 2/2、`write` 49/49；改动前的同一判据在本工作树复现红（6 条里目标那条）。**全量门与付费真跑未做**（Rule 18）。
+- **#158 与 #138 只出设计、未实施**：`docs/superpowers/specs/2026-11-08-omp-verdict-recovery-and-noop-undo-design.md` 写清两条边界——① OMP 干净退出但严格解码失败时，可做的只有**新增一个只做验证的来源种类**（只凭已发布 attempt 重跑必需检查，**不重建缺失的答案**、不写 decisions、不伪造 normalized hash），现有 `execution-format-failure-v1` 保持不可恢复；② 真话「什么都没改」的决策需要一个可机械复核的 no-op undo 形式，才能过 tier 门与 `decision-undo-not-executable`。**两条都要人定产品方向**（新来源种类的名字与准入、ledger 是否带结构化 `undo.kind`）。
+- **#170 被我自己推翻一半，不可按分类改名了事**：`stopIntent.ts:769` 确实有一条 `FROM outbox WHERE kind='handoff-request' AND delivered=0` 的读取，`OUTBOX_QUEUE_KINDS` 里那项的归类由 `outboxKinds.test.ts` 的源码扫描钉着；只把 kind 移到记录类会让该判据红。生产调用侧看起来没有 walker 驱动 `deliverHandoffStop`，但那是代码级判断、未实测，**先按「未定」看待**。
+- **仍在挂帐、需要证据或产品取舍的**：#158（新来源种类，见上）、#138（no-op undo）、#145／#160（人 2026-11-08 已裁「保留现行为」，**不要重开**，`unestimatedDefault.test.ts` 钉着）、#162／#173（估算低估：口径已统一到 ledger，**缺真实估算器的对照数据**才敢宣称校准）、#174（判官 200k 是名义额度，真实限费要另立设计）、#191（要测试者的 single-call 产物或一次免费出站探针）、#193–#197（转录写放大、OMP 457MB、无 handoff／compaction、plan 成本、task 间 session 不复用，**皆需重测**）、UI 信息架构 4 条 open question（见上一节设计稿 §6）。
+
+### 3.前一轮（2026-11-08，本会话续）—— 测试者反馈批与随后四笔（#179 尾项／#184／#182／#192）都已在 `origin/main`（人已推）；另出 UI 信息架构设计稿；#191 只做了代码级定位
 
 - **本轮前半（已在本地 main，主题行）**：`chore(deps): repin ccloop to the shared strict execute decoder`、`fix: task-owned split checks, terminal next steps and review navigation (#168 #179 #157)`、`docs(handoff): the tester-followup round, its honest gates and what still waits`，外加一笔测试健壮性修复（见下）。
 - **合入后的门（现测）**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/ccloop/dist/cli.js npm test` 选中 933 文件（根 750、Web 183）；根 **7009 过／40 跳过／3 红**，Web **1671/1671**。三条红：`orchestration` 既有红（`task-run-moved:ladder-source-superseded`）；`multiDirLandingD` 单跑 6/6（负载 flake）；`commands/removedNames` 是扫描把 `.claude/worktrees/...` 里嵌套 checkout 与二进制 pack 当成违规行 ⇒ 修为 `grep -rnIE --exclude-dir=worktrees`（主题行 `test(commands): the removed-name scan skips a nested worktree and its binary pack`），修后 13/13。
@@ -603,6 +614,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. **#159：本会话已收口**（ccloop 侧，等推）：三个适配器的 execute 都走同一份严格解码（Claude 也走 `normalizeExecutionFinal`）。剩余是 #158 的 OMP 坏 final 胶囊（另立设计，本轮不做）。
 6. **已在 `origin/main` 的**（人 2026-11-08 已推）：测试者反馈批（#168／#179／#157、repin）与随后四笔——#179 尾项（归档判官只读路由）、#184（CLI 读单条证据）、#182（`status` 的 work 健康行）、#192（settle 分段计时）。**#158 需要新设计**（OMP 坏 final 的可恢复来源；不能放宽严格解码）。**#191** 只到代码级定位，需要测试者的 single-call 产物或一次免费出站探针。**UI 信息架构**已有设计稿、4 条 open question 等人答（§八）。其余：#170/#171 历史 outbox／wake 残留、#193–#197 成本与延迟（皆需重测）、#200 主题提案。**全量门与付费真跑**：人本次说之后再做；若做全量，`TMPDIR=/tmp npm test`；付费每次单独授权。push 归人。
 
+### 4.0 2026-11-08 本会话（`8c916c3a`）接手顺序（旧 §4.0 的裁定仍有效，见下）
+
+1. **先合入／推本会话的两笔**（`fix/tester-followup-20261108b`）：跑 `multiDirLandingD` 要用 **ccloop 工作树的 `dist/cli.js`**，别用 `node_modules/ccloop`（缺假 codex 夹具 ⇒ 56 条假红）。
+2. **读反馈文档要按今天的代码复核**：`orca_archived_files/issue-20261023.md` 的计数是 2026-11-06 旧快照；§三 最新一节列了已修／已变味的条目，另有 `Issue 194–197` 这类**需要重测才敢谈**的成本项。
+3. **两条要人定产品方向的**：#158（OMP 坏 final 的可验证来源）、#138（no-op undo）；设计稿已写，**不要放宽严格解码、不要伪造 normalized hash**。
+4. **#170 先当未定**：改 `OUTBOX_QUEUE_KINDS` 的归类会让源码扫描判据红；生产 walker 是否驱动那条读取路径未实测。
+5. **人 2026-11-08 的裁定不要重开**：#145／#160 保留现行为；#174 接受软额度；UI #70 的排版方向等设计稿 §6 的四条答复。
+6. **其余**：push 归人；`dev checkpoint write` 被自动审批拦；全量门只在发版时跑（Rule 18）。
+
 ### 4.1 人做的（agent 不提醒、不代做）
 
 - **push**：本会话的 ccloop main 与 Orca main 都经人**临时授权**由 agent 推过；人 2026-10-26 又自行 push 过一批（含 repin 与 O9 harness）。之后轮次里 handoff 的收尾提交可能在本地领先，push 仍归人，远端一律以 `ls-remote` 现测（本文明文不写当前哈希）。
@@ -799,6 +819,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 八、什么在等人（awaitingHuman）
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
+
+- **2026-11-08 本会话（`8c916c3a`）待人／外部状态**：
+  1. **push**：工作分支 `fix/tester-followup-20261108b` 未合入 main、未推（两笔：`test(control): the multi ledger criterion executes its check file`、`feat(cli): a plan import names the checks it cannot carry`）。合入前请先跑一遍 `multiDirLandingD`（要 ccloop 工作树的二进制，见 §三 最新一节的环境警告）。ccloop／ccmem 本轮零改动，只有各自滚动 handoff。
+  2. **#158／#138 需要产品方向**：设计稿 `docs/superpowers/specs/2026-11-08-omp-verdict-recovery-and-noop-undo-design.md`。要点：OMP 坏 final 只能做「只验证、不重建答案」的新来源种类；真话「什么都没改」的决策需要一个可机械复核的 no-op undo 形式，ledger 是否带结构化 `undo.kind` 由人定。
+  3. **#170 未定**：`stopIntent.ts:769` 有 `delivered=0` 的读取路径，归类由源码扫描判据钉着；生产 walker 是否驱动它未实测。**不要按分类改名了事**。
+  4. **检查点写入**（与 2026-11-07／11-08 同一条规则）：`dev checkpoint write` 被自动审批拦下（用会话转录当来源），需人在终端跑或加允许规则。
+  5. **可选清理**：`/tmp/orca-mut-*`、`/tmp/orca-ctl-*` 旧副本；隔离 worktree `.claude/worktrees/tester-followup-20261108`（分支已合入）。`rm -rf` 与 `worktree prune` 归人。
 
 - **2026-11-08 这轮待人／外部状态**：
   1. **push**：Orca 的 `origin/main` 已由人推到本会话的 8 笔（含本会话随后四笔）；**ccloop 与 ccmem 各领先 1 笔**（本轮 handoff 提交）待人推。
