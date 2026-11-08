@@ -63,7 +63,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-08，本会话 `cf294856`，分支 `feat/tester-followup-20261108c`）—— #127／#138 落地；#158 与 UI 在飞；#191 按“无测试者数据”前提处置
+### 3.最新（2026-11-09，本会话 `cf294856`，已 `--ff-only` 合入本地 main，**未推**）—— #127／#138／#171／#181、UI 四项、#158 两侧；付费校准 n=1
 
 - **人的话（原话）**：「#191：具体需要测试者提供什么 => 太复杂了，你按无法拿到测试者原始数据的前提来走」「其他都按你的建议走」「UI §6 四个问题：我的答案 => 先按你的答案走」。**本轮已由人 push 上一批**（Orca 本地 main 与 `origin/main` 现核一致）。本轮分支 `feat/tester-followup-20261108c`，**未推**。
 - **产品方向已定并写进设计稿**（`docs/superpowers/specs/2026-11-08-omp-verdict-recovery-and-noop-undo-design.md` **Correction 2**、UI 设计稿 **§7 Decision**）：独立 checks 只有在**合同显式声明**时才可判完成；no-change undo 是结构化可验证证明，保留字串永不作数；UI 四项按我的建议（侧栏 workspace switcher、Settings 只留身份＋链接、Import 用对话框、runs 表把转录与证据移进单 run 详情）。
@@ -649,7 +649,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 2. **#162／#173**：本轮校准只得到 n=1（估算 11k vs 实际 43.8k，约 4×），且发现 `task retry --work` 对 finite 合同**不抬冻结预算**（三笔 run 都冻在 11k）。先由人定方向，再谈校准倍率。
 3. **#158 两侧代码已齐**，跨仓验收待 pin；不要把本地 `ORCA_CCLOOP_BIN` 覆盖当验收。
 4. **其余不变**：#145／#160、#174 不重开；UI 四项已落地并过审；#191 等真样本；#170 仍按未定。
-5. **门**：Orca 本轮跑的是受影响范围与聚焦套件（web 200 文件／1849 全绿），**全量门未跑**（Rule 18：只在发版跑）。
+5. **门**：受影响门 `node scripts/test-affected.mjs --base=main`（`TMPDIR=/tmp`）选中 189 个根文件，**1733 过／2 红**：`orchestration`「admits a debug group Orca opened itself」是**已登记的既有红**（历轮在未改动 main 上也红），`driverReconcileN`「lands all three…」单跑 5/5 绿 ⇒ 负载（当时 load 31–36，两套重测试并发）。Web 200 文件／1849 全绿、typecheck 0、镜像判据 8/8。**全量门未跑**（Rule 18）。
 
 1. **verify-only 配对：已结清**（见 §3）：ccloop 修复与其 pin 已推、Orca 已 repin、配对 `V10:` 在 **pin 提交的克隆**上 1 过／22 跳过。不要再用本地 `ORCA_CCLOOP_BIN` 覆盖冒充验收。
 2. **本会话已落地的**（见 §3 最新一节）：#167 `orca group cap`（agent 只能设更低的有限 token 上限）、#166 列表状态、#186 label 候选、#181 plan 版本未命中列版本、以及 wire 活动种类缺 `saved-result-top-up` 的缺陷。**未推**（分支在本地，等 §八 的 push）。
