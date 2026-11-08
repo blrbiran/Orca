@@ -4,7 +4,9 @@ import { EntryRejection, localError, type CliResponseV1 } from "./envelope.js";
 import { requestOverSocket } from "./socketClient.js";
 
 const SEGMENT = /^[A-Za-z0-9@:._-]+$/;
-const BINARY = /^runs\/[^/?]+\/evidence\/[^/?]+/;
+// The octet-stream attachment route (#184 keeps `/content`, the JSON route, printable). Anchored: `/content` is a
+// different, JSON route and must not be refused here.
+const BINARY = /^runs\/[^/?]+\/evidence\/[^/?]+$/;
 
 /** Spec §4.1: the CLI checks only what it needs to build a request; the panel's schemas judge the rest. */
 function checkPath(path: string, allowQuery: boolean): void {

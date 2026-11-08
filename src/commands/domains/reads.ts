@@ -111,6 +111,15 @@ function transcriptPath(context: WriteContext): string {
 interface TranscriptCallRow { attempt: number; phase: string; seq: number; runtime: string | null; recorded: boolean; bytes: number | null; final: boolean }
 interface TranscriptEvent { at: number; kind: string; meta?: Record<string, string>; num?: Record<string, number>; flag?: Record<string, boolean>; fields?: Record<string, { text: string; more: boolean }> }
 
+/** Issue #184: one evidence entry's content, under the identity the panel answered with (text or base64). */
+function evidenceContent(body: unknown): string {
+  const b = body as { evidenceId?: string; sha256?: string; byteLength?: number; truncated?: boolean; encoding?: string; text?: string; base64?: string };
+  if (b.encoding === undefined) return text(body); // the manifest, as before
+  const head = `evidence ${b.evidenceId ?? "?"}  sha256 ${b.sha256 ?? "?"}  ${b.byteLength ?? "?"} B${b.truncated === true ? " (truncated)" : ""}`;
+  if (b.encoding === "utf8") return `${head}\n${b.text ?? ""}`;
+  return `${head}  encoding base64 (binary; pipe through base64 -d to keep the bytes)\n${b.base64 ?? ""}`;
+}
+
 function transcriptText(body: unknown): string {
   const b = body as { schema?: string; available?: boolean; reason?: string; calls?: TranscriptCallRow[]; events?: TranscriptEvent[]; start?: number; end?: number; runtime?: string; final?: boolean };
   if (b.schema === "orca-run-transcripts-v1") {
@@ -213,7 +222,22 @@ export const READ_ROWS: CommandDef[] = [
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");
     } }),
   read({ domain: "run", action: "activity", summary: "a run's newest 200 activity rows, newest first", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/activity`] }),
-  read({ domain: "run", action: "evidence", summary: "a run's evidence manifest", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/evidence`] }),
+  // Issue #184: an agent that has an evidence id from the manifest can read that entry's content, not only list it.
+  read({ domain: "run", action: "evidence", summary: "a run's evidence manifest, or one entry's content when --id names it",
+    positionals: [RUN],
+    flags: [
+      { name: "id", type: "string", summary: "an evidence id the manifest lists: print that entry's content" },
+      { name: "max-bytes", type: "integer", summary: "with --id: cap the content sent (default 262144; 0 sends the whole entry)" },
+    ],
+    examples: ["orca run evidence run-1", "orca run evidence run-1 --id ev-1"],
+    paths: (c) => {
+      const path = `runs/${ids(c, "run")}/evidence`;
+      const id = c.args.flags.id;
+      if (typeof id !== "string") return [path];
+      const max = c.args.flags["max-bytes"];
+      return [`${path}/${id}/content${typeof max === "number" ? `?maxBytes=${max}` : ""}`];
+    },
+    format: (body) => evidenceContent(body) }),
   // Live transcript spec Correction (session 3cfc2e73, F5): the socket serves the Web's transcript routes; a run Orca
   // dispatched is refused there. Without --call: the run's calls (no paths); with it: one window, the tail by default.
   read({ domain: "run", action: "transcript", summary: "a run's agent transcript: its calls, or one call's window (tail by default), redacted as the Web shows it",

@@ -21,13 +21,20 @@ a run's newest 200 activity rows, newest first
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<run>`: a run id
 
-## `orca run evidence <run>`
+## `orca run evidence <run> [--id <id>] [--max-bytes <max-bytes>]`
 
-a run's evidence manifest
+a run's evidence manifest, or one entry's content when --id names it
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<run>`: a run id
+- `--id <id>`: an evidence id the manifest lists: print that entry's content
+- `--max-bytes <n>`: with --id: cap the content sent (default 262144; 0 sends the whole entry)
+
+```
+orca run evidence run-1
+orca run evidence run-1 --id ev-1
+```
 
 ## `orca run transcript <run> [--call <call>] [--before <before>] [--after <after>] [--thinking]`
 

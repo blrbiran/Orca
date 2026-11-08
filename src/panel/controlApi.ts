@@ -122,6 +122,19 @@ function sinceChangeSeq(req: Request): number | null {
 
 const USAGE_GROUPS: readonly UsageGroupBy[] = ["model", "repo", "day", "week", "month"];
 
+/** Issue #184: is every byte part of well-formed UTF-8 text (and no NUL)? Binary evidence is sent base64 instead. */
+function isTextBytes(bytes: Buffer): boolean {
+  if (bytes.includes(0)) return false;
+  try { new TextDecoder("utf-8", { fatal: true }).decode(bytes); return true; } catch { return false; }
+}
+/** The longest well-formed UTF-8 prefix of `bytes`, so a byte cap never cuts a character into U+FFFD. */
+function textPrefix(bytes: Buffer): string {
+  for (let cut = 0; cut < 4 && cut < bytes.byteLength; cut += 1) {
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, bytes.byteLength - cut)); } catch { /* one byte shorter may end on a boundary */ }
+  }
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
 /** Accounts spec §5.3: `scope` is required; `from`/`to` are canonical decimal safe integers with from < to; no other key. */
 function usageQuery(req: Request): UsageQuery {
   const bad = () => new ControlError("usage-query-invalid");
@@ -606,6 +619,31 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     const runId = String(req.params.runId);
     try { res.json(await readRunEvidence(deps.store, runId)); }
     catch (error) {
+      const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
+    }
+  }));
+
+  // Issue #184: the bytes behind one manifest entry, as JSON, so a CLI (which speaks JSON over the socket) can read
+  // an artifact's content without a browser session. The same store-verified path as the attachment route above:
+  // only an id the manifest lists is read, and only under that entry's hash. `maxBytes` caps what is sent (0 = all).
+  app.get("/api/control/runs/:runId/evidence/:artifactId/content", asyncRoute(async (req, res) => {
+    const runId = String(req.params.runId);
+    const artifactId = String(req.params.artifactId);
+    const asked = Number(req.query.maxBytes ?? 262_144);
+    try {
+      if (!Number.isInteger(asked) || asked < 0) throw new ControlError("control-argument-invalid", "maxBytes must be a non-negative integer");
+      const manifest = await readRunEvidence(deps.store, runId);
+      const entry = manifest.entries.find((row) => row.evidenceId === artifactId);
+      if (!entry) throw new ControlError("recovery-blocked", "evidence-reference-unknown");
+      const bytes = await readArtifact(deps.store, { artifactId: entry.evidenceId, hash: entry.sha256 });
+      const cap = asked === 0 ? bytes.byteLength : Math.min(asked, bytes.byteLength);
+      const shown = bytes.subarray(0, cap);
+      const utf8 = isTextBytes(bytes);
+      res.json({ schema: "orca-run-evidence-content-v1", runId, evidenceId: entry.evidenceId, sha256: entry.sha256, byteLength: bytes.byteLength,
+        truncated: cap < bytes.byteLength, encoding: utf8 ? "utf8" : "base64",
+        ...(utf8 ? { text: textPrefix(shown) } : { base64: shown.toString("base64") }) });
+    } catch (error) {
       const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
       sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
     }

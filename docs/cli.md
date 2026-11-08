@@ -104,7 +104,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 - `orca run show <run> [--group <group>]` — one run: its entry in the group view, the newest 10 activity rows, the evidence summary
 - `orca run activity <run>` — a run's newest 200 activity rows, newest first
-- `orca run evidence <run>` — a run's evidence manifest
+- `orca run evidence <run> [--id <id>] [--max-bytes <max-bytes>]` — a run's evidence manifest, or one entry's content when --id names it
 - `orca run transcript <run> [--call <call>] [--before <before>] [--after <after>] [--thinking]` — a run's agent transcript: its calls, or one call's window (tail by default), redacted as the Web shows it
 - `orca run results <run>` — a run's saved results
 - `orca run eligibility <run>` — whether a run's saved result can be verified instead of re-run

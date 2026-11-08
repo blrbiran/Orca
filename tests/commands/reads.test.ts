@@ -30,6 +30,7 @@ const RAW: Record<string, unknown> = {
   "groups/g-alpha/decisions": { schema: "orca-group-decisions-v1", tasks: [] },
   "runs/run-1/activity": { schema: "orca-run-activity-v1", runId: "run-1", entries: ACTIVITY },
   "runs/run-1/evidence": EVIDENCE,
+  "runs/run-1/evidence/ev-2/content": { schema: "orca-run-evidence-content-v1", runId: "run-1", evidenceId: "ev-2", sha256: "c".repeat(64), byteLength: 20, truncated: false, encoding: "utf8", text: "line one\nline two\n" },
   "runs/run-1/results": { schema: "orca-run-results-v1", runId: "run-1" },
   "runs/run-1/saved-result-eligibility": { status: "unavailable", reason: "x" },
   "corrections": { schema: "orca-correction-list-v1", corrections: [] },
@@ -53,7 +54,7 @@ describe("reads whose body is the panel's GET body verbatim (spec §4)", () => {
   const cases: Array<[string[], string]> = [
     [["group", "list"], "summary"], [["group", "show", "g-al"], "groups/g-alpha"], [["requirement", "show", "g-alpha"], "groups/g-alpha/requirement"],
     [["decision", "list", "g-alpha"], "groups/g-alpha/decisions"], [["run", "activity", "run-1"], "runs/run-1/activity"],
-    [["run", "evidence", "run-1"], "runs/run-1/evidence"], [["run", "results", "run-1"], "runs/run-1/results"],
+    [["run", "evidence", "run-1"], "runs/run-1/evidence"], [["run", "evidence", "run-1", "--id", "ev-2"], "runs/run-1/evidence/ev-2/content"], [["run", "results", "run-1"], "runs/run-1/results"],
     [["run", "eligibility", "run-1"], "runs/run-1/saved-result-eligibility"], [["correction", "list"], "corrections"],
     [["agent", "list"], "agents"], [["agent", "models", "claude-main"], "agents/claude-main/models"], [["usage", "show"], "usage?scope=all"],
     [["orchestration", "show"], "orchestration"], [["recovery", "list"], "recovery"], [["project", "list"], "projects"],
@@ -68,6 +69,22 @@ describe("reads whose body is the panel's GET body verbatim (spec §4)", () => {
     const human = await cli(argv, p.dir);
     expect(human.code).toBe(0);
     expect(human.stdout.trim().length).toBeGreaterThan(0);
+  });
+
+  it("run evidence --id prints that entry's content, and a binary entry says base64 (#184)", async () => {
+    const p = await panel();
+    const text = await cli(["run", "evidence", "run-1", "--id", "ev-2"], p.dir);
+    expect(text.code, text.stderr).toBe(0);
+    expect(text.stdout).toContain("evidence ev-2");
+    expect(text.stdout).toContain("line two");
+    const raw = Object.fromEntries(Object.entries(RAW).map(([path, body]) => [`GET ${path}`, { status: 200, body }]));
+    raw["GET runs/run-1/evidence/ev-3/content"] = { status: 200, body: { schema: "orca-run-evidence-content-v1", runId: "run-1", evidenceId: "ev-3", sha256: "d".repeat(64), byteLength: 4, truncated: true, encoding: "base64", base64: "AP/+QQ==" } };
+    const binaryPanel = await fakePanel(raw);
+    const binary = await cli(["run", "evidence", "run-1", "--id", "ev-3"], binaryPanel.dir);
+    expect(binary.code, binary.stderr).toBe(0);
+    expect(binary.stdout).toContain("encoding base64");
+    expect(binary.stdout).toContain("AP/+QQ==");
+    expect(binary.stdout).toContain("(truncated)");
   });
 });
 

@@ -739,6 +739,26 @@ describe("canonical control read API", () => {
     expect(manifest.entries.every(entry => entry.downloadUrl.startsWith("/api/control/runs/run-one/evidence/"))).toBe(true);
     expect(JSON.stringify(manifest)).not.toContain(h.root);
 
+    // Issue #184: one entry's content, as JSON, so a CLI can read it; a byte cap truncates and says so.
+    const zEntry = manifest.entries.find(entry => entry.evidenceId === "evidence-z")!;
+    const content = await request(h, "/api/control/runs/run-one/evidence/evidence-z/content");
+    expect(content.status).toBe(200);
+    expect(await content.json()).toEqual({ schema: "orca-run-evidence-content-v1", runId: "run-one", evidenceId: "evidence-z", sha256: zEntry.sha256, byteLength: 15, truncated: false, encoding: "utf8", text: "longer evidence" });
+    const capped = await request(h, "/api/control/runs/run-one/evidence/evidence-z/content?maxBytes=6");
+    expect(await capped.json()).toMatchObject({ byteLength: 15, truncated: true, encoding: "utf8", text: "longer" });
+    const whole = await request(h, "/api/control/runs/run-one/evidence/evidence-z/content?maxBytes=0");
+    expect(await whole.json()).toMatchObject({ truncated: false, text: "longer evidence" });
+    expect((await request(h, "/api/control/runs/run-one/evidence/evidence-z/content?maxBytes=-1")).status).toBe(400);
+    expect((await request(h, "/api/control/runs/run-one/evidence/nope/content")).status).toBe(423);
+    // Binary bytes are base64, never text mangled by a UTF-8 decode.
+    const binary = await writeArtifact(h.store, "evidence-bin", Buffer.from([0x00, 0xff, 0xfe, 0x41]));
+    h.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)")
+      .run("binary-outbox", "archive", canonicalBytes({ runId: "run-one", artifacts: [binary] }).toString("utf8"));
+    const withBinary = await (await request(h, "/api/control/runs/run-one/evidence")).json() as EvidenceManifestV1;
+    const binEntry = withBinary.entries.find(entry => entry.evidenceId === "evidence-bin")!;
+    const binaryResponse = await request(h, "/api/control/runs/run-one/evidence/evidence-bin/content");
+    expect(await binaryResponse.json()).toEqual({ schema: "orca-run-evidence-content-v1", runId: "run-one", evidenceId: "evidence-bin", sha256: binEntry.sha256, byteLength: 4, truncated: false, encoding: "base64", base64: Buffer.from([0x00, 0xff, 0xfe, 0x41]).toString("base64") });
+
     h.store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)")
       .run("malformed-evidence-outbox", "archive", canonicalBytes({ runId: "run-one", artifacts: {} }).toString("utf8"));
     let corrupted = await request(h, "/api/control/runs/run-one/evidence");
