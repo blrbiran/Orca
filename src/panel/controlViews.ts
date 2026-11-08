@@ -1366,10 +1366,32 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
 
 export function readControlRecovery(store: ControlStore, epoch: string): RecoveryViewV1 {
   const terminalRuns = terminalRunRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }) };
+  const deferredWakes = deferredWakeRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
+}
+
+/**
+ * Tester #171: the start-family wakes `deliverSchedulerWakes` keeps deferring, with the same precedence it applies --
+ * global dispatch block, then a group blocker, then a start wake of an archived group. A wake with no handler in this
+ * caller's table is the one condition this read cannot see; it is not guessed at. `scheduler_wakes` has no timestamp, so
+ * there is no age here: adding one is a migration, not a read.
+ */
+function deferredWakeRows(store: ControlStore): Array<{ groupId: string; kind: string; reason: "dispatch-blocked" | "group-blocker" | "group-archived" }> {
+  const out: Array<{ groupId: string; kind: string; reason: "dispatch-blocked" | "group-blocker" | "group-archived" }> = [];
+  const rows = store.db.prepare("SELECT group_id,kind FROM scheduler_wakes WHERE delivered=0 ORDER BY rowid").all();
+  for (const row of rows) {
+    const groupId = String(row.group_id), kind = String(row.kind);
+    if (!["start", "no-start", "resume", "continuation"].includes(kind)) continue;
+    const group = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    const archived = group !== undefined && archivedMarkOf(JSON.parse(String(group.body))) !== null;
+    if (store.dispatchBlocked) out.push({ groupId, kind, reason: "dispatch-blocked" });
+    else if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId) !== undefined) out.push({ groupId, kind, reason: "group-blocker" });
+    else if (archived) out.push({ groupId, kind, reason: "group-archived" });
+  }
+  return out;
 }
 
 /** Terminal runs whose accounting a person or agent still has to end, with the one command each needs (#169). */
