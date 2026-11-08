@@ -31,6 +31,17 @@ describe("import and estimate print the estimate state and reason on their own l
     expect(JSON.parse(json.stdout)).toMatchObject({ schema: "orca-cli-response-v1", status: 201, body });
   });
 
+  it("group import points to its agent and budget checks before confirmation (#164)", async () => {
+    const w = await world({}, { "POST groups/import-plan": { status: 201, body: imported("none", null) } });
+    const out = await cli(["group", "import", "plan-a", "--group", "g-new"], w.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("orca proposal show g-new");
+    expect(out.stdout).toContain("orca control get groups/g-new/agent-preview");
+    // A machine consumer receives the panel answer unchanged.
+    const json = await cli(["group", "import", "plan-a", "--group", "g-new", "--json"], w.dir);
+    expect(JSON.parse(json.stdout)).toMatchObject({ status: 201, body: imported("none", null) });
+  });
+
   it("group estimate names its state and reason in full", async () => {
     const body = created("input-too-large", "estimate-input-too-large");
     const w = await world({}, { "POST groups/g-alpha/estimates": { status: 201, body } });

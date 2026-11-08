@@ -64,7 +64,10 @@ const estimateFormat = (row: CommandDef, reasonField: "estimateReasonCode" | "re
   const result = (body as { result?: Record<string, unknown> } | null)?.result;
   if (result === undefined || result === null || typeof result.estimateState !== "string") return row.format(body);
   const reason = result[reasonField];
-  return `${row.format(body)}\nestimate: ${result.estimateState}\nreason: ${typeof reason === "string" ? reason : "none"}`;
+  const next = result.kind === "imported" && typeof result.groupId === "string"
+    ? `\nnext: inspect the imported group's agent selections and budgets before confirmation (panel overrides are not copied): orca control get groups/${result.groupId}/agent-preview; orca proposal show ${result.groupId}`
+    : "";
+  return `${row.format(body)}\nestimate: ${result.estimateState}\nreason: ${typeof reason === "string" ? reason : "none"}${next}`;
 } });
 
 export const WORK_ROWS: CommandDef[] = [
