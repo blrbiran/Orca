@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { readArtifact } from "../../src/control/archive.js";
+import { readArtifact, writeArtifact } from "../../src/control/archive.js";
+import { acceptanceEvidence } from "../../src/control/checkpoints.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Tester #127 and #138 (design Correction 2): an ordinary task may complete with no net tracked change only when its
@@ -33,6 +35,19 @@ describe("a checked no-change task completes only by its authored declaration", 
       expect(t.h.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(`acceptance:${runId}`)).toBeUndefined();
       expect(workOf(t, runId)).toBe("blocked");
       expect(t.body(runId).drive.blockedReason).toBe("empty-result");
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("does not count an acceptance whose proof names another attempt", async () => {
+    const t = await driverHarness([{ taskId: "a", commandChecksDecideGoal: true }], { files: () => ({}) }); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).drive?.cleanedUp === true);
+      expect(await acceptanceEvidence(t.h.store, runId)).toBe(true);
+      // A forged proof — the right run, the right landing, a different attempt — must not count.
+      const drive = t.body(runId).drive;
+      const forged = await writeArtifact(t.h.store, `forged-acceptance-${runId}`, Buffer.from(JSON.stringify({ runId, checksPassed: true, landing: "no-change", commit: "1".repeat(40), noChange: { ...drive.noChange, attempt: "1".repeat(40) } })));
+      t.h.store.db.prepare("UPDATE outbox SET body=? WHERE id=?").run(JSON.stringify({ runId, accepted: true, source: forged }), `acceptance:${runId}`);
+      expect(await acceptanceEvidence(t.h.store, runId)).toBe(false);
     } finally { await t.h.dispose(); }
   }, 30000);
 });

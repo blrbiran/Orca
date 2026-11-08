@@ -48,13 +48,14 @@ export async function acceptanceEvidence(store:ControlStore,runId:string):Promis
  // attempt, and the trees it names must be equal. Anything else — an invented landing, a foreign attempt, a proof
  // the run does not hold — is not acceptance.
  if(proof.landing!=="no-change" || typeof proof.noChange!=="object" || proof.noChange===null) return false;
+ // No-change completion (2026-11-08): the acceptance must carry the same proof C measured and recorded on this run.
+ // The comparison is over the canonical bytes of the whole proof, so it binds the attempt, both trees, the frozen
+ // contract hash and the check list together; anything a caller invents fails it.
  const body=store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
  if(!body) return false;
- const drive=(JSON.parse(String(body.body)) as {drive?:{noChange?:unknown;attemptSha?:unknown}|null}).drive;
+ const drive=(JSON.parse(String(body.body)) as {drive?:{noChange?:unknown}|null}).drive;
  if(drive===undefined || drive===null || drive.noChange===undefined || drive.noChange===null) return false;
- const bound=proof.noChange as {attempt?:unknown;baseTree?:unknown;attemptTree?:unknown};
- return canonicalBytes(drive.noChange).toString()===canonicalBytes(proof.noChange).toString()
-   && bound.attempt===drive.attemptSha && bound.baseTree===bound.attemptTree;
+ return canonicalBytes(drive.noChange).toString()===canonicalBytes(proof.noChange).toString();
 }
 /** Handoff delivery spec §13.2 C-1 (preflight I11): the atomic staging write both checkpoint persisters share,
  * parameterized by the byte form each one owns (`JSON.stringify(c)` here, `canonicalBytes(c)` for the H-settle
