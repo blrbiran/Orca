@@ -1098,9 +1098,13 @@ export function App(): JSX.Element {
       );
       return;
     }
-    const owner = overview.data?.groups.find((g) => g.groupId === target.groupId && g.archived !== true);
-    if (overview.status !== "available" || owner === undefined) { unavailable(); return; }
-    if (scope.kind === "project" && owner.repoId !== scope.repoId) {
+    // Tester #174/#179: a criteria-review judge is archived once it settles; its parent still links to it, and a
+    // bookmarked judge URL must reopen it read-only. The overview lists no archived group, so an unlisted group target
+    // is read by id and admitted only when it proves itself a criteria-review judge; every other archived group stays
+    // unavailable, as #63 ruled.
+    const owner = overview.data?.groups.find((g) => g.groupId === target.groupId);
+    if (overview.status !== "available" || (owner === undefined && target.kind !== "group")) { unavailable(); return; }
+    if (owner !== undefined && scope.kind === "project" && owner.repoId !== scope.repoId) {
       // §9.3 (H11 sub-ruling): a route to another project's group never switches the project; it says so, with a button.
       const holder = fromRoute === null ? undefined : projects?.find((entry) => entry.controlRepoId === owner.repoId);
       if (fromRoute !== null && holder !== undefined) { setRouteNotice({ kind: "other-project", section: fromRoute.section, id: target.groupId, projectKey: holder.projectKey, route: fromRoute }); return; }
@@ -1109,20 +1113,25 @@ export function App(): JSX.Element {
     void (async () => {
       try {
         if (target.kind === "requirement") {
+          const requirement = owner!;
           const value = await fetchRequirement(target.groupId);
           if (!current()) return;
-          if (value.summary.groupId !== target.groupId || value.summary.repoId !== owner.repoId || value.summary.archived === true
+          if (value.summary.groupId !== target.groupId || value.summary.repoId !== requirement.repoId || value.summary.archived === true
             || value.epoch !== overviewNow.current.data?.epoch || value.changeSeq < Math.max(overviewNow.current.data?.changeSeq ?? 0, controlNow.current.changeSeq)) { unavailable(); return; }
           if (fromRoute === null && !overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
           setRequirementViews((all) => ({ ...all, [target.groupId]: value })); setSelectedRequirement(target.groupId); finish("requirements");
         } else {
           const value = await fetchControlGroup(target.groupId);
           if (!current()) return;
-          if (value.summary.groupId !== target.groupId || value.summary.repoId !== owner.repoId || value.summary.archived === true
+          // Only a settled criteria-review judge may be opened after archive; its view is read-only (#174/#179).
+          const archivedReview = value.summary.archived === true && value.summary.systemDebug?.source.kind === "criteria-review";
+          const listed = owner !== undefined && value.summary.repoId === owner.repoId && value.summary.archived !== true;
+          if (value.summary.groupId !== target.groupId || (!listed && !archivedReview)
+            || (archivedReview && scope.kind === "project" && value.summary.repoId !== scope.repoId)
             || value.epoch !== overviewNow.current.data?.epoch || value.changeSeq < Math.max(overviewNow.current.data?.changeSeq ?? 0, controlNow.current.changeSeq)
             || (target.taskId !== null && !value.workItems.some((item) => item.taskId === target.taskId))
             || (target.runId !== null && !value.runs.some((run) => run.runId === target.runId))) { unavailable(); return; }
-          if (fromRoute === null && !overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
+          if (fromRoute === null && !archivedReview && !overviewModelNow.current.progress.some((p) => p.group.groupId === target.groupId)) { unavailable(); return; }
           // Review minor 4: the task goes into the URL under the region it opens in (dispatch / integration resolve to one).
           dispatchControl({ type: "group", value }); setSelectedGroup(target.groupId); finish("tasks", focusedDetailRegion(value, target.region));
         }
