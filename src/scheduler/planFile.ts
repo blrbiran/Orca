@@ -241,12 +241,18 @@ export const taskContractSchema = z.object({
   verification: z.object({
     verifierType: z.enum(["command", "agent"]), requiredChecks: z.array(z.string()).min(1),
     rejectOn: z.array(z.string()).min(1), evidenceRequired: z.array(z.string()).default([]),
+    commandChecksDecideGoal: z.literal(true).optional(),
   }).strict(),
   escalationAndExit: z.object({
     escalationTargets: z.array(z.string()).default([]), pauseOn: z.array(z.string()).default([]),
     stopOn: z.array(z.string()).default([]), terminalStates: terminalStatesSchema.default(() => [...terminalStates]),
   }).strict(),
-}).strict();
+}).strict().superRefine((contract, issues) => {
+  if (contract.verification.commandChecksDecideGoal !== true) return;
+  if (contract.verification.verifierType !== "command" || contract.context.setupCommands !== undefined || contract.context.additionalRepos !== undefined) {
+    issues.addIssue({ code: z.ZodIssueCode.custom, path: ["verification", "commandChecksDecideGoal"], message: "decisive command checks require a command verifier, one repository and no setup" });
+  }
+});
 
 function readRegularUtf8(path: string, validateDescriptor?: (fd: number) => void): string {
   let fd: number | undefined;

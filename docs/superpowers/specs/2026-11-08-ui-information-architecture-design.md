@@ -76,3 +76,12 @@ where a person is already looking at one run. The table keeps: run, phase, state
 2. **Should Settings › This project keep any way to change scope**, or only ever show identity plus a link?
 3. **Is a dialog acceptable for import**, or do you want it on its own page/tab ("Plans") beside Tasks?
 4. **Should the runs table keep an evidence affordance at all**, given raw evidence is now readable from the CLI?
+
+## 7. Decision (2026-11-08, person approved the recommendations)
+
+Keep one workspace switcher at the top of the sidebar, visibly naming the current workspace and exposing All projects,
+search when useful, and the existing project actions. Settings shows only the selected project's identity and a link
+that focuses the switcher. Tasks shows an Import button opening a dialog, retaining registration and the Overview entry.
+Progress moves label filters into a toolbar and makes the task table collapsible. The runs table removes the raw evidence
+column: expanding a run displays its transcript at full width and an evidence entry in that run's details. Keep Web
+access to evidence even though CLI can now read its content. Preserve the routes, state and refusal semantics.

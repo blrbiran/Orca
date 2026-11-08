@@ -87,3 +87,20 @@ attempt trees *before* the ledger-only commit changes `.decisions/`. A reserved 
 standalone ledger validator merely on its own wording: that would accept forged third-party ledger rows. A structured
 form also needs a verifier that can check its immutable evidence. The product decision is which decisions may use a
 no-change undo and whether net Git tree equality is enough evidence; the representation follows that decision.
+
+## Correction 2 (2026-11-08, person approved the limited product direction)
+
+**#158:** Independently rerun checks may establish task completion only when the contract explicitly declares that
+its nonempty command checks fully decide the goal. The first implementation covers one repository, no setup, a complete
+clean execute with known usage, and no required agent judgment or reported decisions. A normal command verifier alone
+is insufficient evidence of that declaration: current `rejectOn` is mandatory in the contract but is judged only by an
+agent verifier. Preserve all admission and funding checks, bind the actual published Git evidence during the worker
+lease, and label the resulting acceptance as verification-only. Never synthesize the absent execute answer or its hash;
+ordinary contracts and historical runs without complete evidence stay ineligible.
+
+**#138 and ordinary empty results (#127):** A no-change decision may assert only that this run made no *net tracked
+repository change*. Prove equality of the original base and attempt trees before the ledger-only commit. This does not
+prove absence of intermediate edits, ignored files, external effects or decision-specific changes in a run that changed
+other tracked files. Record a structured, verifiable proof in the ledger; a bare literal `undo.how` is never authority.
+Ordinary work with a proved empty result and passing decisive checks may be accepted only through an explicit no-change
+completion path, not by accepting every empty result. Test pending decision and criteria-review settlement separately.

@@ -49,7 +49,8 @@ import { approximateUsageApplies, bookApproximateFloorInTransaction } from "./ap
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, type WorkspaceRoots } from "./workspace.js";
+import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
+import { git, ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
@@ -276,7 +277,7 @@ export function readStartEnvelope(store: ControlStore, run: DriverRun): StartEnv
 export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: WorkspaceMode, workspace: boolean): DriveRecord {
   return {
     workspaceMode, sourceDir: sourceDirOf(roots, runId), workspacePath: workspace ? workspacePathOf(roots, runId) : null, targetRepo: null,
-    prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null,
+    prepared: false, base: null, envelopeHash: null, inspectUnknown: 0, outcome: null, attemptSha: null, landedCommit: null, noChange: null,
     landingPlan: null, landedDirs: null,
     reconcile: null, blockedAt: null, blockedReason: null, cleanedUp: false, cleanupError: null, publishError: null, skills: null,
     stagedPending: [], ledgerCommit: null, debugRepro: null, stagedDebugClosing: null, stagedCriteriaFlag: null, criteriaBase: null,
@@ -915,14 +916,26 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
       return true;
     }
   }
+  // No-change completion (2026-11-08, design Correction 2): only a contract that declares its command checks decide the
+  // goal, and only an attempt whose Git tree equals its base tree, may complete without a landing. The proof is measured
+  // here from the result repository; a differing tree leaves D14 exactly as it was.
+  let noChange: NonNullable<DriveRecord["noChange"]> | null = null;
+  if (measured.empty && multiDirs === null && drive.base !== null && contract.verification.commandChecksDecideGoal === true) {
+    const resultRepo = join(drive.sourceDir, "repo");
+    const tree = async (rev: string) => (await git(resultRepo, [...QUIET_GIT, "rev-parse", `${rev}^{tree}`])).trim();
+    const [baseTree, attemptTree] = [await tree(drive.base), await tree(attemptSha)];
+    if (baseTree === attemptTree) {
+      noChange = { base: drive.base, attempt: attemptSha, baseTree, attemptTree, contractHash: sha256Canonical(contract), requiredChecks: [...contract.verification.requiredChecks] };
+    }
+  }
   return write(deps, () => {
     const current = readDriverRun(store, runId);
     if (current.state !== "accepted") return false;
     // Deviation D14: an empty result is not landed; `landedCommit` stays null and the settle step
     // (Task 7) applies D14 and decides E from there.
-    current.state = measured.empty ? "landed" : "collected";
+      current.state = measured.empty ? "landed" : "collected";
     current.drive = {
-      ...current.drive!, outcome, attemptSha, landedCommit: null,
+      ...current.drive!, outcome, attemptSha, landedCommit: null, noChange,
       ...(multiDirs === null ? {} : { dirs: multiDirs.map((dir, index) => ({ ...dir, attemptSha: dirAttempts[index]! })) }),
     };
     saveDriverRun(store, current);
@@ -1252,16 +1265,21 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     // Control run decisions plan Task 7: an empty result's decisions go onto the group branch in a ledger-only commit.
     // A multi run that landed only non-primary directories has no `landedCommit` but is not an empty result.
     const landed = landedAnywhere(drive);
+    // No-change completion (2026-11-08): the C proof is used only when it names this run's attempt; anything else keeps
+    // D14's empty-result block. `acceptanceEvidence` re-checks the same binding before it counts the task done.
+    const noChange = !landed && drive.noChange !== null && drive.noChange.attempt === drive.attemptSha ? drive.noChange : null;
     if (!landed && drive.ledgerCommit === null) {
       const recorded = await recordEmptyResultDecisions(deps, runId);
       if (recorded !== "settle") return recorded === "blocked";
     }
     const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
     mark("archive");
-    if (landed) {
+    if (landed || noChange !== null) {
       // Same evidence shape `confirmLanding` writes (schedulerBridge.ts). checksPassed: ccloop's verifier
       // ran the contract's requiredChecks in this run and it ended `succeeded`.
-      const source = await writeArtifact(store, `acceptance-${runId}`, Buffer.from(JSON.stringify({ runId, checksPassed: true, landing: "landed", commit: drive.landedCommit, ...(drive.landedDirs === null ? {} : { dirs: drive.landedDirs }), intent: `drive:${runId}` })), archiveAdmission(deps));
+      const source = await writeArtifact(store, `acceptance-${runId}`, Buffer.from(JSON.stringify(landed
+        ? { runId, checksPassed: true, landing: "landed", commit: drive.landedCommit, ...(drive.landedDirs === null ? {} : { dirs: drive.landedDirs }), intent: `drive:${runId}` }
+        : { runId, checksPassed: true, landing: "no-change", commit: noChange!.attempt, noChange: noChange!, intent: `drive:${runId}` })), archiveAdmission(deps));
       write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run(`acceptance:${runId}`, JSON.stringify({ runId, accepted: true, source })));
     }
     deps.crash?.("E-after-acceptance");
@@ -1282,7 +1300,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }
     // Issues #153/#127: D14 left the task blocked (an empty or ledger-only result has no acceptance); the reason is
     // recorded so the board card and the overview say why. The run stays `settled`; this is not a driver block.
-    if (!landed) write(deps, () => {
+    if (!landed && noChange === null) write(deps, () => {
       const current = readDriverRun(store, runId);
       if (current.state !== "settled" || current.drive === undefined || current.drive.blockedReason !== null) return;
       current.drive = { ...current.drive, blockedReason: EMPTY_RESULT_REASON };

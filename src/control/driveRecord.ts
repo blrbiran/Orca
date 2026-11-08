@@ -170,6 +170,13 @@ export const driveRecordSchema = z.object({
   // Control run decisions: the `orca: decisions <runId>` commit that carried this run's ledger lines when the run landed
   // nothing (`landedCommit` null); a later step writes it. Defaulted for the same reason.
   ledgerCommit: commitSchema.nullable().default(null),
+  // No-change completion (2026-11-08): the Git proof that an opted-in task's attempt tree equals its base tree, written at
+  // C so E can accept the result only with the check evidence the contract declared decisive. Null/absent for every run
+  // that changed the tree and for every record written before this field; defaulted so older records still parse.
+  noChange: z.object({
+    base: commitSchema, attempt: commitSchema, baseTree: commitSchema, attemptTree: commitSchema,
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/), requiredChecks: z.array(z.string().min(1)).min(1),
+  }).strict().nullable().default(null),
   // Debug task plan Task 8 (design §12.8): the reproduce-first check of a debug run. `checking` is written before the check
   // touches the workspace and holds what a restart needs to restore it (fix round 1, R1): the attempt, the symbolic ref and
   // the untracked paths that were there, and whether the attempt was empty. `skipped` keeps the agent's reason for a

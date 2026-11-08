@@ -131,6 +131,7 @@ export const loopInputsSchema = z
   .object({
     tokenBudget: safeInteger.nullable().optional(),
     setup: setupCommandsSchema.optional(),
+    commandChecksDecideGoal: z.literal(true).optional(),
     goal: z.string().min(1),
     successCondition: z.string().min(1),
     targetPaths: z.array(pathEntrySchema).min(1),
@@ -190,6 +191,7 @@ export const loopPlanFileSchema = z
     plan: z.string().min(1).optional(),
     tokenBudget: safeInteger.nullable().optional(),
     setup: setupCommandsSchema.optional(),
+    commandChecksDecideGoal: z.literal(true).optional(),
     goal: z.string().min(1),
     successCondition: z.string().min(1),
     targetPaths: z.array(pathEntrySchema).min(1),
@@ -303,6 +305,7 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
     verification: {
       verifierType: plan.verifierType, rejectOn: [plan.rejectOn], evidenceRequired: [],
       requiredChecks: [...(plan.documentChecks ? inputs.targetPaths.map(documentCheck) : []), ...inputs.checks],
+      ...(inputs.commandChecksDecideGoal === true ? { commandChecksDecideGoal: true } : {}),
     },
     escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: [...TERMINAL_STATES] },
   };
@@ -328,6 +331,7 @@ export function normalizeLoopInputs(input: LoopPlanFileInput): LoopInputs {
   return {
     ...(input.tokenBudget!==undefined?{tokenBudget:input.tokenBudget}:{}),
     ...(input.setup !== undefined ? { setup: [...input.setup] } : {}),
+    ...(input.commandChecksDecideGoal === true ? { commandChecksDecideGoal: true } : {}),
     goal: input.goal, successCondition: input.successCondition, targetPaths: [...input.targetPaths], checks: [...input.checks],
     nonGoals: [...(input.nonGoals ?? [])], relevantDocs: [...(input.relevantDocs ?? [])], protectedPaths: [...(input.protectedPaths ?? [])],
     maxFilesTouched: input.maxFilesTouched ?? null,
