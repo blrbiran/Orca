@@ -63,3 +63,27 @@ escape from the gate, it is the gate recognizing the only honest undo for a no-o
 - A successful empty result still records `empty-result` and leaves ordinary work blocked (D14); only a criteria-review
   judge treats that as a justified verdict (webService.ts, groupDone.ts). The archive's claim that every such group
   clogs a slot is obsolete: blocked tasks without runnable work hold no orchestration slot.
+
+## Correction 1 (2026-11-08, independent review of the branch above `docs(handoff): this round's four fixes`)
+
+**#158:** The proposed authority kind alone cannot enter the existing saved-result verifier. Both ccloop's recovery
+reader and its verification path require a strictly decoded `ExecutionResult` and `normalizedExecutionHash`; Orca's
+consumer also assumes a decoded result for non-exhausted sources. A verification-only source needs a distinct,
+discriminated recovery object and path through both repositories: derive changed paths from the verified published Git
+candidate, leave the absent answer/hash absent, and never manufacture decisions, usage or `taskResult`. Admission must
+prove the final format is the *only* execute failure after a complete stream, clean process exit, no tool-rule violation,
+known usage and unchanged pre/post-execute HEAD. Capture the worktree and evidence under the worker lease, then bind
+them to the real published ref, commit, tree and parent before cleanup; the diagnostic JSON and a predicted ref are
+insufficient. The existing recovery refusals for setup and multiple repositories still apply unless separately designed.
+The product decision is whether independent checks suffice to call a task complete and which verifier contracts qualify;
+a small first scope would require a single repository, no setup and nonempty command checks that fully decide the goal.
+
+**#138:** The sentence above saying a pending decision may keep a criteria-review verdict from settling is not an
+established causal path: `recordEmptyResultDecisions` can stage a pending entry and settle the run, while
+`criteriaReviewVerdict` reads the settled run and its null landed commit. Add a crossing test before claiming that
+particular failure. Git's empty `base..attempt` diff proves only no *net tracked change*, not that the agent never edited
+files or touched ignored/external state; any no-change allowance must state that scope and bind the original base and
+attempt trees *before* the ledger-only commit changes `.decisions/`. A reserved `undo.how` string cannot pass the
+standalone ledger validator merely on its own wording: that would accept forged third-party ledger rows. A structured
+form also needs a verifier that can check its immutable evidence. The product decision is which decisions may use a
+no-change undo and whether net Git tree equality is enough evidence; the representation follows that decision.
