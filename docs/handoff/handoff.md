@@ -81,7 +81,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 跑法：独立 control 目录／`ORCA_PERSON_DIR`／`ORCA_CCLOOP_BIN=node_modules/ccloop/dist/cli.js`，`~/.orca` 与 `~/.codex/config.toml` 前后哈希不变。需求“给 textkit 加 truncate 助手”，clarify 2 轮（frontierEmpty）、split 1 个 task（`checks:["npm test"]`）、estimate、apply-estimate、confirm --hold、start。
 
-- **实测**：估算 **11,000 token／180 s／1 attempt**；task run 实际 **43,849 token／23 s** ⇒ **约 4.0× 低估**，且 `attempts:1` 让首次耗尽即终结。工作没有产出（attempt commit 只含 Orca 写的需求文档，`npm test` 仍是原来的 1 条），所以**不是** #163「已完成却拿不到」的场景。
+- **实测**：估算 **11,000 token／180 s／1 attempt**；task run 实际 **43,849 token／23 s** ⇒ **约 4.0× 低估**，且 `attempts:1` 让首次耗尽即终结。工作没有产出（attempt commit 只含 Orca 写的需求文档，`npm test` 仍是原来的 1 条），所以**不是** #163「已完成却拿不到」的场景。现场在 `/private/tmp/orca-calib-1794153550/`（隔离面板 `--port 7788`、control 目录、logs、三笔 run 的 evidence；**会话结束即在，人在别的终端 `kill` 掉 7788 那个进程即可**）。
 - **更有价值的一条**：随后 `orca task retry --work {"tokens":200000,...}` 返回成功（person token），但**三笔 run 的 `loop-contract.json` 冻结的仍是 `tokenBudget:11000, maxAttempts:1`**；两笔重跑各有 100k+ 剩余额度却仍在 plan 之后立刻 `exhausted`。即：**追加额度进了 Orca 的账，却没有进 ccloop 的合同**。文档早写过 top-up「只支持 optional-policy 分支」，那么这条命令对 finite 合同应当**拒绝或明说无效**，而不是接受后静默重跑一场注定失败的 run。**这是待人定的产品问题**（是改合同冻结规则，还是让 top-up 对 finite 合同直接拒）。
 - 校准数据到此为止，没有再花钱。
 
