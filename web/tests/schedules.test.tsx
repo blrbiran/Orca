@@ -698,9 +698,12 @@ const panel = (onCommand: (action: ControlAction) => void, controlConfig: Contro
     onSelect={() => {}} onCommand={onCommand} onDraft={() => {}} />);
 
 describe("the import form reads the plan library beside registered plans (spec Â§13.3, Â§14)", () => {
+  const openImport = (): void => { fireEvent.click(screen.getByRole("button", { name: "Import a planâ€¦" })); };
   it("says there is no plan anywhere when the repository has none and its library read is empty", async () => {
     serve((url) => url.startsWith("/api/control/plan-library?") ? libraryList([]) : {});
     render(panel(vi.fn()));
+    // Ruling: import is opened from the Tasks dialog entry before its library read.
+    openImport();
     const note = await screen.findByText(/^No plan to import yet/);
     // mutation: keep the old repository-only copy here -> red
     expect(note.textContent).toBe("No plan to import yet: save one to the plan library from a group or a requirement split, import a plan file, or register a tracked plan file below.");
@@ -714,6 +717,7 @@ describe("the import form reads the plan library beside registered plans (spec Â
       return {};
     });
     render(panel(vi.fn()));
+    openImport();
     await waitFor(() => expect(reads).toContain("/api/control/plan-library?repoId=orca"));
     const note = await screen.findByText("No plan is configured for this repository, so nothing can be imported into it.");
     // mutation: claim the library is empty (or the repository unset) after a failed read -> red
@@ -730,6 +734,7 @@ describe("the import form reads the plan library beside registered plans (spec Â
     serve((url) => url.startsWith("/api/control/plan-library?") ? libraryList([headless]) : {});
     const onCommand = vi.fn();
     render(panel(onCommand, withPlan));
+    openImport();
     const select = await screen.findByTestId("import-library");
     await pickOption(select, "Headless plan");
     const button = screen.getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
@@ -745,6 +750,7 @@ describe("the import form reads the plan library beside registered plans (spec Â
     serve((url) => url.startsWith("/api/control/plan-library?") ? libraryList([one]) : {});
     const onCommand = vi.fn();
     render(panel(onCommand));
+    openImport();
     const select = await screen.findByTestId("import-library");
     expect(await offered(select)).toEqual([["Plan library", false], [`Plan nine Â· ${NEW_SHA.slice(0, 10)}`, false]]);
     await pickOption(select, `Plan nine Â· ${NEW_SHA.slice(0, 10)}`);

@@ -6,9 +6,9 @@
 import * as RadixDialog from "@radix-ui/react-dialog";
 import type { JSX, ReactElement, ReactNode } from "react";
 
-export function Dialog(props: { trigger: ReactElement; title: string; closeLabel: string; children: ReactNode }): JSX.Element {
+export function Dialog(props: { trigger: ReactElement; title: string; closeLabel: string; children: ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }): JSX.Element {
   return (
-    <RadixDialog.Root>
+    <RadixDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <RadixDialog.Trigger asChild>{props.trigger}</RadixDialog.Trigger>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 bg-scrim" />

@@ -67,6 +67,14 @@ beforeEach(() => {
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); });
 
 describe("project registry control", () => {
+  it("offers a search when the workspace list is long without losing the current choice", async () => {
+    projectsAnswer = { status: 200, body: FILE(Array.from({ length: 9 }, (_, i) => ({ projectKey: `project-${i}`, name: `Workspace ${i}` }))) };
+    render(<App />);
+    const trigger = await screen.findByRole("combobox", { name: "Project" });
+    const search = screen.getByRole("searchbox", { name: "Search workspaces" });
+    fireEvent.change(search, { target: { value: "Workspace 8" } });
+    expect(await optionsOf(trigger)).toEqual([["All projects", false], ["Workspace 0", false], ["Workspace 8", false]]);
+  });
   it("P1: one project shows the control with its name; Add and Rename are offered", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker shows and offers the one project by its name
     projectsAnswer = { status: 200, body: FILE([{ projectKey: "alpha", name: "Alpha App" }]) };

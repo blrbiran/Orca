@@ -9,7 +9,7 @@
  */
 import { ChargeRetry } from "./ChargeRetry.js";
 import type { JSX } from "react";
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { taskGoal } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { scheduleIdFor, type ControlAction } from "./controlApi.js";
@@ -393,6 +393,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(() => view.summary.state !== "running" || props.route?.taskId != null || props.focus?.taskId != null);
+  const [openRunId, setOpenRunId] = useState<string | null>(props.focus?.runId ?? null);
+  useLayoutEffect(() => { if (props.focus?.runId != null) setOpenRunId(props.focus.runId); }, [props.focusRequest]);
   const [openTask, setOpenTask] = useState<string | null>(props.route != null ? props.route.taskId : props.focus?.groupId === groupId ? props.focus.taskId : null);
   useLayoutEffect(() => { if (props.focus?.groupId === groupId && props.focus.taskId !== null) setOpenTask(props.focus.taskId); }, [props.focus, props.focusRequest]);
   const [region, setRegion] = useState<DetailRegion>(() => props.route?.region != null ? props.route.region : props.focus?.groupId === groupId ? focusedDetailRegion(view, props.focus.region) : defaultDetailRegion(view));
@@ -408,7 +412,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   useLayoutEffect(() => { if (props.focus?.groupId === groupId) setRegion(focusedDetailRegion(view, props.focus.region)); }, [props.focus, props.focusRequest]);
   const [requestedRun, setRequestedRun] = useState<string | null>(null);
   useLayoutEffect(() => { if (region === "runs" && requestedRun !== null) document.getElementById(runRegionId(groupId, requestedRun))?.focus(); }, [region, requestedRun]);
-  const openRun = (runId: string): void => { setRequestedRun(runId); selectRegion("runs"); };
+  const openRun = (runId: string): void => { setRequestedRun(runId); setOpenRunId(runId); selectRegion("runs"); };
   const allLabels = [...new Set(view.workItems.flatMap((item) => item.labels ?? []))].sort();
   // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
@@ -648,20 +652,30 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {dispatchControls}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion} regions={{
         progress: <>
+      {allLabels.length > 0 && (
+        <div className="mb-2 flex flex-wrap items-start gap-2" role="toolbar" aria-label={t("control.group.filterRegion")}>
+          <details className="relative" open={filterOpen} onToggle={(event) => setFilterOpen(event.currentTarget.open)}>
+            <summary role="button" aria-expanded={filterOpen} className="cursor-pointer rounded-control border border-line-strong px-3 py-1.5">{t("control.group.filterButton", { n: activeFilter.length })}</summary>
+            <fieldset aria-label={t("control.group.filterRegion")} className="absolute z-10 min-w-40 rounded-card border border-line-strong bg-elevated p-3 shadow-float">
+              <legend>{t("control.group.filterLegend")}</legend>
+              {allLabels.map((label) => (
+                <label className="flex gap-1" key={label}>
+                  <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
+                  {label}
+                </label>
+              ))}
+              <button type="button" disabled={activeFilter.length === 0} onClick={() => setLabelFilter([])}>{t("control.group.filterClear")}</button>
+            </fieldset>
+          </details>
+        </div>
+      )}
       <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={toggleTask} />
       <h3>{t("control.group.workItems")}</h3>
-      {allLabels.length > 0 && (
-        <fieldset aria-label={t("control.group.filterRegion")}>
-          <legend>{t("control.group.filterLegend")}</legend>
-          {allLabels.map((label) => (
-            <label key={label}>
-              <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
-              {label}
-            </label>
-          ))}
-        </fieldset>
-      )}
-      <table>
+      <button type="button" aria-expanded={tasksOpen} aria-controls={`tasks-${groupId}`} onClick={() => setTasksOpen(!tasksOpen)}>
+        {t("control.group.taskDisclosure", { n: shownItems.length })}
+      </button>
+      {!tasksOpen && view.workItems.some((item) => item.status === "blocked") && <span className="badge" data-tone="warn"> {t("control.group.blockedCount", { n: view.workItems.filter((item) => item.status === "blocked").length })}</span>}
+      <table id={`tasks-${groupId}`} aria-label={t("control.group.taskTable")} data-collapsed={!tasksOpen}>
         <thead>
           <tr>
             <th>{t("control.group.th.task")}</th><th>{t("control.group.th.status")}</th><th>{t("control.group.th.labels")}</th>
@@ -758,18 +772,23 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 </>,
         runs: <>
       <h3>{t("control.group.runs")}</h3>
-      <table className="num">
+      <table className="num runs-table">
         <thead>
           <tr>
             <th>{t("control.group.runsTh.run")}</th><th>{t("control.group.runsTh.phase")}</th><th>{t("control.group.runsTh.state")}</th>
             <th>{t("control.group.runsTh.profile")}</th><th>{t("control.group.runsTh.used")}</th><th>{t("control.group.runsTh.remaining")}</th>
-            <th>{t("control.group.runsTh.evidence")}</th>
           </tr>
         </thead>
         <tbody>
           {runsInCreationOrder(view.runs).map((run, index, orderedRuns) => (
-            <tr key={run.runId} id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
-              <td>{run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}</td>
+            <Fragment key={run.runId}>
+            <tr id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
+              <td>
+                <button type="button" aria-expanded={openRunId === run.runId} aria-controls={`run-detail-${run.runId}`}
+                  aria-label={t(openRunId === run.runId ? "control.group.closeRun" : "control.group.openRun", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}
+                  onClick={() => setOpenRunId(openRunId === run.runId ? null : run.runId)}>{openRunId === run.runId ? "▾" : "▸"}</button>{" "}
+                {run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}
+              </td>
               <td>{enumText("runPhase", run.phase)}</td>
               <td className="run-state [&>div]:mb-1">
                 <div>{enumText("runState", run.state)}</div>
@@ -785,12 +804,19 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               {/* Spec 2026-11-03 soft-mode approximate usage: a booked floor is said to be one, never shown as a reported figure. */}
               <td><Tokens n={run.used.tokens} />{run.usageApproximate !== undefined && <span className="badge" data-tone="warn" data-testid="usage-approximate">{run.usageApproximate.floorTokens === null ? t("control.group.usageApproximateNone") : t("control.group.usageApproximate")}</span>}</td>
               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
-              <td>
-                <EvidenceLink runId={run.runId} />
-                <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} />
-                {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
-              </td>
             </tr>
+            {openRunId === run.runId && (
+              <tr id={`run-detail-${run.runId}`} data-run-detail={run.runId}>
+                <td colSpan={6} className="min-w-0 border-t border-line bg-well p-3 text-start">
+                  <div className="min-w-0 max-w-full overflow-x-auto">
+                    <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen />
+                    <EvidenceLink runId={run.runId} />
+                    {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
+                  </div>
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>

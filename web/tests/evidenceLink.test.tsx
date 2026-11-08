@@ -113,19 +113,24 @@ async function clickEvidence(name: RegExp): Promise<void> {
 describe("evidence links", () => {
   it("asks for a run's manifest with the session alone and offers the answer as a download", async () => {
     render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} {...groupViewProps()} />);
+    // Ruling: evidence moves from the table into the expanded run.
+    expect(screen.queryByRole("button", { name: /^evidence$/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open run a" }));
     await clickEvidence(/^evidence$/);
 
-    expect(requests[0]!.url).toBe(`/api/control/runs/${RUN}/evidence`);
+    const evidenceRequest = requests.find((request) => request.url === `/api/control/runs/${RUN}/evidence`);
+    expect(evidenceRequest?.url).toBe(`/api/control/runs/${RUN}/evidence`);
     // Accounts spec §3.4: a GET carries no header of the page's own; the browser sends the session cookie.
-    expect(requests[0]!.headers).toEqual({});
+    expect(evidenceRequest?.headers).toEqual({});
     expect(downloads).toEqual([`evidence-${RUN}.json`]);
   });
 
   it("names the refusal instead of offering a download when the panel refuses", async () => {
     answer = { status: 401, body: { error: { code: "unauthorized", message: "A valid panel token is required.", commandRevision: null, evidenceIds: [], retryable: false } } };
     render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} {...groupViewProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open run a" }));
     fireEvent.click(screen.getByRole("button", { name: /^evidence$/ }));
-    await vi.waitFor(async () => expect(requests).toHaveLength(1));
+    await vi.waitFor(async () => expect(requests.filter((request) => request.url.endsWith("/evidence"))).toHaveLength(1));
 
     expect((await screen.findByRole("alert")).textContent).toContain("unauthorized");
     expect(downloads).toEqual([]);

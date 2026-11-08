@@ -53,13 +53,16 @@ const flush = async (ms = 0): Promise<void> => { await act(async () => { await v
 const props = (over: Partial<Parameters<typeof ControlGroupView>[0]> = {}, groupView: GroupViewV1 = view): Parameters<typeof ControlGroupView>[0] =>
   ({ view: groupView, config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand: vi.fn(), route: { region: "runs", taskId: "a" }, ...over });
 const taskDetail = (root: HTMLElement): HTMLElement => root.querySelector('[data-task-id="a"]') as HTMLElement;
-const runsRow = (root: HTMLElement): HTMLElement => root.querySelector(`tr[data-run-id="${RUN}"]`) as HTMLElement;
+const runsRow = (root: HTMLElement): HTMLElement => {
+  const row = root.querySelector(`tr[data-run-id="${RUN}"]`) as HTMLElement;
+  const detail = root.querySelector(`tr[data-run-detail="${RUN}"]`) as HTMLElement | null;
+  if (detail !== null) return detail;
+  // Ruling: one run-row disclosure opens the full-width transcript and evidence detail.
+  fireEvent.click(row.querySelector('button[aria-expanded]')!);
+  return root.querySelector(`tr[data-run-detail="${RUN}"]`) as HTMLElement;
+};
 async function openIn(scope: HTMLElement): Promise<void> {
-  // The task detail's transcript opens by itself (tester #113); only the runs table needs the two presses.
-  if (scope.hasAttribute("data-task-id")) { await flush(); return; }
-  fireEvent.click(within(scope).getByRole("button", { name: "Transcript" }));
-  await flush();
-  fireEvent.click(within(scope).getByRole("button", { name: /execute · call 1/ }));
+  // Ruling: the task's current run and an expanded run row both open the latest recorded call.
   await flush();
 }
 const polls = (): number => transcriptUrls.filter((url) => url.includes("after=")).length;
@@ -157,15 +160,15 @@ describe("the task's current run opens by itself (tester #113)", () => {
 });
 
 describe("T12: the task detail and the runs table", () => {
-  it("the runs table's disclosure asks nothing until opened, then calls the shared helper with its run id", async () => {
+  it("the runs table reads the latest recorded call after one run-row disclosure", async () => {
     const { container } = render(<ControlGroupView {...props({ route: { region: "runs", taskId: null } })} />);
     await flush(5000);
-    expect(within(runsRow(container)).getByRole("button", { name: "Transcript" }).getAttribute("aria-expanded")).toBe("false");
     expect(transcriptUrls).toEqual([]);
-    fireEvent.click(within(runsRow(container)).getByRole("button", { name: "Transcript" }));
+    const detail = runsRow(container);
     await flush();
+    expect(within(detail).getByRole("button", { name: "Transcript" }).getAttribute("aria-expanded")).toBe("true");
     expect(api.fetchRunTranscripts).toHaveBeenCalledWith(RUN);
-    expect(transcriptUrls).toEqual([`/api/control/runs/${RUN}/transcripts`]);
+    expect(api.fetchTranscriptWindow).toHaveBeenCalledWith(RUN, { attempt: 1, phase: "execute", seq: 1 }, { tail: true });
   });
 
   it("an open, non-final call polls, and stops when the call is final", async () => {

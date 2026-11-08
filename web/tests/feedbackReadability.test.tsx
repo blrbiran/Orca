@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import i18n from "../src/i18n.js";
@@ -16,10 +16,14 @@ describe("feedback run readability", () => {
   it("keeps identifiers available inside collapsed diagnostics and preserves evidence access", () => {
     const r = run({ taskId: null, runId: "uuid-unfriendly", evidenceIds: ["evidence-unfriendly"] });
     const { container } = render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([], [r])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    for (const id of [r.runId, r.profile.profileHash, "evidence-unfriendly"]) {
+    for (const id of [r.runId, r.profile.profileHash]) {
       const text = screen.getByText(id); const detail = text.closest("details");
       expect(detail).not.toBeNull(); expect(detail!.open).toBe(false);
     }
+    // Ruling: evidence IDs and the manifest entry move into the expanded run detail.
+    fireEvent.click(screen.getByRole("button", { name: "Open run Run 1" }));
+    const evidence = screen.getByText("evidence-unfriendly").closest("details");
+    expect(evidence).not.toBeNull(); expect(evidence!.open).toBe(false);
     expect(screen.getByRole("button", { name: /^Evidence$/i })).toBeTruthy();
     const rows = container.querySelectorAll("tbody tr"); expect(rows.length).toBeGreaterThan(0);
   });

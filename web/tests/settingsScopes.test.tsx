@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PLAN } from "./fixtures/board.js";
 import { App } from "../src/App.js";
-import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
+import { pickOption, shownText } from "./selectControl.js";
 import { ALPHA, BETA, installFakePanel, groupSummary, planGroupView } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
 import type { AgentPreferencesViewV1 } from "../src/controlTypes.js";
@@ -34,7 +34,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); localStorage.clear(); sessionSt
 const project = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
 const globalRegion = (): HTMLElement => screen.getByRole("region", { name: "Global settings" });
 const projectRegion = (): HTMLElement => screen.getByRole("region", { name: "Project settings" });
-const settingsPick = (): HTMLElement => screen.getByRole("combobox", { name: "Settings for project" });
+const identity = (): HTMLElement => screen.getByTestId("settings-workspace-identity");
 async function open(section: string): Promise<void> { await act(async () => { window.location.hash = section; window.dispatchEvent(new Event("hashchange")); }); }
 
 describe("settings scopes", () => {
@@ -59,7 +59,8 @@ describe("settings scopes", () => {
     expect(within(screen.getByRole("navigation", { name: "Sections" })).queryByRole("combobox", { name: "Theme" })).toBeNull();
     expect(shownText(project())).toBe("Alpha");
     const task = screen.getByRole("region", { name: "Task control" });
-    expect(within(task).getByRole("button", { name: "Import plan" })).toBeTruthy();
+    // Ruling: Tasks exposes import as a dialog entry.
+    expect(within(task).getByRole("button", { name: "Import a plan…" })).toBeTruthy();
     expect(within(task).queryByRole("button", { name: "Save agent preferences" })).toBeNull();
     expect(within(task).queryByRole("region", { name: "Workspace mode" })).toBeNull();
   });
@@ -84,8 +85,9 @@ describe("settings scopes", () => {
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
     await pickOption(project(), "All projects");
     await open("project-settings");
-    // Ruling: human 「这次批准改写所有必要的判据」, Orca session 3cd8fb02, 2026-10-28 -- tester #69: the old "choose in the project picker" sentence is gone; under All the page's own select asks for a project.
-    expect(shownText(settingsPick())).toBe("Choose a project");
+    // Ruling: the approved IA replaces the second select with an All-projects identity and a sidebar focus link.
+    expect(identity().textContent).toContain("All projects is selected");
+    expect(within(identity()).queryByRole("combobox")).toBeNull();
     expect(projectRegion().textContent).not.toContain(ALPHA);
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
     expect(within(projectRegion()).queryByRole("button", { name: "Save integration" })).toBeNull();
@@ -98,33 +100,22 @@ describe("settings scopes", () => {
     expect(panel.posts).toEqual([]);
   });
 
-  // Tester #69 (spec §24, session 3cd8fb02): "This project" had no way to pick a project, and under All projects said only
-  // "choose in the project picker". Its own select is bound to the panel's one project scope: it shows the sidebar's
-  // choice, a pick there switches every page, and under All it reads "Choose a project" with the settings hidden.
-  it("picks the project on the page itself, bound to the sidebar's scope, and asks for one under All", async () => {
-    // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): both project pickers show and move the one panel scope; under All the settings picker asks for a project
+  it("keeps Settings identity in step with the one sidebar workspace switcher", async () => {
+    // Ruling: the approved IA puts all scope changes in the sidebar; Settings has identity and a focus link.
     render(<App />);
     await open("settings/project");
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
-    // mutation: drop the picker -> not found, red
-    expect(shownText(settingsPick())).toBe("Alpha");
-    expect(await offered(settingsPick())).toEqual([["Alpha", false], ["Beta", false]]);
-    expect(document.querySelector('[data-category="project"]')!.textContent).toContain("Changing it changes the project for every page.");
-    // mutation: keep a page-local selection instead of the panel's scope -> the sidebar stays on alpha, red
-    await pickOption(settingsPick(), "Beta");
+    expect(identity().textContent).toContain("Alpha");
+    fireEvent.click(within(identity()).getByRole("link", { name: "Switch workspace" }));
+    expect(document.activeElement).toBe(project());
+    await pickOption(project(), "Beta");
     await waitFor(() => expect(projectRegion().textContent).toContain(BETA));
-    expect(shownText(project())).toBe("Beta");
-    // The sidebar's All empties it: "Choose a project", the settings hidden, no old sentence.
+    expect(identity().textContent).toContain("Beta");
     await pickOption(project(), "All projects");
-    await waitFor(() => expect(shownText(settingsPick())).toBe("Choose a project"));
-    expect(settingsPick().hasAttribute("data-placeholder")).toBe(false); // the disabled "Choose a project" option, not the placeholder
+    expect(identity().textContent).toContain("All projects is selected");
     expect(within(projectRegion()).queryByRole("radio")).toBeNull();
-    expect(projectRegion().textContent).not.toContain(BETA);
-    expect(document.body.textContent).not.toContain("project picker");
-    // A pick from the settings page leaves All for that project everywhere.
-    await pickOption(settingsPick(), "Alpha");
+    await pickOption(project(), "Alpha");
     await waitFor(() => expect(projectRegion().textContent).toContain(ALPHA));
-    expect(shownText(project())).toBe("Alpha");
   });
 
   it("keeps preparation unresolved and a failed concrete registry from exposing prior settings", async () => {

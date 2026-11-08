@@ -59,13 +59,25 @@ function Stateful(props: { view: GroupViewV1; onCommand: (action: ControlAction)
 }
 /** The task ids of the work-items table's rows (each row's task cell is its detail toggle). */
 const rows = (): Array<string | null> => {
-  const table = screen.getByRole("table");
+  const table = screen.getByRole("table", { name: "Tasks" });
   return within(table).getAllByRole("button", { expanded: false }).map((button) => button.textContent);
 };
 
 afterEach(cleanup);
 
 describe("labels and progress in the work item table (spec §4.2)", () => {
+  it("keeps the graph available while a running group's task list is collapsed", () => {
+    render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", status: "blocked" })])} onCommand={vi.fn()} />);
+    const disclosure = screen.getByRole("button", { name: "Tasks (2)" });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    // The stylesheet hides the collapsed table; jsdom checks the explicit state.
+    expect(screen.getByRole("table", { name: "Tasks" }).getAttribute("data-collapsed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Labels (0)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
+    expect(screen.getByRole("button", { name: "Labels (1)" })).toBeTruthy();
+    fireEvent.click(disclosure);
+    expect(screen.getByRole("button", { name: "a" })).toBeTruthy();
+  });
   it("shows a system label and a custom label with different classes", () => {
     render(<Stateful view={view([workItem({ labels: ["bug", "custom:前端"] })])} onCommand={vi.fn()} />);
     const chips = [...document.querySelectorAll("td span.label")].map((chip) => [chip.textContent, chip.className]);
@@ -76,6 +88,9 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
 
   it("filters work items by label, any of the checked ones", () => {
     render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", labels: ["custom:x"] }), workItem({ taskId: "c", labels: [] })])} onCommand={vi.fn()} />);
+    // Ruling: the running group's table is disclosed on demand; filtering remains in the toolbar.
+    fireEvent.click(screen.getByRole("button", { name: "Tasks (3)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Labels (0)" }));
     expect(rows()).toEqual(["a", "b", "c"]);
     fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
     expect(rows()).toEqual(["a"]);
@@ -85,6 +100,9 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
 
   it("drops a checked label that no task carries any more, so the table does not stay empty", () => {
     const { rerender } = render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", labels: ["perf"] })])} onCommand={vi.fn()} />);
+    // Ruling: open the filter toolbar and task disclosure before reading the running group's rows.
+    fireEvent.click(screen.getByRole("button", { name: "Tasks (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Labels (0)" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
     expect(rows()).toEqual(["a"]);
     // The person removed "bug" from its last task: the next read carries it on no task, so its checkbox is gone.
@@ -109,6 +127,8 @@ describe("the task detail panel (spec §4.2)", () => {
     const open = (item: Partial<WorkItemViewV1>): ReturnType<typeof vi.fn> => {
       const onCommand = vi.fn();
       render(<Stateful view={view([workItem(item)])} onCommand={onCommand} />);
+      // Ruling: the running group's table is collapsed until asked for.
+      fireEvent.click(screen.getByRole("button", { name: "Tasks (1)" }));
       fireEvent.click(screen.getByRole("button", { name: "a" }));
       return onCommand;
     };
@@ -226,6 +246,8 @@ describe("the task detail panel (spec §4.2)", () => {
 
     it("lists the manifest's entries and downloads one with the session alone", async () => {
       render(<Stateful view={view([workItem({ currentRunId: "run-a", lineageRunIds: ["run-a"] })], [run({})])} onCommand={vi.fn()} />);
+      // Ruling: the table is collapsed for running groups.
+      fireEvent.click(screen.getByRole("button", { name: "Tasks (1)" }));
       fireEvent.click(screen.getByRole("button", { name: "a" }));
       fireEvent.click(screen.getByRole("button", { name: "List evidence of run-a" }));
       const list = await screen.findByRole("list", { name: "Evidence of run-a" });

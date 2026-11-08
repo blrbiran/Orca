@@ -10,8 +10,7 @@ import { GlobalSettings, SettingsCategoryPane } from "./GlobalSettings.js";
 import { ProjectSettings } from "./ProjectSettings.js";
 import { SETTINGS_CATEGORIES, formatRoute, type SettingsCategory } from "./sections.js";
 import { projectName, type ProjectV1 } from "./project.js";
-import { inlinePick, settingHint, tabItem, tabRow } from "./ui/classes.js";
-import { Select } from "./ui/Select.js";
+import { tabItem, tabRow } from "./ui/classes.js";
 
 type GlobalProps = Omit<Parameters<typeof GlobalSettings>[0], "category">;
 type ProjectProps = Parameters<typeof ProjectSettings>[0];
@@ -21,20 +20,23 @@ type ProjectProps = Parameters<typeof ProjectSettings>[0];
  */
 export type ProjectPick = { projects: readonly ProjectV1[] | null; project: string | null; onProject: (projectKey: string) => void };
 
-/** The project select at the top of "This project", outside the remounted settings so a change keeps its focus. */
-function ProjectPicker(props: ProjectPick): JSX.Element | null {
+/** Settings describes the sidebar's scope without offering a second scope control. */
+function ProjectIdentity(props: ProjectPick): JSX.Element | null {
   const { t } = useTranslation();
   if (props.projects === null) return null;
+  const current = props.projects.find((entry) => entry.projectKey === props.project);
   return (
-    <div>
-      <label className={inlinePick}>{t("settings.projectPick.label")}
-        <Select value={props.project ?? ""} onValueChange={props.onProject} placeholder={t("settings.projectPick.choose")}
-          options={[
-            ...(props.project === null ? [{ value: "", label: t("settings.projectPick.choose"), disabled: true }] : []),
-            ...props.projects.map((p) => ({ value: p.projectKey, label: projectName(p) })),
-          ]} />
-      </label>
-      <p className={settingHint}>{t("settings.projectPick.note")}</p>
+    <div data-testid="settings-workspace-identity" className="mb-4 rounded-card border border-line bg-well p-3">
+      {current === undefined ? <p>{t("settings.projectPick.allIdentity")}</p> : (
+        <dl>
+          <dt>{t("settings.projectPick.name")}</dt><dd>{projectName(current)}</dd>
+          <dt>{t("settings.projectPick.kind")}</dt><dd>{current.kind === "multi" ? t("settings.projectPick.multi") : t("settings.projectPick.directory")}</dd>
+          <dt>{t("settings.projectPick.root")}</dt><dd>{current.path ?? t("common.na")}</dd>
+        </dl>
+      )}
+      <a href="#workspace-switcher" onClick={(event) => { event.preventDefault(); document.getElementById("workspace-switcher")?.focus(); }}>
+        {t("settings.projectPick.switch")}
+      </a>
     </div>
   );
 }
@@ -58,7 +60,7 @@ export function SettingsPage(props: { category: SettingsCategory; global: Global
         <GlobalSettings {...props.global} category={props.category} />
         {/* The project's own heading names it (gaps spec §11), so this category adds none. */}
         <SettingsCategoryPane category="project" active={props.category} title={false}>
-          <ProjectPicker {...props.pick} />
+          <ProjectIdentity {...props.pick} />
           <ProjectSettings key={props.projectKey} {...props.project} />
         </SettingsCategoryPane>
       </div>

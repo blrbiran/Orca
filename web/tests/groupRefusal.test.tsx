@@ -117,6 +117,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
       return success();
     };
     render(<App />);
+    // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
+    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     await within(form).findByTestId("import-refusal");
@@ -139,6 +141,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     };
     lookup = async (url) => refused(404, "command-result-not-found", `no command ${url}`);
     render(<App />);
+    // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
+    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     await within(form).findByTestId("import-refusal");
@@ -152,6 +156,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     window.sessionStorage.setItem(UNCERTAIN_COMMANDS_KEY, JSON.stringify([{ groupId: "group-lost", commandId: "cmd-lost", importPlan: true }]));
     lookup = async (url) => refused(404, "command-result-not-found", `no command ${url}`);
     render(<App />);
+    // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
+    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
     const form = await screen.findByRole("region", { name: "Import plan" });
     const notice = await within(form).findByTestId("import-refusal");
     expect(within(notice).getByText("command-result-not-found").tagName).toBe("CODE");
@@ -173,6 +179,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
       body: { error: { code: "control-plan-rejected", message: "control-plan-rejected:dangling-dependency:b", commandRevision: null, evidenceIds: [], retryable: false } },
     });
     render(<App />);
+    // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
+    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     expect(within(await within(form).findByTestId("import-refusal")).getByText("panel-unavailable").tagName).toBe("CODE");
@@ -189,6 +197,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
       ? refused(422, "control-plan-rejected", "control-plan-rejected:missing-target-version:a\ndangling-dependency:b")
       : success());
     render(<App />);
+    // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
+    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     const notice = await within(form).findByTestId("import-refusal");

@@ -77,8 +77,16 @@ beforeEach(() => {
 
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
 
-const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
-const importRegion = async (): Promise<HTMLElement> => screen.findByRole("region", { name: "Import plan" });
+const projectSelect = (): HTMLElement => {
+  // Ruling: a modal import must close before the sidebar can change scope.
+  if (screen.queryByRole("dialog", { name: "Import plan" }) !== null) fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  return screen.getByRole("combobox", { name: "Project" });
+};
+const importRegion = async (): Promise<HTMLElement> => {
+  // Ruling: import stays closed until the Tasks entry is chosen.
+  if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+  return screen.findByRole("region", { name: "Import plan" });
+};
 
 describe("the project switcher", () => {
   it("A: imports into the chosen project's repository with one of that repository's plans", async () => {

@@ -71,7 +71,8 @@ it("hidden panels are inaccessible while technical evidence remains navigable", 
  mount(view([workItem({taskId:"a"})],[run({runId:"evidence-run",evidenceIds:["raw-evidence"]})]));
  expect(screen.queryByRole("region",{name:"Budget proposal"})).toBeNull();
  for(const panel of document.querySelectorAll('[role="tabpanel"]'))expect((panel as HTMLElement).hidden).toBe(panel.getAttribute("data-overview-region")!=="progress");
- select("Runs and evidence");expect(screen.getByRole("tabpanel").textContent).toContain("raw-evidence");
+ // Ruling: raw IDs are available only in the expanded run's full-width detail.
+ select("Runs and evidence");fireEvent.click(screen.getByRole("button",{name:"Open run a"}));expect(screen.getByRole("tabpanel").textContent).toContain("raw-evidence");
 });
 
 it("Results before completion honestly says not produced and keeps evidence reachable", () => {

@@ -1829,6 +1829,7 @@ export function App(): JSX.Element {
           repoLabel={repoLabel}
           targets={targets}
           focusRequest={overviewFocus?.request}
+          importFocusRequest={overviewFocus?.target.kind === "global-control" && overviewFocus.target.region === "import" ? overviewFocus.request : undefined}
           focus={overviewFocus?.target.kind === "group" ? overviewFocus.target : null}
           onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); navigate({ kind: "group", section: "tasks", groupId: id, region: null, taskId: null }); }}
           route={route.kind === "group" ? route : null}

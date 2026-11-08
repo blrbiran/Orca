@@ -40,8 +40,8 @@ describe("page template (P2-6)", () => {
   });
   it("keeps one primary action on Requirements, Chains, the loop plan and plan import (spec §7)", () => {
     const read = (f: string): string => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
-    // ControlPanel's plan import has two mutually exclusive branches (can-import / confirm), each with its one primary.
-    const expected: Record<string, number> = { "RequirementsPanel.tsx": 1, "ChainPanel.tsx": 1, "LoopPlanCard.tsx": 1, "ControlPanel.tsx": 2 };
+    // Ruling: Tasks adds one primary dialog entry; inside it the two import targets remain mutually exclusive.
+    const expected: Record<string, number> = { "RequirementsPanel.tsx": 1, "ChainPanel.tsx": 1, "LoopPlanCard.tsx": 1, "ControlPanel.tsx": 3 };
     for (const [f, n] of Object.entries(expected)) {
       expect(read(f).match(/className="btn-primary"/g)?.length, f).toBe(n);
     }

@@ -20,12 +20,17 @@ const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "e
 const mount = (onRegisterPlan?: RegisterPlan) => render(<ControlPanel config={config} summary={summary} recovery={recovery} groups={{}} selected={null}
   drafts={{}} uncertain={[]} refusal={null} refetchRequired={false} onSelect={vi.fn()} onCommand={vi.fn()} onDraft={vi.fn()}
   {...(onRegisterPlan === undefined ? {} : { onRegisterPlan })} />);
+const openForm = (): HTMLElement => {
+  // Ruling: register the tracked file in the on-demand import dialog.
+  fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+  return screen.getByRole("region", { name: "Import plan" });
+};
 
 describe("registering a plan file from the import form (spec 2026-10-21)", () => {
   it("sends the chosen repository and the trimmed path, and says it was registered", async () => {
     const onRegister = vi.fn<RegisterPlan>(async () => ({ ok: true }));
     mount(onRegister);
-    const form = screen.getByRole("region", { name: "Import plan" });
+    const form = openForm();
     fireEvent.change(within(form).getByRole("textbox"), { target: { value: "  plans/ship.json " } });
     fireEvent.click(within(form).getByRole("button", { name: "Register plan" }));
     expect(onRegister).toHaveBeenCalledWith("repo", "plans/ship.json");
@@ -34,7 +39,7 @@ describe("registering a plan file from the import form (spec 2026-10-21)", () =>
 
   it("shows a refusal by its code and message", async () => {
     mount(async () => ({ ok: false, code: "plan-not-tracked", message: "plans/x.json is not tracked by git in repo" }));
-    const form = screen.getByRole("region", { name: "Import plan" });
+    const form = openForm();
     fireEvent.change(within(form).getByRole("textbox"), { target: { value: "plans/x.json" } });
     fireEvent.click(within(form).getByRole("button", { name: "Register plan" }));
     await waitFor(() => expect(within(form).getByRole("alert").textContent).toBe("Not registered (plan-not-tracked): plans/x.json is not tracked by git in repo"));
@@ -42,7 +47,7 @@ describe("registering a plan file from the import form (spec 2026-10-21)", () =>
 
   it("offers nothing in command-line mode (no callback)", () => {
     mount();
-    expect(within(screen.getByRole("region", { name: "Import plan" })).queryByRole("button", { name: "Register plan" })).toBeNull();
+    expect(within(openForm()).queryByRole("button", { name: "Register plan" })).toBeNull();
   });
 
   it("explains an import refused because the registered plan changed, in both languages", async () => {

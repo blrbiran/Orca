@@ -17,18 +17,29 @@ const summary: ControlSummaryV1 = { schema: "orca-control-summary-v1", epoch: "e
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
 const mount = (onCommand = vi.fn(), shownConfig = config) => render(<ControlPanel config={shownConfig} summary={summary} recovery={recovery} groups={{}} selected={null}
   drafts={{}} uncertain={[]} refusal={null} refetchRequired={false} onSelect={vi.fn()} onCommand={onCommand} onDraft={vi.fn()} />);
+const openImport = (): HTMLElement => {
+  fireEvent.click(screen.getByRole("button", { name: i18n.language === "zh" ? "导入计划…" : "Import a plan…" }));
+  return screen.getByRole("region", { name: i18n.language === "zh" ? "导入计划" : "Import plan" });
+};
 
 describe("plan import with no estimator configured", () => {
+  it("starts with a compact entry and opens the import form on demand", () => {
+    mount();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Import plan" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+    expect(within(screen.getByRole("dialog", { name: "Import plan" })).getByRole("region", { name: "Import plan" })).toBeTruthy();
+  });
   it("keeps the configured estimator fields on an ordinary import", () => {
     const onCommand = vi.fn();
     mount(onCommand, { ...config, defaults: { estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" } });
-    fireEvent.click(within(screen.getByRole("region", { name: "Import plan" })).getByRole("button", { name: "Import plan" }));
+    fireEvent.click(within(openImport()).getByRole("button", { name: "Import plan" }));
     expect(onCommand.mock.calls[0]![0].payload).toMatchObject({ estimatorProfileId: "all", estimatorProfileHash: "b".repeat(64), estimateMode: "soft" });
   });
   it("submits a real import intent with only group, repository and plan fields", () => {
     const onCommand = vi.fn();
     mount(onCommand);
-    const form = screen.getByRole("region", { name: "Import plan" });
+    const form = openImport();
     expect(within(form).getByText(/without an estimate/i)).toBeTruthy();
     fireEvent.click(within(form).getByRole("button", { name: "Import plan" }));
     expect(onCommand).toHaveBeenCalledTimes(1);
@@ -41,7 +52,7 @@ describe("plan import with no estimator configured", () => {
   it("explains in Chinese that import can proceed and estimation stays unavailable", async () => {
     await i18n.changeLanguage("zh");
     mount();
-    const form = screen.getByRole("region", { name: "导入计划" });
+    const form = openImport();
     expect(within(form).getByText(/可以导入计划/)).toBeTruthy();
     expect(within(form).getByRole("button", { name: "导入计划" })).toBeTruthy();
   });

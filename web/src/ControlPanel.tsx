@@ -9,7 +9,7 @@
  * whether an unknown run is finished.
  */
 import { ShortcutsHelp } from "./ShortcutsHelp.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchPlanLibrary, nextCommandId, type ControlAction } from "./controlApi.js";
@@ -21,6 +21,7 @@ import { RefusalNotice } from "./RefusalNotice.js";
 import { enumText, refusalText } from "./i18n.js";
 import { GroupList } from "./GroupList.js";
 import { Select } from "./ui/Select.js";
+import { Dialog } from "./ui/Dialog.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
@@ -37,6 +38,7 @@ export interface ControlPanelProps {
   active?: boolean;
   resultsScope?: string;
   focusRequest?: number;
+  importFocusRequest?: number;
   focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
   config: ControlConfigV1;
@@ -307,6 +309,14 @@ function importPlan(props: ImportFormProps, repoId: string, planId?: string, lib
 
 export function ControlPanel(props: ControlPanelProps): JSX.Element {
   const { t } = useTranslation();
+  const [importOpen, setImportOpen] = useState(false);
+  const openedRequest = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (props.importFocusRequest === undefined || props.importFocusRequest === openedRequest.current || props.active === false) return;
+    openedRequest.current = props.importFocusRequest;
+    setImportOpen(true);
+  }, [props.importFocusRequest, props.active]);
+  useEffect(() => { if (props.active === false) setImportOpen(false); }, [props.active]);
   const { config, summary, recovery, groups, selected, drafts, uncertain, refusal, refetchRequired } = props;
   const view = selected === null ? undefined : groups[selected];
   const scope = props.scope;
@@ -334,14 +344,18 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {summary.resetRequired && <p role="alert" data-tone="danger">{t("control.resetRequired")}</p>}
       {refetchRequired && <p role="alert" data-tone="info">{t("control.refetchRequired")}</p>}
       {recovery.dispatchBlocked && <p role="alert" data-tone="danger">{t("control.dispatchBlockedRecovery")}</p>}
-      {/* Keyed by repository, so another project starts on its own first plan. */}
       <div id="overview-control-import" tabIndex={-1} data-overview-region="import">
-      <ImportForm
-        key={scope?.kind === "all" ? ALL_PROJECTS : (scope?.kind === "project" ? scope.repoId : props.repoId) ?? ""}
-        config={config} repoId={props.repoId} scope={scope} targets={props.targets} repoLabel={props.repoLabel} onCommand={props.onCommand}
-        refusal={props.importRefusal ?? null}
-        {...(props.onRegisterPlan === undefined ? {} : { onRegisterPlan: props.onRegisterPlan })}
-      />
+        <Dialog open={importOpen} onOpenChange={setImportOpen}
+          trigger={<button type="button" className="btn-primary">{t("control.import.entry")}</button>}
+          title={t("control.import.region")} closeLabel={t("control.import.close")}>
+          {/* Keyed by repository, so another project starts on its own first plan. */}
+          <ImportForm
+            key={scope?.kind === "all" ? ALL_PROJECTS : (scope?.kind === "project" ? scope.repoId : props.repoId) ?? ""}
+            config={config} repoId={props.repoId} scope={scope} targets={props.targets} repoLabel={props.repoLabel} onCommand={props.onCommand}
+            refusal={props.importRefusal ?? null}
+            {...(props.onRegisterPlan === undefined ? {} : { onRegisterPlan: props.onRegisterPlan })}
+          />
+        </Dialog>
       </div>
       {/* Issue 94: a group whose stored body does not parse is named here, so the others still render. */}
       {(summary.unreadable ?? []).map((row) => (

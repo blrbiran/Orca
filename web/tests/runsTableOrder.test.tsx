@@ -5,7 +5,7 @@
  * shows rows in that order and numbers its "Run n" fallback label by the same position. A view without the field on
  * every run keeps the order it was sent in.
  */
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
@@ -44,6 +44,21 @@ beforeEach(async () => { await i18n.changeLanguage("en"); });
 afterEach(cleanup);
 
 describe("the Runs table's order (feedback #59)", () => {
+  it("opens one run's transcript and evidence across all six columns", () => {
+    const container = renderRuns([{ ...run("run-a", 1), evidenceIds: ["ev-1"] }]);
+    const table = container.querySelector('[data-overview-region="runs"] table')!;
+    expect(table.classList.contains("runs-table")).toBe(true);
+    expect(table.querySelectorAll("thead th")).toHaveLength(6);
+    const trigger = table.querySelector<HTMLButtonElement>('tr[data-run-id="run-a"] button[aria-expanded="false"]')!;
+    expect(trigger.getAttribute("aria-label")).toBe("Open run Run 1");
+    fireEvent.click(trigger);
+    const detail = table.querySelector('tr[data-run-detail="run-a"]')!;
+    expect(detail.querySelector("td")?.getAttribute("colspan")).toBe("6");
+    expect(detail.querySelector('section[aria-label="Transcript of run-a"] button')).toBeTruthy();
+    expect(detail.querySelector("button")?.textContent).toMatch(/Transcript|evidence/);
+    expect(detail.querySelectorAll("button").length).toBeGreaterThanOrEqual(2);
+    expect(detail.textContent).toContain("ev-1");
+  });
   it("shows runs in creation order and numbers Run 1..3 by it, though the view sends them in id order", () => {
     // Sent in id order a, m, z; created m, z, a.
     const container = renderRuns([run("a-third", 3), run("m-first", 1), run("z-second", 2)]);

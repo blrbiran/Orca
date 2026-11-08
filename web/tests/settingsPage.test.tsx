@@ -5,7 +5,7 @@
  * category instead of scrolling one long page, and a link can open the exact category. Hiding is by styles.css only
  * (data-active), as for the section panes; jsdom does not apply the sheet, so the criteria read data-active.
  */
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { App } from "../src/App.js";
 import { SETTINGS_CATEGORIES } from "../src/sections.js";
@@ -21,6 +21,16 @@ const current = (): string | null => within(screen.getByRole("navigation", { nam
 async function go(hash: string): Promise<void> { await act(async () => { window.location.hash = hash; window.dispatchEvent(new Event("hashchange")); }); }
 
 describe("the Settings page (H6b)", () => {
+  it("shows workspace identity and focuses the sidebar switcher from Settings", async () => {
+    window.location.hash = "#settings/project";
+    render(<App />);
+    const trigger = await screen.findByRole("combobox", { name: "Project" });
+    const identity = screen.getByTestId("settings-workspace-identity");
+    expect(identity.textContent).toContain("Alpha");
+    expect(identity.querySelector("select, [role=combobox]")).toBeNull();
+    fireEvent.click(within(identity).getByRole("link", { name: "Switch workspace" }));
+    expect(document.activeElement).toBe(trigger);
+  });
   it("lists every category as a link to its own hash", async () => {
     window.location.hash = "settings";
     render(<App />);

@@ -318,45 +318,49 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     render(<App />);
     await ready();
     await waitFor(() => expect(selectedText()).toBe("All projects"));
-    const importRegion = (): HTMLElement => screen.getByRole("region", { name: "Import plan" });
+    const importRegion = (): HTMLElement => {
+      // Ruling: import opens on demand in a dialog.
+      if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+      return screen.getByRole("region", { name: "Import plan" });
+    };
     const form = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
     const targetIn = (scope: HTMLElement): HTMLElement => within(scope).getByRole("combobox", { name: "Repository" });
     const importButton = (): HTMLButtonElement => within(importRegion()).getByRole("button", { name: "Import plan" }) as HTMLButtonElement;
     const startButton = (): HTMLButtonElement => within(form()).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement;
-    await waitFor(() => expect(shownText(targetIn(importRegion()))).toBe("Choose a repository"));
-    await pickOption(targetIn(importRegion()), "Beta");
+    // Ruling: the modal import and the Requirements form are used in sequence; closing restores the page.
     await pickOption(targetIn(form()), "Beta");
     fireEvent.change(within(form()).getByRole("textbox", { name: "Idea" }), { target: { value: "export notes" } });
-    expect(importButton().disabled).toBe(false);
     expect(startButton().disabled).toBe(false);
+    await waitFor(() => expect(shownText(targetIn(importRegion()))).toBe("Choose a repository"));
+    await pickOption(targetIn(importRegion()), "Beta");
+    expect(importButton().disabled).toBe(false);
 
     panel.projects = { status: 200, body: { projects: [TWO_PROJECTS[0]!, gamma] } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
+    await waitFor(() => expect(shownText(targetIn(importRegion()))).toBe("Choose a repository"));
+    expect(importButton().disabled).toBe(true);
+    fireEvent.click(importButton());
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(async () => expect(await names(targetIn(form()))).toEqual(["Choose a repository", "Alpha"]));
     expect(selectedText()).toBe("All projects");
-    expect(shownText(targetIn(importRegion()))).toBe("Choose a repository");
     expect(shownText(targetIn(form()))).toBe("Choose a repository");
-    expect(importButton().disabled).toBe(true);
     expect(startButton().disabled).toBe(true);
-    fireEvent.click(importButton());
     fireEvent.click(startButton());
     fireEvent.submit(form());
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(panel.posts.map((post) => post.url)).toEqual([]);
 
-    // Fix round 1, ruling M1: a target seen unheld is forgotten -- beta listed again is not chosen again without a choice.
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, gamma] } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
     await waitFor(async () => expect(await names(targetIn(form()))).toEqual(["Choose a repository", "Alpha", "Beta"]));
+    expect(shownText(targetIn(form()))).toBe("Choose a repository");
+    expect(startButton().disabled).toBe(true);
     await waitFor(async () => expect(await names(targetIn(importRegion()))).toEqual(["Choose a repository", "Alpha", "Beta"]));
     expect(shownText(targetIn(importRegion()))).toBe("Choose a repository");
-    expect(shownText(targetIn(form()))).toBe("Choose a repository");
     expect(importButton().disabled).toBe(true);
-    expect(startButton().disabled).toBe(true);
     fireEvent.click(importButton());
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(startButton());
     fireEvent.submit(form());
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     expect(panel.posts.map((post) => post.url)).toEqual([]);
   });
 });

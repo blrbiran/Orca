@@ -49,6 +49,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
   const [dirs, setDirs] = useState<string[]>([]);
   const [pick, setPick] = useState("");
   const [notice, setNotice] = useState(false);
+  const [search, setSearch] = useState("");
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const editable = props.answer.editable === true;
   const projects = props.answer.projects;
@@ -142,11 +143,14 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
       ) : (
         <label>
           {t("shell.project")}
-          <Select value={withAll && props.view === "all" ? ALL_PROJECTS : props.project ?? ""} placeholder={t("settings.projectPick.choose")}
-            onValueChange={(value) => (value === ALL_PROJECTS ? props.onAll?.() : props.onProject(value))}
+          {current !== undefined && <span className="text-muted">{projectName(current)} · {current.kind === "multi" ? t("settings.projectPick.multi") : t("settings.projectPick.directory")}</span>}
+          {withAll && props.view === "all" && <span className="text-muted">{t("project.all")}</span>}
+          {projects.length > 8 && <input type="search" aria-label={t("project.search")} value={search} onChange={(event) => setSearch(event.currentTarget.value)} />}
+          <Select id="workspace-switcher" aria-label={t("shell.project")} value={withAll && props.view === "all" ? ALL_PROJECTS : props.project ?? ""} placeholder={t("settings.projectPick.choose")}
+            onValueChange={(value) => { setSearch(""); if (value === ALL_PROJECTS) props.onAll?.(); else props.onProject(value); }}
             options={[
               ...(withAll ? [{ value: ALL_PROJECTS, label: t("project.all") }] : []),
-              ...projects.map((p) => ({ value: p.projectKey, label: p.kind === "dir" ? t("project.dirLabel", { name: projectName(p) })
+              ...projects.filter((p) => p.projectKey === props.project || projectName(p).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map((p) => ({ value: p.projectKey, label: p.kind === "dir" ? t("project.dirLabel", { name: projectName(p) })
                 : p.kind === "multi" ? t("project.multiLabel", { name: projectName(p), count: p.dirs?.length ?? 0 })
                 : projectName(p) })),
             ]} />

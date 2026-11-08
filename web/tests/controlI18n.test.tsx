@@ -72,7 +72,7 @@ describe("the task control and recovery areas in Chinese", () => {
     // Rewritten for feedback #61 (human-named 2026-10-15): this now encodes that the Runs table names providerAttemptOrdinal as the attempt within this run, with the task's run number beside it.
     for (const expected of [
       "服务会话 epoch-a · 状态序号 4 · 调度已阻断", "未配置执行端口 · ", "服务端要求重置 · ", "需要重新拉取状态序号 · ", "调度已阻断 · 必须先观察到恢复",
-      "未配置估算 profile。仍可以导入计划", "g · 运行中 · 已完成 0/1 · 已暂停 · 1 个阻塞项",
+      "导入计划…", "g · 运行中 · 已完成 0/1 · 已暂停 · 1 个阻塞项",
       "g · 运行中 · 版本 6 · 状态序号 4", "认领已阻断 · ", "goal-x · 计划 aaaaaaaaaaaa · 图 v1", "停止 暂停 已暂停 · 受理于 不适用 · 截止 无 · 0 个冻结的运行：无",
       "工作项", "依赖", "已挂起", "等人处理 · 尝试次数未知 · token 5 / 0", "已阻塞 — 阶段：工作 · 第 2 次尝试 · 原因未知.", "运行 r1 · why-1", "本次运行内第 2 次尝试（认领序号 不适用） · 这个任务的第 1 次运行", "重试运行 a",
       "交接请求", "h1 · 运行 r1 · 结果未知 · 截止 2026-10-02T00:00:00.000Z · 证据 无", "est-1 · v1 · 已中断 · 严格 · profile p1 bbbbbbbbbbbb",
@@ -80,7 +80,9 @@ describe("the task control and recovery areas in Chinese", () => {
       "全局 · 所有组 · code-2", "运行 · g · 运行 r1 · code-1", "运行证据", "重试恢复",
       "orca 里新的运行使用git worktree（设置版本 1）。已开始的运行保持原样。", "git worktree（默认）", "私有克隆",
     ]) expect(text, expected).toContain(expected);
+    // Ruling: the runs table opens evidence per run, with no evidence column.
     fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
+    fireEvent.click(screen.getByRole("button", { name: /展开运行/ }));
     expect(screen.getAllByRole("button", { name: "证据" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "控制组 g" })).toBeTruthy();
   });
@@ -118,10 +120,13 @@ describe("the rest of the control area's branches in Chinese", () => {
     const panel = screen.getByRole("region", { name: "任务控制" });
     expect(within(panel).getByRole("heading", { level: 2 }).textContent).toBe("任务控制");
     expect(container.textContent).toContain("服务会话 epoch-a · 状态序号 4 · 调度正常");
+    // Ruling: import is opened from the Tasks entry.
+    fireEvent.click(screen.getByRole("button", { name: "导入计划…" }));
     const importForm = screen.getByRole("region", { name: "导入计划" });
     expect(within(importForm).getByRole("heading", { level: 3 }).textContent).toBe("导入一个计划");
     expect(within(importForm).getByText("Repo X · Demo P · 估算模式 宽松")).toBeTruthy();
-    expect(within(importForm).getByRole("button").textContent).toBe("导入计划");
+    expect(within(importForm).getByRole("button", { name: "导入计划" }).textContent).toBe("导入计划");
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(within(screen.getByRole("navigation", { name: "控制组" })).getByText("还没有控制组。")).toBeTruthy();
     expect(screen.getByText("正在读取 zz…")).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "恢复" })).getByText("没有恢复阻塞项。")).toBeTruthy();
@@ -131,6 +136,7 @@ describe("the rest of the control area's branches in Chinese", () => {
       <ControlPanel config={{ ...ready, repositories: [] }} summary={summary} recovery={recovery} groups={{}} selected={null} drafts={{}} uncertain={[]}
         refusal={null} refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "导入计划…" }));
     expect(screen.getByRole("note").textContent).toBe("这个面板没有配置受信任的仓库和计划。");
   });
 
@@ -144,7 +150,8 @@ describe("the rest of the control area's branches in Chinese", () => {
     const { container } = render(<ControlGroupView view={readyView} {...props} />);
     expect(firstRow(container, "任务|状态|标签|进度|运行|待定|依赖")).toEqual(["a", "就绪", "bug", "没有运行", "无", "无", "无"]);
     // Rewritten for feedback #61 (human-named 2026-10-15): this now encodes that the Runs table names providerAttemptOrdinal as the attempt within this run, with the task's run number beside it.
-    expect(firstRow(container, "运行|阶段|状态|配置|已用|剩余|证据").slice(0, 3)).toEqual(["a", "工作", "运行中 · 本次运行内第 2 次尝试（认领序号 不适用） · 这个任务的第 1 次运行"]);
+    // Ruling: the table has six columns; the disclosure precedes the run name, with evidence in its detail.
+    expect(firstRow(container, "运行|阶段|状态|配置|已用|剩余").slice(0, 3)).toEqual(["▸ a", "工作", "运行中 · 本次运行内第 2 次尝试（认领序号 不适用） · 这个任务的第 1 次运行"]);
     const filter = screen.getByRole("group", { name: "按标签筛选工作项" });
     expect(filter.querySelector("legend")!.textContent).toBe("标签（任一）");
     fireEvent.click(screen.getByRole("tab", { name: "技术详情" }));

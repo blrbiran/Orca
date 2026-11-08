@@ -248,7 +248,11 @@ describe("two-project lists", () => {
     await ready();
     await waitFor(() => expect(rows(controlNav()).length).toBeGreaterThan(0));
   };
-  const importRegion = (): HTMLElement => screen.getByRole("region", { name: "Import plan" });
+  const importRegion = (): HTMLElement => {
+    // Ruling: the import form opens from the Tasks entry instead of living on the page.
+    if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+    return screen.getByRole("region", { name: "Import plan" });
+  };
   const newRequirement = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });
   const repositorySelect = (scope: HTMLElement): HTMLElement => within(scope).getByRole("combobox", { name: "Repository" });
   const storeUncertain = (groupId: string, commandId: string): void => {
@@ -305,10 +309,10 @@ describe("two-project lists", () => {
     await pickOption(projectSelect(), "Gamma");
     await waitFor(() => expect(rows(controlNav())).toEqual([]));
     expect(rows(requirementNav())).toEqual([]);
-    expect(within(importRegion()).getByText(/not under task control/)).toBeTruthy();
-    expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
     expect(within(requirementNav()).getByRole("note").textContent).toMatch(/not under task control.*start requirements/);
     expect(screen.queryByRole("button", { name: "Start clarifying" })).toBeNull();
+    expect(within(importRegion()).getByText(/not under task control/)).toBeTruthy();
+    expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
   });
 
   it("5: an unresolved project list shows a note instead of rows and no import or new requirement; recovery and uncertain commands stay", async () => {
@@ -323,9 +327,9 @@ describe("two-project lists", () => {
     expect(rows(controlNav())).toEqual([]);
     expect(rows(requirementNav())).toEqual([]);
     expect(within(requirementNav()).getByRole("note").textContent).toBe("The project list is unavailable; groups are not shown until it is read.");
-    expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Start clarifying" })).toBeNull();
     expect(screen.getByText(/Command outcome unknown, being looked up: cmd-b \(b1/)).toBeTruthy();
+    expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
   });
 
   it("6: in All projects the import needs a chosen repository, lists only its plans, imports there and stays in All", async () => {
@@ -349,6 +353,7 @@ describe("two-project lists", () => {
     await waitFor(() => expect(panel.posts.some((post) => post.url === "/api/control/groups/import-plan")).toBe(true));
     const sent = panel.posts.find((post) => post.url === "/api/control/groups/import-plan")!.body as { payload: { repoId: string; planId: string } };
     expect(sent.payload).toMatchObject({ repoId: BETA, planId: "pb" });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(shownText(projectSelect())).toBe("All projects");
   });
 

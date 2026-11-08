@@ -165,7 +165,9 @@ describe("ControlPanel", () => {
     // evidence control's real behaviour is judged in web/tests/evidenceLink.test.tsx.
     // Ruling (human, 2026-09-22): this rewrite of an existing criterion is ratified -- an
     // implementer may not change a judgement, so it was put up for approval and approved.
-    expect(html).toContain(">evidence</button>");
+    // Ruling: evidence is offered only after expanding a run; this server-rendered row exposes the run disclosure.
+    expect(html).toContain('aria-label="Open run a"');
+    expect(html).not.toContain(">evidence</button>");
     expect(html).toContain("projection refetch required");
   });
 

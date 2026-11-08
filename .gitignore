@@ -28,3 +28,7 @@ dist/
 .orca/chain-logs/
 
 .orca/control/
+
+# Tool artifacts from a local test run (playwright-cli and vitest caches).
+.playwright-cli/
+web/.vitest/
