@@ -16,7 +16,7 @@ describe("the split instruction's no-verify-only rule (#136)", () => {
     expect(instruction).toContain(NO_VERIFY_ONLY_RULE);
   });
 
-  it("uses instruction version 4", () => {
-    expect(instruction.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 4.");
+  it("keeps the rule in instruction version 5", () => {
+    expect(instruction.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 5.");
   });
 });

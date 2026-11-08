@@ -51,7 +51,7 @@ export function file(c: WriteContext, flag = "file"): unknown {
 }
 
 export interface GroupView {
-  summary: { groupId: string; commandRevision: number };
+  summary: { groupId: string; commandRevision: number; state?: string; archived?: boolean };
   plan: { planHash: string };
   proposal: { state?: string; proposalVersion: number; budgetMode: "strict" | "soft" | null; contextPolicy: { handoffAtContextTokens: number | null }; profiles: null | Record<"estimator" | "worker" | "handoff" | "goalReview", { profileId: string; profileHash: string } | null> };
   ledger: { groupLimit: { tokens: number | null; activeMs: number; attempts: number; sessions: number } };
@@ -72,6 +72,7 @@ export interface UnestimatedSource {
   allocations?: GroupView["allocations"];
   plan?: { planHash: string };
   proposal?: { state?: string; proposalVersion?: number };
+  summary?: { state?: string; archived?: boolean };
   estimates?: SuggestionView["estimates"];
 }
 
@@ -90,12 +91,16 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
   // adviceOf answers only for an editable proposal; a confirmed one keeps its ready estimate for after a reopen.
   const ready = source.plan === undefined || source.estimates === undefined ? null
     : adviceOf({ plan: source.plan, proposal: { state: "editable", proposalVersion: source.proposal?.proposalVersion ?? 0 }, estimates: source.estimates } as SuggestionView);
+  const state = ready === null ? "default, not estimated" : `default; estimate ${ready.estimateId} is ready but not applied`;
+  // A settled or archived group may still carry the default, but can no longer act on pre-start budget advice.
+  if (source.summary?.state === "done" || source.summary?.archived === true) {
+    return tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${state})`);
+  }
   const editable = opts.afterConfirm !== true && source.proposal?.state === "editable";
   const reopen = `before the group starts, reopen its proposal with a proposal edit (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>), then `;
   const path = ready === null
     ? `to estimate: ${editable ? "" : reopen}orca group estimate ${groupId}, orca group apply-estimate ${groupId}, orca group confirm ${groupId}`
     : `to apply it: ${editable ? "" : reopen}orca group apply-estimate ${groupId} (--dry-run shows what it sets), orca group confirm ${groupId}`;
-  const state = ready === null ? "default, not estimated" : `default; estimate ${ready.estimateId} is ready but not applied`;
   return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${state})`), path];
 }
 const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);

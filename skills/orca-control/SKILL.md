@@ -44,7 +44,7 @@ any command; `orca version` should equal this skill's version.
    uncertain (timeout, dropped connection, `retryable: true`): save that JSON and run `orca command retry --request -`
    with it on stdin. It looks the id up first and resends the exact bytes only on a confirmed miss. Never re-run the
    command with a new id.
-6. **Some actions are a person's.** Group limits, spend caps and the usage calendar, applying an agent update,
+6. **Some actions are a person's.** Raising/removing group limits (an agent may only lower token ceilings with `group cap`), spend caps and the usage calendar, applying an agent update,
    settling unknown usage, where a project's or group's work is carried, folder and multi-directory landing answers,
    check and flow settings and their locks, re-running or answering a flow, its effects and its pool, appending a
    plan-library version (`plan save --entry`) or importing a file into the library, setting a schedule, making one from
@@ -64,7 +64,7 @@ any command; `orca version` should equal this skill's version.
 |---|---|---|
 | see whether Orca is up and healthy | `orca status` (then `orca doctor`) | references/basics.md |
 | see the projects, groups and their state | `orca project list`, `orca project show`, `orca group list`, `orca group show <g>` | references/project.md, group.md |
-| turn an idea into a task plan | `orca requirement open --idea "…"`, then `requirement show / answer / consensus / accept` | references/requirement.md |
+| turn an idea into a task plan | `orca requirement open --idea "…"`, then `requirement show / answer / consensus / accept` | references/workflow.md, requirement.md |
 | get one more clarification round, revise a round or a draft, or set the class | `orca requirement continue / revise / feedback / classify <g> …` | references/requirement.md |
 | import a plan file as a group | `orca project register-plan <path>`, then `orca group import <plan>` | references/project.md, group.md |
 | review or edit the proposal (budgets, agents, tasks) | `orca proposal show <g>`, `proposal set-budget / set-agent / replace` | references/proposal.md |
@@ -92,7 +92,7 @@ any command; `orca version` should equal this skill's version.
 | look up what happened to a command id | `orca command show <id> --group <g>`, `command retry --request` | references/command.md |
 | check a plan or a ledger without the panel | `orca plan preview <path>`, `orca decision validate / metrics / compact-reviews` | references/plan.md, decision.md |
 | understand an error code or an exit code | — | references/error-codes.md, output-and-exit-codes.md |
-| fix something that went wrong | — | references/troubleshooting.md |
+| fix something that went wrong | — | references/workflow.md, troubleshooting.md |
 | do something no command covers | `orca control get` or `orca control send` (raw) | references/escape-hatch.md |
 
 Ids: a full id or a unique prefix; projects also by name or path (default: the registered repository holding cwd,

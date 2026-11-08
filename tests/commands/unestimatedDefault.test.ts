@@ -55,6 +55,22 @@ describe("the unestimated default is named (criterion 16)", () => {
 
 // Dogfood run 3 F23 (session 86352010): confirm said "not estimated" while a ready estimate sat unapplied, and its hint told
 // an editable proposal to reopen. The lines now follow the state.
+describe("a completed group keeps its default visible without pre-start advice (#179)", () => {
+  it.each(["done", "archived"])("%s group show and proposal show omit estimate/confirm actions", async (state) => {
+    const w = await unestimated();
+    w.state.view.summary.state = state === "done" ? "done" : "review";
+    if (state === "archived") (w.state.view.summary as typeof w.state.view.summary & { archived: boolean }).archived = true;
+    w.state.view.proposal.state = "confirmed";
+    for (const args of [["group", "show", "g-alpha"], ["proposal", "show", "g-alpha"]]) {
+      const out = (await cli(args, w.dir)).stdout;
+      expect(out).toContain(LINE);
+      expect(out).not.toContain("to estimate:");
+      expect(out).not.toContain("orca group confirm g-alpha");
+      expect(out).not.toContain("reopen its proposal");
+    }
+  });
+});
+
 describe("the unestimated lines follow the proposal and estimate state (F23)", () => {
   const ready = (w: Awaited<ReturnType<typeof unestimated>>) => {
     (w.state.view as Record<string, unknown>).estimates = [{ estimateId: "est-9", estimateVersion: 1, state: "ready", stale: false,

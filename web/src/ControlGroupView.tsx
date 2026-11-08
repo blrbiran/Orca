@@ -179,6 +179,8 @@ export interface ControlGroupViewProps {
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void | Promise<number | null>;
   onSourceRequirement?: (groupId: string) => void;
+  /** Open a criteria-review group from its parent's detail using the existing group navigator. */
+  onSelectGroup?: (groupId: string) => void;
   /** Issue-fixes spec §6.5: the clock the graph's elapsed and no-progress text is read against; the graph reads it itself when absent. */
   now?: number;
   /** W5: commands one control sends in order (BudgetEditor's onCommands). */
@@ -552,6 +554,24 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <h2>
         {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
       </h2>
+      {(view.summary.criteriaReviews ?? []).length > 0 && (
+        <div className="detail-block" data-testid="criteria-reviews">
+          <h3>{t("control.group.criteriaReview.heading")}</h3>
+          <ul>
+            {view.summary.criteriaReviews!.map((review) => (
+              <li key={review.debugGroupId}>
+                {t("control.group.criteriaReview.status", { taskId: review.taskId, state: t(`control.group.criteriaReview.state.${review.state}` as const) })}
+                {review.reason !== null && ` · ${review.reason}`}{" "}
+                {props.onSelectGroup === undefined ? review.debugGroupId : (
+                  <button type="button" onClick={() => props.onSelectGroup?.(review.debugGroupId)}>
+                    {t("control.group.criteriaReview.open", { groupId: review.debugGroupId })}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {decisions !== null && decisions.pendingCount > 0 && <p><NeedsHumanBadge testId="group-needs-human" /></p>}
       {/* Kanban spec §9a: flagged decisions are shown at the top, red; nothing waits on them. */}
       {decisions !== null && (decisions.flaggedCount ?? 0) > 0 && (

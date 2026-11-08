@@ -367,6 +367,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           onDraft={props.onDraft}
           onCommand={props.onCommand}
           onSourceRequirement={props.onSourceRequirement}
+          onSelectGroup={props.onSelect}
           onCommands={props.onCommands}
           agents={props.agents}
           preview={props.previews?.[view.summary.groupId] ?? null}

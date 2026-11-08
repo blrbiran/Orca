@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ZodTypeAny } from "zod";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
@@ -88,6 +88,18 @@ describe("the orca-control skill (spec §7, C18)", () => {
     expect(skillMd).toContain("references/escape-hatch.md");
     expect(skillMd).toContain("--if-revision");
     expect(skillMd).not.toMatch(/^\| `POST /m);
+  });
+
+  it("routes a blocked operator to a maintained workflow reference (#157)", () => {
+    const link = "references/workflow.md";
+    expect(skillMd).toContain(link);
+    expect(existsSync(`skills/orca-control/${link}`)).toBe(true);
+    const guide = readFileSync(`skills/orca-control/${link}`, "utf8");
+    expect(guide).toContain("orca requirement open");
+    expect(guide).toContain("orca group import");
+    expect(guide).toContain("orca group brief");
+    expect(guide).toContain("agent-selection-rejected");
+    expect(guide).toContain("empty-result");
   });
 
   it("lists exactly the documented panel mutation routes, including saved-result verification", () => {

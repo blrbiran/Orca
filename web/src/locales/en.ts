@@ -519,6 +519,12 @@ export const en = {
       runOverGrant: "Run {{runId}} used {{used}} {{dimension}}, over its grant of {{grant}}. This group has no token limit, so it was not blocked; its other tasks keep running.",
       region: "Control group {{groupId}}",
       heading: "{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}",
+      criteriaReview: {
+        heading: "Criteria reviews",
+        status: "{{taskId}}: {{state}}",
+        state: { debugging: "in progress", justified: "change justified", restored: "original checks restored", failed: "failed" },
+        open: "Open criteria review {{groupId}}",
+      },
       claimBlocked: "claim blocked · new runs are not being started",
       spendCapBlock: "Waiting on a spend cap: the {{period}} cap for {{scope}} is {{cap}} tokens and the next claim needs {{grant}}. It resumes on its own once the cap is raised or a new period starts.",
       spendCapLink: "See usage and caps",

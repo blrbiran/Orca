@@ -380,6 +380,12 @@ export const zh: Translation<typeof en> = {
       runOverGrant: "运行 {{runId}} 用了 {{used}} {{dimension}}，超过了它的额度 {{grant}}。本组不限 token，所以没有被阻塞；组里其它任务照常运行。",
       region: "控制组 {{groupId}}",
       heading: "{{groupId}} · {{state}} · 版本 {{revision}} · 状态序号 {{projection}}",
+      criteriaReview: {
+        heading: "判据审查",
+        status: "{{taskId}}：{{state}}",
+        state: { debugging: "进行中", justified: "改动合理", restored: "原判据已恢复", failed: "失败" },
+        open: "查看判据审查 {{groupId}}",
+      },
       claimBlocked: "认领已阻断 · 不再启动新的运行",
       spendCapBlock: "正在等待花费上限：{{scope}} 的{{period}}上限是 {{cap}} token，下一次认领需要 {{grant}}。提高上限或进入新周期后会自动继续。",
       spendCapLink: "查看用量与上限",

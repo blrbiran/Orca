@@ -10,9 +10,9 @@ import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
 import { normalizeClaim, qualifiedWriteSetOf } from "../scheduler/writeSet.js";
 
-export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 4.";
+export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 5.";
 /** Multi-directory projects spec §6.4: the multi instruction's own head line. */
-export const SPLIT_PROMPT_HEAD_MULTI = "Orca requirement split (several directories), instruction version 4.";
+export const SPLIT_PROMPT_HEAD_MULTI = "Orca requirement split (several directories), instruction version 5.";
 
 /** Version 3 (#107): the label table choosePlanByLabels reads, in its order, as one sentence. */
 const LABEL_TABLE = LABEL_PRIORITY.map((row) => `${row.labels.length === 1 ? row.labels[0] : `${row.labels.slice(0, -1).join(", ")} or ${row.labels.at(-1)}`} -> ${row.planId}`).join("; ");
@@ -42,6 +42,13 @@ const REVISION_RULE = "- When `earlier-draft` is present, revise that draft: cha
  * file contents it was never shown. `manifests` now carries each package's `type`.
  */
 export const CHECK_SOURCE_RULE = "- Prefer the repository's own test scripts (as \"manifests\" lists them) as checks. Do not write ad-hoc `node -e` checks that load modules: a package's \"type\" in \"manifests\" says whether it is an ES module (\"module\") or CommonJS. Do not assert facts about the contents of files you were not shown.";
+/** #168: a documentation task cannot repair an already failing test in source it cannot write. */
+const CHECK_OWNERSHIP_RULE = [
+  "- You have no tools and the overview does not report test results. Without a documented passing baseline for the same commit, treat repository-wide tests as possibly failing; do not assign one to a documentation-only task that cannot repair its failures.",
+  "A required check's failure must be fixable by this task within its writable target paths, or by dependencies already completed before it runs.",
+  "For a documentation-only task, check the delivered document; do not assign a repository-wide test that already fails in unrelated source the task cannot change.",
+  "A repository-wide test that already passes may still be required to stay passing. If it must be made to pass, assign it to a task allowed to change the failing source or tests.",
+].join(" ");
 /**
  * Issue #136 (session 3cfc2e73, human ruling D1-D8 「其余都同意」; version stays 3): a split wrote a verify-only task whose
  * check was `git diff --name-only HEAD | grep -x src/math.js`; the task it verified had already landed, so the agent added
@@ -60,9 +67,10 @@ export const NO_LOCKFILE_RULE = "When \"manifests\" shows no lockfile, omit \"se
  * that. A call already started under version 1 keeps its stored envelope (stepC compares the prompt's hash against it).
  * Version 3 (#107, Orca tester feedback round 2026-10-28): PLAN_RULES, TRACE_RULE, PATH_SHAPES and EARLIER_DRAFTS above.
  * A call already started keeps the prompt frozen in its envelope at A2 (stepA2SingleCall), whatever version built it.
- * Version 4 (#188) adds the bugfix test-scope rule; in-flight calls keep their frozen envelope.
+ * Version 4 (#188) adds the bugfix test-scope rule; version 5 (#168) ties required checks to writable work.
+ * In-flight calls keep their frozen envelope.
  */
-const SPLIT_INSTRUCTION_V4 = [
+const SPLIT_INSTRUCTION_V5 = [
   SPLIT_PROMPT_HEAD,
   "",
   "A person and you agreed a requirement for one software repository. Split it into loop tasks that an agent will carry out one by one. You have no tools. Answer with one JSON object and nothing else.",
@@ -85,6 +93,7 @@ const SPLIT_INSTRUCTION_V4 = [
   ...PLAN_RULES,
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
   CHECK_SOURCE_RULE,
+  CHECK_OWNERSHIP_RULE,
   NO_VERIFY_ONLY_RULE,
   "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). " + NO_LOCKFILE_RULE + " Prefer the repository's own install and check scripts; in an npm workspace, install at the root. Omit \"setup\" (or give null) when nothing is needed.",
   "- A check that runs a package script must name one already in that package's \"scripts\" in \"manifests\" (and a workspace the root lists); never plan to add a script so that a check exists. Checks that are not package scripts are fine.",
@@ -106,9 +115,9 @@ const str = { type: "string" }, strings = { type: "array", items: str };
  * `targetPaths`/`checks` pair. Version 2 (spec §22, correcting §6.4; Orca session 7753e97d): as the single-repo instruction's, the
  * requirement document Orca commits to the primary directory and Orca's own files there. Version 3 (#107): as
  * the single-repo instruction's, the plan rules applying to the first `writes` entry, the one expansion reads (loopOfMulti).
- * Version 4 (#188) adds the bugfix test-scope rule.
+ * Version 4 (#188) adds the bugfix test-scope rule; version 5 (#168) ties required checks to writable work.
  */
-export const SPLIT_INSTRUCTION_MULTI_V4 = [
+export const SPLIT_INSTRUCTION_MULTI_V5 = [
   SPLIT_PROMPT_HEAD_MULTI,
   "",
   "A person and you agreed a requirement for a project made of several directories (repositories or folders), listed in order; the first is the primary. Split it into loop tasks that an agent will carry out one by one. You have no tools. Answer with one JSON object and nothing else.",
@@ -127,6 +136,7 @@ export const SPLIT_INSTRUCTION_MULTI_V4 = [
   "- `writes` names the directories the task changes: one entry `{ \"dir\": <key>, \"targetPaths\": [ ], \"checks\": [ ] }` per directory. `dir` is a directory's `key` (as `project-overview` lists them), not its name or path. Name only the directories the task changes.",
   `- \`writes[].targetPaths\` are paths relative to that directory's root, ${PATH_SHAPES}`,
   "- `writes[].checks` are shell commands, run in that directory, that pass only when the task is done.",
+  CHECK_OWNERSHIP_RULE,
   "- Before the tasks run, Orca commits the agreed requirement document to the primary directory at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the primary directory while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "- List `writes` in the project's registered order (as `project-overview` lists the directories), one entry per directory, each directory at most once; the first entry is the task's primary directory and its `checks` must not be empty.",
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
@@ -445,7 +455,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
   const latest = withTasks ?? sent.at(-1);
   const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V4 : SPLIT_INSTRUCTION_V4;
+  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : SPLIT_INSTRUCTION_V5;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
     draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback,
