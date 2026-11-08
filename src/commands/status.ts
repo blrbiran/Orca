@@ -90,7 +90,7 @@ export async function workHealthCheck(ctx: CheckContext): Promise<StatusCheck> {
   const facts = [`${groups.length} group${groups.length === 1 ? "" : "s"}`, `${blocked} blocked task${blocked === 1 ? "" : "s"}`, `${stopped} stopped`, `${refused} refused persistently`, `${blockers} recovery blocker${blockers === 1 ? "" : "s"}`];
   const needing = blocked > 0 || stopped > 0 || refused > 0 || blockers > 0 || dispatchBlocked;
   if (!needing) return { level: "ok", subject: "work", fact: facts.join(", ") };
-  return { level: "warn", subject: "work", fact: `${facts.join(", ")}${dispatchBlocked ? " (dispatch blocked)" : ""}: work is waiting on a person`, fix: "orca recovery list; orca group list" };
+  return { level: "warn", subject: "work", fact: `${facts.join(", ")}${dispatchBlocked ? " (dispatch blocked)" : ""}: work is waiting on a person -- read: orca recovery list, orca group list` };
 }
 
 
