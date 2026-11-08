@@ -24,11 +24,12 @@ a library entry with every version's provenance (by, via, origin, time); --versi
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<entry>`: a plan library entry id (pl-…; orca plan list names them)
-- `--version <version>`: a version's sha256 (orca plan show lists them); default: the newest
+- `--version <version>`: a version number or sha256 prefix (numeric SHA prefixes need sha256:); default: the newest
 
 ```
 orca plan show pl-0123456789abcdef
-orca plan show pl-0123456789abcdef --version 3f2a…
+orca plan show pl-0123456789abcdef --version 1
+orca plan show pl-0123456789abcdef --version sha256:1234
 ```
 
 ## `orca plan save [--group <group>] [--requirement <requirement>] [--draft <draft>] [--name <name>] [--entry <entry>]`
@@ -71,7 +72,7 @@ write a library version's orca-plan-v1 bytes to a new file (mode 0600; an existi
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<entry>`: a plan library entry id (pl-…; orca plan list names them)
-- `--version <version>`: a version's sha256 (orca plan show lists them); default: the newest
+- `--version <version>`: a version number or sha256 prefix (numeric SHA prefixes need sha256:); default: the newest
 - `--out <out>` (required): the new file to write
 
 ```

@@ -11,22 +11,27 @@ import { text } from "./format.js";
 import { invalid, str, verb } from "./verbs.js";
 
 const ENTRY: PositionalDef = { name: "entry", summary: "a plan library entry id (pl-…; orca plan list names them)", required: true };
-const VERSION = { name: "version", type: "string" as const, summary: "a version's sha256 (orca plan show lists them); default: the newest" };
+const VERSION = { name: "version", type: "string" as const, summary: "a version number or sha256 prefix (numeric SHA prefixes need sha256:); default: the newest" };
 const entryOf = (c: WriteContext): string => String(c.args.positionals.entry);
 const enc = encodeURIComponent;
 
-interface EntryView { entryId: string; projectId: string; head: { sha256: string } | null; versions: Array<{ sha256: string }> }
+interface EntryView { entryId: string; projectId: string; head: { sha256: string } | null; versions: Array<{ version: number; sha256: string }> }
 const readEntry = async (c: WriteContext, entryId = entryOf(c)): Promise<EntryView> => await c.read(`plan-library/${enc(entryId)}`) as EntryView;
 
-/** `--version` as given (it must be one of the entry's), else the entry's newest version. */
+/** Resolve a displayed version number or SHA prefix; default to the entry's newest version. */
 async function versionOf(c: WriteContext, entry: EntryView): Promise<string> {
   const named = str(c, "version");
   if (named !== undefined) {
-    try { return resolveId("version", named, entry.versions.map((v) => v.sha256)); }
-    catch (error) {
-      // Tester #181: a miss named neither the entry's versions nor how many it has.
+    try {
+      if (/^\d+$/.test(named)) {
+        const version = entry.versions.find((v) => v.version === Number(named));
+        if (version !== undefined) return version.sha256;
+        throw new EntryRejection("id-not-found", `no version ${JSON.stringify(named)}`);
+      }
+      return resolveId("version", named.startsWith("sha256:") ? named.slice(7) : named, entry.versions.map((v) => v.sha256));
+    } catch (error) {
       if (error instanceof EntryRejection && error.code === "id-not-found")
-        throw new EntryRejection("id-not-found", `no version ${JSON.stringify(named)} in ${entry.entryId}; it has ${entry.versions.length} version(s): ${entry.versions.map((v) => v.sha256.slice(0, 12)).join(", ")} (orca plan show ${entry.entryId} lists them in full)`);
+        throw new EntryRejection("id-not-found", `no version ${JSON.stringify(named)} in ${entry.entryId}; it has ${entry.versions.length} version(s): ${entry.versions.map((v) => `${v.version} (${v.sha256.slice(0, 12)})`).join(", ")} (orca plan show ${entry.entryId} lists them in full)`);
       throw error;
     }
   }
@@ -70,7 +75,7 @@ export const PLAN_ROWS: CommandDef[] = [
       },
       compose: (bodies) => ({ ...(bodies[0] as object), document: bodies[1] }),
     },
-    examples: ["orca plan show pl-0123456789abcdef", "orca plan show pl-0123456789abcdef --version 3f2a…"], format: (body) => text(body),
+    examples: ["orca plan show pl-0123456789abcdef", "orca plan show pl-0123456789abcdef --version 1", "orca plan show pl-0123456789abcdef --version sha256:1234"], format: (body) => text(body),
   },
   verb({ domain: "plan", action: "save", summary: "save a group's plan, or a requirement's split draft, to the plan library (--entry appends a version: person token)",
     verb: "plan-library-save", scope: "plan-library",
