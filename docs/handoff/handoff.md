@@ -63,6 +63,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
+### 3.最新（2026-11-08，隔离 worktree `tester-followup-20261108`）—— 测试者反馈三项收口；#158 仍待人设计；**分支未合入 main、未推**
+
+> 人本轮原话：「尽量将这些要做的task都完整做完」「这一轮还是不考虑 context 大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「这一轮如果需要 repin ccloop，临时允许你 push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」「先按你的建议执行」。**本轮没有付费真跑**。收尾 `ls-remote` 现核三仓 main 与远端一致；本轮工作只在隔离 worktree 的两笔提交上，**尚未合入 main、尚未 push**（push 归人）。
+
+- **repin 已做**（主题行 `chore(deps): repin ccloop to the shared strict execute decoder`）：`node scripts/pin-ccloop.mjs <ccloop main>` 六项全 ok（E2E 12/12、typecheck 0、clone `npm ci` 可复现锁），随后主工作树 `npm ci` 0。ccloop 侧 `fix(claude): an execute answer passes the shared strict result decoder` 已在远端 main。
+- **#168（拆分检查归属）**（主题行 `fix: task-owned split checks, terminal next steps and review navigation (#168 #179 #157)`）：两种拆分指令升到 v5，新增规则——必需检查的失败必须能由本任务可写目标路径或已完成依赖修复；没有同提交通过基线时，全仓测试按“可能已红”处理，不能派给只改文档、无法修无关源码的任务；原本已绿的全仓测试仍可要求保持绿。判据 `tests/control/splitCheckOwnership.test.ts` 先红后绿；六文件 81/81 后最终八文件 98/98。**诚实边界**：overview 不报告测试结果，静态验证器也不能证明任意 shell 检查可满足；这是提示词与人工审拆分的防线，不是保证。审阅提出的“同提交基线证据”已用提示词收窄，但未做运行 baseline 的方案。
+- **#179（终态下一步与判官入口）**：CLI `unestimatedDefault` 在 `done`/已归档组只保留“默认未估算”事实，不再打印 estimate/apply/confirm/reopen；草稿与已确认未开跑的行为不变（先红后绿，8/8）。父组详情新增 `criteriaReviews` 列表：状态、原因、打开判官组的按钮，走既有组导航；Web 定向判据 2/2、Web typecheck 0。**Known Important（未修）**：判官组若已归档，点击入口后 App 的路由会判其 unavailable；需要在 summary 带上归档标记或在路由层支持只读归档组，本轮按时间边界留给下一位。
+- **#157（操作指引）**：新增手写 `skills/orca-control/references/workflow.md`（新想法与既有 plan 两条路径、状态→读取→下一步、错误→证据→动作；明确估算可选、人工权限、卡住先读证据）；`SKILL.md` 只加入口并保留 ≤120 行，生成式动词参考未改。判据先红后绿（9/9），生成文档 drift 4/4。
+- **门（现测）**：`TMPDIR=/tmp npm test` 选中 933 文件；根 **6873 过／48 红／131 跳**，Web **1671/1671**。48 红中 42 条是 `ccloop bin not found at <worktree>/../ccloop/dist/cli.js`（隔离 worktree 的 sibling 路径没有 ccloop；环境，不是本轮语义红），另 `orchestration` 的既有红与 `startForm` 既有 ECONNRESET 各 1；`splitCheckOwnership` 2 红是测试跑到一半我又改了源文件造成的竞态（重跑 98/98 绿），该次全量结果不能当最终门。**修复后未再跑全量**；下一位应先在有 sibling ccloop build 或显式 `ORCA_CCLOOP_BIN` 的环境重跑受影响面。
+- **#158（OMP 坏 final 可恢复胶囊）本轮只做了两侧代码核对，未实施**：生产者缺口在 ccloop——干净退出但严格解码失败的 execute 没有“执行已完成”证据，attempt ref 只证明改动被保存；消费者缺口在 Orca——`executionDriver` 把非 exhausted 的胶囊一律按 Codex schema 解析。安全设计需要新的来源种类 + 独立验证路径，不能用放宽 `normalizeExecutionFinal` 或伪造 normalized hash 通过。建议另起 spec，明确“验证可证明代码满足目标，但不能重建缺失的权威 answer”这一边界。
+
 ### 3.最新（2026-11-08，本会话 `fe1f3fa6`）—— 测试者反馈批：#167 落地、三条 CLI 体验修复、一条 wire 缺陷；**本地 main，未推**
 
 > 人的话（原话）：「这个session中，尽量将这些要做的task都完整做完」「这次批准改写所有必要的判据」「这一轮如果需要 repin ccloop，临时允许你 push ccloop 到 origin main」「遇到卡住必须等人的事情，请继续做不必等人的部分」。三项产品裁定走 AskUserQuestion：**#145/#160 保留现行为**、**agent 可设有限额**、**#174 接受软额度**。收尾 `ls-remote` 现核三仓本地＝远端（Orca／ccmem 一致）；**ccloop 本地 main 领先 1 笔，push 被 Tier 0 闸门拦下（等人）**。
@@ -579,7 +590,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 3. **#145/#160：人 2026-11-08 裁定「保留现行为」** —— 未估算的默认无限额度仍可确认（只打提示），`unestimatedDefault.test.ts` 不动。不要再按「必须先应用估算或人明确接受」改。
 4. **#174：人 2026-11-08 裁定「接受软额度」** —— 判官维持现行 200k 名义额度与可见性，本轮不改；真实限费要另立设计。**#173** 只剩校准（口径已统一，需代表性真跑数据）。
 5. **#159：本会话已收口**（ccloop 侧，等推）：三个适配器的 execute 都走同一份严格解码（Claude 也走 `normalizeExecutionFinal`）。剩余是 #158 的 OMP 坏 final 胶囊（另立设计，本轮不做）。
-6. **仍在牌桌上的**：#168（拆分可能给文档任务配不可满足的 check —— 需先改拆分指令版本，未做）、#179 的 CLI next-step 与 Web 入口、#157 skill 的状态／错误表、#191/#192 成本与延迟、#170/#171 历史 outbox／wake 残留的收尾。**全量门与付费真跑**：人本次说之后再做；若做全量，`TMPDIR=/tmp npm test`；付费每次单独授权。push 归人。
+6. **仍在牌桌上的**：#168／#179／#157 的收口在隔离 worktree（见 §3 最新一节），**未合入 main、未推**；合入前先在有 sibling ccloop build 或显式 `ORCA_CCLOOP_BIN` 的环境重跑受影响面。**#158 需要新设计**（OMP 坏 final 的可恢复来源；不能放宽严格解码）。**已知 Important**：父组判官入口对已归档判官组会落到 unavailable，需要归档标记或只读归档路由。其余：#191/#192 成本与延迟、#170/#171 历史 outbox／wake 残留。**全量门与付费真跑**：人本次说之后再做；若做全量，`TMPDIR=/tmp npm test`；付费每次单独授权。push 归人。
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
@@ -779,6 +790,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
 - **2026-11-08 这轮待人／外部状态**：
+  1. **push／合入**：隔离 worktree `tester-followup-20261108`（分支同名）有两笔本地提交：repin 与 #168/#179/#157 收口。**尚未合入 main、尚未 push**，由人决定合推时机。
+  2. **#158 设计**：OMP 坏 final 的可恢复来源需要 ccloop 新来源种类与 Orca 消费端配对实现；不要靠放宽严格解码或伪造 normalized hash。见 §3 最新一节的两侧边界。
+  3. **已知 Important（未修）**：父组判官入口对已归档判官组点击后 unavailable；需要 summary 携带归档标记或在路由层支持只读归档组。
+  4. **测试环境**：在 worktree 里跑 `tests/scheduler/**` 需要 sibling ccloop 的 `dist/cli.js` 或显式 `ORCA_CCLOOP_BIN`，否则 42 条环境假红。
+  5. **流程教训（本轮实证）**：全量测试运行期间不要改源文件——`splitCheckOwnership` 的 2 条红就是运行中改源造成的竞态；重跑后 98/98 绿。
+
+- **2026-11-08 上一轮待人／外部状态**：
   1. **push**：Orca main（本地 2 笔）与 ccloop main（本地领先 1 笔）都归人推。**ccloop 的 push 被 Tier 0 闸门机械拦下**——人本轮在对话里授权过，闸门不认对话授权，agent 没重试。
   2. **repin**：人推完 ccloop 后，按 `scripts/pin-ccloop.mjs` 把 Orca 的 pin 换到含 `fix(claude): an execute answer passes the shared strict result decoder` 的那笔，再 `npm ci`（pin 未变，本会话没有 repin）。
   3. **检查点写入**（与 2026-11-07 同一条规则）：`dev checkpoint write` 被自动审批拦，需人在终端跑或加允许规则。
