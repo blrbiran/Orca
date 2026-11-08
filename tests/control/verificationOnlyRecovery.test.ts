@@ -68,23 +68,23 @@ describe('verification-only wire',()=>{
  });
 });
 
-it('keeps a verification-only collect label on the settled candidate and acceptance',async()=>{
+// Ruling: a collect label must agree with the admitted recovery kind; an ordinary run cannot claim verification-only authority.
+it('rejects a verification-only collect label on an ordinary run',async()=>{
  const t=await driverHarness([{taskId:'a'}]);
  try{
   const router=t.deps.router;
   t.deps.router={...router,resolve(kind,profileId,profileHash){const resolved=router.resolve(kind,profileId,profileHash),collect=resolved.port.collect.bind(resolved.port);
    return {...resolved,port:{...resolved.port,collect:async(envelope,afterSeq)=>{const report=await collect(envelope,afterSeq);return {...report,candidate:report.candidate?{...report.candidate,verificationOnly:true as const}:null};}}};
   }};
-  const runId=await t.claim();await t.until(t.driver(),()=>t.body(runId).state==='settled');
-  const checkpoint=t.h.store.db.prepare('SELECT body FROM checkpoints WHERE run_id=?').get(runId);
-  expect(JSON.parse(String(checkpoint!.body)).verificationOnly).toBe(true);
-  const row=t.h.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='acceptance'").get(`acceptance:${runId}`);
-  const proof=JSON.parse(settlementArtifact(t.h.store,JSON.parse(String(row!.body)).source).toString());
-  expect(proof.verificationOnly).toBe(true);
+  const runId=await t.claim();await t.until(t.driver(),()=>t.body(runId).state==='accepted');
+  await expect(collectInto(t.deps,readDriverRun(t.h.store,runId))).rejects.toThrow('verification-only');
+  expect(t.h.store.db.prepare('SELECT body FROM checkpoints WHERE run_id=?').get(runId)).toBeUndefined();
+  expect(t.h.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='acceptance'").get(`acceptance:${runId}`)).toBeUndefined();
  }finally{await t.h.dispose();}
 });
 
-it('collects a published OMP without-final capsule and preserves the verification-only candidate label',async()=>{
+// Ruling: the failed source captures the capsule; only its later recovery collect carries verificationOnly.
+it.each(['omp','codex'] as const)('collects only a real OMP without-final capsule (executor %s)',async executorKind=>{
  const t=await driverHarness([{taskId:'a'}]);
  try{
   const runId=await t.claim();await t.until(t.driver(),()=>t.body(runId).state==='accepted');
@@ -95,20 +95,25 @@ it('collects a published OMP without-final capsule and preserves the verificatio
   const snapshot=put({schema:'ccloop-execution-snapshot-v1',head:'b'.repeat(40),indexTree:'b'.repeat(40),indexCommit:'b'.repeat(40),bundleRefName:`refs/ccloop/${runId}/attempts/1`,index:evidence,bundle:evidence,status:evidence,rootMode:0o755,files:[],directories:[],deleted:[]});
   const sourceIdentity={groupId:input.claim.groupId,workItemId:input.claim.workItemId,taskId:input.claim.taskId,runId,generation:input.claim.generation,graphVersion:input.claim.graphVersion,targetVersion:input.claim.targetVersion,executionId:`execution-${runId}`,envelopeHash:readDriverRun(t.h.store,runId).drive!.envelopeHash!};
   const artifacts={envelope:evidence,config:evidence,acceptedContract:evidence,runtimeContract:evidence,plan:evidence,outcome:evidence,final:evidence,events:evidence,process:evidence,usageLedger:evidence,owner:evidence,usageObservations:[]};
-  const capsule=put({schema:'ccloop-execution-without-final-v1',identity:sourceIdentity,attempt:1,executor:{kind:'omp',configHash:hash},frozenContractHash:hash,gate:{stage:'execute-format',decision:'malformed-final'},published:{sha:'c'.repeat(40),base:'b'.repeat(40),ref:`refs/ccloop/${runId}/attempts/1`,tree:'d'.repeat(40)},decoder:'strict-execution-v1',normalization:{reason:'execution-format-invalid',diagnostic:{method:'none',candidates:0,valid:0,hidden:false,originalBytes:5}},attemptStartHead:'b'.repeat(40),resolvedBase:'b'.repeat(40),usage:{tokenUsage:14,highWater:2},process:{reason:'completed',code:0,signal:null,isolated:true},verifier:{entered:false,proof:evidence},artifacts,snapshot,stop:{executionId:`execution-${runId}`,generation:input.claim.generation,isolated:true},capturedAt:'2026-11-09T00:00:00.000Z'});
+  const capsule=put({schema:'ccloop-execution-without-final-v1',identity:sourceIdentity,attempt:1,executor:{kind:executorKind,configHash:hash},frozenContractHash:hash,gate:{stage:'execute-format',decision:'malformed-final'},published:{sha:'c'.repeat(40),base:'b'.repeat(40),ref:`refs/ccloop/${runId}/attempts/1`,tree:'d'.repeat(40)},decoder:'strict-execution-v1',normalization:{reason:'execution-format-invalid',diagnostic:{method:'none',candidates:0,valid:0,hidden:false,originalBytes:5}},attemptStartHead:'b'.repeat(40),resolvedBase:'b'.repeat(40),usage:{tokenUsage:14,highWater:2},process:{reason:'completed',code:0,signal:null,isolated:true},verifier:{entered:false,proof:evidence},artifacts,snapshot,stop:{executionId:`execution-${runId}`,generation:input.claim.generation,isolated:true},capturedAt:'2026-11-09T00:00:00.000Z'});
   const router=t.deps.router;
   t.deps.router={...router,resolve(kind,profileId,profileHash){const resolved=router.resolve(kind,profileId,profileHash),original=resolved.port.collect.bind(resolved.port);
    return {...resolved,port:{...resolved.port,
     readFeatures:async()=>({protocol:1,savedResultRecovery:'v1' as const}),
     collectSavedResultEvidence:async()=>({schema:'ccloop-saved-result-evidence-v1',identity:sourceIdentity,attempt:1,capsule,reason:null}),
     readSavedResultEvidence:async(_input,_capsule,reference)=>files.get(reference.hash)!,
-    collect:async(envelope,afterSeq)=>{const report=await original(envelope,afterSeq);return {...report,candidate:report.candidate?{...report.candidate,verificationOnly:true as const}:null};},
+    collect:original,
    }};
   }};
   const collected=await collectInto(t.deps,readDriverRun(t.h.store,runId));
-  expect(collected.candidate?.verificationOnly).toBe(true);
+  expect(collected.candidate?.verificationOnly).toBeUndefined();
   const owner=readDriverRun(t.h.store,runId);
-  expect(owner.savedSource).toEqual({authorityKind:'execution-without-final-v1',source:capsule,attempt:1});
-  expect(settlementArtifact(t.h.store,capsule)).toEqual(files.get(capsule.hash));
+  if(executorKind==='omp'){
+   expect(owner.savedSource).toEqual({authorityKind:'execution-without-final-v1',source:capsule,attempt:1});
+   expect(settlementArtifact(t.h.store,capsule)).toEqual(files.get(capsule.hash));
+  }else{
+   expect(owner.savedSource).toBeUndefined();
+   expect(owner.savedSourceUnavailable).toBe('saved-result-evidence-unavailable');
+  }
  }finally{await t.h.dispose();}
 });
