@@ -50,7 +50,7 @@ import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
 import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
-import { git, ORCA_IDENTITY } from "../scheduler/gitExec.js";
+import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
@@ -933,7 +933,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     if (current.state !== "accepted") return false;
     // Deviation D14: an empty result is not landed; `landedCommit` stays null and the settle step
     // (Task 7) applies D14 and decides E from there.
-      current.state = measured.empty ? "landed" : "collected";
+    current.state = measured.empty ? "landed" : "collected";
     current.drive = {
       ...current.drive!, outcome, attemptSha, landedCommit: null, noChange,
       ...(multiDirs === null ? {} : { dirs: multiDirs.map((dir, index) => ({ ...dir, attemptSha: dirAttempts[index]! })) }),

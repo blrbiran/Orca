@@ -44,13 +44,11 @@ export async function acceptanceEvidence(store:ControlStore,runId:string):Promis
  const proof=JSON.parse((await readArtifact(store,record.source as ArtifactRef)).toString());
  if(!(record.runId===runId && record.accepted===true && proof.runId===runId && proof.checksPassed===true)) return false;
  if(proof.landing==="landed") return true;
- // No-change completion (2026-11-08): the acceptance must carry the same proof C measured, bound to this run's own
- // attempt, and the trees it names must be equal. Anything else — an invented landing, a foreign attempt, a proof
- // the run does not hold — is not acceptance.
- if(proof.landing!=="no-change" || typeof proof.noChange!=="object" || proof.noChange===null) return false;
  // No-change completion (2026-11-08): the acceptance must carry the same proof C measured and recorded on this run.
  // The comparison is over the canonical bytes of the whole proof, so it binds the attempt, both trees, the frozen
- // contract hash and the check list together; anything a caller invents fails it.
+ // contract hash and the check list together; anything a caller invents fails it. An invented landing, a foreign
+ // attempt, or a proof the run does not hold is not acceptance.
+ if(proof.landing!=="no-change" || typeof proof.noChange!=="object" || proof.noChange===null) return false;
  const body=store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
  if(!body) return false;
  const drive=(JSON.parse(String(body.body)) as {drive?:{noChange?:unknown}|null}).drive;
