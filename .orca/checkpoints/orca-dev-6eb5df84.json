@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "runId": "orca-dev-6eb5df84",
+  "runtime": "claude-code",
+  "sessionRef": "6eb5df84-ecac-42b3-a5d0-c5209450a94f",
+  "writtenAt": "2026-11-08T07:21:53.757Z",
+  "head": "997441c943a7671c686292aa1c1f987de19a2780",
+  "level": {
+    "kind": "reading",
+    "level": 343621,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Decide #158 completion semantics: whether independent checks alone may finish a task, and which verifier contracts qualify",
+    "Decide #138 no-change undo scope and whether net Git tree equality is sufficient evidence",
+    "Obtain the tester's OMP single-call usage.json and events.jsonl before acting on #191",
+    "Have a person push Orca local main (ahead of origin/main) and ccloop/ccmem handoff commits"
+  ],
+  "open": [
+    "#158 needs a discriminated verification-only recovery object in both repositories; the current verifier requires a decoded ExecutionResult and normalized hash",
+    "#138's claimed pending-decision blocks-verdict path is unproven and needs a crossing criterion",
+    "#170 has a delivered=0 reader but no production caller of deliverHandoffStop found in src/"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "tied-evidence",
+      "what": "#158 product direction: independent checks as proof of completion and eligible verifier contracts"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "#138 product direction: which no-change decisions may use a no-op undo and whether net Git tree equality is enough"
+    },
+    {
+      "kind": "named-authorization",
+      "what": "Orca push and ccmem push remain the person's; UI information architecture open questions still need answers"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "TMPDIR=/tmp ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/ccloop/dist/cli.js npm test",
+      "exitCode": 0,
+      "commit": "997441c943a7671c686292aa1c1f987de19a2780",
+      "observedAt": "2026-11-08T07:20:37.945Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6eb5df84-t1xyV9/1.txt"
+    },
+    {
+      "command": "node scripts/test-affected.mjs --base=origin/main",
+      "exitCode": 1,
+      "commit": "997441c943a7671c686292aa1c1f987de19a2780",
+      "observedAt": "2026-11-08T07:21:53.699Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6eb5df84-t1xyV9/2.txt"
+    }
+  ]
+}
