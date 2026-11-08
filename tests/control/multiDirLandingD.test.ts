@@ -64,7 +64,7 @@ async function multiWorld(): Promise<World> {
 
 /**
  * An ordinary contract rooted at the extra, as a one-directory write set is frozen (O5 keeps such a contract unchanged).
- * Its required check names `src/check.ts`, so a change to that file is only classifiable through the contract's own checks.
+ * Its required check executes `src/check.ts`, so a change to that file is classifiable through the contract's own checks.
  */
 async function contractRootedAtAlpha(w: World): Promise<void> {
   const path = join(w.root, "contracts", "a.json");
@@ -73,7 +73,7 @@ async function contractRootedAtAlpha(w: World): Promise<void> {
   delete contract.context.repoKey;
   contract.context.repoPath = w.multiRepo!;
   contract.context.targetPaths = ["src/**"];
-  contract.verification.requiredChecks = ["true src/check.ts"];
+  contract.verification.requiredChecks = ["node src/check.ts"];
   await writeFile(path, JSON.stringify(contract));
 }
 
