@@ -1,0 +1,47 @@
+{
+  "v": 1,
+  "runId": "orca-dev-a3d1568b",
+  "runtime": "claude-code",
+  "sessionRef": "a3d1568b-4d40-4ec6-9fb5-93a1b06a565a",
+  "writtenAt": "2026-11-08T03:16:14.833Z",
+  "head": "c9838dde07177294acbcc1de17a3792be9942f11",
+  "level": {
+    "kind": "reading",
+    "level": 581812,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Review and merge the isolated worktree branch tester-followup-20261108 (3 commits: repin, tester-followup fixes, handoff).",
+    "Before merging, rerun affected tests with ORCA_CCLOOP_BIN set to a built ccloop or a sibling ccloop checkout, so scheduler tests do not report the 42 environment-only failures.",
+    "Design #158: a ccloop source kind for a clean-exit OMP execute whose final failed strict decoding, plus the Orca consumer and independent verification path; never relax normalizeExecutionFinal."
+  ],
+  "open": [
+    "Important: a parent-group criteria review entry for an archived judge opens a group the route treats as unavailable.",
+    "#168 remains prompt guidance plus human split review; the overview does not report test baselines, so satisfiability is not statically proven."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "Push Orca, ccloop and ccmem handoff commits; the Orca work lives on a branch and has not been merged."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "./node_modules/.bin/vitest run tests/control/splitCheckOwnership.test.ts tests/commands/unestimatedDefault.test.ts tests/entry/skill.test.ts",
+      "exitCode": 0,
+      "commit": "c9838dde07177294acbcc1de17a3792be9942f11",
+      "observedAt": "2026-11-08T03:16:14.486Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-a3d1568b-A1m7aU/1.txt"
+    },
+    {
+      "command": "cd web && ../node_modules/.bin/vitest run tests/criteriaReviewNavigation.test.tsx",
+      "exitCode": 1,
+      "commit": "c9838dde07177294acbcc1de17a3792be9942f11",
+      "observedAt": "2026-11-08T03:16:14.777Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-a3d1568b-A1m7aU/2.txt"
+    }
+  ]
+}
