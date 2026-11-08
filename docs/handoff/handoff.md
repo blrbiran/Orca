@@ -63,7 +63,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-08，本会话 `6eb5df84`）—— 前一轮四笔已合入本地 main；#186 依赖提示落地；设计稿更正；#191 探针无异常
+### 3.最新（2026-11-08，本会话 `cf294856`，分支 `feat/tester-followup-20261108c`）—— #127／#138 落地；#158 与 UI 在飞；#191 按“无测试者数据”前提处置
+
+- **人的话（原话）**：「#191：具体需要测试者提供什么 => 太复杂了，你按无法拿到测试者原始数据的前提来走」「其他都按你的建议走」「UI §6 四个问题：我的答案 => 先按你的答案走」。**本轮已由人 push 上一批**（Orca 本地 main 与 `origin/main` 现核一致）。本轮分支 `feat/tester-followup-20261108c`，**未推**。
+- **产品方向已定并写进设计稿**（`docs/superpowers/specs/2026-11-08-omp-verdict-recovery-and-noop-undo-design.md` **Correction 2**、UI 设计稿 **§7 Decision**）：独立 checks 只有在**合同显式声明**时才可判完成；no-change undo 是结构化可验证证明，保留字串永不作数；UI 四项按我的建议（侧栏 workspace switcher、Settings 只留身份＋链接、Import 用对话框、runs 表把转录与证据移进单 run 详情）。
+- **#127＋#138 已落地**（两笔，各自先红后绿）：
+  - 合同可选 `verification.commandChecksDecideGoal`（**缺省不出现**，仅允许 command verifier／单仓／无 setup；ccloop 与 Orca 两侧同形）。C 处在空结果且该合同成立时用 Git 量 attempt tree ＝ base tree，把证明写进 drive record；E 只在这个证明点名**本 run 的 attempt** 时写 acceptance，`acceptanceEvidence` 再对 run 复核一次才让 task 记 done；**其余空结果仍是 D14 的 blocked**。
+  - 决策条目可声明 `undo.kind:"no-change"`；**证明由控制器填**（C 量到的 base／attempt／两棵树／frozen contract hash／checks），并覆盖 agent 写的任何值；没有量到的证明 ⇒ 仍按 tier-0 交给**人**（`decision-undo-not-executable` 路径不变）。独立账本校验器只管形状：kind 无 proof 是 rejected，proof 两棵树不同也是 rejected；**一句保留字样仍然过不了**可执行检查。
+  - 判据：`tests/control/decisiveChecksContract.test.ts`、`tests/control/noChangeCompletion.test.ts`（4）、`tests/ledger/noChangeUndo.test.ts`（4）。**三条变异在 `git clone --local` 副本里各自见红**（删 opt-in 守卫／把证明比较换成 `true`／删 tier-0 守卫），副本 `/tmp/orca-nocchange-mutA`。typecheck RC 0；`tests/ledger`＋`approveDecision`＋`driverSettle`＋`driverDecisionsEmpty` 合计 61/61。
+  - **登记（诚实边界）**：`drive.noChange` 只可能出现在**空结果**的 run，所以证明只接进 `recordEmptyResultDecisions` 的两处空结果账本写入点；landed／reconcile 路径不传（那里本就没有该证明）。E 处 `drive.noChange.attempt === drive.attemptSha` 这一小段是纵深防御，C 同时写两者，**没有独立变异能打红它**（不当成已覆盖）。离线读者只能校验形状，**树相等要由有仓库的读者复核**。
+- **#158（OMP 坏 final 的可验证来源）在飞**：ccloop 侧子代理实施中（生产者在租约内取证、绑定真实发布 ref/tree/parent；消费者是**有判别符的只验证来源**，不伪造 answer／hash）。
+- **UI 信息架构在飞**：`web/` 四个任务（workspace switcher、Import 对话框、progress 工具条＋可折叠任务表、runs 行展开全宽转录＋证据进单 run 详情）由一个子代理在同一分支改；**收尾前不要按 web 目录的单次结果下结论**。
+- **#191 改按“拿不到测试者原始数据”处置**：本机免费探针已证隔离配置下出站 body 仅 **7,384 B**（见上一节），**不据此改账本**；本轮**不加**基于可见 prompt 的比值告警（那会把未证实的计费差异写进产品判断）。要落地只能等真样本，或另立设计。
+- **#171 现状（未改）**：面板已经**读**得到未投递的 start 家族 wake（`src/panel/controlOverview.ts:132` 用它压掉「ready-to-start」建议），但**没有任何读**把「这个 wake 为何长期 deferred ＋ 有多旧」讲出来，也没有清理入口；`recovery.ts:86` 的 `pendingWakeIds` 只在启动恢复那一趟里出现。**这是下一步的小活**，不是已经修好的东西。
+
+### 3.上一轮（2026-11-08，本会话 `6eb5df84`）—— 前一轮四笔已合入本地 main；#186 依赖提示落地；设计稿更正；#191 探针无异常
 
 - **人的话（原话）**：「尽量将这些要做的task都完整做完，这个session暂时不要考虑context大小」「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」「如果需要repin ccloop…临时允许你push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」「执行完在最后阶段报给我审核」。**本轮没有付费真跑**；工作全部在本地 main，**未推**。
 - **合入**：`fix/tester-followup-20261108b` 的四笔（`multiDirLandingD` 夹具、`group import` 提示、两笔 handoff）经 `--ff-only` 合入本地 main；合入前后都用 **ccloop 工作树的 `dist/cli.js`** 跑 `npm test`，**选 114 个根文件、796/796**，typecheck RC 0；`multiDirLandingD` 6/6。独立 TypeScript 审阅无 correctness 缺陷。
