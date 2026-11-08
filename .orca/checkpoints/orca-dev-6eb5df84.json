@@ -3,11 +3,11 @@
   "runId": "orca-dev-6eb5df84",
   "runtime": "claude-code",
   "sessionRef": "6eb5df84-ecac-42b3-a5d0-c5209450a94f",
-  "writtenAt": "2026-11-08T07:21:53.757Z",
-  "head": "997441c943a7671c686292aa1c1f987de19a2780",
+  "writtenAt": "2026-11-08T07:27:06.909Z",
+  "head": "b2f099e5900e97f8d3cd13b1ccf7b96d0aad5992",
   "level": {
     "kind": "reading",
-    "level": 343621,
+    "level": 348856,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
@@ -42,16 +42,16 @@
     {
       "command": "TMPDIR=/tmp ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/ccloop/dist/cli.js npm test",
       "exitCode": 0,
-      "commit": "997441c943a7671c686292aa1c1f987de19a2780",
-      "observedAt": "2026-11-08T07:20:37.945Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6eb5df84-t1xyV9/1.txt"
+      "commit": "b2f099e5900e97f8d3cd13b1ccf7b96d0aad5992",
+      "observedAt": "2026-11-08T07:25:48.739Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6eb5df84-khgJnO/1.txt"
     },
     {
-      "command": "node scripts/test-affected.mjs --base=origin/main",
-      "exitCode": 1,
-      "commit": "997441c943a7671c686292aa1c1f987de19a2780",
-      "observedAt": "2026-11-08T07:21:53.699Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6eb5df84-t1xyV9/2.txt"
+      "command": "TMPDIR=/tmp node scripts/test-affected.mjs --base=origin/main",
+      "exitCode": 0,
+      "commit": "b2f099e5900e97f8d3cd13b1ccf7b96d0aad5992",
+      "observedAt": "2026-11-08T07:27:06.847Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-6eb5df84-khgJnO/2.txt"
     }
   ]
 }
