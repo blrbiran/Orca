@@ -80,7 +80,9 @@ function scan(): { offenders: string[]; allowedUsed: Set<number> } {
   try {
     const out = join(dir, "grep.txt");
     const fd = openSync(out, "w");
-    const result = spawnSync("grep", ["-rnE", `(orca|cli\\.ts) (${NAMES.join("|")})`, ...SCANNED], { stdio: ["ignore", fd, "inherit"] });
+    // A nested worktree under .claude is another checkout of this repository, not a file a person reads from this one;
+    // -I keeps a binary match (a git pack in one) from being printed as a line the parser cannot classify.
+    const result = spawnSync("grep", ["-rnIE", "--exclude-dir=worktrees", `(orca|cli\\.ts) (${NAMES.join("|")})`, ...SCANNED], { stdio: ["ignore", fd, "inherit"] });
     closeSync(fd);
     // 0 = matches, 1 = none; anything else (a missing path) is a broken scan, not a clean one.
     expect([0, 1]).toContain(result.status);

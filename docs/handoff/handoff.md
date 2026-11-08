@@ -63,15 +63,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-08，隔离 worktree `tester-followup-20261108`）—— 测试者反馈三项收口；#158 仍待人设计；**分支未合入 main、未推**
+### 3.最新（2026-11-08，隔离 worktree `tester-followup-20261108`）—— 测试者反馈三项收口；三笔已快进合入本地 main；#158 仍待人设计；**未推**
 
-> 人本轮原话：「尽量将这些要做的task都完整做完」「这一轮还是不考虑 context 大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「这一轮如果需要 repin ccloop，临时允许你 push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」「先按你的建议执行」。**本轮没有付费真跑**。收尾 `ls-remote` 现核三仓 main 与远端一致；本轮工作只在隔离 worktree 的两笔提交上，**尚未合入 main、尚未 push**（push 归人）。
+> 人本轮原话：「尽量将这些要做的task都完整做完」「这一轮还是不考虑 context 大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「这一轮如果需要 repin ccloop，临时允许你 push ccloop」「遇到卡住必须等人的事情，请继续做不必等人的部分」「先按你的建议执行」；随后明确「你帮我合并到main分支」。**本轮没有付费真跑**。收尾 `ls-remote` 现核三仓 main 与远端一致；本轮工作已从隔离 worktree **变基并 `--ff-only` 合入本地 main**（主题行见下），**尚未 push**（push 归人）。
 
 - **repin 已做**（主题行 `chore(deps): repin ccloop to the shared strict execute decoder`）：`node scripts/pin-ccloop.mjs <ccloop main>` 六项全 ok（E2E 12/12、typecheck 0、clone `npm ci` 可复现锁），随后主工作树 `npm ci` 0。ccloop 侧 `fix(claude): an execute answer passes the shared strict result decoder` 已在远端 main。
 - **#168（拆分检查归属）**（主题行 `fix: task-owned split checks, terminal next steps and review navigation (#168 #179 #157)`）：两种拆分指令升到 v5，新增规则——必需检查的失败必须能由本任务可写目标路径或已完成依赖修复；没有同提交通过基线时，全仓测试按“可能已红”处理，不能派给只改文档、无法修无关源码的任务；原本已绿的全仓测试仍可要求保持绿。判据 `tests/control/splitCheckOwnership.test.ts` 先红后绿；六文件 81/81 后最终八文件 98/98。**诚实边界**：overview 不报告测试结果，静态验证器也不能证明任意 shell 检查可满足；这是提示词与人工审拆分的防线，不是保证。审阅提出的“同提交基线证据”已用提示词收窄，但未做运行 baseline 的方案。
 - **#179（终态下一步与判官入口）**：CLI `unestimatedDefault` 在 `done`/已归档组只保留“默认未估算”事实，不再打印 estimate/apply/confirm/reopen；草稿与已确认未开跑的行为不变（先红后绿，8/8）。父组详情新增 `criteriaReviews` 列表：状态、原因、打开判官组的按钮，走既有组导航；Web 定向判据 2/2、Web typecheck 0。**Known Important（未修）**：判官组若已归档，点击入口后 App 的路由会判其 unavailable；需要在 summary 带上归档标记或在路由层支持只读归档组，本轮按时间边界留给下一位。
 - **#157（操作指引）**：新增手写 `skills/orca-control/references/workflow.md`（新想法与既有 plan 两条路径、状态→读取→下一步、错误→证据→动作；明确估算可选、人工权限、卡住先读证据）；`SKILL.md` 只加入口并保留 ≤120 行，生成式动词参考未改。判据先红后绿（9/9），生成文档 drift 4/4。
-- **门（现测）**：`TMPDIR=/tmp npm test` 选中 933 文件；根 **6873 过／48 红／131 跳**，Web **1671/1671**。48 红中 42 条是 `ccloop bin not found at <worktree>/../ccloop/dist/cli.js`（隔离 worktree 的 sibling 路径没有 ccloop；环境，不是本轮语义红），另 `orchestration` 的既有红与 `startForm` 既有 ECONNRESET 各 1；`splitCheckOwnership` 2 红是测试跑到一半我又改了源文件造成的竞态（重跑 98/98 绿），该次全量结果不能当最终门。**修复后未再跑全量**；下一位应先在有 sibling ccloop build 或显式 `ORCA_CCLOOP_BIN` 的环境重跑受影响面。
+- **门（合入后的本地 main，现测）**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/ccloop/dist/cli.js npm test` 选中 **933 文件（根 750、Web 183）**；根 **7009 过／40 跳过／3 红**，Web **1671/1671**。三条红：`orchestration`「admits a debug group Orca opened itself」`task-run-moved:ladder-source-superseded`（交接已登记的既有红）；`multiDirLandingD`「puts the ledger on the group primary's tip…」**单跑 6/6 通过**（负载 flake）；`commands/removedNames` 是扫描把 `.claude/worktrees/...` 里嵌套 checkout 的源文件与二进制 git pack 当成违规行——已修为 `grep -rnIE --exclude-dir=worktrees`（主题行 `test(commands): the removed-name scan skips a nested worktree and its binary pack`），修后 13/13、typecheck RC 0。**全量门、付费真跑未做。**
 - **#158（OMP 坏 final 可恢复胶囊）本轮只做了两侧代码核对，未实施**：生产者缺口在 ccloop——干净退出但严格解码失败的 execute 没有“执行已完成”证据，attempt ref 只证明改动被保存；消费者缺口在 Orca——`executionDriver` 把非 exhausted 的胶囊一律按 Codex schema 解析。安全设计需要新的来源种类 + 独立验证路径，不能用放宽 `normalizeExecutionFinal` 或伪造 normalized hash 通过。建议另起 spec，明确“验证可证明代码满足目标，但不能重建缺失的权威 answer”这一边界。
 
 ### 3.最新（2026-11-08，本会话 `fe1f3fa6`）—— 测试者反馈批：#167 落地、三条 CLI 体验修复、一条 wire 缺陷；**本地 main，未推**
