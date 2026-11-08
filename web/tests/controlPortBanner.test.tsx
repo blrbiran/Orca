@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render as renderDom, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlPanel } from "../src/ControlPanel.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
@@ -35,6 +37,8 @@ const summary: ControlSummaryV1 = {
   schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 1, resetRequired: false, dispatchBlocked: false, groups: [],
 };
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
+
+afterEach(cleanup);
 
 const render = (over: Partial<ControlConfigV1> = {}): string => renderToStaticMarkup(
   <ControlPanel
@@ -87,10 +91,15 @@ describe("the panel says when it has no execution port", () => {
 
 describe("the panel says when no estimator was configured", () => {
   it("offers import without an estimate and says which flags enable estimates", () => {
-    const html = render({ defaults: null });
-    // Ruling: estimator guidance is inside the import dialog; the server-rendered page offers its entry.
-    expect(html).toContain("Import a plan…</button>");
-    expect(html).not.toContain("No estimator profile is configured");
+    renderDom(<ControlPanel config={config({ defaults: null })} summary={summary} recovery={recovery}
+      groups={{}} selected={null} drafts={{}} uncertain={[]} refusal={null} refetchRequired={false}
+      onSelect={vi.fn()} onCommand={vi.fn()} onDraft={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+    // Ruling: 2026-11-09 independent review; verify the startup flags in the opened dialog.
+    const dialog = screen.getByRole("dialog", { name: "Import plan" });
+    expect(dialog.textContent).toContain("No estimator profile is configured");
+    expect(dialog.textContent).toContain("--estimator-profile");
+    expect(dialog.textContent).toContain("--estimate-mode");
   });
 
   it("offers the import when an estimator is configured", () => {

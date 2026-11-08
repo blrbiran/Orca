@@ -68,4 +68,12 @@ describe("the Runs table's order (feedback #59)", () => {
     const container = renderRuns([run("a-third", 3), run("m-first"), run("z-second", 2)]);
     expect(rows(container)).toEqual([["a-third", "Run 1"], ["m-first", "Run 2"], ["z-second", "Run 3"]]);
   });
+  it("distinguishes two runs of the same task in each expand button's accessible name", () => {
+    const container = renderRuns([{ ...run("first", 1), taskId: "task-a" }, { ...run("second", 2), taskId: "task-a" }]);
+    const triggers = [...container.querySelectorAll<HTMLButtonElement>('tr[data-run-id] button[aria-expanded]')];
+    expect(triggers.map((button) => button.getAttribute("aria-label"))).toEqual(["Open run task-a · Run 1", "Open run task-a · Run 2"]);
+    expect(triggers.map((button) => button.closest("td")?.textContent)).toEqual(["▸ task-a", "▸ task-a"]);
+    fireEvent.click(triggers[0]!);
+    expect(triggers[0]!.getAttribute("aria-label")).toBe("Close run task-a · Run 1");
+  });
 });

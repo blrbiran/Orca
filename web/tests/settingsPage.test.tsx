@@ -31,6 +31,15 @@ describe("the Settings page (H6b)", () => {
     fireEvent.click(within(identity).getByRole("link", { name: "Switch workspace" }));
     expect(document.activeElement).toBe(trigger);
   });
+  it("shows that no workspace is registered without offering an unavailable switcher", async () => {
+    installFakePanel({ projects: { status: 200, body: { projects: [] } } });
+    window.location.hash = "#settings/project";
+    render(<App />);
+    const identity = await screen.findByTestId("settings-workspace-identity");
+    expect(identity.textContent).toContain("No project yet");
+    expect(identity.textContent).not.toContain("All projects is selected");
+    expect(within(identity).queryByRole("link", { name: "Switch workspace" })).toBeNull();
+  });
   it("lists every category as a link to its own hash", async () => {
     window.location.hash = "settings";
     render(<App />);

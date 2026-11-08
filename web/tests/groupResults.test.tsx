@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {cleanup,render,screen,fireEvent} from "@testing-library/react";
+import {cleanup,render,screen,fireEvent,within} from "@testing-library/react";
 import {afterEach,it,expect,vi} from "vitest";
 import i18n from "../src/i18n.js";
 import {GroupResults} from "../src/GroupResults.js";
@@ -38,4 +38,28 @@ it("group and task results show a running task whose run is blocked as blocked",
  render(<TaskResults view={view([item])} item={item} active scope="shown-status-task"/>);
  // mutation: TaskResults reads item.status -> "task acceptance: active", red
  expect(screen.getByText(/a · task acceptance: blocked/)).toBeTruthy();
+});
+
+// Review 2026-11-09: the collapsed badge must agree with the graph's displayed status.
+it("counts a running task with a blocked category in the collapsed task badge",()=>{
+ const data=view([workItem({status:"active",category:"blocked"})]);
+ render(<ControlGroupView view={data} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ expect(screen.getByRole("button",{name:"Tasks (1)"}).getAttribute("aria-expanded")).toBe("false");
+ expect(screen.getByText("1 blocked")).toBeTruthy();
+});
+
+it("counts only filtered blocked tasks beside Tasks and offers a way to reveal hidden blocked tasks",()=>{
+ const data=view([
+  workItem({taskId:"blocked",status:"blocked",labels:["urgent"]}),
+  workItem({taskId:"visible",status:"active",labels:["normal"]}),
+ ]);
+ render(<ControlGroupView view={data} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ fireEvent.click(screen.getByRole("checkbox",{name:"normal"}));
+ expect(screen.getByRole("button",{name:"Tasks (1)"})).toBeTruthy();
+ expect(screen.queryByText("1 blocked")).toBeNull();
+ expect(screen.getByTestId("hidden-blocked-count").textContent).toContain("1 blocked");
+ expect(screen.getByTestId("hidden-blocked-count").textContent).toContain("Labels (1)");
+ fireEvent.click(within(screen.getByTestId("hidden-blocked-count")).getByRole("button",{name:"Clear labels"}));
+ expect(screen.getByRole("button",{name:"Tasks (2)"})).toBeTruthy();
+ expect(screen.getByText("1 blocked")).toBeTruthy();
 });

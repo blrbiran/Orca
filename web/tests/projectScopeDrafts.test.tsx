@@ -345,8 +345,8 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     expect(selectedText()).toBe("All projects");
     expect(shownText(targetIn(form()))).toBe("Choose a repository");
     expect(startButton().disabled).toBe(true);
-    fireEvent.click(startButton());
-    fireEvent.submit(form());
+    // Ruling: 2026-11-09 independent review; flush the invalid submit path before asserting no command was posted.
+    await act(async () => { fireEvent.click(startButton()); fireEvent.submit(form()); });
     expect(panel.posts.map((post) => post.url)).toEqual([]);
 
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, gamma] } };
@@ -359,8 +359,8 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     expect(importButton().disabled).toBe(true);
     fireEvent.click(importButton());
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    fireEvent.click(startButton());
-    fireEvent.submit(form());
+    // Ruling: 2026-11-09 independent review; flush the invalid submit path before asserting no command was posted.
+    await act(async () => { fireEvent.click(startButton()); fireEvent.submit(form()); });
     expect(panel.posts.map((post) => post.url)).toEqual([]);
   });
 });

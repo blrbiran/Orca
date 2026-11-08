@@ -27,16 +27,16 @@ function ProjectIdentity(props: ProjectPick): JSX.Element | null {
   const current = props.projects.find((entry) => entry.projectKey === props.project);
   return (
     <div data-testid="settings-workspace-identity" className="mb-4 rounded-card border border-line bg-well p-3">
-      {current === undefined ? <p>{t("settings.projectPick.allIdentity")}</p> : (
+      {props.projects.length === 0 ? <p>{t("project.none")} · {t("project.add")}</p> : current === undefined ? <p>{t("settings.projectPick.allIdentity")}</p> : (
         <dl>
           <dt>{t("settings.projectPick.name")}</dt><dd>{projectName(current)}</dd>
           <dt>{t("settings.projectPick.kind")}</dt><dd>{current.kind === "multi" ? t("settings.projectPick.multi") : t("settings.projectPick.directory")}</dd>
           <dt>{t("settings.projectPick.root")}</dt><dd>{current.path ?? t("common.na")}</dd>
         </dl>
       )}
-      <a href="#workspace-switcher" onClick={(event) => { event.preventDefault(); document.getElementById("workspace-switcher")?.focus(); }}>
+      {props.projects.length > 0 && <a href="#workspace-switcher" onClick={(event) => { event.preventDefault(); document.getElementById("workspace-switcher")?.focus(); }}>
         {t("settings.projectPick.switch")}
-      </a>
+      </a>}
     </div>
   );
 }

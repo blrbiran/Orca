@@ -210,7 +210,7 @@ const resultFixture = savedRun({executionId:"exec-x"});
 resultFixture.currentExplanation.content = {schema:"task-result-v1",goal:"x1",completedWork:["x2"],conclusions:["x3"],outputs:[],limitations:["x4"]};
 resultFixture.attempts[0]!.explanation = resultFixture.currentExplanation;
 resultFixture.attempts[0]!.outputs = [];
-const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; settle?: (container: HTMLElement) => Promise<void> }> = [
+const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; settle?: (container: HTMLElement) => Promise<void>; scan?: () => HTMLElement }> = [
   {name:"saved results and actual verification",chinese:"Agent 说明",element:()=> <SavedRunResult value={resultFixture} active={false} identity="locale-owner"/>},
   { name: "progress overview and source states", chinese: "需要你处理", element: () => <Overview model={OVERVIEW} onOpen={noop} onImport={noop} onRequirement={noop} /> },
   { name: "nav and shell footer", chinese: "决策", element: () => (
@@ -230,7 +230,10 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; 
     <ControlPanel config={config} summary={summary} recovery={recovery} groups={{ g: view }} selected="g" drafts={drafts} uncertain={[{ groupId: "g", commandId: "c1" }]}
       refusal={{ status: 409, code: "revision-conflict", message: "m-1", commandRevision: 7 }} refetchRequired onSelect={noop} onDraft={noop} onCommand={noop}
       workspace={workspace} />
-  ) },
+  ), settle: async () => {
+    fireEvent.click(document.querySelector<HTMLButtonElement>("#overview-control-import button")!);
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
+  }, scan: () => document.body },
   { name: "task detail and loop card", chinese: "手写契约", element: () => (
     <>
       <TaskDetail view={view} item={itemA} drafts={drafts} onDraft={noop} onCommand={noop} />
@@ -272,12 +275,13 @@ describe("everything visible goes through t (spec §6.5)", () => {
     expect(FRAGMENTS.length).toBeGreaterThan(120);
   });
 
-  it.each(AREAS)("$name: no English value is left once the pseudo-locale's ⟦…⟧ are stripped", async ({ element, settle }) => {
+  it.each(AREAS)("$name: no English value is left once the pseudo-locale's ⟦…⟧ are stripped", async ({ element, settle, scan }) => {
     await usePseudo();
     const { container } = render(element());
     await settle?.(container);
     expect(container.textContent).toContain("⟦");
-    expect(leftovers(container)).toEqual([]);
+    // Ruling: 2026-11-09 independent review; scan the open import dialog's portal as well as the panel.
+    expect(leftovers(scan?.() ?? container)).toEqual([]);
   });
 
   it.each(AREAS)("$name: the same fixture in Chinese shows $chinese", async ({ element, chinese, settle }) => {

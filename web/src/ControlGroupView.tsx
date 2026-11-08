@@ -420,6 +420,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const shownItems = activeFilter.length === 0
     ? view.workItems
     : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label)));
+  const shownBlocked = shownItems.filter((item) => shownWorkStatus(item) === "blocked").length;
+  const hiddenBlocked = view.workItems.filter((item) => shownWorkStatus(item) === "blocked").length - shownBlocked;
   const toggleFilter = (label: string): void =>
     setLabelFilter((current) => (current.includes(label) ? current.filter((other) => other !== label) : [...current, label]));
   const openItem = view.workItems.find((item) => item.taskId === openTask);
@@ -674,7 +676,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <button type="button" aria-expanded={tasksOpen} aria-controls={`tasks-${groupId}`} onClick={() => setTasksOpen(!tasksOpen)}>
         {t("control.group.taskDisclosure", { n: shownItems.length })}
       </button>
-      {!tasksOpen && view.workItems.some((item) => item.status === "blocked") && <span className="badge" data-tone="warn"> {t("control.group.blockedCount", { n: view.workItems.filter((item) => item.status === "blocked").length })}</span>}
+      {!tasksOpen && shownBlocked > 0 && <span className="badge" data-tone="warn"> {t("control.group.blockedCount", { n: shownBlocked })}</span>}
+      {hiddenBlocked > 0 && <span className="badge" data-tone="warn" data-testid="hidden-blocked-count">
+        {t("control.group.blockedCount", { n: hiddenBlocked })} · {t("control.group.filterButton", { n: activeFilter.length })} · <button type="button" onClick={() => setLabelFilter([])}>{t("control.group.filterClear")}</button>
+      </span>}
       <table id={`tasks-${groupId}`} aria-label={t("control.group.taskTable")} data-collapsed={!tasksOpen}>
         <thead>
           <tr>
@@ -785,7 +790,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
             <tr id={runRegionId(groupId, run.runId)} tabIndex={-1} data-run-id={run.runId}>
               <td>
                 <button type="button" aria-expanded={openRunId === run.runId} aria-controls={`run-detail-${run.runId}`}
-                  aria-label={t(openRunId === run.runId ? "control.group.closeRun" : "control.group.openRun", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}
+                  aria-label={t(openRunId === run.runId ? "control.group.closeRun" : "control.group.openRun", { run: run.taskId != null && view.runs.some((other) => other.runId !== run.runId && other.taskId === run.taskId) ? `${run.taskId} · ${t("control.group.runLabel", { n: index + 1 })}` : run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}
                   onClick={() => setOpenRunId(openRunId === run.runId ? null : run.runId)}>{openRunId === run.runId ? "▾" : "▸"}</button>{" "}
                 {run.taskId ?? run.estimateId ?? <details><summary>{t("control.group.runLabel", { n: index + 1 })}</summary><code>{run.runId}</code></details>}
               </td>
