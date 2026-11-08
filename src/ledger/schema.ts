@@ -8,11 +8,33 @@ export const alternativeSchema = z
   })
   .strict();
 
+const oidSchema = z.string().regex(/^[a-f0-9]{40,64}$/);
+/**
+ * #138 (design Correction 2, 2026-11-08): the only honest undo for a decision that changed nothing is the Git proof that
+ * the attempt's tree equals its base tree. It is a structured field, never a reserved phrase: the standalone validator
+ * can check the shape, and the controller that measured Git supplies it, so a third-party ledger row cannot claim it by
+ * wording alone.
+ */
+export const noChangeProofSchema = z
+  .object({
+    base: oidSchema,
+    attempt: oidSchema,
+    baseTree: oidSchema,
+    attemptTree: oidSchema,
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/),
+    requiredChecks: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+export type NoChangeProof = z.infer<typeof noChangeProofSchema>;
+
 export const undoSchema = z
   .object({
     how: z.string().min(1),
     cost: z.string().min(1),
     blast_radius: z.string().min(1),
+    // Optional and absent by default, so every line written before this field keeps its bytes.
+    kind: z.literal("no-change").optional(),
+    proof: noChangeProofSchema.optional(),
   })
   .strict();
 

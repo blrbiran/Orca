@@ -60,6 +60,20 @@ export function validateLine(raw: string): ValidationResult {
     if (!result.success) {
       return rejected(result.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`));
     }
+    // #138 (2026-11-08): a structured no-change undo carries its own Git proof instead of an executable command. The
+    // proof's shape is checked here; whether the trees really match is checked where the repository is (the controller
+    // that wrote it, and a reader that has the repo). Wording alone is never enough — a `kind` without a valid proof is
+    // a malformed record, and a bare phrase still fails the executable check below.
+    if (result.data.undo.kind === "no-change") {
+      const proof = result.data.undo.proof;
+      if (proof === undefined) {
+        return rejected(["undo.kind no-change requires a proof"]);
+      }
+      if (proof.baseTree !== proof.attemptTree) {
+        return rejected(["undo.proof names different trees: a no-change undo must be the same tree"]);
+      }
+      return { verdict: "ok" };
+    }
     // Check 3 comes after the schema: rejection-class failures take priority
     // over downgrades (decision orca-dev-09cc3ea1/3).
     if (!undoHowIsExecutable(result.data.undo.how)) {

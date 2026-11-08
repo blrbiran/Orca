@@ -7,6 +7,7 @@ import type { DecisionEvent } from "../ledger/schema.js";
 import { appendEvents } from "../ledger/writer.js";
 import { ccloopEvidence } from "../scheduler/ledgerWiring.js";
 import type { ReportedDecisions } from "./reportedDecisions.js";
+import type { NoChangeProof } from "../ledger/schema.js";
 
 export const agentDecisionId = (ledgerRun: string, entryIndex: number): string => `${ledgerRun}/agent-${entryIndex}`;
 export const pendingIdOf = (ledgerRun: string, entryIndex: number): string => `pending-${ledgerRun}-${entryIndex}`;
@@ -38,6 +39,8 @@ export interface NormalizeCtx {
   at: string;
   evidence: string[];
   undoHow?: string;
+  /** #138 (2026-11-08): the run's own Git proof that its attempt tree equals its base tree, when the controller measured one. */
+  noChange?: NoChangeProof;
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -57,6 +60,14 @@ export function normalizeAgentEntry(
   draft.run = ctx.ledgerRun;
   draft.evidence = ctx.evidence;
   if (ctx.undoHow !== undefined && isPlainObject(draft.undo)) draft.undo = { ...draft.undo, how: ctx.undoHow };
+  // #138 (2026-11-08): a decision that changed nothing declares itself structurally; the proof is the controller's own
+  // measurement, never the agent's claim. Without a measured proof the entry is the agent's to hand to a person, so it
+  // is refused to tier 0 rather than written with an invented no-change undo.
+  if (isPlainObject(draft.undo) && draft.undo.kind === "no-change") {
+    if (ctx.noChange === undefined) return { ok: false, reason: "tier-0: undo.kind no-change needs the run's own measured Git proof" };
+    const { how, cost, blast_radius } = draft.undo as { how?: unknown; cost?: unknown; blast_radius?: unknown };
+    draft.undo = { how, cost, blast_radius, kind: "no-change", proof: ctx.noChange };
+  }
 
   const kind = draft.kind;
   if (!(DECISION_KINDS as readonly unknown[]).includes(kind)) {
@@ -81,9 +92,10 @@ export async function writeRunLedger(
     codeAuthored: DecisionEvent[];
     at: string;
     evidence: string[];
+    noChange?: NoChangeProof;
   },
 ): Promise<{ writtenIds: string[]; pending: PendingEntry[] }> {
-  const { ledgerRun, reported, codeAuthored, at, evidence } = input;
+  const { ledgerRun, reported, codeAuthored, at, evidence, noChange } = input;
   const writtenIds: string[] = [];
   const pending: PendingEntry[] = [];
   const refuse = (entryIndex: number, entry: unknown, reason: string): void => {
@@ -104,7 +116,7 @@ export async function writeRunLedger(
 
   const passed: { index: number; entry: unknown; event: DecisionEvent }[] = [];
   reported.entries.forEach((entry, index) => {
-    const r = normalizeAgentEntry(entry, { ledgerRun, entryIndex: index, at, evidence });
+    const r = normalizeAgentEntry(entry, { ledgerRun, entryIndex: index, at, evidence, ...(noChange === undefined ? {} : { noChange }) });
     if (r.ok) passed.push({ index, entry, event: r.event });
     else refuse(index, entry, r.reason);
   });
@@ -125,8 +137,8 @@ export async function writeRunLedger(
  * Flow engine spec §6.2: the same entries writeRunLedger would write, normalised the same way, without a file -- a `dir`
  * flow group's landing writes them to `flow_decisions` instead of `.decisions/`. Refused entries are pending as there.
  */
-export function runLedgerEvents(input: { ledgerRun: string; reported: ReportedDecisions; codeAuthored: DecisionEvent[]; at: string; evidence: string[] }): { events: DecisionEvent[]; pending: PendingEntry[] } {
-  const { ledgerRun, reported, codeAuthored, at, evidence } = input;
+export function runLedgerEvents(input: { ledgerRun: string; reported: ReportedDecisions; codeAuthored: DecisionEvent[]; at: string; evidence: string[]; noChange?: NoChangeProof }): { events: DecisionEvent[]; pending: PendingEntry[] } {
+  const { ledgerRun, reported, codeAuthored, at, evidence, noChange } = input;
   const events: DecisionEvent[] = [...codeAuthored];
   const pending: PendingEntry[] = [];
   const refuse = (entryIndex: number, entry: unknown, reason: string): void => {
@@ -135,7 +147,7 @@ export function runLedgerEvents(input: { ledgerRun: string; reported: ReportedDe
   if (reported.kind === "malformed") refuse(0, reported.value, "decisions-not-array");
   else if (reported.kind === "array") {
     reported.entries.forEach((entry, index) => {
-      const r = normalizeAgentEntry(entry, { ledgerRun, entryIndex: index, at, evidence });
+      const r = normalizeAgentEntry(entry, { ledgerRun, entryIndex: index, at, evidence, ...(noChange === undefined ? {} : { noChange }) });
       if (r.ok) events.push(r.event); else refuse(index, entry, r.reason);
     });
   }

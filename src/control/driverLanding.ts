@@ -23,7 +23,7 @@ import { commitLedgerOnGroupBranch, exportLedgerDir, treeWithLedgerFiles } from 
 import { readDebugMark, type ClosingRecord } from "./debugChecks.js";
 import { writeDebugClosing } from "./debugClosing.js";
 import { reconcileDecision } from "../scheduler/ledgerWiring.js";
-import type { DecisionEvent } from "../ledger/schema.js";
+import type { DecisionEvent, NoChangeProof } from "../ledger/schema.js";
 import { classifyCriteriaChange, criteriaDecision, flagged, type CriteriaChange, type CriteriaChangeKind } from "./criteriaProtection.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loopDirOf, runTask } from "../scheduler/ccloopRunner.js";
@@ -138,8 +138,8 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
   // Flow engine spec §6.2: a `dir` flow group makes no ledger-only commit; its decisions are written to `flow_decisions` in
   // the write that records the result, and a replay that finds them there writes none again.
   if (isDirFlowGroup(store, run.groupId)) {
-    const { reported, evidence, at } = await runLedgerInputs(deps, runId);
-    const { events, pending } = runLedgerEvents({ ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+    const { reported, evidence, at, noChange } = await runLedgerInputs(deps, runId);
+    const { events, pending } = runLedgerEvents({ ledgerRun: runId, reported, codeAuthored: [], at, evidence, ...(noChange === undefined ? {} : { noChange }) });
     write(deps, () => {
       const current = readDriverRun(store, runId);
       if (current.state !== "landed") return;
@@ -162,8 +162,8 @@ export async function recordEmptyResultDecisions(deps: ExecutionDriverDeps, runI
     const result = await commitLedgerOnGroupBranch({
       repo: targetRepo, roots: deps.roots, groupId: run.groupId, worktreeName: `ledger-${runId}`, message: subject, beforeCas: deps.beforeCas,
       write: async (decisionsDir) => {
-        const { reported, evidence, at } = await runLedgerInputs(deps, runId);
-        const { writtenIds, pending } = await writeRunLedger(decisionsDir, { ledgerRun: runId, reported, codeAuthored: [], at, evidence });
+        const { reported, evidence, at, noChange } = await runLedgerInputs(deps, runId);
+        const { writtenIds, pending } = await writeRunLedger(decisionsDir, { ledgerRun: runId, reported, codeAuthored: [], at, evidence, ...(noChange === undefined ? {} : { noChange }) });
         // Before the swap: a death after it adopts the commit and still has these to insert.
         stagePending(deps, runId, pending);
         return writtenIds.length > 0 ? [name] : [];
@@ -199,12 +199,14 @@ async function findLedgerCommit(repo: string, tip: string, subject: string): Pro
 }
 
 /** Control run decisions: what a run's ledger is written from -- the decisions it reported, its evidence and the time. */
-export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string): Promise<{ reported: ReportedDecisions; evidence: string[]; at: string }> {
+export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string): Promise<{ reported: ReportedDecisions; evidence: string[]; at: string; noChange?: NoChangeProof }> {
   const run = readDriverRun(deps.store, runId);
   const reported = reportedDecisionsOf(await savedReport(deps.store, runId));
   // Ledger spec ERRATUM 8 (human ruling 2026-10-18): the attempt sha, never the landing commit.
   const evidence = runEvidence(runId, run.drive!.attemptSha!, await ccloopEvidenceString(deps.ccloopBin));
-  return { reported, evidence, at: (deps.now?.() ?? new Date()).toISOString() };
+  // #138 (2026-11-08): the Git proof C measured for this run, so a no-change decision can carry a verifiable undo.
+  const noChange = run.drive?.noChange ?? undefined;
+  return { reported, evidence, at: (deps.now?.() ?? new Date()).toISOString(), ...(noChange === null || noChange === undefined ? {} : { noChange }) };
 }
 
 /**

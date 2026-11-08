@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readArtifact, writeArtifact } from "../../src/control/archive.js";
 import { acceptanceEvidence } from "../../src/control/checkpoints.js";
+import { listPendingDecisions } from "../../src/control/pendingDecisions.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Tester #127 and #138 (design Correction 2): an ordinary task may complete with no net tracked change only when its
@@ -50,7 +51,41 @@ describe("a checked no-change task completes only by its authored declaration", 
       expect(await acceptanceEvidence(t.h.store, runId)).toBe(false);
     } finally { await t.h.dispose(); }
   }, 30000);
+
+  it("lands a no-change decision with the run's own proof, and refuses it to a person on any other run", async () => {
+    const entry = {
+      question: "should the attempt extend the suite?", chose: "No change was needed.",
+      alternatives: [{ option: "extend it", why_not: "the checks already cover the goal" }], because: "the declared checks pass unchanged",
+      undo: { how: "No change made; nothing to revert", cost: "none", blast_radius: "none", kind: "no-change" },
+      scope: "task", kind: "criteria",
+    };
+    const landed = await driverHarness([{ taskId: "a", commandChecksDecideGoal: true }], { files: () => ({}), decisions: () => [entry] }); try {
+      const runId = await landed.claim();
+      await landed.until(landed.driver(), () => landed.body(runId).drive?.cleanedUp === true);
+      // mutation: write the entry without the run's proof -> the kind is refused and this goes pending, red
+      const rows = ledgerLines(landed, runId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.undo).toMatchObject({ kind: "no-change", proof: landed.body(runId).drive.noChange });
+      expect(rows[0]!.undo.how).toBe("No change made; nothing to revert");
+      expect(listPendingDecisions(landed.h.store, "g")).toEqual([]);
+    } finally { await landed.h.dispose(); }
+    // The same entry on a run with no declared decisive checks: the agent's claim is not the controller's proof.
+    const blocked = await driverHarness([{ taskId: "a" }], { files: () => ({}), decisions: () => [entry] }); try {
+      const runId = await blocked.claim();
+      await blocked.until(blocked.driver(), () => blocked.body(runId).drive?.cleanedUp === true);
+      expect(ledgerLines(blocked, runId)).toEqual([]);
+      expect(listPendingDecisions(blocked.h.store, "g").map((p) => p.entry.reason)).toEqual(["tier-0: undo.kind no-change needs the run's own measured Git proof"]);
+    } finally { await blocked.h.dispose(); }
+  }, 30000);
 });
+
+/** The lines this run's own ledger file holds, parsed; empty when no ledger was written. */
+function ledgerLines(t: Awaited<ReturnType<typeof driverHarness>>, runId: string): Array<{ undo: Record<string, unknown> }> {
+  const tip = git(t.repo, "rev-parse", "refs/heads/orca/g");
+  try {
+    return git(t.repo, "show", `${tip}:.decisions/${runId}.jsonl`).split("\n").filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+  } catch { return []; }
+}
 
 function gitTree(t: Awaited<ReturnType<typeof driverHarness>>, rev: string): string {
   return git(t.repo, "rev-parse", `${rev}^{tree}`);
