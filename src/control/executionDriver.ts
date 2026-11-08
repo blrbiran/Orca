@@ -119,6 +119,8 @@ export interface ExecutionDriverDeps {
   beforeCas?: () => Promise<void>;
   /** Handoff delivery spec §3: the clock a request's grace is judged by (tests move it). */
   now?: () => Date;
+  /** Issue #192 test seam: the settle wall time at or above which stepE writes its timing line (default 5 s). */
+  settleSlowMs?: number;
   /**
    * Test seam only: overrides handoffGraceMsOf(run) (agent selection spec §6.6: the run's frozen killGraceMs + 60 s).
    * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** it overrides handoffGraceMsOf(run, window): max(killGraceMs, frozen recovery window + 5 s) + 60 s.
@@ -1232,6 +1234,17 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
   if (run.drive === undefined) return false;
   const drive = run.drive;
   let settledJustNow = false;
+  // Issue #192: a settle that took minutes left the chain stalled with no line saying where. Marks are taken after each
+  // await; one line is written when the settle is at least `settleSlowMs` (default 5 s, 0 for the tests).
+  const settleStarted = Date.now();
+  const settleMarks: Array<[string, number]> = [];
+  const mark = (label: string): void => { settleMarks.push([label, Date.now()]); };
+  const reportSlowSettle = (): void => {
+    const total = Date.now() - settleStarted;
+    if (total < (deps.settleSlowMs ?? 5_000)) return;
+    const parts = settleMarks.map(([label, at], index) => `${label} ${at - (index === 0 ? settleStarted : settleMarks[index - 1]![1])}`);
+    process.stderr.write(`orca-driver: ${runId}: settle took ${total} ms (${parts.join(", ")})\n`);
+  };
   if (run.state === "landed") {
     const report = await savedReport(store, runId);
     const raw = report.candidate;
@@ -1244,6 +1257,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
       if (recorded !== "settle") return recorded === "blocked";
     }
     const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
+    mark("archive");
     if (landed) {
       // Same evidence shape `confirmLanding` writes (schedulerBridge.ts). checksPassed: ccloop's verifier
       // ran the contract's requiredChecks in this run and it ended `succeeded`.
@@ -1251,6 +1265,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
       write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run(`acceptance:${runId}`, JSON.stringify({ runId, accepted: true, source })));
     }
     deps.crash?.("E-after-acceptance");
+    mark("acceptance");
     const record = readRun(store, runId);
     const missing = [...archive.missing, ...raw.missing];
     const candidate: Candidate = {
@@ -1262,6 +1277,8 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     };
     candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
     await commitCandidate(store, candidate, archiveAdmission(deps));
+    mark("commit");
+    reportSlowSettle();
     if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }
     // Issues #153/#127: D14 left the task blocked (an empty or ledger-only result has no acceptance); the reason is
     // recorded so the board card and the overview say why. The run stays `settled`; this is not a driver block.

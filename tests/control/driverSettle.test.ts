@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readArtifact } from "../../src/control/archive.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { createExecutionDriver, DriverCrash } from "../../src/control/executionDriver.js";
@@ -38,8 +38,23 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
     } finally { await t.h.dispose(); }
   }, 30000);
 
-  it("cleans only the run's own workspace and incoming ref, keeps its source directory, and never touches orca/<group>", async () => {
+  // Issue #192: a settle that took minutes left no line saying where the time went.
+  it("names where a slow settle's time went, and is silent when it is fast", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const lines: string[] = [];
+      const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => { lines.push(String(chunk)); return true; });
+      try {
+        const driver = createExecutionDriver({ ...t.deps, settleSlowMs: 0 });
+        await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+        const line = lines.find((entry) => entry.includes(`${runId}: settle took`));
+        expect(line, lines.join("")).toBeDefined();
+        expect(line).toMatch(/settle took \d+ ms \(archive \d+, acceptance \d+, commit \d+\)/);
+      } finally { spy.mockRestore(); }
+    } finally { await t.h.dispose(); }
+  }, 30000);
+
+  it("cleans only the run's own workspace and incoming ref, keeps its source directory, and never touches orca/<group>", async () => {    const t = await driverHarness([{ taskId: "a" }]); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).drive?.cleanedUp === true);
       const drive = t.body(runId).drive;
