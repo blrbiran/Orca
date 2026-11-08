@@ -32,3 +32,4 @@ dist/
 # Tool artifacts from a local test run (playwright-cli and vitest caches).
 .playwright-cli/
 web/.vitest/
+.vitest/
