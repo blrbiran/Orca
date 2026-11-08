@@ -8,7 +8,7 @@ import {settlementArtifact} from './usageSettlement.js';
 import type {ArtifactRef} from './types.js';
 import type {ControlStore} from './store.js';
 import type {SavedResultSourcePackage,SavedResultPackage,SavedResultAdmission} from './savedResultProtocol.js';
-import {exhaustedCompletionSchema,executionFormatFailureSchema,savedExecutionSnapshotSchema,savedResultPackageSchema,savedResultFenceSchema} from './savedResultProtocol.js';
+import {exhaustedCompletionSchema,executionFormatFailureSchema,ompWithoutFinalCompletionSchema,savedExecutionSnapshotSchema,savedResultPackageSchema,savedResultFenceSchema} from './savedResultProtocol.js';
 
 const digest=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
 export function assertPrivateRecoveryDirectory(path:string):void {
@@ -39,8 +39,8 @@ export function recoveryClosure(store:ControlStore,roots:ArtifactRef[]):Map<stri
   if(ref.artifactId.startsWith('snapshot-')&&parsed.version===1){
     const walkSnapshot=(value:unknown):void=>{if(!value||typeof value!=='object')return;const candidate=artifactSchema.safeParse(value);if(candidate.success){visit(candidate.data,false);return;}for(const child of Object.values(value))walkSnapshot(child);};walkSnapshot(parsed);return;
   }
-  if(parsed.schema==='ccloop-execution-format-failure-v1'||parsed.schema==='ccloop-execution-complete-before-verification-v1'){
-    const capsule=parsed.schema==='ccloop-execution-complete-before-verification-v1'?exhaustedCompletionSchema.parse(parsed):executionFormatFailureSchema.parse(parsed),{usageObservations,...artifacts}=capsule.artifacts;
+  if(parsed.schema==='ccloop-execution-format-failure-v1'||parsed.schema==='ccloop-execution-complete-before-verification-v1'||parsed.schema==='ccloop-execution-without-final-v1'){
+    const capsule=parsed.schema==='ccloop-execution-without-final-v1'?ompWithoutFinalCompletionSchema.parse(parsed):parsed.schema==='ccloop-execution-complete-before-verification-v1'?exhaustedCompletionSchema.parse(parsed):executionFormatFailureSchema.parse(parsed),{usageObservations,...artifacts}=capsule.artifacts;
     for(const r of [capsule.verifier.proof,...Object.values(artifacts).filter((v):v is ArtifactRef=>v!==null&&typeof v==='object'&&'artifactId' in v),...(usageObservations??[]).flatMap(a=>[a.source,a.copy])])visit(r,false);visit(capsule.snapshot);return;
   }
   if(parsed.schema==='ccloop-execution-snapshot-v1'){

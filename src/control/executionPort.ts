@@ -51,7 +51,7 @@ export interface ExecutionPort {
   previewAgentInstallations?():Promise<AgentPreview>;
   applyAgentInstallations?(request:AgentApplyRequest):Promise<AgentReceipt>;
   savedResultSourceEligibility?(input:{source:StartEnvelope;sourceAttempt:number;packagePath:string;packageHash:string}):Promise<SavedResultSourceEligibility>;
-  savedResultEligibility?(input:StartEnvelope):Promise<{status:"eligible";authorityKind:SavedResultSourcePackage["authorityKind"];normalizedExecutionHash:string}|{status:"unavailable";reason:string}>;
+  savedResultEligibility?(input:StartEnvelope):Promise<{status:"eligible";authorityKind:Exclude<SavedResultSourcePackage["authorityKind"],"execution-without-final-v1">;normalizedExecutionHash:string}|{status:"eligible";authorityKind:"execution-without-final-v1";verificationOnly:true}|{status:"unavailable";reason:string}>;
   collectSavedResultEvidence?(input:StartEnvelope):Promise<{schema:"ccloop-saved-result-evidence-v1";identity:unknown;attempt:number;capsule:ArtifactRef|null;reason:string|null}>;
   readSavedResultEvidence?(input:StartEnvelope,capsule:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
   settleSavedResult?(input:StartEnvelope):Promise<{ref:ArtifactRef;settlement:SavedResultSettlement}>;

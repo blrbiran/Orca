@@ -39,7 +39,7 @@ const sourceEnvelope=(store:ControlStore,run:any):StartEnvelope=>{
 };
 function sourceRecord(store:ControlStore,run:any){
  if(run.savedSourceUnavailable)throw Error(run.savedSourceUnavailable);
- if(run.savedSource?.authorityKind==='execution-format-failure-v1'||run.savedSource?.authorityKind==='execution-complete-before-verification-v1')return savedSourceSchema.parse(run.savedSource);
+ if(run.savedSource?.authorityKind==='execution-format-failure-v1'||run.savedSource?.authorityKind==='execution-complete-before-verification-v1'||run.savedSource?.authorityKind==='execution-without-final-v1')return savedSourceSchema.parse(run.savedSource);
  const rows=store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC").all(run.runId);
  for(const row of rows){const value=JSON.parse(String(row.body));const root=value.artifacts?.find((r:ArtifactRef)=>r?.artifactId.startsWith('archive-'));if(root&&value.snapshot&&value.missing?.length===0){
   const archive=JSON.parse(settlementArtifact(store,artifactSchema.parse(root)).toString());const stateRef=archive.logs.find((e:any)=>e.path==='run/loop-state.json')?.ref;if(!stateRef)continue;

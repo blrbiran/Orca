@@ -4,7 +4,11 @@ const idSchema=z.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
 const number=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const artifactRefSchema=z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const budgetAmountSchema=z.object({tokens:number.nullable(),activeMs:number,attempts:number,sessions:number}).strict();
-export const recoveryOfSchema=z.object({sourceRunId:idSchema,sourceAttempt:number.positive(),capsuleHash:z.string().regex(/^[a-f0-9]{64}$/),snapshotHash:z.string().regex(/^[a-f0-9]{64}$/),normalizedExecutionHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
+const recoveryIdentity={sourceRunId:idSchema,sourceAttempt:number.positive(),capsuleHash:z.string().regex(/^[a-f0-9]{64}$/),snapshotHash:z.string().regex(/^[a-f0-9]{64}$/)};
+export const recoveryOfSchema=z.union([
+ z.object({...recoveryIdentity,normalizedExecutionHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
+ z.object({...recoveryIdentity,kind:z.literal('verification-only-v1'),normalizedExecutionHash:z.never().optional()}).strict(),
+]);
 const safe=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), positive=safe.refine(n=>n>0), hash=z.string().regex(/^[a-f0-9]{64}$/);
 const amount=z.object({tokens:safe,activeMs:safe,attempts:safe,sessions:safe}).strict();
 const policyBase={contractHash:hash,authority:artifactRefSchema};
@@ -29,7 +33,7 @@ export const savedResultAdmissionSchema=z.object({
 }).strict();
 export type SavedResultAdmission=z.infer<typeof savedResultAdmissionSchema>;
 export const savedResultPackageSchema=z.object({schema:z.literal("ccloop-saved-result-package-v1"),
- authorityKind:z.enum(["execution-format-failure-v1","legacy-published-candidate-v1","execution-complete-before-verification-v1"]),source:artifactRefSchema,admission:artifactRefSchema,
+ authorityKind:z.enum(["execution-format-failure-v1","legacy-published-candidate-v1","execution-complete-before-verification-v1","execution-without-final-v1"]),source:artifactRefSchema,admission:artifactRefSchema,
  artifacts:z.array(z.object({ref:artifactRefSchema,file:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/)}).strict()).max(20000),
 }).strict();
 export type SavedResultPackage=z.infer<typeof savedResultPackageSchema>;
@@ -81,6 +85,15 @@ export const exhaustedCompletionSchema=z.object({
   capturedAt:z.string().datetime({offset:true}),
 }).strict();
 export type ExhaustedCompletionCapsule=z.infer<typeof exhaustedCompletionSchema>;
+/** The OMP execute ended cleanly, but its final failed strict normalization; no execution result exists. */
+export const ompWithoutFinalCompletionSchema=exhaustedCompletionSchema.omit({outcome:true,gate:true,normalizedExecutionHash:true,usage:true,decoder:true}).extend({
+ schema:z.literal('ccloop-execution-without-final-v1'),
+ gate:z.object({stage:z.literal('execute-format'),decision:z.literal('malformed-final')}).strict(),
+ decoder:z.literal('strict-execution-v1'),
+ normalization:z.object({reason:z.enum(['execution-format-invalid','execution-format-ambiguous-or-hidden']),diagnostic:z.object({method:z.enum(['whole','candidate','none']),candidates:safe,valid:safe,hidden:z.boolean(),originalBytes:safe}).strict()}).strict(),
+ usage:z.object({tokenUsage:positive,highWater:safe}).strict(),
+}).strict();
+export type OmpWithoutFinalCompletionCapsule=z.infer<typeof ompWithoutFinalCompletionSchema>;
 export const savedResultCollectionSchema=z.object({
   schema:z.literal("ccloop-saved-result-evidence-v1"),identity:taskResultIdentitySchema,attempt:safe,capsule:ref.nullable(),reason:z.string().nullable(),
 }).strict();
@@ -88,9 +101,17 @@ export const savedResultCollectionSchema=z.object({
 export const savedResultSourcePackageSchema=savedResultPackageSchema.omit({admission:true}).extend({schema:z.literal("ccloop-saved-result-source-package-v1")}).strict();
 export type SavedResultSourcePackage=z.infer<typeof savedResultSourcePackageSchema>;
 const unavailableSchema=z.object({status:z.literal("unavailable"),reason:z.string().min(1)}).strict();
-export const savedResultSourceEligibilitySchema=z.union([unavailableSchema,z.object({status:z.literal("eligible"),authorityKind:savedResultPackageSchema.shape.authorityKind,sourceIdentity:savedResultAdmissionSchema.shape.source,rawExecutionTokens:safe.nullable(),recoveryOf:recoveryOfSchema,limitation:z.literal("published-candidate-only; current membership and settled accounting require controller admission")}).strict()]);
+const oldAuthorityKind=z.enum(['execution-format-failure-v1','legacy-published-candidate-v1','execution-complete-before-verification-v1']);
+const sourceEligibilityFields={status:z.literal('eligible'),sourceIdentity:savedResultAdmissionSchema.shape.source,rawExecutionTokens:safe.nullable(),limitation:z.literal('published-candidate-only; current membership and settled accounting require controller admission')};
+export const savedResultSourceEligibilitySchema=z.union([unavailableSchema,
+ z.object({...sourceEligibilityFields,authorityKind:oldAuthorityKind,recoveryOf:recoveryOfSchema.refine(value=>'normalizedExecutionHash' in value)}).strict(),
+ z.object({...sourceEligibilityFields,authorityKind:z.literal('execution-without-final-v1'),verificationOnly:z.literal(true),rawExecutionTokens:positive,recoveryOf:recoveryOfSchema.refine(value=>'kind' in value&&value.kind==='verification-only-v1')}).strict(),
+]);
 export type SavedResultSourceEligibility=z.infer<typeof savedResultSourceEligibilitySchema>;
-export const savedResultEligibilitySchema=z.union([unavailableSchema,z.object({status:z.literal("eligible"),authorityKind:savedResultPackageSchema.shape.authorityKind,normalizedExecutionHash:hash}).strict()]);
+export const savedResultEligibilitySchema=z.union([unavailableSchema,
+ z.object({status:z.literal('eligible'),authorityKind:oldAuthorityKind,normalizedExecutionHash:hash}).strict(),
+ z.object({status:z.literal('eligible'),authorityKind:z.literal('execution-without-final-v1'),verificationOnly:z.literal(true)}).strict(),
+]);
 export const interruptedSavedResultSchema=z.object({schema:z.literal("ccloop-saved-result-interrupted-v1"),envelope:ref,accepted:ref,package:ref,admission:ref,state:ref,lifecycle:ref,usage:ref,accounting:savedResultAdmissionSchema.shape.accounting,artifacts:z.array(ref)}).strict();
 export const savedResultSettlementSchema=z.object({schema:z.literal("ccloop-saved-result-settlement-v1"),identity:taskResultIdentitySchema,recoveryOf:recoveryOfSchema,disposition:z.enum(["complete","interrupted","terminal"]),usageStatus:z.enum(["known","unknown"]),state:ref,lifecycle:ref.nullable(),accepted:ref,envelope:ref,usage:ref,stopProof:ref,usageObservations:z.array(z.object({source:ref,copy:ref}).strict())}).strict();
 export type SavedResultSettlement=z.infer<typeof savedResultSettlementSchema>;

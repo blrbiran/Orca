@@ -1132,8 +1132,8 @@ export interface GroupResultsV1 {
     };
 }
 
-export type RecoveryOf={sourceRunId:string;sourceAttempt:number;capsuleHash:string;snapshotHash:string;normalizedExecutionHash:string};
-export type SavedResultEligibilityV1={status:"unavailable";reason:string}|{status:"eligible";authorityKind:"execution-format-failure-v1"|"legacy-published-candidate-v1";sourceIdentity:{groupId:string;workItemId:string;taskId:string;runId:string;generation:number;graphVersion:number;targetVersion:number;executionId:string;envelopeHash:string};rawExecutionTokens:number;recoveryOf:RecoveryOf;limitation:"published-candidate-only; current membership and settled accounting require controller admission"};
+export type RecoveryOf={sourceRunId:string;sourceAttempt:number;capsuleHash:string;snapshotHash:string;normalizedExecutionHash:string}|{sourceRunId:string;sourceAttempt:number;capsuleHash:string;snapshotHash:string;kind:"verification-only-v1"};
+export type SavedResultEligibilityV1={status:"unavailable";reason:string}|{status:"eligible";authorityKind:"execution-format-failure-v1"|"legacy-published-candidate-v1"|"execution-complete-before-verification-v1";sourceIdentity:{groupId:string;workItemId:string;taskId:string;runId:string;generation:number;graphVersion:number;targetVersion:number;executionId:string;envelopeHash:string};rawExecutionTokens:number|null;recoveryOf:Extract<RecoveryOf,{normalizedExecutionHash:string}>;limitation:"published-candidate-only; current membership and settled accounting require controller admission"}|{status:"eligible";authorityKind:"execution-without-final-v1";verificationOnly:true;sourceIdentity:{groupId:string;workItemId:string;taskId:string;runId:string;generation:number;graphVersion:number;targetVersion:number;executionId:string;envelopeHash:string};rawExecutionTokens:number;recoveryOf:Extract<RecoveryOf,{kind:"verification-only-v1"}>;limitation:"published-candidate-only; current membership and settled accounting require controller admission"};
 
 /**
  * Flow engine spec §11.2, §14.1 (plan Task 16): the flow reads the Web renders. FlowSettingsReadV1 and FlowListV1 are

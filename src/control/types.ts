@@ -63,6 +63,7 @@ export interface Candidate extends Identity {
   artifacts: ArtifactRef[]; snapshot: ArtifactRef | null;
   missing: string[]; unresolvedRequestIds: string[];
   stopProof: StopProof | null; terminalOutcome: string; handoff: ArtifactRef;
+  verificationOnly?: true;
 }
 export interface GroupView {
   groupId: string; revision: number; graphVersion: number; stopped: boolean;
