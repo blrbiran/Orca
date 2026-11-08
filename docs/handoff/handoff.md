@@ -72,10 +72,24 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - 决策条目可声明 `undo.kind:"no-change"`；**证明由控制器填**（C 量到的 base／attempt／两棵树／frozen contract hash／checks），并覆盖 agent 写的任何值；没有量到的证明 ⇒ 仍按 tier-0 交给**人**（`decision-undo-not-executable` 路径不变）。独立账本校验器只管形状：kind 无 proof 是 rejected，proof 两棵树不同也是 rejected；**一句保留字样仍然过不了**可执行检查。
   - 判据：`tests/control/decisiveChecksContract.test.ts`、`tests/control/noChangeCompletion.test.ts`（4）、`tests/ledger/noChangeUndo.test.ts`（4）。**三条变异在 `git clone --local` 副本里各自见红**（删 opt-in 守卫／把证明比较换成 `true`／删 tier-0 守卫），副本 `/tmp/orca-nocchange-mutA`。typecheck RC 0；`tests/ledger`＋`approveDecision`＋`driverSettle`＋`driverDecisionsEmpty` 合计 61/61。
   - **登记（诚实边界）**：`drive.noChange` 只可能出现在**空结果**的 run，所以证明只接进 `recordEmptyResultDecisions` 的两处空结果账本写入点；landed／reconcile 路径不传（那里本就没有该证明）。E 处 `drive.noChange.attempt === drive.attemptSha` 这一小段是纵深防御，C 同时写两者，**没有独立变异能打红它**（不当成已覆盖）。离线读者只能校验形状，**树相等要由有仓库的读者复核**。
-- **#158（OMP 坏 final 的可验证来源）在飞**：ccloop 侧子代理实施中（生产者在租约内取证、绑定真实发布 ref/tree/parent；消费者是**有判别符的只验证来源**，不伪造 answer／hash）。
-- **UI 信息架构在飞**：`web/` 四个任务（workspace switcher、Import 对话框、progress 工具条＋可折叠任务表、runs 行展开全宽转录＋证据进单 run 详情）由一个子代理在同一分支改；**收尾前不要按 web 目录的单次结果下结论**。
-- **#191 改按“拿不到测试者原始数据”处置**：本机免费探针已证隔离配置下出站 body 仅 **7,384 B**（见上一节），**不据此改账本**；本轮**不加**基于可见 prompt 的比值告警（那会把未证实的计费差异写进产品判断）。要落地只能等真样本，或另立设计。
-- **#171 现状（未改）**：面板已经**读**得到未投递的 start 家族 wake（`src/panel/controlOverview.ts:132` 用它压掉「ready-to-start」建议），但**没有任何读**把「这个 wake 为何长期 deferred ＋ 有多旧」讲出来，也没有清理入口；`recovery.ts:86` 的 `pendingWakeIds` 只在启动恢复那一趟里出现。**这是下一步的小活**，不是已经修好的东西。
+- **#158（OMP 坏 final 的可验证来源）两侧都已落地**：ccloop `c726a93`（主题行 `feat(recovery): an omp execute whose final is malformed keeps a verification-only source`）新增判别式来源与胶囊 `ccloop-execution-without-final-v1`，**不带 execution／taskResult／decisions／normalizedExecutionHash**；Orca 侧镜像同一 wire（本分支内）。聚焦 117/117、typecheck／build 0；**跨仓验收要等 ccloop 推上去并 repin 之后**才能跑。
+- **UI 信息架构已完成**（主题行 `feat(web): one workspace switcher, import on demand, and run details that stay out of the table` 与 `fix(web): the collapsed blocked count, the badge's scope, run names and the zero-project settings state`）：侧栏 workspace switcher、Settings 只留身份＋链接、导入改对话框、progress 工具条＋可折叠任务表、runs 行展开全宽转录＋证据进单 run 详情。独立审阅的 7 条（受阻计数用错 status 源、徽标与筛选作用域不一致、重复 run 的 aria-label 重名、零项目死链、三条被判据改写变弱）**全部修复**，web 200 文件／1849 用例全绿、typecheck 0。
+- **#191 改按“拿不到测试者原始数据”处置**：本机免费探针已证隔离配置下出站 body 仅 **7,384 B**（见上一节），而本轮真实 dogfood 的 clarify／split 调用各约 **13.5k／13.5k token**——**本机复现不出 232k 隐藏前缀**。**不据此改账本**；要定论仍只能等真样本。
+- **#171**：`orca recovery list` 新增 `deferredWakes[]`（group、kind、`dispatch-blocked`／`group-blocker`／`group-archived`），与 drainer 同一优先级；**没有年龄**（`scheduler_wakes` 没有时间列，加列是迁移）。判据 3 条、删分支变异见红。
+
+### #162／#173 的付费校准（2026-11-09，codex `gpt-6-sol`，隔离面板 `--port 7788`）
+
+跑法：独立 control 目录／`ORCA_PERSON_DIR`／`ORCA_CCLOOP_BIN=node_modules/ccloop/dist/cli.js`，`~/.orca` 与 `~/.codex/config.toml` 前后哈希不变。需求“给 textkit 加 truncate 助手”，clarify 2 轮（frontierEmpty）、split 1 个 task（`checks:["npm test"]`）、estimate、apply-estimate、confirm --hold、start。
+
+- **实测**：估算 **11,000 token／180 s／1 attempt**；task run 实际 **43,849 token／23 s** ⇒ **约 4.0× 低估**，且 `attempts:1` 让首次耗尽即终结。工作没有产出（attempt commit 只含 Orca 写的需求文档，`npm test` 仍是原来的 1 条），所以**不是** #163「已完成却拿不到」的场景。
+- **更有价值的一条**：随后 `orca task retry --work {"tokens":200000,...}` 返回成功（person token），但**三笔 run 的 `loop-contract.json` 冻结的仍是 `tokenBudget:11000, maxAttempts:1`**；两笔重跑各有 100k+ 剩余额度却仍在 plan 之后立刻 `exhausted`。即：**追加额度进了 Orca 的账，却没有进 ccloop 的合同**。文档早写过 top-up「只支持 optional-policy 分支」，那么这条命令对 finite 合同应当**拒绝或明说无效**，而不是接受后静默重跑一场注定失败的 run。**这是待人定的产品问题**（是改合同冻结规则，还是让 top-up 对 finite 合同直接拒）。
+- 校准数据到此为止，没有再花钱。
+
+### 待人（本轮结束时）
+
+1. **push ccloop main**：`c726a93` 已在本地 main 且 ccloop 全量门绿（`check-known-reds` RC 0），**Tier 0 闸门把 agent 的 push 拦下了**（对话授权不解除机制拦截）。推完后再 repin Orca（`node scripts/pin-ccloop.mjs <ccloop main>` + `npm ci`），跨仓 #158 验收才能跑。
+2. **push Orca**：本分支（`feat/tester-followup-20261108c`）全部提交归你推。
+3. **#162／#173 的产品取舍**：上面那条「top-up 不抬合同」要不要改，以及估算的 4× 低估要不要用实测倍率校准（本轮只有 n=1，且同机 plan 固定成本占大头）。
 
 ### 3.上一轮（2026-11-08，本会话 `6eb5df84`）—— 前一轮四笔已合入本地 main；#186 依赖提示落地；设计稿更正；#191 探针无异常
 
@@ -629,7 +643,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 2026-11-08 当前接手顺序（人 2026-11-08 三项裁定已落；旧 §4.1／§4.2 是历史清单）
+### 4.0 2026-11-09 当前接手顺序（本会话收尾；旧 §4.0 的裁定仍有效）
+
+1. **等人推**：ccloop `c726a93`（本地 main、全量门绿）与 Orca 本分支。**Tier 0 闸门拦下了 agent 的 ccloop push**，对话里的临时授权不解除机关拦截。推完 ccloop 才能 repin，repin 之后 #158 的跨仓验收（只验证来源 → 新 run 零 plan/execute）才能跑。
+2. **#162／#173**：本轮校准只得到 n=1（估算 11k vs 实际 43.8k，约 4×），且发现 `task retry --work` 对 finite 合同**不抬冻结预算**（三笔 run 都冻在 11k）。先由人定方向，再谈校准倍率。
+3. **#158 两侧代码已齐**，跨仓验收待 pin；不要把本地 `ORCA_CCLOOP_BIN` 覆盖当验收。
+4. **其余不变**：#145／#160、#174 不重开；UI 四项已落地并过审；#191 等真样本；#170 仍按未定。
+5. **门**：Orca 本轮跑的是受影响范围与聚焦套件（web 200 文件／1849 全绿），**全量门未跑**（Rule 18：只在发版跑）。
 
 1. **verify-only 配对：已结清**（见 §3）：ccloop 修复与其 pin 已推、Orca 已 repin、配对 `V10:` 在 **pin 提交的克隆**上 1 过／22 跳过。不要再用本地 `ORCA_CCLOOP_BIN` 覆盖冒充验收。
 2. **本会话已落地的**（见 §3 最新一节）：#167 `orca group cap`（agent 只能设更低的有限 token 上限）、#166 列表状态、#186 label 候选、#181 plan 版本未命中列版本、以及 wire 活动种类缺 `saved-result-top-up` 的缺陷。**未推**（分支在本地，等 §八 的 push）。
@@ -851,6 +871,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 八、什么在等人（awaitingHuman）
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
+
+- **2026-11-09 本会话（`cf294856`）待人**：
+  1. **push ccloop（`c726a93`）**：本地 main 已提交、全量门绿（`check-known-reds` RC 0），**agent 的 push 被 Tier 0 闸门机械拦下**，对话授权不解除拦截。推完执行 repin（`node scripts/pin-ccloop.mjs <ccloop main>`、`npm ci`）。
+  2. **push Orca**：本分支全部提交归人推。
+  3. **#162／#173 方向**：实测估算 11,000 vs 实际 43,849（约 4×，n=1），且 `task retry --work` 对 finite 合同**不抬 `contract.executionPolicy.tokenBudget`**（三笔 run 都冻结在 11,000 并死在 plan 之后）。要人定：top-up 对 finite 合同应拒绝还是改合同冻结规则；估算是否按实测倍率校准。
+  4. **检查点写入**：本轮 `dev checkpoint write` 先被 dirty-worktree 拒（在飞子任务的文件），干净后再跑会挂在原地不返回、无输出；`dev checkpoint write` 仍未成功落盘。
 
 - **2026-11-08 本会话（`6eb5df84`）待人／外部状态**：
   1. **push**：本地 main 领先 `origin/main`（前一轮四笔＋设计更正＋#186 依赖提示），**push 归人**；ccloop／ccmem 本轮无代码改动。
