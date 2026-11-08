@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ccloopBinCheck, DOCTOR_CHECKS, orcaModesCheck, runDoctor, staleSocketsCheck } from "../../src/commands/doctor.js";
 import { runRegistered } from "../../src/commands/run.js";
-import { projectsCheck, runStatus, agentsTableCheck, ccmemCheck, schemaCheck, skillCheck, STATUS_CHECKS, type Check, type CheckContext } from "../../src/commands/status.js";
+import { projectsCheck, runStatus, agentsTableCheck, ccmemCheck, schemaCheck, skillCheck, STATUS_CHECKS, workHealthCheck, type Check, type CheckContext } from "../../src/commands/status.js";
 import type { CommandIo, ParsedArgs } from "../../src/commands/types.js";
 import { fakePanel, useFakePanels } from "./fixtures/fakePanel.js";
 
@@ -100,12 +100,44 @@ describe("orca status (spec §8)", () => {
   // Rewritten under session 3cfc2e73's ruling (issue 148): status also checks the projects file the panel applied.
   it("status runs the spec's checks: service, panel socket and HTTP, control schema, agents table, ccloop pin, ccmem, skill, projects", () => {
     expect(STATUS_CHECKS.map((check) => check.name)).toEqual([
-      "serviceCheck", "panelSocketCheck", "panelHttpCheck", "schemaCheck", "agentsTableCheck", "ccloopPinCheck", "ccmemCheck", "skillCheck", "projectsCheck",
+      "serviceCheck", "panelSocketCheck", "workHealthCheck", "panelHttpCheck", "schemaCheck", "agentsTableCheck", "ccloopPinCheck", "ccmemCheck", "skillCheck", "projectsCheck",
     ]);
     // Doctor: the same, then the slower ones.
     expect(DOCTOR_CHECKS.slice(0, STATUS_CHECKS.length)).toEqual(STATUS_CHECKS);
     // Issue 92: plus the ccloop bin the panel would start with (rewritten under 0e13a9b7's ruling to add it).
     expect(DOCTOR_CHECKS.slice(STATUS_CHECKS.length).map((check) => check.name)).toEqual(["agentPathCheck", "orcaModesCheck", "staleSocketsCheck", "ccloopBinCheck"]);
+  });
+
+  // Issue #182: the service was all ok while five blocked runs waited. Work that needs a person warns, and status still
+  // exits 0 -- the check is never a fail.
+  it("work health names blocked, stopped, refused and blocked dispatch as one warning", async () => {
+    const { env } = sandbox();
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", dispatchBlocked: true, groups: [
+        { groupId: "g1", counts: { blocked: 2 }, stopState: "paused" },
+        { groupId: "g2", orchestration: { refusal: { persistent: true } } },
+      ] } },
+      "GET recovery": { status: 200, body: { schema: "orca-control-recovery-v1", blockers: [{ scope: "group", code: "x" }] } },
+    });
+    const check = await workHealthCheck({ env, stateDirFlag: p.dir, checkout: CHECKOUT });
+    expect(check).toMatchObject({ level: "warn", subject: "work" });
+    expect(check.fact).toMatch(/2 blocked tasks/);
+    expect(check.fact).toMatch(/1 stopped/);
+    expect(check.fact).toMatch(/1 refused persistently/);
+    expect(check.fact).toMatch(/1 recovery blocker/);
+    expect(check.fact).toMatch(/dispatch blocked/);
+  });
+
+  it("work health is ok with nothing waiting, and unknown rather than a failure without a panel", async () => {
+    const { home, env } = sandbox();
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", groups: [{ groupId: "g1", counts: { blocked: 0 } }] } },
+      "GET recovery": { status: 200, body: { schema: "orca-control-recovery-v1", blockers: [] } },
+    });
+    expect(await workHealthCheck({ env, stateDirFlag: p.dir, checkout: CHECKOUT })).toMatchObject({ level: "ok" });
+    const unknown = await workHealthCheck({ env, stateDirFlag: join(home, "no-panel"), checkout: CHECKOUT });
+    expect(unknown).toMatchObject({ level: "warn", subject: "work" });
+    expect(unknown.fact).toMatch(/unknown/);
   });
 });
 

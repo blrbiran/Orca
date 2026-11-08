@@ -64,7 +64,36 @@ export async function panelSocketCheck(ctx: CheckContext): Promise<StatusCheck> 
   }
 }
 
-/** The service panel's HTTP address, as its panel.json names it: GET / answers 200. No panel.json: a panel run by hand. */
+/** Issue #182: the work layer, not the service. Blocked tasks, stopped groups and recovery blockers are a warning
+ * (a person is needed), never a `fail`: a healthy panel with work waiting on a person is not a broken panel, and many
+ * scripts rely on status exiting 0 while work is stuck. */
+export async function workHealthCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { discoverSocketPath } = await import("../entry/discovery.js");
+  const { requestOverSocket } = await import("../entry/socketClient.js");
+  let groups: Array<{ counts?: { blocked?: number }; stopState?: string | null; orchestration?: { refusal?: { persistent?: boolean } } }> = [];
+  let blockers = 0, dispatchBlocked = false;
+  try {
+    const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
+    const summary = await requestOverSocket({ socketPath, method: "GET", path: "summary", client: "cli", timeoutMs: 10_000 });
+    if (summary.status !== 200) return { level: "warn", subject: "work", fact: `unknown: the panel answered summary ${summary.status}`, fix: "orca panel logs" };
+    const body = summary.body as { groups?: typeof groups; dispatchBlocked?: boolean };
+    groups = body.groups ?? []; dispatchBlocked = body.dispatchBlocked === true;
+    const recovery = await requestOverSocket({ socketPath, method: "GET", path: "recovery", client: "cli", timeoutMs: 10_000 });
+    if (recovery.status === 200) blockers = ((recovery.body as { blockers?: unknown[] }).blockers ?? []).length;
+  } catch (error) {
+    // No panel: the panel checks already say so; the work state is unknown here, not broken.
+    return { level: "warn", subject: "work", fact: `unknown (${message(error)})` };
+  }
+  const blocked = groups.reduce((sum, group) => sum + (group.counts?.blocked ?? 0), 0);
+  const stopped = groups.filter((group) => group.stopState !== null && group.stopState !== undefined).length;
+  const refused = groups.filter((group) => group.orchestration?.refusal?.persistent === true).length;
+  const facts = [`${groups.length} group${groups.length === 1 ? "" : "s"}`, `${blocked} blocked task${blocked === 1 ? "" : "s"}`, `${stopped} stopped`, `${refused} refused persistently`, `${blockers} recovery blocker${blockers === 1 ? "" : "s"}`];
+  const needing = blocked > 0 || stopped > 0 || refused > 0 || blockers > 0 || dispatchBlocked;
+  if (!needing) return { level: "ok", subject: "work", fact: facts.join(", ") };
+  return { level: "warn", subject: "work", fact: `${facts.join(", ")}${dispatchBlocked ? " (dispatch blocked)" : ""}: work is waiting on a person`, fix: "orca recovery list; orca group list" };
+}
+
+
 export async function panelHttpCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { servicePaths } = await import("../service/paths.js");
   const { readPanelJson } = await import("../service/instance.js");
@@ -195,7 +224,7 @@ export async function projectsCheck(ctx: CheckContext): Promise<StatusCheck> {
   return { level: "ok", subject: "projects", fact: `${count} project${count === 1 ? "" : "s"} in effect` };
 }
 
-export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, panelHttpCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck, projectsCheck];
+export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, workHealthCheck, panelHttpCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck, projectsCheck];
 
 /** Every check in order; one that throws is a fail by name, never a crash of the whole screen. */
 export async function runChecks(checks: readonly Check[], ctx: CheckContext): Promise<StatusCheck[]> {

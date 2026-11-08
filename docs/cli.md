@@ -11,7 +11,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca status`
 
-- `orca status` — one screen: is the panel answering, and the facts around it (read-only, starts nothing)
+- `orca status` — one screen: is the panel answering, what work waits on a person, and the facts around it (read-only, starts nothing)
 
 ### `orca doctor`
 

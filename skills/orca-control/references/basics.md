@@ -6,7 +6,7 @@ The commands that are a whole domain. `orca status` first when anything looks wr
 
 ## `orca status`
 
-one screen: is the panel answering, and the facts around it (read-only, starts nothing)
+one screen: is the panel answering, what work waits on a person, and the facts around it (read-only, starts nothing)
 
 - What it does: runs locally.
 - Who may: anyone; runs here, needs no panel.

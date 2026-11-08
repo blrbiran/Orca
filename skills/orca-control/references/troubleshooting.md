@@ -6,6 +6,7 @@ Hand-written. Find the code (`body.error.code` under `--json`, or the `orca: <co
 |---|---|---|
 | `panel-not-running`, `control-socket-error` on connect | no panel answers on the socket | `orca status`; tell the person. Never start the panel yourself. |
 | `fail …` from `orca status` | a check failed | `orca doctor` prints one fix line per failure; pass it on to the person. |
+| `warn work: …` from `orca status` | the panel is healthy but work waits on a person (blocked tasks, stops, recovery blockers) | `orca recovery list`, then `orca group list`; do not call the panel broken. |
 | `revision-conflict` (409) | the state moved after your read (or your `--if-revision`) | Read again (`group show` …) and decide again. Never just bump the number. |
 | `command-id-conflict` (409) | that command id was already used for a different request | Use a new id for a new request; to retry an uncertain one, `orca command retry --request` with the saved JSON. |
 | a `request` field in the `--json` answer, `control-socket-timeout`, `retryable: true` | the outcome is uncertain: the command may have run | `orca command retry --request -` with that JSON on stdin. Do not re-run the command. |
