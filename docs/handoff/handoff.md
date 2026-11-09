@@ -73,7 +73,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **#214（已修）**：`group import --library --version` 接受展示的版本号，与 `plan show/export` 同口径；纯数字 SHA 前缀必须写 `sha256:<prefix>`，否则错误会指明这个写法。判据 `tests/commands/scheduleCli.test.ts` 两条，先红后绿。
 - **门（现测）**：本轮早段的受影响 `npm test`：625 文件，**5375 过／39 跳过／1 红**，唯一红为已登记的 `orchestration`「admits a debug group Orca opened itself」（`ladder-source-superseded`）。其后新增的聚焦判据 `allowanceHeldSettlement`＋`terminalRunClosure`＋`tokenPolicyRuntime` 12/12、CLI 三文件 76/76、`scheduleCli`＋`status`＋`terminalRunClosure` 74/74；typecheck RC 0。**全量门未跑**（Rule 18）。
 - **#212（按人 2026-11-09 裁定的显示方案）**：保留现有 claim 时按 headroom 均分的分配，不改冻结规则。新增只读 `GET groups/<g>/funding-preview`（`fundingPreview`），对每个 task 返回 `authoredTokens`（声明值）与 `fundableTokens`（现在一次 claim 实际会给的 work token）。未确认提案会把 goal-review 分配作为预扣；已确认提案直接用 claim 同一函数 `decideFundedAllowance`。`proposal show` 与 `group confirm` 的人类输出各多一段 `task <t>: authored …; a claim now funds …`；两者的 `--json` 字节不变。判据 `tests/control/fundedAllowance.test.ts` 用反馈现场（2M 上限、used 80,942、goal-review 1M、两个 ready 任务各 600k/300k）钉住 **159,529**；两条变异（只显示 authored、忽略未确认组的 goal-review 预扣）各自见红。CLI 判据 `tests/commands/fundingPreview.test.ts` 3 条。
-- **#210／#215（未修，待定证据门槛）**：反馈里的 429「provider 未进入」与「执行后 usage 丢失」在协议里都落成 `cumulative:null`；把前者按 0 结算需要一条能证明 provider 没消耗 token 的正向事实，本轮没有改账本。
+- **#210／#215（按人 2026-11-09 裁定选 A，两侧已实现）**：ccloop 的终态失败原因新增可选 `usageKnownZero:true`，只在 `observedTokensOf` 给出 0 时写入（pre-spawn 拒绝或 429 before-work；after-work 不写）。Orca 的 `runFailureCauseSchema` 接受它；`settle-unknown-usage` 新增 `release-known-zero`，只在「该事实成立 + 累计用量为 0 + 封存 proof」时允许，记 0 并释放原预留（`group.used` 不变），随后 `close-run`／archive 可走；缺该事实时按名拒绝 `known-zero-not-proved`。判据：ccloop `usageKnownZero.test.ts` 2 条；Orca `knownZeroSettlement.test.ts` 2 条，删掉确认分支的副本变红（`finite-remainder`）。
+- **#206（ccloop 侧已修）**：prompt-mode codex 的 exhausted 捕获原先因 `initializedBase` 与 `resolvedSourceBase` 只在 format/omp capture 分支计算而拿到 null，写出 `saved-result-capture-authority-invalid`。现在 `exhaustedCompletionCapture` 也触发这两处初始化；OMP 侧的 HEAD 修复此前已有。新判据 `exhaustedSource.test.ts` 的 prompt-mode 用例先红（authority-invalid）后绿，回退两处条件即变红。**跨仓生效要等 ccloop 推上去并 repin**。
 - **本轮其余**：`~/.orca/profile.json` 已按人 2026-11-09 的明确授权切到 **v4**（备份 `.bak.20261109-v4`；只改 `instructionVersion`，字节核对通过）。全量门未跑（Rule 18）；没有新付费真跑。`dev checkpoint write` 的 90 s「无输出」不能证明挂死：旧 draft 第一条测量是整套 `npm test`，`runMeasurement` 把输出攒到命令结束才写文件。
 
 ### 3.上一轮（2026-11-09，repin／#158 验收轮，分支 `chore/repin-ccloop-158`）—— ccloop 已 repin 到 #158 的发布提交；跨仓验收 V11 通过；top-up 被冻结合同吞掉已修；估算升 v4
@@ -680,6 +681,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ---
 
 ## 四、⛔ 下一件事（按顺序）
+
+### 4.0 2026-11-10 测试者反馈 A 轮之后的接手顺序
+
+1. **push 与 repin**：Orca 本轮提交（#215 等）在本地 `main`；ccloop 本轮提交（#223／#215／#206）也在本地 `main`。推完 ccloop 后必须 `node scripts/pin-ccloop.mjs <ccloop main>` + `npm ci`，否则 #206 的 prompt-mode 胶囊与 `usageKnownZero` 事实在正式 pin 上不存在。
+2. **付费复跑**：本轮实现了 A 与 #206，但**没有付费真跑**验证 429 before-work 的现场；要验收需人单独点头，并用一次真 429 或假上游构造。
+3. **仍未处理的高优先级反馈**：#216（Overview 的 group-level／run-level usage-unknown 重复、Tasks 与 Overview 集合不一致）、#217–#222（Board 归因、手动 paused 语义、隐藏 DOM 的 inert、requirement 表单选 model、Settings 默认展开、status 归档组已修）。#193–#197 仍按下一条重测。
+4. **需要同条件复测才能改的成本项**：#193 转录写放大、#194 OMP RSS、#196 plan 成本、#197 无 session 复用；#191 仍缺测试者样本。
+5. **其余不变**：#145／#160、#174 不重开；全量门只在发版时跑（Rule 18）；付费真跑每次单独点头。
 
 ### 4.0 2026-11-09 测试者反馈 P0 轮的接手顺序
 
