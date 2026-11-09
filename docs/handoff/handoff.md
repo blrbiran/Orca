@@ -906,7 +906,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
 - **2026-11-09 repin／#158 验收轮待人**：
-  1. **push 分支 `chore/repin-ccloop-158`**（三笔：repin＋V11、top-up 派发、估算 v4）。本轮对话给了临时 push 授权，但 Tier 0 闸门是否放行以实际执行为准；被拦就记在这里等人推。
+  1. **push**：本轮的提交已 `--ff-only` 合入本地 `main`（Orca 7 笔、ccloop 1 笔 handoff、ccmem 1 笔 handoff）。**agent 的 push 被 Tier 0 闸门机械拦下**（本轮对话再次授权，闸门不认；按规矩没有重试、没有改写命令）。收尾时 `ls-remote` 因网络失败，**远端状态未现核**，以你推时的 `git status -sb`／`ls-remote` 为准。
   2. **把 `~/.orca/profile.json` 的估算指令版本升到 `"4"`**（备份后改 `instructionVersion`）。自动审批拒绝 agent 写这份用户配置。
   3. **一次付费校准复跑**（可选、需人点头）：验证 v4 是否把估算抬到可用区间；本轮没花这笔钱。
   4. **清理（可选）**：`/tmp/orca158-pin.*`（pin 提交的克隆，`npm ci` 被我中止）、`/tmp/orca158-mut.*`（变异副本）、`/tmp/orca158-wrongpin.*`（负例克隆）、`/tmp/chk-x`。`rm -rf` 归人。
