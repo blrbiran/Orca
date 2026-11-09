@@ -38,7 +38,7 @@ import a registered plan, or a plan library version (--library), as a new draft 
 - `--estimator-profile <estimator-profile>`: estimate with this profile
 - `--estimate-mode <estimate-mode>`: strict|soft
 - `--library <library>`: a plan library entry (orca plan list) instead of a registered plan
-- `--version <version>`: with --library: the version's sha256; default: the entry's newest
+- `--version <version>`: with --library: the displayed version number or a sha256 prefix (numeric SHA prefixes need sha256:); default: the entry's newest
 
 ```
 orca group import plan-a

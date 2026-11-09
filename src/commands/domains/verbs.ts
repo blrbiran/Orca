@@ -104,6 +104,14 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
   return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${state})`), path];
 }
 const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
+/** Issue #212: the authored work allocation is a request; a claim funds what the group limit leaves after handoffs. */
+export function fundingLines(preview: unknown): string[] {
+  const rows = (preview as { rows?: Array<{ taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null }> } | null)?.rows ?? [];
+  if (rows.length === 0) return [];
+  const tokens = (n: number | null): string => n === null ? "unlimited" : String(n);
+  return ["funding at the current group limit (the authored allocations are requests, not grants):",
+    ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.fundableTokens === null ? `nothing (${row.reason ?? "unavailable"})` : tokens(row.fundableTokens)}`)];
+}
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 export function formatWithUnestimated(body: unknown): string {
   const b = body as (UnestimatedSource & { summary?: { groupId?: string }; groupId?: string }) | null;

@@ -128,6 +128,22 @@ describe("orca status (spec §8)", () => {
     expect(check.fact).toMatch(/dispatch blocked/);
   });
 
+  it("does not report archived groups as live work needing attention (#222)", async () => {
+    const { env } = sandbox();
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", groups: [
+        { groupId: "old", archived: true, counts: { blocked: 29 }, stopState: "paused", orchestration: { refusal: { persistent: true } } },
+        { groupId: "current", archived: false, counts: { blocked: 2 }, stopState: null },
+      ] } },
+      "GET recovery": { status: 200, body: { schema: "orca-control-recovery-v1", blockers: [
+        { scope: "group", groupId: "old", code: "archived-problem" }, { scope: "global", groupId: null, code: "global-problem" },
+      ] } },
+    });
+    const check = await workHealthCheck({ env, stateDirFlag: p.dir, checkout: CHECKOUT });
+    expect(check).toMatchObject({ level: "warn", subject: "work" });
+    expect(check.fact).toContain("1 group, 2 blocked tasks, 0 stopped, 0 refused persistently, 1 recovery blocker");
+  });
+
   it("work health is ok with nothing waiting, and unknown rather than a failure without a panel", async () => {
     const { home, env } = sandbox();
     const p = await fakePanel({

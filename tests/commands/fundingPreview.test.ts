@@ -1,0 +1,39 @@
+// Issue #212: an authored work allocation is a request; the group limit funds less. `proposal show` and `group confirm`
+// print what a claim would actually grant now. Their JSON is unchanged.
+import { describe, expect, it } from "vitest";
+import { cli, useFakePanels } from "./fixtures/fakePanel.js";
+import { world } from "./fixtures/world.js";
+
+useFakePanels();
+
+const LINE = "task t1: authored 600000; a claim now funds 159529";
+const preview = { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
+  { taskId: "t1", authoredTokens: 600000, fundableTokens: 159529, reason: null },
+] } };
+const routes = { "GET groups/g-alpha/funding-preview": preview };
+
+describe("the grant a claim would fund is shown (#212)", () => {
+  it("proposal show prints it, and JSON is unchanged", async () => {
+    const w = await world({}, routes);
+    const shown = await cli(["proposal", "show", "g-alpha"], w.dir);
+    expect(shown.code).toBe(0);
+    expect(shown.stdout).toContain(LINE);
+    const json = await cli(["proposal", "show", "g-alpha", "--json"], w.dir);
+    expect(JSON.parse(json.stdout)).toMatchObject({ status: 200, body: { schema: "orca-proposal-view-v1" } });
+    expect(json.stdout).not.toContain("fundableTokens");
+  });
+
+  it("group confirm prints it before the command's own answer", async () => {
+    const w = await world({}, routes);
+    const confirmed = await cli(["group", "confirm", "g-alpha"], w.dir);
+    expect(confirmed.code).toBe(0);
+    expect(confirmed.stdout).toContain(LINE);
+  });
+
+  it("a task with nothing fundable is named with its reason", async () => {
+    const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
+      { taskId: "t1", authoredTokens: 600000, fundableTokens: null, reason: "group-budget-unavailable", minimumTokens: 300001 },
+    ] } } });
+    expect((await cli(["proposal", "show", "g-alpha"], w.dir)).stdout).toContain("task t1: authored 600000; a claim now funds nothing (group-budget-unavailable)");
+  });
+});

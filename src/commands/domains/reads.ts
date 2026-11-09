@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { formatWithUnestimated, proposalDocument, unestimatedLines } from "./verbs.js";
+import { formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
@@ -184,10 +184,10 @@ export const READ_ROWS: CommandDef[] = [
     paths: (c) => [`groups/${ids(c, "group")}/brief`] }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
-    paths: (c) => [`groups/${ids(c, "group")}`],
+    paths: (c) => [`groups/${ids(c, "group")}`, `groups/${ids(c, "group")}/funding-preview`],
     // Dogfood run 3 F23: the document carries no estimates, so its lines are read from the view it is composed from (the
     // confirm row's pattern, one command per CLI process); its JSON is unchanged.
-    compose: ([view]) => { const v = view as Parameters<typeof proposalDocument>[0]; proposalNote = unestimatedLines(v.summary.groupId, v); return proposalDocument(v); },
+    compose: ([view, funding]) => { const v = view as Parameters<typeof proposalDocument>[0]; proposalNote = [...unestimatedLines(v.summary.groupId, v), ...fundingLines(funding)]; return proposalDocument(v); },
     format: (body) => { const lines = proposalNote; proposalNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   read({ domain: "task", action: "show", summary: "one task of a group and its runs", positionals: [GROUP, TASK], paths: (c) => [`groups/${ids(c, "group")}`],
     compose: ([view], c) => {

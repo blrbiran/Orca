@@ -79,6 +79,27 @@ describe("the plan rows map to their verb or read (§13.1)", () => {
     expect(w.posts()).toEqual([]);
   });
 
+  it("group import accepts the displayed plan library version number (#214)", async () => {
+    const w = await world({}, LIBRARY_READS);
+    const out = await run(["group", "import", "--library", ENTRY, "--version", "1", "--group", "g-new", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.posts()).toMatchObject([{ path: "groups/import-plan", payload: { libraryEntry: { entryId: ENTRY, sha256: H.plan } } }]);
+  });
+
+  it("group import distinguishes a numeric SHA prefix from a displayed version number", async () => {
+    const numericHash = `12345678${"a".repeat(56)}`;
+    const reads = { ...LIBRARY_READS, [`GET plan-library/${ENTRY}`]: { status: 200, body: {
+      ...entryView, head: { version: 2, sha256: numericHash }, versions: [{ version: 1, sha256: H.plan }, { version: 2, sha256: numericHash }],
+    } } };
+    const w = await world({}, reads);
+    const prefixed = await run(["group", "import", "--library", ENTRY, "--version", "sha256:12345678", "--group", "g-new", "--json"], w.dir);
+    expect(prefixed.code, prefixed.stdout + prefixed.stderr).toBe(0);
+    expect(w.posts()).toMatchObject([{ path: "groups/import-plan", payload: { libraryEntry: { sha256: numericHash } } }]);
+    const ambiguous = await run(["group", "import", "--library", ENTRY, "--version", "12345678", "--group", "g-new2", "--json"], w.dir);
+    expect(ambiguous.json().body.error).toMatchObject({ code: "id-not-found" });
+    expect(ambiguous.json().body.error.message).toContain("sha256:12345678");
+  });
+
   it("plan show --version adds that version's document", async () => {
     const w = await world({}, LIBRARY_READS);
     const out = await run(["plan", "show", ENTRY, "--version", SHA, "--json"], w.dir);

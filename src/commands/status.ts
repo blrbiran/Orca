@@ -70,16 +70,18 @@ export async function panelSocketCheck(ctx: CheckContext): Promise<StatusCheck> 
 export async function workHealthCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { discoverSocketPath } = await import("../entry/discovery.js");
   const { requestOverSocket } = await import("../entry/socketClient.js");
-  let groups: Array<{ counts?: { blocked?: number }; stopState?: string | null; orchestration?: { refusal?: { persistent?: boolean } } }> = [];
+  let groups: Array<{ groupId?: string; archived?: boolean; counts?: { blocked?: number }; stopState?: string | null; orchestration?: { refusal?: { persistent?: boolean } } }> = [];
   let blockers = 0, dispatchBlocked = false;
   try {
     const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
     const summary = await requestOverSocket({ socketPath, method: "GET", path: "summary", client: "cli", timeoutMs: 10_000 });
     if (summary.status !== 200) return { level: "warn", subject: "work", fact: `unknown: the panel answered summary ${summary.status}`, fix: "orca panel logs" };
     const body = summary.body as { groups?: typeof groups; dispatchBlocked?: boolean };
-    groups = body.groups ?? []; dispatchBlocked = body.dispatchBlocked === true;
+    const archived = new Set((body.groups ?? []).filter((group) => group.archived === true).flatMap((group) => group.groupId === undefined ? [] : [group.groupId]));
+    groups = (body.groups ?? []).filter((group) => group.archived !== true); dispatchBlocked = body.dispatchBlocked === true;
     const recovery = await requestOverSocket({ socketPath, method: "GET", path: "recovery", client: "cli", timeoutMs: 10_000 });
-    if (recovery.status === 200) blockers = ((recovery.body as { blockers?: unknown[] }).blockers ?? []).length;
+    if (recovery.status === 200) blockers = ((recovery.body as { blockers?: Array<{ groupId?: string | null }> }).blockers ?? [])
+      .filter((blocker) => blocker.groupId === null || blocker.groupId === undefined || !archived.has(blocker.groupId)).length;
   } catch (error) {
     // No panel: the panel checks already say so; the work state is unknown here, not broken.
     return { level: "warn", subject: "work", fact: `unknown (${message(error)})` };

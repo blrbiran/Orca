@@ -28,6 +28,7 @@ const RAW: Record<string, unknown> = {
   "groups/g-beta": { ...GROUP, summary: { ...GROUP.summary, groupId: "g-beta" }, runs: [] },
   "groups/g-alpha/requirement": { schema: "orca-requirement-view-v1", summary: { groupId: "g-alpha", commandRevision: 5 } },
   "groups/g-alpha/decisions": { schema: "orca-group-decisions-v1", tasks: [] },
+  "groups/g-alpha/funding-preview": { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [] },
   "runs/run-1/activity": { schema: "orca-run-activity-v1", runId: "run-1", entries: ACTIVITY },
   "runs/run-1/evidence": EVIDENCE,
   "runs/run-1/evidence/ev-2/content": { schema: "orca-run-evidence-content-v1", runId: "run-1", evidenceId: "ev-2", sha256: "c".repeat(64), byteLength: 20, truncated: false, encoding: "utf8", text: "line one\nline two\n" },

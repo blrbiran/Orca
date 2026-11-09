@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  checkpointOf, config, currentRun, file, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  checkpointOf, config, currentRun, file, fundingLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -139,7 +139,7 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "estimate-mode", type: "string", summary: "strict|soft" },
       // Scheduled flows and groups spec §5.5, §13.1: a library entry's version instead of a registered plan.
       { name: "library", type: "string", summary: "a plan library entry (orca plan list) instead of a registered plan" },
-      { name: "version", type: "string", summary: "with --library: the version's sha256; default: the entry's newest" },
+      { name: "version", type: "string", summary: "with --library: the displayed version number or a sha256 prefix (numeric SHA prefixes need sha256:); default: the entry's newest" },
     ],
     examples: ["orca group import plan-a", "orca group import --library pl-0123456789abcdef"],
     scopeId: (c) => newGroupIdOnce(c), route: () => "groups/import-plan",
@@ -151,9 +151,13 @@ export const WORK_ROWS: CommandDef[] = [
       const binding = profile === undefined ? null : await profileBinding(c, profile);
       let source: Record<string, unknown>;
       if (library !== undefined) {
-        const entry = await c.read(`plan-library/${encodeURIComponent(library)}`) as { entryId: string; projectId: string; head: { sha256: string } | null; versions: Array<{ sha256: string }> };
+        const entry = await c.read(`plan-library/${encodeURIComponent(library)}`) as { entryId: string; projectId: string; head: { sha256: string } | null; versions: Array<{ version: number; sha256: string }> };
         const named = str(c, "version");
-        const sha256 = named !== undefined ? resolveId("version", named, entry.versions.map((v) => v.sha256)) : entry.head?.sha256;
+        const numeric = named !== undefined && /^\d+$/.test(named);
+        const selected = numeric ? entry.versions.find((v) => v.version === Number(named)) : undefined;
+        if (numeric && selected === undefined) throw new EntryRejection("id-not-found", `no version ${JSON.stringify(named)}; use sha256:${named} for a numeric SHA prefix`);
+        const sha256 = named === undefined ? entry.head?.sha256 : numeric ? selected!.sha256
+          : resolveId("version", named.startsWith("sha256:") ? named.slice(7) : named, entry.versions.map((v) => v.sha256));
         if (sha256 === undefined) throw new EntryRejection("plan-library-entry-not-found", `${entry.entryId} has no version`);
         source = { repoId: entry.projectId, libraryEntry: { entryId: entry.entryId, sha256 } };
       } else {
@@ -372,7 +376,8 @@ function unresolvedMessage(groupId: string, preview: AgentPreview): string {
 let confirmNote: string[] = [];
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
-  confirmNote = unestimatedLines(group(c), view, { afterConfirm: true });
+  const funding = await c.read(`groups/${group(c)}/funding-preview`);
+  confirmNote = [...unestimatedLines(group(c), view, { afterConfirm: true }), ...fundingLines(funding)];
   const defaults = (await config(c)).defaults;
   const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;
   if (preview.selectionsHash === null || preview.proposalVersion !== view.proposal.proposalVersion) {

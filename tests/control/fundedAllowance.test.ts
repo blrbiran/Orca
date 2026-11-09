@@ -61,8 +61,19 @@ it("refuses a finite limit while an unbounded provider grant is active",async()=
  expect(()=>setGroupLimit(h.store,"g",amount(1000,1_000_000,100,100),{commandId:"limit",expectedRevision:2,by:"human"})).toThrow("active-unbounded-budget-conflict");
 });
 
-import { inheritedWorkUsage } from "../../src/control/fundedAllowance.js";
+it("shows the grant a claim would fund, not the authored request (#212)",async()=>{
+ const h=await setup([{g:"g",repo:"r",id:"a",handoff:300_000},{g:"g",repo:"r",id:"b",handoff:300_000}],null);
+ h.store.transaction(()=>{const group=readGroup(h.store,"g");group.limit={...group.limit,tokens:2_000_000};group.used={...group.used,tokens:80_942};group.reserved={...group.reserved,tokens:1_000_000};saveGroup(h.store,group);
+  for(const id of ["a","b"]){const work=readWork(h.store,"g",id);work.grant.work={...work.grant.work,tokens:600_000};saveWork(h.store,"g",work);}});
+ expect(funded.fundingPreview(h.store,"g",0)).toEqual([
+  {taskId:"a",authoredTokens:600_000,fundableTokens:159_529,reason:null},
+  {taskId:"b",authoredTokens:600_000,fundableTokens:159_529,reason:null},
+ ]);
+ h.store.transaction(()=>{const group=readGroup(h.store,"g");group.reserved={...group.reserved,tokens:0};saveGroup(h.store,group);});
+ expect(funded.decideFundedAllowance(h.store,"g","a",0,{previewGroupId:"g",extraReserved:amount(1_000_000)}).allowance?.grant.work.tokens).toBe(159_529);
+});
 import { readGroup, readWork, saveGroup, saveWork } from "../../src/control/queries.js";
+import { inheritedWorkUsage } from "../../src/control/fundedAllowance.js";
 import { saveRun } from "../../src/control/budget.js";
 it.each(["attempts","sessions"] as const)("does not renew an exhausted inherited %s dimension",async dimension=>{
  const h=await setup([{g:"g",repo:"r",id:"a",handoff:10}],null);

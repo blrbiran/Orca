@@ -26,6 +26,7 @@ export function groupView(over: { revision?: number; currentRunId?: string; loop
 
 export const READS: Record<string, unknown> = {
   "groups/g-alpha/agent-preview": { schema: "orca-agent-selection-preview-v1", groupId: "g-alpha", proposalVersion: 3, selectionsHash: H.sel },
+  "groups/g-alpha/funding-preview": { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [] },
   "groups/g-alpha/requirement": {
     schema: "orca-requirement-view-v1", summary: { groupId: "g-alpha", commandRevision: 5, requirement: { roundNo: 2, draftNo: 1 } },
     rounds: [{ roundNo: 1 }, { roundNo: 2 }], drafts: [{ draftNo: 1, state: "awaiting-review", draftHash: H.draft }],

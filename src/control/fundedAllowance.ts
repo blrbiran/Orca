@@ -12,7 +12,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { add, groupUsageUnknown, isTerminalRunState, type RunRecord } from "./budget.js";
 import { zero } from "./commands.js";
 import { ControlError } from "./errors.js";
-import { allWork, readGroup, readWork } from "./queries.js";
+import { allWork, readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { amountSchema, budgetAmountSchema, safeInteger, grantSchema, tokenPolicySchema } from "./schema.js";
 import { capStatuses, type CapStatus } from "./spendCaps.js";
 import type { ControlStore } from "./store.js";
@@ -58,8 +58,12 @@ export function allocateFundedAllowance(store:ControlStore,groupId:string,workId
  return decideFundedAllowance(store,groupId,workId,at).allowance;
 }
 export interface FundedDecision {allowance:FundedAllowance|null;workItemId:string|null;reason:string;cap?:CapStatus;minimumTokens?:number}
+export interface FundedDecisionOptions {
+ /** A display-only preview of an unconfirmed group: relax that group's status/proposal gates and subtract `extraReserved`. */
+ previewGroupId?: string; extraReserved?: Amount;
+}
 /** Null workId chooses the first jointly funded ready task, so an unfit earlier task cannot stall its group. */
-export function decideFundedAllowance(store:ControlStore,groupId:string,workId:string|null,at:number):FundedDecision {
+export function decideFundedAllowance(store:ControlStore,groupId:string,workId:string|null,at:number,options:FundedDecisionOptions = {}):FundedDecision {
  let blocked:FundedDecision={allowance:null,workItemId:workId,reason:"task-budget-unavailable"};
  const binders=new Map<string,Binder>(),ready:Demand[]=[];
  const binder=(id:string,cause:Binder["cause"],headroom:number,cap?:CapStatus)=>{
@@ -68,16 +72,18 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
  if(store.dispatchBlocked)return {...blocked,reason:"control-recovery-required"};
  for(const row of store.db.prepare("SELECT id FROM groups ORDER BY id").all()) {
   const id=String(row.id),group=readGroup(store,id);
-  if(group.stopped||!["ready","running","review","blocked"].includes(group.status)||archivedMarkOf(group)!==null)continue;
-  if("proposal" in group&&(group.proposal as {state?:string})?.state!=="confirmed")continue;
+  const previewing=options.previewGroupId===id;
+  if(group.stopped||archivedMarkOf(group)!==null||(!previewing&&!["ready","running","review","blocked"].includes(group.status)))continue;
+  if(!previewing&&"proposal" in group&&(group.proposal as {state?:string})?.state!=="confirmed")continue;
   if(store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(id)||store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=?").get(id)||groupUsageUnknown(store,id))continue;
   const limit=budgetAmountSchema.parse(group.limit),applicable:Binder[]=[];
-  if(limit.tokens!==null)applicable.push(binder(`group:${id}`,"group",limit.tokens-group.used.tokens-group.reserved.tokens));
+  if(limit.tokens!==null)applicable.push(binder(`group:${id}`,"group",limit.tokens-group.used.tokens-group.reserved.tokens-(previewing?options.extraReserved?.tokens??0:0)));
   const repo=groupRepoIdOf(group as unknown as Record<string,unknown>);
   for(const cap of capStatuses(store,repo,at))applicable.push(binder(`cap:${cap.scope}:${cap.period}`,"spend-cap",cap.headroom,cap));
   const works=allWork(store,id).sort((a,b)=>a.workItemId<b.workItemId?-1:a.workItemId>b.workItemId?1:0);
+  const eligible=previewing?["pending","ready","continuing"]:["ready","continuing"];
   for(const work of works) {
-   if(work.kind!=="task"||!["ready","continuing"].includes(work.status)||store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(id,work.workItemId))continue;
+   if(work.kind!=="task"||!eligible.includes(work.status)||store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(id,work.workItemId))continue;
    if(work.dependsOn.some(dep=>works.find(w=>w.workItemId===dep)?.status!=="done"))continue;
    const fixed=!hasOptionalTaskPolicy(store,id,work.workItemId);
    const observed=inheritedWorkUsage(store,id,work.workItemId);if(observed===null)continue;
@@ -107,6 +113,26 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
  }
  const chosen=ready.find(d=>d.groupId===groupId&&(workId===null||d.workId===workId));
  return chosen?{allowance:chosen.allowance,workItemId:chosen.workId,reason:"funded"}:blocked;
+}
+/** Display-only: what a claim would fund each task at the current group limit. */
+export interface FundingPreviewRow { taskId:string; authoredTokens:number|null; fundableTokens:number|null; reason:string|null; minimumTokens?:number }
+/**
+ * Issue #212: the authored work allocation is a request, not a grant. For an editable proposal the goal-review allocation
+ * is pre-subtracted (confirmation will reserve it); for a confirmed proposal the stored reservation already says so, and
+ * this is exactly the claim-time calculation.
+ */
+export function fundingPreview(store:ControlStore,groupId:string,at:number):FundingPreviewRow[] {
+ let extraReserved=zero();
+ if(store.db.prepare("SELECT group_id FROM budget_proposals WHERE group_id=?").get(groupId)){
+  const proposal=readBudgetProposal(store,groupId);
+  if((proposal as {state?:string}).state!=="confirmed")for(const a of proposal.allocations)if(a.ownerKind==="goal-review")extraReserved=add(extraReserved,amountSchema.parse(a.amount));
+ }
+ return allWork(store,groupId).sort((a,b)=>a.workItemId<b.workItemId?-1:a.workItemId>b.workItemId?1:0).flatMap(work=>{
+  if(work.kind!=="task"||work.taskId===null)return [];
+  const authored=budgetAmountSchema.parse(work.grant.work);
+  const decision=decideFundedAllowance(store,groupId,work.workItemId,at,{previewGroupId:groupId,extraReserved});
+  return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:decision.allowance?.grant.work.tokens??null,reason:decision.allowance===null?decision.reason:null,...(decision.minimumTokens===undefined?{}:{minimumTokens:decision.minimumTokens})}];
+ });
 }
 /** Null commitments have their own record; never encode them as a finite sentinel. */
 export function persistFundedAllowance(store:ControlStore,runId:string,groupId:string,workId:string,allowance:FundedAllowance):void {

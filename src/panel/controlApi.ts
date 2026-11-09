@@ -6,6 +6,7 @@ import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
+import { fundingPreview } from "../control/fundedAllowance.js";
 import { multiDirOf, multiPrimaryRepoIdOf } from "../control/multiGroup.js";
 import { readGroup } from "../control/queries.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
@@ -603,6 +604,15 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
   }
 
+  // Issue #212: the authored work allocation is a request; this is what a claim would actually fund now.
+  app.get("/api/control/groups/:groupId/funding-preview", asyncRoute(async (req, res) => {
+    const groupId = String(req.params.groupId);
+    try { res.json({ schema: "orca-funding-preview-v1", groupId, rows: fundingPreview(deps.store, groupId, deps.store.now()) }); }
+    catch (error) {
+      if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }
+      sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
+    }
+  }));
   app.get('/api/control/groups/:groupId/results', asyncRoute(async(req,res)=>{res.json(await readGroupResults(deps.store,String(req.params.groupId),{epoch:deps.epoch}));}));
   app.get('/api/control/runs/:runId/results', asyncRoute(async(req,res)=>{res.json(await readRunResults(deps.store,String(req.params.runId),{epoch:deps.epoch}));}));
   app.get('/api/control/runs/:runId/results/outputs/:outputId', asyncRoute(async(req,res)=>{
