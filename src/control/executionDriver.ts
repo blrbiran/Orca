@@ -1697,7 +1697,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
 /** A renewable boundary is an atomic known settlement plus a saved ready-work registration. */
 async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report:ExecutionReport):Promise<boolean> {
  const {store}=deps,run=readDriverRun(store,runId),raw=report.candidate!;
- if(groupHeld(store,run.groupId)||openRequestOf(store,run)!==null)return false;
+ // This already-running attempt must settle even if overspend or a pause held the group; held still gates new dispatch.
+ if(openRequestOf(store,run)!==null)return false;
  const current=readRun(store,runId);
  if(current.unknown.work||current.unknown.handoff){blockRun(deps,runId,"C","usage-unknown");return true;}
  try{await validateAllowanceCheckpoint(store,raw,readStartEnvelope(store,run));}
@@ -1707,11 +1708,13 @@ async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report
  await verifySnapshot(store,archive.snapshot);
  const candidate:Candidate={...raw,checkpointId:`allowance-${runId}`,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
  await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled:()=>{
-  const settled=readDriverRun(store,runId),work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{allowancePredecessorRunId?:string;currentRunId?:string|null};
+  const settled=readDriverRun(store,runId);
+  if(openRequestOf(store,settled)!==null||settled.state!=="settled")throw new ControlError("handoff-request-conflict","allowance-yields-to-handoff");
+  const work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{allowancePredecessorRunId?:string;currentRunId?:string|null};
   if(work.currentRunId!==undefined&&work.currentRunId!==runId)throw new ControlError("work-already-active");
   settled.state="settled-recoverable";settled.drive={...settled.drive!,outcome:report.terminal!.outcome};saveDriverRun(store,settled);
   work.status="ready";work.allowancePredecessorRunId=runId;Object.assign(work,{fundingReleased:true});saveAllowanceWork(store,run.groupId,work);
-  const group=allowanceGroup(store,run.groupId);if(!group.stopped)group.status="running";saveAllowanceGroup(store,group);
+  const group=allowanceGroup(store,run.groupId);if(!group.stopped&&group.status!=="blocked")group.status="running";saveAllowanceGroup(store,group);
  }});
  return true;
 }
