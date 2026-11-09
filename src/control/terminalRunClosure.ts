@@ -72,6 +72,7 @@ export function applyCloseRun(deps: CloseRunDeps, command: CloseRunCommand): Com
           || deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, run.workItemId)?.id !== runId) throw new ControlError("run-closure-not-current");
         const request = latestRequestForRun(deps.store, groupId, runId);
         if (request && ADOPTABLE_STATES.includes(request.state)) throw new ControlError("run-closure-request-open", request.requestId);
+        if (run.unknown.work || run.unknown.handoff) throw new ControlError("run-closure-evidence", "usage-unknown");
         if (!workspaceOwnerGone(deps.store, run)) throw new ControlError("run-closure-process-live");
         const proof = sealedProof(deps.store, run);
         if (proof === null) throw new ControlError("run-closure-evidence");

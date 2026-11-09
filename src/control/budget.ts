@@ -165,6 +165,7 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
 /** Numeric counters begin at zero, but zero consumption must be observed. */
 export function hasObservedUsage(store:ControlStore,run:RunRecord):boolean {
  if((run as {usageSettlement?:unknown}).usageSettlement!==undefined) return hasValidUsageSettlement(store,run as never);
+ if(run.unknown.work||run.unknown.handoff) return false;
  const observed=new Set<string>();
  for(const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=?").all(run.runId,run.highWater)) {
   const event=JSON.parse(String(row.body));if(event.cumulative!==null)observed.add(event.bucket);

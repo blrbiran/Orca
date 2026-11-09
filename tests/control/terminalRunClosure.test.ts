@@ -3,7 +3,9 @@ import { readRunActivity } from "../../src/control/activity.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { isTerminallyFailedRun } from "../../src/control/driveRecord.js";
 import { readBudgetProposal, readGroup, readWork } from "../../src/control/queries.js";
+import { hasObservedUsage } from "../../src/control/budget.js";
 import { validTerminalClosure } from "../../src/control/terminalRunClosure.js";
+import { recordUsage } from "../../src/control/usage.js";
 import { readControlRecovery, readControlGroup } from "../../src/panel/controlViews.js";
 import { terminallyFailedRun } from "../../src/control/systemDebug.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
@@ -33,6 +35,22 @@ describe("terminal run closure (#169)", () => {
       expect(readRunActivity(t.h.store, runId, 50).filter((row) => row.kind === "run-settled")).toHaveLength(1);
       await t.service.pauseDispatch(t.h.command("pause-dispatch", {}));
       expect(t.service.archiveGroup(t.h.command("archive-group", {}))).toMatchObject({ result: { kind: "archived", groupId: "g" } });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses closure when a later work event makes earlier observed usage unknown", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", sealedOwnerProof: true });
+    try {
+      const runId = await t.claim(), driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      const before = t.body(runId);
+      const earlier = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq=1").get(runId)!.body));
+      recordUsage(t.h.store, { runId, generation: before.generation, eventSeq: before.highWater + 1, bucket: "work", cumulative: null, source: earlier.source });
+      expect(t.body(runId).unknown.work).toBe(true);
+      expect(hasObservedUsage(t.h.store, t.body(runId))).toBe(false);
+      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ error: { code: "run-closure-evidence", message: "run-closure-evidence:usage-unknown" } });
+      expect(Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active)).toBe(1);
+      expect(t.body(runId).terminalClosure).toBeUndefined();
     } finally { await t.h.dispose(); }
   });
 
