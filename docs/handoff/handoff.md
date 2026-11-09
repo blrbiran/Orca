@@ -73,9 +73,10 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **变异见红**：在 `git clone --local` 副本里删掉 Orca 对 `execution-without-final-v1` 的识别分支，V11 在资格判定处变红（期望 `eligible`，实得 `unavailable`）。
 - **门（现测）**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=<ccloop 工作树 dist/cli.js> npm test` 首轮 **7048 过 / 2 红 / 41 跳过**；两条红都是已登记既有红（`flow/startForm` 的 `ECONNRESET`、`orchestration`「admits a debug group Orca opened itself」的 `ladder-source-superseded`）。配对文件在门里按门槛整体跳过（24 条），V11 是单独显式跑的。
 - **#162／#173 的两个产品结论（已实施）**：
-  - **top-up 被冻结合同吞掉是真缺陷，但旧 handoff 的归因写宽了**：`finite-legacy` 分支本来就**直接拒绝** top-up（`retry-top-up-unsupported:finite-legacy`）。静默无效只发生在**可追加额度的任务**上：追加成功、grant 到 298,990，而 A2 用 `withinGrant` 取 min(冻结合同 99,000, grant) ⇒ 交给 ccloop 的 `loop-contract.json` 仍是 99,000，于是同一处耗尽。修法：**可选策略的任务按资金 grant 下发**（含 `work_grant_top_ups`），`finite-legacy` 保持今天的 min()。判据 `tests/control/retryTopUp.test.ts` **T14**；变异（把 `dispatchedPolicy` 退回 `withinGrant`）报 `expected 99000 to be 298990` 才红。
+  - **top-up 被冻结合同吞掉是真缺陷，但旧 handoff 的归因写宽了**：`finite-legacy` 分支本来就**直接拒绝** top-up（`retry-top-up-unsupported:finite-legacy`）。静默无效只发生在**可追加额度的任务**上：追加成功、grant 到 298,990，而 A2 用 `withinGrant` 取 min(冻结合同 99,000, grant) ⇒ 交给 ccloop 的 `loop-contract.json` 仍是 99,000，于是同一处耗尽。修法：**top-up 按它自己授予的量抬高冻结合同的上限，再由资金 grant 封顶**（`dispatchedPolicy`）；没有 top-up 的 run 派发字节不变（T14 同时钉住首跑的 99,000），续跑仍只拿剩余额度；`finite-legacy` 保持今天的 min()。判据 `tests/control/retryTopUp.test.ts` **T14**；变异（把 `dispatchedPolicy` 退回 `withinGrant`）报 `expected 99000 to be 298990` 才红。
   - **saved-result 恢复不受影响**：那条路径上 ccloop 已用 admission 的 fresh grant 重定界（`boundSavedResultRuntime`），本轮一字未动。
   - **估算按实测校准**：新增指令版本 **v4**（= v3 ＋ 实测 framing 段：本机一次 plan 调用约 **43,000** token——14,840 input＋28,288 cacheRead＋532 output；一个任务至少 plan＋execute 两次调用，framing 下限约 **90,000**）。答案形状仍是 v3（**wire 不变**），repair 把 v4 当 v3 走。判据 `tests/control/estimatePromptV2.test.ts`；变异（删掉实测句）见红。
+  - **顺手修掉一处既有不一致**（主题行 `fix(estimator): the instruction names the answer key the schema demands`）：v3 里那句「把答案键换成 v3」的 replace **从未命中**（它找的是带 `- ` 前缀的行，答案块里没有），于是 v3——以及建在它上面的 v4——一直让模型答 `budget-estimate-answer-v2`，而 `estimateResponseSchema` 交给 provider 的 enum 是 v3。严格校验的 provider 会拒掉「按自己提示答出来的答案」。已改成按真实那行替换，并新增判据把「指令里写的键 == schema 要的键」对每个 keyed 版本钉住（**v3 的字节因此变了**：老 v3 profile 下次估算拿到的就是修正后的指令）。
   - ⚠️ **生产估算还没切到 v4**：`~/.orca/profile.json` 仍是 `instructionVersion:"3"`，写它被自动审批拦下（用户配置数据），**需人在自己终端改**（先备份，再把 `"3"` 改成 `"4"`）。
 - **诚实边界**：v4 的 43k／90k 来自**同机两次观测**（一次付费校准的 plan-only 43,849，一次 dogfood 的「首轮 plan 各约 44k」），**没有**新的付费真跑验证它是否把估算抬到够用；`n=1` 的 4× 不能当全局常数，v4 用的是「每次调用的 framing 下限」而不是乘数。
 - ⚠️ 未推：分支在本地，push 归人（本轮对话给了临时授权，但 Tier 0 闸门是否放行以实际执行为准）。
@@ -909,6 +910,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   2. **把 `~/.orca/profile.json` 的估算指令版本升到 `"4"`**（备份后改 `instructionVersion`）。自动审批拒绝 agent 写这份用户配置。
   3. **一次付费校准复跑**（可选、需人点头）：验证 v4 是否把估算抬到可用区间；本轮没花这笔钱。
   4. **清理（可选）**：`/tmp/orca158-pin.*`（pin 提交的克隆，`npm ci` 被我中止）、`/tmp/orca158-mut.*`（变异副本）、`/tmp/orca158-wrongpin.*`（负例克隆）、`/tmp/chk-x`。`rm -rf` 归人。
+  5. **`dev checkpoint write` 第三次复现挂住**：本轮用干净 draft 再跑一次，90 s 后仍无输出（与 `cf294856`、`6eb5df84` 两轮同形）。draft 留在 `/tmp/orca-checkpoint-draft-20261109.json`。
 
 - **2026-11-09 本会话（`cf294856`）待人**：
   1. **push ccloop（`c726a93`）**：本地 main 已提交、全量门绿（`check-known-reds` RC 0），**agent 的 push 被 Tier 0 闸门机械拦下**，对话授权不解除拦截。推完执行 repin（`node scripts/pin-ccloop.mjs <ccloop main>`、`npm ci`）。
