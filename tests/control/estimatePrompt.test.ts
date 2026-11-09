@@ -37,8 +37,9 @@ describe("the estimate prompt (single-call estimate spec §4.2)", () => {
       expect(ESTIMATE_INSTRUCTIONS["1"]).toContain(text);
     }
     // Ruling (session 4de777f4, 2026-10-17): "2" became a known version (spec §4.1); v3 joins it for issue #173's
-    // ledger-unit wording, so the unknown-version probe moves to "4".
-    expect(() => buildEstimatePrompt("4", "{}")).toThrow(expect.objectContaining({ code: "recovery-blocked", detail: "estimate-instruction-unknown:4" }));
+    // ledger-unit wording. Ruling (session 2026-11-09): v4 joins them for the measured framing floor, so the
+    // unknown-version probe moves to "5".
+    expect(() => buildEstimatePrompt("5", "{}")).toThrow(expect.objectContaining({ code: "recovery-blocked", detail: "estimate-instruction-unknown:5" }));
   });
 
   it("counts the whole prompt under the utf8 upper bound", () => {
@@ -66,9 +67,9 @@ describe("the estimate prompt (single-call estimate spec §4.2)", () => {
 
   it("is blocked-capability for an instruction version Orca does not know", () => {
     const snapshot = profileSnapshot();
-    snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, instructionVersion: "4" };
-    // Ruling (session 4de777f4, 2026-10-17): "2" became a known version; v3 joined it for issue #173 -- the unknown
-    // probe is "4".
+    snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, instructionVersion: "5" };
+    // Ruling (session 4de777f4, 2026-10-17): "2" became a known version; v3 joined it for issue #173, v4 for the
+    // measured framing floor (session 2026-11-09) -- the unknown probe is "5".
     const { profile, observation } = observe(snapshot);
     expect(buildBudgetEstimateRequest({ planHash, planCanonicalJson, profile, observation, mode: "soft" }))
       .toMatchObject({ state: "blocked-capability", reasonCode: "estimate-blocked-capability", request: null });
