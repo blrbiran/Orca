@@ -63,7 +63,20 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-09，repin／#158 验收轮，分支 `chore/repin-ccloop-158`）—— ccloop 已 repin 到 #158 的发布提交；跨仓验收 V11 通过；top-up 被冻结合同吞掉已修；估算升 v4
+### 3.最新（2026-11-09，测试者反馈 P0 修复轮）—— #213 停放结算解死锁、#223 proof 稳定化、#207 终结门收窄、#222／#214 已修
+
+- **人的话（原话）**：「这个session暂时忽略context大小。我们尽量多处理一些问题」「部分可能已经解决了你需要基于当前最新代码分析一下」「合理的部分采纳，不合理的部分我们可以再讨论」。本轮按反馈里的新 P0 顺序复核当前代码，没有把文档里的计数当现状。
+- **#213（已修，两侧）**：`settleTokenAllowance` 不再因 `groupHeld` 直接返回；已停的 run 即使在 over-grant 置 blocked 或暂停的组里也能结算，group 状态保持 blocked，新派发仍由 `groupHeld` 挡住。判据 `tests/control/allowanceHeldSettlement.test.ts`（真实 ccloop worker＋假 token codex）：旧码 20 s 超时 `accepted`，修后结算为 `settled-recoverable`、任务 `ready`、只有一次 `plan` 调用。独立审阅抓到的交错也已修：checkpoint 持久化后、提交事务前插入 handoff 请求时，`onSettled` 重查请求和 run 状态并回滚；该判据在删掉守卫的副本里变红。
+- **#223（已修，ccloop）**：`proveStopped` 仍每次做两轮真实探测，但证据字节只含稳定身份（execution／generation／grace／注册进程含 `registeredAt`）。同一停机状态得到同一内容地址；`writeEvidence` 对已存在且哈希已验证的路径不再替换 inode，避免并行归档看到目录 mtime 变化。判据 `tests/control/stopProof.test.ts`：连续与并发调用各返回同一 ref、证据目录保持 1 份、探测次数照增；注册集合变化出新 ref；进程重新出现不发 proof。
+- **#207（已修，Orca 侧）**：`hasObservedUsage` 现在先看 `run.unknown`，较晚的未知事件不会再被较早的已知用量掩盖；`close-run` 对任何仍未解决的未知用量直接回 `run-closure-evidence:usage-unknown`，不再制造 `settled-failed`＋`unknown=true` 的死路。判据 `terminalRunClosure` 新增一条（先红后绿）；原有 handle 结算后关闭、重试路径保持绿。
+- **#222（已修）**：`orca status` 的 work-health 排除归档 group 的 blocked／stopped／refusal 计数，也按归属组排除归档组带来的 recovery blocker；全局 blocker 照算，段内数字与实际计数相符。`tests/commands/status.test.ts` 新增先红后绿判据。
+- **#214（已修）**：`group import --library --version` 接受展示的版本号，与 `plan show/export` 同口径；纯数字 SHA 前缀必须写 `sha256:<prefix>`，否则错误会指明这个写法。判据 `tests/commands/scheduleCli.test.ts` 两条，先红后绿。
+- **门（现测）**：本轮早段的受影响 `npm test`：625 文件，**5375 过／39 跳过／1 红**，唯一红为已登记的 `orchestration`「admits a debug group Orca opened itself」（`ladder-source-superseded`）。其后新增的聚焦判据 `allowanceHeldSettlement`＋`terminalRunClosure`＋`tokenPolicyRuntime` 12/12、CLI 三文件 76/76、`scheduleCli`＋`status`＋`terminalRunClosure` 74/74；typecheck RC 0。**全量门未跑**（Rule 18）。
+- **#212（按人 2026-11-09 裁定的显示方案）**：保留现有 claim 时按 headroom 均分的分配，不改冻结规则。新增只读 `GET groups/<g>/funding-preview`（`fundingPreview`），对每个 task 返回 `authoredTokens`（声明值）与 `fundableTokens`（现在一次 claim 实际会给的 work token）。未确认提案会把 goal-review 分配作为预扣；已确认提案直接用 claim 同一函数 `decideFundedAllowance`。`proposal show` 与 `group confirm` 的人类输出各多一段 `task <t>: authored …; a claim now funds …`；两者的 `--json` 字节不变。判据 `tests/control/fundedAllowance.test.ts` 用反馈现场（2M 上限、used 80,942、goal-review 1M、两个 ready 任务各 600k/300k）钉住 **159,529**；两条变异（只显示 authored、忽略未确认组的 goal-review 预扣）各自见红。CLI 判据 `tests/commands/fundingPreview.test.ts` 3 条。
+- **#210／#215（未修，待定证据门槛）**：反馈里的 429「provider 未进入」与「执行后 usage 丢失」在协议里都落成 `cumulative:null`；把前者按 0 结算需要一条能证明 provider 没消耗 token 的正向事实，本轮没有改账本。
+- **本轮其余**：`~/.orca/profile.json` 已按人 2026-11-09 的明确授权切到 **v4**（备份 `.bak.20261109-v4`；只改 `instructionVersion`，字节核对通过）。全量门未跑（Rule 18）；没有新付费真跑。`dev checkpoint write` 的 90 s「无输出」不能证明挂死：旧 draft 第一条测量是整套 `npm test`，`runMeasurement` 把输出攒到命令结束才写文件。
+
+### 3.上一轮（2026-11-09，repin／#158 验收轮，分支 `chore/repin-ccloop-158`）—— ccloop 已 repin 到 #158 的发布提交；跨仓验收 V11 通过；top-up 被冻结合同吞掉已修；估算升 v4
 
 - **人的话（原话）**：「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「这一轮session如果需要repin ccloop，这个session临时允许你push ccloop到origin main。这一轮session，Orca仓库repin完成后临时允许你push Orca 到origin main」「遇到卡住必须等人的事情，请继续做不必等人的部分」。**本轮没有付费真跑**。开工时 ccloop 与 Orca 的 `origin/main` 都已由人推过（`ls-remote` 现核）。
 - **repin 已做**（主题行 `feat(deps): pin ccloop to the verification-only source, and prove it end to end`）：`node scripts/pin-ccloop.mjs 407b47e1…` 六项检查全 ok —— 锁只改了 ccloop、装进 `node_modules` 的是已构建的真目录、默认解析 E2E **12/12**（`ORCA_CCLOOP_BIN` 未设）、typecheck 0、临时克隆 `npm ci` 复现锁；随后 `npm ci`。
@@ -668,6 +681,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
+### 4.0 2026-11-09 测试者反馈 P0 轮的接手顺序
+
+1. **本轮改动未提交、未推**（Orca 8 个文件＋1 个新判据；ccloop `stopProof`／`evidence`／`paths` 与一条判据）。push 仍归人；ccloop 的后动会让 Orca 的 pin 再次落后，跨仓复验要等 ccloop 提交并重新 pin。
+2. **待人改 profile**：`~/.orca/profile.json` 的 `instructionVersion` 仍为 `"3"`；备份在 `.bak.20261109-v4`，本轮被自动审批拒绝覆盖。
+3. **#212 的产品取舍**先定：确认时拒绝 authored 超出可分 grant，还是保留当前分配但让 `proposal show`／confirm 显式显示实际可授予额度。未完成前不要用「估算 600k」当作派发合同。
+4. **重新跑门**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=<ccloop 构建> npm test`；当日早段唯一红是已登记的 `orchestration` `debug group` 用例。
+5. **其余不变**：#145／#160、#174 不重开；全量门只在发版时跑（Rule 18）；付费真跑仍需每次单独点头。
+
 ### 4.0 2026-11-09 repin／#158 验收轮的接手顺序（旧 §4.0 的裁定仍有效，见下）
 
 1. **等人推**：分支 `chore/repin-ccloop-158`（repin＋V11、top-up 派发修复、估算 v4，都已在本地提交）。推完 Orca 之后**不需要**再 repin——ccloop 的 pin 已是发布提交。
@@ -904,6 +925,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 八、什么在等人（awaitingHuman）
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
+
+- **2026-11-09 测试者反馈 P0 轮待人**：
+  1. **push**：本轮 Orca 与 ccloop 的改动都还在工作树、未提交未推。ccloop 提交并推后，Orca 还要重新 pin 才能跨仓复验 #223。
+  2. **profile 切 v4**：`~/.orca/profile.json` 仍 `"3"`；备份 `.bak.20261109-v4` 已建，自动审批拒绝 agent 覆盖，等待你在终端改。
+  3. **#212 的产品取舍**（见 §四.0 第 3 条）：超额 authored 方案是在确认时拒绝，还是保留分配但把实际 grant 显示出来。
+  4. **可选付费复跑**：本轮没有真跑；若要验证 v4／#213 的真实 OMP 行为，需你单独点头。
 
 - **2026-11-09 repin／#158 验收轮待人**：
   1. **push**：本轮的提交已 `--ff-only` 合入本地 `main`（Orca 7 笔、ccloop 1 笔 handoff、ccmem 1 笔 handoff）。**agent 的 push 被 Tier 0 闸门机械拦下**（本轮对话再次授权，闸门不认；按规矩没有重试、没有改写命令）。收尾时 `ls-remote` 因网络失败，**远端状态未现核**，以你推时的 `git status -sb`／`ls-remote` 为准。
