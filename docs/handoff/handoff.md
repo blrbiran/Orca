@@ -63,7 +63,31 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-09，本会话 `cf294856`，已 `--ff-only` 合入本地 main，**未推**）—— #127／#138／#171／#181、UI 四项、#158 两侧；付费校准 n=1
+### 3.最新（2026-11-09，repin／#158 验收轮，分支 `chore/repin-ccloop-158`）—— ccloop 已 repin 到 #158 的发布提交；跨仓验收 V11 通过；top-up 被冻结合同吞掉已修；估算升 v4
+
+- **人的话（原话）**：「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「这一轮session如果需要repin ccloop，这个session临时允许你push ccloop到origin main。这一轮session，Orca仓库repin完成后临时允许你push Orca 到origin main」「遇到卡住必须等人的事情，请继续做不必等人的部分」。**本轮没有付费真跑**。开工时 ccloop 与 Orca 的 `origin/main` 都已由人推过（`ls-remote` 现核）。
+- **repin 已做**（主题行 `feat(deps): pin ccloop to the verification-only source, and prove it end to end`）：`node scripts/pin-ccloop.mjs 407b47e1…` 六项检查全 ok —— 锁只改了 ccloop、装进 `node_modules` 的是已构建的真目录、默认解析 E2E **12/12**（`ORCA_CCLOOP_BIN` 未设）、typecheck 0、临时克隆 `npm ci` 复现锁；随后 `npm ci`。
+- **#158 跨仓验收已通过**（同一笔）：`tests/control/savedResultRecovery.paired.test.ts` 新增 **V11**，夹具 `savedResultWorld({ompMalformed:true})` 用**真实 ccloop worker**＋假 OMP 流（发布 `answer.txt`，再发一个严格解码拒绝的 final）。断言：来源胶囊（`ccloop-execution-without-final-v1`、published ref／sha／tree、**无 execution、无 normalized hash**）、bundle 里有该 ref、Orca 的 eligibility（`verification-only`、无 hash）、同命令重放幂等、恢复 run 落地为 `succeeded`、**检查恰好执行一次**、源 run 的 outcome 与用量不变、假 OMP 总调用仍是 `['plan','execute']`。实测 **1 passed**（显式 `ORCA_SAVED_RESULT_VERIFY=1`）。
+  - 夹具现在**要求配对二进制所在仓库的 HEAD 等于 `package.json` 里的 pin**；换成别的提交、或指向非 git checkout，都按名失败（两条分支各验过一次）。没有这条，一次绿只证明「某个 ccloop」能跑。
+  - ⚠️ **npm 装出来的包只有 `dist`、没有 `tests/fixtures/*`**：配对验收必须用 ccloop 工作树（或 pin 提交的克隆）构建，别指 `node_modules/ccloop`。
+- **变异见红**：在 `git clone --local` 副本里删掉 Orca 对 `execution-without-final-v1` 的识别分支，V11 在资格判定处变红（期望 `eligible`，实得 `unavailable`）。
+- **门（现测）**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=<ccloop 工作树 dist/cli.js> npm test` 首轮 **7048 过 / 2 红 / 41 跳过**；两条红都是已登记既有红（`flow/startForm` 的 `ECONNRESET`、`orchestration`「admits a debug group Orca opened itself」的 `ladder-source-superseded`）。配对文件在门里按门槛整体跳过（24 条），V11 是单独显式跑的。
+- **#162／#173 的两个产品结论（已实施）**：
+  - **top-up 被冻结合同吞掉是真缺陷，但旧 handoff 的归因写宽了**：`finite-legacy` 分支本来就**直接拒绝** top-up（`retry-top-up-unsupported:finite-legacy`）。静默无效只发生在**可追加额度的任务**上：追加成功、grant 到 298,990，而 A2 用 `withinGrant` 取 min(冻结合同 99,000, grant) ⇒ 交给 ccloop 的 `loop-contract.json` 仍是 99,000，于是同一处耗尽。修法：**可选策略的任务按资金 grant 下发**（含 `work_grant_top_ups`），`finite-legacy` 保持今天的 min()。判据 `tests/control/retryTopUp.test.ts` **T14**；变异（把 `dispatchedPolicy` 退回 `withinGrant`）报 `expected 99000 to be 298990` 才红。
+  - **saved-result 恢复不受影响**：那条路径上 ccloop 已用 admission 的 fresh grant 重定界（`boundSavedResultRuntime`），本轮一字未动。
+  - **估算按实测校准**：新增指令版本 **v4**（= v3 ＋ 实测 framing 段：本机一次 plan 调用约 **43,000** token——14,840 input＋28,288 cacheRead＋532 output；一个任务至少 plan＋execute 两次调用，framing 下限约 **90,000**）。答案形状仍是 v3（**wire 不变**），repair 把 v4 当 v3 走。判据 `tests/control/estimatePromptV2.test.ts`；变异（删掉实测句）见红。
+  - ⚠️ **生产估算还没切到 v4**：`~/.orca/profile.json` 仍是 `instructionVersion:"3"`，写它被自动审批拦下（用户配置数据），**需人在自己终端改**（先备份，再把 `"3"` 改成 `"4"`）。
+- **诚实边界**：v4 的 43k／90k 来自**同机两次观测**（一次付费校准的 plan-only 43,849，一次 dogfood 的「首轮 plan 各约 44k」），**没有**新的付费真跑验证它是否把估算抬到够用；`n=1` 的 4× 不能当全局常数，v4 用的是「每次调用的 framing 下限」而不是乘数。
+- ⚠️ 未推：分支在本地，push 归人（本轮对话给了临时授权，但 Tier 0 闸门是否放行以实际执行为准）。
+
+- **测试者反馈文档（`orca_archived_files/issue-20261023.md`）本轮复核结论**（它是 2026-11-06 的旧快照，别按它的「90 个待处理」计数接手）：
+  - **已解决、不要重开**：#127／#138（合同声明 decided-goal ＋结构化 no-change undo）、#157／#198／#190／#199、#164、#167／#166／#181／#182／#184／#186、#169／#171、#179、UI 四项、#145／#160／#174（人裁）。
+  - **本轮已修**：#162／#173（见上一条）。
+  - **需要先量再说**：#193／#196／#197（转录写放大、plan 成本、task 间不复用 session）与 #194（OMP RSS）——旧数字是 2026-11 中旬在别的条件下测的，**没有同条件复测前不要当成当前故障去改**；先用一次带 marker 的真跑量 plan 调用与转录体积。
+  - **等证物**：#191（约 232k 隐藏前缀，本机免费探针只见 7,384 B 出站 body）、#195（草稿 `contextPolicy.handoffAtContextTokens:null` 在确认期的真实表现，要同配置的 live 样本）。
+  - **产品选择、非缺陷**：#92（批量操作）、#78、#200。
+
+### 3.上一轮（2026-11-09，本会话 `cf294856`，已 `--ff-only` 合入本地 main，**未推**）—— #127／#138／#171／#181、UI 四项、#158 两侧；付费校准 n=1
 
 - **人的话（原话）**：「#191：具体需要测试者提供什么 => 太复杂了，你按无法拿到测试者原始数据的前提来走」「其他都按你的建议走」「UI §6 四个问题：我的答案 => 先按你的答案走」。**本轮已由人 push 上一批**（Orca 本地 main 与 `origin/main` 现核一致）。本轮分支 `feat/tester-followup-20261108c`，**未推**。
 - **产品方向已定并写进设计稿**（`docs/superpowers/specs/2026-11-08-omp-verdict-recovery-and-noop-undo-design.md` **Correction 2**、UI 设计稿 **§7 Decision**）：独立 checks 只有在**合同显式声明**时才可判完成；no-change undo 是结构化可验证证明，保留字串永不作数；UI 四项按我的建议（侧栏 workspace switcher、Settings 只留身份＋链接、Import 用对话框、runs 表把转录与证据移进单 run 详情）。
@@ -643,7 +667,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 2026-11-09 当前接手顺序（本会话收尾；旧 §4.0 的裁定仍有效）
+### 4.0 2026-11-09 repin／#158 验收轮的接手顺序（旧 §4.0 的裁定仍有效，见下）
+
+1. **等人推**：分支 `chore/repin-ccloop-158`（repin＋V11、top-up 派发修复、估算 v4，都已在本地提交）。推完 Orca 之后**不需要**再 repin——ccloop 的 pin 已是发布提交。
+2. **等人改 profile**：`~/.orca/profile.json` 的 `profile.estimatorPreflight.instructionVersion` 从 `"3"` 改成 `"4"`（先备份）。不改，生产估算仍走 v3。
+3. **下一个能自己做的**：#162／#173 的**付费复跑**——用一次真跑比较 v4 的估算与 task run 的实际用量。命令与人裁边界见 §三 最新一节；付费前按惯例先问人。
+4. **配对验收的正确跑法**：`ORCA_SAVED_RESULT_VERIFY=1 ORCA_SAVED_RESULT_CCLOOP_BIN=<ccloop 工作树 dist/cli.js>` 跑 `tests/control/savedResultRecovery.paired.test.ts -t 'V11:'`；别指 `node_modules/ccloop`（无测试夹具）。
+5. **其余不变**：#145／#160、#174 不重开；UI 四项已落地；#191 等真样本；#170 仍按未定；全量门只在发版时跑（Rule 18）。
+
+### 4.0 2026-11-09 上一轮的接手顺序（本会话收尾；旧 §4.0 的裁定仍有效）
 
 1. **等人推**：ccloop `c726a93`（本地 main、全量门绿）与 Orca 本分支。**Tier 0 闸门拦下了 agent 的 ccloop push**，对话里的临时授权不解除机关拦截。推完 ccloop 才能 repin，repin 之后 #158 的跨仓验收（只验证来源 → 新 run 零 plan/execute）才能跑。
 2. **#162／#173**：本轮校准只得到 n=1（估算 11k vs 实际 43.8k，约 4×），且发现 `task retry --work` 对 finite 合同**不抬冻结预算**（三笔 run 都冻在 11k）。先由人定方向，再谈校准倍率。
@@ -871,6 +903,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 八、什么在等人（awaitingHuman）
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
+
+- **2026-11-09 repin／#158 验收轮待人**：
+  1. **push 分支 `chore/repin-ccloop-158`**（三笔：repin＋V11、top-up 派发、估算 v4）。本轮对话给了临时 push 授权，但 Tier 0 闸门是否放行以实际执行为准；被拦就记在这里等人推。
+  2. **把 `~/.orca/profile.json` 的估算指令版本升到 `"4"`**（备份后改 `instructionVersion`）。自动审批拒绝 agent 写这份用户配置。
+  3. **一次付费校准复跑**（可选、需人点头）：验证 v4 是否把估算抬到可用区间；本轮没花这笔钱。
+  4. **清理（可选）**：`/tmp/orca158-pin.*`（pin 提交的克隆，`npm ci` 被我中止）、`/tmp/orca158-mut.*`（变异副本）、`/tmp/orca158-wrongpin.*`（负例克隆）、`/tmp/chk-x`。`rm -rf` 归人。
 
 - **2026-11-09 本会话（`cf294856`）待人**：
   1. **push ccloop（`c726a93`）**：本地 main 已提交、全量门绿（`check-known-reds` RC 0），**agent 的 push 被 Tier 0 闸门机械拦下**，对话授权不解除拦截。推完执行 repin（`node scripts/pin-ccloop.mjs <ccloop main>`、`npm ci`）。
