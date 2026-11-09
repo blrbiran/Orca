@@ -10,6 +10,7 @@ import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,recoveryOfSchema,executionFormatFailureSchema,exhaustedCompletionSchema,ompWithoutFinalCompletionSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
 import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
 import { hasOptionalTaskPolicy, validateAllowanceCheckpoint } from "./fundedAllowance.js";
+import { topUpSum } from "./workTopUp.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
@@ -643,20 +644,25 @@ export function withinGrant<P extends { maxAttempts: number; tokenBudget: number
 /**
  * The policy a run is dispatched with. A task on the optional accounting mode freezes its authored subtotal into the
  * confirmed contract, but every later top-up is booked separately (`work_grant_top_ups`) and folded into the run's
- * funded grant (fundedAllowance.ts) -- so that grant, not the frozen authored number, is what this run may spend
- * (retry work top-up spec 2026-11-06 §2). Taking the min() of the two silently swallowed a person's top-up: the
- * retried run still carried the authored `tokenBudget` and ccloop stopped in the same place, while Orca's own account
- * said it had funded the difference (paid calibration 2026-11-09, #162/#173). A `finite-legacy` task keeps today's
- * min(): its retry branch re-grants the run's own grant and refuses a top-up by name.
- * Saved-result recoveries do not come through here: ccloop bounds that runtime from the admission's fresh grant
+ * funded grant (fundedAllowance.ts). Taking the min() of the frozen number and the grant silently swallowed a person's
+ * top-up: the retried run still carried the authored `tokenBudget` and ccloop stopped in the same place, while Orca's
+ * own account said it had funded the difference (paid calibration 2026-11-09, #162/#173).
+ * So a top-up extends the frozen declaration by exactly what it granted, and the grant still bounds the result -- a
+ * run with no top-up dispatches byte for byte as before, and a continuation still gets only what is left. A
+ * `finite-legacy` task keeps today's min(): its retry branch re-grants the run's own grant and refuses a top-up by
+ * name. Saved-result recoveries do not come through here: ccloop bounds that runtime from the admission's fresh grant
  * (`boundSavedResultRuntime`).
  */
 export function dispatchedPolicy<P extends { maxAttempts: number; tokenBudget: number|null; totalRuntimeBudgetMs: number }>(
   store: ControlStore, run: { groupId: string; workItemId: string }, policy: P, grant: { tokens: number|null; activeMs: number; attempts: number },
 ): P {
-  return hasOptionalTaskPolicy(store, run.groupId, run.workItemId)
-    ? { ...policy, maxAttempts: grant.attempts, tokenBudget: grant.tokens, totalRuntimeBudgetMs: grant.activeMs }
-    : withinGrant(policy, grant);
+  if (!hasOptionalTaskPolicy(store, run.groupId, run.workItemId)) return withinGrant(policy, grant);
+  const topUp = topUpSum(store, run.groupId, run.workItemId, null);
+  return withinGrant({
+    ...policy, maxAttempts: policy.maxAttempts + topUp.attempts,
+    tokenBudget: policy.tokenBudget === null ? null : policy.tokenBudget + topUp.tokens,
+    totalRuntimeBudgetMs: policy.totalRuntimeBudgetMs + topUp.activeMs,
+  }, grant);
 }
 
 /** spec §2.2 B and B': one place turns a port answer into a run state. Answers whether the state changed. */

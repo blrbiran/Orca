@@ -94,8 +94,11 @@ describe("T1: a person's top-up funds the retried run without moving the earlier
 
 describe("T14: an optional-policy run is dispatched with its funded grant, not the frozen authored ceiling", { timeout: 120_000 }, () => {
   it("a person's token top-up reaches ccloop's contract instead of being swallowed by the confirmed one", async () => {
-    const { t, driver } = await exhausted(); try {
+    const { t, driver, first } = await exhausted(); try {
       const authored = work(t, "a").grant.work.tokens as number;
+      // Without a top-up the dispatched ceiling is the contract's own declared number, exactly as before.
+      const firstInput = readStartEnvelope(t.h.store, t.body(first)) as { work: { contract: { executionPolicy: { tokenBudget: number } } } };
+      expect(firstInput.work.contract.executionPolicy.tokenBudget).toBe(99_000);
       expect(code(retry(t, OWNER, "a", { work: { tokens: 200_000, attempts: 2 } }))).toBeNull();
       const second = await claimAgain(t, driver);
       for (let i = 0; i < 400 && t.body(second).drive?.prepared !== true; i++) await driver.round();
