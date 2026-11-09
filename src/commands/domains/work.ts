@@ -333,7 +333,7 @@ export const WORK_ROWS: CommandDef[] = [
       return { sourceRunId, sourceAttempt, capsuleHash, ...(work === undefined ? {} : { work }) };
     } }),
   verb({ domain: "task", action: "settle-usage", summary: "settle a run's unknown usage (cannot be undone)", verb: "settle-unknown-usage", positionals: [GROUP, TASK], access: "token",
-    flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|release-unmetered" }],
+    flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|release-unmetered|release-known-zero (the last only when ccloop proved the failed run spent nothing)" }],
     route: (c) => `groups/${group(c)}/settle-unknown-usage`,
     payload: async (c) => {
       const runId = await currentRun(c);

@@ -73,4 +73,4 @@ settle a run's unknown usage (cannot be undone)
 - Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
-- `--acknowledge <acknowledge>` (required): charge-remaining-grant|release-unmetered
+- `--acknowledge <acknowledge>` (required): charge-remaining-grant|release-unmetered|release-known-zero (the last only when ccloop proved the failed run spent nothing)

@@ -27,6 +27,9 @@ export const usageSettlementSchema = z.union([
   // observed floor in a group with no token limit, backed by its own `settle-approximate-usage` row under orca-auto.
   z.object({ method: z.literal("approximate-floor"), commandId: idSchema, principal: z.literal("orca-auto"), charged: pair,
     floorTokens: safeInteger.nullable(), reason: z.string().min(1), ...markerFields }).strict(),
+  // Issue #215 (human ruling 2026-11-09: option A): a failed run whose terminal carries ccloop's positive proof that
+  // nothing was spent. It books zero and releases the reservation; only that proof admits this method.
+  z.object({ method: z.literal("known-zero"), charged: pair, ...personFields, ...markerFields }).strict(),
 ]).superRefine((v, ctx) => {
   if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
@@ -53,7 +56,7 @@ export interface SettlementRun {
   runId: string; groupId: string; taskId: string | null; workItemId: string; generation: number; highWater: number;
   graphVersion: number; targetVersion: number; executionId: string | null; grant: Grant; remaining: Grant; cumulative: {work:Amount;handoff:Amount};
   unknown: { work: boolean; handoff: boolean }; usageSettlement?: unknown; checkpointId?: string | null;
-  drive?: { outcome: string | null; sourceDir: string; blockedAt?: string | null }; [key: string]: unknown;
+  drive?: { outcome: string | null; sourceDir: string; blockedAt?: string | null; failureCause?: { usageKnownZero?: true } }; [key: string]: unknown;
 }
 const ds = ["tokens", "activeMs", "attempts", "sessions"] as const;
 export const settlementSame = (a: unknown, b: unknown) => canonicalBytes(a).equals(canonicalBytes(b));
@@ -162,6 +165,11 @@ function approximateFloorBooked(run: SettlementRun, m: Extract<UsageSettlement, 
   return run.remaining.work.tokens === (grant === null ? null : Math.max(grant - run.cumulative.work.tokens, 0));
 }
 
+/** Issue #215 (human ruling 2026-11-09, option A): a terminal whose failure cause proves nothing was spent. */
+export const knownZeroProved = (run: Pick<SettlementRun, "drive" | "cumulative">): boolean =>
+  (run.drive?.failureCause as { usageKnownZero?: unknown } | undefined)?.usageKnownZero === true
+  && run.cumulative.work.tokens === 0 && run.cumulative.handoff.tokens === 0;
+
 /** A persisted marker must be backed by the authority receipt, unchanged provider highWater and immutable proof. */
 export function hasValidUsageSettlement(store: ControlStore, subject: unknown): boolean {
   try {
@@ -178,6 +186,13 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     if (!unknown) return false;
     if (m.method === "approximate-floor") {
       if (!approximateFloorBooked(run, m, baseline)) return false;
+    } else if (m.method === "known-zero") {
+      if (!knownZeroProved(run)) return false;
+      for (const b of ["work", "handoff"] as const) for (const d of ds) {
+        if (m.charged[b][d] !== 0 || run.cumulative[b][d] !== baseline[b][d]) return false;
+      }
+      if (run.remaining.work.tokens !== 0 || run.remaining.handoff.tokens !== 0 || run.remaining.work.activeMs !== 0
+        || run.remaining.work.attempts !== 0 || run.remaining.work.sessions !== 0) return false;
     } else for (const b of ["work", "handoff"] as const) for (const d of ds) {
       if (m.method === "owner-acknowledged-unmetered" && b === "work" && d === "tokens") {
         // m.charged.work.tokens is null by unmeteredChargeSchema (parsed above), so it is not checked again here.

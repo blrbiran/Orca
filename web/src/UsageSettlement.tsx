@@ -41,7 +41,7 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   }
   const owner = roles?.includes("owner") === true;
   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
-  const release = preview.acknowledge === "release-unmetered";
+  const release = preview.acknowledge !== "charge-remaining-grant";
   const offered = !archived && owner && preview.allowed && run.taskId !== null;
   const refusal = preview.refusalReason ? <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p> : null;
   const automatic = preview.approximateRefusal ? <p role="status" data-tone="warn" data-testid="approximate-refused">{t("control.settlement.approximateRefused", { code: preview.approximateRefusal })}</p> : null;

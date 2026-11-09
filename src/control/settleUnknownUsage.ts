@@ -2,6 +2,7 @@ import { amountSchema } from "./schema.js";
 import { add, budgetBalance, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { dimensions } from "./commands.js";
 import { hasTokenPolicy } from "./fundedAllowance.js";
+import { finiteCommitment } from "./tokenPolicy.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
@@ -9,7 +10,7 @@ import { settlingPersonFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
-import { releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun, type UsageSettlement } from "./usageSettlement.js";
+import { knownZeroProved, releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun, type UsageSettlement } from "./usageSettlement.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -18,8 +19,10 @@ import type { RawAuthorityCommandV1, CommandSuccessV1, CommandErrorBodyV1 } from
 
 export type SettleUnknownUsageCommand = Extract<RawAuthorityCommandV1, { verb: "settle-unknown-usage" }>;
 export type SettleAcknowledge = SettleUnknownUsageCommand["payload"]["acknowledge"];
-/** The acknowledgement a run's remainder admits: an unlimited work token remainder can only be released unmetered. */
-export const settlementAcknowledgeFor = (run: SettlementRun): SettleAcknowledge => run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant";
+/** The acknowledgement a run's remainder admits: a proved-zero failure releases its reservation; an unlimited work
+ * token remainder can only be released unmetered; otherwise the remainder is charged. */
+export const settlementAcknowledgeFor = (run: SettlementRun): SettleAcknowledge =>
+  knownZeroProved(run) ? "release-known-zero" : run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant";
 export interface SettleUnknownUsageDeps { store: ControlStore; admissionGate?: AdmissionGate; now?: () => Date; beforeCommit?: () => void; afterEvidence?: () => Promise<void> }
 
 /** Optional request-local raw work reader; writers omit it and retain their transaction's database reads. */
@@ -32,6 +35,7 @@ export interface SettlementAdmissionReadContext {
 export function settlementAdmission(store: ControlStore, run: SettlementRun, context?: SettlementAdmissionReadContext, acknowledge: SettleAcknowledge = settlementAcknowledgeFor(run)): "committed" | "released" | "recovered" {
   const group = readGroup(store, run.groupId), work = (context?.store === store && context.groupId === run.groupId
     ? context.readWork(run.workItemId) : readWork(store, run.groupId, run.workItemId)) as unknown as { taskId: string; currentRunId?: string; status: string; grant: unknown; pendingRunId?: string | null };
+  if (acknowledge === "release-known-zero" && !knownZeroProved(run)) throw new ControlError("run-usage-not-settleable", "known-zero-not-proved");
   if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
@@ -80,12 +84,13 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
 export function chargeRunRemainder(
   store: ControlStore, run: Pick<SettlementRun, "runId" | "groupId" | "remaining" | "cumulative" | "unknown"> & { phase?: string; purpose?: string },
   group: Pick<GroupRecord, "used" | "reserved">, charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount },
-  options: { unmetered: boolean; releaseReserved: boolean; at: number },
+  options: { unmetered: boolean; releaseReserved: boolean; releaseReservedAmount?: Amount; at: number },
 ): void {
   // Unmetered work tokens book nothing: the run keeps its observed cumulative and its unlimited (null) remainder.
   const work = { ...charged.work, tokens: charged.work.tokens ?? 0 }, delta = add(work, charged.handoff);
   group.used = add(group.used, delta);
-  if (options.releaseReserved) group.reserved = subtract(group.reserved, delta);
+  // A known-zero settlement charges nothing but gives back the whole reservation the run held.
+  if (options.releaseReserved) group.reserved = subtract(group.reserved, options.releaseReservedAmount ?? delta);
   for (const b of ["work", "handoff"] as const) {
     const amount = b === "work" ? work : charged.handoff, tokens = charged[b].tokens;
     run.cumulative[b] = add(run.cumulative[b], amount); run.remaining[b] = { tokens: b === "work" && options.unmetered ? null : 0, activeMs: 0, attempts: 0, sessions: 0 } as never; run.unknown[b] = false;
@@ -152,11 +157,14 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         if ("error" in evidence) throw evidence.error;
         if (!settlementSame(run, evidence.body) || !settlementSame(settlementProof(store, run), evidence.proof)
           || (disposition !== "committed" && !settlementSame(releasedSettlementCheckpoint(store, run), evidence.checkpoint))) throw new ControlError("run-usage-not-settleable", "evidence-changed");
-        const unmetered = command.payload.acknowledge === "release-unmetered", at = (deps.now ?? (() => new Date()))().getTime();
+        const unmetered = command.payload.acknowledge === "release-unmetered", knownZero = command.payload.acknowledge === "release-known-zero",
+          at = (deps.now ?? (() => new Date()))().getTime();
+        const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
         const charged = unmetered ? unmeteredChargeSchema.parse({ work: run.remaining.work, handoff: run.remaining.handoff })
+          : knownZero ? { work: { ...zero }, handoff: { ...zero } }
           : { work: amountSchema.parse(run.remaining.work), handoff: amountSchema.parse(run.remaining.handoff) };
         const request = latestRequestForRun(store, groupId, run.runId);
-        const marker = usageSettlementSchema.parse({ method: unmetered ? "owner-acknowledged-unmetered" : "remaining-grant", commandId: command.commandId, principal, at,
+        const marker = usageSettlementSchema.parse({ method: knownZero ? "known-zero" : unmetered ? "owner-acknowledged-unmetered" : "remaining-grant", commandId: command.commandId, principal, at,
           groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
           charged, reservationDisposition: disposition, ...evidence.proof,
           ...(disposition !== "committed" ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...evidence.checkpoint! } } : {}),
@@ -164,7 +172,8 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         const group = readGroup(store, groupId);
         // §3.2: an optional-v1 stop kept its reservation (allocations `unknown`); a finite-legacy stop already released it.
         const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId), parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
-        chargeRunRemainder(store, run, group, charged, { unmetered, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy), at });
+        chargeRunRemainder(store, run, group, charged, { unmetered, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy),
+          ...(knownZero ? { releaseReservedAmount: add(finiteCommitment(run.remaining.work), run.remaining.handoff) } : {}), at });
         finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked, activity: { method: marker.method, charged, principal, at } });
         deps.beforeCommit?.();
         const receipt = { kind: "usage-settled" as const, taskId: run.taskId!, runId: run.runId, generation: run.generation, at };

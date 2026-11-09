@@ -120,4 +120,6 @@ export const runFailureCauseSchema = z.object({
   phase: z.enum(["plan", "execute", "verify", "setup"]).nullable(),
   retries: safeInteger,
   detail: z.string().nullable(),
+  // Issue #215: ccloop proved this failed run spent nothing (a pre-spawn refusal, or a 429 before any work).
+  usageKnownZero: z.literal(true).optional(),
 }).strict();

@@ -812,7 +812,7 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 // all-zero or empty `work` reaches the apply so its refusal (retry-top-up-empty) is booked.
 export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), activeMs: safeInteger.optional(), attempts: safeInteger.optional(), sessions: safeInteger.optional() }).strict();
 export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional(), allowObservedPaths: z.literal(true).optional() }).strict();
-export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]) }).strict();
+export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]) }).strict();
 export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();
 /** Terminal run closure #169: the run whose accounting is closed; its group is the target. */
 export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
@@ -1843,7 +1843,7 @@ export const runViewSchema = z
     // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the task's current run failed with quota, was not
     // switched, and its installation rests (quotaRest.ts) until `until`; omitted otherwise.
     quotaRest: z.object({ installation: nonemptyString, until: safeInteger, source: z.enum(["vendor", "default"]) }).strict().optional(),
-    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional() }).strict().optional(),
+    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
@@ -2239,7 +2239,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
   // The receipt copies the marker (usageSettlement.ts), whose schema ties a null work token charge to the unmetered method.
-  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor"]) }).strict(),
+  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor", "known-zero"]) }).strict(),
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema }).strict(),
   z
     .object({
