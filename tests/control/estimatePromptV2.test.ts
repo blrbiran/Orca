@@ -113,6 +113,14 @@ describe("the v2 estimate prompt and schema", () => {
     expect(buildEstimatePrompt("2", "{}", { taskIds: ["a"], retryProblems: [] })).toBe(buildEstimatePrompt("2", "{}", { taskIds: ["a"] }));
   });
 
+  it("names the answer key its response schema requires, for every keyed version", () => {
+    // v3's first cut matched a line that does not exist, so it told the model to answer v2 while the schema demanded v3.
+    for (const version of ["2", "3", "4"]) {
+      const key = (estimateResponseSchema(version, ["a"]) as any).properties.schema.enum[0] as string;
+      expect(ESTIMATE_INSTRUCTIONS[version]).toContain(`"schema": "${key}"`);
+    }
+  });
+
   it("adds the cut-off sentence when the problem is no-json-object, and only then", () => {
     const sentence = " Your answer may have been cut off: reply with the JSON object only, and keep each rationale to one sentence.";
     for (const version of ["1", "2"]) {

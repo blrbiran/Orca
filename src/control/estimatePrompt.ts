@@ -118,7 +118,9 @@ const INSTRUCTION_V3 = INSTRUCTION_V2
     "- \"tokens\": every model token the task will consume, input and output, over every call and every attempt;",
     "- \"tokens\": every token the ledger will bill for the task, over every call and every attempt: the sum of input, output, cacheRead and cacheWrite. A later call re-reads most of its prompt from cache, so count cacheRead at its full token count too; do not count only new input plus output;",
   )
-  .replace("- \"schema\": \"budget-estimate-answer-v2\",", "- \"schema\": \"budget-estimate-answer-v3\",");
+  // The answer block's own line, two spaces in. The first cut matched a line that does not exist ("- " prefix), so v3
+  // still told the model to answer with v2's key while the response schema demanded v3's.
+  .replace("\"schema\": \"budget-estimate-answer-v2\",", "\"schema\": \"budget-estimate-answer-v3\",");
 
 /**
  * Issue #162/#173, paid calibration 2026-11-09: v3 fixed the unit but not the systematic low bias. Two independent
