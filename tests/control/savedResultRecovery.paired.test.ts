@@ -74,6 +74,39 @@ it('V10: a person funds an exhausted source for one verification without another
  }finally{await f.cleanup();}
 },120000);
 
+// A missing without-final source branch must fail before Orca can admit a hashless recovery.
+it('V11: an opted-in malformed OMP final verifies the published work once, without another provider phase',async()=>{
+ const f=await savedResultWorld({ompMalformed:true});try{
+  const source=readDriverRun(f.store,f.source.runId);
+  expect(source.drive?.outcome).toBe('failed');expect(f.calls()).toEqual(['plan','execute']);expect(existsSync(f.checks)).toBe(false);
+  expect(source.savedSource).toMatchObject({authorityKind:'execution-without-final-v1',attempt:1});
+  const capsule=JSON.parse(settlementArtifact(f.store,(source.savedSource as any).source).toString());
+  expect(capsule).toMatchObject({schema:'ccloop-execution-without-final-v1',executor:{kind:'omp'},gate:{decision:'malformed-final'},verifier:{entered:false}});
+  expect(capsule).not.toHaveProperty('execution');expect(capsule).not.toHaveProperty('normalizedExecutionHash');
+  const snapshot=JSON.parse(settlementArtifact(f.store,capsule.snapshot).toString());
+  const bundle=join(f.w.root,'omp-source.bundle');await writeFile(bundle,settlementArtifact(f.store,snapshot.bundle));
+  expect(execFileSync('/usr/bin/git',['bundle','list-heads',bundle],{cwd:f.w.repo,encoding:'utf8'})).toContain(capsule.published.ref);
+  const eligibility=await f.service.savedResultEligibility(source.runId);
+  expect(eligibility).toMatchObject({status:'eligible',authorityKind:'execution-without-final-v1',verificationOnly:true,recoveryOf:{kind:'verification-only-v1'}});
+  if(eligibility.status!=='eligible')throw Error(JSON.stringify(eligibility));
+  expect(eligibility.recoveryOf).not.toHaveProperty('normalizedExecutionHash');
+  const before=JSON.stringify((source as any).cumulative.work);
+  const c=f.command('verify-saved-result',{sourceRunId:source.runId,sourceAttempt:eligibility.recoveryOf.sourceAttempt,capsuleHash:eligibility.recoveryOf.capsuleHash,work:{tokens:100_000,activeMs:1_000_000,attempts:2,sessions:2}},{kind:'task',groupId:'g',taskId:'a'});
+  const submit=()=>withCommandContext(c.commandId,{client:'web',principal:'user:owner',personAuthority:true},()=>f.service.verifySavedResult(c));
+  const result=await submit();expect(result).toHaveProperty('result.kind','saved-result-verification-started');
+  if(!('result' in result)||result.result.kind!=='saved-result-verification-started')throw Error(JSON.stringify(result));
+  expect(await submit()).toEqual(result);
+  const id=result.result.runId;for(let i=0;i<150;i++){await f.driver.round();if(readDriverRun(f.store,id).state==='settled')break;await new Promise(r=>setTimeout(r,50));}
+  const verified=readDriverRun(f.store,id);
+  expect(verified.state,JSON.stringify(verified.drive)).toBe('settled');expect(verified.recoveryOf).toEqual(eligibility.recoveryOf);
+  expect(verified.drive?.outcome).toBe('succeeded');expect(f.w.show('answer.txt')).toBe('42');
+  expect(f.calls()).toEqual(['plan','execute']);expect(readFileSync(f.checks,'utf8')).toBe('check\n');
+  expect(readDriverRun(f.store,source.runId).drive?.outcome).toBe('failed');
+  expect(JSON.stringify((readDriverRun(f.store,source.runId) as any).cumulative.work)).toBe(before);
+  await f.driver.round();expect(f.calls()).toEqual(['plan','execute']);expect(readFileSync(f.checks,'utf8')).toBe('check\n');
+ }finally{await f.cleanup();}
+},120000);
+
 it('O19: the pinned ccloop accepts a saved candidate after Orca books an approximate codex floor',async()=>{
  const f=await savedResultWorld({optional:true,settle:'none',omitExecuteUsage:true,sourcePaired:true,toolRules:{commands:[],network:false,secretEnv:[]}});try{
   expect((f.source.unknown as {work:boolean}).work).toBe(true);
