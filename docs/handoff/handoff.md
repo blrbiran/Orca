@@ -935,11 +935,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
 
-- **2026-11-09 测试者反馈 P0 轮待人**：
-  1. **push**：本轮 Orca 与 ccloop 的改动都还在工作树、未提交未推。ccloop 提交并推后，Orca 还要重新 pin 才能跨仓复验 #223。
-  2. **profile 切 v4**：`~/.orca/profile.json` 仍 `"3"`；备份 `.bak.20261109-v4` 已建，自动审批拒绝 agent 覆盖，等待你在终端改。
-  3. **#212 的产品取舍**（见 §四.0 第 3 条）：超额 authored 方案是在确认时拒绝，还是保留分配但把实际 grant 显示出来。
-  4. **可选付费复跑**：本轮没有真跑；若要验证 v4／#213 的真实 OMP 行为，需你单独点头。
+- **2026-11-10 测试者反馈 A 轮待人**：
+  1. **push**：Orca 本地 `main` 领先 3 笔（#215 代码、两份 handoff）；ccloop 领先 4 笔（#223／#215／#206 与 docs）；ccmem 领先 1 笔（滚动指针）。远端一律以 `ls-remote` 现核。
+  2. **repin**：ccloop 推完后必须 `node scripts/pin-ccloop.mjs <ccloop main>` + `npm ci`，否则 #206 的 prompt-mode 胶囊与 `usageKnownZero` 事实不在正式 pin 上。
+  3. **可选付费复跑**：本轮没有付费真跑；要验收真实 429 before-work 的 `usageKnownZero` 与 prompt-mode exhausted，需人单独点头。
+  4. **仍未处理**：#216（Overview 重复）、#217–#221；#193–#197 需同条件重测；#191 缺样本。
 
 - **2026-11-09 repin／#158 验收轮待人**：
   1. **push**：本轮的提交已 `--ff-only` 合入本地 `main`（Orca 7 笔、ccloop 1 笔 handoff、ccmem 1 笔 handoff）。**agent 的 push 被 Tier 0 闸门机械拦下**（本轮对话再次授权，闸门不认；按规矩没有重试、没有改写命令）。收尾时 `ls-remote` 因网络失败，**远端状态未现核**，以你推时的 `git status -sb`／`ls-remote` 为准。
