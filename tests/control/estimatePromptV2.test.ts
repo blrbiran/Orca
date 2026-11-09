@@ -77,7 +77,7 @@ describe("the v2 estimate prompt and schema", () => {
     const odd = estimateResponseSchema("2", ["constructor", "__proto__", "10"]) as any;
     expect(Object.keys(odd.properties.tasks.properties)).toEqual(expect.arrayContaining(["constructor", "__proto__", "10"]));
     expect(odd.properties.tasks.required).toEqual(["constructor", "__proto__", "10"]);
-    expect(() => estimateResponseSchema("4", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:4" }));
+    expect(() => estimateResponseSchema("5", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:5" }));
   });
 
   it("v3 names the ledger's token unit and keeps v2's keyed answer shape", () => {
@@ -88,7 +88,21 @@ describe("the v2 estimate prompt and schema", () => {
     const schema = estimateResponseSchema("3", ["a"]) as any;
     expect(schema.properties.schema).toEqual({ type: "string", enum: ["budget-estimate-answer-v3"] });
     expect(Object.keys(schema.properties.tasks.properties)).toEqual(["a"]);
-    expect(() => estimateResponseSchema("4", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:4" }));
+    // Ruling (session 2026-11-09): v4 exists, so "4" is no longer the unknown version; "5" is.
+    expect(() => estimateResponseSchema("5", [])).toThrow(expect.objectContaining({ detail: "estimate-instruction-unknown:5" }));
+  });
+
+  it("v4 adds the measured per-call framing floor and keeps v3's answer shape", () => {
+    expect(ESTIMATE_INSTRUCTIONS["4"]).toContain("about 43,000 tokens");
+    expect(ESTIMATE_INSTRUCTIONS["4"]).toContain("at least about 90,000 tokens of framing");
+    expect(ESTIMATE_INSTRUCTIONS["4"]).toContain("input, output, cacheRead and cacheWrite");
+    expect(ESTIMATE_INSTRUCTIONS["4"]).not.toContain("every model token the task will consume, input and output");
+    const prompt = buildEstimatePrompt("4", "{\"x\":1}", { taskIds: ["a"] });
+    expect(prompt.startsWith(`${ESTIMATE_INSTRUCTIONS["4"]}\n\n{"x":1}\n\n`)).toBe(true);
+    expect(prompt.endsWith(`This plan has 1 tasks: "a". Answer each exactly once, as a key of "tasks".`)).toBe(true);
+    const schema = estimateResponseSchema("4", ["a"]) as any;
+    expect(schema.properties.schema).toEqual({ type: "string", enum: ["budget-estimate-answer-v3"] });
+    expect(schema.properties.tasks.required).toEqual(["a"]);
   });
 
   it("retryProblems append the feedback paragraph in both versions, after the task line", () => {

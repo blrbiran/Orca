@@ -9,7 +9,7 @@ import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultR
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,recoveryOfSchema,executionFormatFailureSchema,exhaustedCompletionSchema,ompWithoutFinalCompletionSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
 import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
-import { validateAllowanceCheckpoint } from "./fundedAllowance.js";
+import { hasOptionalTaskPolicy, validateAllowanceCheckpoint } from "./fundedAllowance.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
@@ -412,7 +412,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
   const runtime = {
     ...confirmed.contract, context: { ...confirmed.contract.context, repoPath: workspaceOf(drive) },
-    executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
+    executionPolicy: dispatchedPolicy(store, run, confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number|null; activeMs: number; attempts: number } }).work),
   };
   const prepared = await skillFilledRuntime(deps, run, targetRepo, runtime, confirmed);
   if ("blocked" in prepared) { blockRun(deps, runId, "A2", prepared.blocked); return true; }
@@ -502,7 +502,7 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
       ...contractContext, repoPath: primary.workspacePath,
       ...(contractExtras.length === 0 ? {} : { additionalRepos: contractExtras.map((extra) => ({ ...extra, repoPath: workspaceOfKey.get(extra.key)! })) }),
     },
-    executionPolicy: withinGrant(confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number; activeMs: number; attempts: number } }).work),
+    executionPolicy: dispatchedPolicy(store, run, confirmed.contract.executionPolicy, (run.grant as { work: { tokens: number|null; activeMs: number; attempts: number } }).work),
   };
   // Flow engine spec §12.2 phase 1 / §12.1: a flow step's skills are injected for this run and its dir tokens filled.
   const prepared = await skillFilledRuntime(deps, run, primary.targetRepo, runtime, confirmed);
@@ -638,6 +638,25 @@ export function withinGrant<P extends { maxAttempts: number; tokenBudget: number
     ...policy, maxAttempts: Math.min(policy.maxAttempts, grant.attempts), tokenBudget: minTokenCeiling(policy.tokenBudget, grant.tokens),
     totalRuntimeBudgetMs: Math.min(policy.totalRuntimeBudgetMs, grant.activeMs),
   };
+}
+
+/**
+ * The policy a run is dispatched with. A task on the optional accounting mode freezes its authored subtotal into the
+ * confirmed contract, but every later top-up is booked separately (`work_grant_top_ups`) and folded into the run's
+ * funded grant (fundedAllowance.ts) -- so that grant, not the frozen authored number, is what this run may spend
+ * (retry work top-up spec 2026-11-06 §2). Taking the min() of the two silently swallowed a person's top-up: the
+ * retried run still carried the authored `tokenBudget` and ccloop stopped in the same place, while Orca's own account
+ * said it had funded the difference (paid calibration 2026-11-09, #162/#173). A `finite-legacy` task keeps today's
+ * min(): its retry branch re-grants the run's own grant and refuses a top-up by name.
+ * Saved-result recoveries do not come through here: ccloop bounds that runtime from the admission's fresh grant
+ * (`boundSavedResultRuntime`).
+ */
+export function dispatchedPolicy<P extends { maxAttempts: number; tokenBudget: number|null; totalRuntimeBudgetMs: number }>(
+  store: ControlStore, run: { groupId: string; workItemId: string }, policy: P, grant: { tokens: number|null; activeMs: number; attempts: number },
+): P {
+  return hasOptionalTaskPolicy(store, run.groupId, run.workItemId)
+    ? { ...policy, maxAttempts: grant.attempts, tokenBudget: grant.tokens, totalRuntimeBudgetMs: grant.activeMs }
+    : withinGrant(policy, grant);
 }
 
 /** spec §2.2 B and B': one place turns a port answer into a run state. Answers whether the state changed. */

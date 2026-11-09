@@ -3,6 +3,7 @@ import { withCommandContext } from "../../src/control/commandClient.js";
 import { readFundedAllowance } from "../../src/control/fundedAllowance.js";
 import { orchestrationRevision } from "../../src/control/orchestration.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { readStartEnvelope } from "../../src/control/executionDriver.js";
 import { appendTopUp } from "../../src/control/workTopUp.js";
 import { routedCommandContext } from "../../src/panel/controlApi.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -87,6 +88,22 @@ describe("T1: a person's top-up funds the retried run without moving the earlier
       // The new run runs to its terminal under the topped-up grant, and the read model stays whole.
       await failed(t, driver, second);
       expect(readControlGroup(t.h.store, "epoch", "g").schema).toBe("orca-control-group-v1");
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("T14: an optional-policy run is dispatched with its funded grant, not the frozen authored ceiling", { timeout: 120_000 }, () => {
+  it("a person's token top-up reaches ccloop's contract instead of being swallowed by the confirmed one", async () => {
+    const { t, driver } = await exhausted(); try {
+      const authored = work(t, "a").grant.work.tokens as number;
+      expect(code(retry(t, OWNER, "a", { work: { tokens: 200_000, attempts: 2 } }))).toBeNull();
+      const second = await claimAgain(t, driver);
+      for (let i = 0; i < 400 && t.body(second).drive?.prepared !== true; i++) await driver.round();
+      const input = readStartEnvelope(t.h.store, t.body(second)) as { work: { contract: { executionPolicy: { tokenBudget: number } } } };
+      const funded = allowance(t, second)!.grant.work.tokens as number;
+      // The confirmed contract still says what the task authored; the dispatched one must say what was funded.
+      expect(funded).toBeGreaterThan(authored);
+      expect(input.work.contract.executionPolicy.tokenBudget).toBe(funded);
     } finally { await t.h.dispose(); }
   });
 });

@@ -120,12 +120,32 @@ const INSTRUCTION_V3 = INSTRUCTION_V2
   )
   .replace("- \"schema\": \"budget-estimate-answer-v2\",", "- \"schema\": \"budget-estimate-answer-v3\",");
 
-export const ESTIMATE_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({ "1": INSTRUCTION_V1, "2": INSTRUCTION_V2, "3": INSTRUCTION_V3 });
+/**
+ * Issue #162/#173, paid calibration 2026-11-09: v3 fixed the unit but not the systematic low bias. Two independent
+ * measurements on this installation put one *plan* call at about 43,000–44,000 ledger tokens (one of them: 14,840 input +
+ * 28,288 cacheRead + 532 output for a task whose estimate had been 11,000 for the whole task). The cost is the framing
+ * re-read on every call, not the size of the change, so v4 tells the model that floor and that a task makes at least two
+ * calls. The answer shape is v3's; only the instruction moves.
+ */
+const INSTRUCTION_V4 = INSTRUCTION_V3.replace(
+  "## The answer",
+  [
+    "## What one call already costs",
+    "",
+    "Measured on one installation, a single plan call on a small repository billed about 43,000 tokens before doing any work of its own (14,840 input, 28,288 cacheRead and 532 output); most of it is the prompt, the tool list and the contract, re-read in full on every call.",
+    "A task makes at least a plan call and an execute call, and an agent-verified task makes a verify call as well, so its work costs at least about 90,000 tokens of framing however small the change is.",
+    "Treat those numbers as a floor measured on one machine, not as a prediction: count the framing of every call in the task's \"work\", and never answer with only the tokens the change itself would take.",
+    "",
+    "## The answer",
+  ].join("\n"),
+);
+
+export const ESTIMATE_INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({ "1": INSTRUCTION_V1, "2": INSTRUCTION_V2, "3": INSTRUCTION_V3, "4": INSTRUCTION_V4 });
 
 export interface EstimatePromptOptions { taskIds: readonly string[]; retryProblems?: readonly string[] }
 
 /** v2 and v3 both key the answer by taskId; their instructions carry the shape. */
-const keyedInstruction = (instructionVersion: string): boolean => instructionVersion === "2" || instructionVersion === "3";
+const keyedInstruction = (instructionVersion: string): boolean => instructionVersion === "2" || instructionVersion === "3" || instructionVersion === "4";
 
 /**
  * Spec §4.2: instruction, "\n\n", request bytes. v2 then appends the task list; a retry appends the feedback (spec §4.3).
@@ -237,6 +257,6 @@ function keyedSchema(taskIds: readonly string[], answerVersion: "v2" | "v3" = "v
 export function estimateResponseSchema(instructionVersion: string, taskIds: readonly string[]): Record<string, unknown> {
   if (instructionVersion === "1") return BUDGET_ESTIMATE_JSON_SCHEMA as Record<string, unknown>;
   if (instructionVersion === "2") return keyedSchema(taskIds);
-  if (instructionVersion === "3") return keyedSchema(taskIds, "v3");
+  if (instructionVersion === "3" || instructionVersion === "4") return keyedSchema(taskIds, "v3");
   throw new ControlError("recovery-blocked", `estimate-instruction-unknown:${instructionVersion}`);
 }
