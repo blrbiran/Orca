@@ -12,7 +12,7 @@ import type { GroupViewV1 } from "../src/controlTypes.js";
 
 afterEach(cleanup);
 const mount = (value: GroupViewV1) => render(<ControlGroupView view={value} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-// Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): the Live region is among the tabs.
+// Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): the Live region is among the tabs. Human, 2026-11-10: "Allow all three (Recommended)".
 const TABS = ["Progress", "Live", "Preparation", "Problems", "Results", "Runs and evidence", "Technical details"];
 
 it.each(["draft", "ready", "running"] as const)("a %s group shows its execution controls once, above the tabs, on every tab", (state) => {

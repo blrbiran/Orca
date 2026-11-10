@@ -182,7 +182,7 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
       expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:outcome:none" });
       poke(t, runId, (run) => { run.drive.outcome = "failed"; run.drive.blockedAt = "E"; });
       // Ruling: plan 2026-11-10 tester follow-up B, T1 (#229) -- the refusal for a run blocked at a step other than C names
-      // the command that resumes it in place (recovery-retry), since task retry never will; the code and prefix are unchanged.
+      // the command that resumes it in place (recovery-retry), since task retry never will; the code and prefix are unchanged. Human, 2026-11-10: "Allow all three (Recommended)".
       expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: `task-not-retryable:blocked-at:E:orca recovery retry --run ${runId}` });
       unchanged(t, runId);
     } finally { await t.h.dispose(); }

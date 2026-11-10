@@ -120,7 +120,7 @@ describe("the orca-control skill (spec §7, C18)", () => {
     const at = rows.flatMap((row, index) => (row.route.includes("requirement") ? [index] : []));
     // Clarify caps spec 2026-10-21 §3.1, §3.3: clarify-more and classify are requirement routes too (was 5).
     // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §10.3 adds requirement/revise (was 7).
-    // Issue #236 (tester follow-up B, T5): requirement/set-agent is a requirement route too (was 8).
+    // Ruling: Issue #236 (tester follow-up B, T5): requirement/set-agent is a requirement route too (was 8). Human, 2026-11-10: "Allow all three (Recommended)".
     expect(at.length).toBe(9);
     expect(at.at(-1)! - at[0]!).toBe(at.length - 1);
   });

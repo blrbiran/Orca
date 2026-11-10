@@ -180,7 +180,7 @@ it("execution controls name pause and safe stop without implying completion", ()
   expect(screen.getByRole("button", { name: "Save progress and stop" })).toBeTruthy();
   // Issue #47: the execution controls are a bar above the tabs, no longer inside the Preparation tab.
   const region = screen.getByRole("heading", { name: "Execution controls" }).closest<HTMLElement>('[data-overview-region="dispatch"]')!;
-  // Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): a zero count is no longer shown; the bar's actions are its toolbar.
+  // Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): a zero count is no longer shown; the bar's actions are its toolbar. Human, 2026-11-10: "Allow all three (Recommended)".
   expect(within(region).queryByText("Continuable work")).toBeNull();
   expect(within(region).queryByText("Retryable work")).toBeNull();
   expect(within(region).queryByText("Unresolved work")).toBeNull();
