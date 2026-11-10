@@ -76,7 +76,10 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     }
     // Issue #218 (human ruling 2026-11-10): a pause the person asked for is not a queue item; a stop still settling is.
     if (summary.stopState !== null && summary.stopState !== "paused") add("stop-review", groupId, repoId, summary.stopState, groupDestination("problem"), `stop:${summary.stopMode}`);
-    if (body.ledger.usageUnknown && body.status !== "clarifying") add("recovery-review", groupId, repoId, "usage-unknown", groupDestination("problem"), JSON.stringify(["group", groupId, null, "usage-unknown"]), null, null, true);
+    // Issue #216: the ledger flag and the active run that set it are one problem; the run's row (below) owns it, and the
+    // group's row is said only when no active run explains the flag.
+    const runOwnsUnknown = runs.some(run => run.active && (run.unknown.work || run.unknown.handoff));
+    if (body.ledger.usageUnknown && body.status !== "clarifying" && !runOwnsUnknown) add("recovery-review", groupId, repoId, "usage-unknown", groupDestination("problem"), JSON.stringify(["group", groupId, null, "usage-unknown"]), null, null, true);
     const capBlock = readSpendCapBlock(store, groupId);
     if (capBlock !== null) add(body.status === "clarifying" ? "requirement-attention" : "task-attention", groupId, repoId, "spend-cap-blocked", body.status === "clarifying" ? requirementDestination("problem") : groupDestination("problem"), "spend-cap-blocked", null, null, true);
     for (const work of workItems) {

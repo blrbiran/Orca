@@ -94,6 +94,22 @@ describe("overview human work rules", () => {
     expect((await overview(panel)).steps.some(s => s.kind === "start-review")).toBe(false);
   });
 
+  // Issue #216: one unknown usage was two queue rows -- the group's ledger flag and the active run that set it -- and both
+  // read "Review recovery · <group>". The run's row owns it; the group's row stays only when no active run explains it.
+  it("says an unknown usage once, on the run that has it, and on the group only when no active run does", async () => {
+    const {panel} = await panelFixture(); await confirm(panel);
+    await command(panel, `/api/control/groups/${GROUP}/start`, {commandId:"start-216",expectedRevision:await revision(panel),payload:{}}); await panel.drainWakes();
+    const run = panel.store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1").get(GROUP)!;
+    const original = JSON.parse(String(run.body));
+    panel.store.db.prepare("UPDATE groups SET body=json_set(body,'$.ledger.usageUnknown',json('true')) WHERE id=?").run(GROUP);
+    panel.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({...original,unknown:{work:true,handoff:false}}),run.id);
+    let unknown = (await overview(panel)).steps.filter(s => s.reason === "usage-unknown");
+    expect(unknown).toEqual([expect.objectContaining({kind:"recovery-review",runId:run.id,taskId:"a"})]);
+    panel.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({...original,unknown:{work:false,handoff:false}}),run.id);
+    unknown = (await overview(panel)).steps.filter(s => s.reason === "usage-unknown");
+    expect(unknown).toEqual([expect.objectContaining({kind:"recovery-review",runId:null,groupId:GROUP})]);
+  });
+
   it("preserves active run failure and unknown-usage identity and observes a handoff still settling", async () => {
     const {panel} = await panelFixture(); await confirm(panel);
     await command(panel, `/api/control/groups/${GROUP}/start`, {commandId:"start",expectedRevision:await revision(panel),payload:{}}); await panel.drainWakes();

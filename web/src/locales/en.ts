@@ -243,6 +243,8 @@ export const en = {
     requirementProgress: "Requirement round {{round}} · {{questions}} open questions", taskCountsUnavailable: "Task counts unavailable", goalReview: "goal review is in progress", tasksBlocked: "tasks are blocked", deliverySeparate: "Git delivery is separate",
     source: { progress: "Progress", decisions: "Decisions", recovery: "Recovery" }, status: { loading: "loading", available: "available", stale: "stale", unavailable: "unavailable" },
     step: { "requirement-answer": "Answer requirement", "requirement-review": "Review split", "requirement-attention": "Review requirement problem", "budget-review": "Review budget", "start-review": "Review start", "task-attention": "Review task problem", "stop-review": "Review stopped work", "recovery-review": "Review recovery", "integration-review": "Review integration", "decision-review": "Review decision", "command-unknown": "Check command outcome" },
+    usageSettlement: "Settle usage",
+    forTask: "task {{taskId}}",
   },
   // Kanban spec 2026-10-20 §4: the board tab and the group graph.
   board: {

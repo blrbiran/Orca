@@ -45,3 +45,13 @@ it("never treats a decision's question or a command id as a code", () => {
     expect(item.querySelector("small code")).toBeNull();
   }
 });
+
+// Issue #216: an unknown usage is settled, not recovered, so its row is not called "Review recovery" (Tasks' recovery list,
+// blockers only, then said "no recovery blockers" beside it); and a row on one task says which task.
+it("names an unknown-usage row 'Settle usage' and says the task; other rows keep their step name", () => {
+  mount([row("u", "recovery-review", "usage-unknown"), row("b", "recovery-review", "ledger-corrupt")]);
+  expect(screen.getByRole("button", { name: "Settle usage · g" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Review recovery · g" })).toBeTruthy();
+  const settle = screen.getByRole("button", { name: "Settle usage · g" }).closest("li")!;
+  expect(settle.textContent).toContain("task a");
+});

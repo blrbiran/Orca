@@ -106,6 +106,8 @@ export const zh: Translation<typeof en> = {
     requirementProgress: "需求第 {{round}} 轮 · {{questions}} 个待答问题", taskCountsUnavailable: "任务计数不可用", goalReview: "正在验收目标", tasksBlocked: "有任务被阻塞", deliverySeparate: "Git 交付状态单独查看",
     source: { progress: "进展", decisions: "决策", recovery: "恢复" }, status: { loading: "加载中", available: "可用", stale: "尚未刷新", unavailable: "不可用" },
     step: { "requirement-answer": "回答需求问题", "requirement-review": "审阅拆分", "requirement-attention": "查看需求问题", "budget-review": "审阅预算", "start-review": "查看启动条件", "task-attention": "查看任务问题", "stop-review": "查看已停止工作", "recovery-review": "查看恢复", "integration-review": "查看集成", "decision-review": "审阅决策", "command-unknown": "核对命令结果" },
+    usageSettlement: "结算用量",
+    forTask: "任务 {{taskId}}",
   },
   board: {
     title: "看板",

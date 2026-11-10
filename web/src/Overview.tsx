@@ -50,8 +50,9 @@ export function Overview(props: { model: OverviewModel; onOpen: (target: Overvie
     {/* Tester #25: the queue is already in priority order (overviewModel.ts); its first row is marked as the next step. */}
     <ul className={rowList}>{queue.rows.map((row, index) => <li key={row.key} className={rowItem} data-next={index === 0 ? "true" : undefined}>
      {index === 0 && <span className="overview-next mr-1.5 inline-block rounded-control px-1.5 text-xs font-semibold" data-tone="warn">{t("overview.nextMark")}</span>}
-     <button type="button" className={rowButton} onClick={() => props.onOpen(row.target)}>{t(`overview.step.${row.kind}`)} · {row.target.kind === "group" || row.target.kind === "requirement" ? row.target.groupId : row.target.kind === "decision" ? row.target.id : t("overview.global")}</button>
-     <p className={rowText}>{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · <QueueReason row={row} /></p>
+     {/* Issue #216: an unknown usage is settled, not recovered -- Tasks' recovery list (blockers only) rightly does not show it. */}
+     <button type="button" className={rowButton} onClick={() => props.onOpen(row.target)}>{row.kind === "recovery-review" && row.reason === "usage-unknown" ? t("overview.usageSettlement") : t(`overview.step.${row.kind}`)} · {row.target.kind === "group" || row.target.kind === "requirement" ? row.target.groupId : row.target.kind === "decision" ? row.target.id : t("overview.global")}</button>
+     <p className={rowText}>{row.target.kind === "group" && row.target.taskId != null ? `${t("overview.forTask", { taskId: row.target.taskId })} · ` : ""}{row.owner || t("overview.global")}{row.ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""} · <QueueReason row={row} /></p>
      {row.ownerRequired && <p className={rowText}>{t("overview.ownerRequired")}</p>}
     </li>)}</ul>
     {queue.hiddenDecisions > 0 && <p><a href="#decisions" onClick={() => props.onViewDecisions?.()}>{t("overview.viewAllDecisions", { n: queue.decisions })}</a></p>}
