@@ -25,7 +25,7 @@ import type { FakePanel } from "./fixtures/twoProjects.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
-afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 type Blocker = RecoveryViewV1["blockers"][number];
 const RETRY = "/api/control/recovery/retry";
@@ -58,6 +58,8 @@ const retryPosts = (): FakePanel["posts"] => panel.posts.filter((post) => post.u
 describe("App: a recovery Retry carries its own group's revision", () => {
   it("1: with a1 (rev 3) open, retrying b1's group blocker sends b1 at revision 9", async () => {
     seed(groupSummary("b1", BETA, { commandRevision: 9, recoveryBlockerCount: 1 }), [{ scope: "group", groupId: "b1", runId: null, code: "cleanup-pending", evidenceIds: [] }]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the Recovery region are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await openA1();
     const row = await blockerRow("b1");
@@ -76,6 +78,8 @@ describe("App: a recovery Retry carries its own group's revision", () => {
     const b1 = { ...requirement.summary, groupId: "b1", repoId: BETA, commandRevision: 9 };
     panel.requirementViews["b1"] = { ...requirement, epoch: "epoch-a", summary: b1, requirement: { ...requirement.requirement, repoId: BETA } };
     seed(b1, [{ scope: "group", groupId: "b1", runId: null, code: "cleanup-pending", evidenceIds: [] }]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the Recovery region are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await openA1();
     const retry = within(await blockerRow("b1")).getByRole("button", { name: "Retry recovery" }) as HTMLButtonElement;
@@ -90,6 +94,8 @@ describe("App: a recovery Retry carries its own group's revision", () => {
 
   it("3: a run-scoped b1 blocker sends the run payload at b1's revision 9", async () => {
     seed(groupSummary("b1", BETA, { commandRevision: 9, recoveryBlockerCount: 1 }), [{ scope: "run", groupId: "b1", runId: "run-b", code: "attempt-outcome-unknown", evidenceIds: [] }]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the Recovery region are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await openA1();
     const retry = within(await blockerRow("b1")).getByRole("button", { name: "Retry recovery" }) as HTMLButtonElement;
@@ -101,6 +107,8 @@ describe("App: a recovery Retry carries its own group's revision", () => {
 
   it("4: a blocker of zz, which has no summary, stays visible with a disabled Retry; Re-read reads the summary and sends nothing", async () => {
     seed(groupSummary("b1", BETA, { commandRevision: 9 }), [{ scope: "group", groupId: "zz", runId: null, code: "cleanup-pending", evidenceIds: [] }]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the Recovery region are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await openA1();
     const row = await blockerRow("zz");
@@ -136,6 +144,8 @@ describe("App: a recovery Retry carries its own group's revision", () => {
 
   it("6: once a poll no longer lists the blocker, no Retry for it remains", async () => {
     seed(groupSummary("b1", BETA, { commandRevision: 9, recoveryBlockerCount: 1 }), [{ scope: "group", groupId: "b1", runId: null, code: "cleanup-pending", evidenceIds: [] }]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the Recovery region are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await openA1();
     await blockerRow("b1");
@@ -149,6 +159,8 @@ describe("App: a recovery Retry carries its own group's revision", () => {
 describe("recovery blockers across an epoch change, and a Retry with no App sender", () => {
   it("7: a recovery read of a new epoch before its summary keeps the blocker listed but not retryable, until the complete summary lands", async () => {
     seed(groupSummary("b1", BETA, { commandRevision: 9, recoveryBlockerCount: 1 }), [{ scope: "group", groupId: "b1", runId: null, code: "cleanup-pending", evidenceIds: [] }]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the Recovery region are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     const retryOf = async (): Promise<HTMLButtonElement> => within(await blockerRow("b1")).getByRole("button", { name: "Retry recovery" }) as HTMLButtonElement;
     await waitFor(async () => expect((await retryOf()).disabled).toBe(false));

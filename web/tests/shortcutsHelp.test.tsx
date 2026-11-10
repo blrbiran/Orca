@@ -6,21 +6,45 @@
  * is the panel's Radix dialog (ui/Dialog.tsx), not a native <dialog>; the promises are the same. The list is a constant next to the functions
  * that decide the keys, and names exactly the letters they act on.
  */
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { SHORTCUTS, isRetryKey, reviewKeyAction } from "../src/reviewKeys.js";
 import { Shell } from "../src/Shell.js";
+import { SECTIONS, SETTINGS_CATEGORIES } from "../src/sections.js";
 import { installFakePanel } from "./fixtures/twoProjects.js";
 import { ALPHA, groupSummary, planGroupView } from "./fixtures/twoProjects.js";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); window.localStorage.clear(); });
+afterEach(() => {
+  cleanup(); vi.restoreAllMocks(); window.localStorage.clear();
+  // Ruling R1 (#219): cleared without a hashchange, so no event for "#" (Overview) lands inside the next criterion.
+  window.history.replaceState(null, "", window.location.pathname);
+});
+
+/**
+ * Ruling R1 (#219): only the current section (and Settings category) is mounted, so a criterion that reads the whole page
+ * visits every route in turn: each section, and Settings once per category. Each is reached the way a hash link is.
+ */
+const EVERY_ROUTE: readonly string[] = [
+  ...SECTIONS.filter((section) => section !== "settings").map((section) => `#${section}`),
+  ...SETTINGS_CATEGORIES.map((category) => `#settings/${category}`),
+];
+async function visit(hash: string): Promise<void> {
+  window.history.pushState(null, "", hash);
+  await act(async () => { window.dispatchEvent(new HashChangeEvent("hashchange", { newURL: window.location.href })); });
+  const section = hash.slice(1).split("/")[0]!;
+  await waitFor(() => expect(document.querySelector(`[data-section="${section}"]`)?.getAttribute("data-active")).toBe("true"));
+  // Let the pane's own reads land before it is read.
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+}
 
 /** The App with one group open in Tasks; resolves to the open group's region. */
 async function groupOpen(): Promise<HTMLElement> {
   const panel = installFakePanel();
   const group = planGroupView(groupSummary("g1", ALPHA));
   panel.summary = { ...panel.summary, groups: [group.summary] }; panel.groupViews.g1 = group;
+  // Ruling R1 (#219): the group list is Task control's, mounted only there.
+  window.location.hash = "#tasks";
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /^g1 · / }));
   return screen.findByRole("region", { name: /^Control group g1/ });
@@ -30,18 +54,28 @@ const shell = () => render(<Shell active="overview" badges={{ unreviewed: 0, cha
 
 describe("no ? binding; a button opens the list (C36)", () => {
   it("a ? keydown on the body opens nothing and nothing prevents its default", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the whole page was mounted at once; now each section (and each
+    // Settings category) is, so the ? is pressed on every one of them in turn, the page ready as before (the button shown).
     installFakePanel();
+    window.location.hash = "#decisions";
     render(<App />);
     await screen.findByRole("button", { name: "Keyboard shortcuts" });
-    const event = new KeyboardEvent("keydown", { key: "?", bubbles: true, cancelable: true });
-    document.body.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
-    // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): no dialog of any kind opened (was: showModal never called, no dialog[open]).
-    expect(screen.queryByRole("dialog")).toBeNull();
+    const pressed: string[] = [];
+    for (const hash of EVERY_ROUTE) {
+      await visit(hash);
+      const event = new KeyboardEvent("keydown", { key: "?", bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event);
+      expect(event.defaultPrevented, hash).toBe(false);
+      // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; Radix first): no dialog of any kind opened (was: showModal never called, no dialog[open]).
+      expect(screen.queryByRole("dialog"), hash).toBeNull();
+      pressed.push(hash);
+    }
+    expect(pressed).toEqual(EVERY_ROUTE);
   });
 
   // Rewritten for tester issue #56: the button is on the group view (and Decisions), not in the sidebar footer. Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
   it("the button opens a modal dialog named by its heading; closing it returns focus to the button", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- groupOpen opens Task control by its route first.
     await groupOpen();
     const button = inTasks();
     button.focus();
@@ -85,10 +119,18 @@ describe("where the shortcuts button is (#56)", () => {
     expect(screen.queryByRole("button", { name: "Keyboard shortcuts" })).toBeNull();
     cleanup();
     installFakePanel();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the buttons were read across every pane at once; now every
+    // section (and each Settings category) is visited in turn and the sections holding a button are collected over all of them.
+    window.location.hash = "#decisions";
     render(<App />);
-    const buttons = await screen.findAllByRole("button", { name: "Keyboard shortcuts" });
+    await screen.findAllByRole("button", { name: "Keyboard shortcuts" });
+    const holders: string[] = [];
+    for (const hash of EVERY_ROUTE) {
+      await visit(hash);
+      for (const button of screen.queryAllByRole("button", { name: "Keyboard shortcuts" })) holders.push(button.closest("[data-section]")?.getAttribute("data-section") ?? "outside any section");
+    }
     // mutation: drop it from DecisionsView -> none in the Decisions pane, red; with no group open, Tasks has none
-    expect(buttons.map((button) => button.closest("[data-section]")?.getAttribute("data-section"))).toEqual(["decisions"]);
+    expect(holders).toEqual(["decisions"]);
     cleanup();
     const region = await groupOpen();
     // mutation: drop it from ControlPanel -> none in Tasks, red

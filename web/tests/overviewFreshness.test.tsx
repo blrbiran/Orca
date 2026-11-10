@@ -42,10 +42,16 @@ it("a failed todo refresh retains explicitly stale rows and an unavailable badge
  expect(page.queryByText("Nothing needs your attention.")).toBeNull();
 });
 it("an initial todo failure exposes unavailable, without inventing a zero count", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219)
   // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker drops late todo replies
  const source = setup(); source.fail(); render(<App />); await flush();
  expect(screen.getByTestId("nav-count-decisions").textContent).toBe("—");
  expect(within(screen.getByRole("region", { name: "Overview" })).getByText(/Decisions.*unavailable/)).toBeTruthy();
+ expect(screen.queryByText(/Nothing to review/)).toBeNull();
+ // R1: the Decisions list is mounted only in its own section, so the same two checks are made there after opening it: no
+ // invented empty list, and its count is unavailable, not zero.
+ await act(async () => { window.location.hash = "#decisions"; window.dispatchEvent(new Event("hashchange")); }); await flush();
+ expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true");
  expect(screen.queryByText(/Nothing to review/)).toBeNull();
  expect(screen.getByTestId("decision-count").textContent).toBe("—");
 });

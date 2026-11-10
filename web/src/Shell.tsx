@@ -1,7 +1,8 @@
 /**
- * Panel UI redesign spec §5.1 (ruling U2). Pure: App hands it everything. Every pane stays
- * mounted -- App-level criteria find Task control's buttons by role from the default
- * section, and `getByRole` skips anything `hidden` -- so only styles.css hides a pane.
+ * Panel UI redesign spec §5.1, as corrected by ruling R1 (#219, 2026-11-10; it replaces ruling U2): pure, App hands it
+ * everything. Only the current section's pane renders its content; every other pane is an empty marker
+ * (`data-section`, `data-active="false"`), so the page never holds a second, hidden copy of another page's labels and text.
+ * Unsent input that must outlive leaving a section lives in App's draft stores, not in the pane.
  * Progress spec §4: browser preference controls live in GlobalSettings.
  */
 import { useState } from "react";
@@ -117,9 +118,10 @@ export function Shell(props: {
 }
 
 export function SectionPane(props: { section: Section; active: Section; children: ReactNode }): JSX.Element {
+  const active = props.section === props.active;
   return (
-    <div className="section-pane" data-section={props.section} data-active={props.section === props.active ? "true" : "false"}>
-      {props.children}
+    <div className="section-pane" data-section={props.section} data-active={active ? "true" : "false"}>
+      {active && props.children}
     </div>
   );
 }

@@ -66,7 +66,7 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); document.cookie = "orca_csrf=; max-age=0"; });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; document.cookie = "orca_csrf=; max-age=0"; });
 
 /** The model names the codex default's datalist offers now; null when no list is on screen. */
 const listed = (): string[] | null => {
@@ -78,7 +78,9 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
 
 describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", () => {
   it("keeps the newest read's list when an older read answers after it", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the model lists are on the Agents settings; the page opens there.
     document.cookie = "orca_csrf=token-1";
+    window.location.hash = "#settings/agents";
     render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
     await waitFor(() => expect(modelReads).toHaveLength(1));
     // An owner's Refresh forces a read although the first is still in flight. (Every codex fieldset on the page -- the
@@ -95,6 +97,8 @@ describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", ()
   });
 
   it("starts one background read per installation for two returns in a row", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the model lists are on the Agents settings; the page opens there.
+    window.location.hash = "#settings/agents";
     render(<App />);
     await waitFor(() => expect(modelReads).toHaveLength(1));
     modelReads[0]!.answer(modelsView("gpt-6-sol"));
@@ -108,6 +112,8 @@ describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", ()
   });
 
   it("keeps a read list on screen while a background re-read is pending", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the model lists are on the Agents settings; the page opens there.
+    window.location.hash = "#settings/agents";
     render(<App />);
     await waitFor(() => expect(modelReads).toHaveLength(1));
     modelReads[0]!.answer(modelsView("gpt-6-sol"));
@@ -125,9 +131,11 @@ describe("App's model-list reads (spec 2026-10-15 §5, Task 14 fix round 1)", ()
   // so every background re-read was skipped until an owner's Refresh. Each read is bounded; past the bound it fails,
   // the list shows as unavailable and the next background read goes out.
   it("releases a read that never answers at its bound, so the next background read goes out", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the model lists are on the Agents settings; the page opens there.
     const bounds: number[] = [];
     const fired: AbortController[] = [];
     vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => { bounds.push(ms); const c = new AbortController(); fired.push(c); return c.signal; });
+    window.location.hash = "#settings/agents";
     render(<App />);
     await waitFor(() => expect(modelReads).toHaveLength(1));
     expect(bounds).toEqual([MODEL_READ_TIMEOUT_MS]);

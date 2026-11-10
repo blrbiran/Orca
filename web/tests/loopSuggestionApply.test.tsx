@@ -69,7 +69,7 @@ const cEdit = {
   ] },
 };
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 describe("the budget editor applies a loop task's work suggestion through set-task-loop (W5)", () => {
   it("sends only the clicked dimension from a field button, and offers none where the suggestion already matches", () => {
@@ -154,10 +154,12 @@ const settled = async (postCount: number): Promise<void> => {
 
 describe("Apply all over a loop task and a plain task (W5, human ruling H16)", () => {
   it("sends the proposal-edit, then set-task-loop at the revision the first success returned, with no manual step", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = {
       [EDIT_ROUTE]: [success("proposal-edit", 11, { kind: "proposal-edited", proposalVersion: 3 })],
       [LOOP_ROUTE]: [success("set-task-loop", 12, { kind: "task-loop-set", taskId: "a", loopVersion: 3, proposalVersion: 4 })],
     };
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply all suggestions" }));
@@ -169,10 +171,12 @@ describe("Apply all over a loop task and a plain task (W5, human ruling H16)", (
   });
 
   it("stops at the first refusal and shows it; the set-task-loop is never sent", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = {
       [EDIT_ROUTE]: [{ status: 409, body: { error: { code: "proposal-version-conflict", message: "proposal-version-conflict", commandRevision: 3, evidenceIds: [], retryable: false } } }],
       [LOOP_ROUTE]: [success("set-task-loop", 12, { kind: "task-loop-set", taskId: "a", loopVersion: 3, proposalVersion: 4 })],
     };
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Apply all suggestions" }));

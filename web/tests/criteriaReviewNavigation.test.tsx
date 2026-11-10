@@ -22,6 +22,7 @@ function serveOverview(groups: GroupSummaryV1[]): void {
 }
 
 it("opens an archived criteria-review judge from its parent, read-only (#179)", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
   const parent = groupSummary("g1", ALPHA, {
     criteriaReviews: [{ taskId: "t-doc", debugGroupId: "judge-7", state: "justified", reason: null }],
   });
@@ -32,6 +33,7 @@ it("opens an archived criteria-review judge from its parent, read-only (#179)", 
   panel.summary = { ...panel.summary, groups: [parent, judge] };
   panel.groupViews = { g1: planGroupView(parent), "judge-7": planGroupView(judge) };
   serveOverview([parent]);
+  window.location.hash = "#tasks";
   render(<App />);
   const nav = await screen.findByRole("navigation", { name: "Control groups" });
   fireEvent.click(await within(nav).findByRole("button", { name: /^g1 · / }));

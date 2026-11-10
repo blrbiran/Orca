@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** Task4: region defaults are presentation; eligibility remains with existing controls. */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState, type JSX } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { AccountContext } from "../src/AuthGate.js";
@@ -23,12 +24,18 @@ it("explicit problem owner overrides default and a poll preserves manual region 
  app.rerender(<ControlGroupView view={{...value,summary:{...value.summary,state:"done"},changeSeq:5}} focus={focus} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
  expect(selected()).toBe("Technical details"); expect(document.activeElement).toBe(tab);
 });
+/** Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the label being typed lives in the caller's draft store (App's). */
+function Held(props: { value: GroupViewV1 }): JSX.Element {
+ const [drafts, setDrafts] = useState<Record<string, string>>({});
+ return <ControlGroupView view={props.value} config={config} uncertain={[]} drafts={drafts} onDraft={(key, text) => setDrafts((all) => ({ ...all, [key]: text }))} onCommand={vi.fn()} />;
+}
 it("task form input stays mounted across regions and polls", () => {
- const value=view([workItem({taskId:"a"})]); const app=mount(value);
+ // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- mounted with a draft store that keeps what is typed, as App's does.
+ const value=view([workItem({taskId:"a"})]); const app=render(<Held value={value} />);
  fireEvent.click(screen.getAllByRole("button",{name:"a"})[0]!);
  const input=screen.getByRole("combobox",{name:"Add label"}) as HTMLInputElement;
  fireEvent.change(input,{target:{value:"keep my unfinished text"}}); select("Preparation"); select("Progress");
- app.rerender(<ControlGroupView view={{...value,changeSeq:5}} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+ app.rerender(<Held value={{...value,changeSeq:5}} />);
  expect((screen.getByRole("combobox",{name:"Add label"}) as HTMLInputElement).value).toBe("keep my unfinished text");
 });
 it("active and failed task facts remain visible together without inferring success", () => {

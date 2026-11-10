@@ -54,7 +54,7 @@ const view = (stale = false, loopVersion = 2): GroupViewV1 => ({
   ],
   estimates: [estimate(stale)], runs: [], checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
 });
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 const summary: ControlSummaryV1 = { schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 4, resetRequired: false, dispatchBlocked: false, groups: [view().summary] };
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
@@ -94,7 +94,9 @@ beforeEach(() => {
 
 describe("applying a loop suggestion keeps the plan card's open draft (W7)", () => {
   it("keeps what the person typed and says the plan changed after the draft began", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = { [LOOP_ROUTE]: [success("set-task-loop", 12, { kind: "task-loop-set", taskId: "a", loopVersion: 3, proposalVersion: 3 })] };
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
     fireEvent.click(await screen.findByRole("tab", { name: "Progress" }));

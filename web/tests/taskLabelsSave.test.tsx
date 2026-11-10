@@ -66,7 +66,7 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 const openTaskA = async (): Promise<void> => {
   fireEvent.click(await screen.findByRole("button", { name: /^g · running/ }));
@@ -84,7 +84,9 @@ const success = { status: 200, body: { schema: "orca-command-success-v1", comman
 
 describe("a label change goes straight to the server (tester #114)", () => {
   it("shows a refusal by its code and no chip the server did not accept, then shows the chip once the server holds it", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = [{ status: 422, body: { error: { code: "labels-invalid", message: "labels-invalid:count:17", commandRevision: 6, evidenceIds: [], retryable: false } } }, success];
+    window.location.hash = "#tasks";
     render(<App />);
     await openTaskA();
     add("feature");
@@ -101,7 +103,9 @@ describe("a label change goes straight to the server (tester #114)", () => {
   }, 15_000);
 
   it("sends the version on screen, so the view a poll just read is the one a change is based on", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = [conflict];
+    window.location.hash = "#tasks";
     render(<App />);
     await openTaskA();
     groupView = groupViewAt(6, ["security"], 1); summary = summaryAt(6);
@@ -118,7 +122,9 @@ describe("a label change goes straight to the server (tester #114)", () => {
   // Session 4ed8eb65's residual: the field was emptied before the answer, so a refused label was lost and had to be retyped.
   // mutation: empty the field before the send -> it is empty after the refusal -> red
   it("keeps what was typed when the server refuses it, and empties the field once it is accepted", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = [{ status: 422, body: { error: { code: "labels-invalid", message: "labels-invalid:count:17", commandRevision: 6, evidenceIds: [], retryable: false } } }, success];
+    window.location.hash = "#tasks";
     render(<App />);
     await openTaskA();
     add("feature");
@@ -135,6 +141,7 @@ describe("a label change goes straight to the server (tester #114)", () => {
   // Session 4ed8eb65's residual: a change sent before the previous one's answer carried the same base version and was refused.
   // mutation: drop the in-flight guard -> a second POST on the old version -> red
   it("sends no second change while the first is unanswered, and takes changes again after its answer", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     groupView = groupViewAt(4, ["doc", "ui"], 0);
     let answer!: () => void;
     const held = new Promise<void>((resolve) => { answer = resolve; });
@@ -145,6 +152,7 @@ describe("a label change goes straight to the server (tester #114)", () => {
       return response;
     }) as typeof fetch;
     answers = [success, success];
+    window.location.hash = "#tasks";
     render(<App />);
     await openTaskA();
     fireEvent.click(task().getByRole("button", { name: "Remove doc" }));
@@ -164,6 +172,7 @@ describe("a label change goes straight to the server (tester #114)", () => {
   // unanswered was ignored with nothing on screen to say so. The editor now says it is saving and its buttons cannot be pressed.
   // mutation: never set the saving state -> no status, buttons enabled -> red; never clear it -> still saving after the answer -> red
   it("says it is saving and holds its buttons while a change is unanswered, and lets go once the answer is in", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     groupView = groupViewAt(4, ["doc", "ui"], 0);
     let answer!: () => void;
     const held = new Promise<void>((resolve) => { answer = resolve; });
@@ -174,6 +183,7 @@ describe("a label change goes straight to the server (tester #114)", () => {
       return response;
     }) as typeof fetch;
     answers = [success];
+    window.location.hash = "#tasks";
     render(<App />);
     await openTaskA();
     expect((task().getByRole("button", { name: "Remove ui" }) as HTMLButtonElement).disabled).toBe(false);

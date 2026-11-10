@@ -10,15 +10,27 @@ export type AnswerChoice = { kind: "recommended" } | { kind: "text"; text: strin
 /** Issue #220: `model` is empty for the agent's own default; absent in a draft kept from before the field existed. */
 export interface NewRequirementDraft { idea: string; tokens: number|null; language: PanelLanguage; agent: string; model?: string }
 export interface AnswerDraft { choice: Record<string, AnswerChoice>; decisions: Record<string, boolean> }
+/** Ruling R1 (#219): an open revision of an answered round (spec §10.3); null, or no entry, is the form closed. */
+export interface ReviseDraft { choice: Record<string, AnswerChoice>; decisions: Record<string, boolean>; reason: string; exclude: number[] }
+/**
+ * Ruling R1 (#219): the new-requirement form's own choices -- the All-projects target (spec §6), the repository picked
+ * when no project is chosen, and text typed in All before a target (spec §11 R2, ruling M2). One entry, NEW_REQUIREMENT_FORM.
+ * `localRepoId` null: not picked yet, the first repository.
+ */
+export interface NewRequirementForm { target: string; localRepoId: string | null; unowned: NewRequirementDraft | null }
+export const NEW_REQUIREMENT_FORM = "";
+export const EMPTY_NEW_REQUIREMENT_FORM: NewRequirementForm = { target: "", localRepoId: null, unowned: null };
 export interface DetailDrafts {
   newRequirement: Record<string, NewRequirementDraft>; // key: repoId
   answer: Record<string, AnswerDraft>; // key: answerKey
   feedback: Record<string, string>; // key: feedbackKey
   limit: Record<string, number|null>; // key: limitKey
   correction: Record<string, CorrectionForm>; // key: correctionKey
+  revise: Record<string, ReviseDraft | null>; // key: answerKey
+  newRequirementForm: Record<string, NewRequirementForm>; // key: NEW_REQUIREMENT_FORM
 }
 export type DraftSlot = keyof DetailDrafts;
-export const EMPTY_DRAFTS: DetailDrafts = { newRequirement: {}, answer: {}, feedback: {}, limit: {}, correction: {} };
+export const EMPTY_DRAFTS: DetailDrafts = { newRequirement: {}, answer: {}, feedback: {}, limit: {}, correction: {}, revise: {}, newRequirementForm: {} };
 
 /** How a component reads and writes the store; App's is the real owner, a standalone panel may hold its own. */
 export interface EditableDrafts {

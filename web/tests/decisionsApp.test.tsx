@@ -47,7 +47,7 @@ beforeEach(() => {
   panel.groupViews = { g: { ...groupView, summary, plan: { ...groupView.plan, repoId: ALPHA } } };
   panel.decisions[rowKey({ projectKey: "alpha", id: DECISION_ID })] = { id: DECISION_ID, question: "Which port?", chose: "8080", because: "b", alternatives: [] } as never;
 });
-afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.location.hash = ""; window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
 
 async function openTask(): Promise<HTMLElement> {
   const nav = await screen.findByRole("navigation", { name: "Control groups" });
@@ -59,6 +59,7 @@ async function openTask(): Promise<HTMLElement> {
 
 describe("a group's decisions in the page (control run decisions Task 11, fix round 1)", () => {
   it("drops 需要人确认 once an approve moves the revision, and 纠正 opens the decision in Decisions", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so open Task control first.
     let current: "pending" | "approved" = "pending";
     decisions = () => json(decisionsRead(current));
     panel.onPost = async (url) => {
@@ -70,6 +71,7 @@ describe("a group's decisions in the page (control run decisions Task 11, fix ro
       panel.summary = { ...panel.summary, groups: [moved] };
       return json({ schema: "orca-command-success-v1", commandRevision: 7 });
     };
+    window.location.hash = "#tasks";
     render(<App />);
     const detail = await openTask();
     await within(detail).findByTestId("group-needs-human");
@@ -89,7 +91,9 @@ describe("a group's decisions in the page (control run decisions Task 11, fix ro
   });
 
   it("says a failed decisions read in place of the decisions", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so open Task control first.
     decisions = () => json({ error: { code: "panel-unavailable", message: "down" } }, 503);
+    window.location.hash = "#tasks";
     render(<App />);
     const detail = await openTask();
     // mutation: drop the failed read's entry (the earlier behaviour) -> no line, red
@@ -98,8 +102,10 @@ describe("a group's decisions in the page (control run decisions Task 11, fix ro
   });
 
   it("says a failed decisions read under the group heading with no task open", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so open Task control first.
     // Final review T11 (Rule 12): the failure is visible without opening a task.
     decisions = () => json({ error: { code: "panel-unavailable", message: "down" } }, 503);
+    window.location.hash = "#tasks";
     render(<App />);
     const nav = await screen.findByRole("navigation", { name: "Control groups" });
     fireEvent.click(await within(nav).findByRole("button", { name: /^g · / }));

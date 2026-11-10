@@ -137,6 +137,8 @@ describe("the decision review loop", () => {
   });
 
   it("records an Agree with 'a', moves with 'j', and ignores both outside Decisions", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the open decision is Decisions content, unmounted on Metrics,
+    // so whether 'k' moved it is read after coming back to Decisions: still B, and no review was sent.
     await openA();
     fireEvent.keyDown(document.body, { key: "j" });
     await waitFor(() => expect(screen.getByTestId("decision-question").textContent).toBe(QUESTION_B));
@@ -149,7 +151,11 @@ describe("the decision review loop", () => {
     fireEvent.keyDown(document.body, { key: "k" });
     await settle();
     expect(posts("/api/reviews")).toHaveLength(1);
+    window.location.hash = "#decisions"; fireEvent(window, new HashChangeEvent("hashchange"));
+    await waitFor(() => expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true"));
+    await waitFor(() => expect(document.querySelector(".split-detail")).not.toBeNull());
     expect(question()).toBe(QUESTION_B);
+    expect(posts("/api/reviews")).toHaveLength(1);
   });
 
   it("sends one Agree for a double 'a' while the first is still in flight (Review Focus 2)", async () => {

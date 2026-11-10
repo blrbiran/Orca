@@ -65,10 +65,12 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 describe("a voided control cache is re-read once and then settles", () => {
   it("reads the open group once after the cache was voided, not once per arriving body", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · running/ }));
     await waitFor(() => expect(groupReads).toBeGreaterThan(0));
@@ -79,6 +81,8 @@ describe("a voided control cache is re-read once and then settles", () => {
   });
 
   it("stops saying a refetch is required once a complete summary shows the projection whole", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · running/ }));
     await screen.findByText(REFETCH);

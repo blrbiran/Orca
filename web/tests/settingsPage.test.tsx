@@ -2,8 +2,8 @@
 /**
  * Ruling H6(b) (2026-10-27, session 7753e97d; tester issues #39, #41, #59): global and project settings are one Settings
  * page with a category nav, one category shown at a time, each its own hash -- so a person reaches a setting by its
- * category instead of scrolling one long page, and a link can open the exact category. Hiding is by styles.css only
- * (data-active), as for the section panes; jsdom does not apply the sheet, so the criteria read data-active.
+ * category instead of scrolling one long page, and a link can open the exact category. Ruling R1 (#219, 2026-11-10): a
+ * category that is not shown renders no content (it was hidden by styles.css), so the criteria read which one has content.
  */
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,8 +14,9 @@ import { installFakePanel } from "./fixtures/twoProjects.js";
 beforeEach(() => { localStorage.clear(); sessionStorage.clear(); installFakePanel(); });
 afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); window.location.hash = ""; });
 
-const active = (): string[] => [...document.querySelectorAll('.settings-category[data-active="true"]')].map((el) => el.getAttribute("data-category")!);
-const globalShown = (): string | null => screen.getByRole("region", { name: "Global settings" }).getAttribute("data-active");
+// Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): a category is shown when it renders content; the global settings region is absent on the project's.
+const active = (): string[] => [...document.querySelectorAll(".settings-category")].filter((el) => el.childElementCount > 0).map((el) => el.getAttribute("data-category")!);
+const globalShown = (): string => (screen.queryByRole("region", { name: "Global settings" }) === null ? "false" : "true");
 const current = (): string | null => within(screen.getByRole("navigation", { name: "Settings categories" })).getAllByRole("link")
   .find((link) => link.getAttribute("aria-current") === "page")?.textContent ?? null;
 async function go(hash: string): Promise<void> { await act(async () => { window.location.hash = hash; window.dispatchEvent(new Event("hashchange")); }); }

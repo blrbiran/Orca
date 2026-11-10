@@ -1,6 +1,6 @@
 /**
  * Progress spec §4: browser preferences and shared panel-operator defaults, composed from existing controls.
- * Ruling H6(b): one category of them is shown at a time (SettingsPage); the rest stay mounted, hidden by styles.css only.
+ * Ruling H6(b): one category of them is shown at a time (SettingsPage); ruling R1 (#219): the rest are not mounted.
  */
 import { ChecksSettings } from "./ChecksSettings.js";
 import { FlowSettings } from "./FlowSettings.js";
@@ -20,13 +20,14 @@ import type { SettingsCategory } from "./sections.js";
 import { inlinePick, settingsRegion } from "./ui/classes.js";
 import { Select } from "./ui/Select.js";
 
-/** One category's content, under its own page title; only the active one shows. */
+/** One category's content, under its own page title; only the active one renders it (ruling R1, #219). */
 export function SettingsCategoryPane(props: { category: SettingsCategory; active: SettingsCategory; title?: boolean; children: ReactNode }): JSX.Element {
   const { t } = useTranslation();
+  const active = props.category === props.active;
   return (
-    <div className="settings-category" data-category={props.category} data-active={props.category === props.active ? "true" : "false"}>
-      {props.title !== false && <h2>{t(`settings.category.${props.category}` as const)}</h2>}
-      {props.children}
+    <div className="settings-category" data-category={props.category} data-active={active ? "true" : "false"}>
+      {active && props.title !== false && <h2>{t(`settings.category.${props.category}` as const)}</h2>}
+      {active && props.children}
     </div>
   );
 }
@@ -41,7 +42,7 @@ export function GlobalSettings(props: {
 }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <section className={`settings ${settingsRegion}`} aria-label={t("nav.globalSettings")} data-active={props.category === "project" ? "false" : "true"}>
+    <section className={`settings ${settingsRegion}`} aria-label={t("nav.globalSettings")}>
       {props.refusal && <RefusalNotice refusal={props.refusal} testId="global-settings-refusal" />}
       <SettingsCategoryPane category="appearance" active={props.category}>
         <p>{t("settings.browserScope")}</p>

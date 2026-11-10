@@ -154,10 +154,15 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.location.hash = "";
 });
 
-/** Opens the home view and returns the two row buttons, in list order. */
+/**
+ * Opens the Decisions section and returns the two row buttons, in list order. Ruling R1 (plan 2026-11-10-tester-followup-b
+ * T8, #219): only the current section is mounted now, so the list is reached by its route rather than found in a hidden pane.
+ */
 async function openHome(): Promise<HTMLElement[]> {
+  window.location.hash = "#decisions";
   render(<App />);
   await screen.findByText("Unreviewed high-tier decisions");
   return Array.from(document.querySelectorAll<HTMLButtonElement>(".decision-list li button"));
@@ -165,6 +170,7 @@ async function openHome(): Promise<HTMLElement[]> {
 
 describe("App's selection (parked finding N-1, ruling R71)", () => {
   it("takes the previous decision off the screen the moment another row is opened", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route before reading its list.
     const [openA, openB] = await openHome();
     fireEvent.click(openA!);
     gates.get(DECISION_A.id)!.release();
@@ -184,6 +190,7 @@ describe("App's selection (parked finding N-1, ruling R71)", () => {
   });
 
   it("does not show a decision that finished loading after the person moved on", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route before reading its list.
     const [openA, openB] = await openHome();
     // Both fetches are started and neither has answered; A is the slow one.
     fireEvent.click(openA!);
@@ -201,6 +208,7 @@ describe("App's selection (parked finding N-1, ruling R71)", () => {
   });
 
   it("gives the next decision an empty correction form, not the half-typed one from the last", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route before reading its list.
     const [openA, openB] = await openHome();
     fireEvent.click(openA!);
     gates.get(DECISION_A.id)!.release();
@@ -222,6 +230,7 @@ describe("App's selection (parked finding N-1, ruling R71)", () => {
   });
 
   it("posts a correction against the decision that is on the screen", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route before reading its list.
     const [openA, openB] = await openHome();
     fireEvent.click(openA!);
     gates.get(DECISION_A.id)!.release();

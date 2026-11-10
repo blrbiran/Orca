@@ -218,7 +218,13 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   const groupId = view.summary.groupId;
   const current = item.labelsVersion ?? 0;
   const labels = item.labels ?? [];
-  const [word, setWord] = useState("");
+  // Ruling R1 (#219): the label being typed is unsent input, so it lives in Task control's draft store and outlives
+  // leaving the section (the pane unmounts); the answer's clear reads what is typed by then.
+  const wordKey = JSON.stringify(["task-label", groupId, item.taskId]);
+  const word = drafts[wordKey] ?? "";
+  const setWord = (text: string): void => onDraft(wordKey, text);
+  const wordNow = useRef(word);
+  wordNow.current = word;
   const suggestions = useId();
   // One change at a time: a second sent before the first's answer would carry the same base version and be refused.
   // The ref guards synchronously; the state says so on screen (session 43913afc) instead of ignoring a change silently.
@@ -238,7 +244,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
     const text = word.trim();
     if (text === "") return;
     // A refused label stays in the field to fix or send again; what was typed meanwhile is not this label.
-    const clear = (): void => setWord((typed) => (typed.trim() === text ? "" : typed));
+    const clear = (): void => { if (wordNow.current.trim() === text) setWord(""); };
     const label = (WEB_SYSTEM_LABELS as readonly string[]).includes(text) || text.startsWith(CUSTOM_LABEL_PREFIX) ? text : `${CUSTOM_LABEL_PREFIX}${text}`;
     // Sorted by code unit like the server (spec §8 R15), so what is sent is what will be shown back.
     if (labels.includes(label)) clear(); else change([...labels, label].sort(), clear);

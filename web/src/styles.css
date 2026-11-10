@@ -223,10 +223,6 @@ a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px 
 kbd { font-family: var(--mono); font-size: var(--text-xs); padding: 0 5px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--radius-xs); background: var(--bg-elevated); color: var(--text-strong); }
 hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 
-/* !important since the Tailwind migration (index.css layers this sheet under the utilities): no utility on a pane may
-   un-hide it -- an important declaration in an earlier layer beats every later one (handoff §5.2 item 6). */
-.section-pane:not([data-active="true"]) { display: none !important; }
-
 /* Generic surfaces inside panes: styles existing components without editing them */
 .section-pane > section, .section-pane section[aria-label] {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
@@ -355,7 +351,3 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 
 /* Progress spec layout B (Overview.tsx, utilities): a focused Overview region (a deep link's target) shows the accent ring. */
 [data-overview-region]:focus { outline: 2px solid var(--accent); outline-offset: 3px; }
-
-/* Ruling H6(b): one Settings page, one category shown (the rest stay mounted, hidden by the rule below). The Settings page
-   itself is in Tailwind utilities since the tester round of 2026-10-28 (ui/classes.ts, web/TAILWIND-MIGRATION.md). */
-.settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none !important; }

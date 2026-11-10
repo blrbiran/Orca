@@ -71,14 +71,16 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 describe("the loop draft survives a refusal and is cleared by a success (spec §4.2)", () => {
   it("keeps the draft through a refusal, shows the refusal's code, and clears it once the command succeeded", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
     answers = [
       { status: 422, body: { error: { code: "group-reserve-insufficient", message: "group-reserve-insufficient:tokens:1", commandRevision: 6, evidenceIds: [], retryable: false } } },
       { status: 200, body: { schema: "orca-command-success-v1", commandId: "x", actorId: "operator", verb: "set-task-loop", target: { kind: "task", groupId: "g", taskId: "a" }, commandRevision: 7, projectionSeq: 5, effectivePayloadHash: "1".repeat(64), authorityCommandHash: "2".repeat(64), result: { kind: "task-loop-set", taskId: "a", loopVersion: 1, proposalVersion: 2 } } },
     ];
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · ready/ }));
     fireEvent.click(await screen.findByRole("button", { name: "a" }));

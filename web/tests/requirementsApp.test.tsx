@@ -49,6 +49,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // Ruling R1 (#219): cleared without a hashchange, so no event for "#" (Overview) lands inside the next criterion.
+  window.history.replaceState(null, "", window.location.pathname);
   window.sessionStorage.clear();
 });
 
@@ -56,7 +58,8 @@ const requirementList = async () => within(await screen.findByRole("navigation",
 
 describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   it("reads the requirement view after a requirement command, never the group view a clarifying group does not have", async () => {
-    render(<App />);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
+    window.location.hash = "#requirements"; render(<App />);
     fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Accept all recommended" }));
     await waitFor(() => {
@@ -68,7 +71,8 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   });
 
   it("opens the requirement it just created", async () => {
-    render(<App />);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
+    window.location.hash = "#requirements"; render(<App />);
     const form = await screen.findByRole("form", { name: "New requirement" });
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Let people print a page." } });
     fireEvent.click(within(form).getByRole("button", { name: "Start clarifying" }));
@@ -77,8 +81,9 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   });
 
   it("reads nothing for an open that was refused, and keeps its refusal on screen", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
     openAnswer = { status: 422, body: { error: { code: "idea-too-large", message: "idea-too-large", commandRevision: null } } };
-    render(<App />);
+    window.location.hash = "#requirements"; render(<App />);
     const form = await screen.findByRole("form", { name: "New requirement" });
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Let people print a page." } });
     fireEvent.click(within(form).getByRole("button", { name: "Start clarifying" }));
@@ -88,8 +93,9 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   });
 
   it("reads Task control's group view once a split is accepted, for the group is operated from there on", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
     shownView = requirementView("awaiting-review");
-    render(<App />);
+    window.location.hash = "#requirements"; render(<App />);
     fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Accept this split" }));
     await waitFor(() => expect(requests.slice(requests.indexOf("POST /api/control/groups/r/requirement/accept") + 1)).toContain("GET /api/control/groups/r"));
@@ -97,7 +103,8 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   });
 
   it("re-reads the open requirement on the summary poll that lists it", async () => {
-    render(<App />);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
+    window.location.hash = "#requirements"; render(<App />);
     fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
     await waitFor(() => expect(requests).toContain("GET /api/control/groups/r/requirement"));
     const before = requests.filter((request) => request === "GET /api/control/groups/r/requirement").length;
@@ -106,8 +113,9 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
   });
 
   it("shows the refusal of a requirement command whose outcome is unknown in Requirements", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
     openAnswer = { status: 503, body: { error: { code: "panel-draining", message: "panel-draining", commandRevision: null } } };
-    render(<App />);
+    window.location.hash = "#requirements"; render(<App />);
     const form = await screen.findByRole("form", { name: "New requirement" });
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Let people print a page." } });
     fireEvent.click(within(form).getByRole("button", { name: "Start clarifying" }));
@@ -121,6 +129,7 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
 // Feedback archive uses the requirement read/refusal channel, even though its verb is shared with task groups.
 describe("App requirement archive routing", () => {
   it.each([200, 409])("routes archive response %s to the requirement view", async (status) => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
     shownView = requirementView("failed");
     const original = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
@@ -132,7 +141,7 @@ describe("App requirement archive routing", () => {
       }
       return original(input, init);
     };
-    render(<App />); fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
+    window.location.hash = "#requirements"; render(<App />); fireEvent.click(await (await requirementList()).findByRole("button", { name: /^r · clarifying/ }));
     const archive = await screen.findByRole("button", { name: "Archive group" });
     // Open before the archive, so the closing below is observed, not assumed.
     expect((await requirementList()).getByRole("button", { name: /^r · clarifying/ }).getAttribute("aria-current")).toBe("true");
@@ -152,6 +161,7 @@ describe("App requirement archive routing", () => {
 });
 
 it.each(["clarifying", "draft"] as const)("recovers a lost %s requirement archive response through the requirement channel without resending", async (state) => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
   shownView = requirementView("failed"); shownView.summary.state = state;
   window.sessionStorage.setItem(UNCERTAIN_COMMANDS_KEY, JSON.stringify([{ groupId: "r", commandId: "lost-archive" }]));
   const original = globalThis.fetch;
@@ -167,7 +177,7 @@ it.each(["clarifying", "draft"] as const)("recovers a lost %s requirement archiv
     }
     return original(input, init);
   };
-  render(<App />);
+  window.location.hash = "#requirements"; render(<App />);
   expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
   expect(requests).toContain("GET /api/control/groups/r/commands/lost-archive");
   if (state === "clarifying") expect(requests).not.toContain("GET /api/control/groups/r");
@@ -177,6 +187,7 @@ it.each(["clarifying", "draft"] as const)("recovers a lost %s requirement archiv
 });
 
 it.each(["clarifying", "draft"] as const)("unarchives an archived %s requirement through its actual read channel", async (state) => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so the page opens on Requirements.
   shownView = requirementView("answered"); shownView.summary = { ...shownView.summary, state, archived: true };
   const original = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
@@ -189,7 +200,7 @@ it.each(["clarifying", "draft"] as const)("unarchives an archived %s requirement
     if (url === "/api/control/groups/r") { requests.push(`GET ${url}`); return json({ ...taskView([]), epoch: shownView.epoch, changeSeq: shownView.changeSeq, plan: { ...taskView([]).plan, repoId: "repo" }, summary: shownView.summary }); }
     return original(input, init);
   };
-  render(<App />);
+  window.location.hash = "#requirements"; render(<App />);
   // Ruling (human, session 663fb68e, 「Q1 a」): the box became the Archived filter.
   fireEvent.click(await screen.findByRole("button", { name: "Archived (1)" }));
   fireEvent.click(await (await requirementList()).findByRole("button", { name: `r · ${state}` }));

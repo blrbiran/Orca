@@ -94,8 +94,10 @@ const answer = async (index: number, response: Response): Promise<void> => {
 
 describe("decision requests keep their owner (spec §11 R3)", () => {
   it("1: A's late success or refusal never lands in B's detail; the notice names Alpha / d1", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     for (const late of [recorded, exists]) {
       seed();
+      window.location.hash = "#decisions";
       render(<App />);
       await ready();
       await openDecision("alpha");
@@ -126,7 +128,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
   });
 
   it("2: Record another for A sends A's exact payload with again:true, not B's form", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");
@@ -150,7 +154,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
   });
 
   it("3: two requests for alpha/d1 answered in reverse order -- the inline outcome stays the latest request's", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");
@@ -172,7 +178,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
   });
 
   it("4: a scope switch with nothing selected keeps A's pending request, and its result, visible in every section", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");
@@ -203,7 +211,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
   });
 
   it("8: the open owner's older request refused while its newer one is pending shows in the notice", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");
@@ -221,7 +231,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
   });
 
   it("9: a correction refused without retry_field again, or lost in transport, offers no Record another in the notice", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");
@@ -241,7 +253,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
   });
 
   it("5: an Agree refusal never offers Record another, even beside a correction refusal", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await switchTo("beta", "Beta");
@@ -271,7 +285,9 @@ describe("decision requests keep their owner (spec §11 R3)", () => {
 
 describe("a correction's draft and its request (spec §11 R2 carried into R3)", () => {
   it("6: a late success keeps text typed after the submit; an unchanged draft is cleared by its success", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");
@@ -290,7 +306,9 @@ describe("a correction's draft and its request (spec §11 R2 carried into R3)", 
   });
 
   it("7: a refusal or a transport error keeps the submitted draft", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the decision list and detail are in Decisions, which renders only while it is the current section.
     seed();
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await openDecision("alpha");

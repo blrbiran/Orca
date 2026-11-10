@@ -2,6 +2,7 @@
 // In-repo plan path spec 2026-10-21 §2.5 (#65): the import form registers a plan file of the chosen repository (file
 // mode only), so a person no longer restarts the panel with --plan to import a plan that lives in their repository.
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState, type JSX } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlPanel, type RegisterPlan } from "../src/ControlPanel.js";
 import i18n from "../src/i18n.js";
@@ -17,9 +18,15 @@ const config: ControlConfigV1 = {
 };
 const summary: ControlSummaryV1 = { schema: "orca-control-summary-v1", epoch: "epoch-a", changeSeq: 0, resetRequired: false, dispatchBlocked: false, groups: [] };
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: false, blockers: [] };
-const mount = (onRegisterPlan?: RegisterPlan) => render(<ControlPanel config={config} summary={summary} recovery={recovery} groups={{}} selected={null}
-  drafts={{}} uncertain={[]} refusal={null} refetchRequired={false} onSelect={vi.fn()} onCommand={vi.fn()} onDraft={vi.fn()}
-  {...(onRegisterPlan === undefined ? {} : { onRegisterPlan })} />);
+// Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the typed path lives in the draft store App owns, so the panel is mounted with one that keeps it.
+function Held(props: { onRegisterPlan?: RegisterPlan }): JSX.Element {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  return <ControlPanel config={config} summary={summary} recovery={recovery} groups={{}} selected={null}
+    drafts={drafts} uncertain={[]} refusal={null} refetchRequired={false} onSelect={vi.fn()} onCommand={vi.fn()}
+    onDraft={(key, text) => setDrafts((all) => ({ ...all, [key]: text }))}
+    {...(props.onRegisterPlan === undefined ? {} : { onRegisterPlan: props.onRegisterPlan })} />;
+}
+const mount = (onRegisterPlan?: RegisterPlan) => render(<Held {...(onRegisterPlan === undefined ? {} : { onRegisterPlan })} />);
 const openForm = (): HTMLElement => {
   // Ruling: register the tracked file in the on-demand import dialog.
   fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));

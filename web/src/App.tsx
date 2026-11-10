@@ -92,7 +92,7 @@ import {
 } from "./controlApi.js";
 import type { ControlAction } from "./controlApi.js";
 import { AccountContext } from "./AuthGate.js";
-import { ControlPanel } from "./ControlPanel.js";
+import { ControlPanel, IMPORT_TARGET_DRAFT } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, startQueuedEvent, summaryView } from "./controlState.js";
 import type { ControlAnswer } from "./controlApi.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
@@ -108,14 +108,14 @@ import { RefusalNotice } from "./RefusalNotice.js";
 import { DecisionOperations } from "./DecisionOperations.js";
 import { EMPTY_REQUESTS, dismissRequest, inlineRequest, noticeRequests, pendingWithdrawals, retryPayload, settleRequest, startRequest } from "./decisionRequests.js";
 import type { DecisionRequest, DecisionRequests } from "./decisionRequests.js";
-import { EMPTY_DRAFTS, clearIfUnchanged, correctionKey, setDraft } from "./detailDrafts.js";
+import { EMPTY_DRAFTS, NEW_REQUIREMENT_FORM, clearIfUnchanged, correctionKey, setDraft } from "./detailDrafts.js";
 import type { DetailDrafts, DraftSlot } from "./detailDrafts.js";
 import type { Decision } from "./DecisionDetail.js";
 import { Overview } from "./Overview.js";
 import { fetchOverview } from "./overviewApi.js";
 import { deriveOverview, loadingSource, sourceFailure } from "./overviewModel.js";
 import type { OverviewSource } from "./overviewModel.js";
-import { overviewFocusId } from "./overviewNavigation.js";
+import { focusSection, overviewFocusId } from "./overviewNavigation.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
 import { ErrorPage } from "./ErrorPage.js";
 import i18n, { currentLanguage, refusalDetail, writeLanguage } from "./i18n.js";
@@ -152,6 +152,8 @@ import { applyTheme, readTheme, writeTheme } from "./theme.js";
 import type { ThemePref } from "./theme.js";
 import { acceptArrival } from "./selection.js";
 import { recoveryRetryAction } from "./recoveryTarget.js";
+import { SavedRunAuthorityContext } from "./TaskResults.js";
+import type { SavedRunAuthorityStore } from "./TaskResults.js";
 import type { ChainRepoView, DecisionListRow, DecisionStatusRow, MetricsReport, PanelCoverage } from "./types.js";
 
 type DecisionIdentity = Pick<DecisionListRow, "projectKey" | "id">;
@@ -269,6 +271,10 @@ export function App(): JSX.Element {
   const [route, setRoute] = useState<Route>(() => typeof window === "undefined" ? { kind: "section", section: DEFAULT_SECTION } : parseRoute(window.location.hash));
   const section: Section = route.section;
   const routeNow = useRef(route); routeNow.current = route;
+  // Ruling R1 (#219): each group's last route (region and open task), so Task control remounted by a bare #tasks (the
+  // sidebar link) shows the open group as it was left, as the always-mounted pane used to.
+  const groupRoutes = useRef<Record<string, Extract<Route, { kind: "group" }>>>({});
+  if (route.kind === "group") groupRoutes.current[route.groupId] = route;
   /** Ruling C12: the Decisions page's two tabs, now a route (§9.3: the toggle replaces the history entry). */
   const decisionsTab: "decisions" | "corrections" = route.kind === "corrections" ? "corrections" : "decisions";
   /**
@@ -966,6 +972,8 @@ export function App(): JSX.Element {
   const scopeKeyNow = useRef(scopeKey);
   scopeKeyNow.current = scopeKey;
   const lastScopeKey = useRef<string | null>(null);
+  /** Ruling R1 (#219): see TaskResults.tsx SavedRunAuthorityContext. */
+  const savedRunAuthority = useRef<SavedRunAuthorityStore>(new Map());
   useEffect(() => {
     if (project === null) return;
     const previous = lastScopeKey.current;
@@ -974,6 +982,16 @@ export function App(): JSX.Element {
     setSelectedGroup(null);
     setSelectedRequirement(null);
     setSelected(null);
+    // Ruling R1 (#219): the saved-run authority outlives the Task control pane now; a scope change forgets it, as closing
+    // (unmounting) the open group used to.
+    savedRunAuthority.current.clear();
+    // Ruling R1 (#219): the creation forms' All-projects targets are a choice made in one scope, not typed text; App holds
+    // them now (the forms used to remount, and forget them, on a scope change), so App forgets them here.
+    dispatchControl({ type: "draft", key: IMPORT_TARGET_DRAFT, text: "" });
+    setDetailDrafts((all) => {
+      const form = all.newRequirementForm[NEW_REQUIREMENT_FORM];
+      return form === undefined || form.target === "" ? all : setDraft(all, "newRequirementForm", NEW_REQUIREMENT_FORM, { ...form, target: "" });
+    });
   }, [scopeKey]);
   // Source identity is updated during render: a reply cannot land between a scope/auth/epoch change and effect cleanup.
   const sourceIdentity = JSON.stringify([account, control.epoch, scope, project]);
@@ -1205,6 +1223,11 @@ export function App(): JSX.Element {
     if (element === null) return;
     element.focus(); element.scrollIntoView?.({ block: "nearest" }); focusedRequest.current = overviewFocus.request;
   }, [overviewFocus, selected, decision, acceptedDecision, selectedGroup, control.canonical, selectedRequirement, requirementViews, section]);
+  // Ruling R1 (#219): a pane mounts again each time its section is shown, so an arrival is spent once its section is
+  // left -- else the remounted pane would take it again (Task control would reopen the import dialog an Overview link opened).
+  useEffect(() => {
+    setOverviewFocus((focus) => focus === null || focusSection(focus.target) === section ? focus : null);
+  }, [section]);
 
   // The chosen project's control repository: undefined while no project is chosen (the first repository, as before),
   // null when the control plane does not hold the chosen project.
@@ -1630,6 +1653,7 @@ export function App(): JSX.Element {
 
   return (
     <ProjectNames.Provider value={nameOf}>
+    <SavedRunAuthorityContext.Provider value={savedRunAuthority.current}>
     <Shell
       active={section}
       showAdvanced={showAdvanced}
@@ -1832,7 +1856,7 @@ export function App(): JSX.Element {
           importFocusRequest={overviewFocus?.target.kind === "global-control" && overviewFocus.target.region === "import" ? overviewFocus.request : undefined}
           focus={overviewFocus?.target.kind === "group" ? overviewFocus.target : null}
           onSelect={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedGroup(id); navigate({ kind: "group", section: "tasks", groupId: id, region: null, taskId: null }); }}
-          route={route.kind === "group" ? route : null}
+          route={route.kind === "group" ? route : selectedGroup === null ? null : groupRoutes.current[selectedGroup] ?? null}
           onRouteChange={(groupId, region, taskId) => navigate({ kind: "group", section: "tasks", groupId, region, taskId }, { replace: true })}
           onSelectRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); navigate({ kind: "requirement", section: "requirements", groupId: id }); void readRequirement(id); }}
           onSourceRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); navigate({ kind: "requirement", section: "requirements", groupId: id }); void readRequirement(id); }}
@@ -1955,6 +1979,7 @@ export function App(): JSX.Element {
         <UsagePanel project={controlRepoId ?? null} active={section === "metrics"} />
       </SectionPane>
     </Shell>
+    </SavedRunAuthorityContext.Provider>
     </ProjectNames.Provider>
   );
 }

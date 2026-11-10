@@ -84,10 +84,12 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 describe("polling a server that answers like the real one settles", () => {
   it("keeps the open group and its open task on the page across polls, and re-reads it when it moves", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     const groupButton = await screen.findByRole("button", { name: /^g · running/ });
     fireEvent.click(groupButton);
@@ -126,6 +128,8 @@ describe("polling a server that answers like the real one settles", () => {
     // Re-reading whenever the two differ (rather than when the body is older) turns every arriving body into the
     // trigger for the next GET while the body is ahead: a request every few milliseconds until the next poll.
     groupLead = 1;
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · running/ }));
     await screen.findByRole("region", { name: "Control group g" });

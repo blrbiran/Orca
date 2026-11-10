@@ -27,8 +27,8 @@ import type { ControlRefusal } from "./controlState.js";
 import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, RequirementViewV1 } from "./controlTypes.js";
 import { inScope } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
-import { EMPTY_DRAFTS, answerKey, feedbackKey, limitKey, setDraft } from "./detailDrafts.js";
-import type { AnswerChoice, AnswerDraft, DetailDrafts, DraftSlot, EditableDrafts, NewRequirementDraft } from "./detailDrafts.js";
+import { EMPTY_DRAFTS, EMPTY_NEW_REQUIREMENT_FORM, NEW_REQUIREMENT_FORM, answerKey, feedbackKey, limitKey, setDraft } from "./detailDrafts.js";
+import type { AnswerChoice, AnswerDraft, DetailDrafts, DraftSlot, EditableDrafts, NewRequirementDraft, NewRequirementForm, ReviseDraft } from "./detailDrafts.js";
 
 type View = RequirementViewV1;
 type Round = View["rounds"][number];
@@ -62,16 +62,19 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   const scope = props.scope;
   const all = scope?.kind === "all";
   const chosenRepoId = scope?.kind === "project" ? scope.repoId : props.repoId;
-  const [localRepoId, setLocalRepoId] = useState(props.config.repositories[0]?.repoId ?? "");
+  // Ruling R1 (#219): the form's own choices live in the draft store, so they outlive leaving the section. App forgets the
+  // target when the scope changes (App.tsx, the scope-change effect).
+  const form = props.drafts.newRequirementForm[NEW_REQUIREMENT_FORM] ?? EMPTY_NEW_REQUIREMENT_FORM;
+  const setForm = (change: Partial<NewRequirementForm>): void => props.onDraft("newRequirementForm", NEW_REQUIREMENT_FORM, { ...form, ...change });
+  const localRepoId = form.localRepoId ?? props.config.repositories[0]?.repoId ?? "";
   // Spec §6: in All projects the target is this form's own, empty until chosen, and choosing it does not leave All.
-  const [target, setTarget] = useState("");
-  useEffect(() => { setTarget(""); }, [scope?.kind]);
+  const target = form.target;
   // Spec §6 and §8 (Task 4 review M1): only a held target -- a registered project's control repository -- counts as
   // chosen; one that dropped out of the project list is unchosen again, whatever this form still remembers.
   const choices = all ? props.config.repositories.filter((repo) => (props.targets ?? []).includes(repo.repoId)) : props.config.repositories;
   const held = choices.some((repo) => repo.repoId === target);
   // Fix round 1 (ruling M1): a target seen unheld is forgotten, so a later re-listing needs a new choice.
-  useEffect(() => { if (all && target !== "" && !held) setTarget(""); }, [all, target, held]);
+  useEffect(() => { if (all && target !== "" && !held) setForm({ target: "" }); }, [all, target, held]);
   // Project switcher spec D4: the chosen project's repository when the control plane holds it, else this form's own.
   const repoId = all ? (held ? target : "")
     : chosenRepoId != null && props.config.repositories.some((repo) => repo.repoId === chosenRepoId) ? chosenRepoId : localRepoId;
@@ -79,24 +82,21 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   // no project; the next explicit choice takes it when that target has no draft of its own, and drops it either way
   // (ruling M2), so it never resurfaces under a later target or over another target's draft.
   const defaults: NewRequirementDraft = { idea: "", tokens: null, language: props.language, agent: "" };
-  const [unowned, setUnowned] = useState<NewRequirementDraft | null>(null);
+  const unowned = form.unowned;
   // Text in the limit field that is not an amount: the held number is stale, so the form must not send it.
   const [limitBad, setLimitBad] = useState(false);
   const draft = repoId === "" ? unowned ?? defaults : props.drafts.newRequirement[repoId] ?? defaults;
   const edit = (change: Partial<NewRequirementDraft>): void => {
-    if (repoId === "") setUnowned({ ...draft, ...change });
+    if (repoId === "") setForm({ unowned: { ...draft, ...change } });
     else props.onDraft("newRequirement", repoId, { ...draft, ...change });
   };
   const setRepoId = (next: string): void => {
     if (all) {
-      if (unowned !== null) {
-        if (props.drafts.newRequirement[next] === undefined) props.onDraft("newRequirement", next, unowned);
-        setUnowned(null);
-      }
-      setTarget(next);
+      if (unowned !== null && props.drafts.newRequirement[next] === undefined) props.onDraft("newRequirement", next, unowned);
+      setForm({ target: next, unowned: null });
       return;
     }
-    setLocalRepoId(next); props.onRepo?.(next);
+    setForm({ localRepoId: next }); props.onRepo?.(next);
   };
   if (props.config.repositories.length === 0) return <p role="note">{t("requirements.noRepository")}</p>;
   // Plan decision P1: no target is safe without a project list; the list's own note above says why.
@@ -456,7 +456,9 @@ export type RoundRevision = {
   glossaryDecisions: Array<{ id: string; accept: boolean }>; adrDecisions: Array<{ id: string; accept: boolean }>; reason?: string; exclude?: number[];
 };
 
-export function ReviseRound(props: { round: Round; position: number; later: Array<{ roundNo: number; position: number }>; onRevise: (revision: RoundRevision) => void }): JSX.Element {
+export function ReviseRound(props: { round: Round; position: number; later: Array<{ roundNo: number; position: number }>; onRevise: (revision: RoundRevision) => void;
+  /** Ruling R1 (#219): the open revision held by the caller's draft store (null: closed); without it the form keeps its own. */
+  draft?: ReviseDraft | null; onDraft?: (draft: ReviseDraft | null) => void }): JSX.Element {
   const { t } = useTranslation();
   const result = props.round.result!;
   const answered = new Map((props.round.answers ?? []).map((a) => [a.id, a]));
@@ -465,12 +467,18 @@ export function ReviseRound(props: { round: Round; position: number; later: Arra
     return [q.id, a?.kind === "text" ? { kind: "text", text: a.text } : { kind: "recommended" }];
   }));
   const decided = new Map([...(props.round.glossaryDecisions ?? []), ...(props.round.adrDecisions ?? [])].map((d) => [d.id, d.accept]));
-  const [open, setOpen] = useState(false);
   const [asking, setAsking] = useState(false);
-  const [choice, setChoice] = useState<Record<string, AnswerChoice>>(initial);
-  const [decisions, setDecisions] = useState<Record<string, boolean>>({});
-  const [reason, setReason] = useState("");
-  const [exclude, setExclude] = useState<number[]>([]);
+  const [own, setOwn] = useState<ReviseDraft | null>(null);
+  const form = props.onDraft === undefined ? own : props.draft ?? null;
+  const setForm = props.onDraft ?? setOwn;
+  const open = form !== null;
+  const { choice, decisions, reason, exclude }: ReviseDraft = form ?? { choice: {}, decisions: {}, reason: "", exclude: [] };
+  const edit = (change: Partial<ReviseDraft>): void => { if (form !== null) setForm({ ...form, ...change }); };
+  const setChoice = (next: Record<string, AnswerChoice>): void => edit({ choice: next });
+  const setDecisions = (next: Record<string, boolean>): void => edit({ decisions: next });
+  const setReason = (next: string): void => edit({ reason: next });
+  const setExclude = (next: number[]): void => edit({ exclude: next });
+  const setOpen = (next: boolean): void => setForm(next ? { choice: initial(), decisions: {}, reason: "", exclude: [] } : null);
   const accepts = (id: string): boolean => decisions[id] ?? decided.get(id) ?? true;
   const send = (): void => {
     setAsking(false); setOpen(false);
@@ -482,7 +490,7 @@ export function ReviseRound(props: { round: Round; position: number; later: Arra
       ...(reason.trim() === "" ? {} : { reason: reason.trim() }), ...(exclude.length === 0 ? {} : { exclude }),
     });
   };
-  if (!open) return <button type="button" onClick={() => { setChoice(initial()); setOpen(true); }}>{t("requirements.revise")}</button>;
+  if (!open) return <button type="button" onClick={() => setOpen(true)}>{t("requirements.revise")}</button>;
   const label = t("requirements.reviseTitle", { n: props.position });
   return (
     <form aria-label={label} onSubmit={(event) => { event.preventDefault(); setAsking(true); }}>
@@ -614,6 +622,9 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const { t } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
   const editable: EditableDrafts = { drafts: props.drafts, onDraft: props.onDraft };
+  // Ruling R1 (#219): an open revision is a draft of its round, keyed like that round's answers.
+  const owner = ownerOf(view);
+  const reviseKey = (roundNo: number): string => answerKey(owner.repoId, owner.groupId, owner.requirementId, roundNo);
   const valid = view.rounds.filter((round) => round.result !== null);
   const latest = valid.at(-1)?.result ?? null;
   const round = view.rounds.at(-1) ?? null, draft = view.drafts.at(-1) ?? null;
@@ -739,6 +750,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
               {pending && <RoundForm view={view} round={r} onCommand={props.onCommand} {...editable} />}
               {answered ? <AnsweredRound round={r} /> : !pending && r.answers?.map((a) => <p key={a.id}>{a.id}: {a.text}</p>)}
               {revisable && <ReviseRound round={r} position={position} later={later}
+                draft={props.drafts.revise[reviseKey(r.roundNo)]} onDraft={(next) => props.onDraft("revise", reviseKey(r.roundNo), next)}
                 onRevise={(payload) => props.onCommand({ verb: "requirement-revise", groupId: view.summary.groupId, expectedRevision: revisionOf(view), payload })} />}
               {superseded.map((s) => (
                 <details key={s.roundNo} className={roundBox}>

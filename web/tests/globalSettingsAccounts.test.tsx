@@ -41,6 +41,8 @@ async function password(current: string, next: string, again = next): Promise<vo
 }
 describe("global account settings", () => {
   it("lets a member change their own password from settings with existing validation/CSRF and returns to login", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current settings category is mounted, so open Account.
+    window.location.hash = "#settings/account";
     render(ui); await screen.findByRole("region", { name: "Global settings" });
     expect(within(settings()).queryByRole("form", { name: "Add user" })).toBeNull();
     expect(settings().textContent).not.toContain("initial password");
@@ -58,6 +60,8 @@ describe("global account settings", () => {
     expect(authCalls.filter(c => c.url === "/api/auth/notices")).toHaveLength(0);
   });
   it("keeps a refused ordinary password change in settings", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current settings category is mounted, so open Account.
+    window.location.hash = "#settings/account";
     passwordStatus = 403; render(ui); await screen.findByRole("region", { name: "Global settings" });
     await password("wrong", "a long new password");
     await screen.findByText("current-password-wrong");
@@ -65,6 +69,8 @@ describe("global account settings", () => {
     expect(screen.queryByRole("form", { name: "Log in" })).toBeNull();
   });
   it("mounts one owner Add user surface in settings and one global notice reader across navigation", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current settings category is mounted, so open Account.
+    window.location.hash = "#settings/account";
     me.user.roles = ["owner"]; render(ui);
     await screen.findByRole("region", { name: "Global settings" });
     const form = within(settings()).getByRole("form", { name: "Add user" });
@@ -81,12 +87,21 @@ describe("global account settings", () => {
     expect(screen.getByRole("region", { name: "Security notices" }).closest('.section-pane')).toBeNull();
     expect(authCalls.filter(c => c.url === "/api/auth/notices")).toHaveLength(1);
     expect(authCalls.filter(c => c.url === "/api/auth/me")).toHaveLength(1);
-    expect(screen.getAllByRole("form", { name: "Add user" })).toHaveLength(1);
+    // R1: the Add user surface is Settings content, so on Task control there is none (no second surface outside Settings);
+    // back in Settings there is exactly one again, and coming back reads neither the notices nor the account again.
+    expect(screen.queryAllByRole("form", { name: "Add user" })).toHaveLength(0);
     expect(screen.getByRole("navigation", { name: "Sections" }).closest('.authenticated-shell')).toBe(screen.getByRole("button", { name: "Log out" }).closest('.authenticated-shell'));
+    await act(async () => { window.location.hash = "#settings/account"; window.dispatchEvent(new Event("hashchange")); });
+    expect(screen.getAllByRole("form", { name: "Add user" })).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Security notices" }).closest('.section-pane')).toBeNull();
+    expect(authCalls.filter(c => c.url === "/api/auth/notices")).toHaveLength(1);
+    expect(authCalls.filter(c => c.url === "/api/auth/me")).toHaveLength(1);
   });
   it("adds an owner when Owner is picked for the role (Radix picker, session b999cc81)", async () => {
     // New criterion: none chose a role before. The role picked is the role the add-user request carries.
     // mutation: the role picker's onValueChange ignores the pick -> role "member", red
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current settings category is mounted, so open Account.
+    window.location.hash = "#settings/account";
     me.user.roles = ["owner"]; render(ui);
     await screen.findByRole("region", { name: "Global settings" });
     const form = within(settings()).getByRole("form", { name: "Add user" });

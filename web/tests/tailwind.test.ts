@@ -65,10 +65,12 @@ describe("the Tailwind entry (index.css)", () => {
   });
 
   it("keeps a hidden pane and a hidden settings category hidden whatever utility an element carries", () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): an inactive pane or settings category renders no content (Shell.tsx SectionPane,
+    // GlobalSettings.tsx SettingsCategoryPane; web/tests/shell.test.tsx, sectionUnmount.test.tsx), so no utility can show
+    // it; the sheet keeps no dead hiding rule.
     const sheet = read("styles.css");
-    // mutation: drop !important -> a display utility on a pane (later layer) shows every section at once, red
-    expect(sheet).toContain('.section-pane:not([data-active="true"]) { display: none !important; }');
-    expect(sheet).toContain('.settings-category:not([data-active="true"]), .settings[data-active="false"] { display: none !important; }');
+    expect(sheet).not.toMatch(/\.section-pane:not\(\[data-active/);
+    expect(sheet).not.toMatch(/\.settings-category:not\(\[data-active|\.settings\[data-active/);
   });
 
   it("bundles the two fonts as woff2 only, exposed as --font-sans and --font-mono", () => {

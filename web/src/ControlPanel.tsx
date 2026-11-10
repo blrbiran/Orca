@@ -133,14 +133,21 @@ interface ImportFormProps {
   /** Spec 2026-10-08 §2.2(d): the last import's refusal, with the refused plan's problems one per line. */
   refusal?: ControlRefusal | null;
   onRegisterPlan?: RegisterPlan;
+  /** Ruling R1 (#219): the target and the plan path live in Task control's draft store, so they outlive leaving the section. */
+  drafts: Record<string, string>;
+  onDraft: (key: string, text: string) => void;
 }
+
+/** Ruling R1 (#219): the import form's draft keys -- its All-projects target, and the plan path typed for one repository. */
+export const IMPORT_TARGET_DRAFT = JSON.stringify(["import-target"]);
+export const importPathDraft = (repoId: string): string => JSON.stringify(["import-path", repoId]);
 
 export type RegisterPlan = (repoId: string, path: string) => Promise<{ ok: true } | { ok: false; code: string; message: string }>;
 
 /** In-repo plan path spec 2026-10-21 §2.5: a repository-relative path; registering it is the person trusting that file. */
-function RegisterPlanForm(props: { repoId: string; onRegister: RegisterPlan }): JSX.Element {
+function RegisterPlanForm(props: { repoId: string; onRegister: RegisterPlan; path: string; onPath: (path: string) => void }): JSX.Element {
   const { t } = useTranslation();
-  const [path, setPath] = useState("");
+  const { path, onPath: setPath } = props;
   const [answer, setAnswer] = useState<{ ok: true; path: string } | { ok: false; code: string; message: string } | null>(null);
   const submit = (): void => {
     const trimmed = path.trim();
@@ -168,7 +175,9 @@ function ImportForm(props: ImportFormProps): JSX.Element {
   const scope = props.scope;
   const all = scope?.kind === "all";
   // Spec §6: in All projects the target is this form's own choice, empty until the person makes one -- never the first.
-  const [target, setTarget] = useState("");
+  // App forgets it when the scope changes (App.tsx, the scope-change effect).
+  const target = props.drafts[IMPORT_TARGET_DRAFT] ?? "";
+  const setTarget = (next: string): void => props.onDraft(IMPORT_TARGET_DRAFT, next);
   const fixed = scope === undefined ? props.repoId : scope.kind === "project" ? scope.repoId : undefined;
   const choices = props.config.repositories.filter((entry) => (props.targets ?? []).includes(entry.repoId));
   // Spec §8 (Task 4 review M1): a target that is no longer held is unchosen -- resolved from the allowed choices only.
@@ -285,7 +294,8 @@ function ImportForm(props: ImportFormProps): JSX.Element {
           </button>
         </>
       )}
-      {repository !== undefined && props.onRegisterPlan !== undefined && <RegisterPlanForm key={repository.repoId} repoId={repository.repoId} onRegister={props.onRegisterPlan} />}
+      {repository !== undefined && props.onRegisterPlan !== undefined && <RegisterPlanForm key={repository.repoId} repoId={repository.repoId} onRegister={props.onRegisterPlan}
+        path={props.drafts[importPathDraft(repository.repoId)] ?? ""} onPath={(path) => props.onDraft(importPathDraft(repository.repoId), path)} />}
     </section>
   );
 }
@@ -352,7 +362,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           <ImportForm
             key={scope?.kind === "all" ? ALL_PROJECTS : (scope?.kind === "project" ? scope.repoId : props.repoId) ?? ""}
             config={config} repoId={props.repoId} scope={scope} targets={props.targets} repoLabel={props.repoLabel} onCommand={props.onCommand}
-            refusal={props.importRefusal ?? null}
+            refusal={props.importRefusal ?? null} drafts={drafts} onDraft={props.onDraft}
             {...(props.onRegisterPlan === undefined ? {} : { onRegisterPlan: props.onRegisterPlan })}
           />
         </Dialog>

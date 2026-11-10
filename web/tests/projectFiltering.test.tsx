@@ -25,6 +25,9 @@ beforeEach(() => { panel = installFakePanel(); });
 // Tester round 2 §9.3: an opened decision is now in the URL and a remounted App opens it again, so each test starts at "/".
 afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.history.replaceState(null, "", "/"); });
 
+/** Ruling R1 (#219): only the current section renders, so a criterion opens the section it reads first. */
+async function go(hash: string): Promise<void> { await act(async () => { window.location.hash = hash; window.dispatchEvent(new Event("hashchange")); }); }
+
 // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker is driven by keyboard, read by its shown text.
 const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
 const optionNames = async (): Promise<string[]> => (await offered(projectSelect())).map(([name]) => name);
@@ -128,17 +131,25 @@ describe("view mode and persistence", () => {
 describe("selection lifecycle", () => {
   it("5: a project that disappears from the list falls back to the first, and its open group and decision close", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group (Task control) and the decision (Decisions) no longer
+    // render together; both are opened, the group is seen still open on Task control when the list drops beta, and the
+    // decision's close is read on Decisions.
     seedOpenables();
+    window.location.hash = "#tasks";
     render(<App />);
     await ready();
     await pickOption(projectSelect(), "Beta");
     await openGroup("gb");
+    await go("#decisions");
     await openDecision("run-b/1");
+    await go("#tasks");
+    expect(screen.getByRole("region", { name: "Control group gb" })).toBeTruthy();
 
     panel.projects = { status: 200, body: { projects: [TWO_PROJECTS[0]] } };
     await act(async () => { window.dispatchEvent(new Event("focus")); });
     await waitFor(() => expect(shownText(projectSelect())).toBe("Alpha"));
     await waitFor(() => expect(screen.queryByRole("region", { name: /Control group/ })).toBeNull());
+    await go("#decisions");
     expect(screen.queryByTestId("decision-question")).toBeNull();
     expect(screen.getByText("Select a decision to read it.")).toBeTruthy();
   });
@@ -148,6 +159,8 @@ describe("selection lifecycle", () => {
     seedOpenables();
     let release!: () => void;
     panel.holdProjects = new Promise<void>((resolve) => { release = resolve; });
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await openDecision("run-a/1");
     expect(screen.queryByRole("combobox", { name: "Project" })).toBeNull();
@@ -160,6 +173,8 @@ describe("selection lifecycle", () => {
   it("8: a failed project re-read neither closes the open group nor counts as a scope change when the list returns", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedOpenables();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group detail is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await ready();
     await openGroup("ga");
@@ -186,6 +201,8 @@ describe("selection lifecycle", () => {
     const human = { provenance: "human", estimateId: null } as const;
     const allocations = [{ ownerKind: "task", ownerId: "t", bucket: "work", state: "draft-encumbered", amount: amount(2_000), fieldProvenance: { tokens: human, activeMs: human, attempts: human, sessions: human } }] as const;
     panel.groupViews["ga"] = { ...base, summary: ga, allocations: [...allocations], plan: { ...base.plan, repoId: ALPHA } };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group detail and its plan form are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await ready();
     await openGroup("ga");
@@ -204,18 +221,30 @@ describe("selection lifecycle", () => {
 
   it("6: changing the scope closes the open group, requirement and decision; the initial resolution closes nothing", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group, the requirement and the decision live on three
+    // sections that no longer render together; each is opened on its own section, the group and requirement are seen still
+    // open before the scope changes, and each close is read on its own section after it.
     seedOpenables();
+    window.location.hash = "#tasks";
     render(<App />);
     await ready();
     await openGroup("ga");
+    await go("#requirements");
     fireEvent.click(await within(await screen.findByRole("navigation", { name: "Requirement list" })).findByRole("button", { name: /^r · clarifying/ }));
     await screen.findByRole("article", { name: "markdown-export" });
+    await go("#decisions");
     await openDecision("run-a/1");
+    await go("#requirements");
+    expect(screen.getByRole("article", { name: "markdown-export" })).toBeTruthy();
+    await go("#tasks");
     expect(screen.getByRole("region", { name: "Control group ga" })).toBeTruthy();
 
     await chooseAll();
     await waitFor(() => expect(screen.queryByRole("region", { name: /Control group/ })).toBeNull());
+    await go("#requirements");
+    await screen.findByRole("navigation", { name: "Requirement list" });
     expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull();
+    await go("#decisions");
     expect(screen.queryByTestId("decision-question")).toBeNull();
     expect(screen.getByText("Select a decision to read it.")).toBeTruthy();
   });
@@ -261,19 +290,27 @@ describe("two-project lists", () => {
 
   it("1: Alpha lists only alpha's groups and requirements; Beta only beta's", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): Task control's list and Requirements' list no longer render
+    // together, so each is read on its own section, in each scope.
     seedLists();
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     expect(rowIds(controlNav())).toEqual(["a1", "ra"]);
-    expect(rowIds(requirementNav())).toEqual(["ra"]);
+    await go("#requirements");
+    await waitFor(() => expect(rowIds(requirementNav())).toEqual(["ra"]));
     await pickOption(projectSelect(), "Beta");
+    await waitFor(() => expect(rowIds(requirementNav())).toEqual(["rb"]));
+    await go("#tasks");
     await waitFor(() => expect(rowIds(controlNav())).toEqual(["b1", "rb"]));
-    expect(rowIds(requirementNav())).toEqual(["rb"]);
   });
 
   it("2: All projects lists every row, each ending with its project's name", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): Task control's list and Requirements' list no longer render
+    // together, so each is read on its own section.
     seedLists();
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     await chooseAll();
@@ -283,6 +320,7 @@ describe("two-project lists", () => {
     expect(control[1]).toMatch(/^b1 · running.* · Beta$/);
     expect(control[2]).toMatch(/^ra · clarifying.* · Alpha$/);
     expect(control[3]).toMatch(/^rb · clarifying.* · Beta$/);
+    await go("#requirements");
     expect(rows(requirementNav())).toEqual(["ra · clarifying · Alpha", "rb · clarifying · Beta"]);
   });
 
@@ -290,6 +328,8 @@ describe("two-project lists", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.config = { ...twoConfig, repositories: [...twoConfig.repositories, { repoId: "gamma-3", displayName: "Gamma" }] };
     seedLists([groupSummary("c1", "gamma-3"), groupSummary("z1", "zeta-9")]);
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     await chooseAll();
@@ -303,14 +343,19 @@ describe("two-project lists", () => {
   it("4: a project the control plane does not hold lists no groups and says it is not under task control", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true }] } };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): Task control (list, import) and Requirements (list, note, form)
+    // no longer render together, so each is read on its own section.
     seedLists();
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     await pickOption(projectSelect(), "Gamma");
     await waitFor(() => expect(rows(controlNav())).toEqual([]));
+    await go("#requirements");
     expect(rows(requirementNav())).toEqual([]);
     expect(within(requirementNav()).getByRole("note").textContent).toMatch(/not under task control.*start requirements/);
     expect(screen.queryByRole("button", { name: "Start clarifying" })).toBeNull();
+    await go("#tasks");
     expect(within(importRegion()).getByText(/not under task control/)).toBeTruthy();
     expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
   });
@@ -318,18 +363,23 @@ describe("two-project lists", () => {
   it("5: an unresolved project list shows a note instead of rows and no import or new requirement; recovery and uncertain commands stay", async () => {
     panel.projects = { status: 500, body: { code: "boom", message: "boom" } };
     panel.recovery = { ...panel.recovery, blockers: [{ scope: "group", groupId: "b1", runId: null, code: "blocker-x", evidenceIds: [] }] };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): Task control (recovery, list, outcome-unknown line, import) and
+    // Requirements (list, note, form) no longer render together, so each is read on its own section.
     storeUncertain("b1", "cmd-b");
     seedLists();
+    window.location.hash = "#tasks";
     render(<App />);
     await screen.findByText(/blocker-x/);
     await waitFor(() => expect(panel.requests).toContain("GET /api/projects"));
     expect(within(controlNav()).getByRole("note").textContent).toBe("The project list is unavailable; groups are not shown until it is read.");
     expect(rows(controlNav())).toEqual([]);
+    expect(screen.getByText(/Command outcome unknown, being looked up: cmd-b \(b1/)).toBeTruthy();
+    expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await go("#requirements");
     expect(rows(requirementNav())).toEqual([]);
     expect(within(requirementNav()).getByRole("note").textContent).toBe("The project list is unavailable; groups are not shown until it is read.");
     expect(screen.queryByRole("button", { name: "Start clarifying" })).toBeNull();
-    expect(screen.getByText(/Command outcome unknown, being looked up: cmd-b \(b1/)).toBeTruthy();
-    expect(within(importRegion()).queryByRole("button", { name: "Import plan" })).toBeNull();
   });
 
   it("6: in All projects the import needs a chosen repository, lists only its plans, imports there and stays in All", async () => {
@@ -337,6 +387,8 @@ describe("two-project lists", () => {
     // gamma-3 is configured but no registered project holds it: not a target.
     panel.config = { ...twoConfig, repositories: [...twoConfig.repositories, { repoId: "gamma-3", displayName: "Gamma" }], plans: [...twoConfig.plans, { planId: "pa2", repoId: ALPHA, displayName: "Alpha plan 2" }, { planId: "pb2", repoId: BETA, displayName: "Beta plan 2" }] };
     seedLists();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     await chooseAll();
@@ -359,10 +411,14 @@ describe("two-project lists", () => {
 
   it("7: in All projects a new requirement needs a chosen repository and stays in All; in project mode the select moves the project", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the lists are read ready on Task control, then the New
+    // requirement form is used on Requirements, which renders only while it is the current section.
     panel.config = { ...twoConfig, repositories: [...twoConfig.repositories, { repoId: "gamma-3", displayName: "Gamma" }] };
     seedLists();
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
+    await go("#requirements");
     // Project mode: today's select, which moves the global project.
     expect(shownText(repositorySelect(newRequirement()))).toBe("alpha");
     await pickOption(repositorySelect(newRequirement()), "beta");
@@ -395,6 +451,8 @@ describe("two-project lists", () => {
   it("11: in All projects a chosen target shows the repository, plan and estimate mode before the button enables", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedLists();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     await chooseAll();
@@ -409,6 +467,8 @@ describe("two-project lists", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     panel.config = { ...twoConfig, plans: twoConfig.plans.filter((entry) => entry.repoId === ALPHA) };
     seedLists();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     await chooseAll();
@@ -427,6 +487,8 @@ describe("two-project lists", () => {
     panel.config = { ...twoConfig, repositories: twoConfig.repositories.filter((entry) => entry.repoId === ALPHA) };
     window.localStorage.setItem(PROJECT_KEY, "beta");
     seedLists();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the New requirement form is in Requirements, which renders only while it is the current section.
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     await screen.findByText("This project's repository is not configured on this panel, so a requirement cannot be started here.");
@@ -438,6 +500,8 @@ describe("two-project lists", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       seedLists();
+      // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list is in Task control, which renders only while it is the current section.
+      window.location.hash = "#tasks";
       render(<App />);
       await listsReady();
       const complete = (): number => panel.requests.filter((request) => request === "GET /api/control/summary").length;
@@ -462,6 +526,8 @@ describe("two-project lists", () => {
   it("9: the outcome-unknown line names every uncertain command with its repository, not only the open group's", async () => {
     storeUncertain("b1", "cmd-b");
     seedLists();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group list and the outcome-unknown line are in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
     fireEvent.click(within(controlNav()).getByRole("button", { name: /^a1 · / }));
@@ -484,8 +550,12 @@ describe("two-project lists", () => {
       await held;
       return base(url, body);
     };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the lists are read ready on Task control, then the New
+    // requirement form is used on Requirements, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await listsReady();
+    await go("#requirements");
     fireEvent.change(within(newRequirement()).getByRole("textbox", { name: "Idea" }), { target: { value: "export notes" } });
     fireEvent.click(within(newRequirement()).getByRole("button", { name: "Start clarifying" }));
     await waitFor(() => expect(panel.posts.some((post) => post.url === "/api/control/requirements")).toBe(true));
@@ -518,6 +588,8 @@ describe("decision identity and count", () => {
   it("1: the pane lists only the chosen project's rows, counted within it; All lists every row of both, d1 twice", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await settled("1 of 1");
@@ -532,6 +604,8 @@ describe("decision identity and count", () => {
   it("2: the kind filter narrows within the project, and an open decision filtered away is still named by the note", async () => {
     seedDecisions();
     window.localStorage.setItem(PROJECT_KEY, "beta");
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await settled("2 of 2");
@@ -548,6 +622,8 @@ describe("decision identity and count", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true }] } };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await pickOption(projectSelect(), "Gamma");
@@ -559,6 +635,8 @@ describe("decision identity and count", () => {
   it("4: the Decisions repository select and the sidebar selector are one state, in both directions", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Decisions picker offers the sidebar's options, and a pick in either is the one scope both show
@@ -577,6 +655,8 @@ describe("decision identity and count", () => {
   it("5: opening alpha/d1 reads alpha's decision, not beta's, though both are d1", async () => {
     seedDecisions();
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await settled("3 of 3");
@@ -592,6 +672,8 @@ describe("decision identity and count", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedDecisions();
     window.localStorage.setItem(PROJECT_KEY, "beta");
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await ready();
     await settled("2 of 2");
@@ -604,6 +686,8 @@ describe("decision identity and count", () => {
   it("7: without a project list the pane keeps today's behaviour: every row, its own repository filter", async () => {
     seedDecisions();
     panel.projects = { status: 500, body: {} };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await screen.findByText("epoch epoch-a");
     await waitFor(() => expect(count()).toBe("3 of 3"));
@@ -617,6 +701,8 @@ describe("decision identity and count", () => {
     seedDecisions();
     let release!: () => void;
     panel.holdProjects = new Promise<void>((resolve) => { release = resolve; });
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the Decisions pane renders only while it is the current section.
+    window.location.hash = "#decisions";
     render(<App />);
     await screen.findByText("epoch epoch-a");
     await waitFor(() => expect(count()).toBe("3 of 3"));
@@ -649,6 +735,8 @@ describe("group workspace", () => {
   it("1: an open group of another repository shows its own workspace mode, read from its own repository", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group detail is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await ready();
     await waitFor(() => expect(panel.requests).toContain(`GET /api/control/repositories/${ALPHA}/workspace`));
@@ -662,6 +750,8 @@ describe("group workspace", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
     panel.workspaces[ALPHA] = { mode: "worktree", delayMs: 300 };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the group detail is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await ready();
     // Alpha is the chosen project, so its slow read is in flight; All and b1 follow at once.
@@ -677,6 +767,8 @@ describe("group workspace", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
     panel.workspaces[BETA] = { mode: "worktree", delayMs: 300 };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the panel-level Workspace mode selector is in Settings > Project, which renders only while it is the current section.
+    window.location.hash = "#settings/project";
     render(<App />);
     await ready();
     await pickOption(projectSelect(), "Beta");
@@ -693,6 +785,8 @@ describe("group workspace", () => {
   it("3: the panel-level workspace selector shows in project mode only", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses and shows, the options it and the target pickers offer, and which repository and plan reach the command
     seedWorkspaces();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the panel-level Workspace mode selector is in Settings > Project, which renders only while it is the current section.
+    window.location.hash = "#settings/project";
     render(<App />);
     await ready();
     await waitFor(() => expect(workspaceRegion()?.textContent).toContain("alpha-11111111"));

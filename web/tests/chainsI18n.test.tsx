@@ -28,7 +28,7 @@ const json = (body: unknown, status = 200): Response =>
 // Copied verbatim from web/tests/i18nSwitch.test.tsx (the page reads the metrics on load).
 const METRICS = { report: { as_of: "2026-09-21T00:00:00.000Z", as_of_mode: "wall_clock", repos: [], correction_rate: { numerator_corrections_excluding_stale: 0, denominator_decisions: 0, rate_excluding_stale: null, corrections_total_including_stale: 0, by_decision_kind: [], buckets: [], caveats: [] }, repair_rate: { numerator_overturned: 0, denominator_corrections_including_stale: 0, rate: null, stale_only: { numerator_overturned: 0, denominator_corrections: 0, rate: null, known_bias: "" }, buckets: [], caveats: [] }, backlog: { open_corrections: 0, oldest_age_ms: null, oldest_correction_id: null, by_correction_kind: [] }, breakdown_by_correction_kind_including_stale: [], review_coverage: { available: false, reason: "none" }, unresolved_decisions: [], unkeyable_repos: [], malformed_lines: [] }, panel_review_coverage: { reviewed_high_tier: 0, high_tier_total: 0, rate: 0, caveat: "" } };
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.location.hash = ""; });
 
 describe("the chains area in Chinese", () => {
   it("shows state, cost, progress, the form, outcomes and banners in Chinese", async () => {
@@ -80,6 +80,7 @@ describe("the chains area in Chinese", () => {
   });
 
   it("says the chains have not loaded in Chinese while the page waits for them", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- only the current section is mounted, so open Chains first.
     await i18n.changeLanguage("zh");
     // /api/chains never answers, so the page keeps its not-loaded line; there is no control plane.
     globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
@@ -89,6 +90,7 @@ describe("the chains area in Chinese", () => {
       if (url === "/api/metrics") return json(METRICS);
       return json({ error: { code: "control-port-unconfigured", message: "no control plane in this criterion" } }, 404);
     }) as typeof fetch;
+    window.location.hash = "#chains";
     render(<App />);
     await waitFor(() => expect(screen.getByText("链尚未加载。").className).toBe("empty"));
   });

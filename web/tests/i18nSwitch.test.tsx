@@ -29,6 +29,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  // Ruling R1 (#219): the hash is cleared without a hashchange -- an assigned "" would deliver its event (newURL "#",
+  // Overview) inside the next criterion and remount Settings under the trigger it holds.
+  window.history.replaceState(null, "", window.location.pathname);
   vi.restoreAllMocks();
 });
 
@@ -49,6 +52,9 @@ const ZH = /中文/, EN = /English/;
 
 describe("the language switch (spec §6.7)", () => {
   it("switches the page to Chinese and back, remembering the choice in this browser", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the language switch is Settings > Appearance content, and only
+    // the current section and category are mounted, so the page opens there.
+    window.location.hash = "#settings/appearance";
     const { container } = render(<App />);
     const select = await languageSelect(container);
     expect(screen.getByRole("link", { name: /Decisions/ })).toBeTruthy();
@@ -65,10 +71,13 @@ describe("the language switch (spec §6.7)", () => {
   });
 
   it("re-renders a helper-built string too: the chain banner bannersFor builds", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the language switch is Settings > Appearance content, and only
+    // the current section and category are mounted, so the page opens there.
     chainRepos = [{
       repoKey: "acme-alpha", defaultSessionTimeoutMin: null, problem: null,
       chain: { chainId: "chain-0000000b", goal: "g-1", by: "amy", via: "cli", startedAt: "2026-10-01T00:00:00.000Z", state: "stopped", holderGone: false, sessionsDone: 2, costUsd: 1.5, stop: { reason: "r-1", category: "done", at: "2026-10-01T01:00:00.000Z", awaitingHuman: [], detail: null } },
     }];
+    window.location.hash = "#settings/appearance";
     const { container } = render(<App />);
     const select = await languageSelect(container);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Chain finished"));
@@ -79,6 +88,9 @@ describe("the language switch (spec §6.7)", () => {
   });
 
   it("still switches when this browser refuses to store the choice (a full or blocked storage costs the memory, not the switch)", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the language switch is Settings > Appearance content, and only
+    // the current section and category are mounted, so the page opens there.
+    window.location.hash = "#settings/appearance";
     const { container } = render(<App />);
     const select = await languageSelect(container);
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });

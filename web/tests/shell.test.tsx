@@ -54,11 +54,13 @@ describe("Shell and SectionPane", () => {
       </Shell>,
     );
 
-  it("marks only the active pane and nav item, and still renders every pane", () => {
+  it("marks only the active pane and nav item, and renders only the active pane's content", () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): was "still renders every pane"; an inactive pane is an empty marker now.
     const html = render({ unreviewed: 118, chainRunning: false, controlAlert: false });
-    expect(html).toContain('data-section="decisions" data-active="false"');
+    expect(html).toContain('data-section="decisions" data-active="false"></div>');
     expect(html).toContain('data-section="chains" data-active="true"');
-    expect(html).toContain("pane-d");
+    // mutation: SectionPane renders its children whatever the active section -> pane-d is in the page, red
+    expect(html).not.toContain("pane-d");
     expect(html).toContain("pane-c");
     expect(html).toMatch(/href="#chains"[^>]*aria-current="page"/);
     expect(html).not.toMatch(/href="#decisions"[^>]*aria-current/);
@@ -79,7 +81,8 @@ describe("Shell and SectionPane", () => {
 
 // N1 spec §11.2 (Task 13): a fifth section, Requirements, between Task control and Metrics, mounted like the others.
 describe("the Requirements section in the shell (N1 spec §11.2)", () => {
-  it("lists Requirements in the nav after Task control and keeps its pane mounted while another is active", () => {
+  it("lists Requirements in the nav after Task control and leaves its pane empty while another is active", () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): was "keeps its pane mounted while another is active".
     // Rewritten again under the human's 2026-10-03 request to reorder the tabs (session 9d95e6c8); earlier under the OK at memory-tab plan review (plan D10).
     // Rewritten under the session grant (human, session 9ec98639: 「这次批准改写所有必要的判据」): kanban spec §4 adds the board tab after Task control.
     // Rewritten for ruling H6 (one Settings section replaces global and project settings). Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
@@ -90,8 +93,8 @@ describe("the Requirements section in the shell (N1 spec §11.2)", () => {
       </Shell>,
     );
     expect(html).toMatch(/href="#requirements"[^>]*><span>Requirements<\/span>/);
-    expect(html).toContain('data-section="requirements" data-active="false"');
-    expect(html).toContain("pane-r");
+    expect(html).toContain('data-section="requirements" data-active="false"></div>');
+    expect(html).not.toContain("pane-r");
   });
 });
 

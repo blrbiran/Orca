@@ -40,8 +40,10 @@ describe("styles.css", () => {
     expect(src("CardGoal.tsx")).toMatch(/\["card-goal", cardGoal, props\.className\]/);
   });
 
-  it("hides inactive panes by class, the only thing allowed to hide one (spec §5.1)", () => {
-    expect(rule('.section-pane:not([data-active="true"])')).toContain("display: none");
+  it("has no rule hiding an inactive pane: an inactive pane is not mounted (spec §5.1 as corrected by R1)", () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): was "hides inactive panes by class"; the pane's content is unmounted instead (Shell.tsx SectionPane).
+    expect(css).not.toContain('.section-pane:not([data-active="true"])');
+    expect(css).not.toContain(".settings-category:not(");
   });
 
   // Final review Important 2: the global label rule stacks its children, which put every radio and

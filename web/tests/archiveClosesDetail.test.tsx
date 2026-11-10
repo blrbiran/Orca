@@ -4,7 +4,7 @@
  * with it and the URL drops its id; archiving another group leaves the open detail, and the page, where they were.
  * Fake fetch only (Rule 17).
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { requirementView } from "./fixtures/requirement.js";
@@ -31,6 +31,8 @@ async function openGroup(groupId: string): Promise<HTMLElement> {
 
 describe("archiving closes the detail open on that group (tester #63)", () => {
   it("closes the open group's detail and leaves #tasks once its archive succeeded", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     const g1 = await openGroup("g1");
     expect(window.location.hash).toBe("#tasks/g1");
@@ -41,6 +43,8 @@ describe("archiving closes the detail open on that group (tester #63)", () => {
   });
 
   it("keeps the open detail and its URL when another group is archived from the list", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     await openGroup("g1");
     const nav = screen.getByRole("navigation", { name: "Control groups" });
@@ -55,18 +59,33 @@ describe("archiving closes the detail open on that group (tester #63)", () => {
   });
 
   it("closes the detail but keeps the page when the URL is elsewhere, as after moving to the Board", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- Task control's list is no longer on the page while the
+    // Board is shown (it was before, mounted and hidden), so the archive is sent from that list on Task control and its answer
+    // is held until the person has moved to the Board: the answer still lands with the URL elsewhere. The detail it must have
+    // closed is then looked for where it lives, back on Task control (App keeps the open group across sections).
+    // mutation: drop App's setSelectedGroup(null) on the archive's success -> g1's detail is back on Task control -> red
+    let answer: ((response: Response) => void) | undefined;
+    panel.onPost = () => new Promise<Response>((resolve) => { answer = resolve; });
+    window.location.hash = "#tasks";
     render(<App />);
     await openGroup("g1");
-    fireEvent.click(screen.getByRole("link", { name: "Board" }));
-    await waitFor(() => expect(window.location.hash).toBe("#board"));
-    // Every section stays mounted (handoff §5.2.6), so Task control's list is still there to archive from.
     const nav = screen.getByRole("navigation", { name: "Control groups" });
     const card = within(nav).getByRole("button", { name: /^g1 · / }).closest(".group-card-row") as HTMLElement;
     fireEvent.click(within(card).getByRole("button", { name: "More actions" }));
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
     await waitFor(() => expect(panel.requests).toContain("POST /api/control/groups/g1/archive"));
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Control group g1" })).toBeNull());
+    await waitFor(() => expect(answer).toBeDefined());
+    fireEvent.click(screen.getByRole("link", { name: "Board" }));
+    await waitFor(() => expect(window.location.hash).toBe("#board"));
+    const readsBefore = panel.requests.filter((r) => r === "GET /api/control/groups/g1").length;
+    await act(async () => { answer!(success()); });
+    // The archive's own re-read of the group is the last thing its command does.
+    await waitFor(() => expect(panel.requests.filter((r) => r === "GET /api/control/groups/g1").length).toBeGreaterThan(readsBefore));
     expect(window.location.hash).toBe("#board");
+    fireEvent.click(screen.getByRole("link", { name: "Task control" }));
+    await waitFor(() => expect(window.location.hash).toBe("#tasks"));
+    await screen.findByRole("navigation", { name: "Control groups" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Control group g1" })).toBeNull());
   });
 
   it("closes the open requirement's detail and leaves #requirements once its archive succeeded", async () => {
@@ -94,18 +113,33 @@ describe("archiving closes the detail open on that group (tester #63)", () => {
     const ra = { ...base, epoch: "epoch-a", summary: { ...base.summary, groupId: "ra", repoId: ALPHA }, requirement: { ...base.requirement, repoId: ALPHA } };
     panel.requirementViews = { ra };
     panel.summary = { ...panel.summary, groups: [ra.summary] };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the requirement list is no longer on the page while the
+    // Board is shown, so the archive is sent from that list on Requirements and its answer is held until the person has moved
+    // to the Board; the detail it must have closed is then looked for back on Requirements (App keeps the open requirement).
+    // mutation: drop App's setSelectedRequirement(null) on the archive's success -> ra's detail is back on Requirements -> red
+    let answer: ((response: Response) => void) | undefined;
+    panel.onPost = () => new Promise<Response>((resolve) => { answer = resolve; });
+    window.location.hash = "#requirements";
     render(<App />);
     const list = within(await screen.findByRole("navigation", { name: "Requirement list" }));
     fireEvent.click(await list.findByRole("button", { name: /^ra · / }));
     await screen.findByRole("article", { name: "markdown-export" });
-    fireEvent.click(screen.getByRole("link", { name: "Board" }));
-    await waitFor(() => expect(window.location.hash).toBe("#board"));
-    // Every section stays mounted (handoff §5.2.6), so the requirement list is still there to archive from.
     const card = list.getByRole("button", { name: /^ra · / }).closest(".group-card-row") as HTMLElement;
     fireEvent.click(within(card).getByRole("button", { name: "More actions" }));
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
     await waitFor(() => expect(panel.requests).toContain("POST /api/control/groups/ra/archive"));
-    await waitFor(() => expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull());
+    await waitFor(() => expect(answer).toBeDefined());
+    fireEvent.click(screen.getByRole("link", { name: "Board" }));
+    await waitFor(() => expect(window.location.hash).toBe("#board"));
+    const READ = "GET /api/control/groups/ra/requirement";
+    const readsBefore = panel.requests.filter((r) => r === READ).length;
+    await act(async () => { answer!(success()); });
+    // The archive's own re-read of the requirement follows its answer.
+    await waitFor(() => expect(panel.requests.filter((r) => r === READ).length).toBeGreaterThan(readsBefore));
     expect(window.location.hash).toBe("#board");
+    fireEvent.click(screen.getByRole("link", { name: "Requirements" }));
+    await waitFor(() => expect(window.location.hash).toBe("#requirements"));
+    await screen.findByRole("navigation", { name: "Requirement list" });
+    await waitFor(() => expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull());
   });
 });

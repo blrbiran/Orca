@@ -88,9 +88,11 @@ it.each(["answers", "draft", "problem"] as const)("opens exact requirement owner
  expect(panel.requests).toContain("GET /api/control/groups/r/requirement"); expect(panel.requests).not.toContain("GET /api/control/groups/r"); expect(panel.posts).toHaveLength(0);
 });
 it("same-name decision queue entries open their exact composite owner despite ordinary Decisions filters", async () => {
+ // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- Overview remounts when shown again, so its region is read anew
+ // after coming back from Decisions (the one held from the first visit is no longer in the page).
  window.localStorage.setItem("orca.projectView", "all"); const panel = setup(); panel.todo = [decisionRow("alpha", "same"), decisionRow("beta", "same", { kind: "boundary" })];
  for (const row of panel.todo) panel.decisions[rowKey(row)] = { id: row.id, question: row.projectKey + " exact question", chose: "c", because: "b", alternatives: [] };
- render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
+ render(<App />); await screen.findByRole("region", { name: "Overview" });
  fireEvent.click(screen.getByRole("link", { name: /^Decisions/ }));
  await waitFor(() => expect(document.querySelector('[data-section="decisions"]')?.getAttribute("data-active")).toBe("true"));
  // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): an ordinary Kind filter picked in Decisions narrows the list, and the Overview entries still open their exact owner
@@ -100,7 +102,8 @@ it("same-name decision queue entries open their exact composite owner despite or
  await waitFor(() => expect(document.querySelectorAll(".decision-list button")).toHaveLength(1));
  fireEvent.click(screen.getByRole("link", { name: "Overview" }));
  await waitFor(() => expect(document.querySelector('[data-section="overview"]')?.getAttribute("data-active")).toBe("true"));
- const buttons = await within(page).findAllByRole("button", { name: "Review decision · same" });
+ const pageAgain = await screen.findByRole("region", { name: "Overview" });
+ const buttons = await within(pageAgain).findAllByRole("button", { name: "Review decision · same" });
  expect(buttons).toHaveLength(2);
  fireEvent.click(buttons[1]!);
  expect((await screen.findByTestId("decision-question")).textContent).toBe("beta exact question");

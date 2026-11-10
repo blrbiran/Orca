@@ -6,7 +6,7 @@
  * this browser's, kept across a reload, and a page that cannot store it, or a panel with one project, behaves as
  * before.
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.js";
 import { PROJECT_KEY } from "../src/project.js";
@@ -75,7 +75,10 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
+
+/** Ruling R1 (#219): only the current section renders, so a criterion opens the section it reads first. */
+async function go(hash: string): Promise<void> { await act(async () => { window.location.hash = hash; window.dispatchEvent(new Event("hashchange")); }); }
 
 const projectSelect = (): HTMLElement => {
   // Ruling: a modal import must close before the sidebar can change scope.
@@ -91,6 +94,8 @@ const importRegion = async (): Promise<HTMLElement> => {
 describe("the project switcher", () => {
   it("A: imports into the chosen project's repository with one of that repository's plans", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     expect(shownText(projectSelect())).toBe("alpha");
@@ -115,6 +120,8 @@ describe("the project switcher", () => {
 
   it("A2: says a project is not under task control instead of importing into another repository", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     await pickOption(projectSelect(), "gamma");
@@ -162,6 +169,9 @@ describe("the project switcher", () => {
   it("C: the Requirements, Chains and Memory selects are views of the one selection, both ways", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     chainRepos = ["alpha", "beta", "gamma"].map((repoKey) => ({ repoKey, defaultSessionTimeoutMin: null, chain: null, problem: null }));
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): Chains and Requirements no longer render together, so each view of
+    // the one selection is read on its own section, with a navigation between them; every view and move is still asserted.
+    window.location.hash = "#chains";
     render(<App />);
     await screen.findByRole("combobox", { name: "Project" });
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the Chains picker (its trigger, never Radix's hidden select) shows the one selection and moves it
@@ -169,15 +179,20 @@ describe("the project switcher", () => {
     const requirementSelect = (): HTMLElement =>
       within(screen.getByRole("form", { name: "New requirement" })).getByRole("combobox", { name: "Repository" });
     await waitFor(() => expect(shownText(chainSelect())).toBe("alpha"));
+    await go("#requirements");
     await waitFor(() => expect(shownText(requirementSelect())).toBe("alpha"));
 
     // Chains moves the selection: the sidebar and Requirements follow.
+    await go("#chains");
+    await waitFor(() => expect(shownText(chainSelect())).toBe("alpha"));
     await pickOption(chainSelect(), "beta");
     expect(shownText(projectSelect())).toBe("beta");
+    await go("#requirements");
     expect(shownText(requirementSelect())).toBe("beta");
     // Requirements moves it back.
     await pickOption(requirementSelect(), "alpha");
     expect(shownText(projectSelect())).toBe("alpha");
+    await go("#chains");
     expect(shownText(chainSelect())).toBe("alpha");
     // The sidebar moves it; Memory, opened afterwards, reads that project.
     await pickOption(projectSelect(), "gamma");
@@ -202,6 +217,8 @@ describe("the project switcher", () => {
   it("E: shows the project select with its one project when the panel has one project", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which project the sidebar picker chooses and shows, which plan the import sends, and that Requirements' picker moves the one scope
     projectsAnswer = { status: 200, body: { projects: [PROJECTS.projects[0]] } };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     await importRegion();
     await waitFor(() => expect(workspaceReads).toContain("alpha-11111111"));
@@ -215,6 +232,8 @@ describe("the project switcher", () => {
   // Orca session 32306496.
   it("F: offers no import while the project list cannot be read", async () => {
     projectsAnswer = { status: 500, body: { code: "boom", message: "boom" } };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the import form is in Task control, which renders only while it is the current section.
+    window.location.hash = "#tasks";
     render(<App />);
     const region = await importRegion();
     await waitFor(() => expect(within(region).getByRole("note").textContent).toBe("The project list is unavailable; groups are not shown until it is read."));

@@ -116,6 +116,7 @@ afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
   vi.restoreAllMocks();
+  window.location.hash = "";
 });
 
 /** The line ControlPanel shows while an id is unresolved, or null once it is gone. */
@@ -130,8 +131,12 @@ function storedIds(): string[] {
   return Array.isArray(parsed) ? (parsed as { commandId: string }[]).map((entry) => entry.commandId) : [];
 }
 
-/** Renders App and waits until the lookup for the reloaded id has been attempted. */
+/**
+ * Renders App on Task control, where ControlPanel shows the pending line, and waits until the lookup for the reloaded
+ * id has been attempted. Ruling R1 (#219): only the current section's pane is on the page.
+ */
 async function renderWaitingOnReloadedCommand(): Promise<void> {
+  window.location.hash = "#tasks";
   render(<App />);
   await screen.findByText(/Command outcome unknown, being looked up/);
   await waitFor(() => expect(lookups).toEqual([LOOKUP_PATH]));
@@ -271,6 +276,8 @@ describe("App's recovery of an uncertain command", () => {
     expect(lookups).toHaveLength(3);
   });
   it("keeps the id when the lookup itself could not conclude", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the refusal and the pending line are Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     await waitFor(() => expect(lookups).toEqual([LOOKUP_PATH]));
     lookupGate.release(new Response(null, { status: 503 }));
@@ -285,6 +292,7 @@ describe("App's recovery of an uncertain command", () => {
   });
 
   it("drops the id only when the server says no result was ever retained", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the helper opens Task control, where the pending line is.
     await renderWaitingOnReloadedCommand();
     lookupGate.release(jsonResponse({ error: { code: "command-result-not-found", message: "No retained command result was found.", commandRevision: 6, evidenceIds: [], retryable: false } }, 404));
 
@@ -293,6 +301,7 @@ describe("App's recovery of an uncertain command", () => {
   });
 
   it("drops the id when the lookup returns the command's retained result", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the helper opens Task control, where the pending line is.
     await renderWaitingOnReloadedCommand();
     lookupGate.release(jsonResponse({ schema: "orca-command-lookup-v1", originalStatus: 202, body: {
       schema: "orca-command-success-v1", commandId: COMMAND, actorId: "human", verb: "start", target: { kind: "group", groupId: GROUP },
@@ -306,6 +315,7 @@ describe("App's recovery of an uncertain command", () => {
 });
 
 it("D9 uses authenticated App roles and retains the original command id after losing its POST answer", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list is Task control's; the page opens there.
   window.sessionStorage.clear();
   const fallback = globalThis.fetch;
   const posted: { commandId: string; expectedRevision: number; payload: unknown }[] = [];
@@ -319,6 +329,7 @@ it("D9 uses authenticated App roles and retains the original command id after lo
     return fallback(input, init);
   });
   try {
+    window.location.hash = "#tasks";
     render(<AccountContext.Provider value={{ user: { id: "owner", name: "Owner", roles: ["owner"], mustChangePassword: false }, expiresAt: Date.now() + 86400000, sessionDays: 1 }}><App /></AccountContext.Provider>);
     fireEvent.click(await screen.findByRole("button", { name: "g · running" }));
     fireEvent.click(await screen.findByRole("tab", { name: "Runs and evidence" }));

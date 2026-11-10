@@ -39,7 +39,7 @@ beforeEach(() => {
   panel.summary = { ...panel.summary, groups: [g1, g2] };
   panel.groupViews = { g1: planGroupView(g1), g2: planGroupView(g2) };
 });
-afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
 
 /** Open a group from Task control's list and answer its view's region once it is the one shown. */
 async function openGroup(groupId: string): Promise<HTMLElement> {
@@ -53,6 +53,7 @@ const groupReads = (groupId: string): number => panel.requests.filter((request) 
 
 describe("a group's refusal stays with its group (spec §2.2(d))", () => {
   it("is shown at the top of its group's view, kept through another group's success, and cleared by its own group's next success", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     let refuseG1 = true;
     panel.onPost = async (url) => {
       if (url === "/api/control/groups/g1/pause-dispatch" && refuseG1) {
@@ -61,6 +62,7 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
       }
       return success();
     };
+    window.location.hash = "#tasks";
     render(<App />);
     let g1 = await openGroup("g1");
     fireEvent.click(within(g1).getByRole("button", { name: "Pause new tasks" }));
@@ -91,9 +93,11 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
   });
 
   it("clears a group's unknown outcome once the lookup finds the command succeeded", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     // Fix round 1: a 5xx leaves the outcome unknown; the next poll's lookup finds it committed, which is a success.
     panel.onPost = async (url) => (url === "/api/control/groups/g1/pause-dispatch" ? json({ error: { code: "panel-unavailable", message: "down" } }, 503) : success());
     lookup = async () => json({ schema: "orca-command-lookup-v1", originalStatus: 200, body: { schema: "orca-command-success-v1", commandRevision: 7 } });
+    window.location.hash = "#tasks";
     render(<App />);
     const g1 = await openGroup("g1");
     fireEvent.click(within(g1).getByRole("button", { name: "Pause new tasks" }));
@@ -105,6 +109,7 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
 
 describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
   it("leaves no hidden refusal behind a refused import: a later successful import puts the badge out", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     // Fix round 1: a refused import made no group, so reading that group (404 group-not-found) stored a refusal no view
     // shows and nothing clears, which kept Task control's badge lit until a reload.
     let refuse = true;
@@ -116,6 +121,7 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
       panel.groupViews[imported] = planGroupView(groupSummary(imported, ALPHA));
       return success();
     };
+    window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
     fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
@@ -132,6 +138,7 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
   });
 
   it("remembers an import whose answer was lost as an import, so its lookup's answer replaces the notice in the import form", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     // Fix round 1: the 5xx leaves the import's outcome unknown; the next poll's lookup says it never reached the ledger.
     let sent = "";
     panel.onPost = async (url, body) => {
@@ -140,6 +147,7 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
       return json({ error: { code: "panel-unavailable", message: "down" } }, 503);
     };
     lookup = async (url) => refused(404, "command-result-not-found", `no command ${url}`);
+    window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
     fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
@@ -151,10 +159,12 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
   }, 10_000);
 
   it("shows an unknown import the lookup cannot find in the import form, and reads no group for it", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     // Fix round 1: an import whose answer was lost is remembered as an import; command-result-not-found means it never
     // reached the ledger, so its group does not exist and the import form is where the person acted.
     window.sessionStorage.setItem(UNCERTAIN_COMMANDS_KEY, JSON.stringify([{ groupId: "group-lost", commandId: "cmd-lost", importPlan: true }]));
     lookup = async (url) => refused(404, "command-result-not-found", `no command ${url}`);
+    window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
     fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
@@ -168,6 +178,7 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
   // Final review A5+A6-1: the lookup finds the import reached the ledger and was refused; that refusal, with the plan's
   // problems one per line, replaces the outcome-unknown notice in the import form, and no group is read for it.
   it("replaces an unknown import's notice with the refusal its lookup finds, the plan's problems listed", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     let sent = "";
     panel.onPost = async (url, body) => {
       if (url !== "/api/control/groups/import-plan") return success();
@@ -178,6 +189,7 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
       schema: "orca-command-lookup-v1", originalStatus: 422,
       body: { error: { code: "control-plan-rejected", message: "control-plan-rejected:dangling-dependency:b", commandRevision: null, evidenceIds: [], retryable: false } },
     });
+    window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
     fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
@@ -193,9 +205,11 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
   }, 10_000);
 
   it("lists the plan's problems one per line, in English and in Chinese", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group list and the import dialog are Task control's; the page opens there.
     panel.onPost = async (url) => (url === "/api/control/groups/import-plan"
       ? refused(422, "control-plan-rejected", "control-plan-rejected:missing-target-version:a\ndangling-dependency:b")
       : success());
+    window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
     fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));

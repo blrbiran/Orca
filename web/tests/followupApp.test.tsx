@@ -17,9 +17,11 @@ async function openCardMenu(): Promise<void> {
 }
 
 it("card archive reads the current group revision and does not start execution", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group cards are Task control's; the page opens there.
   const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
   panel.summary = { ...panel.summary, groups: [summary] };
   panel.groupViews.g = planGroupView({ ...summary, commandRevision: 9 });
+  window.location.hash = "#tasks";
   render(<App />);
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
@@ -30,9 +32,11 @@ it("card archive reads the current group revision and does not start execution",
 });
 
 it("a fresh read owned by another repository cannot archive the old card", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group cards are Task control's; the page opens there.
   const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
   panel.summary = { ...panel.summary, groups: [summary] };
   panel.groupViews.g = planGroupView({ ...summary, repoId: BETA, commandRevision: 9 });
+  window.location.hash = "#tasks";
   render(<App />);
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
@@ -41,6 +45,7 @@ it("a fresh read owned by another repository cannot archive the old card", async
 });
 
 it("a project switch during the archive GET cancels the POST for the old scope", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group cards are Task control's; the page opens there.
   // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): a scope switch made through the sidebar picker cancels the old scope's POST
   const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
   panel.summary = { ...panel.summary, groups: [summary] };
@@ -49,6 +54,7 @@ it("a project switch during the archive GET cancels the POST for the old scope",
   let release: ((response: Response) => void) | undefined;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => String(input) === "/api/control/groups/g"
     ? new Promise<Response>((resolve) => { release = resolve; }) : original(input, init)) as typeof fetch;
+  window.location.hash = "#tasks";
   render(<App />);
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));
@@ -59,6 +65,7 @@ it("a project switch during the archive GET cancels the POST for the old scope",
 });
 
 it.each(["estimate", "integration"] as const)("an enabled Archive with a fresh %s guard receives the server refusal", async (guard) => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group cards are Task control's; the page opens there.
   const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
   panel.summary = { ...panel.summary, groups: [summary] };
   const fresh = planGroupView(summary);
@@ -68,6 +75,7 @@ it.each(["estimate", "integration"] as const)("an enabled Archive with a fresh %
   const code = guard === "estimate" ? "archive-call-in-flight" : "archive-integration-resolving";
   panel.onPost = async () => new Response(JSON.stringify({ error: { code, message: "not eligible", commandRevision: 7 } }),
     { status: 409, headers: { "content-type": "application/json" } });
+  window.location.hash = "#tasks";
   render(<App />);
   await openCardMenu();
   const archive = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }) as HTMLButtonElement;
@@ -106,11 +114,13 @@ it.each([false, true])("accepted requirement opens the same group's Preparation 
 });
 
 it("a server archive refusal remains visible at the card where it was requested", async () => {
+  // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group cards are Task control's; the page opens there.
   const summary = groupSummary("g", ALPHA, { state: "ready", commandRevision: 7 });
   panel.summary = { ...panel.summary, groups: [summary] };
   panel.groupViews.g = planGroupView(summary);
   panel.onPost = async () => new Response(JSON.stringify({ error: { code: "archive-run-active", message: "still active", commandRevision: 7 } }),
     { status: 409, headers: { "content-type": "application/json" } });
+  window.location.hash = "#tasks";
   render(<App />);
   await openCardMenu();
   fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Archive group" }));

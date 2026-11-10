@@ -133,6 +133,7 @@ afterEach(() => {
   vi.useRealTimers();
   cleanup();
   window.sessionStorage.clear();
+  window.location.hash = "";
 });
 
 const rereadButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Re-read agent selections" }) as HTMLButtonElement;
@@ -150,7 +151,9 @@ const passQuiescent = async (ms: number): Promise<void> => {
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
 const confirmButton = (): HTMLButtonElement => screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement;
 
+/** Ruling R1 (#219): the group list and the proposal view are Task control's, and only the current section is on the page. */
 async function openGroup(): Promise<void> {
+  window.location.hash = "#tasks";
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
   await screen.findByRole("button", { name: "Confirm task plan" });
@@ -158,6 +161,7 @@ async function openGroup(): Promise<void> {
 
 describe("App re-reads a group's agent preview when the one on screen can no longer be confirmed (wave 3 I-3)", () => {
   it("re-reads the preview once after a confirm refused with agent-selection-changed, and the next confirm carries the new hash", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     let release = (): void => {};
     const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(SECOND))); });
     previewAnswers = [() => json(preview(FIRST)), () => held];
@@ -182,6 +186,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   // Rewritten for ruling review R17 (human ruling 2026-09-27: backoff 10, 20, 40, 80, 160 s): the first retry of a
   // read that did not conclude now comes after 10 s, not 2 s; it still offers the confirm only once a read concludes.
   it("re-reads the preview 10 s after a read that did not conclude, and only then offers the confirm", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     previewAnswers = [() => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500), () => json(preview(FIRST))];
     await openGroup();
@@ -198,6 +203,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   // slot is read again on the bounded backoff -- 10, 20, 40, 80, 160 s, five retries -- and then waits for the
   // operator's Re-read, which reads it once. The bound is what the T15 ruling was about: every read spawns ccloop.
   it("re-reads a preview whose slot was unavailable five times on the backoff, then waits for the operator's Re-read", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     previewAnswers = [...Array.from({ length: 6 }, () => () => json(preview(null, true))), () => json(preview(FIRST))];
     await openGroup();
@@ -222,6 +228,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   // Rewritten for ruling review R17 (human ruling 2026-09-27): "exactly once" became the bounded backoff -- five retries
   // at 10, 20, 40, 80, 160 s -- after which the page waits for the operator; a read that concluded starts a new round.
   it("retries a preview read that did not conclude five times on the backoff, reports the failure once, and then waits for the operator's Re-read", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
     previewAnswers = [...Array.from({ length: 6 }, () => failed), () => json(preview(FIRST)), failed, () => json(preview(SECOND))];
@@ -253,6 +260,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   // Ruling review R17 (a), human ruling 2026-09-27: the operator fixes an installation outside the page, so coming back
   // to it reads the table, the preferences and the open preview again -- once, and a new round of retries.
   it("reads the table, the preferences and the open preview again when the page comes back into view", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     previewAnswers = [() => json(preview(FIRST)), () => json(preview(SECOND))];
     await openGroup();
     await waitFor(() => expect(previewReads).toBe(1));
@@ -267,6 +275,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   // Ruling review R17 (b): the table's content, not the object read, keys the preview. Coming back with the same table
   // reads the preview once (the return itself); with a table that changed meanwhile, once more for the new table.
   it("reads the preview again for a table whose content changed, and not for the same table read again", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     previewAnswers = [() => json(preview(FIRST)), () => json(preview(FIRST)), () => json(preview(SECOND)), () => json(preview(SECOND))];
     await openGroup();
     await waitFor(() => expect(previewReads).toBe(1));
@@ -283,6 +292,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
 
   // Ruling review R17 (d): nothing is retried while the page is hidden; the return reads again and starts a new round.
   it("pauses the backoff while the page is hidden and reads again when it comes back", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     previewAnswers = [() => json(preview(null, true)), () => json(preview(FIRST))];
     await openGroup();
@@ -299,6 +309,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   });
 
   it("keeps the newer preview when the answer to an older read arrives after it", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     let release = (): void => {};
     const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(FIRST))); });
     previewAnswers = [() => held, () => json(preview(SECOND))];
@@ -314,6 +325,7 @@ describe("App re-reads a group's agent preview when the one on screen can no lon
   });
 
   it("ignores a failure that answers an older read after a newer read concluded", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let fail = (): void => {};
     const held = new Promise<Response>((resolve) => { fail = () => resolve(json({ error: { code: "control-internal-error", message: "late", commandRevision: null, evidenceIds: [], retryable: true } }, 500)); });
@@ -337,6 +349,7 @@ describe("the proposal view when the installation table cannot be read, and afte
   // Rewritten for ruling review R17 (human ruling 2026-09-27): "once" became the bounded backoff, five retries at 10,
   // 20, 40, 80, 160 s; after them the operator's Re-read still reads the table and then the preview.
   it("retries a failed installation table read five times on the backoff, then re-reads it and the preview when the operator presses Re-read", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const failed = () => json({ error: { code: "control-internal-error", message: "ccloop did not answer", commandRevision: null, evidenceIds: [], retryable: true } }, 500);
     agentsFailures = Array.from({ length: 6 }, () => failed);
@@ -361,6 +374,7 @@ describe("the proposal view when the installation table cannot be read, and afte
   });
 
   it("says why on an unconfigured port -- the server's code, no endless resolving, no retry -- and offers no confirm", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     servedConfig = { ...config, executionPort: "unconfigured" };
     const unconfigured = () => json({ error: { code: "control-port-unconfigured", message: "No execution port is configured.", commandRevision: null, evidenceIds: [], retryable: false } }, 422);
@@ -385,6 +399,8 @@ describe("the proposal view when the installation table cannot be read, and afte
     const served = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
       String(input).startsWith("/api/control/summary") ? json({ ...summary, changeSeq: 1 }) : served(input, init)) as typeof fetch;
+    // // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the no-port note and a panel refusal line are Task control's; the page opens there.
+    window.location.hash = "#tasks";
     render(<App />);
     // The amber no-port note says why at panel level ...
     await waitFor(() => expect(document.querySelector('p[role="note"][data-tone="warn"]')).not.toBeNull());
@@ -397,6 +413,7 @@ describe("the proposal view when the installation table cannot be read, and afte
   });
 
   it("drops the preview a confirm was refused on as agent-selection-rejected, so the refused hash cannot be sent again", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- openGroup opens Task control first.
     let release = (): void => {};
     const held = new Promise<Response>((resolve) => { release = () => resolve(json(preview(SECOND))); });
     previewAnswers = [() => json(preview(FIRST)), () => held];
@@ -414,7 +431,11 @@ describe("the proposal view when the installation table cannot be read, and afte
 
 describe("App wires the operator's agent defaults (agent selection spec §6.8)", () => {
   it("saves the defaults as { preferences } under the revision read, reads them back, re-reads the open group's preview, and hands them to the proposal view", async () => {
+    // // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the group's proposal view is on Task control and the
+    // defaults' Save is on Settings > Agents; they were on one page while every section stayed mounted. The group is opened
+    // on Task control, then the defaults are saved from Settings: the group stays open in App, so its preview is re-read.
     previewAnswers = [() => json(preview(FIRST)), () => json(preview(SECOND))];
+    window.location.hash = "#tasks";
     const { container } = render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /^g · draft/ }));
     await waitFor(() => expect(confirmButton().disabled).toBe(false));
@@ -423,7 +444,8 @@ describe("App wires the operator's agent defaults (agent selection spec §6.8)",
     const options = (await optionsOf(agentField(container, "g:agent:group:worker", "context"))).map(([name]) => name);
     expect(options).toEqual(["inherit", "agent default", "1000000 tokens"]);
     expect(previewReads).toBe(1);
-    fireEvent.click(screen.getByRole("button", { name: "Save agent preferences" }));
+    await act(async () => { window.location.hash = "#settings/agents"; window.dispatchEvent(new Event("hashchange")); });
+    fireEvent.click(await screen.findByRole("button", { name: "Save agent preferences" }));
     // Review P5: the revision lives in the envelope only.
     await waitFor(() => expect(preferencePosts).toHaveLength(1));
     expect(preferencePosts[0]).toMatchObject({ expectedRevision: 1, payload: { preferences: { defaultAgent: "claude", perAgent: {} } } });

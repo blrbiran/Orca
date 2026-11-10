@@ -70,7 +70,7 @@ beforeEach(async () => {
     throw new Error(`unexpected request: ${url}`);
   }) as typeof fetch;
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.location.hash = ""; });
 
 const listed = (): string[] =>
   Array.from(document.querySelectorAll<HTMLButtonElement>(".decision-list li button")).map((b) => b.textContent ?? "");
@@ -80,7 +80,9 @@ const status = (): HTMLElement => screen.getByRole("combobox", { name: /^(Status
 const pickStatus = (label: string): Promise<void> => pickOption(status(), label);
 const ids = (rows: readonly DecisionListRow[]): string[] => rows.map((r) => r.id);
 
+/** Ruling R1 (plan 2026-11-10-tester-followup-b T8, #219): only the current section is mounted, so Decisions is opened by its route. */
 async function openHome(): Promise<void> {
+  window.location.hash = "#decisions";
   render(<App />);
   await screen.findByText("Unreviewed high-tier decisions");
 }
@@ -95,6 +97,7 @@ describe("rowsForStatus (spec §9.2(1))", () => {
 
 describe("the Decisions status filter in the page", () => {
   it("defaults to Unreviewed, lists exactly today's /api/todo rows, and does not read /api/decisions", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     await openHome();
     expect(shownText(status())).toBe("Unreviewed");
     expect(listed()).toHaveLength(1);
@@ -103,6 +106,7 @@ describe("the Decisions status filter in the page", () => {
   });
 
   it("Reviewed lists the reviewed decisions of any tier and none of the others", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     await openHome();
     await pickStatus("Reviewed");
     await waitFor(() => expect(listed()).toHaveLength(2));
@@ -111,12 +115,14 @@ describe("the Decisions status filter in the page", () => {
   });
 
   it("All lists every decision", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     await openHome();
     await pickStatus("All");
     await waitFor(() => expect(listed()).toHaveLength(4));
   });
 
   it("says so, in the status' own words, when Reviewed has nothing -- not that every decision has been reviewed", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     const real = globalThis.fetch;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
       String(input).startsWith("/api/decisions") ? json({ rows: [OPEN, UNREVIEWED_LOW] }) : real(input, init)) as typeof fetch;
@@ -127,6 +133,7 @@ describe("the Decisions status filter in the page", () => {
   });
 
   it("final review M-T8: the title and lede say which decisions are listed, in each status and language", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     const heading = () => document.querySelector(".decisions h1")?.textContent;
     const lede = () => document.querySelector(".decisions .section-lede")?.textContent;
     await openHome();
@@ -149,6 +156,7 @@ describe("the Decisions status filter in the page", () => {
   });
 
   it("final review M-T8: until the Reviewed rows arrive the list says it is reading them, not that there are none", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     const real = globalThis.fetch;
     let answer: (response: Response) => void = () => undefined;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
@@ -163,6 +171,7 @@ describe("the Decisions status filter in the page", () => {
   });
 
   it("opens a reviewed decision with the correction form, and a second correction shows the refusal", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- opens Decisions by its route (openHome).
     await openHome();
     await pickStatus("Reviewed");
     await waitFor(() => expect(listed()).toHaveLength(2));

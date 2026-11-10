@@ -22,7 +22,10 @@ import type { FakePanel } from "./fixtures/twoProjects.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
-afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); window.localStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; });
+
+/** Ruling R1 (#219): only the current section renders, so a criterion opens the section it reads first. */
+async function go(hash: string): Promise<void> { await act(async () => { window.location.hash = hash; window.dispatchEvent(new Event("hashchange")); }); }
 
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the sidebar picker is driven by keyboard, read by its shown text.
@@ -96,7 +99,10 @@ const TASTE = "not_my_taste — defensible, but not what I would choose";
 
 describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () => {
   it("1: alpha's answers, choices, feedback, limit and correction survive Beta and come back; Beta shows its own defaults", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): requirements and decisions no longer render together, so the
+    // flow moves between Requirements and Decisions; each closed-detail and kept-draft check is made on its own section.
     seed();
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     // Alpha: an own answer for Q1 and a rejected glossary entry on ra.
@@ -109,14 +115,17 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     fireEvent.change(feedbackBox(shown), { target: { value: "alpha feedback" } });
     fireEvent.change(limitBox(shown), { target: { value: "12000000" } });
     // A correction of alpha/d1.
+    await go("#decisions");
     let detail = await openDecision("alpha");
     fireEvent.change(becauseBox(detail), { target: { value: "alpha because" } });
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the correction kind picked for alpha is part of alpha's kept draft
     await pickOption(kindSelect(detail), TASTE);
 
     await switchTo("beta", "Beta");
-    await waitFor(() => expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull());
-    expect(screen.queryByTestId("decision-question")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("decision-question")).toBeNull());
+    await go("#requirements");
+    await screen.findByRole("navigation", { name: "Requirement list" });
+    expect(screen.queryByRole("article", { name: "markdown-export" })).toBeNull();
     // Beta's twins (same round, draft and entry ids) show their own defaults.
     shown = await openRequirement("rb", "answers");
     expect(within(shown).getAllByRole("radio", { name: "Use recommended", checked: true })).toHaveLength(2);
@@ -125,18 +134,22 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     shown = await openRequirement("rb2", "review");
     expect(feedbackBox(shown).value).toBe("");
     expect(limitBox(shown).value).toBe("10,000,000");
+    await go("#decisions");
     detail = await openDecision("beta");
     expect(becauseBox(detail).value).toBe("");
     expect(shownText(kindSelect(detail))).toBe("wrong — the choice was wrong");
 
     await switchTo("alpha", "Alpha");
     await waitFor(() => expect(screen.queryByTestId("decision-question")).toBeNull());
+    await go("#requirements");
     shown = await openRequirement("ra2", "review");
     expect(feedbackBox(shown).value).toBe("alpha feedback");
     expect(limitBox(shown).value).toBe("12,000,000");
+    await go("#decisions");
     detail = await openDecision("alpha");
     expect(becauseBox(detail).value).toBe("alpha because");
     expect(shownText(kindSelect(detail))).toBe(TASTE);
+    await go("#requirements");
     shown = await openRequirement("ra", "answers");
     expect(radio(questionGroup(shown, "R1.Q1"), "Own answer").checked).toBe(true);
     expect((within(questionGroup(shown, "R1.Q1")).getByRole("textbox") as HTMLTextAreaElement).value).toBe("alpha text");
@@ -156,6 +169,8 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
 
   it("2: a round that advanced while closed shows the new round with defaults, and the old round's draft is never sent", async () => {
     seed();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the requirement list, its detail and the New requirement form are in Requirements, which renders only while it is the current section.
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     let shown = await openRequirement("ra", "answers");
@@ -203,6 +218,8 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
       // The command's answer is followed by a re-read of the requirement; let it land.
       await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
     };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the requirement list, its detail and the New requirement form are in Requirements, which renders only while it is the current section.
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     const shown = await openRequirement("ra2", "review");
@@ -236,6 +253,8 @@ describe("detail drafts outlive the detail, keyed by owner (spec §11 R2)", () =
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses, which targets the All-projects pickers offer, and whose draft follows the chosen target
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
     seed();
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the requirement list, its detail and the New requirement form are in Requirements, which renders only while it is the current section.
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     await waitFor(() => expect(selectedText()).toBe("All projects"));
@@ -271,6 +290,8 @@ describe("text typed in All before a target is chosen (fix round 1, I1 and rulin
     panel.config = { ...panel.config, repositories: [...panel.config.repositories, { repoId: GAMMA, displayName: "gamma" }] };
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, { projectKey: "gamma", name: "Gamma", controlRepoId: GAMMA, editable: true }] } };
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the requirement list, its detail and the New requirement form are in Requirements, which renders only while it is the current section.
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     await waitFor(() => expect(selectedText()).toBe("All projects"));
@@ -314,7 +335,11 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): which scope the sidebar picker chooses, which targets the All-projects pickers offer, and whose draft follows the chosen target
     const gamma = { projectKey: "gamma", name: "Gamma", controlRepoId: null, editable: true };
     panel.projects = { status: 200, body: { projects: [...TWO_PROJECTS, gamma] } };
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): the New requirement form (Requirements) and the import form (Task
+    // control) no longer render together, so the flow moves between the two sections; each form's target, options and
+    // disabled button are asserted on its own section, after each project re-read, and nothing is posted from either.
     window.localStorage.setItem(PROJECT_VIEW_KEY, "all");
+    window.location.hash = "#requirements";
     render(<App />);
     await ready();
     await waitFor(() => expect(selectedText()).toBe("All projects"));
@@ -331,6 +356,7 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     await pickOption(targetIn(form()), "Beta");
     fireEvent.change(within(form()).getByRole("textbox", { name: "Idea" }), { target: { value: "export notes" } });
     expect(startButton().disabled).toBe(false);
+    await go("#tasks");
     await waitFor(() => expect(shownText(targetIn(importRegion()))).toBe("Choose a repository"));
     await pickOption(targetIn(importRegion()), "Beta");
     expect(importButton().disabled).toBe(false);
@@ -341,6 +367,7 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     expect(importButton().disabled).toBe(true);
     fireEvent.click(importButton());
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await go("#requirements");
     await waitFor(async () => expect(await names(targetIn(form()))).toEqual(["Choose a repository", "Alpha"]));
     expect(selectedText()).toBe("All projects");
     expect(shownText(targetIn(form()))).toBe("Choose a repository");
@@ -354,11 +381,14 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     await waitFor(async () => expect(await names(targetIn(form()))).toEqual(["Choose a repository", "Alpha", "Beta"]));
     expect(shownText(targetIn(form()))).toBe("Choose a repository");
     expect(startButton().disabled).toBe(true);
+    await go("#tasks");
     await waitFor(async () => expect(await names(targetIn(importRegion()))).toEqual(["Choose a repository", "Alpha", "Beta"]));
     expect(shownText(targetIn(importRegion()))).toBe("Choose a repository");
     expect(importButton().disabled).toBe(true);
     fireEvent.click(importButton());
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await go("#requirements");
+    expect(shownText(targetIn(form()))).toBe("Choose a repository");
     // Ruling: 2026-11-09 independent review; flush the invalid submit path before asserting no command was posted.
     await act(async () => { fireEvent.click(startButton()); fireEvent.submit(form()); });
     expect(panel.posts.map((post) => post.url)).toEqual([]);

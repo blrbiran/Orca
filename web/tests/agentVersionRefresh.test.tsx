@@ -66,12 +66,14 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); document.cookie = "orca_csrf=; max-age=0"; });
+afterEach(() => { cleanup(); window.sessionStorage.clear(); vi.restoreAllMocks(); window.location.hash = ""; document.cookie = "orca_csrf=; max-age=0"; });
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100));
 
 describe("the Agents page's version refresh (agent version auto-refresh spec §3.3)", () => {
   it("loads the agents view without a refresh POST of its own", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the version table is on the Agents settings; the page opens there.
+    window.location.hash = "#settings/agents";
     render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
     await screen.findByText("0.155.1");
     await settle();
@@ -79,8 +81,10 @@ describe("the Agents page's version refresh (agent version auto-refresh spec §3
   });
 
   it("keeps the table and shows the refusal when the button's refresh is refused", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the version table is on the Agents settings; the page opens there.
     refreshStatus = 403;
     document.cookie = "orca_csrf=token-1";
+    window.location.hash = "#settings/agents";
     render(<App />);
     await screen.findByText("0.155.1");
     fireEvent.click(await screen.findByRole("button", { name: "Refresh versions" }));
@@ -90,6 +94,8 @@ describe("the Agents page's version refresh (agent version auto-refresh spec §3
   });
 
   it("refreshes again from the Refresh versions button and re-reads the table", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the version table is on the Agents settings; the page opens there.
+    window.location.hash = "#settings/agents";
     render(<AccountContext.Provider value={owner}><App /></AccountContext.Provider>);
     await screen.findByText("0.155.1");
     const reads = sent.filter((entry) => entry === "GET agents").length;

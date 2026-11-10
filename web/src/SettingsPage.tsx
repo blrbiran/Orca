@@ -57,7 +57,8 @@ export function SettingsPage(props: { category: SettingsCategory; global: Global
         </ul>
       </nav>
       <div className="min-w-0">
-        <GlobalSettings {...props.global} category={props.category} />
+        {/* Ruling R1 (#219): the project's category shows none of the global settings, so they are not mounted there. */}
+        {props.category !== "project" && <GlobalSettings {...props.global} category={props.category} />}
         {/* The project's own heading names it (gaps spec §11), so this category adds none. */}
         <SettingsCategoryPane category="project" active={props.category} title={false}>
           <ProjectIdentity {...props.pick} />

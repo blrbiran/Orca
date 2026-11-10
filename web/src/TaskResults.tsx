@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { createContext, useContext, useRef } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { GroupViewV1, ResultAttemptV1, ResultExplanationV1, RunResultsV1, WorkItemViewV1 } from "./controlTypes.js";
@@ -58,17 +58,33 @@ export function freshSavedRun(answer: RunResultsV1, prior?: RunResultsV1, author
   && (knownExecution === null || answer.executionId === knownExecution)
   && (knownAttempt === null || answer.currentAttempt === null || answer.currentAttempt >= knownAttempt);
 }
+/**
+ * Ruling R1 (#219): the authority each owner has seen, kept by App so it outlives the Task control pane (which unmounts when
+ * another section is shown). Keyed by the owner string, which names scope, account, epoch, group (and task); App clears it
+ * when the project scope changes, as unmounting the closed group used to. Null (a component rendered on its own): each
+ * consumer keeps its own memory, as before.
+ */
+export type SavedRunAuthorityStore = Map<string, Map<string, SavedRunAuthority>>;
+export const SavedRunAuthorityContext = createContext<SavedRunAuthorityStore | null>(null);
 /** Remember authority separately from nullable display DTOs, across read/pane refreshes for the same immutable owner. */
 export function useSavedRunAuthority(owner: string) {
+ const store = useContext(SavedRunAuthorityContext);
  const memory = useRef({ owner, runs: new Map<string, SavedRunAuthority>() });
  if (memory.current.owner !== owner) memory.current = { owner, runs: new Map() };
+ const runsOf = (): Map<string, SavedRunAuthority> => {
+  if (store === null) return memory.current.runs;
+  let runs = store.get(owner);
+  if (runs === undefined) { runs = new Map(); store.set(owner, runs); }
+  return runs;
+ };
  const key = (run: RunResultsV1): string => JSON.stringify([run.runId, run.generation]);
  return {
-  admit: (run: RunResultsV1, prior?: RunResultsV1): boolean => freshSavedRun(run, prior, memory.current.runs.get(key(run))),
+  admit: (run: RunResultsV1, prior?: RunResultsV1): boolean => freshSavedRun(run, prior, runsOf().get(key(run))),
   remember: (runs: RunResultsV1[]): void => {
+   const saved = runsOf();
    for (const run of runs) {
-    const known = memory.current.runs.get(key(run));
-    memory.current.runs.set(key(run), {
+    const known = saved.get(key(run));
+    saved.set(key(run), {
      captureRevision: Math.max(run.captureRevision, known?.captureRevision ?? 0),
      currentAttempt: run.currentAttempt === null ? known?.currentAttempt ?? null : Math.max(run.currentAttempt, known?.currentAttempt ?? 0),
      executionId: run.executionId ?? known?.executionId ?? null,

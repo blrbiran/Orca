@@ -55,7 +55,7 @@ const summary: ControlSummaryV1 = {
 const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "epoch-a", dispatchBlocked: true, blockers: [{ scope: "global", groupId: "", runId: null, code: "code-2", evidenceIds: [] }] };
 const workspace: RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1", repoId: "orca", workspaceMode: "worktree", revision: 1 };
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.location.hash = ""; });
 
 describe("the task control and recovery areas in Chinese", () => {
   it("shows the control summary, one group, recovery and the workspace mode in Chinese", async () => {
@@ -255,6 +255,7 @@ describe("the rest of the control area's branches in Chinese", () => {
   });
 
   it("says the task control plane is unavailable in Chinese", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the notice is Task control's, so the page opens there.
     await i18n.changeLanguage("zh");
     const realFetch = globalThis.fetch;
     const report = {
@@ -272,6 +273,7 @@ describe("the rest of the control area's branches in Chinese", () => {
       return json({ error: { code: "not-here", message: "no", commandRevision: null, evidenceIds: [], retryable: false } }, 404);
     }) as typeof fetch;
     try {
+      window.location.hash = "#tasks";
       render(<App />);
       expect((await screen.findByText("这个面板上没有任务控制面。")).className).toBe("empty");
     } finally {

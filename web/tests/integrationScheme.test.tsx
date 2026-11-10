@@ -220,6 +220,7 @@ describe("the page around the integration UI (spec §9.1)", () => {
   });
 
   it("reads the chosen project's default, saves an owner's change under its revision, and reads it back", async () => {
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219) -- the project's integration default is on Settings > Project; the page opens there.
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const realFetch = globalThis.fetch;
     const panel = installFakePanel();
@@ -233,6 +234,7 @@ describe("the page around the integration UI (spec §9.1)", () => {
       return fake(input, init);
     }) as typeof fetch;
     try {
+      window.location.hash = "#settings/project";
       render(<App />);
       const region = await screen.findByRole("region", { name: "Integration" });
       await choose(region, "Delivery", "push-branch");
@@ -243,6 +245,7 @@ describe("the page around the integration UI (spec §9.1)", () => {
     } finally {
       cleanup();
       window.localStorage.clear();
+      window.location.hash = "";
       globalThis.fetch = realFetch;
     }
   });

@@ -10,6 +10,8 @@ import { App } from "../src/App.js";
 // content: renderToStaticMarkup, not jsdom, per plan ruling 2.
 describe("App", () => {
   it("renders the placeholder markup", () => {
-    expect(renderToStaticMarkup(<App />)).toContain("orca panel");
+    // Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219): only the current section renders, so the Metrics pane's loading line
+    // ("orca panel loading…") is no longer in the markup; the default section's own heading is.
+    expect(renderToStaticMarkup(<App />)).toMatch(/data-section="overview" data-active="true"><section aria-label="Overview">.*<h2>Overview<\/h2>/);
   });
 });
