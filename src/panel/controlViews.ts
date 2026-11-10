@@ -13,7 +13,8 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { isTerminallyFailedRun, recoveryRetryCommand } from "../control/driveRecord.js";
+import { isTerminallyFailedRun, recoveryRetryCommand, requirementSetAgentCommand } from "../control/driveRecord.js";
+import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
@@ -425,7 +426,9 @@ function blockedRequirementRun(store: ControlStore, groupId: string, clarifying:
   // remaining grant; the view names that amount and ccloop's lower bound before the person confirms.
   const charge = settleableSingleCallBlock(run as never) === null ? {}
     : { blockedRunCharge: { tokens: run.remaining?.work?.tokens ?? 0, usageLowerBound: run.singleCallUsageLowerBound?.tokens ?? null } };
-  return { blockedRun: { runId, reason: run.drive?.blockedReason ?? null }, ...charge };
+  // Plan follow-up B, T10: a call blocked on its agent names the verb that re-selects it (the brief, requirement show).
+  const next = run.state === "blocked" && blockedOnRequirementAgent(run.drive?.blockedAt, run.drive?.blockedReason) ? { next: requirementSetAgentCommand(groupId) } : {};
+  return { blockedRun: { runId, reason: run.drive?.blockedReason ?? null, ...next }, ...charge };
 }
 
 /** N1 spec §11.2: a requirement's state in one line (the summary); null round/draft fields before the first of each. */

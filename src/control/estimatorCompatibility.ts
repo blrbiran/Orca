@@ -52,6 +52,17 @@ export const catalogMissReason = (miss: { model: string; listed: string[] }): Es
 /** Issue #236: the reason a requirement call is blocked with when its frozen selector left the catalog. */
 export const SELECTOR_MISS_PREFIX = "agent-selection-invalid:";
 
+const ACCEPT_UNSUPPORTED = /^accept-refused:[^:]*:single-call-unsupported(?=$|:|\s)/;
+/**
+ * Issue #236: a requirement call blocked because its frozen agent cannot run it -- Orca's catalog check at A2 named the
+ * selector, or ccloop refused the call at accept before writing anything (exit 2) with `single-call-unsupported`. The one
+ * test requirement-set-agent closes such a call by, and the views name that verb by (plan follow-up B, T10).
+ */
+export function blockedOnRequirementAgent(blockedAt: string | null | undefined, reason: string | null | undefined): boolean {
+  const text = reason ?? "";
+  return (blockedAt === "A2" && text.startsWith(SELECTOR_MISS_PREFIX)) || (blockedAt === "B" && ACCEPT_UNSUPPORTED.test(text));
+}
+
 /** One predicate for every required single-call action, evaluated against the chosen resolution only. */
 export function estimatorCompatibility(
   resolution: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution" | "catalogMiss">,

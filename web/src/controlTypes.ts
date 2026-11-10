@@ -59,7 +59,8 @@ export type RequirementSummaryV1 = {
   limit: BudgetAmount;
   usageUnknown: boolean;
   /** Final review finding 4: the requirement's call the driver blocked, and why (webProtocol.ts). */
-  blockedRun: { runId: string; reason: string | null } | null;
+  /** Plan follow-up B, T10: `next` is the `orca requirement set-agent` command, on a call blocked on its agent. */
+  blockedRun: { runId: string; reason: string | null; next?: string } | null;
   /** Spec 2026-10-27 single-call unknown usage §9 R1, R6: only when blockedRun is blocked on unknown usage -- the grant its retry charges. */
   blockedRunCharge?: { tokens: number; usageLowerBound: number | null };
   /** Issue #75: the requirement's slug once a round named one. Optional so literal fixtures need no edit; the server always sends it. */

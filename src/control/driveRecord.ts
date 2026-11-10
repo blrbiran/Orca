@@ -267,6 +267,14 @@ export function recoveryRetryCommand(runId: string): string {
 }
 
 /**
+ * Plan 2026-11-10 follow-up B, T10: the command that re-selects a requirement's agent, named on a requirement call blocked
+ * on it (estimatorCompatibility.ts blockedOnRequirementAgent); the agent and model are the person's to choose.
+ */
+export function requirementSetAgentCommand(groupId: string): string {
+  return `orca requirement set-agent ${groupId} --agent <agent> --model <model>`;
+}
+
+/**
  * `recovery-retry` on a blocked driver run: back to the step it was blocked at, reason cleared.
  * Blocked at A2 means the workspace was never recorded as prepared, so A2 runs again; blocked at R
  * forgets the dead reconciliation process so the next round decides afresh. Answers whether it

@@ -3,6 +3,7 @@ import type { PartialSelection } from "../../src/control/agentSelection.js";
 import { ControlError } from "../../src/control/errors.js";
 import type { AgentModelsView } from "../../src/control/executionPort.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
+import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { fixtureConfigHashOf, fixtureResolveAgent } from "./fixtures/agents.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { ROUND_ONE, ROUND_TWO } from "./fixtures/requirementOutputs.js";
@@ -113,6 +114,38 @@ describe("a frozen codex selector the catalog no longer lists (#236)", () => {
       expect(roundTwoRun(x).at(-1)!.agent.model).toBe(RENAMED);
       expect(x.round(1)).toEqual(roundOne);
     } finally { await x.dispose(); }
+  });
+
+  // Plan 2026-11-10 follow-up B, T10 (T5's hint): the brief and requirement show print the summary's blockedRun; a call
+  // blocked on its agent names the verb that unblocks it (as T1's firstFailure.next names recovery retry), another block
+  // does not -- set-agent would refuse it as a call in flight.
+  const SET_AGENT_NEXT = "orca requirement set-agent r --agent <agent> --model <model>";
+  it("the summary's blocked call names requirement set-agent when blocked on its agent at A2 or at accept, and not otherwise", async () => {
+    const stale = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }, { purpose: "clarify", output: ROUND_TWO }] });
+    try {
+      stale.fake.setModels(catalog("fixture-model"));
+      await answeredRoundOne(stale);
+      stale.fake.setModels(catalog(RENAMED));
+      await stale.until(() => roundTwoRun(stale).some((run) => run.state === "blocked"));
+      expect(readGroupSummary(stale.store, "r").requirement!.blockedRun)
+        .toEqual({ runId: roundTwoRun(stale)[0]!.runId, reason: `agent-selection-invalid:fixture-model (listed: ${RENAMED})`, next: SET_AGENT_NEXT });
+    } finally { await stale.dispose(); }
+    const refused = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }, { purpose: "clarify", output: ROUND_TWO }] });
+    try {
+      await answeredRoundOne(refused);
+      refused.fake.refuseAccept(new ControlError("control-peer-exit", "2:single-call-unsupported: codex model fixture-model has no single call"));
+      await refused.until(() => roundTwoRun(refused).some((run) => run.state === "blocked"));
+      expect(readGroupSummary(refused.store, "r").requirement!.blockedRun!.next).toBe(SET_AGENT_NEXT);
+    } finally { await refused.dispose(); }
+    const other = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }, { purpose: "clarify", output: ROUND_TWO }] });
+    try {
+      await answeredRoundOne(other);
+      other.fake.refuseAccept(new ControlError("control-peer-exit", "2:claim-invalid: not this agent's fault"));
+      await other.until(() => roundTwoRun(other).some((run) => run.state === "blocked"));
+      const blocked = readGroupSummary(other.store, "r").requirement!.blockedRun!;
+      expect(blocked.reason).toMatch(/^accept-refused:2:claim-invalid/);
+      expect(blocked).not.toHaveProperty("next");
+    } finally { await other.dispose(); }
   });
 
   it("requirement-set-agent refuses a selector the catalog does not list, and a call that is in flight for another reason", async () => {

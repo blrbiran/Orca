@@ -1469,7 +1469,8 @@ export const requirementSummarySchema = z.object({
   used: amountSchema, reserved: amountSchema, limit: budgetAmountSchema, usageUnknown: z.boolean(),
   // Final review finding 4: the requirement's call blocked by the driver, and why; the group view refuses a clarifying
   // group (DR25), so this is where its reason and its run-scoped recovery-retry are shown.
-  blockedRun: z.object({ runId: idSchema, reason: nonemptyString.nullable() }).strict().nullable(),
+  // Plan follow-up B, T10: `next` names `orca requirement set-agent` when the call is blocked on its agent.
+  blockedRun: z.object({ runId: idSchema, reason: nonemptyString.nullable(), next: nonemptyString.optional() }).strict().nullable(),
   // Spec 2026-10-27 single-call unknown usage §9 R1, R6: present only when blockedRun is a call blocked on unknown usage --
   // the remaining grant its retry charges, and ccloop's lower bound on what it spent (null when none was observed).
   blockedRunCharge: z.object({ tokens: safeInteger, usageLowerBound: positiveSafeInteger.nullable() }).strict().optional(),

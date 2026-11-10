@@ -12,7 +12,7 @@ import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from ".
 import { freezeMultiDir, dirTargetRepoId, multiDirOf, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
 import { readIntegrationDefault } from "./integrationScheme.js";
 import { initialLanding, type LandingScheme } from "./multiLandingRecord.js";
-import { catalogMissText, estimatorCompatibility, SELECTOR_MISS_PREFIX, selectorMissOf } from "./estimatorCompatibility.js";
+import { blockedOnRequirementAgent, catalogMissText, estimatorCompatibility, selectorMissOf } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
@@ -163,16 +163,13 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
 }
 
 /**
- * Issue #236: a requirement call blocked because its frozen agent cannot run it -- Orca's catalog check at A2 named the
- * selector (`agent-selection-invalid:`), or ccloop refused the call at accept before writing anything (exit 2) with
- * `single-call-unsupported`. Such a call never reached a provider, so requirement-set-agent may close it and restart it.
+ * Issue #236: a requirement call blocked because its frozen agent cannot run it (blockedOnRequirementAgent). Such a call
+ * never reached a provider, so requirement-set-agent may close it and restart it.
  */
-const ACCEPT_UNSUPPORTED = /^accept-refused:[^:]*:single-call-unsupported(?=$|:|\s)/;
 function blockedOnAgent(run: { state: string; drive?: { blockedAt: string | null; blockedReason: string | null } }): boolean {
   const drive = run.drive;
   if (run.state !== "blocked" || drive === undefined) return false;
-  const reason = drive.blockedReason ?? "";
-  return (drive.blockedAt === "A2" && reason.startsWith(SELECTOR_MISS_PREFIX)) || (drive.blockedAt === "B" && ACCEPT_UNSUPPORTED.test(reason));
+  return blockedOnRequirementAgent(drive.blockedAt, drive.blockedReason);
 }
 
 /**
