@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { layoutDependencies } from "../src/dependencyLayout.js";
-import { nodeLines, runNumber } from "../src/DependencyGraph.js";
+import { edgePath, graphGeometry, nodeLines, runNumber, sampleEdge } from "../src/DependencyGraph.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
 
 afterEach(cleanup);
@@ -118,5 +118,39 @@ describe("category fill, legend and live node text (issue-fixes spec §6.5)", ()
     render(<ControlGroupView view={view([runningItem], runs(minutes(2)))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} now={NOW} />);
     fireEvent.click(screen.getByRole("button", { name: "a · active" }));
     expect(screen.getByRole("region", { name: "Task a" })).toBeTruthy();
+  });
+});
+
+// #232 (plan 2026-11-10-tester-followup-b T7): an edge that skips a layer was one curve straight across it, so it ran
+// through the tasks drawn there and read as a dependency on them. Each edge is sampled from the geometry the graph draws.
+describe("edge routing (#232)", () => {
+  const sixTasks = [deps("T1"), deps("T2", "T1"), deps("T3", "T1"), deps("T4", "T1"), deps("T5", "T2", "T3", "T4"), deps("T6", "T1", "T2", "T3", "T4", "T5")];
+  const throughB = [deps("c", "a", "b"), deps("b", "a"), deps("a"), deps("d")];
+
+  it.each([["T1..T6", sixTasks], ["a->c past b", throughB]] as const)("%s: no edge passes through a task it does not join, and every edge is inside the drawing", (_name, items) => {
+    const geometry = graphGeometry(layoutDependencies(items));
+    const crossings = new Set<string>();
+    const outside = new Set<string>();
+    for (const edge of geometry.edges) {
+      for (const point of sampleEdge(edge.segments)) {
+        for (const node of geometry.nodes) {
+          if (node.taskId === edge.from || node.taskId === edge.to) continue;
+          if (point.x > node.x && point.x < node.x + node.w && point.y > node.y && point.y < node.y + node.h) crossings.add(`${edge.from}->${edge.to} through ${node.taskId}`);
+        }
+        if (point.x < 0 || point.x > geometry.width || point.y < 0 || point.y > geometry.height) outside.add(`${edge.from}->${edge.to}`);
+      }
+    }
+    expect([...crossings]).toEqual([]);
+    expect([...outside]).toEqual([]);
+  });
+
+  it("draws each edge and the drawing's size from that same geometry", () => {
+    const items = sixTasks.map((task) => workItem({ taskId: task.taskId, dependencyTaskIds: [...task.dependencyTaskIds] }));
+    render(<ControlGroupView view={view(items)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const geometry = graphGeometry(layoutDependencies(items));
+    const graph = screen.getByRole("figure", { name: "Dependency graph" });
+    const drawn = Object.fromEntries([...graph.querySelectorAll("path[data-edge]")].map((path) => [path.getAttribute("data-edge"), path.getAttribute("d")]));
+    expect(drawn).toEqual(Object.fromEntries(geometry.edges.map((edge) => [`${edge.from}->${edge.to}`, edgePath(edge.segments)])));
+    expect(graph.querySelector("svg")!.getAttribute("height")).toBe(String(geometry.height));
   });
 });
