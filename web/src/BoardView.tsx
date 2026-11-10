@@ -139,6 +139,13 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
           {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: causeText(facts.firstFailure.cause) })}` : ""}
         </p>
       )}
+      {/* Tester #229 (plan follow-up B, T1/T10): a run blocked after landing resumes in place; the failure names the command. */}
+      {facts?.firstFailure?.next !== undefined && (
+        <p className="detail-note" data-testid="board-card-failure-next">
+          {t("board.card.failureNext")} <code className="select-all">{facts.firstFailure.next}</code>{" "}
+          <button type="button" className="btn-quiet" onClick={() => { void navigator.clipboard?.writeText(facts.firstFailure!.next!); }}>{t("board.card.copyCommand")}</button>
+        </p>
+      )}
       {/* Checks spec 2026-10-22 §7: a model review's findings this group is involved in -- major red, minor grey (P5). */}
       {(facts?.reviewFindings?.major ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-tone="danger" data-testid="board-card-findings-major">{t("board.card.findingsMajor", { count: facts!.reviewFindings!.major })}</span>}
       {(facts?.reviewFindings?.minor ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-testid="board-card-findings-minor">{t("board.card.findingsMinor", { count: facts!.reviewFindings!.minor })}</span>}
