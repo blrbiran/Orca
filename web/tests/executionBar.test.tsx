@@ -4,10 +4,10 @@
  * Problems). They are one persistent bar above the region tabs, shown whatever tab is open, and never repeated inside a
  * tab -- which buttons the bar offers is still decided by the existing gates.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import { config, view } from "./fixtures/board.js";
+import { config, run, view } from "./fixtures/board.js";
 import type { GroupViewV1 } from "../src/controlTypes.js";
 
 afterEach(cleanup);
@@ -35,4 +35,30 @@ it("keeps the existing gates: a ready group offers Start; a running one does not
   cleanup();
   mount(view([]));
   expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+});
+
+// #228 (plan 2026-11-10-tester-followup-b T7): the bar sits above every tab, so it must stay short. Its three counts
+// were stacked label/number pairs shown even at 0, and its recent-command ids (a technical fact) pushed the tabs down.
+const bar = (): HTMLElement => screen.getByRole("heading", { name: "Execution controls" }).closest<HTMLElement>('[data-overview-region="dispatch"]')!;
+
+it("shows no work count when every count is zero, and keeps the actions as an always-visible toolbar", () => {
+  const value = view([]); value.summary.state = "ready"; mount(value);
+  for (const label of ["Continuable work", "Retryable work", "Unresolved work"]) expect(within(bar()).queryByText(label), label).toBeNull();
+  const actions = within(bar()).getByRole("toolbar", { name: "Execution actions" });
+  expect(within(actions).getByRole("button", { name: "Pause new tasks" })).toBeTruthy();
+  expect(actions.closest("details"), "actions are not folded away").toBeNull();
+});
+
+it("puts the non-zero counts on one wrapping row of chips and leaves the zero ones out", () => {
+  const value = view([], [run({ runId: "run-a", state: "unknown" })]); value.summary.state = "ready"; mount(value);
+  const counts = within(bar()).getByRole("list", { name: "Work counts" });
+  expect(counts.className.split(" "), "one wrapping row, not a stacked list").toEqual(expect.arrayContaining(["flex", "flex-wrap"]));
+  expect(within(counts).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["Unresolved work 1"]);
+});
+
+it("shows the recent commands under Technical details, not in the bar", () => {
+  const value = view([]); value.recentCommandIds = ["start-1"]; mount(value);
+  expect(within(bar()).queryByText(/Recent commands/)).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "Technical details" }));
+  expect(within(screen.getByRole("tabpanel")).getByText("Recent commands: start-1")).toBeTruthy();
 });

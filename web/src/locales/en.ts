@@ -580,6 +580,8 @@ export const en = {
       continuableWork: "Continuable work",
       retryableWork: "Retryable work",
       unresolvedWork: "Unresolved work",
+      workCounts: "Work counts",
+      dispatchActions: "Execution actions",
       start: "Start",
       startQueued: "Queued: {{ahead}} ahead; it starts when a slot frees.",
       pause: "Pause new tasks",

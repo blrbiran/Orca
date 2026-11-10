@@ -180,9 +180,11 @@ it("execution controls name pause and safe stop without implying completion", ()
   expect(screen.getByRole("button", { name: "Save progress and stop" })).toBeTruthy();
   // Issue #47: the execution controls are a bar above the tabs, no longer inside the Preparation tab.
   const region = screen.getByRole("heading", { name: "Execution controls" }).closest<HTMLElement>('[data-overview-region="dispatch"]')!;
-  expect(within(region).getByText("Continuable work")).toBeTruthy();
-  expect(within(region).getByText("Retryable work")).toBeTruthy();
-  expect(within(region).getByText("Unresolved work")).toBeTruthy();
+  // Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): a zero count is no longer shown; the bar's actions are its toolbar.
+  expect(within(region).queryByText("Continuable work")).toBeNull();
+  expect(within(region).queryByText("Retryable work")).toBeNull();
+  expect(within(region).queryByText("Unresolved work")).toBeNull();
+  expect(within(within(region).getByRole("toolbar", { name: "Execution actions" })).getByRole("button", { name: "Pause new tasks" })).toBeTruthy();
 });
 
 it("unresolved work counts distinct affected runs, not duplicate or group blockers", () => {

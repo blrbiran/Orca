@@ -10,7 +10,7 @@
 import { ChargeRetry } from "./ChargeRetry.js";
 import type { JSX } from "react";
 import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { taskGoal } from "./ui/classes.js";
+import { actionRow, chipRow, taskGoal } from "./ui/classes.js";
 import { useTranslation } from "react-i18next";
 import { scheduleIdFor, type ControlAction } from "./controlApi.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -389,6 +389,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   for (const run of view.runs) if (run.state === "unknown" || run.state === "attempt-unknown") unresolvedWork.add(unresolvedKey(run.runId));
   for (const blocker of view.recoveryBlockers) if (blocker.scope === "run" && blocker.runId !== null) unresolvedWork.add(unresolvedKey(blocker.runId));
   const unresolvedCount = unresolvedWork.size;
+  const workCounts = ([["continuableWork", continuable.length], ["retryableWork", retryableCount], ["unresolvedWork", unresolvedCount]] as const)
+    .filter(([, n]) => n > 0);
   const selections = (): ContinuationSelectionV1[] =>
     continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
@@ -471,22 +473,23 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const dispatchControls = (<>
       <div id={overviewRegionId("group", groupId, "dispatch")} tabIndex={-1} data-overview-region="dispatch">
       <h3>{t("control.group.dispatch")}</h3>
-      <dl className="execution-work-kinds">
-        <dt>{t("control.group.continuableWork")}</dt><dd>{continuable.length}</dd>
-        <dt>{t("control.group.retryableWork")}</dt><dd>{retryableCount}</dd>
-        <dt>{t("control.group.unresolvedWork")}</dt><dd>{unresolvedCount}</dd>
-      </dl>
+      {/* #228: the bar is above every tab, so it stays short -- only the non-zero counts, as one row of chips. */}
+      {workCounts.length > 0 && (
+        <ul className={chipRow} aria-label={t("control.group.workCounts")}>
+          {workCounts.map(([key, n]) => <li key={key} className="badge"><span>{t(`control.group.${key}`)}</span> <span className="num">{n}</span></li>)}
+        </ul>
+      )}
       {continuable.length > 0 && <p>{t("control.group.continueFromCheckpoint")}</p>}
       {handoffActive && view.summary.stopState === "handoff-complete" && <p>{t("control.group.resumeForRetry")}</p>}
+      {!archived && view.summary.state === "ready" && view.summary.executionPending !== true && props.startQueued !== undefined && (
+        <p role="status" data-testid="start-queued">{t("control.group.startQueued", { ahead: props.startQueued })}</p>
+      )}
       {!archived && (
-        <>
+        <div role="toolbar" aria-label={t("control.group.dispatchActions")} className={actionRow}>
           {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
           {/* Feedback #53: a Web-started group stays ready through its first run; executionPending is the server's "not startable". */}
           {view.summary.state === "ready" && view.summary.executionPending !== true && stopMode === null && (
             <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
-          )}
-          {view.summary.state === "ready" && view.summary.executionPending !== true && props.startQueued !== undefined && (
-            <p role="status" data-testid="start-queued">{t("control.group.startQueued", { ahead: props.startQueued })}</p>
           )}
           {/* Tester #15: a done group dispatches nothing more, so there is nothing to pause or hand off. A draft keeps both: a
               pause there holds the start that confirming would otherwise bring. */}
@@ -549,9 +552,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               {t("control.group.archive")}
             </button>
           )}
-        </>
+        </div>
       )}
-      <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
       </div>
   </>);
 
@@ -829,6 +831,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 </>,
         technical: <>
       <SkillsGiven view={view} />
+      {/* #228: moved here from the execution bar -- command ids are a technical fact, not a control. */}
+      <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>
 
       {view.handoffRequests.length > 0 && (
         <>

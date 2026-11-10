@@ -14,6 +14,11 @@ export const tabItem = "-mb-px flex items-center border-b-2 border-transparent p
   + " aria-[pressed=true]:border-accent aria-[pressed=true]:font-semibold aria-[pressed=true]:text-fg-strong hover:aria-[pressed=true]:border-accent";
 /** A row of button tabs (the region and corrections tabs): the tab row with its air above and below. */
 export const tabButtonRow = `${tabRow} mt-4 mb-3`;
+/** The group detail's region tabs (#228): closer to the execution bar right above them than a free-standing tab row. */
+export const regionTabRow = `${tabRow} mt-2 mb-3`;
+/** The execution bar (#228): its non-zero work counts as one wrapping row of chips, and its actions as one wrapping row. */
+export const chipRow = "m-0 flex list-none flex-wrap gap-2 p-0";
+export const actionRow = "my-2 flex flex-wrap items-center gap-2 [&>button]:ms-0";
 /** A tab that is a button drops the button chrome -- fill, side and top edges, corners, shadow, the gap after a button. */
 export const tabButton = `${tabItem} ms-0 rounded-none border-x-0 border-t-0 bg-transparent shadow-none`;
 
