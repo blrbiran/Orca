@@ -240,8 +240,20 @@ function testsOutsideScope(checks: readonly string[], targetPaths: readonly stri
   return [...new Set(named)].filter((path) => !claims.some((claim) => contains(claim, path)));
 }
 
-const loopOf = (task: SplitOutput["tasks"][number]): LoopPlanFileInput => ({
-  goal: task.goal, successCondition: task.successCondition, targetPaths: [...task.targetPaths], checks: [...task.checks], ...(task.loopPlan === undefined ? {} : { plan: task.loopPlan }),
+type Criterion = { readonly id: string; readonly text: string };
+/**
+ * #204: the split's free-text successCondition lost an acceptance criterion's exact values (`todo/doing/done`), and the
+ * agent built something else. Code, not the instruction, appends the full text of every acceptance criterion the task
+ * traces, in the requirement's order, so the contract carries them verbatim. A task tracing none keeps its words.
+ */
+function withTracedCriteria(successCondition: string, traces: readonly string[], criteria: readonly Criterion[]): string {
+  const traced = criteria.filter((criterion) => traces.includes(criterion.id));
+  return traced.length === 0 ? successCondition
+    : `${successCondition}\n\nAcceptance criteria this task traces:\n${traced.map((criterion) => `- ${criterion.id}: ${criterion.text}`).join("\n")}`;
+}
+
+const loopOf = (task: SplitOutput["tasks"][number], criteria: readonly Criterion[]): LoopPlanFileInput => ({
+  goal: task.goal, successCondition: withTracedCriteria(task.successCondition, task.traces, criteria), targetPaths: [...task.targetPaths], checks: [...task.checks], ...(task.loopPlan === undefined ? {} : { plan: task.loopPlan }),
   ...(task.setup === undefined ? {} : { setup: [...task.setup] }),
 });
 
@@ -250,7 +262,7 @@ export function expandSplitDraft(output: SplitOutput, context: { targetRepo: str
   return {
     targetRepo: context.targetRepo, ccloopBin: context.ccloopBin, runsDir: context.runsDir, workBranch: `orca/${context.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo",
     goal: context.statement, successConditions: context.acceptanceCriteria.map((criterion) => criterion.text),
-    tasks: output.tasks.map((task) => ({ taskId: task.taskId, loop: loopOf(task), dependsOn: [...task.dependsOn], targetVersion: 1 as const, ...(task.labels.length === 0 ? {} : { labels: [...task.labels] }) })),
+    tasks: output.tasks.map((task) => ({ taskId: task.taskId, loop: loopOf(task, context.acceptanceCriteria), dependsOn: [...task.dependsOn], targetVersion: 1 as const, ...(task.labels.length === 0 ? {} : { labels: [...task.labels] }) })),
   };
 }
 
@@ -268,12 +280,14 @@ export function orderWrites<T extends { dir: string }>(writes: readonly T[], key
 export interface MultiSplitContext {
   targetRepo: string; ccloopBin: string; runsDir: string; groupId: string; statement: string;
   successConditions: readonly string[];
+  /** #204: the requirement's acceptance criteria; each task's success condition gets the text of those it traces. Absent: none. */
+  acceptanceCriteria?: readonly Criterion[];
   dirs: readonly { key: string; path: string }[];
 }
 
-const loopOfMulti = (task: MultiSplitOutput["tasks"][number], keys: readonly string[]): LoopPlanFileInput => {
+const loopOfMulti = (task: MultiSplitOutput["tasks"][number], keys: readonly string[], criteria: readonly Criterion[]): LoopPlanFileInput => {
   const primary = orderWrites(task.writes, keys)[0]!;
-  return { goal: task.goal, successCondition: task.successCondition, targetPaths: [...primary.targetPaths], checks: [...primary.checks],
+  return { goal: task.goal, successCondition: withTracedCriteria(task.successCondition, task.traces, criteria), targetPaths: [...primary.targetPaths], checks: [...primary.checks],
     ...(task.loopPlan === undefined ? {} : { plan: task.loopPlan }) };
 };
 
@@ -290,14 +304,14 @@ export function expandMultiSplitDraft(output: MultiSplitOutput, context: MultiSp
   const plan: SplitPlanFile = {
     targetRepo: context.targetRepo, ccloopBin: context.ccloopBin, runsDir: context.runsDir, workBranch: `orca/${context.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo",
     goal: context.statement, successConditions: [...context.successConditions],
-    tasks: output.tasks.map((task) => ({ taskId: task.taskId, loop: loopOfMulti(task, keys), dependsOn: [...task.dependsOn], targetVersion: 1 as const,
+    tasks: output.tasks.map((task) => ({ taskId: task.taskId, loop: loopOfMulti(task, keys, context.acceptanceCriteria ?? []), dependsOn: [...task.dependsOn], targetVersion: 1 as const,
       ...(task.labels.length === 0 ? {} : { labels: [...task.labels] }) })),
   };
   const contracts = new Map<string, Record<string, unknown>>(), reasons: string[] = [];
   for (const task of output.tasks) {
     const writes = orderWrites(task.writes, keys), primaryPath = pathOf.get(writes[0]!.dir);
     if (primaryPath === undefined || writes.some((write) => !pathOf.has(write.dir))) continue;
-    const expanded = expandLoopTask(task.taskId, primaryPath, loopOfMulti(task, keys), task.labels);
+    const expanded = expandLoopTask(task.taskId, primaryPath, loopOfMulti(task, keys, context.acceptanceCriteria ?? []), task.labels);
     if (!expanded.ok) { reasons.push(`expand:${task.taskId}:${expanded.reason}`); continue; }
     if (writes.length === 1) { contracts.set(task.taskId, expanded.contract); continue; }
     const definition = loopPlanDefinition(expanded.recipe.planId, expanded.recipe.planVersion);
@@ -420,7 +434,8 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   if (new Set(plan.successConditions).size !== plan.successConditions.length) reasons.push("import:duplicate-success-condition");
   const contracts = new Map<string, unknown>();
   for (const task of output.tasks) {
-    const expanded = expandLoopTask(task.taskId, plan.targetRepo, loopOf(task), task.labels);
+    // These contracts judge expansion and write sets only; the traced criteria's text (#204) bears on neither.
+    const expanded = expandLoopTask(task.taskId, plan.targetRepo, loopOf(task, []), task.labels);
     if (expanded.ok) contracts.set(task.taskId, expanded.contract); else reasons.push(`expand:${task.taskId}:${expanded.reason}`);
   }
   for (const task of output.tasks) for (const path of task.targetPaths) {

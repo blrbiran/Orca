@@ -414,7 +414,7 @@ async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRu
   }
   const dirs = [...paths].map(([key, path]) => ({ key, path }));
   const expanded = expandMultiSplitDraft(parsed.data, { targetRepo: dirs[0]!.path, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId,
-    statement: latest.statement, successConditions: latest.acceptanceCriteria.map((criterion) => criterion.text), dirs });
+    statement: latest.statement, successConditions: latest.acceptanceCriteria.map((criterion) => criterion.text), acceptanceCriteria: latest.acceptanceCriteria, dirs });
   const validated = await validateMultiSplitDraft({ output: parsed.data, plan: expanded.plan, contracts: expanded.contracts, expandReasons: expanded.reasons, paths, commits,
     criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
   // DR12: the hash is of the expanded plan, the bytes the person reviews; a draft with a reason keeps neither.

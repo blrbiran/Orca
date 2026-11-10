@@ -29,10 +29,13 @@ const task = (patch: Partial<SplitOutput["tasks"][number]>, index = 0) => ({ ...
 
 describe("expanding a split (N1 spec §8.2)", () => {
   it("expands into a complete loop-task plan on orca/<groupId>, local-merge, the statement as goal", () => {
+    // Ruling: human, session after 9179cdad, 2026-11-10 — #204 appends traced acceptance criteria to the task contract (plan 2026-11-10-tester-followup-b T4)
+    // Each VALID_SPLIT task traces exactly one acceptance criterion.
+    const traced = (t: SplitOutput["tasks"][number]) => `${t.successCondition}\n\nAcceptance criteria this task traces:\n- ${t.traces[0]}: ${criteria.find((c) => c.id === t.traces[0])!.text}`;
     expect(expandSplitDraft(VALID_SPLIT, ctx())).toEqual({
       targetRepo: repo, ccloopBin: "/opt/ccloop/dist/cli.js", runsDir: "/var/orca/runs", workBranch: "orca/r", policy: "local-merge", ledgerMode: "out-of-repo",
       goal: "Export notes.", successConditions: criteria.map((c) => c.text),
-      tasks: VALID_SPLIT.tasks.map((t) => ({ taskId: t.taskId, loop: { goal: t.goal, successCondition: t.successCondition, targetPaths: t.targetPaths, checks: t.checks }, dependsOn: t.dependsOn, targetVersion: 1, labels: t.labels })),
+      tasks: VALID_SPLIT.tasks.map((t) => ({ taskId: t.taskId, loop: { goal: t.goal, successCondition: traced(t), targetPaths: t.targetPaths, checks: t.checks }, dependsOn: t.dependsOn, targetVersion: 1, labels: t.labels })),
     });
   });
 });

@@ -400,11 +400,20 @@ export async function applyRequirementDraftAccept(
           if (deps.resolveRepository === undefined) throw new ControlError("control-target-not-allowed");
           for (const member of multi.dirs) paths.set(member.key, deps.resolveRepository(dirTargetRepoId(deps.store, id, member.key)));
         }
-        const expanded = multi === null ? null : expandMultiSplitDraft(draft.output as MultiSplitOutput, {
+        // #204: the same criteria the split expanded with (evaluateMultiSplit: the latest answered round's), so each
+        // re-expanded contract's success condition carries the text of the criteria its task traces, as the plan does --
+        // but only when re-expanding with them reproduces the stored plan's success conditions. A draft expanded before
+        // #204 was reviewed without that text, so its contracts are re-expanded without it and agree with its plan.
+        const criteria = multi === null ? [] : chainRounds(readRounds(deps.store, id)).filter((round) => round.result !== null).at(-1)?.result?.acceptanceCriteria ?? [];
+        const reexpand = (acceptanceCriteria: typeof criteria) => expandMultiSplitDraft(draft.output as MultiSplitOutput, {
           targetRepo: [...paths.values()][0]!, ccloopBin: stored.ccloopBin, runsDir: stored.runsDir, groupId: id,
-          statement: source.goal, successConditions: source.successConditions,
+          statement: source.goal, successConditions: source.successConditions, acceptanceCriteria,
           dirs: [...paths].map(([key, path]) => ({ key, path })),
         });
+        const storedSuccess = new Map(stored.tasks.map((task) => [task.taskId, task.loop.successCondition]));
+        const withCriteria = multi === null ? null : reexpand(criteria);
+        const expanded = withCriteria === null ? null
+          : withCriteria.plan.tasks.every((task) => storedSuccess.get(task.taskId) === task.loop.successCondition) ? withCriteria : reexpand([]);
         const tasks = expanded === null ? source.tasks : source.tasks.map((task) => {
           const contract = expanded.contracts.get(task.taskId);
           if (contract === undefined) throw new ControlError("recovery-blocked", `multi-dir-contract:${task.taskId}`);
