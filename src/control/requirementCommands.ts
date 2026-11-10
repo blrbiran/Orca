@@ -12,7 +12,7 @@ import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from ".
 import { freezeMultiDir, dirTargetRepoId, multiDirOf, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
 import { readIntegrationDefault } from "./integrationScheme.js";
 import { initialLanding, type LandingScheme } from "./multiLandingRecord.js";
-import { estimatorCompatibility } from "./estimatorCompatibility.js";
+import { catalogMissText, estimatorCompatibility, SELECTOR_MISS_PREFIX, selectorMissOf } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
@@ -29,7 +29,8 @@ import { writeCanonicalRecord } from "./snapshot.js";
 import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
 import { expandMultiSplitDraft, orderWrites, type SplitPlanFile } from "./requirementSplit.js";
 import { REQUIREMENT_CALL_GRANT, REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput } from "./requirementSchemas.js";
-import { commandSuccess, readStopIntent } from "./stopIntent.js";
+import { commandSuccess, readRunBody, readStopIntent, saveRunBody } from "./stopIntent.js";
+import { interruptRequirementCall } from "./requirementCalls.js";
 import type { ControlStore } from "./store.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { Amount } from "./types.js";
@@ -43,6 +44,7 @@ export type RequirementDraftAcceptCommand = Extract<RawAuthorityCommandV1, { ver
 export type RequirementClarifyMoreCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-clarify-more" }>;
 export type RequirementClassifyCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-classify" }>;
 export type RequirementReviseCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-revise" }>;
+export type RequirementSetAgentCommand = Extract<RawAuthorityCommandV1, { verb: "requirement-set-agent" }>;
 type Result = CommandLookupV1["body"];
 export interface RequirementCommandDeps {
   store: ControlStore; admissionGate?: AdmissionGate; profileRouter: ExecutionProfileRouter; defaults: () => ImportDefaults | null;
@@ -106,6 +108,8 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
     } catch (error) {
       return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
+    // Issue #236: the selector this requirement would freeze, against the installation's read catalog.
+    const miss = slot.outcome.kind === "frozen" ? await selectorMissOf(profile.port, slot.outcome.slot.selection) : null;
     const now = nowOf(deps);
     return applyWebCommand<Result>(deps.store, {
       rawCommand: command,
@@ -128,6 +132,9 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
         if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}${probeDetail === undefined ? "" : `: ${probeDetail}`}`);
         const preflight = profile.snapshot.profile.estimatorPreflight;
         if (!preflight) throw new ControlError("control-estimator-unconfigured");
+        // Issue #236: ccloop runs a codex single call only for an exact catalog selector, so one the catalog does not list is
+        // refused here, with the selectors it does list -- before the capability codes the miss implies.
+        if (miss !== null) throw new ControlError("agent-selection-invalid", catalogMissText(miss));
         const compatibility = estimatorCompatibility(slot.observation, estimateMode);
         if (!compatibility.compatible) throw new ControlError("agent-selection-rejected", `estimator:${compatibility.reasonCodes.join(",")}`);
         const requirementId = sha256Canonical({ groupId: payload.groupId, commandId: command.commandId }).slice(0, 32);
@@ -141,6 +148,97 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
         writeRound(deps.store, payload.groupId, newRound(1));
         const wakeId = queueRequirementCall(deps.store, payload.groupId, `open-${context.nextCommandRevision}`);
         return commandSuccess(context, { kind: "requirement-opened", groupId: payload.groupId, requirementId, roundNo: 1, wakeId }, 201);
+      },
+    }).body;
+  } finally { release?.(); }
+}
+
+/**
+ * Issue #236: a requirement call blocked because its frozen agent cannot run it -- Orca's catalog check at A2 named the
+ * selector (`agent-selection-invalid:`), or ccloop refused the call at accept before writing anything (exit 2) with
+ * `single-call-unsupported`. Such a call never reached a provider, so requirement-set-agent may close it and restart it.
+ */
+const ACCEPT_UNSUPPORTED = /^accept-refused:[^:]*:single-call-unsupported(?=$|:|\s)/;
+function blockedOnAgent(run: { state: string; drive?: { blockedAt: string | null; blockedReason: string | null } }): boolean {
+  const drive = run.drive;
+  if (run.state !== "blocked" || drive === undefined) return false;
+  const reason = drive.blockedReason ?? "";
+  return (drive.blockedAt === "A2" && reason.startsWith(SELECTOR_MISS_PREFIX)) || (drive.blockedAt === "B" && ACCEPT_UNSUPPORTED.test(reason));
+}
+
+/**
+ * Issue #236: the person (or an agent, as every requirement verb) re-selects a clarifying requirement's agent. The slot is
+ * resolved and checked exactly as requirement-open checks it -- against the requirement's own frozen profile -- and frozen
+ * in its place (new selection, new configHash, output bound recomputed), and the estimator override is replaced, so an
+ * accepted draft seeds the worker default with it. A call blocked on its agent (blockedOnAgent) is closed as never
+ * started -- its grant given back, its round or draft interrupted with the call recorded -- and drafted again on the new
+ * slot, as recovery-retry would: rounds already answered stay as they are. Any other call in flight is refused.
+ */
+export async function applyRequirementSetAgent(deps: RequirementCommandDeps, command: RequirementSetAgentCommand): Promise<Result> {
+  const release = deps.admissionGate?.enter();
+  try {
+    const replay = preflightWebCommand<Result>(deps.store, command);
+    if (replay) return replay.body;
+    const id = command.target.groupId;
+    let profile: FrozenProfile, slot: PreparedEstimatorSlot, miss: { model: string; listed: string[] } | null;
+    try {
+      const binding = clarifying(deps.store, id).requirement.profile;
+      profile = deps.profileRouter.resolve("budget-estimate", binding.profileId, binding.profileHash);
+      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, { estimator: command.payload.agent }, profile);
+      miss = slot.outcome.kind === "frozen" ? await selectorMissOf(profile.port, slot.outcome.slot.selection) : null;
+    } catch (error) {
+      return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+    }
+    return applyWebCommand<Result>(deps.store, {
+      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: (context) => {
+        const store = deps.store;
+        notStopped(store, clarifying(store, id));
+        const probeDetail = slot.observation.probeFailureDetail;
+        if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}${probeDetail === undefined ? "" : `: ${probeDetail}`}`);
+        const preflight = profile.snapshot.profile.estimatorPreflight;
+        if (!preflight) throw new ControlError("control-estimator-unconfigured");
+        if (miss !== null) throw new ControlError("agent-selection-invalid", catalogMissText(miss));
+        const compatibility = estimatorCompatibility(slot.observation, deps.defaults()?.estimateMode ?? "soft");
+        if (!compatibility.compatible) throw new ControlError("agent-selection-rejected", `estimator:${compatibility.reasonCodes.join(",")}`);
+        const frozen = slot.outcome.slot;
+        const active = store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").all(id).map((row) => readRunBody(store, String(row.id)));
+        if (active.length > 1 || (active.length === 1 && !blockedOnAgent(active[0] as never))) invalid("call-in-flight");
+        const blocked = active[0] ?? null;
+        const before = readRequirementGroup(store, id);
+        const overrides = { ...readGroupAgentOverrides(before), estimator: command.payload.agent };
+        if (blocked === null && canonicalBytes(before.requirement.agentSlot).equals(canonicalBytes(frozen)) && canonicalBytes(before.agentOverrides ?? {}).equals(canonicalBytes(overrides))) {
+          throw new ControlError("no-op-command");
+        }
+        let restarted: { roundNo: number } | { draftNo: number } | null = null;
+        if (blocked !== null) {
+          // The call never reached a provider: closed as a no-start (as a stop's restartable settlement closes one), its
+          // grant back on the clarifying ledger and the call recorded on its round or draft as interrupted.
+          const settled = { ...blocked, state: "settled-restartable", failureCode: "agent-reselected" };
+          saveRunBody(store, settled as never, false);
+          interruptRequirementCall(store, id, settled as never);
+          const group = readRequirementGroup(store, id);
+          if (group.requirement.consensus === null) {
+            const round = latestRound(store, id);
+            if (round !== null && round.state === "interrupted") {
+              writeRound(store, id, { ...round, state: "drafting", retries: 0, lastInvalidReason: null, reasonCode: null, waiting: null });
+              restarted = { roundNo: round.roundNo };
+            }
+          } else {
+            const draft = latestDraft(store, id);
+            if (draft !== null && draft.state === "interrupted") {
+              writeDraft(store, id, newDraft(draft.draftNo + 1, 0));
+              restarted = { draftNo: draft.draftNo + 1 };
+            }
+          }
+        }
+        const group = readRequirementGroup(store, id);
+        group.requirement = { ...group.requirement, agentSlot: frozen, maxOutputTokens: singleCallOutputBound(preflight.maxOutputTokens, slot.observation.resolution) };
+        group.agentOverrides = overrides;
+        saveRequirementGroup(store, group);
+        const wakeId = restarted === null ? null : queueRequirementCall(store, id, `set-agent-${context.nextCommandRevision}`);
+        return commandSuccess(context, { kind: "requirement-agent-set", selection: frozen.selection, configHash: frozen.configHash,
+          restarted: restarted === null || wakeId === null ? null : { ...restarted, wakeId } });
       },
     }).body;
   } finally { release?.(); }

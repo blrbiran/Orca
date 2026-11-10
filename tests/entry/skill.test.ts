@@ -5,7 +5,7 @@ import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import {
   confirmPayloadSchema, continueTaskPayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
-  requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, requirementRevisePayloadSchema, resumeFromHandoffPayloadSchema,
+  requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, requirementRevisePayloadSchema, requirementSetAgentPayloadSchema, resumeFromHandoffPayloadSchema,
   setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
@@ -39,7 +39,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "proposal-set-agent": proposalSetAgentPayloadSchema, "requirement-open": requirementOpenPayloadSchema, "requirement-answer": requirementAnswerPayloadSchema,
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "requirement-clarify-more": requirementClarifyMorePayloadSchema,
-  "requirement-classify": requirementClassifyPayloadSchema, "requirement-revise": requirementRevisePayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
+  "requirement-classify": requirementClassifyPayloadSchema, "requirement-revise": requirementRevisePayloadSchema, "requirement-set-agent": requirementSetAgentPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
   "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
   "resolve-folder-change": resolveFolderChangePayloadSchema, "multi-dir-landing": multiDirLandingPayloadSchema,
@@ -120,7 +120,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
     const at = rows.flatMap((row, index) => (row.route.includes("requirement") ? [index] : []));
     // Clarify caps spec 2026-10-21 §3.1, §3.3: clarify-more and classify are requirement routes too (was 5).
     // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §10.3 adds requirement/revise (was 7).
-    expect(at.length).toBe(8);
+    // Issue #236 (tester follow-up B, T5): requirement/set-agent is a requirement route too (was 8).
+    expect(at.length).toBe(9);
     expect(at.at(-1)! - at[0]!).toBe(at.length - 1);
   });
 

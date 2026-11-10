@@ -688,7 +688,7 @@ export type CommandSuccessV1 = {
   commandId: string;
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
-    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise"
+    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
@@ -788,6 +788,8 @@ export type CommandSuccessV1 = {
     | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }
     | { kind: "requirement-classified"; scope: RequirementScopeV1; clarity: RequirementClarityV1 }
     | { kind: "requirement-revised"; roundNo: number; revises: number; consensusWithdrawn: boolean; nextRoundNo: number | null; wakeId: string | null }
+    // Issue #236: the re-frozen agent slot, and the blocked round or draft drafted again (null: nothing was blocked).
+    | { kind: "requirement-agent-set"; selection: AgentSelectionV1; configHash: string; restarted: { roundNo: number; wakeId: string } | { draftNo: number; wakeId: string } | null }
     | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string | null; estimateState: "queued" | "blocked-capability" | "input-too-large" | "none"; documentSha256: string; exportWakeId: string }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned" | "unchanged-idle"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };
 };

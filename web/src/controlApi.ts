@@ -1,4 +1,4 @@
-import type {SavedResultEligibilityV1} from "./controlTypes.js";
+import type {PanelPartialSelectionV1, SavedResultEligibilityV1} from "./controlTypes.js";
 /**
  * Task 9: the browser's only door to the control plane.
  *
@@ -468,6 +468,8 @@ export type ControlAction =
   | { verb: "requirement-classify"; groupId: string; expectedRevision: number; payload: { scope: RequirementScopeV1; clarity: RequirementClarityV1 } }
   // Flow engine spec §10.3 (W-76): revise an answered round as a new round.
   | { verb: "requirement-revise"; groupId: string; expectedRevision: number; payload: RequirementAnswerPayloadV1 & { reason?: string; exclude?: number[] } }
+  // Issue #236: re-select a clarifying requirement's agent; a call blocked on the old one is drafted again.
+  | { verb: "requirement-set-agent"; groupId: string; expectedRevision: number; payload: { agent: PanelPartialSelectionV1 } }
   // Control run decisions plan Tasks 9-11: an owner approves a refused decision with an undo.how, or rejects it (no
   // `because` key when the person wrote no line -- the server's schema refuses an empty one).
   | { verb: "approve-pending-decision"; groupId: string; expectedRevision: number; payload: { pendingId: string; undoHow: string } }
@@ -558,6 +560,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/requirement/classify`;
     case "requirement-revise":
       return `${group}/requirement/revise`;
+    case "requirement-set-agent":
+      return `${group}/requirement/set-agent`;
     case "approve-pending-decision":
       return `${group}/decisions/approve`;
     case "reject-pending-decision":

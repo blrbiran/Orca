@@ -1327,7 +1327,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
 }
 
 /** Clarify caps spec 2026-10-21 §3.6: the commands that start a drafting step (a round or a draft); retries are the same wait. */
-const DRAFTING_VERBS = ["requirement-open", "requirement-answer", "requirement-clarify-more", "requirement-consensus", "requirement-draft-feedback", "recovery-retry", "requirement-revise"];
+const DRAFTING_VERBS = ["requirement-open", "requirement-answer", "requirement-clarify-more", "requirement-consensus", "requirement-draft-feedback", "recovery-retry", "requirement-revise", "requirement-set-agent"];
 function draftingSince(store: ControlStore, groupId: string): number | null {
   const row = store.db.prepare(`SELECT at FROM activity WHERE group_id=? AND kind='command' AND json_extract(body,'$.verb') IN (${DRAFTING_VERBS.map(() => "?").join(",")}) ORDER BY seq DESC LIMIT 1`)
     .get(groupId, ...DRAFTING_VERBS);

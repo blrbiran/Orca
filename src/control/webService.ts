@@ -125,8 +125,8 @@ import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { insertSingleCallRun } from "./singleCallLedger.js";
 import {
-  applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementRevise, applyRequirementClassify, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
-  type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementReviseCommand, type RequirementClassifyCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
+  applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementRevise, applyRequirementClassify, applyRequirementSetAgent, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
+  type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementReviseCommand, type RequirementClassifyCommand, type RequirementSetAgentCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
 } from "./requirementCommands.js";
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
@@ -1708,6 +1708,8 @@ export class WebControlService {
   requirementClarifyMore(command: RequirementClarifyMoreCommand): WebCommandResult { return applyRequirementClarifyMore(this.deps, command); }
   requirementRevise(command: RequirementReviseCommand): WebCommandResult { return applyRequirementRevise(this.deps, command); }
   requirementClassify(command: RequirementClassifyCommand): WebCommandResult { return applyRequirementClassify(this.deps, command); }
+  /** Issue #236: re-select a clarifying requirement's agent and restart a call blocked on it. */
+  requirementSetAgent(command: RequirementSetAgentCommand): Promise<WebCommandResult> { return applyRequirementSetAgent(this.deps, command); }
   /** N1 spec §9.1. */
   acceptRequirementDraft(command: RequirementDraftAcceptCommand): Promise<WebCommandResult> { return applyRequirementDraftAccept(this.deps, command); }
   /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */

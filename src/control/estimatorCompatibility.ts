@@ -20,21 +20,37 @@ const LISTED_NAMED = 12;
  * read stays not a refusal of its own (ccloop materialize.ts, plan issue 5).
  */
 export async function catalogMissOf(port: Pick<ExecutionPort, "listModels">, resolution: AgentResolution | null): Promise<{ model: string; listed: string[] } | null> {
-  if (resolution === null || resolution.singleCallExecution !== null || resolution.capabilities.contextWindowTokens !== null || port.listModels === undefined) return null;
-  let view: Awaited<ReturnType<NonNullable<ExecutionPort["listModels"]>>>;
-  try { view = await port.listModels(resolution.selection.agent, false); } catch { return null; }
-  if (view.kind !== "codex" || view.source === "none" || view.models.length === 0) return null;
-  const model = resolution.selection.model;
-  if (view.models.some((entry) => entry.model === model)) return null;
-  return { model, listed: view.models.map((entry) => entry.model) };
+  if (resolution === null || resolution.singleCallExecution !== null || resolution.capabilities.contextWindowTokens !== null) return null;
+  return selectorMissOf(port, resolution.selection);
 }
 
-/** Issue #209: also the worker slots' refusal code (agentFreeze.ts), so both paths name the miss in the same words. */
-export const catalogMissReason = (miss: { model: string; listed: string[] }): EstimatorCompatibilityReason => {
+/**
+ * Issue #236: ccloop resolves a codex single call by the exact catalog selector (ccloop materialize.ts), so a requirement's
+ * frozen selector that the read catalog no longer lists can only be refused at accept (single-call-unsupported). This
+ * asks the catalog directly, whatever the resolution says: a read codex catalog that lists models but not this one names
+ * it and the list; a catalog that was not or could not be read, or another kind, is null -- not a refusal (#124).
+ */
+export async function selectorMissOf(port: Pick<ExecutionPort, "listModels">, selection: { agent: string; model: string }): Promise<{ model: string; listed: string[] } | null> {
+  if (port.listModels === undefined) return null;
+  let view: Awaited<ReturnType<NonNullable<ExecutionPort["listModels"]>>>;
+  try { view = await port.listModels(selection.agent, false); } catch { return null; }
+  if (view.kind !== "codex" || view.source === "none" || view.models.length === 0) return null;
+  if (view.models.some((entry) => entry.model === selection.model)) return null;
+  return { model: selection.model, listed: view.models.map((entry) => entry.model) };
+}
+
+/** `<model> (listed: a b ... and N more)`: the miss in the words every path names it with. */
+export const catalogMissText = (miss: { model: string; listed: string[] }): string => {
   const named = miss.listed.slice(0, LISTED_NAMED).join(" ");
   const more = miss.listed.length > LISTED_NAMED ? ` and ${miss.listed.length - LISTED_NAMED} more` : "";
-  return `model-not-in-catalog: ${miss.model} (listed: ${named}${more})`;
+  return `${miss.model} (listed: ${named}${more})`;
 };
+
+/** Issue #209: also the worker slots' refusal code (agentFreeze.ts), so both paths name the miss in the same words. */
+export const catalogMissReason = (miss: { model: string; listed: string[] }): EstimatorCompatibilityReason => `model-not-in-catalog: ${catalogMissText(miss)}`;
+
+/** Issue #236: the reason a requirement call is blocked with when its frozen selector left the catalog. */
+export const SELECTOR_MISS_PREFIX = "agent-selection-invalid:";
 
 /** One predicate for every required single-call action, evaluated against the chosen resolution only. */
 export function estimatorCompatibility(

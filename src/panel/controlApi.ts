@@ -910,6 +910,7 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/requirement/clarify-more", verb: "requirement-clarify-more", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/revise", verb: "requirement-revise", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/classify", verb: "requirement-classify", target: fromParams },
+    { path: "/api/control/groups/:groupId/requirement/set-agent", verb: "requirement-set-agent", target: fromParams },
     // Labels and progress spec §8 R9: the one new route; the ledger key is the group's, as for continue-task.
     {
       path: "/api/control/groups/:groupId/tasks/:taskId/labels",
@@ -1020,6 +1021,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "requirement-clarify-more": service.requirementClarifyMore(command); break;
           case "requirement-revise": service.requirementRevise(command); break;
           case "requirement-classify": service.requirementClassify(command); break;
+          case "requirement-set-agent": await service.requirementSetAgent(command); break;
           case "set-spend-cap": service.setSpendCap(command); break;
           case "set-orchestration-settings": service.setOrchestrationSettings(command); break;
           case "clear-spend-cap": service.clearSpendCap(command); break;

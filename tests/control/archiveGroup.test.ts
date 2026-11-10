@@ -219,6 +219,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "requirement-clarify-more": { call: (s, c) => s.requirementClarifyMore(c), target: "group", payload: { roundNo: 1 } },
   "requirement-classify": { call: (s, c) => s.requirementClassify(c), target: "group", payload: { scope: "small", clarity: "clear" } },
   "requirement-revise": { call: (s, c) => s.requirementRevise(c), target: "group", payload: { roundNo: 1, answers: [], glossaryDecisions: [], adrDecisions: [] } },
+  "requirement-set-agent": { call: (s, c) => s.requirementSetAgent(c), target: "group", payload: { agent: { model: "fixture-model" } } },
   // Ruling: 「这次批准改写所有必要的判据。」 (session 86352010) -- spec 2026-11-06 (d): Orca's own verb, applied in-process.
   "settle-approximate-usage": { call: (s, c) => applySettleApproximateUsage({ store: s.store }, c), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1 } },
   "settle-unknown-usage": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.settleUnknownUsage(c)), target: "group", payload: { taskId: "a", runId: "run-a", generation: 1, acknowledge: "charge-remaining-grant" } },

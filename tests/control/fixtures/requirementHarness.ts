@@ -9,7 +9,7 @@ import { updateRevision } from "../../../src/control/commandLedger.js";
 import { deliverSchedulerWakes } from "../../../src/control/dispatch.js";
 import { ControlError } from "../../../src/control/errors.js";
 import { createExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
-import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
+import type { AgentModelsView, ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
 import { estimatorSlotFor } from "../../../src/control/planImport.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
 import { classifyClarifyOutput } from "../../../src/control/requirementClarify.js";
@@ -53,10 +53,15 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
   let resolveOverride: ((partial: PartialSelection) => Promise<AgentResolution>) | null = null;
   // Issue 91 review fix: a criterion can make a handoff delivery fail (the router keeps its own copy of the port's methods).
   let handoffFailure: Error | null = null;
+  // Issue #236: ccloop's catalog view a criterion sets; null (the default) is a catalog that cannot be read.
+  let models: AgentModelsView | null = null;
+  // Issue #236: a criterion can make accept refuse as ccloop does before it writes anything (exit 2).
+  let acceptRefusal: ControlError | null = null;
   const port: ExecutionPort = {
     resolveAgent: async (partial) => (resolveOverride ?? resolveAgent)(partial),
+    listModels: async () => { if (models === null) throw new Error("queuedPort: no catalog"); return structuredClone(models); },
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
-    async accept(envelope) { calls.accept.push(structuredClone(envelope)); return accepted(envelope); },
+    async accept(envelope) { calls.accept.push(structuredClone(envelope)); if (acceptRefusal !== null) throw acceptRefusal; return accepted(envelope); },
     async inspect(envelope) { return accepted(envelope); },
     async requestHandoff(_envelope, request) { if (handoffFailure !== null) throw handoffFailure; requested = true; return { kind: "latched", requestId: request.requestId }; },
     async collect(envelope): Promise<ExecutionReport> {
@@ -92,7 +97,8 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
     async readEvidence(ref) { const bytes = evidence.get(`${ref.artifactId}:${ref.hash}`); if (!bytes) throw new ControlError("control-evidence-context-missing"); return bytes; },
   };
   return { port, calls, baseResolveAgent: resolveAgent, setResolveAgent: (fn: ((partial: PartialSelection) => Promise<AgentResolution>) | null) => { resolveOverride = fn; },
-    failHandoff: (error: Error | null) => { handoffFailure = error; } };
+    failHandoff: (error: Error | null) => { handoffFailure = error; },
+    setModels: (view: AgentModelsView | null) => { models = view; }, refuseAccept: (error: ControlError | null) => { acceptRefusal = error; } };
 }
 
 /**

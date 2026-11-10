@@ -645,6 +645,7 @@ export const commandVerbSchema = z.enum([
   "requirement-clarify-more",
   "requirement-classify",
   "requirement-revise",
+  "requirement-set-agent",
   "set-spend-cap",
   "clear-spend-cap",
   "set-usage-calendar",
@@ -1050,6 +1051,8 @@ export const requirementRevisePayloadSchema = z.object({
   answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema),
   reason: nonemptyString.optional(), exclude: z.array(positiveSafeInteger).optional(),
 }).strict();
+// Issue #236: re-select a clarifying requirement's agent (requirement-open's `agent`, required here).
+export const requirementSetAgentPayloadSchema = z.object({ agent: panelPartialSelectionSchema }).strict();
 
 // Flow engine spec §14.2: the flow verbs' payloads. A run, a step and a record are named by id; values are the kernel's
 // to check (a template's params, an ask's form), so they arrive as plain JSON scalars.
@@ -1280,6 +1283,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-set-agent"), target: groupCommandTargetSchema, payload: requirementSetAgentPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1379,6 +1383,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-set-agent"), target: groupCommandTargetSchema, payload: requirementSetAgentPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -2262,6 +2267,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("requirement-clarify-more"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-classified"), scope: z.enum(SCOPES), clarity: z.enum(CLARITIES) }).strict(),
   z.object({ kind: z.literal("requirement-revised"), roundNo: positiveSafeInteger, revises: positiveSafeInteger, consensusWithdrawn: z.boolean(), nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
+  // Issue #236: the slot frozen in its place, and the blocked round or draft drafted again (null: nothing was blocked).
+  z.object({ kind: z.literal("requirement-agent-set"), selection: agentSelectionSchema, configHash: hashSchema,
+    restarted: z.union([z.object({ roundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(), z.object({ draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict()]).nullable() }).strict(),
   z
     .object({
       kind: z.literal("requirement-draft-accepted"),

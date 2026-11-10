@@ -43,6 +43,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "requirement-classify": "any",
   // Flow engine spec §10.3 (W-76): as requirement-answer -- the person answering the clarification may revise it.
   "requirement-revise": "any",
+  // Issue #236: as every requirement verb.
+  "requirement-set-agent": "any",
   // Accounts spec §3.5, §6.1: the spend caps bound every group, and the calendar moves their period boundaries.
   "set-spend-cap": "human-only",
   "clear-spend-cap": "human-only",

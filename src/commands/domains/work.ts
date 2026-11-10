@@ -130,6 +130,20 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "requirement", action: "classify", summary: "set the requirement's class (it sets the clarification caps)", verb: "requirement-classify", positionals: [GROUP],
     flags: [{ name: "scope", type: "string", required: true, summary: "small|medium|large" }, { name: "clarity", type: "string", required: true, summary: "the clarity class" }],
     route: (c) => `groups/${group(c)}/requirement/classify`, payload: (c) => ({ scope: str(c, "scope"), clarity: str(c, "clarity") }) }),
+  // Issue #236: a frozen selector the catalog no longer lists (or ccloop's single-call-unsupported) blocks a round; this
+  // re-selects the requirement's agent and drafts that round again, keeping the rounds already answered.
+  verb({ domain: "requirement", action: "set-agent", summary: "re-select the requirement's agent; a round or draft blocked on the old one is drafted again", verb: "requirement-set-agent", positionals: [GROUP],
+    flags: [
+      { name: "agent", type: "string", summary: "the installation (orca agent list); default: as your agent preferences choose" },
+      { name: "model", type: "string", summary: "the model, as the installation's catalog lists it (orca agent models <installation>)" },
+    ],
+    route: (c) => `groups/${group(c)}/requirement/set-agent`,
+    payload: (c) => {
+      const agent = str(c, "agent"), model = str(c, "model");
+      if (agent === undefined && model === undefined) throw invalid("give --agent, --model or both");
+      return { agent: { ...(agent === undefined ? {} : { agent }), ...(model === undefined ? {} : { model }) } };
+    },
+    examples: ["orca requirement set-agent g-1 --model tokenswitch/mode-x", "orca requirement set-agent g-1 --agent codex-main --model gpt-5"] }),
 
   // --- group
   estimateFormat(verb({ domain: "group", action: "import", summary: "import a registered plan, or a plan library version (--library), as a new draft group", verb: "import-plan",

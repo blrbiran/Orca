@@ -5,6 +5,7 @@ import { classifyEstimateOutput, readEstimateContract } from "./estimator.js";
 import { readEstimateRecord } from "./queries.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { MultiDirProjectOf } from "./multiGroup.js";
+import type { ExecutionProfileRouter } from "./profiles.js";
 import type { SingleCallPurpose } from "./singleCall.js";
 import type { ControlStore } from "./store.js";
 import type { WorkspaceRoots } from "./workspace.js";
@@ -28,6 +29,11 @@ export interface SingleCallPrepareDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository(repoId: string): string; ccloopBin: string; astGrepBin?: string | null;
   /** N1 spec §6: A2 of a requirement call stores its overview in its own admitted transaction. */
   admissionGate?: AdmissionGate;
+  /**
+   * Issue #236: the driver's profile router, through which A2 of a requirement call reads the installation's catalog (the
+   * run's frozen profile's port) to check the frozen selector. Absent: no check (the catalog cannot be read).
+   */
+  router?: Pick<ExecutionProfileRouter, "resolve">;
   /**
    * Dir-requirements spec §6.1 (Rule 17): the environment a dir group's vault is found by ($ORCA_VAULT_DIR), the panel's
    * own -- never os.homedir() at a call site. A dir group's call without it is blocked (repository-path).

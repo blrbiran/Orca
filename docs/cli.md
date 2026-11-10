@@ -81,6 +81,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca requirement feedback <group> --text <text>` — ask for a new draft of the split
 - `orca requirement accept <group>` — accept the current draft: the group becomes a draft task group
 - `orca requirement classify <group> --scope <scope> --clarity <clarity>` — set the requirement's class (it sets the clarification caps)
+- `orca requirement set-agent <group> [--agent <agent>] [--model <model>]` — re-select the requirement's agent; a round or draft blocked on the old one is drafted again
 
 ### `orca proposal`
 

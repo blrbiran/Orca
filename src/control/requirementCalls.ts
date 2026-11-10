@@ -28,6 +28,8 @@ import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, Singl
 import { writeCanonicalRecord } from "./snapshot.js";
 import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
+import { catalogMissText, SELECTOR_MISS_PREFIX, selectorMissOf } from "./estimatorCompatibility.js";
+import type { ExecutionPort } from "./executionPort.js";
 import type { ControlStore } from "./store.js";
 
 /** Spec 2026-10-15 ccloop error codes §4.5: ccloop refused before spawning (books 0); the same envelope would be refused again. */
@@ -335,6 +337,16 @@ export function interruptRequirementCall(store: ControlStore, groupId: string, r
   saveRequirementGroup(store, group);
 }
 
+/** Issue #236: the run's frozen selection against its frozen profile's catalog; null when there is no router, profile or catalog to ask. */
+async function frozenSelectorMiss(deps: SingleCallPrepareDeps, run: SingleCallRunRow): Promise<{ model: string; listed: string[] } | null> {
+  const profile = run.executionProfile as { profileId: string; profileHash: string } | undefined;
+  const agent = run.agent as { agent: string; model: string } | undefined;
+  if (deps.router === undefined || profile === undefined || agent === undefined) return null;
+  let port: ExecutionPort;
+  try { port = deps.router.resolve("budget-estimate", profile.profileId, profile.profileHash).port; } catch { return null; }
+  return selectorMissOf(port, agent);
+}
+
 /**
  * A2 for both requirement purposes: the round or draft must still be drafting, the overview is built and stored, then
  * the purpose writes its prompt. Every call of a requirement asks for the frozen output cap (DR8).
@@ -348,6 +360,10 @@ async function prepareRequirementCall(
   const group = readRequirementGroup(deps.store, run.groupId);
   const target = targetOf(run.workItemId);
   if (group.status !== "clarifying" || !stillDrafting(target)) return { blocked: "requirement-call-target-moved" };
+  // Issue #236: a frozen codex selector the read catalog no longer lists would only be refused at accept; it is named here,
+  // before the overview is built or the call sent. requirement-set-agent re-freezes the slot and restarts the call.
+  const miss = await frozenSelectorMiss(deps, run);
+  if (miss !== null) return { blocked: `${SELECTOR_MISS_PREFIX}${catalogMissText(miss)}` };
   // A resolveRepository refusal or a failed build is repository-shaped and named on the run; recovery-retry re-runs A2.
   let built: Awaited<ReturnType<typeof buildOverviewFor>>;
   // Dir-requirements spec §6.2: a dir group's folder that is gone or moved is named as such (`dir-folder-missing:<detail>`).

@@ -92,3 +92,18 @@ set the requirement's class (it sets the clarification caps)
 - `<group>`: a group id or a unique prefix
 - `--scope <scope>` (required): small|medium|large
 - `--clarity <clarity>` (required): the clarity class
+
+## `orca requirement set-agent <group> [--agent <agent>] [--model <model>]`
+
+re-select the requirement's agent; a round or draft blocked on the old one is drafted again
+
+- What it does: sends control verb `requirement-set-agent`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--agent <agent>`: the installation (orca agent list); default: as your agent preferences choose
+- `--model <model>`: the model, as the installation's catalog lists it (orca agent models <installation>)
+
+```
+orca requirement set-agent g-1 --model tokenswitch/mode-x
+orca requirement set-agent g-1 --agent codex-main --model gpt-5
+```
