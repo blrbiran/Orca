@@ -575,7 +575,7 @@ export function explainSplitReason(reason: string): string | null {
   const parts = reason.split(":");
   const key = parts[0] === "expand" ? (EXPAND_REFUSALS.includes(parts.at(-1)!) ? `expand.${parts.at(-1)}` : null)
     : parts[0] === "import" ? (IMPORT_ITEMS.includes(parts[1] ?? "") ? `import.${parts[1]}` : null)
-    : parts[0] === "checks-primary" ? "checksPrimary" : parts[0] === "ledger-path" ? "ledgerPath"
+    : parts[0] === "checks-primary" ? "checksPrimary" : parts[0] === "ledger-path" ? "ledgerPath" : parts[0] === "check-write-scope" ? "checkWriteScope"
     : ["path", "trace", "untraced", "dir"].includes(parts[0]!) ? parts[0]! : null;
   return key === null ? null : (i18n.t as (key: string) => string)(`requirements.splitReason.${key}`);
 }

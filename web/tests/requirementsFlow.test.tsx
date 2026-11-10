@@ -37,6 +37,16 @@ describe("hand-back reasons on a split draft (#107)", () => {
     expect(screen.getByText(/^expand:T2:investigate-target · an investigate task must name exactly one target path/)).toBeTruthy();
   });
 
+  it("shows a check-write-scope: reason (#239) with its meaning in English and in Chinese", async () => {
+    show(withReasons(["check-write-scope:T2:test/cli-workflow.test.js"]));
+    // mutation: drop check-write-scope from the panel's explainSplitReason -> the code alone -> red
+    expect(screen.getByText(/^check-write-scope:T2:test\/cli-workflow\.test\.js · the task's check names a committed test file outside its targetPaths/)).toBeTruthy();
+    cleanup();
+    await i18n.changeLanguage("zh");
+    show(withReasons(["check-write-scope:T2:test/cli-workflow.test.js"]), "zh");
+    expect(screen.getByText(/^check-write-scope:T2:test\/cli-workflow\.test\.js · 任务的检查引用了一个已提交的测试文件/)).toBeTruthy();
+  });
+
   it("leaves a reason that carries its checker's own message, or an unknown one, as the code alone", () => {
     expect(explainSplitReason("graph:buildGraph: a cycle")).toBeNull();
     expect(explainSplitReason("import:other-item")).toBeNull();

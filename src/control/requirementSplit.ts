@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { ControlError } from "./errors.js";
 import { SYSTEM_LABELS } from "./labels.js";
 import { choosePlanByLabels, documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
@@ -8,6 +9,7 @@ import { overviewPathExists, treeOf } from "./requirementOverview.js";
 import type { DraftBody, MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
 import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
+import { contains } from "../scheduler/pathTrie.js";
 import { normalizeClaim, qualifiedWriteSetOf } from "../scheduler/writeSet.js";
 
 export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 5.";
@@ -225,6 +227,19 @@ function writableTestScope(declared: readonly string[], committedPaths: readonly
       : testFile(claim)));
 }
 
+/**
+ * #239: the committed test files a check names that the task cannot write. Runner-agnostic: the command is split on
+ * `&&`, `||`, `;`, `|` and whitespace, and a token (unquoted, `./` dropped) that is a committed file `testFile()` accepts
+ * is a referenced test. A check naming no committed file (`npm test`, `make`) yields nothing. Only the task's own
+ * targetPaths count: a dependency writing the file does not let this task fix it (ccloop's allowlist is targetPaths).
+ */
+function testsOutsideScope(checks: readonly string[], targetPaths: readonly string[], committed: ReadonlySet<string>): string[] {
+  const claims = targetPaths.map((path) => normalizeClaim(path).normalized);
+  const named = checks.flatMap((check) => check.split(/&&|\|\||[;|\s]+/)).map((token) => token.replace(/^['"]+|['"]+$/g, "")).filter((token) => token.length > 0)
+    .map((token) => posix.normalize(token)).filter((path) => committed.has(path) && testFile(path));
+  return [...new Set(named)].filter((path) => !claims.some((claim) => contains(claim, path)));
+}
+
 const loopOf = (task: SplitOutput["tasks"][number]): LoopPlanFileInput => ({
   goal: task.goal, successCondition: task.successCondition, targetPaths: [...task.targetPaths], checks: [...task.checks], ...(task.loopPlan === undefined ? {} : { plan: task.loopPlan }),
   ...(task.setup === undefined ? {} : { setup: [...task.setup] }),
@@ -351,6 +366,13 @@ export async function validateMultiSplitDraft(input: {
     }
     if (!writable) reasons.push(`bugfix-test-scope:${task.taskId}`);
   }
+  // #239: each write's checks run in its directory, so a test they name is that directory's and that write's to fix.
+  for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
+    const path = input.paths.get(write.dir), commit = input.commits.get(write.dir);
+    if (path === undefined || commit === undefined || write.checks.length === 0) continue;
+    if (!committedByDir.has(write.dir)) committedByDir.set(write.dir, (await treeOf(path, commit).catch(() => [])).map((entry) => entry.path));
+    for (const missing of testsOutsideScope(write.checks, write.targetPaths, new Set(committedByDir.get(write.dir)!))) reasons.push(`check-write-scope:${task.taskId}:${write.dir}:${missing}`);
+  }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -381,7 +403,8 @@ export function importReasons(error: ControlError): string[] {
 
 /**
  * N1 spec §8.3-§8.4 (Rule 5: code decides): every reason, in check order -- loadPlan's, the Web import's own dependency
- * and success-condition checks, each task's expansion, each target path against the overview's commit, each trace --
+ * and success-condition checks, each task's expansion, each target path against the overview's commit, the committed
+ * test files each task's checks name against its own targetPaths (#239), each trace --
  * and only for a draft with none, the import itself (one reason per item it names) and the layers.
  */
 export async function validateSplitDraft(input: { output: SplitOutput; plan: SplitPlanFile; repo: string; commit: string; criterionIds: readonly string[]; adrIds: readonly string[] }): Promise<SplitValidation> {
@@ -403,8 +426,11 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   for (const task of output.tasks) for (const path of task.targetPaths) {
     if (!(await overviewPathExists(input.repo, input.commit, path))) reasons.push(`path:${task.taskId}:${path}`);
   }
-  const committedPaths = output.tasks.some(usesBugfixLoop) ? (await treeOf(input.repo, input.commit).catch(() => [])).map((entry) => entry.path) : [];
+  // #239 reads the tree for every task's checks, so it is read once whenever any task has a check or uses bugfix.
+  const committedPaths = output.tasks.some((task) => usesBugfixLoop(task) || task.checks.length > 0) ? (await treeOf(input.repo, input.commit).catch(() => [])).map((entry) => entry.path) : [];
   for (const task of output.tasks) if (usesBugfixLoop(task) && !writableTestScope(task.targetPaths, committedPaths)) reasons.push(`bugfix-test-scope:${task.taskId}`);
+  const committed = new Set(committedPaths);
+  for (const task of output.tasks) for (const missing of testsOutsideScope(task.checks, task.targetPaths, committed)) reasons.push(`check-write-scope:${task.taskId}:${missing}`);
   // Task setup spec §4.3: each distinct npm setup or check command against the commit (npmCommand.ts); others pass.
   // The commit's tree is read once, and only when some command is npm; an unreadable tree leaves them all unverifiable.
   // Each distinct command is checked once; its reason names every task giving it: `command:<taskId>[,<taskId>]:<command>: ...`.
@@ -491,6 +517,7 @@ export function explainSplitReason(reason: string): string | null {
     case "checks-primary": return "the task's first writes entry (its primary directory) has no checks";
     case "ledger-path": return "only the task's first writes entry (its primary directory) may name `.decisions` as a target path";
     case "bugfix-test-scope": return "this bugfix uses reproduce-first but its writable target paths include no regression test; add a test path or choose a loop without reproduce-first";
+    case "check-write-scope": return "the task's check names a committed test file outside the task's targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file (or its directory as `<directory>/**`) to this task's targetPaths, or check only files this task may write";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";
       if (parts[1] === "dangling-dependency") return "the task depends on a taskId no task in this split has";

@@ -1106,6 +1106,7 @@ export const zh: Translation<typeof en> = {
       dir: "这不是项目概览里列出的目录键",
       checksPrimary: "任务的第一条写入项（主目录）没有检查",
       ledgerPath: "只有任务的第一条写入项（主目录）可以把 `.decisions` 作为目标路径",
+      checkWriteScope: "任务的检查引用了一个已提交的测试文件，但它不在这个任务的 targetPaths 里，任务无法修改它来让检查通过（别的任务能写它不算）；把这个文件或它的目录加进本任务的 targetPaths，或只检查本任务能写的文件",
       import: {
         "duplicate-dependency": "任务把同一个依赖写了两次",
         "dangling-dependency": "任务依赖的任务编号，这次拆分里没有任何任务拥有",

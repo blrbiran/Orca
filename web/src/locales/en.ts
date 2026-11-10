@@ -1247,6 +1247,7 @@ export const en = {
       dir: "this is not a directory key the project overview lists",
       checksPrimary: "the task's first writes entry (its primary directory) has no checks",
       ledgerPath: "only the task's first writes entry (its primary directory) may name `.decisions` as a target path",
+      checkWriteScope: "the task's check names a committed test file outside its targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file or its directory to this task's targetPaths, or check only files this task may write",
       import: {
         "duplicate-dependency": "the task names the same dependency twice",
         "dangling-dependency": "the task depends on a task id that no task in this split has",
