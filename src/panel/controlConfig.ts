@@ -305,6 +305,7 @@ export function createTrustedControlConfig(
           observed,
           observedAt,
           probeFailureCode,
+          estimatorInstructionVersion: profile.snapshot.profile.estimatorPreflight?.instructionVersion ?? null,
         })).sort((left, right) => compareText(left.profileId, right.profileId)),
         defaults: defaultProfile === null || input.defaultEstimateMode === null ? null : {
           estimatorProfileId: defaultProfile.snapshot.profile.profileId,

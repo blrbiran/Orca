@@ -7,6 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
 import { adviceOf, type SuggestionView } from "../../control/budgetSuggestions.js";
+import { ESTIMATE_INSTRUCTIONS } from "../../control/estimatePrompt.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
 export const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
@@ -87,8 +88,19 @@ export interface GroupView {
 }
 export interface ConfigView {
   plans: Array<{ planId: string; repoId: string }>;
-  profiles: Array<{ profileId: string; profileHash: string }>;
+  profiles: Array<{ profileId: string; profileHash: string; estimatorInstructionVersion?: string | null }>;
   defaults: { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" } | null;
+}
+
+/**
+ * Tester follow-up B T3 (#224): a line naming an estimator profile pinned to an estimate instruction older than the newest
+ * this Orca holds (estimatePrompt.ts ESTIMATE_INSTRUCTIONS); none when it is the newest, unknown or not reported.
+ */
+export function instructionLines(view: ConfigView, profileId: string | null | undefined): string[] {
+  const version = view.profiles.find((p) => p.profileId === profileId)?.estimatorInstructionVersion;
+  const newest = Math.max(...Object.keys(ESTIMATE_INSTRUCTIONS).map(Number));
+  if (typeof version !== "string" || !Object.hasOwn(ESTIMATE_INSTRUCTIONS, version) || Number(version) >= newest) return [];
+  return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${newest}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest`];
 }
 
 /** What the unestimated-default lines read: a group view, or `orca proposal show`'s document (no estimates in it). */

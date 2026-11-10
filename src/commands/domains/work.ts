@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  checkpointOf, type ClarifyRoundView, config, currentRun, file, fillRoundAnswer, fundingLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  checkpointOf, type ClarifyRoundView, config, currentRun, file, fillRoundAnswer, fundingLines, instructionLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -107,6 +107,13 @@ const estimateFormat = (row: CommandDef, reasonField: "estimateReasonCode" | "re
     ? `\nnext: inspect the imported group's agent selections and budgets before confirmation (panel overrides are not copied): orca control get groups/${result.groupId}/agent-preview; orca proposal show ${result.groupId}`
     : "";
   return `${row.format(body)}\nestimate: ${result.estimateState}\nreason: ${typeof reason === "string" ? reason : "none"}${next}`;
+} });
+
+/** #224: the lines a row's payload left for its human output, after what the row prints (one command per CLI process). */
+let estimateNote: string[] = [];
+const withNote = (take: () => string[], row: CommandDef): CommandDef => ({ ...row, format: (body) => {
+  const lines = take(), printed = row.format(body);
+  return lines.length === 0 ? printed : `${printed}\n${lines.join("\n")}`;
 } });
 
 export const WORK_ROWS: CommandDef[] = [
@@ -233,17 +240,18 @@ export const WORK_ROWS: CommandDef[] = [
         ...(str(c, "estimate-mode") === undefined ? {} : { estimateMode: str(c, "estimate-mode") }),
       };
     } }), "estimateReasonCode"),
-  estimateFormat(verb({ domain: "group", action: "estimate", summary: "ask the estimator for budgets at the current proposal version", verb: "estimate", positionals: [GROUP],
+  withNote(() => { const lines = estimateNote; estimateNote = []; return lines; }, estimateFormat(verb({ domain: "group", action: "estimate", summary: "ask the estimator for budgets at the current proposal version", verb: "estimate", positionals: [GROUP],
     flags: [{ name: "estimator-profile", type: "string", summary: "default: the panel's estimator" }, { name: "mode", type: "string", summary: "strict|soft; default: the panel's" }],
     route: (c) => `groups/${group(c)}/estimates`,
     payload: async (c) => {
-      const defaults = (await config(c)).defaults;
+      const view = await config(c), defaults = view.defaults;
       const named = str(c, "estimator-profile");
       const binding = named !== undefined ? await profileBinding(c, named) : defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
       const mode = str(c, "mode") ?? defaults?.estimateMode;
       if (binding === null || mode === undefined) throw new EntryRejection("estimator-unconfigured", "the panel has no estimator default; pass --estimator-profile and --mode");
+      estimateNote = instructionLines(view, binding.profileId);
       return { proposalVersion: (await groupView(c)).proposal.proposalVersion, estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash, estimateMode: mode };
-    } }), "reasonCode"),
+    } }), "reasonCode")),
   { ...verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
     flags: [
       { name: "hold", type: "boolean", summary: "confirm only; start it later with orca group start" },
@@ -466,6 +474,7 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
     return defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
   };
   const bindings = { estimator: await bind("estimator"), worker: await bind("worker"), handoff: await bind("handoff"), goalReview: await bind("goalReview") };
+  confirmNote.push(...instructionLines(await config(c), bindings.estimator?.profileId));
   for (const kind of ["worker", "handoff", "goalReview"] as const) {
     if (bindings[kind] === null) throw new EntryRejection("confirm-profile-missing", `no ${kind} profile; pass --${flagFor[kind]} <id>`);
   }

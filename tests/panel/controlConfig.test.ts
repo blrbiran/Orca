@@ -59,7 +59,7 @@ async function setup() {
   const frozen = resolveProfile(snapshot, port);
   const router = createExecutionProfileRouter([frozen]);
   // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
-  return { root, repo, plan, binary, agentsTable, frozen, router };
+  return { root, repo, plan, binary, agentsTable, frozen, router, snapshot, port };
 }
 
 describe("trusted panel control config", () => {
@@ -89,6 +89,23 @@ describe("trusted panel control config", () => {
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the trusted path is the
     // agents table now (spec §6.6); neither its value nor its field name reaches the view.
     expect(serialized).not.toContain("agentsTablePath");
+  });
+
+  // Tester follow-up B T3 (#224): the view names each profile's estimate instruction version (null without a preflight),
+  // so a client can warn when it is older than the newest the panel holds.
+  it("names each profile's estimator instruction version", async () => {
+    const h = await setup();
+    const preflight = { instructionVersion: "2", schemaVersion: "budget-estimate-v1" as const, maxOutputTokens: 64_000, framingTokenOverhead: 17, tokenizer: { kind: "utf8-upper-bound" as const, numerator: 2, denominator: 3, proofRef: "proof" } };
+    const older = resolveProfile({ ...h.snapshot, profile: { ...h.snapshot.profile, profileId: "older", estimatorPreflight: preflight } }, h.port);
+    const config = createTrustedControlConfig({
+      epoch: "epoch-1", stateDir: h.root, executablePath: h.binary, agentsTablePath: h.agentsTable, executionPort: "configured" as const,
+      archiveRoot: h.root, exportRoot: h.root, evidenceRoot: h.root, shutdownGraceMs: 30_000,
+      repositories: [{ repoId: "repo", displayName: "Repo", path: h.repo }], plans: [{ planId: "ship", repoId: "repo", displayName: "Ship", path: h.plan }],
+      defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
+    }, createExecutionProfileRouter([h.frozen, older]));
+    const view = await config.readView({ agent: "codex" });
+    // Mutation "field not written" -> red: undefined for both.
+    expect(view.profiles.map((p) => [p.profileId, p.estimatorInstructionVersion])).toEqual([["estimator", null], ["older", "2"]]);
   });
 
   it("rejects allowlisted plan escapes and symlinked path components at startup", async () => {

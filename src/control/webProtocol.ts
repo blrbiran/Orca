@@ -1432,6 +1432,9 @@ export const controlConfigSchema = z
           observed: capabilityViewSchema,
           observedAt: canonicalTimestampSchema,
           probeFailureCode: nonemptyString.nullable(),
+          // Tester follow-up B T3 (#224): the profile's estimate instruction version (null without an estimator
+          // preflight), so a client can warn when it is older than the newest the panel holds. Optional: older panels.
+          estimatorInstructionVersion: nonemptyString.nullable().optional(),
         })
         .strict(),
     ),
