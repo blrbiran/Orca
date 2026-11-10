@@ -57,7 +57,9 @@ describe("overview human work rules", () => {
     panel.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES ('one',?,NULL,'group','ledger-corrupt',?),('two',?,NULL,'group','ledger-corrupt',?),('three',?,NULL,'group','claim-unknown',?)").run(GROUP, '{"evidenceIds":[]}', GROUP, '{"evidenceIds":[]}', GROUP, '{"evidenceIds":[]}');
     body = await overview(panel);
     expect(body.steps.filter(s => s.kind === "recovery-review").map(s => s.reason).sort()).toEqual(["claim-unknown", "ledger-corrupt"]);
-    expect(body.steps.find(s => s.kind === "stop-review")).toMatchObject({ reason: "paused" });
+    // Ruling: human 2026-11-10 (session 9179cdad, #218): was a stop-review row with reason "paused"; a pause the person asked
+    // for is not a queue item (the group's recovery blockers above still are).
+    expect(body.steps.find(s => s.kind === "stop-review")).toBeUndefined();
     expect(body.steps.find(s => s.kind === "integration-review")).toMatchObject({ reason:"integration-conflict", ownerRequired:true });
     expect(body.steps.at(-1)?.kind).toBe("budget-review");
     expect((await overview(panel)).steps).toEqual(body.steps);

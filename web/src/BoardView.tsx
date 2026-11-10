@@ -67,11 +67,11 @@ function FlowCard(props: { run: FlowRun; onOpen: () => void }): JSX.Element {
 }
 
 /** Why a needs-you card needs the person, in the order the list's attention rule checks it. */
-function needsYouReason(group: GroupSummaryV1): "refused" | "paused" | "stopping" | "blocked" | "recovery" | null {
+function needsYouReason(group: GroupSummaryV1): "refused" | "stopping" | "blocked" | "recovery" | null {
   if (!needsAttention(group)) return null;
   if (group.orchestration?.refusal?.persistent === true) return "refused";
-  if (group.stopState === "paused") return "paused";
-  if (group.stopState != null && group.stopState !== "handoff-complete") return "stopping";
+  // Issue #218: a pause is not why a card needs you (the stop-state badge already says it); the real reason follows.
+  if (group.stopState != null && group.stopState !== "handoff-complete" && group.stopState !== "paused") return "stopping";
   if ((group.counts?.blocked ?? 0) > 0 || group.state === "blocked") return "blocked";
   return "recovery";
 }
@@ -85,6 +85,7 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
     : o?.state === "held" ? t("board.card.held") : null;
   const reason = needsYouReason(group);
   const facts = group.card;
+  const causeText = (cause: string): string => (KNOWN_FAILURE_CAUSES as readonly string[]).includes(cause) ? t(`control.failureCause.label.${knownCause(cause)}`) : cause;
   const hasTasks = group.completion !== undefined && group.completion.total > 0;
   const updatedAt = group.updatedAt ?? null;
   const onDragStart = (event: DragEvent<HTMLElement>): void => { event.dataTransfer.setData("text/plain", group.groupId); props.onDragging?.(group); };
@@ -114,7 +115,11 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
         <p key={entry.taskId} className="detail-note" data-testid="board-card-escalation">
           {entry.state === "debugging" ? t("board.card.escalating", { taskId: entry.taskId, debugGroupId: entry.debugGroupId })
             : entry.state === "rerunning" ? t("board.card.rerunning", { taskId: entry.taskId })
-            : t("board.card.escalationExhausted", { taskId: entry.taskId, reason: entry.reason ?? "" })}
+            // Issue #217: `reason` is the debug ladder's own result (debug-failed), not why the task failed; when the card
+            // knows that task's original cause it says that, so "automatic debugging" and "provider limit" do not read as two faults.
+            : facts?.firstFailure != null && facts.firstFailure.taskId === entry.taskId
+              ? t("board.card.escalationExhaustedCause", { taskId: entry.taskId, cause: causeText(facts.firstFailure.cause) })
+              : t("board.card.escalationExhausted", { taskId: entry.taskId, reason: entry.reason ?? "" })}
         </p>
       ))}
       {(group.criteriaReviews ?? []).filter((entry) => entry.state === "failed" || entry.state === "debugging").map((entry) => (
@@ -131,7 +136,7 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
         <p className="detail-note num" data-testid="board-card-budget" title={[facts.budget.usedTokens, facts.budget.limitTokens].flatMap((n) => (n === null ? [] : [formatTokens(n, currentLanguage())])).join(" / ")}>
           {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: shortTokens(facts.budget.usedTokens) }) : t("board.card.budget", { used: shortTokens(facts.budget.usedTokens), limit: shortTokens(facts.budget.limitTokens) })}
           {facts.pendingDecisions > 0 ? ` · ${t("board.card.decisions", { count: facts.pendingDecisions })}` : ""}
-          {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: (KNOWN_FAILURE_CAUSES as readonly string[]).includes(facts.firstFailure.cause) ? t(`control.failureCause.label.${knownCause(facts.firstFailure.cause)}`) : facts.firstFailure.cause })}` : ""}
+          {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: causeText(facts.firstFailure.cause) })}` : ""}
         </p>
       )}
       {/* Checks spec 2026-10-22 §7: a model review's findings this group is involved in -- major red, minor grey (P5). */}

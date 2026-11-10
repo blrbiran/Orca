@@ -18,8 +18,10 @@ export const GROUP_FILTER_KEY = "orca.panel.groupFilter";
 export function needsAttention(summary: GroupSummaryV1): boolean {
   // System debug task spec 2026-10-21 §3.5: a blocked task the escalation ladder is still working on is Orca's, not yours.
   const escalating = (summary.escalation ?? []).filter((entry) => entry.state !== "exhausted").length;
+  // Issue #218 (human ruling 2026-11-10): a pause the person asked for is a state, not a request for them; only a stop
+  // still settling is. A paused group with a blocked task or a recovery blocker still needs them through those clauses.
   return (summary.counts?.blocked ?? 0) - escalating > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
-    || (summary.stopState != null && summary.stopState !== "handoff-complete")
+    || (summary.stopState != null && summary.stopState !== "handoff-complete" && summary.stopState !== "paused")
     || summary.orchestration?.refusal?.persistent === true;
 }
 
@@ -97,6 +99,8 @@ export function boardColumn(summary: GroupSummaryV1): BoardColumn {
   if (needsAttention(summary)) return "needs-you";
   if (summary.state === "clarifying") return "clarifying";
   if (summary.state === "done" || (summary.completion !== undefined && summary.completion.total > 0 && summary.completion.done === summary.completion.total)) return "done";
+  // Issue #218: a paused group waits to be resumed, like a queued one; dropping it on Running resumes it (boardDrop).
+  if (summary.stopState === "paused") return "queued";
   if (summary.state === "draft") return "awaiting-confirmation";
   if (summary.state === "ready" && summary.executionPending !== true) {
     const orchestration = summary.orchestration;

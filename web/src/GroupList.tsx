@@ -75,7 +75,8 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
             aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />
         )}
         <span className={`group-chip ${groupChip}`} data-category={category}>{t(`control.groupCategory.${category}` as const)}</span>
-        {needsAttention(group) && <span className={`group-badge ${groupBadge}`}>{t("control.groupCard.attention")}</span>}
+        {/* Issue #218: the chip already says "Needs attention"; the badge adds it only where the chip says something else (archived). */}
+        {needsAttention(group) && category !== "attention" && <span className={`group-badge ${groupBadge}`}>{t("control.groupCard.attention")}</span>}
         {group.branch !== undefined && <code>{group.branch}</code>}
         {updated !== null && <span>{updatedText(t, updated)}</span>}
       </span>

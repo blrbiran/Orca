@@ -35,7 +35,10 @@ describe("board columns (kanban spec §4)", () => {
       [{ executionPending: true, orchestration: { ...queued, state: "started" } }, "running"],
       [{ state: "running" }, "running"],
       [{ counts: { idle: 1, running: 0, waiting: 0, blocked: 1, done: 0 } }, "needs-you"],
-      [{ stopMode: "pause", stopState: "paused" }, "needs-you"],
+      // Ruling: human 2026-11-10 (session 9179cdad, #218): was "needs-you"; a plain pause waits to be resumed, like a queued group.
+      [{ stopMode: "pause", stopState: "paused" }, "queued"],
+      [{ state: "running", stopMode: "pause", stopState: "paused" }, "queued"],
+      [{ stopMode: "pause", stopState: "paused", counts: { idle: 1, running: 0, waiting: 0, blocked: 1, done: 0 } }, "needs-you"],
       [{ completion: { done: 2, total: 2 } }, "done"],
       [{ completion: { done: 2, total: 2 }, archived: true }, "archived"],
       // A ready group confirmed before start-on-confirm: queued until anything ran.
@@ -158,6 +161,27 @@ describe("the system-debug badge (#58)", () => {
     board();
     const zh = badges();
     sources.forEach(([source, , word], i) => { expect(zh[i]).toContain(`（${word}）`); expect(zh[i]).not.toContain(source.kind); });
+  });
+
+  // Issue #218: a paused card says "Paused" once (its badge), and a paused card with a blocked task names the block, not the pause.
+  it("says a pause once, and gives a paused card's real reason when it needs the person", () => {
+    const groups = [g({ groupId: "p", stopMode: "pause", stopState: "paused" }), g({ groupId: "pb", stopMode: "pause", stopState: "paused", counts: { idle: 0, running: 0, waiting: 0, blocked: 1, done: 0 } })];
+    render(<BoardView groups={groups} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const plain = screen.getByTestId("board-card-p");
+    expect(plain.textContent!.split("paused").length - 1).toBe(1);
+    expect(within(plain).queryByTestId("board-card-reason")).toBeNull();
+    expect(within(screen.getByTestId("board-card-pb")).getByTestId("board-card-reason").textContent).toBe("a task is blocked");
+  });
+
+  // Issue #217: an exhausted escalation states the task's own cause, not the debug ladder's result as if it were Orca's fault.
+  it("words an exhausted escalation with the task's original failure cause when the card knows it", () => {
+    const card = { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "T4", cause: "rate-limited" } };
+    const groups = [g({ groupId: "e", state: "running", escalation: [{ taskId: "T4", state: "exhausted", reason: "debug-failed" }] as never, card })];
+    render(<BoardView groups={groups} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const line = screen.getByTestId("board-card-escalation").textContent!;
+    expect(line).toContain("automatic debugging did not fix it");
+    expect(line).not.toContain("debug-failed");
+    expect(line).toContain("the original cause: the provider kept rate-limiting");
   });
 
   it("boxes a board card's badge so a second line stays inside its border", () => {

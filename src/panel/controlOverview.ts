@@ -74,7 +74,8 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
         blocker.scope === "global" ? {kind:"recovery"} : groupDestination("problem", null, blocker.runId),
         JSON.stringify([blocker.scope, groupId, blocker.runId, blocker.code]), null, blocker.runId);
     }
-    if (summary.stopState !== null) add("stop-review", groupId, repoId, summary.stopState, groupDestination("problem"), `stop:${summary.stopMode}`);
+    // Issue #218 (human ruling 2026-11-10): a pause the person asked for is not a queue item; a stop still settling is.
+    if (summary.stopState !== null && summary.stopState !== "paused") add("stop-review", groupId, repoId, summary.stopState, groupDestination("problem"), `stop:${summary.stopMode}`);
     if (body.ledger.usageUnknown && body.status !== "clarifying") add("recovery-review", groupId, repoId, "usage-unknown", groupDestination("problem"), JSON.stringify(["group", groupId, null, "usage-unknown"]), null, null, true);
     const capBlock = readSpendCapBlock(store, groupId);
     if (capBlock !== null) add(body.status === "clarifying" ? "requirement-attention" : "task-attention", groupId, repoId, "spend-cap-blocked", body.status === "clarifying" ? requirementDestination("problem") : groupDestination("problem"), "spend-cap-blocked", null, null, true);

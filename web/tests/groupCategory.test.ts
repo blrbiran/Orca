@@ -11,12 +11,18 @@ const g = (over: Partial<GroupSummaryV1> = {}): GroupSummaryV1 => ({
 /** Issue-fixes spec §6.4: a group's list category, first match wins: archived, attention, done, running, not started. */
 describe("groupCategory (spec §6.4)", () => {
   it("1: archived", () => expect(groupCategory(g({ archived: true }))).toBe("archived"));
-  it("2: needs attention -- a blocked task, a recovery blocker, a blocked claim, a blocked group, a stop not handoff-complete", () => {
+  // Ruling: human 2026-11-10 (session 9179cdad, #218/#221 question: 「两条都允许」) -- a plain pause was in the attention list;
+  // a pause the person asked for is now a state, not a request for them, unless something else in the group needs them.
+  it("2: needs attention -- a blocked task, a recovery blocker, a blocked claim, a blocked group, a stop still settling", () => {
     for (const over of [
       { counts: { ...zero, blocked: 1, idle: 1 } }, { recoveryBlockerCount: 1 }, { claimBlocked: true }, { state: "blocked" as const },
-      { stopMode: "pause" as const, stopState: "paused" as const }, { stopMode: "handoff" as const, stopState: "handoff-pending" as const },
+      { stopMode: "handoff" as const, stopState: "handoff-pending" as const },
+      { stopMode: "pause" as const, stopState: "paused" as const, counts: { ...zero, blocked: 1, idle: 1 } },
+      { stopMode: "pause" as const, stopState: "paused" as const, recoveryBlockerCount: 1 },
     ]) expect(groupCategory(g(over)), JSON.stringify(over)).toBe("attention");
     expect(groupCategory(g({ stopMode: "handoff", stopState: "handoff-complete" }))).toBe("not-started");
+    // #218: mutation: put `paused` back in the stop clause -> attention, red
+    expect(needsAttention(g({ stopMode: "pause", stopState: "paused" }))).toBe(false);
   });
   it("3: done when every task is done", () => expect(groupCategory(g({ completion: { done: 2, total: 2 }, counts: { ...zero, done: 2 } }))).toBe("done"));
   it("4: running when a task runs or waits, or the group runs or is in review", () => {

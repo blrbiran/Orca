@@ -70,7 +70,8 @@ describe("the group list (spec §6.4)", () => {
     expect(card.querySelector("progress")?.getAttribute("value")).toBe("1");
     expect(card.querySelector("progress")?.getAttribute("max")).toBe("3");
     expect(card.querySelector(".group-chip")?.textContent).toBe("Needs attention");
-    expect(card.querySelector(".group-badge")?.textContent).toBe("needs you");
+    // Ruling: human 2026-11-10 (session 9179cdad, #218): was a "needs you" badge beside the chip; the chip alone says it now.
+    expect(card.querySelector(".group-badge")).toBeNull();
     expect(card.textContent).toContain("orca/g");
     expect(card.textContent).toContain("updated 5 min ago");
     fireEvent.click(within(card).getByText("Ship the export"));
