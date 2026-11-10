@@ -241,6 +241,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `report-path-conflict` | 409 |
 | `requirement-already-accepted` | 422 |
 | `requirement-export-pending` | 422 |
+| `requirement-limit-too-low` | 422 |
 | `requirement-not-split` | 422 |
 | `resume-artifact-conflict` | 409 |
 | `resume-bundle-exists` | 409 |
