@@ -389,7 +389,7 @@ answer a step that waits for the person (an ask's form, a step's question, a cla
 - `--set <set>` (repeatable): an ask's form field as key=value (repeatable)
 - `--file <file>`: an ask's form values as a JSON object; with --feedback, {"answers":[{"id":…,"kind":"recommended"|"text","text"?:…}]}
 - `--text <text>`: the answer to the question the step asked (flow.needs)
-- `--answer <answer>` (repeatable): clarify: <question id> (take the recommended answer) or <id>=<text>
+- `--answer <answer>` (repeatable): clarify: <question id> (take the recommended answer) or <id>=<text>; a question not named takes its recommendation and a glossary entry or ADR not named is accepted
 - `--glossary <glossary>` (repeatable): clarify: <entry id>=accept|reject
 - `--adr <adr>` (repeatable): clarify: <adr id>=accept|reject
 - `--consensus`: clarify: agree with the brief as it stands

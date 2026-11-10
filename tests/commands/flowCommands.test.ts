@@ -156,3 +156,19 @@ describe("orca flow commands: route, revision and payload (spec §14.2)", () => 
     expect(w.posts()).toHaveLength(0);
   });
 });
+
+// Tester follow-up B T3 (#231): a flow clarify round is answered as `requirement answer` answers one -- a question not
+// named takes its recommendation, a glossary entry or ADR not named is accepted, a named one keeps the person's choice.
+describe("orca flow answer fills a clarify round's unnamed ids", () => {
+  it("sends every id of the waiting round, the person's choices winning", async () => {
+    const round = { roundNo: 2, state: "awaiting-answers", result: { questions: [{ id: "R2.Q1" }, { id: "R2.Q2" }], glossary: [{ id: "G1" }, { id: "G2" }], adrs: [{ id: "A1" }] } };
+    const view = READS[`GET flows/${RUN}`].body;
+    const w = await world({}, { ...READS, [`GET flows/${RUN}`]: { status: 200, body: { ...view, steps: [{ ...view.steps[0], clarify: { rounds: [{ roundNo: 1, state: "answered" }, round], chain: [1, 2] } }] } } });
+    const out = await cli(["flow", "answer", "fr-0a", "brief", "--answer", "R2.Q2=short", "--glossary", "G2=reject", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    // Mutation "no fill" -> red: one answer, one glossary decision, no ADR decision.
+    expect(w.posts().map((post) => post.payload)).toEqual([{ runId: RUN, stepKey: "brief", clarify: { roundNo: 2,
+      answers: [{ id: "R2.Q1", kind: "recommended" }, { id: "R2.Q2", kind: "text", text: "short" }],
+      glossaryDecisions: [{ id: "G1", accept: true }, { id: "G2", accept: false }], adrDecisions: [{ id: "A1", accept: true }] } }]);
+  });
+});

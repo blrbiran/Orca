@@ -7,13 +7,17 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  checkpointOf, config, currentRun, file, fundingLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  checkpointOf, type ClarifyRoundView, config, currentRun, file, fillRoundAnswer, fundingLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
 import { text } from "./format.js";
 
-interface RequirementView { summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } }; drafts: Array<{ draftNo: number; draftHash: string | null }> }
+type RoundView = ClarifyRoundView;
+interface RequirementView {
+  summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } };
+  rounds?: RoundView[]; drafts: Array<{ draftNo: number; draftHash: string | null }>;
+}
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
 /**
  * Issue #132: a pin this CLI cannot fill is refused here, before the panel's archive gate could answer. On an archived
@@ -24,10 +28,45 @@ function missing(c: WriteContext, view: RequirementView, code: string, message: 
   return new EntryRejection(code, message);
 }
 async function roundNo(c: WriteContext): Promise<number> {
+  return (await currentRound(c)).roundNo;
+}
+/** The current round's number and, when the view holds it, its row (state and result). */
+async function currentRound(c: WriteContext): Promise<{ roundNo: number; row: RoundView | undefined }> {
   const view = await requirement(c);
   const round = view.summary.requirement?.roundNo ?? null;
   if (round === null) throw missing(c, view, "requirement-no-round", `${group(c)} has no clarification round`);
-  return round;
+  return { roundNo: round, row: view.rounds?.find((r) => r.roundNo === round) };
+}
+/** #231: the named answers and decisions, filled to the whole round as the Web's defaults (fillRoundAnswer). */
+function filledAnswer(c: WriteContext, round: RoundView | undefined) {
+  return fillRoundAnswer(round, {
+    answers: list(c, "answer").map((value) => {
+      const at = value.indexOf("=");
+      return at === -1 ? { id: value, kind: "recommended" as const } : { id: value.slice(0, at), kind: "text" as const, text: value.slice(at + 1) };
+    }),
+    glossaryDecisions: list(c, "glossary").map((v) => decision(v, "glossary")), adrDecisions: list(c, "adr").map((v) => decision(v, "adr")),
+  });
+}
+/**
+ * Tester follow-up B T3 (#240): consensus on a round still awaiting answers is the panel's rule (spec §11.1 item 3), and it
+ * drops that round's glossary entries and ADRs from the document. The Web confirms it first (Issue 88); the CLI refuses it
+ * unless --unanswered says the person means it.
+ */
+function unansweredRefusal(roundNo: number, round: RoundView | undefined): EntryRejection | null {
+  if (round?.state !== "awaiting-answers" || round.result === undefined || round.result === null) return null;
+  const { questions, glossary, adrs } = round.result;
+  return new EntryRejection("requirement-round-unanswered", `round ${roundNo} has ${questions.length} unanswered question(s); consensus now closes it unanswered and drops its ${glossary.length} glossary entr${glossary.length === 1 ? "y" : "ies"} and ${adrs.length} ADR(s) from the document. Answer it (orca requirement answer), or pass --unanswered to agree as it stands`);
+}
+/** #231: the panel's answer-set refusal (`group-state-invalid:<kind>:missing=…;extra=…`), one readable line per kind. */
+function answerSetHint(error: { code: string; message: string }): string | undefined {
+  if (error.code !== "group-state-invalid") return undefined;
+  const lines = error.message.replace(/^group-state-invalid:/, "").split("|").flatMap((part) => {
+    const match = /^(answers|glossary-decisions|adr-decisions):(.+)$/.exec(part);
+    if (match === null) return [];
+    const ids = Object.fromEntries(match[2]!.split(";").map((field) => field.split("=") as [string, string]));
+    return [`${match[1]}: ${["missing", "extra", "duplicate"].filter((k) => ids[k] !== undefined).map((k) => `${k} ${ids[k]!.split(",").join(", ")}`).join("; ")}`];
+  });
+  return lines.length === 0 ? undefined : `the round's ids do not match (orca requirement show lists them): ${lines.join(" | ")}`;
 }
 async function latestDraft(c: WriteContext): Promise<{ draftNo: number; draftHash: string | null }> {
   const view = await requirement(c);
@@ -90,23 +129,24 @@ export const WORK_ROWS: CommandDef[] = [
       ? "no agent is selected: pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences"
       : undefined,
     examples: ["orca requirement open --idea \"add a dark mode\"", "orca requirement open --idea \"add a dark mode\" --agent claude-main"] }),
-  verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words",
+  verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults",
     verb: "requirement-answer", positionals: [GROUP],
     flags: [
       { name: "answer", type: "string", repeatable: true, summary: "<questionId> or <questionId>=<text>" },
       { name: "glossary", type: "string", repeatable: true, summary: "<id>=accept|reject" }, { name: "adr", type: "string", repeatable: true, summary: "<id>=accept|reject" },
     ],
     route: (c) => `groups/${group(c)}/requirement/answer`,
-    payload: async (c) => ({
-      roundNo: await roundNo(c),
-      answers: list(c, "answer").map((value) => {
-        const at = value.indexOf("=");
-        return at === -1 ? { id: value, kind: "recommended" } : { id: value.slice(0, at), kind: "text", text: value.slice(at + 1) };
-      }),
-      glossaryDecisions: list(c, "glossary").map((v) => decision(v, "glossary")), adrDecisions: list(c, "adr").map((v) => decision(v, "adr")),
-    }) }),
-  verb({ domain: "requirement", action: "consensus", summary: "close clarification at the current round", verb: "requirement-consensus", positionals: [GROUP],
-    route: (c) => `groups/${group(c)}/requirement/consensus`, payload: async (c) => ({ roundNo: await roundNo(c) }) }),
+    payload: async (c) => { const round = await currentRound(c); return { roundNo: round.roundNo, ...filledAnswer(c, round.row) }; },
+    hint: answerSetHint }),
+  verb({ domain: "requirement", action: "consensus", summary: "close clarification at the current round; a round still awaiting answers is refused unless --unanswered", verb: "requirement-consensus", positionals: [GROUP],
+    flags: [{ name: "unanswered", type: "boolean", summary: "agree with a round still awaiting answers: its questions stay open and its glossary entries and ADRs are dropped" }],
+    route: (c) => `groups/${group(c)}/requirement/consensus`,
+    payload: async (c) => {
+      const round = await currentRound(c);
+      const refusal = c.args.flags.unanswered === true ? null : unansweredRefusal(round.roundNo, round.row);
+      if (refusal !== null) throw refusal;
+      return { roundNo: round.roundNo };
+    } }),
   verb({ domain: "requirement", action: "continue", summary: "grant exactly one more clarification round after the cap", verb: "requirement-clarify-more", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/clarify-more`, payload: async (c) => ({ roundNo: await roundNo(c) }) }),
   // Flow engine spec §10.3 (W-76): a new round revising round --round; the file holds {answers, glossaryDecisions,

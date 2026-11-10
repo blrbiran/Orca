@@ -41,6 +41,30 @@ export function json(c: WriteContext, flag: string): unknown {
   try { return JSON.parse(value) as unknown; } catch { throw invalid(`--${flag} wants JSON`); }
 }
 
+/** A clarify round as the requirement and flow views carry it: its state and the ids its result asks the person about. */
+export interface ClarifyRoundView {
+  roundNo: number; state?: string;
+  result?: { questions: Array<{ id: string }>; glossary: Array<{ id: string }>; adrs: Array<{ id: string }> } | null;
+}
+type ClarifyAnswer = { id: string; kind: "recommended" } | { id: string; kind: "text"; text: string };
+type ClarifyDecision = { id: string; accept: boolean };
+/**
+ * Tester follow-up B T3 (#231): a round's answer as the Web's RoundForm.send makes it -- a question not named takes its
+ * recommendation, a glossary entry or ADR not named is accepted -- with what the person named winning. An id the round
+ * does not hold is sent as named, so the panel's refusal names it. A round not awaiting answers is sent as named.
+ */
+export function fillRoundAnswer(round: ClarifyRoundView | undefined, named: { answers: ClarifyAnswer[]; glossaryDecisions: ClarifyDecision[]; adrDecisions: ClarifyDecision[] }) {
+  const result = round?.state === "awaiting-answers" ? round.result ?? null : null;
+  if (result === null) return named;
+  const fill = <T extends { id: string }>(ids: ReadonlyArray<{ id: string }>, given: T[], fallback: (id: string) => T): T[] =>
+    [...ids.map(({ id }) => given.find((g) => g.id === id) ?? fallback(id)), ...given.filter((g) => !ids.some((i) => i.id === g.id))];
+  return {
+    answers: fill<ClarifyAnswer>(result.questions, named.answers, (id) => ({ id, kind: "recommended" })),
+    glossaryDecisions: fill(result.glossary, named.glossaryDecisions, (id) => ({ id, accept: true })),
+    adrDecisions: fill(result.adrs, named.adrDecisions, (id) => ({ id, accept: true })),
+  };
+}
+
 /** `--file <path>`: a JSON document, read relative to cwd. */
 export function file(c: WriteContext, flag = "file"): unknown {
   const path = str(c, flag);

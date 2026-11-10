@@ -137,6 +137,22 @@ describe("requirement-answer and requirement-consensus (N1 spec §11.1 items 2-3
     } finally { await x.dispose(); }
   });
 
+  // Tester follow-up B T3 (#231): the refusal names, per kind, the ids the round wants and did not get and the ids it does
+  // not hold, so a caller that sent a partial set can see what to add (the code stays group-state-invalid).
+  it("names the missing, extra and duplicate ids of every mismatched kind, changing nothing", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      const full = recommendedAll(1, x);
+      const payload = { ...full, answers: [full.answers[1]!, full.answers[1]!, { id: "R1.Q9", kind: "recommended" }], glossaryDecisions: [], adrDecisions: [...full.adrDecisions, { id: "R1.ADR9", accept: true }] };
+      const answer = x.service.answerRequirement(x.command("requirement-answer", payload)) as { error: { code: string; message: string } };
+      expect(answer.error.code).toBe("group-state-invalid");
+      // Mutation "first kind only, no ids" (the old `invalid("answers")`) -> red.
+      expect(answer.error.message).toBe("group-state-invalid:answers:missing=R1.Q1;extra=R1.Q9;duplicate=R1.Q2|glossary-decisions:missing=R1.G1|adr-decisions:extra=R1.ADR9");
+      expect(x.round(1).state).toBe("awaiting-answers");
+    } finally { await x.dispose(); }
+  });
+
   it("queues no round after a round whose frontier is empty, and then takes consensus with the open branches, once", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }, { purpose: "clarify", output: ROUND_TWO }] });
     try {

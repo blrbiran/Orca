@@ -74,8 +74,8 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 - `orca requirement show <group>` — a requirement's rounds, drafts and document
 - `orca requirement open --idea <idea> [--group <group>] [--language <language>] [--limit <limit>] [--agent <agent>]` — open a requirement from an idea; the group id is generated unless --group names one
-- `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]` — answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words
-- `orca requirement consensus <group>` — close clarification at the current round
+- `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]` — answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults
+- `orca requirement consensus <group> [--unanswered]` — close clarification at the current round; a round still awaiting answers is refused unless --unanswered
 - `orca requirement continue <group>` — grant exactly one more clarification round after the cap
 - `orca requirement revise <group> --round <round> --file <file>` — revise an answered clarification round (a new round; at most one clarify call)
 - `orca requirement feedback <group> --text <text>` — ask for a new draft of the split

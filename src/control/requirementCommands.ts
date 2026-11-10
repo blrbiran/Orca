@@ -58,8 +58,17 @@ type EffectiveOpenPayload = { groupId: string; repoId: string; idea: string; lim
 
 const nowOf = (deps: { now?: () => Date }) => (deps.now ?? (() => new Date()))();
 const invalid = (detail: string): never => { throw new ControlError("group-state-invalid", detail); };
-const sameIds = (given: readonly string[], expected: readonly string[]) =>
-  given.length === expected.length && new Set(given).size === given.length && expected.every((id) => given.includes(id));
+/**
+ * Tester follow-up B T3 (#231): how a given id list differs from the round's, as `<kind>:missing=…;extra=…;duplicate=…`
+ * (empty parts left out), or null when it covers every id exactly once.
+ */
+function idMismatch(kind: string, given: readonly string[], expected: readonly string[]): string | null {
+  const missing = expected.filter((id) => !given.includes(id));
+  const extra = [...new Set(given.filter((id) => !expected.includes(id)))];
+  const duplicate = [...new Set(given.filter((id, at) => given.indexOf(id) !== at))];
+  const parts = Object.entries({ missing, extra, duplicate }).filter(([, ids]) => ids.length > 0).map(([name, ids]) => `${name}=${ids.join(",")}`);
+  return parts.length === 0 ? null : `${kind}:${parts.join(";")}`;
+}
 function admitted<T>(deps: { admissionGate?: AdmissionGate }, action: () => T): T {
   const release = deps.admissionGate?.enter();
   try { return action(); } finally { release?.(); }
@@ -255,9 +264,12 @@ export function applyRequirementAnswer(deps: RequirementCommandDeps, command: Re
       const round = latestRound(deps.store, id);
       if (round === null || round.roundNo !== payload.roundNo || round.state !== "awaiting-answers" || round.result === null) return invalid("round-not-awaiting-answers");
       const result = round.result;
-      if (!sameIds(payload.answers.map((a) => a.id), result.questions.map((q) => q.id))) invalid("answers");
-      if (!sameIds(payload.glossaryDecisions.map((d) => d.id), result.glossary.map((e) => e.id))) invalid("glossary-decisions");
-      if (!sameIds(payload.adrDecisions.map((d) => d.id), result.adrs.map((a) => a.id))) invalid("adr-decisions");
+      const mismatches = [
+        idMismatch("answers", payload.answers.map((a) => a.id), result.questions.map((q) => q.id)),
+        idMismatch("glossary-decisions", payload.glossaryDecisions.map((d) => d.id), result.glossary.map((e) => e.id)),
+        idMismatch("adr-decisions", payload.adrDecisions.map((d) => d.id), result.adrs.map((a) => a.id)),
+      ].filter((m): m is string => m !== null);
+      if (mismatches.length > 0) invalid(mismatches.join("|"));
       const given = new Map(payload.answers.map((a) => [a.id, a]));
       const answers = result.questions.map((q) => {
         const a = given.get(q.id)!;

@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, PositionalDef, RevisionScope, WriteContext } from "../types.js";
 import { text } from "./format.js";
-import { file, invalid, list, str, verb } from "./verbs.js";
+import { type ClarifyRoundView, file, fillRoundAnswer, invalid, list, str, verb } from "./verbs.js";
 
 const GLOBAL = { name: "global", type: "boolean" as const, summary: "the global layer (every project without its own value) instead of this project's" };
 const isGlobal = (c: WriteContext): boolean => c.args.flags.global === true;
@@ -286,7 +286,7 @@ const RUN_ROWS: CommandDef[] = [
       { name: "set", type: "string", repeatable: true, summary: "an ask's form field as key=value (repeatable)" },
       { name: "file", type: "string", summary: "an ask's form values as a JSON object; with --feedback, {\"answers\":[{\"id\":…,\"kind\":\"recommended\"|\"text\",\"text\"?:…}]}" },
       { name: "text", type: "string", summary: "the answer to the question the step asked (flow.needs)" },
-      { name: "answer", type: "string", repeatable: true, summary: "clarify: <question id> (take the recommended answer) or <id>=<text>" },
+      { name: "answer", type: "string", repeatable: true, summary: "clarify: <question id> (take the recommended answer) or <id>=<text>; a question not named takes its recommendation and a glossary entry or ADR not named is accepted" },
       { name: "glossary", type: "string", repeatable: true, summary: "clarify: <entry id>=accept|reject" },
       { name: "adr", type: "string", repeatable: true, summary: "clarify: <adr id>=accept|reject" },
       { name: "consensus", type: "boolean", summary: "clarify: agree with the brief as it stands" },
@@ -316,15 +316,18 @@ const RUN_ROWS: CommandDef[] = [
       });
       if (list(c, "answer").length > 0 || list(c, "glossary").length > 0 || list(c, "adr").length > 0) {
         // A waiting clarify round is on its step's latest execution; the view's openAsks never lists clarify rounds.
-        const view = (await c.read(`flows/${runId}`)) as { steps?: Array<{ stepKey: string; latest?: { state?: string; ask?: { kind?: string; roundNo?: number } } | null }> };
-        const latest = view.steps?.find((s) => s.stepKey === stepKey)?.latest;
+        const view = (await c.read(`flows/${runId}`)) as { steps?: Array<{ stepKey: string; latest?: { state?: string; ask?: { kind?: string; roundNo?: number } } | null; clarify?: { rounds?: ClarifyRoundView[] } | null }> };
+        const step = view.steps?.find((s) => s.stepKey === stepKey);
+        const latest = step?.latest;
         const roundNo = latest?.state === "needs-person" && latest.ask?.kind === "clarify-round" ? latest.ask.roundNo : undefined;
         if (roundNo === undefined) throw invalid(`step ${stepKey} has no clarify round waiting`);
         const answers = list(c, "answer").map((pair) => {
           const at = pair.indexOf("=");
-          return at === -1 ? { id: pair, kind: "recommended" } : { id: pair.slice(0, at), kind: "text", text: pair.slice(at + 1) };
+          return at === -1 ? { id: pair, kind: "recommended" as const } : { id: pair.slice(0, at), kind: "text" as const, text: pair.slice(at + 1) };
         });
-        return { runId, stepKey, clarify: { roundNo, answers, glossaryDecisions: decide("glossary"), adrDecisions: decide("adr") } };
+        // Tester follow-up B T3 (#231): unnamed ids take the Web's defaults, as `requirement answer` fills them.
+        const filled = fillRoundAnswer(step?.clarify?.rounds?.find((r) => r.roundNo === roundNo), { answers, glossaryDecisions: decide("glossary"), adrDecisions: decide("adr") });
+        return { runId, stepKey, clarify: { roundNo, ...filled } };
       }
       if (c.args.flags.consensus === true) return { runId, stepKey, consensus: true };
       if (str(c, "text") !== undefined) return { runId, stepKey, text: str(c, "text")! };

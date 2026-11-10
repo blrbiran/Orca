@@ -31,7 +31,7 @@ orca requirement open --idea "add a dark mode" --agent claude-main
 
 ## `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]`
 
-answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words
+answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults
 
 - What it does: sends control verb `requirement-answer`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
@@ -40,13 +40,14 @@ answer the current round: --answer <qid> takes the recommendation, --answer <qid
 - `--glossary <glossary>` (repeatable): <id>=accept|reject
 - `--adr <adr>` (repeatable): <id>=accept|reject
 
-## `orca requirement consensus <group>`
+## `orca requirement consensus <group> [--unanswered]`
 
-close clarification at the current round
+close clarification at the current round; a round still awaiting answers is refused unless --unanswered
 
 - What it does: sends control verb `requirement-consensus`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
+- `--unanswered`: agree with a round still awaiting answers: its questions stay open and its glossary entries and ADRs are dropped
 
 ## `orca requirement continue <group>`
 
