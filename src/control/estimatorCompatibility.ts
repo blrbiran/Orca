@@ -29,7 +29,8 @@ export async function catalogMissOf(port: Pick<ExecutionPort, "listModels">, res
   return { model, listed: view.models.map((entry) => entry.model) };
 }
 
-const catalogMissReason = (miss: { model: string; listed: string[] }): EstimatorCompatibilityReason => {
+/** Issue #209: also the worker slots' refusal code (agentFreeze.ts), so both paths name the miss in the same words. */
+export const catalogMissReason = (miss: { model: string; listed: string[] }): EstimatorCompatibilityReason => {
   const named = miss.listed.slice(0, LISTED_NAMED).join(" ");
   const more = miss.listed.length > LISTED_NAMED ? ` and ${miss.listed.length - LISTED_NAMED} more` : "";
   return `model-not-in-catalog: ${miss.model} (listed: ${named}${more})`;

@@ -3,6 +3,7 @@ import { descriptorProvenance, frozenSlotOf, resolveSelection, selectionsHashV2,
 import { canonicalBytes } from "./canonicalJson.js";
 import { peerCode } from "./ccloopPort.js";
 import { ControlError, nonDurableControlErrorClassifications } from "./errors.js";
+import { catalogMissOf, catalogMissReason } from "./estimatorCompatibility.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { readArchivedPlan, readBudgetProposal } from "./queries.js";
 import type { ControlStore } from "./store.js";
@@ -105,13 +106,15 @@ export function groupSelectionPartials(store: ControlStore, groupId: string, ope
  * can mark the one slot it could not resolve -- the hash is then null, so nothing can be confirmed from it.
  */
 export async function resolveGroupSelections(
-  deps: { store: ControlStore; port: Pick<ExecutionPort, "resolveAgent"> },
+  deps: { store: ControlStore; port: Pick<ExecutionPort, "resolveAgent" | "listModels"> },
   groupId: string,
   operatorId: string,
   mode: "preview" | "confirm" = "confirm",
 ): Promise<GroupSelectionResolution> {
   const base = groupSelectionPartials(deps.store, groupId, operatorId);
   const answers = new Map<string, Promise<AgentResolution>>();
+  // Issue #209: one catalog read per distinct selection, as for the resolution itself.
+  const misses = new Map<string, Promise<string | null>>();
   const slots: SlotResolution[] = [];
   for (const entry of base.slots) {
     const identity = { key: entry.key, slot: entry.slot, taskId: entry.taskId };
@@ -121,6 +124,11 @@ export async function resolveGroupSelections(
     if (!answers.has(id)) answers.set(id, deps.port.resolveAgent(partial));
     try {
       const resolution = structuredClone(await answers.get(id)!);
+      // Issue #209: a codex model the read catalog does not list is refused here, by name, instead of reaching the
+      // provider and coming back as a rate limit. A catalog that was not or could not be read changes nothing (#124).
+      if (!misses.has(id)) misses.set(id, catalogMissOf(deps.port, resolution).then((miss) => (miss === null ? null : catalogMissReason(miss))));
+      const miss = await misses.get(id)!;
+      if (miss !== null) { slots.push({ ...identity, outcome: { kind: "rejected", code: miss } }); continue; }
       const frozen: FrozenSlot = frozenSlotOf(resolution, partial, descriptorProvenance(partial, resolution.selection, provenance));
       slots.push({ ...identity, outcome: { kind: "resolved", frozen } });
     } catch (error) {
