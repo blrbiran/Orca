@@ -1,6 +1,6 @@
 /** Read-only owner destinations; App owns selection, live GETs and focus. */
 import type { OverviewDestinationV1 } from "./controlTypes.js";
-export type GroupRegion = Extract<OverviewDestinationV1, { kind: "group" }>["region"] | "progress" | "runs" | "technical";
+export type GroupRegion = Extract<OverviewDestinationV1, { kind: "group" }>["region"] | "progress" | "live" | "runs" | "technical";
 export type RequirementRegion = Extract<OverviewDestinationV1, { kind: "requirement" }>["region"];
 export type OverviewTarget = Exclude<OverviewDestinationV1, { kind: "recovery" | "group" }>
   | (Omit<Extract<OverviewDestinationV1, { kind: "group" }>, "region"> & { region: GroupRegion })

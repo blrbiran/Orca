@@ -34,7 +34,7 @@ import { SkillsGiven } from "./SkillsGiven.js";
 import { NeedsHumanBadge, runNeedsHuman, type GroupDecisionsRead } from "./RunDecisions.js";
 import type {
   AgentSelectionPreviewV1, AgentsViewV1, AmountDimensionV1, ControlConfigV1, ContinuationSelectionV1, GroupOrchestrationV1, GroupViewV1, ModelListState, OperatorPreferencesV1, RepositoryIntegrationV1, RepositoryWorkspaceV1,
-  RunViewV1,
+  RunViewV1, WorkItemViewV1,
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, progressText } from "./TaskDetail.js";
@@ -46,6 +46,7 @@ import { Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
 import { isRetryKey } from "./reviewKeys.js";
+import { useClock } from "./clock.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 /** Estimate usable-answer spec, correction of 2026-10-20: a withdrawn estimate's reasonCode prefix (the reason follows). */
@@ -97,6 +98,44 @@ function runsInCreationOrder(runs: readonly RunViewV1[]): readonly RunViewV1[] {
   return runs.every((run) => run.createdOrdinal !== undefined)
     ? [...runs].sort((left, right) => left.createdOrdinal! - right.createdOrdinal!)
     : runs;
+}
+
+/** #226 (i): a work item whose current run is in flight -- what the Live region lists. */
+const IN_FLIGHT: ReadonlySet<WorkItemViewV1["status"]> = new Set(["starting", "active", "continuing"]);
+
+/**
+ * #226 (i): the group's Live region -- each work item running now with its run's phase, attempt, tokens and elapsed time
+ * and its transcript, opened by itself on the latest call; with nothing running, the most recent run. `active` is the
+ * region being shown: the pane stays mounted when hidden, and a hidden transcript must ask nothing.
+ */
+function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number }): JSX.Element {
+  const { t } = useTranslation();
+  const ticking = useClock(30_000);
+  const now = props.now ?? ticking;
+  const { view } = props;
+  const runOf = (runId: string | null): RunViewV1 | undefined => runId === null ? undefined : view.runs.find((run) => run.runId === runId);
+  const running = view.workItems.flatMap((item) => {
+    const run = runOf(item.currentRunId);
+    return run !== undefined && (IN_FLIGHT.has(item.status) || item.category === "running") ? [{ taskId: item.taskId, run }] : [];
+  });
+  const latest = running.length === 0 ? runsInCreationOrder(view.runs).at(-1) : undefined;
+  const shown = latest === undefined ? running : [{ taskId: latest.taskId ?? latest.runId, run: latest }];
+  const facts = (run: RunViewV1): string => [
+    t("control.group.liveFacts", { phase: enumText("runPhase", run.phase), attempt: run.providerAttemptOrdinal }),
+    t("control.group.liveTokens", { tokens: shortTokens(run.used.tokens) }),
+    ...(run.startedAt != null ? [t("control.group.liveElapsed", { minutes: Math.max(0, Math.floor(((run.endedAt ?? now) - run.startedAt) / 60_000)) })] : []),
+  ].join(" · ");
+  return <>
+    {running.length === 0 && <p>{t(latest === undefined ? "control.group.liveNone" : "control.group.liveLatest")}</p>}
+    {shown.map(({ taskId, run }) => {
+      const name = t(latest === undefined ? "control.group.liveItem" : "control.group.liveLatestItem", { taskId });
+      return <section key={run.runId} aria-label={name}>
+        <h4>{name}</h4>
+        <p className="num" title={formatTokens(run.used.tokens, currentLanguage())}>{enumText("runState", run.state)} · {facts(run)}</p>
+        <RunTranscript runId={run.runId} active={props.active} autoOpen />
+      </section>;
+    })}
+  </>;
 }
 
 /**
@@ -714,6 +753,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </table>
 
         </>,
+        live: <LiveRegion view={view} active={props.active !== false && region === "live"} now={props.now} />,
         preparation: <>
       <section aria-label={t("control.preparation.reviewTitle")}>
         <h3>{t("control.preparation.reviewTitle")}</h3>

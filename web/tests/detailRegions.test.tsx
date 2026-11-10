@@ -39,7 +39,8 @@ it("active and failed task facts remain visible together without inferring succe
 });
 it("every region of an archived group remains read-only with unarchive available", () => {
  const value=view([workItem({taskId:"a",labels:["bug"]})]);value.summary.archived=true; mount(value);
- for(const name of ["Progress","Preparation","Problems","Results","Runs and evidence","Technical details"]){
+ // Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): the Live region is among the tabs.
+ for(const name of ["Progress","Live","Preparation","Problems","Results","Runs and evidence","Technical details"]){
   select(name); expect(screen.queryAllByRole("button",{name:/^(Start|Pause new tasks|Save progress and stop|Resume|Continue|Retry|Set limit|Save|Confirm|Archive group)/})).toHaveLength(0);
   expect(screen.queryAllByRole("textbox").filter(x=>!(x as HTMLInputElement).readOnly)).toHaveLength(0);
  }

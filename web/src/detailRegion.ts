@@ -1,7 +1,7 @@
 /** Presentation only: stored state chooses the first region; explicit owner navigation wins. */
 import type { GroupViewV1 } from "./controlTypes.js";
 import type { GroupRegion } from "./overviewNavigation.js";
-export const DETAIL_REGIONS = ["progress", "preparation", "problem", "results", "runs", "technical"] as const;
+export const DETAIL_REGIONS = ["progress", "live", "preparation", "problem", "results", "runs", "technical"] as const;
 export type DetailRegion = typeof DETAIL_REGIONS[number];
 export function defaultDetailRegion(view: GroupViewV1): DetailRegion {
   if (view.summary.state === "done") return "results";

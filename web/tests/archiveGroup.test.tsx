@@ -19,7 +19,8 @@ const actionButtons = (): HTMLElement[] =>
 const selectRegion = (name: string): void => { fireEvent.click(screen.getByRole("tab", { name })); };
 const allRegionActions = (): string[] => {
   const buttons = new Set<HTMLElement>();
-  for (const region of ["Progress", "Preparation", "Problems", "Results", "Runs and evidence", "Technical details"]) {
+  // Ruling: plan 2026-11-10-tester-followup-b T7 (#228/#226): the Live region is among the tabs.
+  for (const region of ["Progress", "Live", "Preparation", "Problems", "Results", "Runs and evidence", "Technical details"]) {
     selectRegion(region); for (const button of actionButtons()) buttons.add(button);
   }
   return [...buttons].map(button => button.getAttribute("aria-label") ?? button.textContent ?? "");

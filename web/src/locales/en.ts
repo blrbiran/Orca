@@ -231,7 +231,7 @@ export const en = {
     "not-produced": "not-produced"
   }
 },
-  detail: { regions: "Group detail", progress: "Progress", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", tasksBlocked: "Some of this group's tasks are blocked; open Problems to see why.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
+  detail: { regions: "Group detail", progress: "Progress", live: "Live", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", tasksBlocked: "Some of this group's tasks are blocked; open Problems to see why.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "Keyboard shortcuts", title: "Keys Orca uses", decisions: "j / k: next / previous row · a: agree · c: correct — on the Decisions page, with focus on the page", retry: "r: retry the open task's run — in a group, where Retry task is offered", arrows: "Arrow keys: move between region tabs and menu items", close: "Close" },
   nav: { overview: "Overview", sections: "Sections", more: "More", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", settings: "Settings", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
@@ -582,6 +582,13 @@ export const en = {
       unresolvedWork: "Unresolved work",
       workCounts: "Work counts",
       dispatchActions: "Execution actions",
+      liveItem: "Running: {{taskId}}",
+      liveLatestItem: "Most recent run: {{taskId}}",
+      liveLatest: "Nothing is running. The most recent run:",
+      liveNone: "Nothing has run yet.",
+      liveFacts: "{{phase}} · attempt {{attempt}}",
+      liveTokens: "{{tokens}} tokens",
+      liveElapsed: "{{minutes}} min",
       start: "Start",
       startQueued: "Queued: {{ahead}} ahead; it starts when a slot frees.",
       pause: "Pause new tasks",
