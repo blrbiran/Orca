@@ -1,7 +1,7 @@
 import {validSavedNoDispatch} from "./savedResultNoDispatch.js";
 import {claimCapBlocking} from "./spendCaps.js";
 import { readFundedAllowance, hasOptionalTaskPolicy } from "./fundedAllowance.js";
-import { finiteCommitment, remainingBudget } from "./tokenPolicy.js";
+import { finiteCommitment, remainingBudget, type BudgetAmount } from "./tokenPolicy.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { createHash } from "node:crypto";
 import { readWorkClaimEnvelope } from "./webDispatch.js";
@@ -72,16 +72,37 @@ const topUpOf = (command: RetryTaskCommand): Amount | null => {
   return work === undefined ? null : { tokens: work.tokens ?? 0, activeMs: work.activeMs ?? 0, attempts: work.attempts ?? 0, sessions: work.sessions ?? 0 };
 };
 
-/** A ladder cannot finish its job if its required automatic retry has no authored budget left. */
-export function autoRetryFundingRefusal(store: ControlStore, groupId: string, taskId: string, runId: string): "authored-budget-exhausted" | "retry-funding-missing" | null {
-  if (!hasOptionalTaskPolicy(store, groupId, taskId)) return null;
+/** Why a ladder's automatic retry is refused funding; the attempt-cost form names the fresh grant and one attempt's cost. */
+export type AutoRetryFundingRefusal = "authored-budget-exhausted" | "retry-funding-missing" | `retry-funding-below-attempt-cost:${number}/${number}`;
+
+/**
+ * Tester follow-up B T2 (#234, #202): what retrying an optional-policy task's failed run leaves its next claim, by the
+ * task's authored work -- authored + every top-up (+ `incoming`) - lineage usage, as the claim's decideFundedAllowance
+ * sizes it (the group's headroom may fund less) -- and what one attempt of that lineage has cost (its token usage over the
+ * attempts it used, rounded up; null when it used none). Null when the run has no funded allowance to read.
+ */
+export interface RetryFunding { authored: BudgetAmount; inherited: Amount; fresh: BudgetAmount; perAttemptTokens: number | null }
+export function retryFundingOf(store: ControlStore, groupId: string, taskId: string, runId: string, incoming: Amount | null = null): RetryFunding | null {
   const run = readRunBody(store, runId), work = readWork(store, groupId, taskId) as unknown as RetriedWork;
   const funding = readFundedAllowance(store, run as never);
-  if (funding === null) return "retry-funding-missing";
-  const authored = withTopUp(work.grant.work, topUpSum(store, groupId, taskId, null));
+  if (funding === null) return null;
+  const authored = withTopUp(work.grant.work, add(topUpSum(store, groupId, taskId, null), incoming ?? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }));
   const inherited = add(funding.inheritedUsage, lineageWorkUsage(run));
-  const left = remainingBudget(authored, inherited);
-  return dimensions.some((dimension) => left[dimension] === 0) ? "authored-budget-exhausted" : null;
+  return { authored, inherited, fresh: remainingBudget(authored, inherited), perAttemptTokens: inherited.attempts > 0 ? Math.ceil(inherited.tokens / inherited.attempts) : null };
+}
+
+/**
+ * A ladder cannot finish its job if its required automatic retry has no authored budget left -- or (#234) less than one
+ * attempt of the failed lineage has cost: ccloop checks its budget only between phases, so such a run overshoots into the
+ * group's deficit instead of stopping. An unlimited token dimension is never refused by that floor.
+ */
+export function autoRetryFundingRefusal(store: ControlStore, groupId: string, taskId: string, runId: string): AutoRetryFundingRefusal | null {
+  if (!hasOptionalTaskPolicy(store, groupId, taskId)) return null;
+  const funding = retryFundingOf(store, groupId, taskId, runId);
+  if (funding === null) return "retry-funding-missing";
+  const { fresh, perAttemptTokens } = funding;
+  if (dimensions.some((dimension) => fresh[dimension] === 0)) return "authored-budget-exhausted";
+  return fresh.tokens !== null && perAttemptTokens !== null && fresh.tokens < perAttemptTokens ? `retry-funding-below-attempt-cost:${fresh.tokens}/${perAttemptTokens}` : null;
 }
 
 /** Normal failed-recovery retry keeps its real failure; no-dispatch consumption has separate proof and authority. */

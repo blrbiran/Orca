@@ -722,7 +722,9 @@ export const en = {
     // Task setup and check retry spec 2026-11-04 §4.7: why the ladder left a run out (a `ladder-skipped` activity row).
     ladder: {
       skipped: { "setup-failed": "Not retried automatically: setup failed.", "could-not-run": "Not retried automatically: the check could not run.",
-        "authored-budget-exhausted": "Not retried automatically: the task's work budget is exhausted. Add work to an explicit retry.", "retry-funding-missing": "Not retried automatically: the retry budget could not be verified." },
+        "authored-budget-exhausted": "Not retried automatically: the task's work budget is exhausted. Add work to an explicit retry.", "retry-funding-missing": "Not retried automatically: the retry budget could not be verified.",
+        "retry-funding-below-attempt-cost": "Not retried automatically: the task's remaining work budget is less than one attempt has cost. Add work to an explicit retry." },
+      attemptCost: "the next run would get {{fresh}} tokens; one attempt has cost {{perAttempt}}",
     },
     diagnosis: {
       phaseLabel: "Phase: {{phase}}", stepLabel: "step: {{step}}", attempt: "attempt {{attempt}}", identity: "run {{runId}}",

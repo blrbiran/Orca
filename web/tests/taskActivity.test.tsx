@@ -101,6 +101,22 @@ describe("the task detail's run activity (spec §6.5)", () => {
     expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · Not retried automatically: the check could not run. · npm test`]);
   });
 
+  // Tester follow-up B T2 (#234): a run left out because the fresh grant is below one attempt's cost says so, with both figures.
+  it.each([
+    ["en", "Not retried automatically: the task's remaining work budget is less than one attempt has cost. Add work to an explicit retry. · the next run would get 795594 tokens; one attempt has cost 1602203"],
+    ["zh", "没有自动重试：任务剩余的工作额度不够一次尝试的花费。请在显式重试时追加额度。 · 下一次运行只能拿到 795594 tokens；一次尝试已花费 1602203"],
+  ])("says in %s that the remainder is below one attempt's cost", async (language, sentence) => {
+    await i18n.changeLanguage(language);
+    try {
+      entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "ladder-skipped", body: { reason: "retry-funding-below-attempt-cost:795594/1602203" } }];
+      detail();
+      const region = await screen.findByRole("region", { name: language === "en" ? "Recent activity of run-a" : "run-a 的近期活动" });
+      const lines = await within(region).findAllByRole("listitem");
+      // Mutation: drop the figures -> the " · the next run would get ..." tail is missing, red.
+      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toISOString()} · ${sentence}`]);
+    } finally { await i18n.changeLanguage("en"); }
+  });
+
   // Scoped fix (re-review item 3): only a could-not-run row names a command; a setup-failed one shows its sentence alone.
   it("shows no command on a setup-failed row", async () => {
     entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "ladder-skipped", body: { reason: "setup-failed", command: "npm test" } }];

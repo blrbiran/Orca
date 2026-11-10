@@ -593,7 +593,9 @@ export const zh: Translation<typeof en> = {
     },
     ladder: {
       skipped: { "setup-failed": "没有自动重试：准备步骤失败。", "could-not-run": "没有自动重试：检查命令根本没能运行。",
-        "authored-budget-exhausted": "没有自动重试：任务工作额度已用完。请在显式重试时追加额度。", "retry-funding-missing": "没有自动重试：无法验证重试额度。" },
+        "authored-budget-exhausted": "没有自动重试：任务工作额度已用完。请在显式重试时追加额度。", "retry-funding-missing": "没有自动重试：无法验证重试额度。",
+        "retry-funding-below-attempt-cost": "没有自动重试：任务剩余的工作额度不够一次尝试的花费。请在显式重试时追加额度。" },
+      attemptCost: "下一次运行只能拿到 {{fresh}} tokens；一次尝试已花费 {{perAttempt}}",
     },
     diagnosis: {
       phaseLabel: "阶段：{{phase}}", stepLabel: "步骤：{{step}}", attempt: "第 {{attempt}} 次尝试", identity: "运行 {{runId}}",

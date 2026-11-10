@@ -29,6 +29,8 @@ export interface HarnessOptions {
   files?: (workItemId: string) => Record<string, string>;
   delayAccept?: () => Promise<void>;
   workTokens?: (workItemId: string) => number;
+  /** Tester follow-up B T2 (#234): the work attempts a run reports (driverPort.ts; 1 unless said otherwise). */
+  workAttempts?: (workItemId: string) => number;
   duringCollect?: () => Promise<void>;
   /**
    * Agent selection spec §6.6 (plan T11): the killGraceMs ccloop answers at confirmation, frozen onto every work item
@@ -88,7 +90,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   const fake = fakeCcloopPort({
     capabilities: snapshot.profile.capabilities, behaviour: options.behaviour ?? (() => "succeed"),
     files: options.files ?? ((id) => ({ [id]: `${id}\n` })), delayAccept: options.delayAccept,
-    workTokens: options.workTokens, duringCollect: options.duringCollect,
+    workTokens: options.workTokens, ...(options.workAttempts ? { workAttempts: options.workAttempts } : {}), duringCollect: options.duringCollect,
     ...(options.acceptedConfigHash ? { acceptedConfigHash: options.acceptedConfigHash } : {}),
     ...(options.stopReason ? { stopReason: options.stopReason } : {}),
     ...(options.failure ? { failure: options.failure } : {}),

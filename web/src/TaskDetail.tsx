@@ -134,13 +134,20 @@ function activityText(entry: ActivityEntryV1): string {
   // Final-review fix wave (minor 5): the sentence already says "not retried", so the kind is not put before it; (I4) the
   // failing command, when the row names one, follows it.
   const skipped = ladderSkipOf(entry);
-  if (skipped !== null) return `${i18n.t(`control.ladder.skipped.${skipped}`)}${skipped === "could-not-run" && typeof body.command === "string" && body.command !== "" ? ` · ${body.command}` : ""}`;
+  if (skipped !== null) {
+    // Tester follow-up B T2 (#234): the attempt-cost skip names the fresh grant and one attempt's cost its reason carries.
+    const cost = skipped === "retry-funding-below-attempt-cost" ? /^retry-funding-below-attempt-cost:(\d+)\/(\d+)$/.exec(String(body.reason)) : null;
+    return `${i18n.t(`control.ladder.skipped.${skipped}`)}${skipped === "could-not-run" && typeof body.command === "string" && body.command !== "" ? ` · ${body.command}` : ""}${cost === null ? "" : ` · ${i18n.t("control.ladder.attemptCost", { fresh: cost[1], perAttempt: cost[2] })}`}`;
+  }
   return kind;
 }
 
 /** A `ladder-skipped` row's reason, when it is one this panel words; null for any other row. */
 function ladderSkipOf(entry: ActivityEntryV1): LadderSkipReason | null {
-  return entry.kind === "ladder-skipped" && (entry.body.reason === "setup-failed" || entry.body.reason === "could-not-run" || entry.body.reason === "authored-budget-exhausted" || entry.body.reason === "retry-funding-missing") ? entry.body.reason : null;
+  if (entry.kind !== "ladder-skipped") return null;
+  const reason = entry.body.reason;
+  if (typeof reason === "string" && reason.startsWith("retry-funding-below-attempt-cost:")) return "retry-funding-below-attempt-cost";
+  return reason === "setup-failed" || reason === "could-not-run" || reason === "authored-budget-exhausted" || reason === "retry-funding-missing" ? reason : null;
 }
 
 /**

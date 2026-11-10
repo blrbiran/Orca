@@ -50,6 +50,8 @@ export function fakeCcloopPort(input: {
   delayAccept?: () => Promise<void>;
   /** Final review I1: the work tokens the run reports (10 unless said otherwise), so a criterion can overspend a grant. */
   workTokens?: (workItemId: string) => number;
+  /** Tester follow-up B T2 (#234): the work attempts the run reports (1 unless said otherwise). */
+  workAttempts?: (workItemId: string) => number;
   /** Handoff delivery (Task 4): runs inside every `collect` that found an execution, before it answers. */
   duringCollect?: () => Promise<void>;
   /** Audit 2026-09-26 (seat B): what `accept` answers as the execution's configHash; absent, the claim's is echoed. */
@@ -98,7 +100,7 @@ export function fakeCcloopPort(input: {
     }
     const variant = input.behaviour(claim.workItemId);
     const events: UsageEvent[] = [
-      { runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work", cumulative: variant === "stoppable-usage-unknown" || variant === "failed-usage-unknown" ? null : { tokens: input.workTokens?.(claim.workItemId) ?? 10, activeMs: 5, attempts: 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`work usage ${claim.runId}`)) },
+      { runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work", cumulative: variant === "stoppable-usage-unknown" || variant === "failed-usage-unknown" ? null : { tokens: input.workTokens?.(claim.workItemId) ?? 10, activeMs: 5, attempts: input.workAttempts?.(claim.workItemId) ?? 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`work usage ${claim.runId}`)) },
       { runId: claim.runId, generation: claim.generation, eventSeq: 2, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-2`, Buffer.from(`handoff usage ${claim.runId}`)) },
     ];
     if (variant === "stoppable-usage-gap") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 4, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-4`, Buffer.from(`handoff usage ${claim.runId} 4`)) });
