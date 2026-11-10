@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { cardGoal, groupCard, inlinePick, kindDot, tabButton, tabButtonRow, tabItem, tabRow } from "../src/ui/classes.js";
+import { cardGoal, groupCard, inlinePick, kindDot, regionTabRow, tabButton, tabButtonRow, tabItem, tabRow } from "../src/ui/classes.js";
 import { carrying } from "./sourceClasses.js";
 
 const css = readFileSync(fileURLToPath(new URL("../src/styles.css", import.meta.url)), "utf8");
@@ -197,7 +197,10 @@ describe("styles.css", () => {
     expect(tabButton.split(" ")).toEqual(expect.arrayContaining([...item, "ms-0", "rounded-none", "border-x-0", "border-t-0", "bg-transparent", "shadow-none"]));
     expect(tabButtonRow.split(" ")).toEqual(expect.arrayContaining([...tabRow.split(" "), "mt-4", "mb-3"]));
     // mutation: GroupDetailRegions back on className="detail-region-tabs" -> red
-    expect(src("GroupDetailRegions.tsx")).toContain('role="tablist" aria-label={t("detail.regions")} className={tabButtonRow}');
+    // Ruling: human 「这次批准改写所有必要的判据」 (2026-11-10, plan 2026-11-10-tester-followup-b T7, #228): the group detail's
+    // region row sits closer under the execution bar (regionTabRow, mt-2); it is still the one tabRow component.
+    expect(regionTabRow.split(" ")).toEqual(expect.arrayContaining([...tabRow.split(" "), "mt-2", "mb-3"]));
+    expect(src("GroupDetailRegions.tsx")).toContain('role="tablist" aria-label={t("detail.regions")} className={regionTabRow}');
     expect(src("GroupDetailRegions.tsx")).toContain('role="tab" className={tabButton}');
     expect(src("App.tsx")).toContain('aria-label={t("corrections.tabs")} className={tabButtonRow}');
     expect(src("App.tsx")).toContain('type="button" className={tabButton} aria-pressed=');
