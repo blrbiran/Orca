@@ -1,5 +1,5 @@
 import { describe,it,expect } from "vitest";
-import { mkdir, rename, readFile, readdir, writeFile, stat, symlink } from "node:fs/promises";
+import { link, mkdir, rename, readFile, readdir, writeFile, stat, symlink, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { archiveRun,readArtifact,writeArtifact } from "../../src/control/archive.js";
@@ -81,6 +81,43 @@ describe("independent evidence archive",{timeout:30000},()=>{
    expect(h.store.db.prepare("SELECT id FROM artifacts WHERE id=?").get("duplicate")).toBeUndefined();
    expect(await readdir(join(h.store.stateDir,"staging"))).toEqual([]);
   }finally{resume.release();await h.dispose();}
+ });
+
+ // Tester #230 (plan 2026-11-10 follow-up B, T1): seven checks raised one bare `artifact-id-conflict`, so a blocked run's
+ // reason could not say which artifact or which check. Each check now names both, as `<artifactId>:<check>`.
+ it("names the artifact id and the check that raised each artifact-id-conflict",async()=>{
+  const h=await openTestStore();try{
+   const artifacts=join(h.store.stateDir,"artifacts"),data=(id:string)=>join(artifacts,id,"data");
+   const bytes=Buffer.from("same"),seen:Record<string,unknown>={};
+   const refused=async(id:string,deps:Parameters<typeof writeArtifact>[3]={})=>{
+    try{await writeArtifact(h.store,id,bytes,deps);seen[id]="written";}
+    catch(error){const e=error as {code?:unknown;detail?:unknown};seen[id]={code:e.code,detail:e.detail};}
+   };
+   // hash-file: the published data file holds other bytes.
+   await writeArtifact(h.store,"c-file",Buffer.from("first"));await refused("c-file");
+   // hash-row: the database row names another hash than the bytes being registered.
+   h.store.db.prepare("INSERT INTO artifacts VALUES (?,?,?)").run("c-row","0".repeat(64),JSON.stringify({path:"artifacts/c-row/data"}));
+   await refused("c-row");
+   // data-missing: the id's directory exists without its data file.
+   await mkdir(join(artifacts,"c-missing"),{recursive:true,mode:0o700});await refused("c-missing");
+   // read-changed: the data file changed while the duplicate was being hashed.
+   await writeArtifact(h.store,"c-read",bytes);
+   await refused("c-read",{beforeDuplicateRead:()=>utimes(data("c-read"),new Date(0),new Date(0))});
+   // parent-changed: the id's directory changed between the hash and the registration.
+   await writeArtifact(h.store,"c-parent",bytes);
+   await refused("c-parent",{admit:async operation=>{await writeFile(join(artifacts,"c-parent","extra"),"x");return operation();}});
+   // identity-changed: the data file changed between the hash and the registration.
+   await writeArtifact(h.store,"c-identity",bytes);
+   await refused("c-identity",{admit:async operation=>{await utimes(data("c-identity"),new Date(0),new Date(0));return operation();}});
+   // nlink: the data file has a second hard link.
+   await writeArtifact(h.store,"c-link",bytes);await link(data("c-link"),join(h.root,"c-link-second"));await refused("c-link");
+   const conflict=(id:string,check:string)=>({code:"artifact-id-conflict",detail:`${id}:${check}`});
+   expect(seen).toEqual({
+    "c-file":conflict("c-file","hash-file"),"c-row":conflict("c-row","hash-row"),"c-missing":conflict("c-missing","data-missing"),
+    "c-read":conflict("c-read","read-changed"),"c-parent":conflict("c-parent","parent-changed"),
+    "c-identity":conflict("c-identity","identity-changed"),"c-link":conflict("c-link","nlink"),
+   });
+  }finally{await h.dispose();}
  });
 
  it("rejects a duplicate through a symlinked artifact id directory without registering it",async()=>{

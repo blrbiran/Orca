@@ -32,6 +32,15 @@ interface FileIdentity {dev:string;ino:string;size:string;mtimeNs:string;ctimeNs
 function fileIdentity(stat:BigIntStats):FileIdentity {
  return {dev:String(stat.dev),ino:String(stat.ino),size:String(stat.size),mtimeNs:String(stat.mtimeNs),ctimeNs:String(stat.ctimeNs)};
 }
+/**
+ * Tester #230 (plan 2026-11-10 follow-up B, T1): which artifact and which check refused it, as `<artifactId>:<check>`.
+ * data-missing: the id's directory has no data file; read-changed: the data file changed while it was hashed; nlink: it is
+ * not one regular file with one link; hash-row / hash-file: the registered row / the published file holds another hash;
+ * parent-changed / identity-changed: the id's directory / its data file changed between the hash and the registration.
+ */
+function idConflict(id:string,check:"data-missing"|"read-changed"|"nlink"|"hash-row"|"hash-file"|"parent-changed"|"identity-changed"):ControlError {
+ return new ControlError("artifact-id-conflict",`${id}:${check}`);
+}
 function sameFileIdentity(left:FileIdentity,right:FileIdentity):boolean {
  return left.dev===right.dev&&left.ino===right.ino&&left.size===right.size&&left.mtimeNs===right.mtimeNs&&left.ctimeNs===right.ctimeNs;
 }
@@ -43,26 +52,26 @@ function checkedDirectoryIdentity(root:string,dir:string):FileIdentity {
  if(canonical!==dir||dirname(canonical)!==root||!within(root,canonical))throw new ControlError("control-path-symlink");
  return fileIdentity(stat);
 }
-async function observeDuplicate(root:string,dir:string,path:string,deps:ArchiveDependencies):Promise<{parentIdentity:FileIdentity;identity:FileIdentity;hash:string}|null> {
+async function observeDuplicate(root:string,dir:string,path:string,id:string,deps:ArchiveDependencies):Promise<{parentIdentity:FileIdentity;identity:FileIdentity;hash:string}|null> {
  let parentIdentity:FileIdentity;
  try {parentIdentity=checkedDirectoryIdentity(root,dir);}
  catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
  let handle:FileHandle;
  try {handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);}
- catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")throw new ControlError("artifact-id-conflict");throw error;}
+ catch(error) {if((error as NodeJS.ErrnoException).code==="ENOENT")throw idConflict(id,"data-missing");throw error;}
  try {
   const before=fileIdentity(await handle.stat({bigint:true}));
   await deps.beforeDuplicateRead?.();
   const hash=createHash("sha256");
   for await(const bytes of handle.createReadStream({autoClose:false}))hash.update(bytes);
   const after=fileIdentity(await handle.stat({bigint:true}));
-  if(!sameFileIdentity(before,after))throw new ControlError("artifact-id-conflict");
+  if(!sameFileIdentity(before,after))throw idConflict(id,"read-changed");
   return {parentIdentity,identity:after,hash:hash.digest("hex")};
  } finally {await handle.close();}
 }
-function currentIdentity(path:string):FileIdentity {
+function currentIdentity(path:string,id:string):FileIdentity {
  const stat=lstatSync(path,{bigint:true});
- if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n)throw new ControlError("artifact-id-conflict");
+ if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n)throw idConflict(id,"nlink");
  return fileIdentity(stat);
 }
 async function publish(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
@@ -73,18 +82,18 @@ async function publish(store:ControlStore,id:string,temp:string,hash:string,deps
  const register=()=>store.transaction(()=>{
   deps.assertHeld?.();
   const old=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id);
-  if(old && old.hash!==hash) throw new ControlError("artifact-id-conflict");
+  if(old && old.hash!==hash) throw idConflict(id,"hash-row");
   store.db.prepare("INSERT INTO artifacts VALUES (?,?,?) ON CONFLICT(id) DO NOTHING").run(id,hash,JSON.stringify({path:relative(store.stateDir,destination)}));
  });
  try {
   await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
   for(;;) {
-   const duplicate=await observeDuplicate(artifactsRoot,dir,destination,deps);
+   const duplicate=await observeDuplicate(artifactsRoot,dir,destination,id,deps);
    if(duplicate) {
-    if(duplicate.hash!==hash)throw new ControlError("artifact-id-conflict");
+    if(duplicate.hash!==hash)throw idConflict(id,"hash-file");
     await admit(async()=>{
-     if(!sameFileIdentity(duplicate.parentIdentity,checkedDirectoryIdentity(artifactsRoot,dir)))throw new ControlError("artifact-id-conflict");
-     if(!sameFileIdentity(duplicate.identity,currentIdentity(destination)))throw new ControlError("artifact-id-conflict");
+     if(!sameFileIdentity(duplicate.parentIdentity,checkedDirectoryIdentity(artifactsRoot,dir)))throw idConflict(id,"parent-changed");
+     if(!sameFileIdentity(duplicate.identity,currentIdentity(destination,id)))throw idConflict(id,"identity-changed");
      register();
     });
     break;
