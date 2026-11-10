@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-9179cdad",
+  "runtime": "claude-code",
+  "sessionRef": "9179cdad-9847-4ebf-a49f-a798dd161c00",
+  "writtenAt": "2026-11-10T01:42:35.449Z",
+  "head": "015ccacdf74d7a7dafcc8e1bbb360430d655075f",
+  "level": {
+    "kind": "reading",
+    "level": 521486,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Run the B7 startup test red then green (missing project path must not stop the panel)",
+    "Run the #211 requirement-limit test red then green",
+    "Fix #205 closed-after-top-up retry, #209 worker catalog miss, #216/#217/#218/#219/#220/#221 UI"
+  ],
+  "open": [
+    "ccloop repin done (73fff1a); npm ci done; ccloop full gate 2596/2596; paired V10/V11 2 passed",
+    "#201 assembly change and registry fileError change are written but untested"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "push Orca branch and later merge to origin"
+    },
+    {
+      "kind": "tied-evidence",
+      "what": "real paid 429 before-work run; session authorization recorded, scenario not yet fixed"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "TMPDIR=/tmp ./node_modules/.bin/vitest run tests/panel/projectsFileMode.test.ts",
+      "exitCode": 0,
+      "commit": "015ccacdf74d7a7dafcc8e1bbb360430d655075f",
+      "observedAt": "2026-11-10T01:42:35.394Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9179cdad-SwlQox/1.txt"
+    }
+  ]
+}
