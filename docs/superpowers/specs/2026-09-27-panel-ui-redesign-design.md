@@ -152,3 +152,48 @@ npm run typecheck && ./node_modules/.bin/vitest run && npm run build --workspace
 1. U1 让 `opened` 更弱（§2），本文不修补它。
 2. 列表每次请求都读一遍各仓库台账的全部 decision 行；今天本仓库约一百多条，不做缓存（Rule 2）。若将来变慢再说。
 3. 合并进 `main`、删 worktree 与分支 —— 都归人（Rule 15）。
+
+## Correction (2026-11-10, plan `2026-11-10-tester-followup-b` T8, issue #219): a non-current section is unmounted
+
+Human ruling R1, verbatim: "#219 同意改裁定". It changes the section-switching rule of §5.1 (the 🔴 paragraph "分区切换：四个区始终挂载……",
+recorded under U2); the paragraph above is kept word for word as the history of that decision.
+
+**What changes.**
+- `SectionPane` (`web/src/Shell.tsx`) renders its content only for the current section. Every other pane stays in the page as an
+  empty marker (`<div class="section-pane" data-section=… data-active="false">`), so `data-active` still says which section is
+  current, but the page holds no hidden copy of another page's labels, buttons and text (#219: a find-in-page, a screen reader
+  or a label lookup met every section at once; Settings' global and project forms repeated the same labels).
+- Settings categories follow the same rule: `SettingsCategoryPane` (`web/src/GlobalSettings.tsx`) renders only the open
+  category, and on the project category the global settings region is not rendered at all (`web/src/SettingsPage.tsx`).
+- The CSS that hid inactive panes and categories (`.section-pane:not([data-active="true"])`, `.settings-category:not(…)`,
+  `.settings[data-active="false"]` in `web/src/styles.css`) is removed: there is nothing left for it to hide.
+- A pane mounts again each time its section is shown. An Overview arrival (App's overview focus request) is therefore spent
+  once its section is left, so a remounted Task control does not reopen the import dialog an Overview link once opened.
+
+**Unsent input that survives leaving a section** (it lives in App, not in the pane):
+- already App-owned before this change: Task control's drafts (`control.drafts`: budgets, agent settings, loop plans …) and the
+  requirement/decision detail drafts (`detailDrafts`: round answers, split feedback, token limit, decision correction, the new
+  requirement's text per target);
+- lifted by this change: a round's open revision (`detailDrafts.revise`, keyed like that round's answers: choices, glossary/ADR
+  decisions, reason, exclusions; Cancel or Send closes and drops it); the new-requirement form's All-projects target, the
+  repository picked when no project is chosen, and text typed in All before a target (`detailDrafts.newRequirementForm`); the
+  import form's All-projects target and the plan path typed for a repository (`control.drafts`, keys in
+  `web/src/ControlPanel.tsx`). App forgets both forms' All-projects targets when the project scope changes, as the forms did
+  when they remounted on a scope change.
+- also lifted, because the existing criteria (`web/tests/resultsApp.test.tsx`) pin them across leaving Task control: the label
+  being typed on a task (`control.drafts`, `web/src/TaskDetail.tsx`); each group's last route (region and open task), which App
+  hands back to Task control when a bare `#tasks` (the sidebar link) remounts it with that group still open; and the saved
+  results' capture authority (`SavedRunAuthorityContext`, `web/src/TaskResults.tsx`), kept by App per owner and cleared when the
+  project scope changes, as unmounting the closed group used to.
+
+**Dropped on leaving a section** (accepted): other unsent input held inside a pane's own state -- e.g. a Settings field being
+edited (the `draft` state of the fields in `FlowSettings.tsx`, `ChecksSettings.tsx` and the like), the Memory search box
+(`MemoryView.tsx`), the chain start form's fields (read from the form on submit), and `ChainPanel`'s own repository pick
+(`localRepoKey`, the second reason U2 gave). The repository pick is not lifted: choosing one also chooses that project
+(`onProject`), and the chosen project is App's, so on return the panel shows that project's repository; only a pick with no
+project behind it falls back to the first repository. Which group, requirement or decision is open is App state and survives.
+
+**Rewriting criteria.** Criteria that rendered `<App />` and read a section other than the default one relied on every pane
+being mounted. Each is rewritten to navigate to that section first (a `location.hash` set before rendering, a `hashchange`, or a
+click on the sidebar link) and keeps every assertion; one that asserted across two sections at once visits them in turn. Each
+rewrite carries `// Ruling: R1 (plan 2026-11-10-tester-followup-b T8, #219)`. New criteria: `web/tests/sectionUnmount.test.tsx`.
