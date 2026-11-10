@@ -2130,7 +2130,9 @@ export class WebControlService {
           if ((payload.profileIds.estimator === null) !== (payload.profileHashes.estimator === null)) throw new ControlError("control-estimator-unconfigured");
           const selected = { estimator: payload.profileIds.estimator === null ? null : this.deps.profileRouter.resolve("budget-estimate", payload.profileIds.estimator, payload.profileHashes.estimator!), worker: this.deps.profileRouter.resolve("task", payload.profileIds.worker, payload.profileHashes.worker), handoff: this.deps.profileRouter.resolve("handoff", payload.profileIds.handoff, payload.profileHashes.handoff), goalReview: this.deps.profileRouter.resolve("goal-review", payload.profileIds.goalReview, payload.profileHashes.goalReview) };
           const window = selected.worker.snapshot.profile.capabilities.contextWindowTokens, threshold = payload.contextPolicy.handoffAtContextTokens;
-          if (window === null ? threshold !== null : threshold === null || threshold > window) throw new ControlError("execution-policy-unrepresentable");
+          // Tester follow-up B T3 (#203): a profile that declares no window is checked against the frozen task selections'
+          // windows below, once the slots are known to be resolved; a declared one is checked here, as before.
+          if (window !== null && (threshold === null || threshold > window)) throw new ControlError("execution-policy-unrepresentable", threshold === null ? undefined : `threshold-above-window:${window}`);
           const profiles = Object.fromEntries(Object.entries(selected).map(([slot, p]) => [slot, p === null ? null : { profileId: p.snapshot.profile.profileId, profileHash: p.profileHash }])) as { estimator: ProfileBindingV1 | null; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
           for (const row of proposal.allocations) for (const d of dimensions) {
             const source = row.fieldProvenance[d];
@@ -2152,6 +2154,14 @@ export class WebControlService {
             if (!slot || slot.outcome.kind !== "resolved") throw new ControlError("recovery-blocked", `slot-missing:${key}`);
             return slot.outcome.frozen;
           };
+          // #203: under a profile with no declared window the threshold is bounded by the smallest numeric window the
+          // tasks' frozen worker selections name; a task left at "agent-default" makes the window unknown.
+          if (window === null && threshold !== null) {
+            const windows = plan.plan.tasks.map(task => frozenOf(taskSlotKey(task.taskId)).selection.contextWindow);
+            if (windows.some(w => typeof w !== "number")) throw new ControlError("execution-policy-unrepresentable", "worker-window-unknown");
+            const smallest = Math.min(...(windows as number[]));
+            if (threshold > smallest) throw new ControlError("execution-policy-unrepresentable", `threshold-above-window:${smallest}`);
+          }
           // Spec §6.5: a task's capabilities are the worker profile's declaration intersected with ccloop's answer for its selection.
           const workerDeclared = selected.worker.snapshot.profile.capabilities;
           const agentTasks = plan.plan.tasks.map(task => {
