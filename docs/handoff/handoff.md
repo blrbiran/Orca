@@ -63,7 +63,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 本节于会话 `a3b2a7a7` 把七个历史会话小节（`808feb6a`、`b39a5527`、`02f047f6`、`026d10e3`、`a852f96a`、`4de777f4`、`d0843ec0`）压成下面三块：那些轮次的分支**都已由人合推、分支与工作树已删**（会话 `4de777f4`／`a3b2a7a7` 现核），过程原文在 git 历史里（§十）；每一条仍成立的结论都留在下面，出处指到 spec／台账。
 
-### 3.最新（2026-11-09，测试者反馈 P0 修复轮）—— #213 停放结算解死锁、#223 proof 稳定化、#207 终结门收窄、#222／#214 已修
+### 3.最新（2026-11-10，会话 `9179cdad`，分支 `fix/tester-followup-20261110`）—— repin 到 #206／#215 生产者；#201／#205／#209／#211 与 UI #216–#218／#220／#221 已修；#219 未做
+
+- **人的话（原话）**：「先做 repin 和已确认的阻塞／UI 问题」；#209 判据问题答「不改判据，改产品」；#218／#221 判据改写答「两条都允许」。付费真跑此前已授权「repin后在这个session接着做付费跑」——**本轮没有跑**（见待人）。
+- **repin**（主题行 `chore(deps): pin ccloop to the zero-usage and prompt-mode exhausted fixes`）：`pin-ccloop` 六项检查全 ok（默认解析 E2E 12/12、typecheck、临时克隆 `npm ci`）；随后 `npm ci`。ccloop 工作树构建后低负载全量 **668 文件／2,596 条全过**，`check-known-reds` failed 0、unexpected 0。配对 `V10:|V11:` 用 ccloop 工作树 `dist/cli.js` 跑 **2 过／22 跳过**。
+- **#201**：已删除的项目目录不再让面板起不来——该条不进 trusted config（不是可执行目标），stderr 与 projects 视图 `fileError` 点名（`project moved: <id>: <path>`），列表里 `controlRepoId:null`（projects 列表改问控制面是否真持有）。判据 `tests/panel/projectsFileMode.test.ts` B7（旧源码红在原始 `ENOENT`）。
+- **#211**：`requirement-open` 的上限任一维低于单次调用 grant（tokens 1,000,000 等）即 422 `requirement-limit-too-low`，detail 列每维最小值，不留组与 wake；claim 时的等待保留给后来跑短的组。中英文解释已加，CLI 文档已重生成。
+- **#205**：optional-policy 任务 top-up 后 close-run 再重试不再卡在 `run-state:settled-failed`——closed 准入改为核对 run 与其 funded allowance 记录，finite-legacy 仍比 `work.grant`。判据 `retryTopUp.test.ts` T15（第三个 run attempts=2；伪造 closure 仍拒）。
+- **#209（人裁：改产品不改判据）**：worker 槽位选到 codex catalog 未列的模型时**照常解析与确认**，agent preview 的该槽带可选 `warning`（`model-not-in-catalog: … (listed: …)`），提案视图显示为提示。wire 是**可选新键**（Orca 自己的 server／web 两侧都认识，ccloop 不涉及）。先前一版是硬拒绝（主题行 `fix(agents): a worker model the catalog does not list is refused before dispatch`），被 `agentSelectionE2E` M1 打红后按人裁改为警告（主题行 `fix(agents): warn, not refuse, …`）。
+- **UI**：#216 一个未知用量只出一行（run 有就归 run，组级只在没有对应活动 run 时出现），按钮叫「结算用量」，第二行写 task；#217 自动调试失败时写「自动调试没有修好；原始原因：<cause>」；#218 手动暂停是状态不是待办（Board 放 queued 列、拖回 running 仍恢复；列表不算 attention；Overview 不出 stop-review；暂停且有阻塞仍提醒，卡片写真实原因；列表卡片去掉与 chip 重复的徽标）；#220 新需求表单选定 agent 后可填模型（catalog 候选、默认值占位、未列出时提示）；#221 Settings → Agent 首次展开、折叠被记住。**改写的判据**：`groupCategory` 「2:」、board 列的 paused 行、列表卡片徽标、`controlOverview` 的 stop-review paused、`agentsCollapsed` 全文件——每处带 Ruling 行。
+- **每条都先红后绿**：新／改判据都在 `git stash` 掉产品改动的同一工作树里见红再恢复（diff 复核无残留）。
+- **门（现测）**：服务端批次后 `TMPDIR=/tmp ORCA_CCLOOP_BIN=<ccloop 工作树 dist/cli.js> npm test` 选 943 文件：根 **7,068 过／3 红／41 跳过**、Web **1,683/1,683**；3 红＝已登记 `orchestration`「admits a debug group…」＋本轮引起的 `drift`（已重生成文档修复）＋`agentSelectionE2E` M1（已按人裁修复）。整分支收尾门见本节末行。**全量门未跑（Rule 18）**。
+- **踩到的坑**：根目录 `npm run typecheck` **不查 web**；web 要 `cd web && npx tsc --noEmit -p tsconfig.json`（本轮因此补了一笔 `fix(web): the catalog warning's text option is a string`）。`dev checkpoint write` 在干净树上能写（拒绝只因 dirty-worktree），本轮写成功一次；上下文水位报告超过 Rule 6 会话档 450k，人本轮明示忽略。另有一次误在 Orca 目录触发 `npm run build` 与一次 ccloop 测试（立即停止，不计结果）。
+- **未做**：#219（非当前 section 卸载）——App 级判据依赖全部常驻（`web/src/Shell.tsx` 头注释），卸载会丢表单本地状态，`inert` 不解决 locator 歧义，需单独设计；#204／#224／#225 按人裁先讨论。
+
+### 3.上一轮（2026-11-09，测试者反馈 P0 修复轮）—— #213 停放结算解死锁、#223 proof 稳定化、#207 终结门收窄、#222／#214 已修
 
 - **人的话（原话）**：「这个session暂时忽略context大小。我们尽量多处理一些问题」「部分可能已经解决了你需要基于当前最新代码分析一下」「合理的部分采纳，不合理的部分我们可以再讨论」。本轮按反馈里的新 P0 顺序复核当前代码，没有把文档里的计数当现状。
 - **#213（已修，两侧）**：`settleTokenAllowance` 不再因 `groupHeld` 直接返回；已停的 run 即使在 over-grant 置 blocked 或暂停的组里也能结算，group 状态保持 blocked，新派发仍由 `groupHeld` 挡住。判据 `tests/control/allowanceHeldSettlement.test.ts`（真实 ccloop worker＋假 token codex）：旧码 20 s 超时 `accepted`，修后结算为 `settled-recoverable`、任务 `ready`、只有一次 `plan` 调用。独立审阅抓到的交错也已修：checkpoint 持久化后、提交事务前插入 handoff 请求时，`onSettled` 重查请求和 run 状态并回滚；该判据在删掉守卫的副本里变红。
@@ -682,6 +696,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
+### 4.0 2026-11-10 会话 `9179cdad` 之后的接手顺序
+
+1. **push 归人**：分支 `fix/tester-followup-20261110` 待门绿后 `--ff-only` 合入本地 `main`（以 `git branch --merged` 现核）；ccloop／ccmem 本轮只有 handoff（已推）。repin 已在本分支，正式 pin＝已推 ccloop main。
+2. **付费复跑（人已授权，本轮未跑）**：真 429 before-work 无法按需触发；prompt-mode exhausted 需一个 `structuredOutput:"prompt"` 的 codex 安装加很小的 token grant。先定场景与次数再跑。
+3. **#219** 单独设计（见 §三 最新节「未做」）；**#204、#224／#225** 等人讨论完成语义与额度承诺。
+4. **其余不变**：#193–#197 同条件重测；#191 缺样本；全量门只在发版时跑。
+
 ### 4.0 2026-11-10 测试者反馈 A 轮之后的接手顺序
 
 1. **push 与 repin**：Orca 本轮提交（#215 等）在本地 `main`；ccloop 本轮提交（#223／#215／#206）也在本地 `main`。推完 ccloop 后必须 `node scripts/pin-ccloop.mjs <ccloop main>` + `npm ci`，否则 #206 的 prompt-mode 胶囊与 `usageKnownZero` 事实在正式 pin 上不存在。
@@ -934,6 +955,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ## 八、什么在等人（awaitingHuman）
 
 > 会话 `a3b2a7a7` 删去已了结的条目：历轮「人已裁」长段（结论都已落进 §三／§五 或对应 spec／台账，人回复过的裁定不再待人）、已删除的 Qoder 钩子（会话 `026d10e3` 经人授权备份后删除）、已做的面板／profile／名单／分支删除。
+
+- **2026-11-10 会话 `9179cdad` 待人**：
+  1. **push Orca**（本地 main 领先：repin＋#201／#205／#209／#211／#216–#218／#220／#221 与 docs）。ccloop／ccmem 的 handoff 人已推（下一会话 `ls-remote` 现核本地＝远端）。
+  2. **付费复跑**：要不要现在跑、跑哪个场景（真 429 不可按需触发）。
+  3. **讨论**：#219 的做法；#204（验收值结构化）；#224／#225（额度是软上限还是要硬上限）。
 
 - **2026-11-10 测试者反馈 A 轮待人**：
   1. **push**：Orca 本地 `main` 领先 3 笔（#215 代码、两份 handoff）；ccloop 领先 4 笔（#223／#215／#206 与 docs）；ccmem 领先 1 笔（滚动指针）。远端一律以 `ls-remote` 现核。
