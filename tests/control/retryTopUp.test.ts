@@ -60,10 +60,11 @@ async function failed(t: Harness, driver: ReturnType<Harness["driver"]>, runId: 
 }
 
 /** An unlimited (optional-v1) group whose task a has authored attempts 1: its first run, failed, exhausts them. */
-async function exhausted(options: HarnessOptions = {}, tasks = [{ taskId: "a" }]) {
+async function exhausted(options: HarnessOptions = {}, tasks = [{ taskId: "a" }], beforeClaim?: (t: Harness) => void) {
   const behaviour = { value: "failed" as FakeBehaviour };
   const t = await driverHarness(tasks, { tokenPolicy: "optional-v1", behaviour: () => behaviour.value, ...options });
   pokeWork(t, "a", (w) => { w.grant.work.attempts = 1; });
+  beforeClaim?.(t);
   const first = await t.claim();
   const driver = t.driver();
   await failed(t, driver, first);
@@ -107,6 +108,50 @@ describe("T14: an optional-policy run is dispatched with its funded grant, not t
       // The confirmed contract still says what the task authored; the dispatched one must say what was funded.
       expect(funded).toBeGreaterThan(authored);
       expect(input.work.contract.executionPolicy.tokenBudget).toBe(funded);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+// Issue #205: after a top-up the work item's authored grant and the funded run's fresh grant differ by construction, so
+// the closed-run admission must not demand they be equal; closing such a run used to strand the task at
+// `task-not-retryable:run-state:settled-failed`.
+describe("T15: a topped-up run that was closed can be retried again", { timeout: 120_000 }, () => {
+  it("top-up, fail, close-run, then a second top-up retry is admitted and claims a fresh run", async () => {
+    // The fixture group's attempts limit holds exactly two runs; a third needs room (T5 pins that refusal by name).
+    const roomy = (t: Harness): void => {
+      const limit = readControlGroup(t.h.store, "epoch", "g").ledger.groupLimit;
+      expect(code(t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10 } })))).toBeNull();
+    };
+    const { t, driver, first } = await exhausted({ sealedOwnerProof: true }, undefined, roomy); try {
+      expect(code(retry(t, OWNER, "a", { work: { attempts: 2 } }))).toBeNull();
+      const second = await claimAgain(t, driver);
+      await failed(t, driver, second);
+      expect(t.service.closeRun(t.h.command("close-run", { runId: second }))).toMatchObject({ result: { kind: "run-closed", alreadyClosed: false } });
+      const closed = t.body(second);
+      const usedBefore = group(t).used.tokens;
+      expect(code(retry(t, OWNER, "a", { work: { attempts: 1 } }))).toBeNull();
+      // The closed run's own accounting is untouched and its remainder is not released a second time.
+      expect(t.body(second)).toMatchObject({ state: closed.state, grant: closed.grant, cumulative: closed.cumulative, terminalClosure: closed.terminalClosure });
+      expect(group(t).used.tokens).toBe(usedBefore);
+      const third = await claimAgain(t, driver);
+      expect([first, second]).not.toContain(third);
+      // authored 1 + top-ups 2 and 1 = 4, minus one attempt used by each of the two earlier runs.
+      expect(allowance(t, third)!.grant.work.attempts).toBe(2);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("still refuses when the closed run's marker no longer verifies", async () => {
+    const { t, driver } = await exhausted({ sealedOwnerProof: true }); try {
+      expect(code(retry(t, OWNER, "a", { work: { attempts: 2 } }))).toBeNull();
+      const second = await claimAgain(t, driver);
+      await failed(t, driver, second);
+      expect(t.service.closeRun(t.h.command("close-run", { runId: second }))).toMatchObject({ result: { kind: "run-closed" } });
+      t.h.store.transaction(() => {
+        const body = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(second)!.body));
+        body.terminalClosure.highWater += 1;
+        t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), second);
+      });
+      expect(code(retry(t, OWNER, "a", { work: { attempts: 1 } }))!.message).toContain("retry-closure-invalid");
     } finally { await t.h.dispose(); }
   });
 });
