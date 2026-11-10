@@ -13,7 +13,7 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { isTerminallyFailedRun } from "../control/driveRecord.js";
+import { isTerminallyFailedRun, recoveryRetryCommand } from "../control/driveRecord.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { peerCode } from "../control/ccloopPort.js";
@@ -490,10 +490,10 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   const pending = store.db.prepare("SELECT body FROM pending_decisions WHERE group_id=? AND state='pending'").all(groupId)
     .filter((row) => (JSON.parse(String(row.body)) as { entry?: { importance?: unknown } }).entry?.importance !== "minor").length;
   const flagged = groupCardFlaggedCount(store, groupId);
-  let firstFailure: { taskId: string; cause: string } | null = null;
+  let firstFailure: { taskId: string; cause: string; next?: string } | null = null;
   for (const taskId of taskIds) {
     // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).
-    let runId: unknown, run: { failureCode?: unknown; drive?: { blockedReason?: unknown; failureCause?: { cause?: unknown } } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
+    let runId: unknown, run: { state?: unknown; failureCode?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; failureCause?: { cause?: unknown } } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
     try {
       work = decodedValue(snapshot.decodeWork(taskId)) as typeof work;
       runId = work?.currentRunId;
@@ -503,7 +503,10 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const runCause = run === undefined || run === null ? null : typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
     // Issue #153: a blocked task whose run names no cause still shows (the overview's own `task-blocked`), not nothing.
     const cause = runCause ?? (work?.status === "blocked" ? "task-blocked" : null);
-    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200) }; break; }
+    // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at a step other than C is not a ccloop failure (task
+    // retry refuses it); recovery-retry resumes it in place, so the failure names that command.
+    const resumable = typeof runId === "string" && run?.state === "blocked" && typeof run.drive?.blockedAt === "string" && run.drive.blockedAt !== "C";
+    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : {}) }; break; }
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
   const major = findings.filter((row) => row.severity === "major").length;

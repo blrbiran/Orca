@@ -6,7 +6,7 @@ import { readGroup, saveGroup } from "./queries.js";
 import { createHash } from "node:crypto";
 import { readWorkClaimEnvelope } from "./webDispatch.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import type { DriveRecord } from "./driveRecord.js";
+import { recoveryRetryCommand, type DriveRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import type { Amount } from "./types.js";
@@ -208,7 +208,10 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           && allocations.every(a => a.state === "terminal") && closedGrantMatches;
         if ((!live || run.state !== "blocked") && !held && !released && !closed) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
         const drive = run.drive as DriveRecord | undefined;
-        if (drive === undefined || (live && drive.blockedAt !== "C")) throw new ControlError("task-not-retryable", `blocked-at:${drive?.blockedAt ?? "none"}`);
+        // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at another step is resumed in place by recovery-retry
+        // (its block is not a ccloop failure); the refusal names that command.
+        if (drive === undefined || (live && drive.blockedAt !== "C")) throw new ControlError("task-not-retryable",
+          drive?.blockedAt == null ? `blocked-at:${drive?.blockedAt ?? "none"}` : `blocked-at:${drive.blockedAt}:${recoveryRetryCommand(runId)}`);
         // A codex-skills-* failure sets an outcome too (review C3), so it is retryable like any other ccloop failure.
         if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}`);
         const observed = command.payload.allowObservedPaths === true ? drive.pathPolicyMisses : null;

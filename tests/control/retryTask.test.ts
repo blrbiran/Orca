@@ -181,7 +181,9 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
       poke(t, runId, (run) => { run.drive.outcome = null; run.drive.blockedReason = "control-peer-timeout"; });
       expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:outcome:none" });
       poke(t, runId, (run) => { run.drive.outcome = "failed"; run.drive.blockedAt = "E"; });
-      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:blocked-at:E" });
+      // Ruling: plan 2026-11-10 tester follow-up B, T1 (#229) -- the refusal for a run blocked at a step other than C names
+      // the command that resumes it in place (recovery-retry), since task retry never will; the code and prefix are unchanged.
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: `task-not-retryable:blocked-at:E:orca recovery retry --run ${runId}` });
       unchanged(t, runId);
     } finally { await t.h.dispose(); }
   });

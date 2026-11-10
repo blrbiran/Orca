@@ -1530,7 +1530,9 @@ export const groupSummarySchema = z
     card: z.object({
       budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable() }).strict(),
       pendingDecisions: safeInteger,
-      firstFailure: z.object({ taskId: idSchema, cause: nonemptyString }).strict().nullable(),
+      // Tester #229 (plan 2026-11-10 follow-up B, T1): `next`, the command that resumes the failed task's run in place --
+      // only when it is blocked at a step other than C.
+      firstFailure: z.object({ taskId: idSchema, cause: nonemptyString, next: nonemptyString.optional() }).strict().nullable(),
       // Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group (not dismissed) that another group
       // -- the review -- owns and names this one among its involved groups; present only when there is one.
       reviewFindings: z.object({ major: safeInteger, minor: safeInteger }).strict().optional(),

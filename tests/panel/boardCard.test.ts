@@ -39,6 +39,23 @@ describe("a board card's facts (kanban spec §4)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked after C (at E, say) is resumed in place by recovery-retry,
+  // which task retry refuses to do; the brief's failure names that command. A terminal failure at C does not (task retry).
+  it("names orca recovery retry --run for a failed task whose run is blocked at a step other than C", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, currentRunId: "re" }));
+      const run = (drive: Record<string, unknown>) => JSON.stringify({ state: "blocked", failureCode: null, drive });
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('re','g','a',1,1,?)")
+        .run(run({ blockedAt: "E", outcome: "succeeded", blockedReason: "artifact-id-conflict:acceptance-re:hash-row" }));
+      expect(readGroupSummary(h.store, "g").card!.firstFailure)
+        .toEqual({ taskId: "a", cause: "artifact-id-conflict:acceptance-re:hash-row", next: "orca recovery retry --run re" });
+      // mutation: name it for every blocked run -> next on the terminal failure at C, red
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id='re'").run(run({ blockedAt: "C", outcome: "failed", blockedReason: "terminal:failed" }));
+      expect(readGroupSummary(h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "terminal:failed" });
+    } finally { await h.dispose(); }
+  });
+
   // Checks spec 2026-10-22 §6.6, §7: a model-review finding's row is the review group's, so the badge on an involved
   // group's card is counted from the flag's involvedGroupIds -- waiting (not ratified) only, major and minor apart.
   it("counts the model-review findings waiting on a group it is involved in, major and minor apart", async () => {

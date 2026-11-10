@@ -259,6 +259,14 @@ export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord;
 }
 
 /**
+ * Tester #229 (plan 2026-11-10 follow-up B, T1): the command that resumes a run blocked at a step other than C in place
+ * (`resumeBlockedDriverRun` below), named where task retry refuses it and in the group brief's failure.
+ */
+export function recoveryRetryCommand(runId: string): string {
+  return `orca recovery retry --run ${runId}`;
+}
+
+/**
  * `recovery-retry` on a blocked driver run: back to the step it was blocked at, reason cleared.
  * Blocked at A2 means the workspace was never recorded as prepared, so A2 runs again; blocked at R
  * forgets the dead reconciliation process so the next round decides afresh. Answers whether it
