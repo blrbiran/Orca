@@ -29,6 +29,14 @@ describe("confirm's handoff threshold against the worker window (#203)", () => {
     } finally { await h.dispose(); }
   });
 
+  it("the smallest window bounds it wherever its task stands, not the first task's", async () => {
+    const h = await webFixture(nullWindowProfile(), [{ taskId: "a", agent: { contextWindow: 400_000 } }, { taskId: "b", agent: { contextWindow: 272_000 } }]);
+    try {
+      // Mutation "the first slot's window only" -> red: 300 000 is within task a's 400 000, so it would confirm.
+      expect(await confirmAt(h, 300_000)).toMatchObject({ error: { code: "execution-policy-unrepresentable", message: "execution-policy-unrepresentable:threshold-above-window:272000" } });
+    } finally { await h.dispose(); }
+  });
+
   it("a task whose selection leaves the window to the agent makes the window unknown", async () => {
     const h = await webFixture(nullWindowProfile(), [{ taskId: "a", agent: { contextWindow: 272_000 } }, { taskId: "b" }]);
     try {
