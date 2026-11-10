@@ -1095,6 +1095,7 @@ export const en = {
     staleResolution: "The resolution shown is for proposal v{{version}}; re-reading. Confirm waits for it.",
     models: { refresh: "Refresh models", loading: "Reading the model list…", window: "{{tokens}} tokens of context", unavailable: "The model list is unavailable: {{reason}}" },
     unresolved: "A selection below did not resolve; confirm is not offered until every slot resolves.",
+    catalogWarning: "{{slot}}: {{warning}}. It will still run; if the provider rejects it, change the model in Settings → Agent.",
     groupSlot: "Group {{slot}}",
     setGroup: "Set group {{slot}} agent",
     clearGroup: "Clear group {{slot}} agent",

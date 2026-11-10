@@ -31,21 +31,25 @@ function uncataloged(x: Harness, listed: string[]): ExecutionPort {
   };
 }
 
-describe("a worker model the read catalog does not list is refused by name (#209)", () => {
-  it("refuses each task slot with model-not-in-catalog, naming the listed models", async () => {
+describe("a worker model the read catalog does not list is warned about, not refused (#209)", () => {
+  it("keeps each task slot resolved and carries a warning naming the listed models", async () => {
     const x = await accepted(); try {
       const resolution = await resolveGroupSelections({ store: x.store, port: uncataloged(x, ["mode-a", "mode-b"]) }, "r", "human");
       const slot = resolution.slots.find((entry) => entry.key === taskSlotKey("exporter"))!;
-      expect(slot.outcome).toEqual({ kind: "rejected", code: expect.stringMatching(/^model-not-in-catalog: .+ \(listed: mode-a mode-b\)$/) });
-      expect(resolution.selectionsHash).toBeNull();
+      expect(slot.outcome.kind).toBe("resolved");
+      expect(slot.warning).toMatch(/^model-not-in-catalog: .+ \(listed: mode-a mode-b\)$/);
+      // A warning is not a refusal: confirm still has a hash to bind.
+      expect(resolution.selectionsHash).not.toBeNull();
     } finally { await x.dispose(); }
   });
 
-  it("control: a model the catalog lists still resolves", async () => {
+  it("control: a model the catalog lists resolves with no warning", async () => {
     const x = await accepted(); try {
       const model = (await x.fake.port.resolveAgent({})).selection.model;
       const resolution = await resolveGroupSelections({ store: x.store, port: uncataloged(x, ["mode-a", model]) }, "r", "human");
-      expect(resolution.slots.find((entry) => entry.key === taskSlotKey("exporter"))!.outcome.kind).toBe("resolved");
+      const slot = resolution.slots.find((entry) => entry.key === taskSlotKey("exporter"))!;
+      expect(slot.outcome.kind).toBe("resolved");
+      expect(slot.warning).toBeUndefined();
     } finally { await x.dispose(); }
   });
 });

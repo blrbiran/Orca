@@ -958,6 +958,7 @@ export const zh: Translation<typeof en> = {
     staleResolution: "显示的解析结果属于提案 v{{version}}；正在重新读取。确认会等它。",
     models: { refresh: "刷新模型列表", loading: "正在读取模型列表…", window: "上下文 {{tokens}} token", unavailable: "读不到模型列表：{{reason}}" },
     unresolved: "下面有一项选择没有解析成功；每个槽位都解析成功之前不提供确认。",
+    catalogWarning: "{{slot}}：{{warning}}。它仍会照常运行；如果 provider 拒绝，请在 设置 → Agent 里换一个模型。",
     groupSlot: "组 {{slot}}",
     setGroup: "设置组 {{slot}} 的 agent",
     clearGroup: "清除组 {{slot}} 的 agent",

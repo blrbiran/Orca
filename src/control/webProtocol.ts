@@ -2554,7 +2554,7 @@ export const agentSelectionPreviewSchema = z
       tasks: z.record(idSchema, partialSelectionSchema.nullable()),
     }).strict(),
     slots: z.array(
-      z.object({ key: nonemptyString, slot: z.enum(["worker", "reconcile"]), taskId: idSchema.nullable(), outcome: slotOutcomeSchema }).strict(),
+      z.object({ key: nonemptyString, slot: z.enum(["worker", "reconcile"]), taskId: idSchema.nullable(), outcome: slotOutcomeSchema, warning: nonemptyString.optional() }).strict(),
     ),
     rolePreviews: z.object({ worker: slotOutcomeSchema, estimator: slotOutcomeSchema }).strict().optional(),
     selectionsHash: hashSchema.nullable(),

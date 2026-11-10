@@ -183,6 +183,10 @@ export function AgentSelectionEditor(props: AgentSelectionEditorProps): JSX.Elem
       <h3>{t("agents.selectionTitle")} <small>{t("agents.proposalTitle", { version: view.proposal.proposalVersion })}</small></h3>
       {stale && <p role="status">{t("agents.staleResolution", { version: preview.proposalVersion })}</p>}
       {preview.selectionsHash === null && <p role="alert">{t("agents.unresolved")}</p>}
+      {/* Issue #209: a model the read catalog does not list still dispatches; say so before the provider rejects it. */}
+      {preview.slots.filter((entry) => entry.warning !== undefined).map((entry) => (
+        <p role="status" key={`catalog-warning-${entry.key}`} data-testid="agent-catalog-warning">{t("agents.catalogWarning", { slot: entry.taskId ?? entry.slot, warning: entry.warning })}</p>
+      ))}
       {reread}
       {!archived && (["worker", "estimator", "reconcile"] as const).map((slot) => {
         const scope: Scope = { kind: "group", slot };

@@ -948,7 +948,7 @@ export type AgentSelectionPreviewV1 = {
   taskOverrides: Record<string, PanelPartialSelectionV1 | null>;
   /** Ruling review R7: the plan file's own layers, below the panel's. */
   planLayers: { group: { worker?: PartialSelectionV1; reconcile?: PartialSelectionV1 }; tasks: Record<string, PartialSelectionV1 | null> };
-  slots: Array<{ key: string; slot: "worker" | "reconcile"; taskId: string | null; outcome: SlotOutcomeV1 }>;
+  slots: Array<{ key: string; slot: "worker" | "reconcile"; taskId: string | null; outcome: SlotOutcomeV1; warning?: string }>;
   rolePreviews?: { worker: SlotOutcomeV1; estimator: SlotOutcomeV1 };
   selectionsHash: string | null;
 };

@@ -26,6 +26,8 @@ export interface SlotResolution {
    * a confirm rethrows it so the command is retried rather than bound to a resolution it could not complete.
    */
   outcome: { kind: "resolved"; frozen: FrozenSlot } | { kind: "rejected"; code: string } | { kind: "unavailable"; code: string };
+  /** Issue #209: a resolved slot whose model the read catalog does not list; the confirm still proceeds. */
+  warning?: string;
 }
 export interface GroupSelectionResolution {
   proposalVersion: number;
@@ -124,13 +126,13 @@ export async function resolveGroupSelections(
     if (!answers.has(id)) answers.set(id, deps.port.resolveAgent(partial));
     try {
       const resolution = structuredClone(await answers.get(id)!);
-      // Issue #209: a codex model the read catalog does not list is refused here, by name, instead of reaching the
-      // provider and coming back as a rate limit. A catalog that was not or could not be read changes nothing (#124).
+      // Issue #209: a codex model the read catalog does not list is still resolved (a catalog is not authoritative), but
+      // the slot carries a warning naming it, so the panel can say "the provider may reject this" instead of leaving a
+      // 429 to read as rate limiting. A catalog that was not or could not be read changes nothing (#124).
       if (!misses.has(id)) misses.set(id, catalogMissOf(deps.port, resolution).then((miss) => (miss === null ? null : catalogMissReason(miss))));
-      const miss = await misses.get(id)!;
-      if (miss !== null) { slots.push({ ...identity, outcome: { kind: "rejected", code: miss } }); continue; }
+      const warning = await misses.get(id)!;
       const frozen: FrozenSlot = frozenSlotOf(resolution, partial, descriptorProvenance(partial, resolution.selection, provenance));
-      slots.push({ ...identity, outcome: { kind: "resolved", frozen } });
+      slots.push({ ...identity, outcome: { kind: "resolved", frozen }, ...(warning === null ? {} : { warning }) });
     } catch (error) {
       if (!(error instanceof ControlError)) throw error;
       // Assembly spec §3 / ruling R5 (as service.ts profiledCapabilities): "there is no port" is not a refusal of this
