@@ -7,7 +7,8 @@ import type { CorrectionForm } from "./api.js";
 import type { PanelLanguage } from "./i18n.js";
 
 export type AnswerChoice = { kind: "recommended" } | { kind: "text"; text: string };
-export interface NewRequirementDraft { idea: string; tokens: number|null; language: PanelLanguage; agent: string }
+/** Issue #220: `model` is empty for the agent's own default; absent in a draft kept from before the field existed. */
+export interface NewRequirementDraft { idea: string; tokens: number|null; language: PanelLanguage; agent: string; model?: string }
 export interface AnswerDraft { choice: Record<string, AnswerChoice>; decisions: Record<string, boolean> }
 export interface DetailDrafts {
   newRequirement: Record<string, NewRequirementDraft>; // key: repoId

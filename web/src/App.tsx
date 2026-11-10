@@ -1889,6 +1889,7 @@ export function App(): JSX.Element {
       <SectionPane section="requirements" active={section}>
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
+            models={modelsFor} onModels={(id) => { void loadModels(id, false); }}
             onPrepare={(groupId) => { const request = ++navigationSeq.current; setOverviewFocus({ target: { kind: "group", groupId, region: "preparation", taskId: null, runId: null }, request }); setSelectedGroup(groupId); navigate({ kind: "group", section: "tasks", groupId, region: "preparation", taskId: null }); void readControlGroup(groupId); }}
             onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
             groupRefusals={control.refusals}

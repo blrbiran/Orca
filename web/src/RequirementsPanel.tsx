@@ -24,7 +24,7 @@ import { Select } from "./ui/Select.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
-import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, RequirementViewV1 } from "./controlTypes.js";
+import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, RequirementViewV1 } from "./controlTypes.js";
 import { inScope } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import { EMPTY_DRAFTS, answerKey, feedbackKey, limitKey, setDraft } from "./detailDrafts.js";
@@ -53,6 +53,8 @@ type OnCommand = (action: ControlAction, submitted?: Submitted) => void;
 
 function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 | null; language: PanelLanguage; onCommand: OnCommand;
   repoId?: string | null; onRepo?: (repoId: string) => void;
+  /** Issue #220: each installation's model list as last read, and a read of one not yet asked for. */
+  models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void;
   scope?: GroupScope; targets?: readonly string[]; repoLabel?: (repoId: string) => string } & EditableDrafts): JSX.Element | null {
   const { t } = useTranslation();
   // Accounts spec §3.5: requirement-open.limit is human-only. A member opens with the server's default limit instead.
@@ -105,14 +107,18 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
     return <p role="note">{t("requirements.repositoryNotConfigured")}</p>;
   }
   const { idea, tokens, language, agent } = draft;
+  const model = (draft.model ?? "").trim();
+  const chosen = props.agents?.installations.find((row) => row.id === agent);
+  const listed = agent === "" ? undefined : props.models?.(agent);
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
       if (repoId === "" || limitBad) return;
       const groupId = `requirement-${nextCommandId()}`;
+      // Issue #220: the model is sent only with the agent it was chosen for; empty keeps that agent's default.
       props.onCommand({ verb: "requirement-open", groupId, expectedRevision: 0, payload: {
         groupId, repoId, idea, contentLanguage: language, ...(mayLimit ? { limit: { tokens, activeMs: 14_400_000, attempts: 40, sessions: 40 } } : {}),
-        ...(agent === "" ? {} : { agent: { agent } }) } },
+        ...(agent === "" ? {} : { agent: { agent, ...(model === "" ? {} : { model }) } }) } },
       { slot: "newRequirement", key: repoId, value: draft });
     }}>
       <h3>{t("requirements.newTitle")}</h3>
@@ -123,9 +129,26 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);edit({tokens:null});}} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
       <label>{t("requirements.contentLanguage")}<Select value={language} onValueChange={(value) => edit({ language: value as PanelLanguage })}
         options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} /></label>
-      <label>{t("requirements.agent")}<Select value={agent} onValueChange={(value) => edit({ agent: value })}
+      <label>{t("requirements.agent")}<Select value={agent} onValueChange={(value) => { edit({ agent: value, model: "" }); if (value !== "" && props.models?.(value) === undefined) props.onModels?.(value); }}
         options={[{ value: "", label: t("requirements.agentDefault") },
           ...(props.agents?.installations ?? []).map((installation) => ({ value: installation.id, label: installation.id }))]} /></label>
+      {/* Issue #220: a model the provider's catalog does not list used to surface only after submit, with the fix in another
+          page; the model is chosen here, from the agent's catalog when it was read, and the placeholder is the default. */}
+      {chosen !== undefined && (
+        <label>{t("requirements.model")}
+          <input name="new-requirement-model" value={draft.model ?? ""} placeholder={chosen.defaults.model} list={listed?.state === "ready" ? "new-requirement-models" : undefined}
+            onChange={(event) => edit({ model: event.currentTarget.value })} />
+          {listed?.state === "ready" && (
+            <datalist id="new-requirement-models">
+              {listed.view.models.map((row) => <option key={row.model} value={row.model} />)}
+            </datalist>
+          )}
+          {listed?.state === "loading" && <small>{t("agents.models.loading")}</small>}
+          {listed?.state === "ready" && model !== "" && !listed.view.models.some((row) => row.model === model) && <small role="note">{t("requirements.modelUnlisted")}</small>}
+          {listed?.state === "ready" && model === "" && listed.view.models.length > 0 && !listed.view.models.some((row) => row.model === chosen.defaults.model)
+            && <small role="note">{t("requirements.defaultUnlisted", { model: chosen.defaults.model })}</small>}
+        </label>
+      )}
       <p role="note">{t("requirements.capabilityNote")}</p>
       <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
@@ -797,6 +820,7 @@ function listName(group: ControlSummaryV1["groups"][number]): string | null {
 
 export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kind: "requirement" }> | null; config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
   agents: AgentsViewV1 | null; language: PanelLanguage; onSelect: (groupId: string) => void;
+  models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void;
   onPrepare?: (groupId: string) => void;
   onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
   groupRefusals?: Record<string, ControlRefusal>;
@@ -840,6 +864,7 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
         <nav aria-label={t("requirements.list")}>
           {/* Tester #36: the form to start one sits above the list, not after however many requirements there are. */}
           <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
+            {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })}
             scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
           <div role="group" aria-label={t("requirements.filter.region")} className={groupFilter}>
             {REQUIREMENT_PARTS.map((option) => (
