@@ -159,6 +159,42 @@ function namedBy(suite, p) {
   return sources.get(dir).filter(([f, text]) => f !== p && token.test(text)).map(([f]) => f);
 }
 
+// A ccloop repin (plan 2026-11-10-tester-followup-b T9, ruling R6): when package.json differs from the merge base only in
+// dependencies.ccloop and package-lock.json only in its root entry's ccloop line and ccloop's own entries (the shape
+// scripts/pin-ccloop.mjs checks), the two files select the tests that reach ccloop -- those naming it, and those importing a
+// helper that names it -- instead of the whole suite. Any other difference keeps them whole-suite config.
+const NAMES_CCLOOP = /ORCA_CCLOOP_BIN|ccloopBin|node_modules\/ccloop|ccloop\/dist|["'`]ccloop["'`/]/;
+const ccloopOwn = (key) => key === "node_modules/ccloop" || key.startsWith("node_modules/ccloop/");
+function withoutCcloop(manifest) {
+  const copy = structuredClone(manifest ?? {});
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) delete copy[field]?.ccloop;
+  return copy;
+}
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function ccloopPinOnly() {
+  const mergeBase = spawnSync("git", ["merge-base", base, "HEAD"], { cwd: root, encoding: "utf8" });
+  if (mergeBase.status !== 0) return false;
+  const at = (path) => {
+    const r = spawnSync("git", ["show", `${mergeBase.stdout.trim()}:${path}`], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
+    return r.status === 0 ? JSON.parse(r.stdout) : null;
+  };
+  try {
+    const [pkgBefore, lockBefore] = [at("package.json"), at("package-lock.json")];
+    const pkgNow = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    const lockNow = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
+    if (!pkgBefore || !lockBefore || !same(withoutCcloop(pkgBefore), withoutCcloop(pkgNow))) return false;
+    const { packages: before = {}, ...lockRestBefore } = lockBefore;
+    const { packages: after = {}, ...lockRestNow } = lockNow;
+    if (!same(lockRestBefore, lockRestNow)) return false;
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])].every((key) =>
+      ccloopOwn(key) || (key === "" ? same(withoutCcloop(before[key]), withoutCcloop(after[key])) : same(before[key], after[key])));
+  } catch {
+    return false;
+  }
+}
+const PIN_FILES = new Set(["package.json", "package-lock.json"]);
+const pinOnly = changed.some((p) => PIN_FILES.has(p)) && ccloopPinOnly();
+
 // [file whose importers to find, the changed path it stands for]
 const relatedRoot = [];
 const relatedWeb = [];
@@ -167,7 +203,14 @@ let webTypecheck = false;
 for (const p of changed) {
   if (p.startsWith("web/") || p === "src/control/webProtocol.ts") webTypecheck = true;
   const present = existsSync(join(root, p));
-  if (isRootConfig(p)) select("root", listTests("tests", ROOT_TEST), `${p} (config: whole suite)`, p);
+  if (pinOnly && PIN_FILES.has(p)) {
+    for (const [suite, dir, pattern] of [["root", "tests", ROOT_TEST], ["web", "web/tests", WEB_TEST]]) {
+      for (const f of listTests(dir, CODE).filter((f) => NAMES_CCLOOP.test(readFileSync(join(root, f), "utf8")))) {
+        if (pattern.test(f)) select(suite, [f], `${p} (ccloop pin only: names ccloop)`, p);
+        else (suite === "web" ? relatedWeb : relatedRoot).push([f, p]); // a helper naming ccloop: the tests importing it
+      }
+    }
+  } else if (isRootConfig(p)) select("root", listTests("tests", ROOT_TEST), `${p} (config: whole suite)`, p);
   else if (WEB_CONFIG.has(p)) select("web", listTests("web/tests", WEB_TEST), `${p} (config: whole web suite)`, p);
   else if (/^(src|tests|scripts)\//.test(p)) {
     const dir = mirror(p);

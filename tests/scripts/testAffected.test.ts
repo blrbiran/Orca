@@ -502,3 +502,76 @@ describe("skip report", () => {
     expect(r.out).toContain("test-affected: 3 skipped tests\n  tests/c/plain.test.ts: 3 skipped\n");
   });
 });
+
+/**
+ * A ccloop repin (plan 2026-11-10-tester-followup-b T9, human ruling R6, session after 9179cdad: "repin 为什么每次都跑这么久
+ * => 同意，按你的建议走"). package.json and package-lock.json are whole-suite config, so every repin ran ~945 files. When the
+ * only difference is the ccloop pin (the shape scripts/pin-ccloop.mjs checks), they select the tests that reach ccloop:
+ * those naming it and those importing a helper that names it. Any other difference in either file keeps the whole suite.
+ */
+describe("a repin that changes only ccloop", () => {
+  const PIN = (sha: string) => `github:o/ccloop#${sha}`;
+  const pkg = (sha: string, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({ name: "orca-like", type: "module", scripts: { typecheck: "node -e 0" }, dependencies: { ccloop: PIN(sha) }, ...extra }) + "\n";
+  const lock = (sha: string, extraPackages: Record<string, unknown> = {}) => JSON.stringify({
+    name: "orca-like", lockfileVersion: 3, requires: true,
+    packages: {
+      "": { name: "orca-like", dependencies: { ccloop: PIN(sha) } },
+      "node_modules/ccloop": { version: "0.1.0", resolved: `git+ssh://git@github.com/o/ccloop.git#${sha}` },
+      "node_modules/ccloop/node_modules/inner": { version: "1.0.0" },
+      ...extraPackages,
+    },
+  }, null, 2) + "\n";
+  const CCLOOP_TESTS = ["root tests/q/spawnsCcloop.test.ts", "root tests/q/viaWorld.test.ts"];
+
+  // main gets the old pin and two tests that reach ccloop (one names it, one through a helper that names it).
+  function pinnedRepo(): string {
+    const repo = graphRepo();
+    git(repo, "checkout", "-q", "main");
+    write(repo, "package.json", pkg("a".repeat(40)));
+    write(repo, "package-lock.json", lock("a".repeat(40)));
+    write(repo, "tests/q/spawnsCcloop.test.ts", T(`const bin = process.env.ORCA_CCLOOP_BIN;\nvoid bin;`));
+    write(repo, "tests/helpers/ccloopWorld.ts", `export const world = "node_modules/ccloop/dist/cli.js";\n`);
+    write(repo, "tests/q/viaWorld.test.ts", T(`import { world } from "../helpers/ccloopWorld.js";\nvoid world;`));
+    commit(repo);
+    git(repo, "checkout", "-q", "-B", "work", "main");
+    return repo;
+  }
+
+  it("selects only the tests that name ccloop or import a helper naming it, each with its reason", () => {
+    const repo = pinnedRepo();
+    write(repo, "package.json", pkg("b".repeat(40)));
+    write(repo, "package-lock.json", lock("b".repeat(40), { "node_modules/ccloop/node_modules/inner": { version: "1.1.0" } }));
+    commit(repo);
+    const r = dry(repo);
+    expect(r.files).toEqual(CCLOOP_TESTS);
+    expect(r.out).toContain("root tests/q/spawnsCcloop.test.ts <- package-lock.json (ccloop pin only: names ccloop)");
+    expect(r.out).toMatch(/root tests\/q\/viaWorld\.test\.ts <- .*named by tests\/helpers\/ccloopWorld\.ts, imported/);
+  });
+
+  it("a lock entry outside ccloop keeps the whole suite", () => {
+    const repo = pinnedRepo();
+    write(repo, "package.json", pkg("b".repeat(40)));
+    write(repo, "package-lock.json", lock("b".repeat(40), { "node_modules/left-pad": { version: "1.0.0" } }));
+    commit(repo);
+    expect(dry(repo).files).toEqual([...ALL_ROOT, ...CCLOOP_TESTS].sort());
+  });
+
+  it("a package.json change beside the pin keeps the whole suite", () => {
+    const repo = pinnedRepo();
+    write(repo, "package.json", pkg("b".repeat(40), { version: "2.0.0" }));
+    write(repo, "package-lock.json", lock("b".repeat(40)));
+    commit(repo);
+    expect(dry(repo).files).toEqual([...ALL_ROOT, ...CCLOOP_TESTS].sort());
+  });
+
+  it("another root dependency changed in the lock's root entry keeps the whole suite", () => {
+    const repo = pinnedRepo();
+    write(repo, "package.json", pkg("b".repeat(40)));
+    const changedRoot = JSON.parse(lock("b".repeat(40)));
+    changedRoot.packages[""].dependencies["left-pad"] = "^1.0.0";
+    write(repo, "package-lock.json", JSON.stringify(changedRoot, null, 2) + "\n");
+    commit(repo);
+    expect(dry(repo).files).toEqual([...ALL_ROOT, ...CCLOOP_TESTS].sort());
+  });
+});

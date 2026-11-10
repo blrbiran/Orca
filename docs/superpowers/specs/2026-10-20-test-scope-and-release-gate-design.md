@@ -213,3 +213,23 @@ Commit: `fix(scripts): on a branch, test-affected compares against local main`.
   `test-affected: no test names <path>; selecting the whole <root|web> suite`.
 - `package.json` stays a whole-root-suite change even when only `scripts` changed (tests spawn `npm run <name>` and read
   the scripts as text; no code here can prove an entry is outside every test's reach).
+
+## 9. Correction (2026-11-10, plan `2026-11-10-tester-followup-b` T9) — a ccloop repin is not a whole-suite change
+
+Human ruling R6 (verbatim: "repin 为什么每次都跑这么久 => 同意，按你的建议走"). §8's last row still holds for every other
+change to `package.json`; this section narrows it for one shape only.
+
+- When `package.json` differs from the merge base only in `dependencies.ccloop`, and `package-lock.json` only in the root
+  entry's `ccloop` line and in `node_modules/ccloop` / `node_modules/ccloop/**` entries (all other lock fields equal — the
+  shape `scripts/pin-ccloop.mjs` checks), the two files select: every root or web test file whose text names ccloop
+  (`ORCA_CCLOOP_BIN`, `ccloopBin`, `node_modules/ccloop`, `ccloop/dist`, or a quoted `ccloop`), and the tests importing a
+  helper under `tests/` or `web/tests/` that names it. Each row prints `(ccloop pin only: names ccloop)` or the helper.
+- Any other difference in either file (another dependency, a hoisted entry outside ccloop, a version, a script) keeps them
+  whole-suite config.
+- Accepted gap, same kind as §4.1's spawned-process gap: a test that reaches ccloop only through a `src/` module that
+  resolves the binary (e.g. a panel boot with the default resolution) and names neither ccloop nor such a helper is not
+  selected; the release gate still runs it. Following `src/` importers was rejected because `src/cli.ts` and the panel
+  assembly are imported by most of the suite, which would select it whole again.
+- Measured on the repin commit `871b275d` against its parent (dry run): 433 test files (432 root, 1 web) instead of the
+  whole suite (945 at `43f76e90`).
+- A repin no longer re-runs ccloop's own full suite: that is ccloop's commit gate, run when ccloop's commit was made.
