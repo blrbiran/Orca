@@ -7,6 +7,7 @@ import { readControlOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
 import { fundingPreview } from "../control/fundedAllowance.js";
+import { retryFundingPreview } from "../control/retryTask.js";
 import { multiDirOf, multiPrimaryRepoIdOf } from "../control/multiGroup.js";
 import { readGroup } from "../control/queries.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
@@ -119,6 +120,16 @@ function sinceChangeSeq(req: Request): number | null {
   const value = Number(raw);
   if (!Number.isSafeInteger(value)) throw new ControlError("query-invalid");
   return value;
+}
+
+/** Issue #202: the funding preview's optional retry question; both keys or neither, `tokens` a non-negative safe integer. */
+function retryPreviewQuery(req: Request): { taskId: string; tokens: number } | null {
+  const keys = Object.keys(req.query);
+  if (keys.length === 0) return null;
+  const { retry, tokens } = req.query;
+  if (keys.length !== 2 || typeof retry !== "string" || !idSchema.safeParse(retry).success || typeof tokens !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(tokens)
+    || !Number.isSafeInteger(Number(tokens))) throw new ControlError("query-invalid");
+  return { taskId: retry, tokens: Number(tokens) };
 }
 
 const USAGE_GROUPS: readonly UsageGroupBy[] = ["model", "repo", "day", "week", "month"];
@@ -607,7 +618,12 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   // Issue #212: the authored work allocation is a request; this is what a claim would actually fund now.
   app.get("/api/control/groups/:groupId/funding-preview", asyncRoute(async (req, res) => {
     const groupId = String(req.params.groupId);
-    try { res.json({ schema: "orca-funding-preview-v1", groupId, rows: fundingPreview(deps.store, groupId, deps.store.now()) }); }
+    try {
+      // Issue #202: `?retry=<task>&tokens=<n>` also answers what retrying that task with that top-up funds (task retry --work).
+      const retry = retryPreviewQuery(req);
+      const rows = fundingPreview(deps.store, groupId, deps.store.now());
+      res.json({ schema: "orca-funding-preview-v1", groupId, rows, ...(retry === null ? {} : { retry: retryFundingPreview(deps.store, groupId, retry.taskId, retry.tokens) }) });
+    }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));

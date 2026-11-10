@@ -92,6 +92,21 @@ export function retryFundingOf(store: ControlStore, groupId: string, taskId: str
 }
 
 /**
+ * Issue #202: display-only, what retrying the task's current run with a `tokens` top-up would leave its next claim, read by
+ * `task retry --work` before it acts (GET groups/<g>/funding-preview?retry=<task>&tokens=<n>). Null when the task has no
+ * current run, is not under the optional token policy (its retry takes no top-up), or its run has no funded allowance.
+ */
+export interface RetryFundingPreview { taskId: string; runId: string; authoredTokens: number | null; lineageTokens: number; lineageAttempts: number; freshTokens: number | null; perAttemptTokens: number | null }
+export function retryFundingPreview(store: ControlStore, groupId: string, taskId: string, tokens: number): RetryFundingPreview | null {
+  const work = readWork(store, groupId, taskId) as unknown as RetriedWork;
+  if (typeof work.currentRunId !== "string" || !hasOptionalTaskPolicy(store, groupId, taskId)) return null;
+  const funding = retryFundingOf(store, groupId, taskId, work.currentRunId, { tokens, activeMs: 0, attempts: 0, sessions: 0 });
+  if (funding === null) return null;
+  return { taskId, runId: work.currentRunId, authoredTokens: funding.authored.tokens, lineageTokens: funding.inherited.tokens, lineageAttempts: funding.inherited.attempts,
+    freshTokens: funding.fresh.tokens, perAttemptTokens: funding.perAttemptTokens };
+}
+
+/**
  * A ladder cannot finish its job if its required automatic retry has no authored budget left -- or (#234) less than one
  * attempt of the failed lineage has cost: ccloop checks its budget only between phases, so such a run overshoots into the
  * group's deficit instead of stopping. An unlimited token dimension is never refused by that floor.
