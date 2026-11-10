@@ -162,6 +162,11 @@ export interface DriverContext {
   multiPrechecks?: Map<string, MultiPrecheck>;
   /** Ruling R2 (#241): post-merge checks in flight, by run; a restart merges and checks again (nothing was written). */
   postMergeChecks?: Map<string, PostMergeCheck>;
+  /**
+   * Tester #229/#230 (plan 2026-11-10 follow-up B, T1): transient step-E failures already retried, by run. In memory: a
+   * restart grants at most TRANSIENT_E_RETRIES more, which is still bounded, and needs no drive-record field.
+   */
+  transientRetries?: Map<string, number>;
 }
 
 /** One reproduce-first check running off the driver round: aborted by stop(), its outcome read by a later round. */
@@ -188,6 +193,21 @@ export function describeError(error: unknown): string {
   if (peer !== null) { const text = peerExitText(peer); return text === "" ? "control-peer-exit" : `control-peer-exit:${text}`; }
   if (error instanceof ControlError) return error.detail ? `${error.code}:${error.detail}` : error.code;
   return error instanceof Error && error.message.length > 0 ? error.message : String(error);
+}
+
+/** Tester #229/#230 (plan 2026-11-10 follow-up B, T1): how many times a transient step-E failure is retried before it blocks. */
+export const TRANSIENT_E_RETRIES = 3;
+const TRANSIENT_ERRNO = new Set(["EBUSY", "EAGAIN", "ENOENT"]);
+
+/**
+ * Tester #229/#230: an error at step E worth another try -- an artifact-id-conflict (a check that saw the archive change
+ * under it) or an I/O race. Step E is idempotent (content-addressed archive, checkpoint id from the candidate), so running
+ * it again is safe; anything else blocks at once, as before.
+ */
+export function transientSettleError(error: unknown): boolean {
+  if (error instanceof ControlError) return error.code === "artifact-id-conflict";
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && TRANSIENT_ERRNO.has(code);
 }
 
 /**
@@ -1551,7 +1571,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map() };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), transientRetries: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
@@ -1605,8 +1625,23 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
           // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
           if (run.state === "blocked" && run.drive.blockedAt !== null) {
             blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
+            process.stderr.write(`orca-driver: ${runId}: blocked at ${run.drive.blockedAt}: ${logError(error)}\n`);
           } else {
-            blockRun(deps, runId, stepOf(run), describeError(error));
+            // Tester #229/#230: a landed run whose settle failed transiently stays landed, so a later round runs E again,
+            // up to TRANSIENT_E_RETRIES times; the failure after that blocks it as before.
+            if (run.state === "landed" && transientSettleError(error)) {
+              const retries = context.transientRetries ?? (context.transientRetries = new Map());
+              const done = retries.get(runId) ?? 0;
+              if (done < TRANSIENT_E_RETRIES) {
+                retries.set(runId, done + 1);
+                process.stderr.write(`orca-driver: ${runId}: E: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_E_RETRIES}\n`);
+                continue;
+              }
+              retries.delete(runId);
+            }
+            const step = stepOf(run);
+            blockRun(deps, runId, step, describeError(error));
+            process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${logError(error)}\n`);
           }
           progressed = true;
         } catch (recordError) {
