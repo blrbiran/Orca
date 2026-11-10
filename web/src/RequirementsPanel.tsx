@@ -50,6 +50,76 @@ function revisionOf(view: View): number { return view.summary.commandRevision; }
 /** What a requirement command may clear once it succeeded: the submitted draft, by its slot and key (spec §11 R2). */
 export interface Submitted { slot: DraftSlot; key: string; value: unknown }
 type OnCommand = (action: ControlAction, submitted?: Submitted) => void;
+/** Issue #220: each installation's model list as last read, and a read of one not yet asked for. */
+type ModelLists = { models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void };
+
+/**
+ * Issue #220: the agent select and, once one is chosen, its model -- from the agent's catalog when it was read, the
+ * placeholder its default. Shared by the New requirement form and the set-agent control (#236), so both choose alike.
+ * `defaultOption` offers "your default" (no agent); without it the select starts empty until one is chosen.
+ */
+function AgentModelFields(props: { agents: AgentsViewV1 | null; agent: string; model: string; name: string; defaultOption?: boolean;
+  onAgent: (agent: string) => void; onModel: (model: string) => void } & ModelLists): JSX.Element {
+  const { t } = useTranslation();
+  const { agent } = props, model = props.model.trim();
+  const chosen = props.agents?.installations.find((row) => row.id === agent);
+  const listed = agent === "" ? undefined : props.models?.(agent);
+  const listId = `${props.name}-list`;
+  return (
+    <>
+      <label>{t("requirements.agent")}<Select value={agent} placeholder={t("requirements.chooseAgent")}
+        onValueChange={(value) => { props.onAgent(value); if (value !== "" && props.models?.(value) === undefined) props.onModels?.(value); }}
+        options={[...(props.defaultOption === true ? [{ value: "", label: t("requirements.agentDefault") }] : []),
+          ...(props.agents?.installations ?? []).map((installation) => ({ value: installation.id, label: installation.id }))]} /></label>
+      {/* Issue #220: a model the provider's catalog does not list used to surface only after submit, with the fix in another
+          page; the model is chosen here, from the agent's catalog when it was read, and the placeholder is the default. */}
+      {chosen !== undefined && (
+        <label>{t("requirements.model")}
+          <input name={props.name} value={props.model} placeholder={chosen.defaults.model} list={listed?.state === "ready" ? listId : undefined}
+            onChange={(event) => props.onModel(event.currentTarget.value)} />
+          {listed?.state === "ready" && (
+            <datalist id={listId}>
+              {listed.view.models.map((row) => <option key={row.model} value={row.model} />)}
+            </datalist>
+          )}
+          {listed?.state === "loading" && <small>{t("agents.models.loading")}</small>}
+          {listed?.state === "ready" && model !== "" && !listed.view.models.some((row) => row.model === model) && <small role="note">{t("requirements.modelUnlisted")}</small>}
+          {listed?.state === "ready" && model === "" && listed.view.models.length > 0 && !listed.view.models.some((row) => row.model === chosen.defaults.model)
+            && <small role="note">{t("requirements.defaultUnlisted", { model: chosen.defaults.model })}</small>}
+        </label>
+      )}
+    </>
+  );
+}
+
+/**
+ * Issue #236 (plan follow-up B, T10): the reasons a requirement call is blocked on its agent -- the catalog no longer lists
+ * the frozen selector (A2), or ccloop refused it at accept as single-call-unsupported. The server's test is
+ * `blockedOnRequirementAgent` (src/control/estimatorCompatibility.ts); the view carries the reason only.
+ */
+const AGENT_BLOCK = /^agent-selection-invalid:|^accept-refused:[^:]*:single-call-unsupported(?=$|:|\s)/;
+
+/** Issue #236: retrying the same frozen agent blocks again, so the block offers another agent (requirement-set-agent). */
+function SetAgent(props: { view: View; agents: AgentsViewV1 | null; onCommand: OnCommand } & ModelLists): JSX.Element {
+  const { t } = useTranslation();
+  const [agent, setAgent] = useState(""), [model, setModel] = useState("");
+  const chosenModel = model.trim();
+  return (
+    <form aria-label={t("requirements.setAgent.title")} onSubmit={(event) => {
+      event.preventDefault();
+      if (agent === "") return;
+      props.onCommand({ verb: "requirement-set-agent", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view),
+        payload: { agent: { agent, ...(chosenModel === "" ? {} : { model: chosenModel }) } } });
+    }}>
+      <h5>{t("requirements.setAgent.title")}</h5>
+      <p>{t("requirements.setAgent.why")}</p>
+      <AgentModelFields agents={props.agents} agent={agent} model={model} name={`set-agent-model-${props.view.summary.groupId}`}
+        onAgent={(value) => { setAgent(value); setModel(""); }} onModel={setModel}
+        {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
+      <button type="submit" disabled={agent === ""}>{t("requirements.setAgent.submit")}</button>
+    </form>
+  );
+}
 
 function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 | null; language: PanelLanguage; onCommand: OnCommand;
   repoId?: string | null; onRepo?: (repoId: string) => void;
@@ -108,8 +178,6 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   }
   const { idea, tokens, language, agent } = draft;
   const model = (draft.model ?? "").trim();
-  const chosen = props.agents?.installations.find((row) => row.id === agent);
-  const listed = agent === "" ? undefined : props.models?.(agent);
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
@@ -129,26 +197,9 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);edit({tokens:null});}} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
       <label>{t("requirements.contentLanguage")}<Select value={language} onValueChange={(value) => edit({ language: value as PanelLanguage })}
         options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} /></label>
-      <label>{t("requirements.agent")}<Select value={agent} onValueChange={(value) => { edit({ agent: value, model: "" }); if (value !== "" && props.models?.(value) === undefined) props.onModels?.(value); }}
-        options={[{ value: "", label: t("requirements.agentDefault") },
-          ...(props.agents?.installations ?? []).map((installation) => ({ value: installation.id, label: installation.id }))]} /></label>
-      {/* Issue #220: a model the provider's catalog does not list used to surface only after submit, with the fix in another
-          page; the model is chosen here, from the agent's catalog when it was read, and the placeholder is the default. */}
-      {chosen !== undefined && (
-        <label>{t("requirements.model")}
-          <input name="new-requirement-model" value={draft.model ?? ""} placeholder={chosen.defaults.model} list={listed?.state === "ready" ? "new-requirement-models" : undefined}
-            onChange={(event) => edit({ model: event.currentTarget.value })} />
-          {listed?.state === "ready" && (
-            <datalist id="new-requirement-models">
-              {listed.view.models.map((row) => <option key={row.model} value={row.model} />)}
-            </datalist>
-          )}
-          {listed?.state === "loading" && <small>{t("agents.models.loading")}</small>}
-          {listed?.state === "ready" && model !== "" && !listed.view.models.some((row) => row.model === model) && <small role="note">{t("requirements.modelUnlisted")}</small>}
-          {listed?.state === "ready" && model === "" && listed.view.models.length > 0 && !listed.view.models.some((row) => row.model === chosen.defaults.model)
-            && <small role="note">{t("requirements.defaultUnlisted", { model: chosen.defaults.model })}</small>}
-        </label>
-      )}
+      <AgentModelFields agents={props.agents} agent={agent} model={draft.model ?? ""} name="new-requirement-model" defaultOption
+        onAgent={(value) => edit({ agent: value, model: "" })} onModel={(value) => edit({ model: value })}
+        {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
       <p role="note">{t("requirements.capabilityNote")}</p>
       <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
@@ -618,7 +669,7 @@ function FlowSteps(props: { view: View }): JSX.Element {
   );
 }
 
-function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void } & EditableDrafts): JSX.Element {
+function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void; agents: AgentsViewV1 | null } & ModelLists & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
   const editable: EditableDrafts = { drafts: props.drafts, onDraft: props.onDraft };
@@ -732,6 +783,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button></>}
         </p>
       )}
+      {!archived && blockedRun?.reason != null && AGENT_BLOCK.test(blockedRun.reason) && <SetAgent view={view} agents={props.agents} onCommand={props.onCommand}
+        {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />}
       {!archived && reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
       </div>
       <section id={overviewRegionId("requirement", groupId, "answers")} tabIndex={-1} data-overview-region="answers" aria-label={t("requirements.rounds")}>
@@ -896,7 +949,8 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
             )}</GroupActionsMenu>
           ))}
         </nav>
-        {view !== undefined && <Detail view={view} onCommand={onCommand} onPrepare={props.onPrepare} {...editable} />}
+        {view !== undefined && <Detail view={view} onCommand={onCommand} onPrepare={props.onPrepare} agents={props.agents}
+          {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} {...editable} />}
       </div>
     </section>
   );

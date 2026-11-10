@@ -1180,6 +1180,12 @@ export const en = {
     model: "Model",
     modelUnlisted: "This model is not in the agent's model list; the provider may refuse it.",
     defaultUnlisted: "This agent's default model {{model}} is not in its model list; choose one from the list.",
+    chooseAgent: "Choose an agent",
+    setAgent: {
+      title: "Choose another agent",
+      why: "This call's agent cannot run it, so retrying it would block again. Choose another agent or model: the blocked step is drafted again on it, and finished rounds stay.",
+      submit: "Use this agent",
+    },
     open: "Start clarifying",
     noRepository: "No repository is registered with this panel.",
     notUnderControl: "This project is not under task control: restart the panel with --repo for it to start requirements here.",

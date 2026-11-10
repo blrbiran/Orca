@@ -1041,6 +1041,12 @@ export const zh: Translation<typeof en> = {
     model: "模型",
     modelUnlisted: "这个模型不在该 agent 的模型列表里；provider 可能会拒绝。",
     defaultUnlisted: "该 agent 的默认模型 {{model}} 不在它的模型列表里；请从列表里选一个。",
+    chooseAgent: "选择一个 agent",
+    setAgent: {
+      title: "换一个 agent",
+      why: "这次调用的 agent 无法执行它，重试只会再次受阻。换一个 agent 或模型后，受阻的那一步会在它上面重新起草，已完成的轮次保留。",
+      submit: "使用这个 agent",
+    },
     open: "开始澄清",
     noRepository: "这个面板没有登记仓库。",
     notUnderControl: "这个项目不在任务控制之下：要在这里发起需求，请用 --repo 给出它并重启面板。",
