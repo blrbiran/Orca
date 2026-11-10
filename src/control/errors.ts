@@ -330,6 +330,9 @@ export const durableCommandErrorStatuses = {
   "proposal-confirmed": 422,
   // Flow engine spec §10.3 (W-76): a revision after a split draft was accepted, and one that changes nothing.
   "requirement-already-accepted": 422,
+  // Issue #211 (session 9179cdad): requirement-open with a limit below one requirement call's grant; the detail names
+  // each short dimension with the minimum it needs (`tokens:1000000`).
+  "requirement-limit-too-low": 422,
   // Flow engine spec §5.1 [IR-I7]: a flow group on a `dir` workspace delivers `keep`, fixed by code.
   "flow-group-delivery-fixed": 422,
   // Flow engine spec §6.2, §9.6: a flow run's hidden child is the kernel's; retry the step through the run instead.

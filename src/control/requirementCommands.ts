@@ -28,7 +28,7 @@ import {
 import { writeCanonicalRecord } from "./snapshot.js";
 import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
 import { expandMultiSplitDraft, orderWrites, type SplitPlanFile } from "./requirementSplit.js";
-import { REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput } from "./requirementSchemas.js";
+import { REQUIREMENT_CALL_GRANT, REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput } from "./requirementSchemas.js";
 import { commandSuccess, readStopIntent } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -115,6 +115,12 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
       } }),
       apply: (context) => {
         const payload = context.effectiveCommand.payload as EffectiveOpenPayload;
+        // Issue #211: a limit below one call's grant makes a group that can never make its first call; it used to
+        // park at requirement-budget-exhausted with used=0, which reads as "spent". Refuse it by name at the door.
+        const below = (["tokens", "activeMs", "attempts", "sessions"] as const)
+          .filter((dimension) => payload.limit[dimension] !== null && payload.limit[dimension] < REQUIREMENT_CALL_GRANT[dimension])
+          .map((dimension) => `${dimension}:${REQUIREMENT_CALL_GRANT[dimension]}`);
+        if (below.length > 0) throw new ControlError("requirement-limit-too-low", below.join(","));
         if (!(deps.knownRepository?.(payload.repoId) ?? false)) throw new ControlError("group-project-binding-required");
         if (deps.store.db.prepare("SELECT id FROM groups WHERE id=?").get(payload.groupId)) throw new ControlError("group-already-exists");
         // Issue #73: ccloop's stderr from a failed probe follows its code, as `<code>: <detail>` (web/src/ccloopCodes.ts).

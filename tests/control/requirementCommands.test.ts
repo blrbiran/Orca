@@ -57,6 +57,17 @@ describe("requirement-open (N1 spec §11.1 item 1)", () => {
     } finally { await x.dispose(); }
   });
 
+  it("refuses a new requirement whose limit cannot fund its first call, without leaving a stuck group", async () => {
+    const x = await requirementHarness({ answers: [], startAt: "none" });
+    try {
+      const limit = { tokens: 600_000, activeMs: 3_600_000, attempts: 4, sessions: 4 };
+      const result = await x.service.openRequirement(open("below-first-call", { limit }));
+      expect(result).toMatchObject({ error: { code: "requirement-limit-too-low", message: expect.stringContaining("tokens:1000000") } });
+      expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM groups WHERE id='below-first-call'").get()!.n).toBe(0);
+      expect(x.store.db.prepare("SELECT COUNT(*) AS n FROM scheduler_wakes WHERE group_id='below-first-call'").get()!.n).toBe(0);
+    } finally { await x.dispose(); }
+  });
+
   it("keeps a given limit and agent, and writes English when no content language is given", async () => {
     const x = await requirementHarness({ answers: [], startAt: "none" });
     try {
