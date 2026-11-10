@@ -301,6 +301,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   buildApi(app, {
     opts, reviews, statics, projects, auth,
     ...(multiControlRepoId === undefined ? {} : { multiControlRepoId }),
+    ...(control === null ? {} : { holdsRepository: (repoId: string) => control!.config.hasRepository(repoId) }),
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
     // existed, so `controlApi.ts` registers nothing and every /api/control path is a 404.
     ...(control === null ? {} : { control: { store: control.store, epoch, config: control.config, service: control.service, port: control.port } }),
@@ -338,7 +339,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   let socket: ControlSocketHandle | null = null;
   if (control !== null) {
     const bound = await bindControlSocket(
-      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true, multiControlRepoId), auth),
+      buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true, multiControlRepoId,
+        (repoId) => control!.config.hasRepository(repoId)), auth),
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {

@@ -84,6 +84,22 @@ describe("file mode", () => {
     expect(read.kind === "valid" && read.config.projects).toEqual([{ id: "web", name: "Web App", path: repo }]);
   });
 
+  it("B7: one project whose folder moved does not stop the panel serving the others", async () => {
+    const w = world();
+    const kept = w.gitRepo("kept");
+    mkdirSync(join(w.root, "home"));
+    writeFileSync(w.file, JSON.stringify({ version: 1, projects: [
+      { id: "kept", name: "Kept", path: kept },
+      { id: "moved", name: "Moved", path: join(w.root, "gone") },
+    ] }));
+    const { call } = await boot(["--projects-file", w.file], w.env);
+    expect((await call("GET", "/api/control/config")).body.repositories).toEqual([{ repoId: controlRepoKey("kept"), displayName: "Kept" }]);
+    expect((await call("GET", "/api/projects")).body).toMatchObject({
+      projects: [{ projectKey: "kept", name: "Kept", path: kept, controlRepoId: controlRepoKey("kept") }, { projectKey: "moved", name: "Moved", path: join(w.root, "gone"), controlRepoId: null }],
+      fileError: expect.stringContaining("project moved:"),
+    });
+  });
+
   it("B5: refusals come back with their status and code", async () => {
     const w = world();
     const { call } = await boot(["--projects-file", w.file], w.env);

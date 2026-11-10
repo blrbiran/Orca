@@ -81,6 +81,8 @@ export interface ApiDeps {
   projects?: ProjectRegistry | null;
   /** Multi-directory projects spec §4.2: a multi project's control repoId, from the assembly's multi map. */
   multiControlRepoId?: (projectKey: string) => string | null;
+  /** Issue #201: whether the control plane holds a repoId (a project whose folder moved is listed but not held). */
+  holdsRepository?: (repoId: string) => boolean;
   /** Accounts spec §3.3-§3.4: sessions; the /api middleware wants one on every route but POST /api/auth/login. */
   auth: PanelAuth;
 }
@@ -817,7 +819,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   registerChainRoutes(app, deps.opts, objectBody);
   // Project switcher spec D1 (§8), project registry §12 C2: the control plane holds exactly the projects in
   // opts.repos (given with --repo, or added to the registry since boot), so the join is computed per request.
-  registerProjectRoutes(app, projectsDepsOf(deps.opts, deps.projects ?? null, deps.control !== undefined, deps.multiControlRepoId));
+  registerProjectRoutes(app, projectsDepsOf(deps.opts, deps.projects ?? null, deps.control !== undefined, deps.multiControlRepoId, deps.holdsRepository));
 
   // Errors last. A gate refusal is a first-class error page, never partial
   // data: relaxing here would void E2's gate entirely.

@@ -13,7 +13,7 @@
  */
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join as joinPath, posix, relative, sep } from "node:path";
 import { compareText } from "../control/webProtocol.js";
 import type { TrustedPlanConfig, TrustedRepositoryConfig } from "./controlConfig.js";
@@ -367,8 +367,13 @@ export function createProjectRegistry(input: {
     if (fileError !== null && readProjectsFile(file).kind === "invalid") fail("projects-file-invalid", 409, `${file} is invalid (${fileError}); fix it first`);
   };
 
-  // The trusted config was built with display name = id; give it the file's names (spec §6).
-  for (const p of running) if (p.name !== p.id) control?.rename(controlRepoKey(p.id), p.name);
+  // The trusted config was built with display name = id; give it the file's names (spec §6). Issue #201: an entry the
+  // control plane could not mount (its folder is gone) is not a reason to stop the registry; it is named instead.
+  const bootRenameErrors: string[] = [];
+  for (const p of running) if (p.name !== p.id) {
+    try { control?.rename(controlRepoKey(p.id), p.name); }
+    catch (error) { bootRenameErrors.push(`project ${p.id}: ${(error as Error).message}`); }
+  }
   // In-repo plan path spec 2026-10-21 §2.4: the filed plans join at boot; one that no longer checks out is named.
   const bootPlanErrors = running.flatMap(joinPlans);
   // Multi-directory projects spec §4.1: boot validates member references the same way a hand edit does.
@@ -381,7 +386,7 @@ export function createProjectRegistry(input: {
     runningMulti.push({ id: entry.id, name: entry.name, dirs: [...entry.dirs] });
     multiPaths.set(entry.id, realPathsOf(entry, bootConfig.projects));
   }
-  const bootErrors = [...bootPlanErrors, ...bootMultiErrors];
+  const bootErrors = [...bootRenameErrors, ...running.filter((p) => !existsSync(p.path)).map((p) => `project moved: ${p.id}: ${p.path}`), ...bootPlanErrors, ...bootMultiErrors];
   if (bootErrors.length > 0) fileError = bootErrors.join("; ");
 
   const view = (): ProjectsListV1 => ({

@@ -223,6 +223,9 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   dispatchedPersonDir = join(root, DISPATCHED_PERSON_DIRNAME);
   mkdirSync(dispatchedPersonDir, { recursive: true, mode: 0o700 });
 
+  // Issue #201: paths the trusted config cannot hold because the folder is gone. Named on stderr and
+  // in the projects view; the rest of the panel runs.
+  const unavailable: string[] = [];
   const config = createTrustedControlConfig({
     epoch,
     stateDir: store.stateDir,
@@ -236,11 +239,23 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     shutdownGraceMs: SHUTDOWN_GRACE_MS,
     // Resolved, for the same reason as the roots above: the trusted config refuses a path that
     // traverses a symlink, and an operator typing a path through /tmp has not done anything wrong.
-    repositories: repos.map((repo) => ({ repoId: controlRepoKey(repo.projectKey), displayName: repo.projectKey, path: realpathSync(repo.path) })),
-    plans: control.plans.map((plan) => ({ planId: plan.planId, repoId: plan.repoId, displayName: plan.planId, path: realpathSync(plan.path) })),
+    // Issue #201: one registered folder that moved must not keep the whole panel from starting. The
+    // entry is left out of the trusted config (so it is never an executable target) and named, not
+    // silently dropped; the registry keeps listing it so a person can see and fix it.
+    repositories: repos.flatMap((repo) => {
+      try { return [{ repoId: controlRepoKey(repo.projectKey), displayName: repo.projectKey, path: realpathSync(repo.path) }]; }
+      catch { unavailable.push(`repository ${repo.projectKey}: ${repo.path}`); return []; }
+    }),
+    plans: control.plans.flatMap((plan) => {
+      try { return [{ planId: plan.planId, repoId: plan.repoId, displayName: plan.planId, path: realpathSync(plan.path) }]; }
+      catch { unavailable.push(`plan ${plan.planId}: ${plan.path}`); return []; }
+    }),
     defaultEstimatorProfileId: control.estimatorProfileId,
     defaultEstimateMode: control.estimateMode,
   }, router);
+  // Issue #201: said once, at the boundary where the entries were left out; a person reading panel.err.log
+  // learns which folder to restore, and every other project keeps working.
+  for (const entry of unavailable) process.stderr.write(`orca-control: not mounted, path is gone: ${entry}\n`);
 
   const estimator = control.estimatorProfileId === null
     ? null

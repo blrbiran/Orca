@@ -32,10 +32,12 @@ export interface ProjectsDeps {
 export function projectsDepsOf(
   opts: ProjectsDeps["opts"], registry: ProjectRegistry | null, controlOn: boolean,
   multiControlRepoId?: (projectKey: string) => string | null,
+  /** Issue #201: the control plane's own answer, so a project whose folder moved lists as unheld rather than as a target it cannot act on. */
+  holds?: (repoId: string) => boolean,
 ): ProjectsDeps {
   return {
     opts, registry,
-    controlRepoId: (key) => (controlOn && opts.repos.some((repo) => repo.projectKey === key) ? controlRepoKey(key) : null),
+    controlRepoId: (key) => (controlOn && (holds === undefined ? opts.repos.some((repo) => repo.projectKey === key) : holds(controlRepoKey(key))) ? controlRepoKey(key) : null),
     ...(multiControlRepoId === undefined || !controlOn ? {} : { multiControlRepoId }),
   };
 }
