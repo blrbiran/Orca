@@ -14,9 +14,12 @@ import { Select } from "./ui/Select.js";
 const DEFAULT_AGENT_KEY = "agents:default-agent";
 export const AGENTS_OPEN_KEY = "orca.panel.agentsOpen";
 
-/** Spec §9.2 item 4: folded unless this browser opened it; storage may be absent or throw, which leaves it folded. */
+/**
+ * Issue #221 (human ruling 2026-11-10, replacing spec §9.2 item 4's "folded by default"): open unless this browser
+ * folded it, so a first visit shows the models it is the only place to set; unreadable storage also shows it open.
+ */
 function readOpen(): boolean {
-  try { return localStorage.getItem(AGENTS_OPEN_KEY) === "1"; } catch { return false; }
+  try { return localStorage.getItem(AGENTS_OPEN_KEY) !== "0"; } catch { return true; }
 }
 function writeOpen(open: boolean): void {
   try { localStorage.setItem(AGENTS_OPEN_KEY, open ? "1" : "0"); } catch { /* not remembered */ }
