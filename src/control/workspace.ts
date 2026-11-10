@@ -41,6 +41,8 @@ export const landingPathOf = (roots: WorkspaceRoots, runId: string): string => j
 export const extraWorkspacePathOf = (roots: WorkspaceRoots, runId: string, key: string): string => join(roots.workspacesRoot, `${runId}.dir-${key}`);
 export const extraLandingPathOf = (roots: WorkspaceRoots, runId: string, key: string): string => join(roots.workspacesRoot, `landing-${runId}.dir-${key}`);
 export const conflictPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `conflict-${runId}`);
+/** Ruling R2 (#241): the scratch worktree a landing's merged tree is checked in before the work branch moves. */
+export const postMergeCheckPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `post-merge-${runId}`);
 export const reconcileRunsDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `reconcile-${runId}`);
 /** Syncskill integration spec §10.6: the run's skill snapshot, the plugin dir ccloop is handed (runIds are `run-<uuid>`, so no collision). */
 export const skillsPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `skills-${runId}`);

@@ -53,7 +53,7 @@ import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js
 import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
-import { recordEmptyResultDecisions, stepD, stepR } from "./driverLanding.js";
+import { recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
 import { readDebugMark } from "./debugChecks.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { correctionTargetOf } from "../corrections/target.js";
@@ -160,6 +160,8 @@ export interface DriverContext {
   debugChecks?: Map<string, DebugCheck>;
   /** Multi-directory projects spec §9.4: opt-in checks in flight, by group; a restart re-pre-checks (nothing was written). */
   multiPrechecks?: Map<string, MultiPrecheck>;
+  /** Ruling R2 (#241): post-merge checks in flight, by run; a restart merges and checks again (nothing was written). */
+  postMergeChecks?: Map<string, PostMergeCheck>;
 }
 
 /** One reproduce-first check running off the driver round: aborted by stop(), its outcome read by a later round. */
@@ -1531,7 +1533,7 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2(deps, runId);
     case "unknown": return stepBPrime(deps, runId);
     case "accepted": return stepC(deps, runId, context);
-    case "collected": return stepD(deps, runId);
+    case "collected": return stepD(deps, runId, context);
     case "reconciling": return stepR(deps, runId, context);
     case "landed": case "settled": return stepE(deps, runId);
     case "settled-failed": return stepCleanupFailed(deps, runId);
@@ -1549,7 +1551,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map() };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
@@ -1683,10 +1685,13 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       // Debug task plan Task 8 (fix round 1, R1): a reproduce-first check is not awaited. Its process group is killed and its
       // persisted marker stays, so the next driver restores the workspace and checks again.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
+      // Ruling R2: a post-merge check likewise; nothing moved, so the next driver merges and checks again.
+      for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       // Belt and braces for the guard in startDebugCheck: anything started while the last round finished is aborted too.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
       await stopping;
     },
     get crashed() { return crashed; },

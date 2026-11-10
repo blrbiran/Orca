@@ -30,7 +30,8 @@ import { AgentsRunRefused, TERMINAL_OUTCOMES, cloneDirOf, latestAttemptSha, loop
 import { netChangeSet } from "../scheduler/harvest.js";
 import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
 import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
-import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
+import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, postMergeCheckPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
+import { firstFailingSetup, runAsCheck, type CheckFailure } from "./checkCommand.js";
 import type { ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PlanFile, PlanTask } from "../scheduler/planFile.js";
@@ -305,11 +306,11 @@ async function debugClosingOf(
  * driver's own at `old`; `produce` makes the commit to land in it (null: nothing to land, a conflict);
  * the work branch moves only by compare-and-swap from `old`; the worktree is removed whatever happens.
  */
-type Landing = { kind: "not-produced" } | { kind: "moved" } | { kind: "swapped"; commit: string };
+type Landing = { kind: "not-produced" } | { kind: "deferred" } | { kind: "moved" } | { kind: "swapped"; commit: string };
 
 async function landOnTip(
   deps: ExecutionDriverDeps, targetRepo: string, runId: string, groupId: string, old: string,
-  produce: (landing: string) => Promise<string | null>,
+  produce: (landing: string) => Promise<string | null | "deferred">,
 ): Promise<Landing> {
   const landing = landingPathOf(deps.roots, runId);
   await removeOwnPath(targetRepo, deps.roots, landing);
@@ -317,6 +318,8 @@ async function landOnTip(
   try {
     const next = await produce(landing);
     if (next === null) return { kind: "not-produced" };
+    // Ruling R2: the merge waits for its post-merge check; nothing moves this round.
+    if (next === "deferred") return { kind: "deferred" };
     await deps.beforeCas?.();
     return await compareAndSwap(targetRepo, workBranchRef(groupId), next, old) ? { kind: "swapped", commit: next } : { kind: "moved" };
   } finally {
@@ -329,7 +332,7 @@ async function landOnTip(
  * current tip in a fresh detached worktree, then swap the branch from that tip. A moved tip is not an
  * error -- the next round lands on the new one. A conflict goes to a reconciliation (spec §5.3).
  */
-export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: DriverContext): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.state !== "collected" || run.drive?.attemptSha == null || run.drive.base === null) return false;
@@ -345,6 +348,24 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
   const old = await revParse(targetRepo, workBranchRef(run.groupId));
   const already = await findLanding(targetRepo, drive.base!, old, drive.attemptSha!);
   if (already !== null) { markLanded(deps, runId, already); return true; }
+  // Ruling R2 (#241): a merge whose check was started in an earlier round lands, or blocks, on that check's answer.
+  const checks = postMergeChecksOf(context);
+  const checked = checks.get(runId);
+  if (checked !== undefined) {
+    if (checked.settled === null) return false;
+    checks.delete(runId);
+    if ("error" in checked.settled) throw checked.settled.error;
+    if (checked.old === old) {
+      if (checked.settled.failure !== null) { blockRun(deps, runId, "D", postMergeBlockReason(runId, run.groupId, old, checked.settled.failure)); return true; }
+      await deps.beforeCas?.();
+      // A moved tip only (as below): the next round merges onto the new tip and checks that tree.
+      if (!(await compareAndSwap(targetRepo, workBranchRef(run.groupId), checked.next, old))) return false;
+      deps.crash?.("D-after-cas");
+      markLanded(deps, runId, checked.next);
+      return true;
+    }
+    // The tip moved while the check ran: the tree it checked will never land. Merge onto the new tip, and check that.
+  }
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, old, async (landing) => {
     // Into the target's shared refs: the incoming ref is how the attempt stays reachable until settle.
     await git(landing, [...QUIET_GIT, "fetch", "--no-tags", join(drive.sourceDir, "repo"), `+${drive.attemptSha}:${incomingRefOf(runId)}`]);
@@ -374,14 +395,92 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string): Promise<b
     await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
     // Before the swap: a death after it finds the landing, skips this produce and still has these for markLanded.
     stagePending(deps, runId, pending, closing?.record ?? null, criteria?.flag ?? null, flowDecisions);
-    return revParse(landing, "HEAD");
+    const next = await revParse(landing, "HEAD");
+    // Ruling R2 (#241): a merged tree the attempt's checks never ran on is checked before the ref moves.
+    if (await untestedMerge(landing, drive.attemptSha!, next)) {
+      const contract = run.taskId === null ? null : readConfirmedTaskExecution(store, run.groupId, run.taskId).contract;
+      if (contract !== null && contract.verification.requiredChecks.length > 0) {
+        startPostMergeCheck(deps, context, targetRepo, runId, old, next, contract);
+        return "deferred";
+      }
+    }
+    return next;
   });
+  if (landed.kind === "deferred") return true;
   if (landed.kind === "not-produced") return beginReconcile(deps, runId, targetRepo, old);
   // A moved tip only (final review I2): any other failed swap threw from compareAndSwap and blocks the run.
   if (landed.kind === "moved") return false;
   deps.crash?.("D-after-cas");
   markLanded(deps, runId, landed.commit);
   return true;
+}
+
+/**
+ * Ruling R2 (#241, plan 2026-11-10 tester follow-up B, T6; default on). ccloop passed the task's required checks on its
+ * attempt's tree. A landing whose merged tree differs from that tree outside `.decisions/` -- the group tip moved since the
+ * attempt's base because a sibling landed -- is a tree no check ran on (the tester's case: two parallel tasks each green
+ * alone, two tests red together, the group done). Its checks run again on it before the ref moves. A merged tree equal to
+ * the attempt's (a fast-forward-equivalent merge, or a tip that moved only by ledger commits) runs nothing more.
+ *
+ * Shape of the multi-directory pre-check (multiLanding.ts §9.4) and the reproduce-first check: off the round, in a scratch
+ * worktree of the driver's own, each command as ccloop runs a required check (checkCommand.ts), the task's setup first,
+ * each command bounded by the contract's `perAttemptTimeoutMs` (the bound ccloop's own attempt ran under). The first red
+ * stops it. Kept in memory only: a restarted driver finds no entry, merges again and checks again -- nothing was written.
+ * A red blocks at D; `orca recovery retry --run <id>` (resumeBlockedDriverRun: back to `collected`) merges onto the
+ * then-current tip and checks again, after a person fixed the group branch.
+ */
+export interface PostMergeCheck { controller: AbortController; old: string; next: string; settled: { failure: CheckFailure | null } | { error: unknown } | null }
+/** For a step called outside a driver (a criterion calling stepD itself); a driver owns its own map. */
+const unownedPostMergeChecks = new Map<string, PostMergeCheck>();
+function postMergeChecksOf(context: DriverContext | undefined): Map<string, PostMergeCheck> {
+  return context?.postMergeChecks ?? unownedPostMergeChecks;
+}
+
+/** Whether the merged tree differs from the attempt's tree anywhere but the ledger the landing itself writes. */
+async function untestedMerge(landing: string, attemptSha: string, merged: string): Promise<boolean> {
+  return (await git(landing, [...QUIET_GIT, "diff", "--name-only", "-z", attemptSha, merged, "--", ".", ":(exclude).decisions"])).length > 0;
+}
+
+type TaskContract = ReturnType<typeof readConfirmedTaskExecution>["contract"];
+
+function startPostMergeCheck(deps: ExecutionDriverDeps, context: DriverContext | undefined, targetRepo: string, runId: string, old: string, next: string, contract: TaskContract): void {
+  // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver merges again.
+  if (context?.stopped) return;
+  const entry: PostMergeCheck = { controller: new AbortController(), old, next, settled: null };
+  postMergeChecksOf(context).set(runId, entry);
+  void runPostMergeCheck(deps, targetRepo, runId, next, contract, entry.controller.signal)
+    .then((failure) => { entry.settled = { failure }; }, (error: unknown) => { entry.settled = { error }; });
+}
+
+async function runPostMergeCheck(deps: ExecutionDriverDeps, targetRepo: string, runId: string, next: string, contract: TaskContract, signal: AbortSignal): Promise<CheckFailure | null> {
+  const path = postMergeCheckPathOf(deps.roots, runId);
+  await removeOwnPath(targetRepo, deps.roots, path);
+  await git(targetRepo, [...QUIET_GIT, "worktree", "add", "--detach", path, next]);
+  // The commands are the task's; they run as this run, with the panel's empty person directory (as the debug checks).
+  const as = { runId, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
+  const timeoutMs = contract.executionPolicy.perAttemptTimeoutMs;
+  try {
+    // Task setup spec 2026-11-04 §4.6: a fresh worktree has no dependencies; a failed setup is named as `setup: <cmd>`.
+    const setup = await firstFailingSetup(path, contract.context.setupCommands ?? [], timeoutMs, as, signal);
+    if (setup !== null) return { ...setup, command: `setup: ${setup.command}` };
+    for (const command of contract.verification.requiredChecks) {
+      const failure = await runAsCheck(path, command, timeoutMs, as, signal);
+      if (failure !== null) return failure;
+    }
+    return null;
+  } finally {
+    await removeOwnPath(targetRepo, deps.roots, path).catch(() => undefined);
+  }
+}
+
+/** First line `post-merge-check-failed:<command>`; then the exit, the way out, and the end of its output, bounded. */
+function postMergeBlockReason(runId: string, groupId: string, old: string, failure: CheckFailure): string {
+  const head = `post-merge-check-failed:${failure.command}`;
+  const how = `exited ${failure.exit} on the merge onto orca/${groupId} at ${old.slice(0, 12)}; orca/${groupId} did not move. `
+    + `Fix the branch, then \`orca recovery retry --run ${runId}\` merges and checks again.`;
+  const room = 2048 - head.length - how.length - 2;
+  const tail = failure.tail === "" || room <= 0 ? "" : `\n${failure.tail.slice(-room)}`;
+  return `${head}\n${how}${tail}`.slice(0, 2048);
 }
 
 /**

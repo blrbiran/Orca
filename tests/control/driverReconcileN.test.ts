@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { readDriverRun, type ExecutionDriver } from "../../src/control/executionDriver.js";
-import { otherSideOfWeb, stepD } from "../../src/control/driverLanding.js";
+import { otherSideOfWeb } from "../../src/control/driverLanding.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -54,8 +54,13 @@ describe("N1u: the other side of a conflict is every landed task it touches (spe
         const ids = [await t.claim(), await t.claim(), await t.claim()];
         const byTask = new Map(ids.map((id) => [t.taskOf(id), id]));
         if (!(byTask.get("b")! < byTask.get("a")!)) { if (tries < 15) continue; throw new Error("run ids never sorted b before a"); }
-        await t.until(t.driver(), () => ids.every((id) => ["collected", ...LANDED].includes(t.body(id).state)));
-        for (const id of [byTask.get("a")!, byTask.get("b")!]) if (t.body(id).state === "collected") await stepD(t.deps, id);
+        // Ruling: R2 (#241, plan 2026-11-10 T6) -- a clean merge onto a moved tip now waits for its post-merge check, which
+        // runs off the round, so one direct stepD call no longer lands it (and a second caller would race the driver's own
+        // check). The same driver lands a and b instead, rounds 50 ms apart up to a deadline; what is asserted is unchanged.
+        const driver = t.driver();
+        await t.until(driver, () => ids.every((id) => ["collected", ...LANDED].includes(t.body(id).state)));
+        const abLanded = () => [byTask.get("a")!, byTask.get("b")!].every((id) => LANDED.includes(t.body(id).state));
+        for (const deadline = Date.now() + 20_000; !abLanded() && Date.now() < deadline;) { await driver.round(); if (!abLanded()) await new Promise((resolve) => setTimeout(resolve, 50)); }
         expect([t.body(byTask.get("a")!).state, t.body(byTask.get("b")!).state].every((state) => LANDED.includes(state))).toBe(true);
         const d = readDriverRun(t.h.store, byTask.get("d")!);
         expect(await otherSideOfWeb(t.h.store, t.repo, d, ["a", "b"])).toEqual({ taskIds: ["a", "b"] });
