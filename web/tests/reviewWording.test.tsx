@@ -30,7 +30,9 @@ it.each(CASES)("group detail of a review group, %s", (_name, over, expected) => 
   expect(text.includes("The group is in goal review")).toBe(expected === "goal");
   // mutation: drop the blocked branch of reviewWording -> the blocked case shows no blocked line, red
   expect(text.includes("Some of this group's tasks are blocked")).toBe(expected === "blocked");
-  expect(text.includes("Review progress, preparation or problems")).toBe(expected === "none");
+  // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes that no group page
+  // carries the generic next-action line (#81); a group with work left and none blocked says neither line above.
+  expect(text.includes("Review progress, preparation or problems")).toBe(false);
 });
 
 it.each(CASES)("overview row of a review group, %s (zh)", async (_name, over, expected) => {

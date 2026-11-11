@@ -231,7 +231,7 @@ export const en = {
     "not-produced": "not-produced"
   }
 },
-  detail: { regions: "Group detail", progress: "Progress", live: "Live", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", tasksBlocked: "Some of this group's tasks are blocked; open Problems to see why.", nextAction: "Review progress, preparation or problems; each region keeps the actions allowed by the current read." },
+  detail: { regions: "Group detail", progress: "Progress", live: "Live", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", tasksBlocked: "Some of this group's tasks are blocked; open Problems to see why." },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "Keyboard shortcuts", title: "Keys Orca uses", decisions: "j / k: next / previous row · a: agree · c: correct — on the Decisions page, with focus on the page", retry: "r: retry the open task's run — in a group, where Retry task is offered", arrows: "Arrow keys: move between region tabs and menu items", close: "Close" },
   nav: { overview: "Overview", sections: "Sections", more: "More", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", settings: "Settings", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
@@ -527,7 +527,8 @@ export const en = {
       blockedBanner: "This group is blocked: run {{runId}} went over its {{dimension}} grant ({{used}} of {{grant}}). No new step starts in it, and preparation changes are refused.",
       runOverGrant: "Run {{runId}} used {{used}} {{dimension}}, over its grant of {{grant}}. This group has no token limit, so it was not blocked; its other tasks keep running.",
       region: "Control group {{groupId}}",
-      heading: "{{groupId}} · {{state}} · revision {{revision}} · projection {{projection}}",
+      heading: "{{groupId}} · {{state}}",
+      counters: "revision {{revision}} · projection {{projection}}",
       criteriaReview: {
         heading: "Criteria reviews",
         status: "{{taskId}}: {{state}}",
@@ -537,7 +538,7 @@ export const en = {
       claimBlocked: "claim blocked · new runs are not being started",
       spendCapBlock: "Waiting on a spend cap: the {{period}} cap for {{scope}} is {{cap}} tokens and the next claim needs {{grant}}. It resumes on its own once the cap is raised or a new period starts.",
       spendCapLink: "See usage and caps",
-      planLine: "{{goal}} · plan {{hash}} · graph v{{graphVersion}}",
+      planLine: "plan {{hash}} · graph v{{graphVersion}}",
       sourceRequirement: "Inspect source requirement",
       stop: "stop {{mode}} {{state}} · accepted {{accepted}} · deadline {{deadline}} · {{n}} frozen run(s): {{runs}}",
       stopping: "Stopping",
@@ -1180,6 +1181,7 @@ export const en = {
       empty: "Nothing here. The other filters hold the rest.",
     },
     capabilityNote: "Clarification uses a bounded single call. Choose a supported agent, or import a plan in Task control.",
+    capabilityHint: "Which agents can clarify?",
     agentDefault: "Your default",
     defaultResolved: "Your default: {{agent}} · {{model}}",
     noDefaultAgent: "No default agent is set; choose an agent here, or set one in Settings > Agent.",

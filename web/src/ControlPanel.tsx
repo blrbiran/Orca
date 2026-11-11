@@ -339,9 +339,11 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
   return (
     <section aria-label={t("control.title")}>
       <h2>{t("control.title")}</h2>
-      <p className="section-meta">
-        {t("control.summaryLine", { epoch: summary.epoch, seq: summary.changeSeq, dispatch: t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive") })}
-      </p>
+      {/* #81: the server session and its sequence are technical facts; they fold away under the heading. */}
+      <details className="section-meta">
+        <summary>{t("detail.technical")}</summary>
+        <p className="m-0">{t("control.summaryLine", { epoch: summary.epoch, seq: summary.changeSeq, dispatch: t(summary.dispatchBlocked ? "common.dispatchBlocked" : "common.dispatchLive") })}</p>
+      </details>
       {/*
         * Ruling R6. Read from the config's own field, never inferred from profiles[].probeFailureCode:
         * that answers a per-profile, per-probe question, and this one is per process for the life of

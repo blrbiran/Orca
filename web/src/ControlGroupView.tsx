@@ -623,7 +623,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   return (
     <section ref={sectionRef} aria-label={t("control.group.region", { groupId })}>
       <h2>
-        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state), revision, projection: view.summary.projectionSeq })}
+        {/* #81/#228: the revision and projection counters are in the Technical region, not the first screen. */}
+        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state) })}
       </h2>
       {(view.summary.criteriaReviews ?? []).length > 0 && (
         <div className="detail-block" data-testid="criteria-reviews">
@@ -700,9 +701,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           <a href="#metrics">{t("control.group.spendCapLink")}</a>
         </p>
       )}
-      <p>
-        {t("control.group.planLine", { goal: view.plan.goal, hash: short(view.plan.planHash), graphVersion: view.graphVersion })}
-      </p>
+      {/* #81/#228: the goal leads; the plan hash and graph version are in the Technical region. */}
+      <p>{view.plan.goal}</p>
       {view.summary.debug !== undefined && <DebugMark debug={view.summary.debug} />}
       {view.summary.requirement !== undefined && <a href="#requirements" onClick={() => props.onSourceRequirement?.(groupId)}>{t("control.group.sourceRequirement")}</a>}
       {!archived && view.summary.state !== "clarifying" && <GroupLibraryActions view={view} onCommand={onCommand} />}
@@ -714,7 +714,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           </button>
         </p>
       )}
-      <p>{t(reviewWording(view.summary) === "goal-review" ? "detail.goalReview" : reviewWording(view.summary) === "blocked" ? "detail.tasksBlocked" : "detail.nextAction")}</p>
+      {/* #81: only a line that says something about this group; the generic one every page carried is gone. */}
+      {reviewWording(view.summary) !== null && <p>{t(reviewWording(view.summary) === "goal-review" ? "detail.goalReview" : "detail.tasksBlocked")}</p>}
       {/* Issue #47: the execution controls are one bar above the region tabs, shown whatever tab is open. */}
       {dispatchControls}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion} regions={{
@@ -894,6 +895,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
 </>,
         technical: <>
+      {/* #81/#228: moved here from the header and the plan line. */}
+      <p className="num">{t("control.group.counters", { revision, projection: view.summary.projectionSeq })}</p>
+      <p className="num">{t("control.group.planLine", { hash: short(view.plan.planHash), graphVersion: view.graphVersion })}</p>
       <SkillsGiven view={view} />
       {/* #228: moved here from the execution bar -- command ids are a technical fact, not a control. */}
       <p>{t("control.group.recent", { commands: view.recentCommandIds.join(", ") || t("common.none") })}</p>

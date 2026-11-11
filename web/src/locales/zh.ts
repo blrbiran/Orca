@@ -94,7 +94,7 @@ export const zh: Translation<typeof en> = {
     "not-produced": "尚未产出"
   }
 },
-  detail: { regions: "任务组详情", progress: "进度", live: "实时", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", tasksBlocked: "这个组有任务被阻塞；打开「问题」查看原因。", nextAction: "查看进度、准备或问题；各区域保留当前读取状态允许的操作。" },
+  detail: { regions: "任务组详情", progress: "进度", live: "实时", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", tasksBlocked: "这个组有任务被阻塞；打开「问题」查看原因。" },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "键盘快捷键", title: "Orca 用到的按键", decisions: "j / k：下一条 / 上一条 · a：同意 · c：纠正 —— 在决策页、焦点在页面上时", retry: "r：重试打开的任务的运行 —— 在任务组里、提供“重试任务”时", arrows: "方向键：在区域标签和菜单项之间移动", close: "关闭" },
   nav: { overview: "概览", sections: "分区", more: "更多", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", settings: "设置", globalSettings: "全局设置", projectSettings: "项目设置", back: "← 返回{{label}}", routeMissing: "没有找到 {{id}}，显示{{section}}。", otherProject: "{{id}} 属于项目 {{project}}。", switchProject: "切换到 {{project}}" },
@@ -388,7 +388,8 @@ export const zh: Translation<typeof en> = {
       blockedBanner: "任务组已阻塞：运行 {{runId}} 超出了 {{dimension}} 额度（{{used}} / {{grant}}）。组里不会再开始新的步骤，准备阶段的修改也会被拒绝。",
       runOverGrant: "运行 {{runId}} 用了 {{used}} {{dimension}}，超过了它的额度 {{grant}}。本组不限 token，所以没有被阻塞；组里其它任务照常运行。",
       region: "控制组 {{groupId}}",
-      heading: "{{groupId}} · {{state}} · 版本 {{revision}} · 状态序号 {{projection}}",
+      heading: "{{groupId}} · {{state}}",
+      counters: "版本 {{revision}} · 状态序号 {{projection}}",
       criteriaReview: {
         heading: "判据审查",
         status: "{{taskId}}：{{state}}",
@@ -398,7 +399,7 @@ export const zh: Translation<typeof en> = {
       claimBlocked: "认领已阻断 · 不再启动新的运行",
       spendCapBlock: "正在等待花费上限：{{scope}} 的{{period}}上限是 {{cap}} token，下一次认领需要 {{grant}}。提高上限或进入新周期后会自动继续。",
       spendCapLink: "查看用量与上限",
-      planLine: "{{goal}} · 计划 {{hash}} · 图 v{{graphVersion}}",
+      planLine: "计划 {{hash}} · 图 v{{graphVersion}}",
       sourceRequirement: "查看来源需求",
       stop: "停止 {{mode}} {{state}} · 受理于 {{accepted}} · 截止 {{deadline}} · {{n}} 个冻结的运行：{{runs}}",
       stopping: "正在停止",
@@ -1041,6 +1042,7 @@ export const zh: Translation<typeof en> = {
       empty: "这里没有。其余需求在另外两个筛选项下。",
     },
     capabilityNote: "需求澄清需要有消耗上界的单次调用。请选择支持此能力的 agent，或在任务控制中导入计划。",
+    capabilityHint: "哪些 agent 能做需求澄清？",
     agentDefault: "你的默认",
     defaultResolved: "你的默认：{{agent}} · {{model}}",
     noDefaultAgent: "还没有设置默认 agent；请在这里选一个，或到 设置 > Agent 里设置。",

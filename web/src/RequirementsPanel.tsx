@@ -217,7 +217,8 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       <AgentModelFields agents={props.agents} agent={agent} model={draft.model ?? ""} name="new-requirement-model" defaultOption
         onAgent={(value) => edit({ agent: value, model: "" })} onModel={(value) => edit({ model: value })} preferences={props.preferences ?? null}
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
-      <p role="note">{t("requirements.capabilityNote")}</p>
+      {/* #81: the capability note folds away; the agent line above already says what the call will use. */}
+      <details><summary>{t("requirements.capabilityHint")}</summary><p role="note">{t("requirements.capabilityNote")}</p></details>
       <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
     </form>
   );
