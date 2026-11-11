@@ -132,7 +132,7 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number })
       return <section key={run.runId} aria-label={name}>
         <h4>{name}</h4>
         <p className="num" title={formatTokens(run.used.tokens, currentLanguage())}>{enumText("runState", run.state)} · {facts(run)}</p>
-        <RunTranscript runId={run.runId} active={props.active} autoOpen />
+        <RunTranscript runId={run.runId} active={props.active} follow />
       </section>;
     })}
   </>;

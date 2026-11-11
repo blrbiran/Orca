@@ -9,7 +9,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as api from "../src/controlApi.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import type { GroupViewV1, RunTranscriptsV1, TranscriptWindowV1 } from "../src/controlTypes.js";
+import { LISTING_POLL_MS } from "../src/AgentTranscript.js";
+import type { GroupViewV1, RunTranscriptsV1, TranscriptCallV1, TranscriptWindowV1 } from "../src/controlTypes.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
 
 vi.mock("../src/controlApi.js", async (importOriginal) => {
@@ -19,9 +20,13 @@ vi.mock("../src/controlApi.js", async (importOriginal) => {
 
 const NOW = Date.UTC(2026, 10, 10, 12, 0, 0);
 let transcriptUrls: string[];
+/** The call listing each run answers with; null: one recorded execute call (what the first four criteria read). */
+let listing: Record<string, TranscriptCallV1[]> | null;
+const recorded = (phase: string, seq: number): TranscriptCallV1 => ({ attempt: 1, phase, seq, runtime: "codex", recorded: true, bytes: 100, final: false, truncatedAt: null });
 beforeEach(() => {
   vi.useFakeTimers();
   transcriptUrls = [];
+  listing = null;
   vi.mocked(api.fetchRunTranscripts).mockClear();
   let end = 10;
   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
@@ -31,7 +36,7 @@ beforeEach(() => {
       transcriptUrls.push(url);
       const runId = decodeURIComponent(url.split("/runs/")[1]?.split("/")[0] ?? "");
       if (url.endsWith("/transcripts")) {
-        body = { schema: "orca-run-transcripts-v1", runId, available: true, calls: [{ attempt: 1, phase: "execute", seq: 1, runtime: "codex", recorded: true, bytes: 100, final: false, truncatedAt: null }] } satisfies RunTranscriptsV1;
+        body = { schema: "orca-run-transcripts-v1", runId, available: true, calls: listing?.[runId] ?? [recorded("execute", 1)] } satisfies RunTranscriptsV1;
       } else {
         const start = url.includes("tail=1") ? 0 : end; end = start + 10;
         body = { schema: "orca-transcript-window-v1", runId, attempt: 1, phase: "execute", seq: 1, runtime: "codex", source: "run", final: false, truncatedAt: null,
@@ -105,4 +110,58 @@ it("shows the most recent run when nothing runs", async () => {
   expect(within(livePanel()).getByText("Nothing is running. The most recent run:")).toBeTruthy();
   expect(within(livePanel()).getByRole("region", { name: "Transcript of run-2" })).toBeTruthy();
   expect(within(livePanel()).queryByRole("region", { name: "Transcript of run-1" })).toBeNull();
+});
+
+// Human, 2026-11-11 (real-browser check of T7): the Live region shows the transcript by default -- no press of "Transcript".
+// autoOpen read the listing once, so a run whose first call was not yet recorded stayed closed, and execute never replaced
+// plan. The Live region now follows: it re-reads the listing every LISTING_POLL_MS while shown.
+const callButton = (scope: HTMLElement, phase: string, seq: number): HTMLElement =>
+  within(scope).getByRole("button", { name: new RegExp(`^${phase} · call ${seq} `) });
+
+it("opens a call recorded after Live was shown, without a press", async () => {
+  // mutation: drop the listing re-read (setInterval) -> the first, empty listing is the last one read -> red
+  listing = { "run-a": [] };
+  mount(running());
+  fireEvent.click(liveTab());
+  await flush();
+  expect(within(livePanel()).queryAllByTestId("transcript-call"), "nothing recorded yet").toHaveLength(0);
+  listing = { "run-a": [recorded("plan", 1)] };
+  await flush(LISTING_POLL_MS);
+  expect(within(livePanel()).getAllByTestId("transcript-call")).toHaveLength(1);
+  expect(callButton(livePanel(), "plan", 1).getAttribute("aria-expanded")).toBe("true");
+});
+
+it("moves to a newer call by itself, until the person picks one", async () => {
+  // mutation: open the latest only while nothing is open -> execute never replaces plan -> red at the second check
+  // mutation: ignore the person's pick -> verify replaces the plan call they chose -> red at the last check
+  listing = { "run-a": [recorded("plan", 1)] };
+  mount(running());
+  fireEvent.click(liveTab());
+  await flush();
+  expect(callButton(livePanel(), "plan", 1).getAttribute("aria-expanded")).toBe("true");
+  listing = { "run-a": [recorded("plan", 1), recorded("execute", 2)] };
+  await flush(LISTING_POLL_MS);
+  expect(callButton(livePanel(), "execute", 2).getAttribute("aria-expanded"), "the newer call is followed").toBe("true");
+  expect(callButton(livePanel(), "plan", 1).getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(callButton(livePanel(), "plan", 1));
+  await flush();
+  listing = { "run-a": [recorded("plan", 1), recorded("execute", 2), recorded("verify", 3)] };
+  await flush(LISTING_POLL_MS * 2);
+  expect(callButton(livePanel(), "plan", 1).getAttribute("aria-expanded"), "the person's pick stays").toBe("true");
+  expect(within(livePanel()).getAllByTestId("transcript-call")).toHaveLength(1);
+});
+
+it("keeps one followed transcript when two tasks run, instead of the two taking it from each other on every read", async () => {
+  // mutation: drop heldByOtherFollower -> each listing read reopens the other run's call, re-reading its tail -> red
+  const value = view(
+    [workItem({ taskId: "a", status: "active", category: "running", currentRunId: "run-a", lineageRunIds: ["run-a"] }),
+      workItem({ taskId: "c", status: "active", category: "running", currentRunId: "run-c", lineageRunIds: ["run-c"] })],
+    [run({ runId: "run-a", taskId: "a", state: "running", startedAt: NOW - 60_000 }), run({ runId: "run-c", taskId: "c", state: "running", startedAt: NOW - 60_000 })],
+  );
+  mount(value);
+  fireEvent.click(liveTab());
+  await flush();
+  await flush(LISTING_POLL_MS * 3);
+  expect(within(livePanel()).getAllByTestId("transcript-call"), "one open transcript per tab (spec §10.4.4)").toHaveLength(1);
+  expect(transcriptUrls.filter((url) => url.includes("tail=1")), "the open call is read from its tail once").toHaveLength(1);
 });

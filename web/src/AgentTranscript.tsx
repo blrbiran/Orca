@@ -30,13 +30,18 @@ export const POLL_MS = 1000;
 type CallKey = { attempt: number; phase: string; seq: number };
 const sameCall = (a: CallKey | null, b: CallKey): boolean => a !== null && a.attempt === b.attempt && a.phase === b.phase && a.seq === b.seq;
 
+/** How often a following transcript (the Live region) re-reads its run's call listing, to find a newer call. */
+export const LISTING_POLL_MS = 3000;
+
 // The one open transcript of this tab (spec §10.4.4): opening a call anywhere closes the one open elsewhere.
-let slot: { owner: symbol; close: () => void } | null = null;
-function claimSlot(owner: symbol, close: () => void): void {
+// `follower` marks a transcript the Live region keeps open by itself; one follower never takes the slot from another.
+let slot: { owner: symbol; close: () => void; follower: boolean } | null = null;
+function claimSlot(owner: symbol, close: () => void, follower = false): void {
   if (slot !== null && slot.owner !== owner) slot.close();
-  slot = { owner, close };
+  slot = { owner, close, follower };
 }
 function releaseSlot(owner: symbol): void { if (slot?.owner === owner) slot = null; }
+const heldByOtherFollower = (owner: symbol): boolean => slot !== null && slot.owner !== owner && slot.follower;
 
 function useDocumentVisible(): boolean {
   const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
@@ -286,19 +291,48 @@ function sizeText(bytes: number): string {
  * The disclosure for one Orca run: collapsed, nothing is asked; opened, the listing as metadata rows.
  * Tester #113: with `autoOpen` (a task's current run) it asks while active, and when the listing has a recorded call it opens
  * on the latest one. That happens once: after an answer, or after any press of the disclosure, only the person opens it.
+ *
+ * With `follow` (the Live region; human, 2026-11-11: the Live region shows the transcript without a press) it starts
+ * expanded and, while active, re-reads the listing every LISTING_POLL_MS: a run with no recorded call yet opens as soon
+ * as one is recorded, and a newer call (execute after plan, the next attempt) replaces the open one -- until the person
+ * picks a call themselves. It takes the tab's one open transcript from a hidden region, never from another follower.
  */
-export function RunTranscript(props: { runId: string; active: boolean; autoOpen?: boolean }): JSX.Element {
+export function RunTranscript(props: { runId: string; active: boolean; autoOpen?: boolean; follow?: boolean }): JSX.Element {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const following = props.follow === true;
+  const [expanded, setExpanded] = useState(following);
   const [autoDone, setAutoDone] = useState(false);
   const [listing, setListing] = useState<RunTranscriptsV1 | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [openCall, setOpenCall] = useState<CallKey | null>(null);
   const owner = useRef(Symbol("transcript"));
+  const openRef = useRef(openCall);
+  openRef.current = openCall;
+  const picked = useRef(false); // the person chose a call (or closed it): following stops replacing it
   useEffect(() => () => releaseSlot(owner.current), []);
-  const autoPending = props.autoOpen === true && !autoDone;
   useEffect(() => {
-    if ((!expanded && !autoPending) || !props.active) return;
+    if (!following || !expanded || !props.active) return;
+    let live = true;
+    const read = (): void => {
+      fetchRunTranscripts(props.runId).then(
+        (answer) => {
+          if (!live) return;
+          setListing(answer); setRefusal(null);
+          const latest = answer.available ? answer.calls.filter((call) => call.recorded).at(-1) : undefined;
+          if (latest === undefined || picked.current || sameCall(openRef.current, latest) || heldByOtherFollower(owner.current)) return;
+          claimSlot(owner.current, () => setOpenCall(null), true);
+          setOpenCall({ attempt: latest.attempt, phase: latest.phase, seq: latest.seq });
+        },
+        (error: unknown) => { if (live) setRefusal(controlFailureFrom(error).code); },
+      );
+    };
+    read();
+    const timer = setInterval(read, LISTING_POLL_MS);
+    return () => { live = false; clearInterval(timer); };
+  }, [following, expanded, props.active, props.runId]);
+  const autoPending = props.autoOpen === true && !following && !autoDone;
+  useEffect(() => {
+    if (following || (!expanded && !autoPending) || !props.active) return;
     let live = true;
     fetchRunTranscripts(props.runId).then(
       (answer) => {
@@ -314,14 +348,15 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded || autoPending, props.active, props.runId]);
   const toggleCall = (call: TranscriptCallV1): void => {
+    picked.current = true;
     if (sameCall(openCall, call)) { setOpenCall(null); releaseSlot(owner.current); return; }
-    claimSlot(owner.current, () => setOpenCall(null));
+    claimSlot(owner.current, () => setOpenCall(null), following);
     setOpenCall({ attempt: call.attempt, phase: call.phase, seq: call.seq });
   };
   const attempts = [...new Set((listing?.calls ?? []).map((call) => call.attempt))];
   return (
     <section className="run-transcript" aria-label={t("transcript.region", { runId: props.runId })}>
-      <button type="button" aria-expanded={expanded} onClick={() => { setAutoDone(true); setExpanded(!expanded); if (expanded) { setOpenCall(null); releaseSlot(owner.current); } }}>
+      <button type="button" aria-expanded={expanded} onClick={() => { setAutoDone(true); picked.current = false; setExpanded(!expanded); if (expanded) { setOpenCall(null); releaseSlot(owner.current); } }}>
         {t("transcript.disclosure")}
       </button>
       {expanded && (
