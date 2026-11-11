@@ -58,3 +58,18 @@ register (or re-trust) a git-tracked plan file of the project so it can be impor
 ```
 orca project register-plan docs/plans/next.json
 ```
+
+## `orca project add <name> [--path <path>] [--dirs <dirs>]`
+
+register a project: a git repository's root (--path) or a multi project of registered ones (--dirs); an owner's act
+
+- What it does: runs locally.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- `<name>`: the project's display name
+- `--path <path>`: the repository's top-level directory (relative to cwd or absolute)
+- `--dirs <dirs>`: a multi project's member project ids, comma-separated, in order
+
+```
+orca project add Web --path ~/code/web --as-person
+orca project add Shop --dirs web,api --as-person
+```

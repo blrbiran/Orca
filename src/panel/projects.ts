@@ -10,6 +10,8 @@ import type { Express } from "express";
 import { compareText } from "../control/webProtocol.js";
 import { discoverRepos } from "../metrics/discover.js";
 import { controlRepoKey } from "./controlOptions.js";
+import { sendControlError } from "./controlErrors.js";
+import { projectAddRefusal, type Principal } from "./permissions.js";
 import { PANEL_BAD_REQUEST } from "./rejection.js";
 import { ProjectRegistryError, type ProjectRegistry } from "./projectRegistry.js";
 import { projectKindOf, type MultiDirProjectEntryV1, type ProjectEntryV1 } from "./projectsFile.js";
@@ -102,9 +104,43 @@ export function registerPlan(deps: ProjectsDeps, projectId: string, body: unknow
   }
 }
 
+/**
+ * Project registry spec §6, multi-directory projects spec §4.2: add a project, `{name, path}` or `{name, dirs}`; file mode
+ * only. Tester follow-up E §9 (D21): one handler for the HTTP route and the control socket's (`orca project add`), as
+ * registerPlan is -- the same validation, the same answer. Who may call it is the route's question (projectAddRefusal).
+ */
+export function addProject(deps: ProjectsDeps, raw: unknown): { status: number; body: unknown } {
+  if (!deps.registry) return { status: 409, body: FROM_COMMAND_LINE };
+  const bad = (message: string) => ({ status: 400, body: { code: PANEL_BAD_REQUEST, message } });
+  const body = raw as { name?: unknown; path?: unknown; dirs?: unknown } | undefined;
+  if (body === undefined || body === null || typeof body.name !== "string") return bad("POST /api/projects wants { name: string, path: string } or { name: string, dirs: string[] }");
+  const hasPath = body.path !== undefined;
+  const hasDirs = body.dirs !== undefined;
+  if (hasPath === hasDirs) return bad("POST /api/projects takes either path or dirs, not both and not neither");
+  try {
+    if (hasPath) {
+      if (typeof body.path !== "string") return bad("POST /api/projects wants path as a string");
+      return { status: 201, body: { project: rowFor(deps, deps.registry.add(body.name, body.path).id) } };
+    }
+    if (!Array.isArray(body.dirs) || body.dirs.some((dir) => typeof dir !== "string")) return bad("POST /api/projects wants dirs as an array of project ids");
+    return { status: 201, body: { project: rowFor(deps, deps.registry.addMulti(body.name, body.dirs as string[]).id) } };
+  } catch (error) {
+    if (!(error instanceof ProjectRegistryError)) throw error;
+    return { status: error.status, body: { code: error.code, message: error.message } };
+  }
+}
+
 /** CLI v2 spec §14 R4: the plan registration (and the project list it needs to resolve cwd) on the control socket. */
 export function registerSocketProjectRoutes(app: Express, deps: ProjectsDeps): void {
   app.get("/api/control/projects", (_req, res, next) => { void listProjects(deps).then((body) => res.json(body), next); });
+  // Tester follow-up E §9 (D21): `orca project add`. A new project is a new directory Orca and its agents write in, so
+  // only a person adds one: an owner's person token, never a run Orca dispatched (projectAddRefusal).
+  app.post("/api/control/projects", (req, res) => {
+    const refusal = projectAddRefusal(res.locals.orcaPrincipal as Principal);
+    if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
+    const answer = addProject(deps, req.body);
+    res.status(answer.status).json(answer.body);
+  });
   app.post("/api/control/projects/:id/plans", (req, res) => {
     const answer = registerPlan(deps, String(req.params.id), req.body);
     res.status(answer.status).json(answer.body);
@@ -120,35 +156,13 @@ export function registerProjectRoutes(app: Express, deps: ProjectsDeps): void {
   app.get("/api/projects", (_req, res, next) => { void listProjects(deps).then((body) => res.json(body), next); });
 
   app.post("/api/projects", (req, res) => {
-    if (!deps.registry) { res.status(409).json(FROM_COMMAND_LINE); return; }
-    const body = req.body as { name?: unknown; path?: unknown; dirs?: unknown } | undefined;
-    if (body === undefined || typeof body.name !== "string") {
-      res.status(400).json({ code: PANEL_BAD_REQUEST, message: "POST /api/projects wants { name: string, path: string } or { name: string, dirs: string[] }" });
-      return;
-    }
-    const hasPath = body.path !== undefined;
-    const hasDirs = body.dirs !== undefined;
-    if (hasPath === hasDirs) {
-      res.status(400).json({ code: PANEL_BAD_REQUEST, message: "POST /api/projects takes either path or dirs, not both and not neither" });
-      return;
-    }
-    try {
-      if (hasPath) {
-        if (typeof body.path !== "string") {
-          res.status(400).json({ code: PANEL_BAD_REQUEST, message: "POST /api/projects wants path as a string" });
-          return;
-        }
-        const entry = deps.registry.add(body.name, body.path);
-        res.status(201).json({ project: rowFor(deps, entry.id) });
-        return;
-      }
-      if (!Array.isArray(body.dirs) || body.dirs.some((dir) => typeof dir !== "string")) {
-        res.status(400).json({ code: PANEL_BAD_REQUEST, message: "POST /api/projects wants dirs as an array of project ids" });
-        return;
-      }
-      const entry = deps.registry.addMulti(body.name, body.dirs as string[]);
-      res.status(201).json({ project: rowFor(deps, entry.id) });
-    } catch (error) { refused(res, error); }
+    // Tester follow-up E §9 (D21): owner only. buildApi mounts this behind authMiddleware, which sets a principal on every
+    // request it lets through; a criterion that mounts the routes bare has none, and is answered as before.
+    const principal = res.locals.orcaPrincipal as Principal | undefined;
+    const refusal = principal === undefined ? null : projectAddRefusal(principal);
+    if (refusal !== null) { res.status(403).json({ code: refusal.code, message: refusal.message }); return; }
+    const answer = addProject(deps, req.body);
+    res.status(answer.status).json(answer.body);
   });
 
   // In-repo plan path spec 2026-10-21 (#65): register, or re-trust, a plan file of a project; file mode only.

@@ -94,6 +94,18 @@ export const SETTINGS_ROWS: CommandDef[] = [
     mapsTo: { kind: "local", load: async () => (await import("../local/registerPlan.js")).runRegisterPlan },
     examples: ["orca project register-plan docs/plans/next.json"], format: () => "",
   },
+  // Tester follow-up E §9 (D21): the Web's add-project form; a person's act (an owner's token), never an agent's.
+  {
+    domain: "project", action: "add", summary: "register a project: a git repository's root (--path) or a multi project of registered ones (--dirs); an owner's act",
+    positionals: [{ name: "name", summary: "the project's display name", required: true }],
+    flags: [
+      { name: "path", type: "string", summary: "the repository's top-level directory (relative to cwd or absolute)" },
+      { name: "dirs", type: "string", summary: "a multi project's member project ids, comma-separated, in order" },
+    ],
+    access: "token",
+    mapsTo: { kind: "local", load: async () => (await import("../local/addProject.js")).runAddProject },
+    examples: ["orca project add Web --path ~/code/web --as-person", "orca project add Shop --dirs web,api --as-person"], format: () => "",
+  },
 
   // --- decision (group scope)
   verb({ domain: "decision", action: "approve", summary: "approve a decision a landing refused, with an executable undo.how", verb: "approve-pending-decision", positionals: [GROUP, ID],

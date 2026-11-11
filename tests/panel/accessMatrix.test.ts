@@ -14,7 +14,7 @@ import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
 import { describe, expect, it } from "vitest";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { DISPATCHED_RUN_REFUSED, HUMAN_ONLY_FIELDS, HUMAN_ONLY_VERBS, SOCKET_TIER, VERB_ACCESS, humanOnlyRefusal } from "../../src/panel/humanOnly.js";
-import { permissionRefusal, type Principal } from "../../src/panel/permissions.js";
+import { permissionRefusal, projectAddRefusal, type Principal } from "../../src/panel/permissions.js";
 import type { StartedPanel } from "../../src/panel/server.js";
 import { sessionFor } from "./fixtures/auth.js";
 import { boot, overSocket, useSocketPanels, workspace } from "./fixtures/socketPanel.js";
@@ -217,6 +217,21 @@ describe("the socket access tiers (CLI v2 spec §15.1)", () => {
     expect([...DISPATCHED_RUN_REFUSED].sort()).toEqual(["flow-start"]);
     expect(Object.fromEntries(Object.entries(PRINCIPALS).map(([name, p]) => [name, permissionRefusal(p, "flow-start", { template: "t", dir: "/x", params: {} })?.code ?? "accepted"]))).toEqual({
       socket: "accepted", socketToken: "accepted", socketMarker: "control-dispatched-run-refused", socketTokenMarker: "control-dispatched-run-refused", webMember: "accepted", webOwner: "accepted",
+    });
+  });
+});
+
+/**
+ * Tester follow-up E §9 (D21): registering a project (the Web's POST /api/projects, the socket's `orca project add`) is not a
+ * control verb, so it has no VERB_ACCESS row; its one gate, every principal answered (tests/panel/projectAdd.test.ts drives
+ * the routes). A member's token answers the member's Web refusal, as I3 has it for every human-only entry.
+ */
+describe("who may register a project (tester follow-up E §9, D21)", () => {
+  it("answers every principal, a member's person token included", () => {
+    const principals: Record<string, Principal> = { ...PRINCIPALS, socketMemberToken: { kind: "agent", client: "cli:claude", person: { userId: "u3", name: "amy", roles: ["member"] } } };
+    expect(Object.fromEntries(Object.entries(principals).map(([name, p]) => [name, projectAddRefusal(p)?.code ?? "accepted"]))).toEqual({
+      socket: "control-person-token-required", socketToken: "accepted", socketMarker: "control-dispatched-run-refused",
+      socketTokenMarker: "control-dispatched-run-refused", webMember: "owner-required", webOwner: "accepted", socketMemberToken: "owner-required",
     });
   });
 });

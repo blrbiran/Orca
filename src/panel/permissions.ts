@@ -60,6 +60,24 @@ export const hasPauseAuthority = (p: Principal): boolean =>
   p.kind === "user" ? true : p.dispatchedRun === undefined && p.person !== undefined;
 
 /**
+ * Tester follow-up E §9 (D21): who may register a project -- `POST /api/projects` on the Web, `orca project add` on the
+ * socket. Registering one lets Orca and its agents write in a new directory, so agents must not widen that set themselves:
+ * an owner on the Web (a member: `owner-required`); on the socket an owner's person token (a member's token answers the
+ * member's Web refusal, as I3 does), never a run Orca dispatched, token or not. Not a control verb: the registry is the
+ * panel's projects file, outside the command ledger, as the plan registration beside it is.
+ */
+export function projectAddRefusal(p: Principal):
+  { code: "owner-required" | "control-dispatched-run-refused" | "control-person-token-required"; message: string } | null {
+  const ownerRequired = { code: "owner-required" as const, message: "only an owner registers a project" };
+  if (p.kind === "user") return mayDoHumanOnly(p) ? null : ownerRequired;
+  if (p.dispatchedRun !== undefined)
+    return { code: "control-dispatched-run-refused", message: `orca project add is not done by a run Orca dispatched (${p.dispatchedRun}); a person registers a project, from the Web UI or an attended session.` };
+  if (p.person === undefined)
+    return { code: "control-person-token-required", message: "orca project add wants a person: log in with `orca auth login` and resend it with --as-person, or add the project in the Web UI." };
+  return mayDoHumanOnly({ kind: "user", ...p.person }) ? null : ownerRequired;
+}
+
+/**
  * The refusal a control command gets from this principal, or null. A member: today's human-only codes (I3). The socket
  * agent (CLI v2 spec §15.1): an `open` entry passes; a `token` entry wants a verified person token,
  * `control-person-token-required` without one; a run Orca dispatched is refused every entry (§15.4), token or not.

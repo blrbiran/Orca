@@ -53,7 +53,7 @@ any command; `orca version` should equal this skill's version.
    command with `--as-person`). A new `plan save`, `plan archive` and disabling, removing or resuming a schedule need no
    person token. An agent may set the global `agentTopUpCap` orchestration limit; it is summed per group, not set per
    task. A run Orca dispatched is refused all plan-library and schedule writes, and even some open verbs
-   (`control-dispatched-run-refused`, e.g. `flow start`).
+   (`control-dispatched-run-refused`, e.g. `flow start`). Never register a project yourself (`project add`, owner only).
 7. **Parse `--json`.** One line: `{schema:"orca-cli-response-v1", status, commandId?, body, request?}`. Exit 0 = 2xx,
    1 = refused here before sending, 2 = the panel refused (`body.error.code` names why), 3 = crash.
    The text output is for people: it shortens long values with an ellipsis, so never parse it.
