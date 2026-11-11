@@ -175,6 +175,8 @@ describe("refusals made here", () => {
     const out = await cli(["group", "confirm", "g-alpha", "--json"], w.dir);
     expect([out.code, out.json().body.error.code]).toEqual([2, "no-op-command"]);
     expect(w.posts().map((p) => p.path)).toEqual(["groups/g-alpha/confirm"]);
+    // The panel's confirm payload schema takes a hash, never null; this fake panel does not check that, so it is asserted here.
+    expect((w.posts()[0]!.payload as { selectionsHash: unknown }).selectionsHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("a task with no current run cannot be retried by the CLI's read", async () => {
