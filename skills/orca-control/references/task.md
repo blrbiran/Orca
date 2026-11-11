@@ -72,7 +72,7 @@ verify the current run's saved result instead of re-running (after run eligibili
 land a failed, settled run's last attempt after Orca re-runs the task's checks on it (an owner's act)
 
 - What it does: sends control verb `accept-attempt`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 - `--run <run>` (required): the terminal run whose last attempt to accept (orca run show <run> names it)
