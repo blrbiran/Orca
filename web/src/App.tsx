@@ -911,6 +911,15 @@ export function App(): JSX.Element {
     }
   };
   useEffect(() => { void readControlConfig(); }, []);
+  /**
+   * Tester #77 (Board), extended to Tasks and Requirements: not there yet is not "not available". That is said only after a
+   * read failed -- the config read, or the poll that follows it -- with a way to ask again; reading the config again restarts
+   * that poll. Until then the pane reads neutrally.
+   */
+  const controlLoadState = (loading: "control.loading" | "control.loadingBoard"): JSX.Element =>
+    controlConfigFailed || (controlConfig !== null && control.panelRefusal !== null)
+      ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void readControlConfig(); }}>{t("control.retryRead")}</button></div>
+      : <p className="empty" role="status">{t(loading)}</p>;
 
   useEffect(() => {
     if (controlConfig === null) return;
@@ -1819,9 +1828,7 @@ export function App(): JSX.Element {
       )}
       </SectionPane>
       <SectionPane section="tasks" active={section}>
-      {(controlConfig === null || control.recovery === null) && (
-        <p className="empty">{t("control.unavailable")}</p>
-      )}
+      {(controlConfig === null || control.recovery === null) && controlLoadState("control.loading")}
       {controlConfig !== null && control.recovery !== null && (
         <ControlPanel
           active={section === "tasks"}
@@ -1892,13 +1899,7 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="board" active={section}>
         {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
-        {section !== "board" ? null : controlConfig === null || control.recovery === null ? (
-          // Tester #77: not there yet is not "not available": that is said only after a read failed, with a way to ask again.
-          // The config read failed, or the poll that follows it did. Reading the config again restarts that poll.
-          controlConfigFailed || (controlConfig !== null && control.panelRefusal !== null)
-            ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void readControlConfig(); }}>{t("control.retryRead")}</button></div>
-            : <p className="empty" role="status">{t("control.loadingBoard")}</p>
-        ) : (
+        {section !== "board" ? null : controlConfig === null || control.recovery === null ? controlLoadState("control.loadingBoard") : (
           <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel} prefs={boardPrefs} onPrefs={setBoardPrefs}
             openFlowRunId={route.kind === "flow-run" ? route.flowRunId : null}
             onOpenFlowRun={(flowRunId) => navigate(flowRunId === null ? { kind: "section", section: "board" } : { kind: "flow-run", section: "board", flowRunId })}
@@ -1911,6 +1912,7 @@ export function App(): JSX.Element {
         )}
       </SectionPane>
       <SectionPane section="requirements" active={section}>
+        {(controlConfig === null || control.recovery === null) && controlLoadState("control.loading")}
         {controlConfig !== null && control.recovery !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
             models={modelsFor} onModels={(id) => { void loadModels(id, false); }}

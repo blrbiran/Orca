@@ -318,6 +318,7 @@ export const zh: Translation<typeof en> = {
     unavailable: "这个面板上没有任务控制面。",
     retryRead: "重试",
     loadingBoard: "正在读取看板…",
+    loading: "正在读取任务控制…",
     title: "任务控制",
     summaryLine: "服务会话 {{epoch}} · 状态序号 {{seq}} · {{dispatch}}",
     noPort: "未配置执行端口 · 这个面板提供恢复和证据，但拒绝开始工作 · 设置 ORCA_CCLOOP_BIN 和 ORCA_AGENTS_TABLE 后重启它",

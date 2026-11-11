@@ -456,6 +456,7 @@ export const en = {
     unavailable: "The task control plane is not available on this panel.",
     retryRead: "Try again",
     loadingBoard: "Reading the board…",
+    loading: "Reading task control…",
     title: "Task control",
     summaryLine: "epoch {{epoch}} · projection {{seq}} · {{dispatch}}",
     noPort: "no execution port configured · this panel serves recovery and evidence, and refuses to start work · set ORCA_CCLOOP_BIN and ORCA_AGENTS_TABLE and restart it",

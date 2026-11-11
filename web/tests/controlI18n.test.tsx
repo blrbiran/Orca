@@ -275,7 +275,9 @@ describe("the rest of the control area's branches in Chinese", () => {
     try {
       window.location.hash = "#tasks";
       render(<App />);
-      expect((await screen.findByText("这个面板上没有任务控制面。")).className).toBe("empty");
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes that the failed
+      // read's line sits in the Board's empty box (`<div class="empty"><p>…</p><button>`), which also holds Try again.
+      expect((await screen.findByText("这个面板上没有任务控制面。")).parentElement?.className).toBe("empty");
     } finally {
       globalThis.fetch = realFetch;
     }
