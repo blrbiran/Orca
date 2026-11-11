@@ -748,7 +748,9 @@ describe("stop and continuation mutation routes", () => {
       expect(paused.status).toBe(200);
       expect(paused.body).toMatchObject({ verb: "pause-dispatch", result: { kind: "paused", stopMode: "pause" }, actorId: expect.stringMatching(/^operator-/) });
       expect((await s.post("/groups/g/pause-dispatch", pause)).body).toEqual(paused.body);
-      expect(await s.lookup("g", "http-pause")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 200, body: paused.body });
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup also
+      // answering the booked request's argumentsHash (issue #149; its value is pinned in commandLedger.test.ts).
+      expect(await s.lookup("g", "http-pause")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 200, body: paused.body, argumentsHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
 
       const resumed = await s.post("/groups/g/resume-dispatch", { commandId: "http-resume", expectedRevision: s.revision(), payload: {} });
       expect(resumed.status).toBe(202);

@@ -62,7 +62,9 @@ describe("the removed integration-check setter", () => {
         canonicalBytes(raw).toString("utf8"), sha256Canonical(raw), canonicalBytes(raw.payload).toString("utf8"), sha256Canonical(raw.payload),
         canonicalBytes(effective).toString("utf8"), sha256Canonical(effective), 200, json, Buffer.from(json, "utf8"), 1, null, null, null,
       );
-      expect(lookupCommandResult(store, "@repository:repo", "old-ic-1")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 200, body });
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup also
+      // answering the booked request's argumentsHash (issue #149; its value is pinned in commandLedger.test.ts).
+      expect(lookupCommandResult(store, "@repository:repo", "old-ic-1")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 200, body, argumentsHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     } finally { store.close(); await rm(root, { recursive: true, force: true }); }
   });
 });

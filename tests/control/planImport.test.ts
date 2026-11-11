@@ -294,7 +294,9 @@ describe("immutable plan import", () => {
       const first = await importControlPlanAsync(deps, command());
       expect(first).toMatchObject({ error: { code: "revision-conflict", commandRevision: 1, retryable: false } });
       for (const callback of [defaults, resolve, probe, resolveTarget]) expect(callback).not.toHaveBeenCalled();
-      expect(lookupCommandResult(h.store, "g", "import-1")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 409, body: first });
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup also
+      // answering the booked request's argumentsHash (issue #149; its value is pinned in commandLedger.test.ts).
+      expect(lookupCommandResult(h.store, "g", "import-1")).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 409, body: first, argumentsHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
       expect(h.store.db.prepare(`SELECT effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash
         FROM commands WHERE group_id='g' AND id='import-1'`).get()).toEqual({
         effective_payload_json: null, effective_payload_hash: null, authority_command_json: null, authority_command_hash: null,

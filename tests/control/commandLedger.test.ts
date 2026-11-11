@@ -524,8 +524,8 @@ describe("the command lookup's argumentsHash (issue #149)", () => {
       createGroup(h.store, { ...group, groupId: "g2" }, { commandId: "create-2", expectedRevision: 0, by: "human" });
       applyWebCommand(h.store, input(raw("at-1", 1), () => deadlineA, accepted));
       applyWebCommand(h.store, input(raw("at-2", 2), () => deadlineA, accepted));
-      applyWebCommand(h.store, input({ ...raw("other-payload", 3), payload: { handoffDeadlineAt: deadlineB } }, () => deadlineB, accepted));
-      applyWebCommand(h.store, input({ ...raw("other-target", 1), target: { kind: "group", groupId: "g2" } }, () => deadlineA, accepted));
+      applyWebCommand(h.store, input({ ...raw("other-payload", 3), payload: { handoffDeadlineAt: deadlineB } } as RawAuthorityCommandV1, () => deadlineB, accepted));
+      applyWebCommand(h.store, input({ ...raw("other-target", 1), target: { kind: "group", groupId: "g2" } } as RawAuthorityCommandV1, () => deadlineA, accepted));
       const hashOf = (scope: string, id: string) => lookupCommandResult(h.store, scope, id)?.argumentsHash;
       const rows = h.store.db.prepare("SELECT id,expected_revision FROM commands WHERE id IN ('at-1','at-2') ORDER BY id").all();
       // The two booked requests really differ in their revision (else "ignores the revision" would be vacuous).
@@ -552,7 +552,7 @@ describe("the command lookup's argumentsHash (issue #149)", () => {
       createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
       // Booked stale (revision-conflict), whose body does not echo the payload, so the marker can only come from the request.
       const marker = "2031-01-02T03:04:05.000Z";
-      const stale = applyWebCommand(h.store, input({ ...raw("stale-marker", 0), payload: { handoffDeadlineAt: marker } }, () => marker, accepted));
+      const stale = applyWebCommand(h.store, input({ ...raw("stale-marker", 0), payload: { handoffDeadlineAt: marker } } as RawAuthorityCommandV1, () => marker, accepted));
       expect(stale.status).toBe(409);
       const lookup = lookupCommandResult(h.store, "g1", "stale-marker");
       expect(Object.keys(lookup ?? {}).sort()).toEqual(["argumentsHash", "body", "originalStatus", "schema"]);

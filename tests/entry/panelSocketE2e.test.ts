@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { lstat, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { commandArgumentsHash } from "../../src/control/commandArguments.js";
 import { controlSummarySchema } from "../../src/control/webProtocol.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { boot, useSocketPanels, workspace } from "../panel/fixtures/socketPanel.js";
@@ -46,7 +47,10 @@ describe("orca control against a real panel (C6, C7, C14)", () => {
     expect(first).toMatchObject({ status: 200, commandId: "e2e-1" });
     const lookup = await cli(["control", "get", `groups/@repository:${repo}/commands/e2e-1`, "--control-state-dir", w.state], env);
     // The lookup wraps the retained outcome (commandLedger lookupCommandResult).
-    expect(JSON.parse(lookup.stdout).body).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 200, body: first.body });
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup also
+    // answering the booked request's argumentsHash (issue #149), computed as the shared definition computes it.
+    const argumentsHash = commandArgumentsHash({ verb: "set-workspace-mode", target: { kind: "repository", repoId: repo }, payload: { workspaceMode: "clone" } });
+    expect(JSON.parse(lookup.stdout).body).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 200, body: first.body, argumentsHash });
     const again = await cli(sendArgs, env);
     expect(JSON.parse(again.stdout).body).toEqual(first.body);
   }, 60_000);

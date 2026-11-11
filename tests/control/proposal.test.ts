@@ -84,7 +84,9 @@ describe("proposal commands", () => {
       const first = await post("/groups/g/estimates", body); expect(first.status).toBe(202); const result = await first.json();
       expect((await post("/groups/g/estimates", body)).status).toBe(202);
       const lookup = await (await fetch(`${base}/groups/g/commands/http-estimate`)).json();
-      expect(lookup).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 202, body: result });
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup also
+      // answering the booked request's argumentsHash (issue #149; its value is pinned in commandLedger.test.ts).
+      expect(lookup).toEqual({ schema: "orca-command-lookup-v1", originalStatus: 202, body: result, argumentsHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
       expect(result.actorId).toMatch(/^operator-/);
       const duplicate = { target: { scope: "goal-review", dimension: "tokens" }, value: 1, provenance: "human" };
       const rejected = await post("/groups/g/proposal/edit", { commandId: "http-duplicate", expectedRevision: 2, payload: { baseProposalVersion: 1, operations: [duplicate, duplicate] } });

@@ -213,7 +213,9 @@ describe("lost answers, restart and a second tab (task 10 step 2)", () => {
     const discarded = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, envelope);
     expect(discarded).toEqual(committed);
     const lookup = await json(await get(panel, `/api/control/groups/${GROUP}/commands/lost-edit`));
-    expect(lookup).toEqual({ schema: "orca-command-lookup-v1", originalStatus: committed.status, body: committed.body });
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup also
+    // answering the booked request's argumentsHash (issue #149; its value is pinned in commandLedger.test.ts).
+    expect(lookup).toEqual({ schema: "orca-command-lookup-v1", originalStatus: committed.status, body: committed.body, argumentsHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(panel.store.db.prepare("SELECT COUNT(*) AS n FROM commands WHERE group_id=?").get(GROUP)).toMatchObject({ n: 2 });
 
     // A command nobody ever answered: the lookup says so, which is what lets the
