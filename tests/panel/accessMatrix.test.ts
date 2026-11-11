@@ -93,6 +93,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "charge-remaining-grant" }, tier: "open", member: V },
   { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "release-known-zero" }, tier: "open", member: V },
   { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "release-unmetered" }, tier: "token", member: V },
+  // Tester follow-up F §2 (#116, ledger C3): charging a finite remainder at the observed floor is open as the grant charge.
+  { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "charge-observed-floor" }, tier: "open", member: V },
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): human-only, socket tier token; a run Orca dispatched is always refused.
   { entry: "accept-attempt", payload: { taskId: "a", runId: "run-1", note: "looked at it" }, tier: "token", member: V },
   // Tester follow-up E §5 (#241): accepting a failed group acceptance is a person's act (socket tier token).
@@ -109,6 +111,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — charging a single call's grant is open on the
   // socket (spec 2026-11-11-tester-followup-e-design.md §8), as settle-unknown-usage's charge form. (Was: tier token.)
   { entry: "recovery-retry.acknowledge", payload: { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" }, tier: "open", member: F },
+  // Tester follow-up F §2 (#116): the single call's observed-floor form, the same open field.
+  { entry: "recovery-retry.acknowledge", payload: { scope: "run", runId: "run-1", acknowledge: "charge-observed-floor" }, tier: "open", member: F },
   { entry: "import-plan.integration", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, integration: { delivery: "keep" } }, tier: "token", member: F },
   // Scheduled flows and groups spec 2026-10-24 §11.1 (Task 5): setting a schedule (its pool and token limit are budgets, its
   // scheme a delivery choice) and making one from a group are token; enabling is token, and disabling, removing and

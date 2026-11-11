@@ -636,9 +636,10 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   // same record and block it again, so its retry is a settlement, and only with the charge acknowledged; the acknowledgement
   // on any other run is refused.
   if (target.groupId === groupId && settleableSingleCallBlock(target as never) !== null) {
-    if (acknowledge !== SINGLE_CALL_SETTLE_ACKNOWLEDGE) throw new ControlError("run-usage-not-settleable", "acknowledge-required");
+    // Tester follow-up F §2 (#116): or with the call's observed floor charged instead (singleCallSettlement.ts admits it).
+    if (acknowledge !== SINGLE_CALL_SETTLE_ACKNOWLEDGE && acknowledge !== "charge-observed-floor") throw new ControlError("run-usage-not-settleable", "acknowledge-required");
     if (settlement === null) throw new ControlError("run-usage-not-settleable", "settlement-unavailable");
-    settlement.settle(store, { groupId, runId, commandId: context.rawCommand.commandId, at: Date.parse(now), evaluation: settlement.evaluation });
+    settlement.settle(store, { groupId, runId, commandId: context.rawCommand.commandId, at: Date.parse(now), evaluation: settlement.evaluation, acknowledge });
     return { resolved: true, blockerCodes: [], evidenceIds: [], wakeIds: [] };
   }
   if (acknowledge !== undefined) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");

@@ -818,7 +818,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       {!archived && blockedRun !== null && (
         <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}
           {blockedCharge !== null ? <ChargeRetry charge={blockedCharge}
-            onCharge={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId, acknowledge: "charge-remaining-grant" } })} /> : <>{t("requirements.blockedRun")}{" "}
+            onCharge={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId, acknowledge: "charge-remaining-grant" } })}
+            onChargeFloor={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId, acknowledge: "charge-observed-floor" } })} /> : <>{t("requirements.blockedRun")}{" "}
           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button></>}
         </p>
       )}

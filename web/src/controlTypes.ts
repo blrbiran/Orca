@@ -395,14 +395,17 @@ export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
 };
 export type SettleAcknowledgeV1 = "charge-remaining-grant" | "release-unmetered" | "release-known-zero";
-export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: SettleAcknowledgeV1 };
+// Tester follow-up F §2 (#116): `charge-observed-floor` is sent only from the view's `observedFloor` offer, never as `acknowledge`.
+export type SettleUnknownUsagePayloadV1 = { taskId: string; runId: string; generation: number; acknowledge: SettleAcknowledgeV1 | "charge-observed-floor" };
 /** The unlimited work token dimension of an unmetered release is booked as nothing (null), never as 0. */
 export type UnmeteredChargeV1 = { work: Omit<Amount, "tokens"> & { tokens: null }; handoff: Amount };
 /** Spec 2026-11-06 §3.5: `approximate-floor` is Orca's booking of a loop run's observed floor (principal orca-auto). */
-export type UsageSettlementV1 = ({ method: "remaining-grant"; charged: { work: Amount; handoff: Amount } } | { method: "owner-acknowledged-unmetered"; charged: UnmeteredChargeV1 } | { method: "known-zero"; charged: { work: Amount; handoff: Amount } } | { method: "approximate-floor"; principal: "orca-auto"; charged: { work: Amount; handoff: Amount }; floorTokens: number | null; reason: string }) & { commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; reservationDisposition: "committed" | "released" | "recovered"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
+export type UsageSettlementV1 = ({ method: "remaining-grant"; charged: { work: Amount; handoff: Amount } } | { method: "owner-acknowledged-unmetered"; charged: UnmeteredChargeV1 } | { method: "known-zero"; charged: { work: Amount; handoff: Amount } } | { method: "approximate-floor"; principal: "orca-auto"; charged: { work: Amount; handoff: Amount }; floorTokens: number | null; reason: string } | { method: "observed-floor"; charged: { work: Amount; handoff: Amount }; floorTokens: number; reason: string }) & { commandId: string; principal: string; at: number; groupId: string; taskId: string; workItemId: string; runId: string; generation: number; highWater: number; reservationDisposition: "committed" | "released" | "recovered"; report: { artifactId: string; hash: string }; stopProof: { executionId: string; generation: number; isolated: true; source: { artifactId: string; hash: string } }; handoffResolution?: { requestId: string; previousState: "settled-unrecoverable"; previousFailureCode: "usage-unsettled"; checkpointId: string; checkpointHash: string } };
 export type RunViewV1 = {
   recoveryOf?:RecoveryOf;savedResultOrdinaryRetry?:boolean;
-  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; acknowledge: SettleAcknowledgeV1; settlement?: UsageSettlementV1; approximateRefusal?: string };
+  unknownUsageSettlement?: { generation: number; highWater: number; remaining: { work: BudgetAmount; handoff: Amount }; allowed: boolean; refusalReason: string | null; acknowledge: SettleAcknowledgeV1; settlement?: UsageSettlementV1; approximateRefusal?: string;
+    /** Tester follow-up F §2 (#116): the explicit observed-floor form, with its own admission answer; absent from older servers. */
+    observedFloor?: { tokens: number; allowed: boolean; refusalReason: string | null } };
   runId: string;
   taskId: string | null;
   estimateId: string | null;
@@ -678,7 +681,7 @@ export type OperatorNoteV1 = { text: string; scope: "next-attempt" | "remaining-
 export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string; checkpointId: string; operatorNote?: OperatorNoteV1 };
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
 export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string; operatorNote?: OperatorNoteV1 };
-export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string; acknowledge?: "charge-remaining-grant" } | { scope: "group"; groupId: string };
+export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string; acknowledge?: "charge-remaining-grant" | "charge-observed-floor" } | { scope: "group"; groupId: string };
 /** CLI v2 spec §14 R2: `runId` is the run the person saw failing; the panel refuses task-run-moved once it is not current. */
 export type RetryTaskPayloadV1 = { taskId: string; runId?: string; allowObservedPaths?: true };
 /** N1 spec §11.1: the five requirement commands (src/control/webProtocol.ts, field for field). */
@@ -746,7 +749,7 @@ export type CommandSuccessV1 = {
   result:
     | {kind:"saved-result-verification-started";taskId:string;runId:string;recoveryOf:RecoveryOf}
 
-    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount }; at: number; method: "remaining-grant" | "owner-acknowledged-unmetered" | "approximate-floor" | "known-zero" }
+    | { kind: "usage-settled"; taskId: string; runId: string; generation: number; charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount }; at: number; method: "remaining-grant" | "owner-acknowledged-unmetered" | "approximate-floor" | "known-zero" | "observed-floor" }
     | { kind: "imported"; groupId: string; estimateId: string | null; estimateState: "queued" | "blocked-capability" | "input-too-large" | "none"; estimateReasonCode: string | null }
     | { kind: "proposal-edited"; proposalVersion: number }
     | { kind: "estimate-created"; estimateId: string; estimateVersion: number; estimateState: "queued" | "blocked-capability" | "input-too-large"; reasonCode: string | null; wakeId: string | null }

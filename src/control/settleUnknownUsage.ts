@@ -21,8 +21,19 @@ export type SettleUnknownUsageCommand = Extract<RawAuthorityCommandV1, { verb: "
 export type SettleAcknowledge = SettleUnknownUsageCommand["payload"]["acknowledge"];
 /** The acknowledgement a run's remainder admits: a proved-zero failure releases its reservation; an unlimited work
  * token remainder can only be released unmetered; otherwise the remainder is charged. */
-export const settlementAcknowledgeFor = (run: SettlementRun): SettleAcknowledge =>
+export const settlementAcknowledgeFor = (run: SettlementRun): Exclude<SettleAcknowledge, "charge-observed-floor"> =>
   knownZeroProved(run) ? "release-known-zero" : run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant";
+/**
+ * Tester follow-up F §2 (#116, ledger C3): ccloop's observed floor as the soft path reads it (the loop run's `usageLowerBound`,
+ * executionDriver.ts), or null when ccloop observed none. The explicit `charge-observed-floor` is admitted only with one.
+ */
+export function observedFloorOf(run: SettlementRun): number | null {
+  const tokens = (run.usageLowerBound as { tokens?: unknown } | undefined)?.tokens;
+  return typeof tokens === "number" && Number.isSafeInteger(tokens) && tokens > 0 ? tokens : null;
+}
+/** The work token remainder once a floor is booked (spec 2026-11-06 §3.2): max(grant - cumulative, 0), null when unlimited. */
+const remainderAfterFloor = (run: SettlementRun, floor: number): number | null =>
+  run.grant.work.tokens === null ? null : Math.max(run.grant.work.tokens - (run.cumulative.work.tokens + floor), 0);
 export interface SettleUnknownUsageDeps { store: ControlStore; admissionGate?: AdmissionGate; now?: () => Date; beforeCommit?: () => void; afterEvidence?: () => Promise<void> }
 
 /** Optional request-local raw work reader; writers omit it and retain their transaction's database reads. */
@@ -36,7 +47,11 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
   const group = readGroup(store, run.groupId), work = (context?.store === store && context.groupId === run.groupId
     ? context.readWork(run.workItemId) : readWork(store, run.groupId, run.workItemId)) as unknown as { taskId: string; currentRunId?: string; status: string; grant: unknown; pendingRunId?: string | null };
   if (acknowledge === "release-known-zero" && !knownZeroProved(run)) throw new ControlError("run-usage-not-settleable", "known-zero-not-proved");
-  if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null ? "unlimited-remainder" : "finite-remainder");
+  if (acknowledge === "charge-observed-floor") {
+    // Tester follow-up F §2 (#116, ledger C3): a finite remainder only (an unlimited one keeps its forms), and only with a floor.
+    if (run.remaining.work.tokens === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
+    if (observedFloorOf(run) === null) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
+  } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
   if ((group as { status?: string }).status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
@@ -58,8 +73,12 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
     if (!hasTokenPolicy(store, run.groupId)) {
       // §3.2 finite-legacy: the charge and the commitment parked again for the continuation must both fit the group limit.
       const parked = add(run.remaining.work as never, run.remaining.handoff), available = budgetBalance(group.limit, group.used, group.reserved).reserve;
+      // Tester follow-up F §2: an observed floor charges its tokens only and parks the remainder after it (bookObservedFloor).
+      const floor = acknowledge === "charge-observed-floor" ? observedFloorOf(run)! : null;
+      const after = floor === null ? null : add({ ...run.remaining.work, tokens: remainderAfterFloor(run, floor) ?? 0 } as never, run.remaining.handoff);
       for (const d of dimensions) {
-        const shortfall = available[d] === null ? 0 : 2 * parked[d] - available[d]!;
+        const needed = after === null ? 2 * parked[d] : after[d] + (d === "tokens" ? floor! : 0);
+        const shortfall = available[d] === null ? 0 : needed - available[d]!;
         if (shortfall > 0) throw new ControlError("group-reserve-insufficient", `${d}:${shortfall}`);
       }
     }
@@ -96,6 +115,36 @@ export function chargeRunRemainder(
     run.cumulative[b] = add(run.cumulative[b], amount); run.remaining[b] = { tokens: b === "work" && options.unmetered ? null : 0, activeMs: 0, attempts: 0, sessions: 0 } as never; run.unknown[b] = false;
     if (tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens, appliedAt: options.at });
   }
+}
+/**
+ * The booking of an observed floor (spec 2026-11-06 soft-mode loop run settlement §3.2 arithmetic, §3.4 reservations), shared
+ * by Orca's approximate settlement (softLoopSettlement.ts) and a person's or agent's explicit `charge-observed-floor` (tester
+ * follow-up F §2, #116), extracted rather than copied. The floor and the baseline count disjoint calls, so the floor itself
+ * is booked as work usage; the run is marked `usageApproximate`. Returns the charge and the remainder after the floor (a
+ * finite-legacy continuation's commitment, §3.4 last row).
+ */
+export function bookObservedFloor(store: ControlStore, run: SettlementRun, group: GroupRecord,
+  input: { floorTokens: number | null; reason: string; disposition: "committed" | "released" | "recovered"; legacy: boolean; at: number },
+): { charged: { work: Amount; handoff: Amount }; parked: { work: unknown; handoff: Amount } } {
+  const { disposition, legacy, at } = input, floor = input.floorTokens ?? 0;
+  if (!Number.isSafeInteger(floor) || floor < 0) throw new ControlError("recovery-blocked", `approximate-floor:${floor}`);
+  const before = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) }, held = before.work.tokens ?? 0;
+  run.cumulative.work = { ...run.cumulative.work, tokens: run.cumulative.work.tokens + floor };
+  run.remaining.work = { ...run.remaining.work, tokens: run.grant.work.tokens === null ? null : Math.max(run.grant.work.tokens - run.cumulative.work.tokens, 0) } as never;
+  run.unknown = { work: false, handoff: false };
+  run.usageApproximate = { floorTokens: input.floorTokens, reason: input.reason, at };
+  group.used = { ...group.used, tokens: group.used.tokens + floor };
+  // §3.4: committed -- the floor leaves the run's own reservation (approximateUsage.ts semantics), the rest stays for its
+  // retry; released -- the stop already gave it back; recovered optional-v1 (plan reading 3) -- the whole remainder is
+  // released, as a known-usage recoverable stop's (stopIntent.ts terminaliseRun); finite-legacy -- re-parked by the caller.
+  if (disposition === "committed") group.reserved = { ...group.reserved, tokens: Math.max(group.reserved.tokens - Math.min(floor, held), 0) };
+  if (disposition === "recovered" && !legacy) {
+    const release = add(finiteCommitment(before.work), before.handoff);
+    group.reserved = Object.fromEntries((["tokens", "activeMs", "attempts", "sessions"] as const).map(d => [d, Math.max(group.reserved[d] - release[d], 0)])) as unknown as Amount;
+  }
+  bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens: floor, appliedAt: at });
+  const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
+  return { charged: { work: { ...zero, tokens: floor }, handoff: zero }, parked: { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) } };
 }
 /**
  * The disposition tail of a settlement, after its booking: shared by a person's settlement and Orca's approximate one
@@ -159,6 +208,23 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         if ("error" in evidence) throw evidence.error;
         if (!settlementSame(run, evidence.body) || !settlementSame(settlementProof(store, run), evidence.proof)
           || (disposition !== "committed" && !settlementSame(releasedSettlementCheckpoint(store, run), evidence.checkpoint))) throw new ControlError("run-usage-not-settleable", "evidence-changed");
+        const resolution = (request: ReturnType<typeof latestRequestForRun>) => disposition !== "committed"
+          ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...evidence.checkpoint! } } : {};
+        if (command.payload.acknowledge === "charge-observed-floor") {
+          // Tester follow-up F §2 (#116, ledger C3): booked as the soft path books it (bookObservedFloor), but by this settler.
+          const at = (deps.now ?? (() => new Date()))().getTime(), floorTokens = observedFloorOf(run)!;
+          const reason = (run.drive as { blockedReason?: string | null } | undefined)?.blockedReason ?? (run.failureCode as string | null | undefined) ?? "usage-unknown";
+          const request = latestRequestForRun(store, groupId, run.runId), group = readGroup(store, groupId);
+          const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId);
+          const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at });
+          const marker = usageSettlementSchema.parse({ method: "observed-floor", commandId: command.commandId, principal, at,
+            groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
+            charged, floorTokens, reason, reservationDisposition: disposition, ...evidence.proof, ...resolution(request) });
+          finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked,
+            activity: { method: marker.method, floorTokens, reason, charged, principal, at } });
+          deps.beforeCommit?.();
+          return commandSuccess(context, { kind: "usage-settled" as const, taskId: run.taskId!, runId: run.runId, generation: run.generation, at, charged, method: marker.method });
+        }
         const unmetered = command.payload.acknowledge === "release-unmetered", knownZero = command.payload.acknowledge === "release-known-zero",
           at = (deps.now ?? (() => new Date()))().getTime();
         const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
@@ -168,8 +234,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         const request = latestRequestForRun(store, groupId, run.runId);
         const marker = usageSettlementSchema.parse({ method: knownZero ? "known-zero" : unmetered ? "owner-acknowledged-unmetered" : "remaining-grant", commandId: command.commandId, principal, at,
           groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
-          charged, reservationDisposition: disposition, ...evidence.proof,
-          ...(disposition !== "committed" ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...evidence.checkpoint! } } : {}),
+          charged, reservationDisposition: disposition, ...evidence.proof, ...resolution(request),
         });
         const group = readGroup(store, groupId);
         // §3.2: an optional-v1 stop kept its reservation (allocations `unknown`); a finite-legacy stop already released it.

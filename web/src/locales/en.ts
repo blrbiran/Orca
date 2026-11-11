@@ -746,6 +746,15 @@ export const en = {
       approximateReceiptNone: "Booked by Orca at {{at}}: unknown, at least 0 work tokens (usage not reported)",
       methodApproximate: "booked at least by Orca (usage not reported)",
       approximateRefused: "Orca could not settle the usage automatically: {{code}}",
+      // Tester follow-up F §2 (#116): the explicit observed-floor form of a finite remainder, and its receipt.
+      floorOpen: "Charge observed usage ({{tokens}} tokens, approximate)",
+      floorConfirmation: "Confirm approximate usage settlement",
+      floorWarning: "This charges only the {{tokens}} work tokens ccloop observed before the run stopped, booked as approximate usage: what it did not observe is not charged, so the group's totals become a lower bound. The rest of the grant is not charged. It cannot be undone and does not restart the task.",
+      floorApprove: "I understand and approve this approximate charge",
+      floorConfirm: "Confirm approximate charge of {{tokens}} tokens",
+      observedReceipt: "Settled by {{principal}} at {{at}}: at least {{tokens}} work tokens (observed usage, approximate)",
+      methodObserved: "observed usage, approximate",
+      floorAfter: "Settled at the observed usage. The failure remains; retry is a separate action after dispatch resumes and still requires budget.",
     },
     // #122: a third-party provider refused codex's --output-schema; ccloop's opt-in prompt mode is the way out.
     structuredOutput: {
@@ -1214,6 +1223,10 @@ export const en = {
     confirm: "Charge {{tokens}} tokens and retry",
     cancel: "Cancel",
     owner: "Only an owner can charge the call's grant and retry it.",
+    // Tester follow-up F §2 (#116): charge the observed floor instead of the grant.
+    floorOpen: "Charge observed usage ({{tokens}} tokens, approximate) and retry",
+    floorConfirmText: "This books only the {{tokens}} tokens observed before the call stopped, as approximate usage (what was not observed is not charged), then retries the call. The retry reserves another grant, so a finite limit or a spend cap may hold it.",
+    floorConfirm: "Charge {{tokens}} tokens (approximate) and retry",
   },
   requirements: {
     goToPreparation: "Go to task preparation",

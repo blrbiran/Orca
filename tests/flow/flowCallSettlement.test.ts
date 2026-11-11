@@ -52,10 +52,10 @@ async function world(options: SingleCallOptions) {
     for (let i = 0; i < 30 && run().state !== "blocked"; i += 1) await driver.round();
     expect(run()).toMatchObject({ state: "blocked", purpose: "flow-draft", unknown: { work: true } });
   };
-  const settle = (runId: string, as: typeof OWNER | null = OWNER) => {
+  const settle = (runId: string, as: typeof OWNER | null = OWNER, acknowledge = "charge-remaining-grant") => {
     const command = { schema: "orca-raw-command-v1", commandId: `c-settle-${runId}`, actorId: "human",
       expectedRevision: Number(h.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)!.revision), verb: "recovery-retry",
-      target: { kind: "run", groupId, runId }, payload: { scope: "run", runId, acknowledge: "charge-remaining-grant" } };
+      target: { kind: "run", groupId, runId }, payload: { scope: "run", runId, acknowledge } };
     return as === null ? service.recoveryRetry(command as never) : withCommandContext(command.commandId, as, () => service.recoveryRetry(command as never));
   };
   return { h, w, flowRunId, groupId, run, parent, blocked, settle, driver };
@@ -113,6 +113,20 @@ describe("settling a flow call blocked on unknown usage", () => {
       expect(answer.error).toMatchObject({ code: "run-usage-not-settleable" });
       expect(answer.error!.message).toContain("owner-required");
       expect(x.run()).toMatchObject({ state: "blocked", unknown: { work: true } });
+      expect(groupUsageUnknown(x.h.store, x.groupId)).toBe(true);
+    } finally { await x.w.dispose(); }
+  });
+
+  // Tester follow-up F §2 (#116): flow calls are unchanged -- the observed-floor form is refused even with ccloop's floor.
+  // mutation: drop the flow-call check in the single-call settlement -> books the floor, red
+  it("charge-observed-floor is refused for a flow call, which keeps its grant charge", async () => {
+    const x = await world({ outcome: "failed", tokens: null, errorCode: "omp-stalled", recordExtra: { usageLowerBound: { tokens: 1_234 } } });
+    try {
+      await x.blocked();
+      const before = x.run();
+      const answer = await x.settle(before.runId, OWNER, "charge-observed-floor") as { error?: { code: string; message?: string } };
+      expect(answer.error).toMatchObject({ code: "run-usage-not-settleable", message: "run-usage-not-settleable:flow-call" });
+      expect(x.run()).toEqual(before);
       expect(groupUsageUnknown(x.h.store, x.groupId)).toBe(true);
     } finally { await x.w.dispose(); }
   });

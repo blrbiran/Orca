@@ -809,7 +809,8 @@ export const resumeFromHandoffPayloadSchema = z
 export const continueTaskPayloadSchema = z.object({ predecessorRunId: idSchema, checkpointId: idSchema, operatorNote: operatorNoteSchema.optional() }).strict();
 export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   // Spec 2026-10-27 single-call unknown usage §9 R1: a single call blocked on unknown usage is retried only with its grant's charge acknowledged.
-  z.object({ scope: z.literal("run"), runId: idSchema, acknowledge: z.literal("charge-remaining-grant").optional() }).strict(),
+  // Tester follow-up F §2 (#116, ledger C3): or with the call's observed floor charged instead (singleCallSettlement.ts).
+  z.object({ scope: z.literal("run"), runId: idSchema, acknowledge: z.enum(["charge-remaining-grant", "charge-observed-floor"]).optional() }).strict(),
   z.object({ scope: z.literal("group"), groupId: idSchema }).strict(),
 ]);
 // Issue fixes spec §4.2(2): start a task again whose current run ccloop ended failed. Group target; the task is named here.
@@ -820,7 +821,8 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 // all-zero or empty `work` reaches the apply so its refusal (retry-top-up-empty) is booked.
 export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), activeMs: safeInteger.optional(), attempts: safeInteger.optional(), sessions: safeInteger.optional() }).strict();
 export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional(), allowObservedPaths: z.literal(true).optional() }).strict();
-export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]) }).strict();
+// Tester follow-up F §2 (#116, ledger C3): `charge-observed-floor` books ccloop's observed floor of a finite remainder, approximate.
+export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero", "charge-observed-floor"]) }).strict();
 export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();
 /** Terminal run closure #169: the run whose accounting is closed; its group is the target. */
 export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
@@ -1910,7 +1912,10 @@ export const runViewSchema = z
       attemptSha: commitShaSchema, mergedSha: commitShaSchema, oldTip: commitShaSchema,
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()), tail: z.string().max(2048).optional(),
     }).strict().optional(),
-    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional() }).strict().optional(),
+    unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional(),
+      // Tester follow-up F §2 (#116): the explicit observed-floor form, offered beside `acknowledge` while the run is unsettled,
+      // its work remainder finite and ccloop's floor known; its own admission answer (the floor may fit where the grant does not).
+      observedFloor: z.object({ tokens: positiveSafeInteger, allowed: z.boolean(), refusalReason: nonemptyString.nullable() }).strict().optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work
@@ -2311,7 +2316,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
   // The receipt copies the marker (usageSettlement.ts), whose schema ties a null work token charge to the unmetered method.
-  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor", "known-zero"]) }).strict(),
+  z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor", "known-zero", "observed-floor"]) }).strict(),
   // Tester follow-up E §8: `nextRun`, what the new run starts with, when an explicit retry in a group with no token limit
   // gave it fresh attempts and active time (absent otherwise, so every other receipt is as it was).
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema, nextRun: z.object({ attempts: safeInteger, activeMs: safeInteger }).strict().optional() }).strict(),

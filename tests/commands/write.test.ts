@@ -70,6 +70,9 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
     { sourceRunId: "run-0", sourceAttempt: 1, capsuleHash: H.capsule, work: { tokens: 50000, attempts: 1 } }],
   [["task", "settle-usage", "g-alpha", "t1", "--acknowledge", "charge-remaining-grant"], "groups/g-alpha/settle-unknown-usage", 5,
     { taskId: "t1", runId: "run-1", generation: 3, acknowledge: "charge-remaining-grant" }],
+  // Tester follow-up F §2 (#116): the observed-floor form passes through unchanged.
+  [["task", "settle-usage", "g-alpha", "t1", "--acknowledge", "charge-observed-floor"], "groups/g-alpha/settle-unknown-usage", 5,
+    { taskId: "t1", runId: "run-1", generation: 3, acknowledge: "charge-observed-floor" }],
 ];
 
 describe("requirement, group and task commands: route and payload (spec §4)", () => {

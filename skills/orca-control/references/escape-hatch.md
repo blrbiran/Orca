@@ -75,6 +75,12 @@ orca control get groups/<groupId>/decisions
   proved the run spent nothing); `"release-unmetered"` is a person's (Web owner, or a person token). A run Orca dispatched
   is refused every form. Do not claim missing usage is zero or retry past an unresolved charge. The conservative charge
   is not provider-reported usage.
+- Tester follow-up F §2 (#116): with a finite remainder and a floor ccloop observed (the run's `usageLowerBound`; the view
+  offers `unknownUsageSettlement.observedFloor`), `acknowledge: "charge-observed-floor"` books only that floor, marked
+  approximate; no person token needed. Without a floor it is refused `observed-floor-unknown` (charge the grant instead);
+  an unlimited remainder keeps its forms. A blocked requirement or estimate call takes the same value on `recovery-retry`
+  (`--acknowledge charge-observed-floor`); a flow call does not. Choosing it is a judgement that the floor is close
+  enough to what was spent: the group's totals then read as a lower bound.
 - Saved-result verification is a distinct action after the eligibility read says `eligible`; its source run, attempt
   and capsule hash come from that answer. It skips execution, but validation/verification may consume model usage.
   `unavailable` is a reason to inspect evidence or use an otherwise legal ordinary retry, not an invitation to guess

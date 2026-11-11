@@ -85,8 +85,9 @@ export function settlingPersonFor(commandId: string): string | null {
  * person token -- charging the whole remaining grant (never under-books; the grant was already reserved), and a known-zero
  * release, which the code admits only when ccloop proved the run spent nothing. Releasing an unlimited remainder unmetered
  * stays a person's. The socket tier (humanOnly.ts SOCKET_TIER) and the settlements' own check read this one list.
+ * Tester follow-up F §2 (#116, ledger C3): charging a finite remainder at ccloop's observed floor is open as well.
  */
-export const AGENT_SETTLE_ACKNOWLEDGE: readonly string[] = ["charge-remaining-grant", "release-known-zero"];
+export const AGENT_SETTLE_ACKNOWLEDGE: readonly string[] = ["charge-remaining-grant", "release-known-zero", "charge-observed-floor"];
 /**
  * Who a usage settlement sent with `acknowledge` is booked to: the person (settlingPersonFor), else -- tester follow-up E
  * §8 -- a socket agent's own principal (`agent:<client>`) for a form in AGENT_SETTLE_ACKNOWLEDGE, never for a run Orca
@@ -100,7 +101,7 @@ export function settlingPrincipalFor(commandId: string, acknowledge: string): st
   return AGENT_SETTLE_ACKNOWLEDGE.includes(acknowledge) ? c.principal : null;
 }
 /** The refusal's note when no one may settle: which forms an agent may send without a person token. */
-export const AGENT_SETTLE_NOTE = "an agent without a person token may send acknowledge charge-remaining-grant, or release-known-zero when ccloop proved the run spent nothing";
+export const AGENT_SETTLE_NOTE = "an agent without a person token may send acknowledge charge-remaining-grant, or release-known-zero when ccloop proved the run spent nothing, or charge-observed-floor when the remainder is finite and ccloop observed a floor";
 /**
  * Socket usage settlement spec 2026-10-29 §2: the ledger row's `person_principal` -- the person token's account for a
  * socket command with person authority, null for a Web row (its principal already names the account) and for anyone else.

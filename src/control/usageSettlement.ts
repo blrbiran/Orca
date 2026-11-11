@@ -33,6 +33,10 @@ export const usageSettlementSchema = z.union([
   // Issue #215 (human ruling 2026-11-09: option A): a failed run whose terminal carries ccloop's positive proof that
   // nothing was spent. It books zero and releases the reservation; only that proof admits this method.
   z.object({ method: z.literal("known-zero"), charged: pair, ...settlerFields, ...markerFields }).strict(),
+  // Tester follow-up F §2 (#116, ledger C3): a person's or socket agent's explicit booking of a finite remainder at ccloop's
+  // observed floor -- the approximate-floor shape (floorTokens, reason; the run's `usageApproximate` matches it), backed by
+  // the settler's own `settle-unknown-usage` row. Only a known floor admits it, so floorTokens is never null.
+  z.object({ method: z.literal("observed-floor"), charged: pair, floorTokens: safeInteger.positive(), reason: z.string().min(1), ...settlerFields, ...markerFields }).strict(),
 ]).superRefine((v, ctx) => {
   if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
@@ -49,11 +53,13 @@ export const singleCallUsageLowerBoundSchema = z.object({ tokens: safeInteger.po
  * purpose, interrupted because its round, draft or estimate had moved (R2), or `stopped`: a stop had already closed it
  * (code review S1).
  */
+// Tester follow-up F §2 (#116, ledger C3): `observed-floor` -- the call's observed floor (usageLowerBound, never null then)
+// was charged instead of its remaining grant, as the soft path books it (approximateUsage.ts bookCallFloor).
 export const singleCallSettlementSchema = z.object({
-  method: z.literal("remaining-grant"), ...settlerFields, at: safeInteger,
+  method: z.enum(["remaining-grant", "observed-floor"]), ...settlerFields, at: safeInteger,
   groupId: idSchema, runId: idSchema, highWater: safeInteger, charged: amountSchema,
   usageLowerBound: singleCallUsageLowerBoundSchema.nullable(), blockedReason: z.string().min(1), disposition: z.enum(["completed", "interrupted", "stopped"]),
-}).strict();
+}).strict().refine(v => v.method !== "observed-floor" || v.usageLowerBound !== null, "observed-floor-unknown");
 export type SingleCallSettlement = z.infer<typeof singleCallSettlementSchema>;
 export interface SettlementRun {
   runId: string; groupId: string; taskId: string | null; workItemId: string; generation: number; highWater: number;
@@ -146,7 +152,8 @@ export function lineageWorkUsage(run: { cumulative: { work: Amount }; usageSettl
   // A run settled back to recoverable (spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.2) is continued, so the same
   // ruling holds for its remaining-grant charge: otherwise the charge exhausts the authored budget the continuation needs.
   // Spec 2026-11-06 §3.2: an approximate floor is provider-observed usage, so it stays in the lineage, recovered or not.
-  if (m === undefined || m.method === "approximate-floor" || (m.method !== "owner-acknowledged-unmetered" && m.reservationDisposition !== "recovered")) return work;
+  // Tester follow-up F §2: so does an observed floor a person or agent booked explicitly.
+  if (m === undefined || m.method === "approximate-floor" || m.method === "observed-floor" || (m.method !== "owner-acknowledged-unmetered" && m.reservationDisposition !== "recovered")) return work;
   const c = m.charged.work;
   return { tokens: c.tokens === null ? work.tokens : work.tokens - c.tokens, activeMs: work.activeMs - c.activeMs, attempts: work.attempts - c.attempts, sessions: work.sessions - c.sessions };
 }
@@ -157,7 +164,7 @@ export function lineageWorkUsage(run: { cumulative: { work: Amount }; usageSettl
  * the run's work token remainder is `max(grant - cumulative, 0)` (null when unlimited). The marker matches the run's
  * `usageApproximate`. Whether the group's limit is still null is never asked: a later set-limit leaves the marker valid.
  */
-function approximateFloorBooked(run: SettlementRun, m: Extract<UsageSettlement, { method: "approximate-floor" }>, baseline: {work:Amount;handoff:Amount}): boolean {
+function approximateFloorBooked(run: SettlementRun, m: Extract<UsageSettlement, { method: "approximate-floor" | "observed-floor" }>, baseline: {work:Amount;handoff:Amount}): boolean {
   const floor = m.floorTokens ?? 0;
   if (!settlementSame(run.usageApproximate, { floorTokens: m.floorTokens, reason: m.reason, at: m.at })) return false;
   for (const b of ["work", "handoff"] as const) for (const d of ds) {
@@ -187,7 +194,8 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
       const e = JSON.parse(String(row.body)); if (e.cumulative === null) unknown = true; else baseline[e.bucket as keyof Grant] = e.cumulative;
     }
     if (!unknown) return false;
-    if (m.method === "approximate-floor") {
+    // Tester follow-up F §2: an observed floor is booked by the same arithmetic as Orca's approximate floor.
+    if (m.method === "approximate-floor" || m.method === "observed-floor") {
       if (!approximateFloorBooked(run, m, baseline)) return false;
     } else if (m.method === "known-zero") {
       if (!knownZeroProved(run)) return false;

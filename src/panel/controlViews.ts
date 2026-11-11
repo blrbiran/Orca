@@ -30,7 +30,7 @@ import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
 import { approximateCommandId } from "../control/softLoopSince.js";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
-import { settlementAcknowledgeFor, settlementAdmission } from "../control/settleUnknownUsage.js";
+import { observedFloorOf, settlementAcknowledgeFor, settlementAdmission, type SettleAcknowledge } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
@@ -1636,15 +1636,22 @@ export async function readSelectionPreview(
 
 function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRunSchema>, snapshot: GroupReadSnapshot): Pick<RunViewV1, "unknownUsageSettlement"> {
   if (run.usageSettlement === undefined && !run.unknown.work && !run.unknown.handoff) return {};
-  let refusalReason: string | null = null;
-  try { const disposition = settlementAdmission(store, run, { store, groupId: snapshot.groupId, readWork: id => {
-    const result = snapshot.decodeWork(id);
-    if (result === undefined) throw new ControlError("work-not-found");
-    return decodedValue(result);
-  } }); settlementProof(store, run); if (disposition !== "committed") releasedSettlementCheckpoint(store, run); } catch (error) { refusalReason = error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
+  const refusalFor = (acknowledge?: SettleAcknowledge): string | null => {
+    try { const disposition = settlementAdmission(store, run, { store, groupId: snapshot.groupId, readWork: id => {
+      const result = snapshot.decodeWork(id);
+      if (result === undefined) throw new ControlError("work-not-found");
+      return decodedValue(result);
+    } }, acknowledge); settlementProof(store, run); if (disposition !== "committed") releasedSettlementCheckpoint(store, run); } catch (error) { return error instanceof ControlError ? error.code : "run-usage-not-settleable"; }
+    return null;
+  };
+  const refusalReason = refusalFor();
+  // Tester follow-up F §2 (#116): the observed-floor form, offered while unsettled with a finite remainder and a known floor.
+  const floor = observedFloorOf(run as never);
+  const observedFloor = run.usageSettlement === undefined && run.remaining.work.tokens !== null && floor !== null
+    ? (reason => ({ observedFloor: { tokens: floor, allowed: reason === null, refusalReason: reason } }))(refusalFor("charge-observed-floor")) : {};
   // Spec 2026-11-06 §3.3 (finding 6): Orca's refused attempt is named on the run; the person's path stays offered.
   const auto = store.db.prepare("SELECT original_status,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, approximateCommandId(run.runId, run.generation));
   const approximateRefusal: unknown = auto !== undefined && Number(auto.original_status) >= 400 ? JSON.parse(String(auto.body_json))?.error?.code : undefined;
   return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason, acknowledge: settlementAcknowledgeFor(run),
-    ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }), ...(typeof approximateRefusal === "string" && approximateRefusal !== "" ? { approximateRefusal } : {}) } };
+    ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }), ...(typeof approximateRefusal === "string" && approximateRefusal !== "" ? { approximateRefusal } : {}), ...observedFloor } };
 }

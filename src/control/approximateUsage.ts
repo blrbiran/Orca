@@ -9,7 +9,7 @@
 import { recordActivity } from "./activity.js";
 import { readRun, saveRun, syncWebBudget, type RunRecord } from "./budget.js";
 import { ControlError } from "./errors.js";
-import { readGroup, saveGroup } from "./queries.js";
+import { readGroup, saveGroup, type GroupRecord } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import { isFlowCallRun } from "../flow/calls.js";
@@ -23,11 +23,13 @@ export function approximateUsageApplies(store: ControlStore, run: { groupId: str
   return limit !== undefined && limit.tokens === null;
 }
 
-/** §2 steps 1-4, inside the caller's transaction, before the purpose's own completion. */
-export function bookApproximateFloorInTransaction(store: ControlStore, runId: string, input: { floorTokens: number | null; reason: string; at: number }): void {
-  const run = readRun(store, runId) as RunRecord & { usageApproximate?: UsageApproximate; phase?: string; purpose?: string };
-  if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
-  const group = readGroup(store, run.groupId);
+/**
+ * §2 steps 1-3 on the run and group records (the caller saves them): shared with a person's or agent's explicit
+ * `charge-observed-floor` on a single call (tester follow-up F §2, #116; singleCallSettlement.ts), extracted rather than
+ * copied. `releaseReserved` false: a stop already gave the call's grant back, so only `used` grows. Returns the tokens booked.
+ */
+export function bookCallFloor(store: ControlStore, run: RunRecord & { usageApproximate?: UsageApproximate }, group: GroupRecord,
+  input: { floorTokens: number | null; reason: string; at: number; releaseReserved: boolean }): number {
   const floor = input.floorTokens ?? 0;
   if (!Number.isSafeInteger(floor) || floor < 0) throw new ControlError("recovery-blocked", `approximate-floor:${floor}`);
   const work = run.cumulative.work, grant = run.grant.work;
@@ -38,10 +40,19 @@ export function bookApproximateFloorInTransaction(store: ControlStore, runId: st
   const held = run.remaining.work.tokens ?? 0;
   run.remaining.work = { ...run.remaining.work, tokens: grant.tokens === null ? null : Math.max(grant.tokens - work.tokens, 0) } as never;
   group.used = { ...group.used, tokens: group.used.tokens + tokens };
-  group.reserved = { ...group.reserved, tokens: Math.max(group.reserved.tokens - Math.min(tokens, held), 0) };
+  if (input.releaseReserved) group.reserved = { ...group.reserved, tokens: Math.max(group.reserved.tokens - Math.min(tokens, held), 0) };
   run.unknown = { work: false, handoff: false };
   run.usageApproximate = { floorTokens: input.floorTokens, reason: input.reason, at: input.at };
   bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens, appliedAt: input.at });
+  return tokens;
+}
+
+/** §2 steps 1-4, inside the caller's transaction, before the purpose's own completion. */
+export function bookApproximateFloorInTransaction(store: ControlStore, runId: string, input: { floorTokens: number | null; reason: string; at: number }): void {
+  const run = readRun(store, runId) as RunRecord & { usageApproximate?: UsageApproximate; phase?: string; purpose?: string };
+  if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
+  const group = readGroup(store, run.groupId);
+  bookCallFloor(store, run, group, { ...input, releaseReserved: true });
   saveRun(store, run);
   syncWebBudget(store, group, run);
   if (group.budgetVersion === Number.MAX_SAFE_INTEGER) throw new ControlError("numeric-overflow");

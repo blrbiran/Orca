@@ -19,4 +19,4 @@ resume a run (--run) or a group (--group) blocked for a reason other than a term
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `--run <run>`: a blocked run
 - `--group <group>`: a blocked group
-- `--acknowledge <acknowledge>`: charge-remaining-grant: settle a single call's unknown usage (a requirement, estimate or flow call) by charging its remaining grant, then retry (--run only; an agent may send it without a person token, tester follow-up E §8; refused to a run Orca dispatched)
+- `--acknowledge <acknowledge>`: charge-remaining-grant|charge-observed-floor: settle a single call's unknown usage (a requirement, estimate or flow call) by charging its remaining grant, then retry (--run only; an agent may send it without a person token, tester follow-up E §8; refused to a run Orca dispatched); charge-observed-floor charges instead the floor ccloop observed, marked approximate (a requirement or estimate call with a finite remainder and a known floor; never a flow call)

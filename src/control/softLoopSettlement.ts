@@ -6,21 +6,18 @@
  * record of why it was not (§3.3). Code only (Rule 5).
  */
 import { approximateUsageApplies } from "./approximateUsage.js";
-import { add, readRun } from "./budget.js";
+import { readRun } from "./budget.js";
 import { withCommandContext } from "./commandClient.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { ControlError } from "./errors.js";
 import { hasTokenPolicy } from "./fundedAllowance.js";
 import { readBudgetProposal, readGroup } from "./queries.js";
-import { finishUsageSettlement, settlementAdmission } from "./settleUnknownUsage.js";
+import { bookObservedFloor, finishUsageSettlement, settlementAdmission } from "./settleUnknownUsage.js";
 import { approximateCommandId, softLoopSince } from "./softLoopSince.js";
 import { commandSuccess, groupCommandTarget, latestRequestForRun } from "./stopIntent.js";
-import { finiteCommitment } from "./tokenPolicy.js";
-import { bookSettledUsage } from "./usageLedger.js";
 import { releasedSettlementCheckpoint, settlementProof, usageSettlementSchema, type SettlementRun } from "./usageSettlement.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
-import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
 /** As orchestration.ts's ORCHESTRATION_ACTOR (Q8); written here, not imported, to keep that module out of this one's imports. */
@@ -71,35 +68,18 @@ export function applySettleApproximateUsage(deps: SoftLoopSettlementDeps, comman
       if (run.groupId !== groupId || run.taskId !== command.payload.taskId || run.generation !== command.payload.generation) throw new ControlError("run-usage-not-settleable", "identity");
       const disposition = settlementAdmission(store, run);
       const proof = settlementProof(store, run), checkpoint = disposition !== "committed" ? releasedSettlementCheckpoint(store, run) : null;
-      const at = (deps.now ?? (() => new Date()))().getTime(), floorTokens = run.usageLowerBound?.tokens ?? null, floor = floorTokens ?? 0;
-      if (!Number.isSafeInteger(floor) || floor < 0) throw new ControlError("recovery-blocked", `approximate-floor:${floor}`);
+      const at = (deps.now ?? (() => new Date()))().getTime(), floorTokens = run.usageLowerBound?.tokens ?? null;
       const reason = (run.drive as { blockedReason?: string | null } | undefined)?.blockedReason ?? run.failureCode ?? "usage-unknown";
       const request = latestRequestForRun(store, groupId, run.runId), group = readGroup(store, groupId);
       const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId);
-      // §3.2 arithmetic (finding 1): the floor and the baseline count disjoint calls, so the floor itself is booked.
-      const before = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) }, held = before.work.tokens ?? 0;
-      run.cumulative.work = { ...run.cumulative.work, tokens: run.cumulative.work.tokens + floor };
-      run.remaining.work = { ...run.remaining.work, tokens: run.grant.work.tokens === null ? null : Math.max(run.grant.work.tokens - run.cumulative.work.tokens, 0) } as never;
-      run.unknown = { work: false, handoff: false };
-      run.usageApproximate = { floorTokens, reason, at };
-      group.used = { ...group.used, tokens: group.used.tokens + floor };
-      // §3.4: committed -- the floor leaves the run's own reservation (approximateUsage.ts semantics), the rest stays for its
-      // retry; released -- the stop already gave it back; recovered optional-v1 (plan reading 3) -- the whole remainder is
-      // released, as a known-usage recoverable stop's (stopIntent.ts terminaliseRun); finite-legacy -- re-parked below.
-      if (disposition === "committed") group.reserved = { ...group.reserved, tokens: Math.max(group.reserved.tokens - Math.min(floor, held), 0) };
-      if (disposition === "recovered" && !legacy) {
-        const release = add(finiteCommitment(before.work), before.handoff);
-        group.reserved = Object.fromEntries((["tokens", "activeMs", "attempts", "sessions"] as const).map(d => [d, Math.max(group.reserved[d] - release[d], 0)])) as unknown as Amount;
-      }
-      bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens: floor, appliedAt: at });
-      const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, charged = { work: { ...zero, tokens: floor }, handoff: zero };
+      // §3.2 arithmetic (finding 1) and §3.4 reservations: shared with the explicit observed-floor form (tester follow-up F §2).
+      // A finite-legacy continuation is funded from the remainder after the floor (§3.4 last row): `parked`.
+      const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at });
       const marker = usageSettlementSchema.parse({ method: "approximate-floor", commandId: command.commandId, principal: ORCA_AUTO, at,
         groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
         charged, floorTokens, reason, reservationDisposition: disposition, ...proof,
         ...(disposition !== "committed" ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...checkpoint! } } : {}),
       });
-      // A finite-legacy continuation is funded from the remainder after the floor (§3.4 last row).
-      const parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
       finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked,
         activity: { method: "approximate-floor", floorTokens, reason, principal: ORCA_AUTO, at } });
       return commandSuccess(context, { kind: "usage-settled", taskId: run.taskId!, runId: run.runId, generation: run.generation, at, charged, method: "approximate-floor" });

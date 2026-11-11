@@ -10,6 +10,7 @@ import { readGroup, saveGroup } from "./queries.js";
 import { interruptRequirementCall, requirementCallTargetMoved } from "./requirementCalls.js";
 import { amountSchema } from "./schema.js";
 import { chargeRunRemainder } from "./settleUnknownUsage.js";
+import { bookCallFloor } from "./approximateUsage.js";
 import { settleableSingleCallBlock } from "./singleCall.js";
 import { singleCallHandler, type SingleCallRunRow } from "./singleCallPurposes.js";
 import { interruptEstimate, readStopIntent } from "./stopIntent.js";
@@ -44,8 +45,10 @@ function estimateMoved(store: ControlStore, groupId: string, estimateId: string)
  */
 export type SettleSingleCallUsage = typeof settleSingleCallUsageInTransaction;
 export function settleSingleCallUsageInTransaction(
-  store: ControlStore, input: { groupId: string; runId: string; commandId: string; at: number; evaluation?: unknown },
+  store: ControlStore, input: { groupId: string; runId: string; commandId: string; at: number; evaluation?: unknown; acknowledge?: "charge-remaining-grant" | "charge-observed-floor" },
 ): void {
+  // Tester follow-up F §2 (#116, ledger C3): `charge-observed-floor` charges the call's observed floor instead of its grant.
+  const observed = input.acknowledge === "charge-observed-floor";
   const run = readRun(store, input.runId) as SingleCallRun;
   const block = settleableSingleCallBlock(run as never);
   if (block === null || run.groupId !== input.groupId) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");
@@ -53,7 +56,7 @@ export function settleSingleCallUsageInTransaction(
   // tester #103, the recovery CLI -- an owner's person token on the socket. Tester follow-up E §8: charging the grant is
   // also a socket agent's without a token (`recovery-retry.acknowledge` is open-tier), booked to the agent; never a run
   // Orca dispatched.
-  const principal = settlingPrincipalFor(input.commandId, "charge-remaining-grant");
+  const principal = settlingPrincipalFor(input.commandId, observed ? "charge-observed-floor" : "charge-remaining-grant");
   if (principal === null) throw new ControlError("run-usage-not-settleable", "owner-required");
   const group = readGroup(store, run.groupId);
   // A stop owns the group's calls in flight: it closes them (terminaliseRun) and the call is settled after (code review
@@ -65,17 +68,28 @@ export function settleSingleCallUsageInTransaction(
   // Re-review m-b: a requirement call closed by a stop is settled only while its group still clarifies (the summary offers
   // it only then, and the wake it queues is a clarifying group's).
   const flow = isFlowCallRun(run);
+  if (observed) {
+    // Tester follow-up F §2: flow calls are unchanged (their pool is finite and the soft path never books them,
+    // approximateUsage.ts); a finite remainder only; and only with ccloop's floor on the blocked call (the soft path's source).
+    if (flow) throw new ControlError("run-usage-not-settleable", "flow-call");
+    if (run.remaining.work.tokens === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
+    if (run.singleCallUsageLowerBound === undefined) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
+  }
   if (block.closed && !flow && handler.purpose !== "estimate" && (group as { status?: string }).status !== "clarifying") throw new ControlError("run-usage-not-settleable", "group-not-clarifying");
   if (!block.closed && handler.evaluate !== undefined && input.evaluation === undefined) throw new ControlError("run-usage-not-settleable", "evaluation-missing");
   const estimate = handler.purpose === "estimate";
   const moved = !block.closed && !flow && (estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run));
   // A single call's grant is work-only (verifyStoppedSingleCall), so its whole remainder is the work bucket's.
-  const charged = amountSchema.parse(run.remaining.work);
+  let charged = amountSchema.parse(run.remaining.work);
   // A stop already gave the grant back (interruptRequirementCall / releaseCommitment): the charge books `used` only.
-  chargeRunRemainder(store, run, group, { work: charged, handoff: amountSchema.parse(run.remaining.handoff) }, { unmetered: false, releaseReserved: !block.closed, at: input.at });
+  if (observed) {
+    // As the soft path books it (bookCallFloor): only what the floor adds to the call's booked usage, marked approximate.
+    const tokens = bookCallFloor(store, run, group, { floorTokens: run.singleCallUsageLowerBound!.tokens, reason: run.drive!.blockedReason!, at: input.at, releaseReserved: !block.closed });
+    charged = { ...zero(), tokens };
+  } else chargeRunRemainder(store, run, group, { work: charged, handoff: amountSchema.parse(run.remaining.handoff) }, { unmetered: false, releaseReserved: !block.closed, at: input.at });
   const disposition = block.closed ? "stopped" : moved ? "interrupted" : "completed";
   const marker = singleCallSettlementSchema.parse({
-    method: "remaining-grant", commandId: input.commandId, principal, at: input.at, groupId: run.groupId, runId: run.runId, highWater: run.highWater,
+    method: observed ? "observed-floor" : "remaining-grant", commandId: input.commandId, principal, at: input.at, groupId: run.groupId, runId: run.runId, highWater: run.highWater,
     charged, usageLowerBound: run.singleCallUsageLowerBound ?? null, blockedReason: run.drive!.blockedReason, disposition,
   });
   run.singleCallSettlement = marker;
@@ -107,5 +121,5 @@ export function settleSingleCallUsageInTransaction(
   // Flow call settlement spec §4, review (session 43913afc) I1: a flow call a stop closed had its draw returned to the pool
   // by interruptFlowCall before the charge; the pool does not count the charge (no take-back path, by design). Named here.
   const poolNotCharged = flow && block.closed ? { poolNotCharged: { tokens: charged.tokens } } : {};
-  recordActivity(store, { groupId: run.groupId, taskId: null, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged: { work: charged, handoff: zero() }, principal, at: input.at, disposition, ...poolNotCharged } });
+  recordActivity(store, { groupId: run.groupId, taskId: null, runId: run.runId, kind: "usage-settled", body: { method: marker.method, charged: { work: charged, handoff: zero() }, principal, at: input.at, disposition, ...poolNotCharged, ...(observed ? { floorTokens: run.singleCallUsageLowerBound!.tokens } : {}) } });
 }

@@ -201,7 +201,8 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
   ) : null) : estimateUsageUnknown(run) ? (
     // Spec 2026-10-27 single-call unknown usage §9 R1: an estimate blocked on unknown usage is retried by charging its grant.
     <ChargeRetry charge={{ tokens: run.remaining.tokens ?? 0, usageLowerBound: run.usageLowerBound ?? null }}
-      onCharge={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId, acknowledge: "charge-remaining-grant" } })} />
+      onCharge={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId, acknowledge: "charge-remaining-grant" } })}
+      onChargeFloor={() => onCommand({ verb: "recovery-retry", groupId, expectedRevision: revision, payload: { scope: "run", runId: run.runId, acknowledge: "charge-observed-floor" } })} />
   ) : run.state === "blocked" && run.blockedReason ? (
     <button
       type="button"

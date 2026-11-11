@@ -239,6 +239,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // Tester follow-up E §8 (#101/#104/#116): charging the whole remaining grant (the grant was reserved; it never
   // under-books) and a known-zero release (admitted only when ccloop proved it) are open; an unmetered release, and what
   // the predicate cannot read, want a person. A run Orca dispatched is still refused every form (permissions.ts).
+  // Tester follow-up F §2 (#116, ledger C3): charge-observed-floor is in AGENT_SETTLE_ACKNOWLEDGE too (open), as is the
+  // single call's same form under recovery-retry.acknowledge below.
   "settle-unknown-usage": (p) => (typeof p.acknowledge === "string" && AGENT_SETTLE_ACKNOWLEDGE.includes(p.acknowledge) ? "open" : "token"),
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): an owner on the Web, or the socket agent with an owner's person token.
   "accept-attempt": "token",

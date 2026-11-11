@@ -135,6 +135,8 @@ function activityText(entry: ActivityEntryV1): string {
     });
     return `${kind} · ${i18n.t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method")} · ${buckets.join(" · ")}`;
   }
+  // Tester follow-up F §2 (#116): a person's or agent's explicit observed floor.
+  if (entry.kind === "usage-settled" && body.method === "observed-floor") return `${kind} · ${i18n.t("control.settlement.methodObserved")}${typeof body.floorTokens === "number" ? ` · ${body.floorTokens}` : ""}`;
   if (entry.kind === "usage-settled" && body.method === "approximate-floor") return `${kind} · ${i18n.t("control.settlement.methodApproximate")}${typeof body.floorTokens === "number" ? ` · ${body.floorTokens}` : ""}`;
   if (entry.kind === "phase" && typeof body.step === "string") {
     const step = enumText("progressStep", CCLOOP_STEP[body.step] ?? body.step);
