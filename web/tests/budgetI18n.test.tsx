@@ -67,10 +67,14 @@ describe("the budget editor and the loop card in Chinese", () => {
     await i18n.changeLanguage("zh");
     const text = render(<BudgetEditor view={view} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
     for (const expected of [
-      "提案 v2 · 可编辑", "预算模式 宽松 · 观测到的约束方式 宽松 · 宽松：超支事后结算，不会被阻止", "上下文观测不可用 · 上下文水位线无法自动交接",
+      "提案 v2 · 可编辑", "预算模式 宽松 · 观测到的约束方式 宽松 · 宽松：超支事后结算，不会被阻止",
+      // Ruling (2026-11-12, tester follow-up F): #195, human ruling 「要改」 -- the context note now says hand-off is not active
+      // because no installed agent reports context usage, and the threshold field is optional (was "上下文观测不可用 ·
+      // 上下文水位线无法自动交接" and "上下文达到多少 token 时交接（留空则不设）").
+      "上下文交接未生效：已安装的 agent 都不报告上下文用量。阈值可不填，填了也不会起作用。",
       "profile all：交接控制 阶段结束时 · 交接执行 无 · 绑定到它的工作不会被调度（claim-capability-unavailable）",
       "归属", "桶", "活跃毫秒", "会话数", "建议", "任务 a", "草稿占用", " 在做法卡片里改", "模型 est-1", "采用 2000000", "应用整行", "应用全部建议",
-      "估算理由（est-1）", "b · M · 置信度 高 · rationale-x", "组上限", "设置上限", "上下文达到多少 token 时交接（留空则不设）",
+      "估算理由（est-1）", "b · M · 置信度 高 · rationale-x", "组上限", "设置上限", "上下文达到多少 token 时交接（可选；留空则不设）",
       // Issue #84 (human: 中文界面也统一用 K/M/B): was "已用 0 · 已承诺 300 万 · 余量 600 万".
       // Tester #7/#14: "下方" became "上方" (Agent selection is now above the budget). Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27
       "已用 0 · 已承诺 3M · 余量 6M", "保存提案", "重新估算", "每个 agent 槽位都要解析成功；请看上方 Agent 选择，或在此检查安装和默认值：", "确认任务方案",
