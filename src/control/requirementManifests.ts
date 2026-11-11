@@ -16,7 +16,12 @@ export type ManifestsPart = {
 type ManifestEntry = ManifestsPart["entries"][number];
 
 const LOCKFILES: ReadonlySet<string> = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb"]);
-const OTHER_MANIFEST = /^(pyproject\.toml|requirements[^/]*\.txt|Makefile|Cargo\.toml|go\.mod)$/;
+/**
+ * Issue #130 (session f958ec3f): the lockfiles npm itself installs from -- `npm ci` needs one, and `npm install` writes
+ * package-lock.json when there is neither. LOCKFILES names every installer's for the split to read; this is npm's alone.
+ */
+export const isNpmLockfile = (name: string): boolean => name === "package-lock.json" || name === "npm-shrinkwrap.json";
+const OTHER_MANIFEST =/^(pyproject\.toml|requirements[^/]*\.txt|Makefile|Cargo\.toml|go\.mod)$/;
 /** A package.json larger than this is not read whole, so it is listed as no package (it would not parse). */
 export const MAX_PACKAGE_BYTES = 1024 * 1024;
 

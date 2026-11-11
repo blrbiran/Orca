@@ -4,6 +4,7 @@ import { SYSTEM_LABELS } from "./labels.js";
 import { choosePlanByLabels, documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
 import { classifyNpmCommand, npmCommandReason } from "./npmCommand.js";
 import { normalizeControlPlan } from "./planImport.js";
+import { isNpmLockfile } from "./requirementManifests.js";
 import { deepFreeze, fence } from "./requirementClarify.js";
 import { overviewPathExists, treeOf } from "./requirementOverview.js";
 import type { DraftBody, MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
@@ -240,6 +241,27 @@ function testsOutsideScope(checks: readonly string[], targetPaths: readonly stri
   return [...new Set(named)].filter((path) => !claims.some((claim) => contains(claim, path)));
 }
 
+const NPM_CLEAN_INSTALL: ReadonlySet<string> = new Set(["ci", "clean-install", "ic", "install-clean"]);
+const NPM_INSTALL: ReadonlySet<string> = new Set(["install", "i"]);
+/**
+ * Issue #130 (session f958ec3f): whether a setup command runs `npm ci`, or an `npm install` / `npm i` that writes
+ * package-lock.json (no `--no-package-lock`), at the repository root -- where NO_LOCKFILE_RULE forbids both when the root
+ * commits no npm lockfile. A command that changes directory or names `--prefix` installs where another lockfile may be,
+ * which this does not read, so it is not judged. Leading `NAME=value` assignments are skipped.
+ */
+function needsRootNpmLockfile(command: string): boolean {
+  const segments = command.split(/&&|\|\||[;|]/).map((segment) => segment.trim().split(/\s+/).filter((token) => token.length > 0));
+  const elsewhere = segments.some((tokens) => tokens[0] === "cd" || tokens[0] === "pushd" || tokens.some((token) => token === "--prefix" || token.startsWith("--prefix=")));
+  if (elsewhere) return false;
+  return segments.some((tokens) => {
+    const words = tokens.slice(Math.max(0, tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))));
+    if (words[0] !== "npm") return false;
+    const subcommand = words.slice(1).find((token) => !token.startsWith("-"));
+    if (subcommand !== undefined && NPM_CLEAN_INSTALL.has(subcommand)) return true;
+    return subcommand !== undefined && NPM_INSTALL.has(subcommand) && !words.includes("--no-package-lock") && !words.includes("--package-lock=false");
+  });
+}
+
 type Criterion = { readonly id: string; readonly text: string };
 /**
  * #204: the split's free-text successCondition lost an acceptance criterion's exact values (`todo/doing/done`), and the
@@ -441,8 +463,10 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   for (const task of output.tasks) for (const path of task.targetPaths) {
     if (!(await overviewPathExists(input.repo, input.commit, path))) reasons.push(`path:${task.taskId}:${path}`);
   }
-  // #239 reads the tree for every task's checks, so it is read once whenever any task has a check or uses bugfix.
-  const committedPaths = output.tasks.some((task) => usesBugfixLoop(task) || task.checks.length > 0) ? (await treeOf(input.repo, input.commit).catch(() => [])).map((entry) => entry.path) : [];
+  // #239 reads the tree for every task's checks, so it is read once whenever any task has a check or setup or uses bugfix;
+  // null when it cannot be read, which #130 must tell from a tree with no lockfile.
+  const committedTree = output.tasks.some((task) => usesBugfixLoop(task) || task.checks.length > 0 || task.setup !== undefined) ? await treeOf(input.repo, input.commit).catch(() => null) : null;
+  const committedPaths = (committedTree ?? []).map((entry) => entry.path);
   for (const task of output.tasks) if (usesBugfixLoop(task) && !writableTestScope(task.targetPaths, committedPaths)) reasons.push(`bugfix-test-scope:${task.taskId}`);
   const committed = new Set(committedPaths);
   for (const task of output.tasks) for (const missing of testsOutsideScope(task.checks, task.targetPaths, committed)) reasons.push(`check-write-scope:${task.taskId}:${missing}`);
@@ -456,6 +480,10 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   if (tree !== null) for (const command of npmCommands) {
     const reason = await npmCommandReason(input.repo, input.commit, command, tree);
     if (reason !== null) reasons.push(`command:${tasksOf.get(command)!.join(",")}:${reason.slice("command:".length)}`);
+  }
+  // #130: NO_LOCKFILE_RULE in code -- an npm install that needs or writes a lockfile, where the root commits none.
+  if (committedTree !== null && !committedTree.some((entry) => isNpmLockfile(entry.path))) {
+    for (const task of output.tasks) for (const command of new Set(task.setup ?? [])) if (needsRootNpmLockfile(command)) reasons.push(`setup-lockfile:${task.taskId}:${command}`);
   }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
@@ -532,6 +560,7 @@ export function explainSplitReason(reason: string): string | null {
     case "checks-primary": return "the task's first writes entry (its primary directory) has no checks";
     case "ledger-path": return "only the task's first writes entry (its primary directory) may name `.decisions` as a target path";
     case "bugfix-test-scope": return "this bugfix uses reproduce-first but its writable target paths include no regression test; add a test path or choose a loop without reproduce-first";
+    case "setup-lockfile": return "this setup command runs `npm ci`, or an `npm install` that writes package-lock.json, but the repository root commits no package-lock.json or npm-shrinkwrap.json: `npm ci` fails without one, and a setup that creates the lockfile is refused; omit `setup` if nothing needs installing, else use `npm install --no-package-lock`";
     case "check-write-scope": return "the task's check names a committed test file outside the task's targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file (or its directory as `<directory>/**`) to this task's targetPaths, or check only files this task may write";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";

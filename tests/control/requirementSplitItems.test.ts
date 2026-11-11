@@ -48,6 +48,9 @@ describe("the split validator and npm commands that do not exist (task setup spe
     g("init", "-q", "-b", "main");
     await writeFile(join(npmRepo, "package.json"), JSON.stringify({ name: "root", workspaces: ["web"], scripts: { build: "tsc" } }));
     await writeFile(join(npmRepo, "web", "package.json"), JSON.stringify({ name: "@x/web", scripts: { build: "vite build" } }));
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes a repository
+    // whose root commits package-lock.json, so its `npm ci` setup is not a #130 `setup-lockfile:` reason.
+    await writeFile(join(npmRepo, "package-lock.json"), "{}\n");
     await writeFile(join(npmRepo, "src", "a.ts"), "a"); g("add", "-A"); g("commit", "-qm", "base");
     npmCommit = g("rev-parse", "HEAD");
   });

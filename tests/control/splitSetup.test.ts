@@ -9,7 +9,10 @@ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 // Task setup spec §4.2: a split task's optional `setup` is the commands that make its checks runnable in a fresh clone.
 // It travels from the model's answer through the stored draft plan and accept into the frozen contract's
 // `context.setupCommands`; absent, no key appears anywhere. The multi-directory split has no `setup` (spec §5.4).
-const WITH_SETUP = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, setup: ["npm ci", "make gen"] }, VALID_SPLIT.tasks[1]!] };
+// Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes a setup the
+// harness repository (no lockfile) accepts under #130 -- `npm ci` there is a `setup-lockfile:` reason.
+const SETUP = ["npm install --no-package-lock", "make gen"];
+const WITH_SETUP = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, setup: SETUP }, VALID_SPLIT.tasks[1]!] };
 
 describe("a split task's setup (task setup spec §4.2)", () => {
   // mutation C2-M4: drop `setup` in loopOf -> the contract has no setupCommands -> red
@@ -23,9 +26,11 @@ describe("a split task's setup (task setup spec §4.2)", () => {
       const archived = readArchivedPlan(x.store, "r").plan.tasks;
       const task = (taskId: string) => archived.find((entry) => entry.taskId === taskId)!;
       const context = (taskId: string) => (JSON.parse(task(taskId).originalContractCanonicalJson) as { context: Record<string, unknown> }).context;
-      expect(context("exporter").setupCommands).toEqual(["npm ci", "make gen"]);
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes SETUP (#130).
+      expect(context("exporter").setupCommands).toEqual(SETUP);
       // The recipe the plan keeps (loop plans spec §3.3) carries it in its inputs, so a re-expansion gives it again.
-      expect((task("exporter").loop as { inputs: { setup?: string[] } }).inputs.setup).toEqual(["npm ci", "make gen"]);
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes SETUP (#130).
+      expect((task("exporter").loop as { inputs: { setup?: string[] } }).inputs.setup).toEqual(SETUP);
       expect(context("images")).not.toHaveProperty("setupCommands");
       expect((task("images").loop as { inputs: object }).inputs).not.toHaveProperty("setup");
     } finally { await x.dispose(); }
