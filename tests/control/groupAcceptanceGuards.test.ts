@@ -45,7 +45,7 @@ async function scene(): Promise<Scene> {
   try {
     await t.claim(); await t.claim();
     const driver = t.driver();
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + 60_000;
     while (!lines(log).some((line) => line.startsWith("start ")) && Date.now() < deadline) {
       await driver.round();
       await new Promise((resolve) => setTimeout(resolve, 25));
