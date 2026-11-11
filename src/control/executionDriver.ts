@@ -1232,11 +1232,12 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
   // N1 spec §8.3: a purpose that must read the target repository to judge its output does so before the transaction.
   // §4.5: "the call failed" means outcome !== complete; the handler is told ccloop's (normalised) code, rawOutput is unchanged.
   const failure = record.outcome === "complete" ? null : normalizeSingleCallErrorCode(record.errorCode);
-  const settled = handler.evaluate === undefined ? rawOutput
-    : await handler.evaluate(deps, run, rawOutput, failure, { outcome: record.outcome, failureCause: record.failureCause ?? null });
+  // Issue #125: `complete` is given the same facts, so a failed requirement call can keep ccloop's failure detail.
+  const facts = { outcome: record.outcome, failureCause: record.failureCause ?? null };
+  const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput, failure, facts);
   try {
     // Spec 2026-10-27 single-call unknown usage §9 R2: one commit, shared with a person's usage settlement.
-    handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, singleCallCommitTerminal(store, run), failure);
+    handler.complete({ store, admissionGate: deps.admissionGate }, run, settled, singleCallCommitTerminal(store, run), failure, facts);
   } catch (error) {
     if (error instanceof ControlError && error.code === "run-stop-unconfirmed") {
       const reason = failure === null ? handler.usageUnknownReason : `${handler.usageUnknownReason}:${failure}`;
@@ -1251,7 +1252,7 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
       if (handler.completeInTransaction !== undefined && handler.rejectedBeforeWork?.(settled) === true && current.unknown.work && !current.unknown.handoff) {
         write(deps, () => {
           bookRejectedZeroInTransaction(store, runId);
-          handler.completeInTransaction!(store, readRun(store, runId) as never, settled, singleCallCommitTerminal(store, run), failure);
+          handler.completeInTransaction!(store, readRun(store, runId) as never, settled, singleCallCommitTerminal(store, run), failure, facts);
         });
         return true;
       }
@@ -1259,7 +1260,7 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
         const at = (deps.now?.() ?? new Date()).getTime();
         write(deps, () => {
           bookApproximateFloorInTransaction(store, runId, { floorTokens: record.usageLowerBound?.tokens ?? null, reason, at });
-          handler.completeInTransaction!(store, readRun(store, runId) as never, settled, singleCallCommitTerminal(store, run), failure);
+          handler.completeInTransaction!(store, readRun(store, runId) as never, settled, singleCallCommitTerminal(store, run), failure, facts);
         });
         return true;
       }

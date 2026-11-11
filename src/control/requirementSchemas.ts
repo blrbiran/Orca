@@ -60,10 +60,16 @@ export const clarifyResultSchema = z.object({
   questions: z.array(questionSchema).max(MAX_QUESTIONS), frontierEmpty: z.boolean(), openBranches: z.array(nonempty),
   glossary: z.array(glossaryEntrySchema), adrs: z.array(adrSchema), classification: classificationSchema.optional(),
 }).strict();
-/** One call of a round or draft (spec §4.2 "the run ids and usage of the round's calls, the overview hash and commit"). */
+/** Issue #125 (session f958ec3f): the most a failed call's `detail` keeps of ccloop's failureCause.detail. */
+export const CALL_DETAIL_MAX_BYTES = 512;
+/**
+ * One call of a round or draft (spec §4.2 "the run ids and usage of the round's calls, the overview hash and commit").
+ * Issue #125: a failed call may keep `detail`, the head of the provider's words ccloop's record gives (absent if none).
+ */
 export const callRecordSchema = z.object({
   runId: idSchema, overviewHash: hash.nullable(), commit: commit.nullable(), usage: amountSchema.nullable(),
   outcome: z.enum(["valid", "invalid", "failed", "interrupted"]), reason: z.string().nullable(),
+  detail: nonempty.refine((text) => Buffer.byteLength(text, "utf8") <= CALL_DETAIL_MAX_BYTES, { message: `over-${CALL_DETAIL_MAX_BYTES}-utf8-bytes` }).optional(),
 }).strict();
 export const answerSchema = z.object({ id: questionIdSchema, kind: z.enum(["recommended", "text"]), text: nonempty }).strict();
 export const decisionSchema = z.object({ id: nonempty, accept: z.boolean() }).strict();

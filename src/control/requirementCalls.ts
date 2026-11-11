@@ -8,7 +8,7 @@ import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
 import { buildManifests, withManifests } from "./requirementManifests.js";
-import { buildRepositoryOverview, dividedOverviewLimits, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
+import { buildRepositoryOverview, dividedOverviewLimits, truncateUtf8, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
 import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
 import { flowVaultRepoId } from "../flow/groups.js";
 import { dirTargetRepoId, multiDirOf, type FrozenMultiDir } from "./multiGroup.js";
@@ -17,14 +17,14 @@ import {
   clarifyingLedger, clarifyLimits, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
-import { MAX_AUTO_RETRIES, multiSplitOutputSchema, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
+import { CALL_DETAIL_MAX_BYTES, MAX_AUTO_RETRIES, multiSplitOutputSchema, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
 import {
   buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft, withoutEmptySetup,
   type SplitPlanFile,
 } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
-import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
+import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRecordFacts, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -284,14 +284,25 @@ export function requirementCallTargetMoved(store: ControlStore, run: SingleCallR
   return (target.kind === "round" ? readRound(store, run.groupId, target.no).state : readDraft(store, run.groupId, target.no).state) !== "drafting";
 }
 
-export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null): CallRecord => ({
+export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null, detail: string | null = null): CallRecord => ({
   runId: run.runId, overviewHash: run.overview?.hash ?? null,
   commit: run.overview !== undefined && run.overview !== null && "commit" in run.overview ? run.overview.commit : null,
   usage: run.cumulative.work, outcome, reason,
+  // Issue #125: present only when there is one, so a call record without it keeps its bytes.
+  ...(detail === null ? {} : { detail }),
 });
 
+/**
+ * Issue #125 (session f958ec3f): the head of the provider's words for a failed call, from ccloop's record
+ * (`failureCause.detail`), cut to CALL_DETAIL_MAX_BYTES on a character boundary; null when the record names none.
+ */
+function failureDetailOf(facts: SingleCallRecordFacts | undefined): string | null {
+  const head = truncateUtf8(facts?.failureCause?.detail ?? "", CALL_DETAIL_MAX_BYTES);
+  return head.length > 0 ? head : null;
+}
+
 /** Spec §7.3 and H7: a valid round awaits answers; an invalid one is retried at most twice, then fails. */
-function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null): void {
+function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null, detail: string | null): void {
   const round = readRound(store, group.groupId, target.no);
   if (round.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-round-moved");
   const rounds = readRounds(store, group.groupId);
@@ -302,7 +313,7 @@ function recordClarify(store: ControlStore, group: RequirementGroup, target: Req
   // repeats, so only the chain's earlier rounds' questions can be depended on -- one id, one question.
   const earlierQuestionIds = rounds.filter((r) => chain.indexOf(r.roundNo) !== -1 && chain.indexOf(r.roundNo) < position).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
   const classified = classifyClarifyOutput(rawOutput, { roundNo: position === -1 ? round.roundNo : position + 1, requirementId: group.requirement.requirementId, earlierQuestionIds, classification: clarifyLimits(store, group).effective });
-  round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
+  round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure, detail) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
   if (classified.ok) {
     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
     if (round.roundNo === 1) group.requirement.slug = classified.result.slug;
@@ -390,11 +401,11 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
     }, withoutStructure);
   },
   classify: classifyClarifyOutput,
-  complete(deps, run, rawOutput, commitTerminal, failure = null) {
-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure));
+  complete(deps, run, rawOutput, commitTerminal, failure = null, facts) {
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure, failureDetailOf(facts)));
   },
-  completeInTransaction(store, run, rawOutput, commitTerminal, failure = null) {
-    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordClarify(inner, group, target, settled, rawOutput, failure));
+  completeInTransaction(store, run, rawOutput, commitTerminal, failure = null, facts) {
+    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordClarify(inner, group, target, settled, rawOutput, failure, failureDetailOf(facts)));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };
@@ -467,10 +478,10 @@ async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow,
 }
 
 /** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */
-function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation, failure: string | null): void {
+function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation, failure: string | null, detail: string | null): void {
   const draft = readDraft(store, group.groupId, target.no);
   if (draft.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-draft-moved");
-  draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
+  draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure, detail) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
   Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges });
   if (ev.ok) draft.state = "awaiting-review";
   else if (draft.autoRetry < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
@@ -503,11 +514,11 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   },
   evaluate: evaluateSplit,
   classify: validateSplitDraft,
-  complete(deps, run, evaluation, commitTerminal, failure = null) {
-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure));
+  complete(deps, run, evaluation, commitTerminal, failure = null, facts) {
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts)));
   },
-  completeInTransaction(store, run, evaluation, commitTerminal, failure = null) {
-    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordSplit(inner, group, target, settled, evaluation as SplitEvaluation, failure));
+  completeInTransaction(store, run, evaluation, commitTerminal, failure = null, facts) {
+    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordSplit(inner, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts)));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };

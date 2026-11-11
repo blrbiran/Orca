@@ -143,7 +143,7 @@ function filesPart(paths: string[], limits: OverviewLimits): RepositoryOverview[
   return { status: "ok", total: paths.length, listed, cut, directories };
 }
 
-function truncateUtf8(text: string, maxBytes: number): string {
+export function truncateUtf8(text: string, maxBytes: number): string {
   let out = "", bytes = 0;
   for (const char of text) { const size = Buffer.byteLength(char, "utf8"); if (bytes + size > maxBytes) break; out += char; bytes += size; }
   return out;

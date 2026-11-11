@@ -56,13 +56,17 @@ export interface SingleCallHandler {
   evaluate?(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown, failure?: string | null, facts?: SingleCallRecordFacts): Promise<unknown>;
   /** Ce: the purpose's own classifier of the raw output (code, never the model). */
   readonly classify: (...args: never[]) => unknown;
-  /** Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back. */
-  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
+  /**
+   * Ce: settle the call and its run in one transaction; `commitTerminal` runs first, a throw rolls everything back.
+   * `facts` (issue #125): what the driver read in ccloop's record, as `evaluate` is given it; absent where no record was
+   * read (a person's usage settlement).
+   */
+  complete(deps: { store: ControlStore; admissionGate?: AdmissionGate }, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null, facts?: SingleCallRecordFacts): void;
   /**
    * Spec 2026-10-27 single-call unknown usage §9 R2: `complete`'s core inside the caller's transaction (no gate, no
    * transaction of its own); `complete` wraps it. Absent: the purpose's call cannot be settled by a person (flow calls, R1).
    */
-  completeInTransaction?(store: ControlStore, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null): void;
+  completeInTransaction?(store: ControlStore, run: SingleCallRunRow, rawOutput: unknown, commitTerminal: () => void, failure?: string | null, facts?: SingleCallRecordFacts): void;
   /**
    * Quota probe spec 2026-11-06 §2 Outcome: what a run blocked at C on unknown usage keeps of `evaluate`'s result, on the
    * run and its drive record (a probe's verdict is known from the record even when its usage is not). Absent: nothing.
@@ -106,11 +110,11 @@ const CLARIFY_ANY: SingleCallHandler = {
   purpose: "clarify",
   prepare: (deps, run) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).prepare(deps, run),
   classify: CLARIFY_HANDLER.classify,
-  complete: (deps, run, rawOutput, commitTerminal, failure) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).complete(deps, run, rawOutput, commitTerminal, failure),
+  complete: (deps, run, rawOutput, commitTerminal, failure, facts) => (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).complete(deps, run, rawOutput, commitTerminal, failure, facts),
   // Spec 2026-10-27 §9 R1: a flow clarify call is out of the settlement's scope; singleCallSettlement.ts never reaches it.
   // ERRATUM (session 43913afc, flow call settlement spec 2026-11-01): a flow clarify call is now settled by the flow core.
-  completeInTransaction: (store, run, rawOutput, commitTerminal, failure) =>
-    (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).completeInTransaction!(store, run, rawOutput, commitTerminal, failure),
+  completeInTransaction: (store, run, rawOutput, commitTerminal, failure, facts) =>
+    (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).completeInTransaction!(store, run, rawOutput, commitTerminal, failure, facts),
   usageUnknownReason: CLARIFY_HANDLER.usageUnknownReason,
 };
 const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpose, ...FLOW_CALL_HANDLER });
