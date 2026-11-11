@@ -88,7 +88,7 @@ orca check schedule weekly --remove
 set the global lock list (needs a person token); no --lock clears every lock
 
 - What it does: sends control verb `set-check-locks`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `--lock <lock>` (repeatable): integrationCheck.command|modelReview.budgetTokens (repeatable)
 
 ```

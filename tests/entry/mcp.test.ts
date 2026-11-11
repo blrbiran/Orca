@@ -95,6 +95,23 @@ describe("orca mcp serve (CLI v2 spec §10)", () => {
     }
   }, 60_000);
 
+  // CLI browser login spec (2026-11-11) §6.8: `auth login` waits on a person in a browser; over MCP it is refused by name
+  // before anything is sent. `auth status` is not.
+  it("refuses auth login over MCP (cli-login-not-over-mcp) without asking the panel; auth status runs", async () => {
+    const panel = await world();
+    const client = await connect({ root: panel.dir, state: panel.dir, env: {} });
+    try {
+      const refused = await call(client, ["auth", "login"]);
+      expect(refused.isError).toBe(true);
+      expect(envelope(refused as never).body.error.code).toBe("cli-login-not-over-mcp");
+      expect(panel.requests).toEqual([]);
+      const status = await call(client, ["auth", "status"]);
+      expect((status as { content: Array<{ text: string }> }).content[0]!.text).toContain("person-token-missing");
+    } finally {
+      await client.close();
+    }
+  }, 60_000);
+
   it("C14: with no panel, a read answers panel-not-running as an error result", async () => {
     const w = await workspace();
     const client = await connect(w);

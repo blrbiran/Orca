@@ -49,7 +49,7 @@ any command; `orca version` should equal this skill's version.
    check and flow settings and their locks, re-running or answering a flow, its effects and its pool, appending a
    plan-library version (`plan save --entry`) or importing a file into the library, setting a schedule, making one from
    a group or enabling one, most orchestration limits, group dependencies and corrections are refused
-   (`control-person-token-required`). Do not look for a way around it: ask the person (they run `orca login` and the
+   (`control-person-token-required`). Do not look for a way around it: ask the person (they run `orca auth login` and the
    command with `--as-person`). A new `plan save`, `plan archive` and disabling, removing or resuming a schedule need no
    person token. An agent may set the global `agentTopUpCap` orchestration limit; it is summed per group, not set per
    task. A run Orca dispatched is refused all plan-library and schedule writes, and even some open verbs

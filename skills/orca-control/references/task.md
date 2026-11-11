@@ -72,7 +72,7 @@ verify the current run's saved result instead of re-running (after run eligibili
 settle a run's unknown usage (cannot be undone)
 
 - What it does: sends control verb `settle-unknown-usage`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 - `--acknowledge <acknowledge>` (required): charge-remaining-grant|release-unmetered|release-known-zero (the last only when ccloop proved the failed run spent nothing)

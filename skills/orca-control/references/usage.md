@@ -20,7 +20,7 @@ tokens used per model, the caps and the spend revision
 set a spend cap
 
 - What it does: sends control verb `set-spend-cap`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `--scope <scope>` (required): all|repo:<repoId>
 - `--period <period>` (required): total|week|month
 - `--tokens <n>` (required): the cap
@@ -30,7 +30,7 @@ set a spend cap
 clear a spend cap
 
 - What it does: sends control verb `clear-spend-cap`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `--scope <scope>` (required): all|repo:<repoId>
 - `--period <period>` (required): total|week|month
 
@@ -39,6 +39,6 @@ clear a spend cap
 the usage calendar's time zone and first weekday
 
 - What it does: sends control verb `set-usage-calendar`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `--time-zone <time-zone>` (required): an IANA zone
 - `--week-start <n>` (required): 1 Monday .. 7 Sunday

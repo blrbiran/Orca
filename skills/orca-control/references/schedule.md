@@ -47,7 +47,7 @@ orca schedule fires sch-weekly --limit 10
 a builtin flow template on a cron (at most hourly), at the version the build ships; needs a person token
 
 - What it does: sends control verb `schedule-set`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<template>`: a builtin template (wechat-article or wechat-article@3)
 - `--cron <cron>` (required): 5-field cron (minute hour day month weekday), at most hourly
 - `--param <param>` (repeatable): a template param, k=v (repeatable)
@@ -67,7 +67,7 @@ orca schedule add flow wechat-article --cron '0 9 * * 1' --param idea='a topic' 
 a plan library entry at one explicit version on a cron; --version is required (orca plan show lists an entry's versions); needs a person token
 
 - What it does: sends control verb `schedule-set`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<entry>`: a plan library entry (pl-…; orca plan list names them)
 - `--version <version>` (required): the version's sha256 (orca plan show lists them)
 - `--cron <cron>` (required): 5-field cron (minute hour day month weekday), at most hourly
@@ -85,7 +85,7 @@ orca schedule add group pl-0123456789abcdef --version 3f2a… --cron '0 9 * * 1'
 change a schedule's cron or name, a flow's params and pool, or a group's pinned version and token limit; needs a person token
 
 - What it does: sends control verb `schedule-set`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<schedule>`: a schedule id (orca schedule list)
 - `--cron <cron>`: 5-field cron (minute hour day month weekday), at most hourly
 - `--param <param>` (repeatable): a template param, k=v (repeatable)
@@ -105,7 +105,7 @@ orca schedule edit sch-weekly --repin 3f2a…
 turn a schedule's fires on; needs a person token
 
 - What it does: sends control verb `schedule-enable`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<schedule>`: a schedule id (orca schedule list)
 
 ```

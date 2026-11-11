@@ -33,7 +33,7 @@ function commandHelp(def: CommandDef): string {
     for (const p of def.positionals) lines.push(`  <${p.name}>  ${p.summary}`);
     for (const f of def.flags) lines.push(`  ${flagUsage(f).replace(/^\[|\]$/g, "")}  ${f.summary}${f.humanOnly ? " (person token: --as-person)" : ""}`);
   }
-  if (def.access === "token") lines.push("", "Needs a person token over the socket: orca login, then --as-person.");
+  if (def.access === "token") lines.push("", "Needs a person token over the socket: orca auth login, then --as-person.");
   if (def.exitCodes !== undefined) {
     lines.push("");
     for (const [code, meaning] of Object.entries(def.exitCodes)) lines.push(`  exit ${code}: ${meaning}`);

@@ -40,7 +40,7 @@ set the operator's agent preferences from a JSON file, or only the model review'
 apply the detected installation changes named by --accept
 
 - What it does: sends control verb `apply-agent-update`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `--accept <accept>` (required) (repeatable): a change id from the update preview (repeatable)
 
 ## `orca agent init`

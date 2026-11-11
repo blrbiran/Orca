@@ -21,9 +21,15 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 - `orca version` — the CLI's version (the orca-control skill's version: should equal it)
 
+### `orca auth`
+
+- `orca auth login [--no-browser]` — store a person token for this terminal: an owner approves its code in the browser where they are signed in; used only with --as-person
+- `orca auth logout` — revoke the stored person token and remove it (the same as orca logout)
+- `orca auth status` — the stored person token's account and expiry (never the token)
+
 ### `orca login`
 
-- `orca login --name <name> [--password-stdin]` — store a person token for this terminal: the panel account's password, typed here; used only with --as-person
+- `orca login --name <name> [--password-stdin]` — store a person token by typing the panel account's password here (members and isolated test panels; otherwise prefer orca auth login); used only with --as-person
 
 ### `orca logout`
 

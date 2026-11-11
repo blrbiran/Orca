@@ -44,7 +44,7 @@ export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: Proje
     if (token !== undefined) {
       const current = auth?.authenticatePerson(token, auth.nowMs()) ?? null;
       if (current === null) {
-        sendControlError(res, 401, "control-person-token-invalid", "The person token is not live (wrong, expired or revoked): run orca login again.");
+        sendControlError(res, 401, "control-person-token-invalid", "The person token is not live (wrong, expired or revoked): run orca auth login again.");
         return;
       }
       person = { userId: current.user.id, name: current.user.name, roles: current.user.roles };

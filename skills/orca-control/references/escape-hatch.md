@@ -9,7 +9,7 @@ What follows is the text the orca-control skill carried before CLI v2 (moved her
 including the route table and where each route's expected revision comes from.
 
 > **Correction (CLI v2 spec §15.1, plan Task 10):** section 6 below predates the socket's access tiers. Over the socket
-> today a verb is *open* (an attended agent may send it), *token* (it needs a person token: `orca login`, then
+> today a verb is *open* (an attended agent may send it), *token* (it needs a person token: `orca auth login`, then
 > `--as-person`; without one the answer is 403 `control-person-token-required`), or refused for a run Orca dispatched
 > (403 `control-dispatched-run-refused`). The "Who may" line of each command in the generated references is current;
 > a Web member still meets `control-verb-human-only` / `control-field-human-only` as section 6 says.

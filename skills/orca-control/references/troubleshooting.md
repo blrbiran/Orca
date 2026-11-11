@@ -10,8 +10,8 @@ Hand-written. Find the code (`body.error.code` under `--json`, or the `orca: <co
 | `revision-conflict` (409) | the state moved after your read (or your `--if-revision`) | Read again (`group show` …) and decide again. Never just bump the number. |
 | `command-id-conflict` (409) | that command id was already used for a different request | Use a new id for a new request; to retry an uncertain one, `orca command retry --request` with the saved JSON. |
 | a `request` field in the `--json` answer, `control-socket-timeout`, `retryable: true` | the outcome is uncertain: the command may have run | `orca command retry --request -` with that JSON on stdin. Do not re-run the command. |
-| `control-person-token-required` (403) | a person's action (budget, caps, where work goes, …) | Ask the person: `orca login`, then the command with `--as-person`. |
-| `control-person-token-invalid` (401) | the stored person token expired or was revoked | The person runs `orca login` again. |
+| `control-person-token-required` (403) | a person's action (budget, caps, where work goes, …) | Ask the person: `orca auth login` (they approve it in the browser), then the command with `--as-person`. Never run it yourself over MCP. |
+| `control-person-token-invalid` (401) | the stored person token expired or was revoked | The person runs `orca auth login` again. |
 | `control-dispatched-run-refused` (403) | you are a run Orca dispatched; it may not act as the person | Report what you would have done; do not retry. |
 | `control-verb-human-only`, `control-field-human-only` (403) | a Web member, or an old surface, asked for an owner's action | Ask an owner. |
 | `group-execution-pending` (409) on `group start` | the group is already starting or running | Poll `orca group show`; no second start is needed. |

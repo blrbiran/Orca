@@ -10,7 +10,7 @@
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { DISPATCHED_RUN_ENV } from "../control/commandClient.js";
+import { DISPATCHED_RUN_ENV, dispatchedRunHeaders } from "../control/commandClient.js";
 import { discoverSocketPath } from "../entry/discovery.js";
 import { EntryRejection } from "../entry/envelope.js";
 import { requestOverSocket } from "../entry/socketClient.js";
@@ -50,8 +50,8 @@ function storedTokenHeaders(env: NodeJS.ProcessEnv): Record<string, string> {
   const file = join(personDir(env), TOKEN_FILE);
   let stored: Partial<StoredPersonToken>;
   try { stored = JSON.parse(readFileSync(file, "utf8")) as Partial<StoredPersonToken>; }
-  catch { throw new EntryRejection("person-token-missing", `no person token at ${file}: run orca login first`); }
-  if (stored.schema !== PERSON_TOKEN_SCHEMA || typeof stored.token !== "string") throw new EntryRejection("person-token-missing", `${file} is not an orca person token: run orca login again`);
+  catch { throw new EntryRejection("person-token-missing", `no person token at ${file}: run orca auth login first`); }
+  if (stored.schema !== PERSON_TOKEN_SCHEMA || typeof stored.token !== "string") throw new EntryRejection("person-token-missing", `${file} is not an orca person token: run orca auth login again`);
   return { [PERSON_TOKEN_HEADER]: stored.token };
 }
 
@@ -75,7 +75,7 @@ const errorOf = (body: unknown): { code: string; message: string } => {
 };
 
 /** A refusal or the panel's error: one line on stderr; 1 here, 2 the panel's (spec §7). */
-function fail(io: CommandIo, exit: 1 | 2, code: string, message: string): number {
+function fail(io: CommandIo, exit: 1 | 2 | typeof AUTH_LOGIN_CANCELLED, code: string, message: string): number {
   io.stderr(`orca: ${code}: ${message}\n`);
   return exit;
 }
@@ -105,6 +105,106 @@ export async function runLogin(args: ParsedArgs, io: CommandIo): Promise<number>
   const answer = body as { token: string; sid: string; user: { name: string }; expiresAt: number };
   store(dir, { schema: PERSON_TOKEN_SCHEMA, token: answer.token, sid: answer.sid, user: answer.user.name, expiresAt: answer.expiresAt });
   if (!args.global.quiet) io.stdout(`logged in as ${answer.user.name} until ${new Date(answer.expiresAt).toISOString()}; token in ${join(dir, TOKEN_FILE)} (sent only with --as-person)\n`);
+  return 0;
+}
+
+/**
+ * CLI browser login spec §6.11: whether `orca auth login` opens a browser -- not with --no-browser, not over SSH on macOS
+ * (it would open on the console's screen), not on Linux without a display, and on no other platform (it only prints).
+ */
+export function browserAllowed(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, noBrowser: boolean): boolean {
+  if (noBrowser) return false;
+  if (platform === "darwin") return !env.SSH_CONNECTION && !env.SSH_TTY;
+  if (platform === "linux") return Boolean(env.DISPLAY || env.WAYLAND_DISPLAY);
+  return false;
+}
+
+/** The default `openUrl`: no shell, detached, nothing inherited; rejects when the opener cannot be spawned. */
+function openWithSystem(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    void import("node:child_process").then(({ spawn }) => {
+      const child = spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { detached: true, stdio: "ignore" });
+      child.once("error", reject);
+      child.once("spawn", () => { child.unref(); resolve(); });
+    }, reject);
+  });
+}
+
+/** Spec §6.1: the panel's answer must be a loopback http URL of exactly this shape before anything opens it. */
+const CLI_LOGIN_URL = /^http:\/\/(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost|\[::1\]):\d{1,5}\/#cli-login\/[A-Z0-9-]{9}$/;
+const AUTH_LOGIN_CANCELLED = 130;
+
+/**
+ * CLI browser login spec §6: `orca auth login`. Asks the panel for a login request, prints its code and URL, opens the URL
+ * (§6.11), and polls with the request id -- never printed -- until an owner approves or denies the code in the browser, or
+ * it expires. The token is stored as `orca login` stores it. Refused under the dispatched-run marker (§6.7) and over MCP
+ * (§6.8), before anything is sent.
+ */
+export async function runAuthLogin(args: ParsedArgs, io: CommandIo): Promise<number> {
+  if (marked(io.env)) throw new EntryRejection("control-dispatched-run-refused", "orca auth login is not run by a run Orca dispatched; a person runs it in a terminal they attend");
+  const client = io.client ?? "cli";
+  if (client.startsWith("mcp")) throw new EntryRejection("cli-login-not-over-mcp", "orca auth login is not available over MCP; a person runs it in a terminal they attend");
+  // Resolved before the panel is asked, so a store that cannot be named leaves no request behind.
+  const dir = personDir(io.env);
+  const socketPath = discoverSocketPath({ stateDirFlag: args.global.controlStateDir, env: io.env });
+  const ask = (path: string, body: unknown) => requestOverSocket({ socketPath, method: "POST", path, client, headers: dispatchedRunHeaders(io.env), body });
+  const started = await ask("person/cli-login", { pid: process.pid, ppid: process.ppid, cwd: io.cwd, startedAt: Math.round(performance.timeOrigin) });
+  if (started.status !== 200) { const e = errorOf(started.body); return fail(io, 2, e.code, e.message); }
+  const request = started.body as { requestId: string; code: string; url: string; expiresAt: number; pollMs: number };
+  const cancel = (): Promise<unknown> => ask("person/cli-login/cancel", { requestId: request.requestId }).catch(() => undefined);
+  if (typeof request.url !== "string" || !CLI_LOGIN_URL.test(request.url)) {
+    await cancel();
+    return fail(io, 2, "cli-login-url-invalid", `the panel answered a login URL that is not a loopback http URL of the expected shape: ${JSON.stringify(request.url)}`);
+  }
+  io.stdout(`Code ${request.code}: approve it in the browser at ${request.url}\n`);
+  if (browserAllowed(process.platform, io.env, args.flags["no-browser"] === true)) {
+    try { await (io.openUrl ?? openWithSystem)(request.url); }
+    catch { io.stderr("orca: could not open a browser; open the URL above yourself\n"); }
+  }
+  // Spec §6.10: a signal while waiting cancels the request, so the page says so instead of waiting for the expiry.
+  let interrupted = false;
+  let wake: () => void = () => undefined;
+  const onSignal = (): void => { interrupted = true; wake(); };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  try {
+    const pollMs = Number.isSafeInteger(request.pollMs) && request.pollMs > 0 && request.pollMs <= 10_000 ? request.pollMs : 1_000;
+    // The panel's clock decides the expiry; this deadline only stops a loop the panel never ends.
+    const deadline = Date.now() + Math.max(0, request.expiresAt - Date.now()) + 5 * pollMs + 5_000;
+    while (!interrupted) {
+      const answer = await ask("person/cli-login/poll", { requestId: request.requestId });
+      const body = answer.body as { state?: unknown; token?: unknown; sid?: unknown; user?: { name?: unknown }; expiresAt?: unknown };
+      if (answer.status !== 200) {
+        const e = errorOf(answer.body);
+        return fail(io, 2, e.code, e.code === "cli-login-unknown" ? "the panel has no such login request (it may have restarted): run orca auth login again" : e.message);
+      }
+      if (typeof body.token === "string") {
+        const user = String(body.user?.name);
+        const expiresAt = Number(body.expiresAt);
+        store(dir, { schema: PERSON_TOKEN_SCHEMA, token: body.token, sid: String(body.sid), user, expiresAt });
+        if (!args.global.quiet) io.stdout(`logged in as ${user} until ${new Date(expiresAt).toISOString()}; token in ${join(dir, TOKEN_FILE)} (sent only with --as-person)\n`);
+        return 0;
+      }
+      if (Date.now() > deadline) { await cancel(); return fail(io, 2, "cli-login-expired", "the login request expired: run orca auth login again"); }
+      await new Promise<void>((resolve) => { const timer = setTimeout(resolve, pollMs); wake = () => { clearTimeout(timer); resolve(); }; });
+    }
+    await cancel();
+    return fail(io, AUTH_LOGIN_CANCELLED, "cli-login-cancelled", "cancelled; the browser page will say so");
+  } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  }
+}
+
+/** CLI browser login spec §6.12: the stored token's user and expiry, labelled as stored; never the token itself. */
+export async function runAuthStatus(_args: ParsedArgs, io: CommandIo): Promise<number> {
+  const file = join(personDir(io.env), TOKEN_FILE);
+  let stored: Partial<StoredPersonToken>;
+  try { stored = JSON.parse(readFileSync(file, "utf8")) as Partial<StoredPersonToken>; }
+  catch { return fail(io, 1, "person-token-missing", `no person token at ${file}: run orca auth login`); }
+  if (stored.schema !== PERSON_TOKEN_SCHEMA || typeof stored.user !== "string" || typeof stored.expiresAt !== "number") return fail(io, 1, "person-token-missing", `${file} is not an orca person token: run orca auth login`);
+  const expired = stored.expiresAt <= Date.now() ? " (expired)" : "";
+  io.stdout(`stored person token: ${stored.user}, expires ${new Date(stored.expiresAt).toISOString()}${expired}\n`);
   return 0;
 }
 

@@ -22,9 +22,31 @@ export const META_ROWS: CommandDef[] = [
     mapsTo: { kind: "local", load: async () => (await import("../status.js")).runVersion },
     examples: ["orca version", "orca version --json"], format: () => "",
   },
+  // CLI browser login spec (2026-11-11) §6: the person token, approved by an owner in the browser (sent only with --as-person).
+  {
+    domain: "auth", action: "login", summary: "store a person token for this terminal: an owner approves its code in the browser where they are signed in; used only with --as-person",
+    positionals: [], flags: [
+      { name: "no-browser", type: "boolean", summary: "print the code and URL only; do not open a browser (also the case over SSH on macOS and on Linux without a display)" },
+    ], access: "open",
+    mapsTo: { kind: "local", load: async () => (await import("../person.js")).runAuthLogin },
+    exitCodes: { 2: "the panel refused, the request was denied or expired, or its URL was not a loopback URL", 130: "interrupted; the request was cancelled" },
+    examples: ["orca auth login", "orca auth login --no-browser", "orca usage set-cap --scope all --period week --tokens 500000 --as-person"], format: () => "",
+  },
+  {
+    domain: "auth", action: "logout", summary: "revoke the stored person token and remove it (the same as orca logout)",
+    positionals: [], flags: [], access: "open",
+    mapsTo: { kind: "local", load: async () => (await import("../person.js")).runLogout },
+    examples: ["orca auth logout"], format: () => "",
+  },
+  {
+    domain: "auth", action: "status", summary: "the stored person token's account and expiry (never the token)",
+    positionals: [], flags: [], access: "panel-local",
+    mapsTo: { kind: "local", load: async () => (await import("../person.js")).runAuthStatus },
+    examples: ["orca auth status"], format: () => "",
+  },
   // CLI v2 spec §15.3: a person token for an attended terminal session (sent only with --as-person).
   {
-    domain: "login", action: null, summary: "store a person token for this terminal: the panel account's password, typed here; used only with --as-person",
+    domain: "login", action: null, summary: "store a person token by typing the panel account's password here (members and isolated test panels; otherwise prefer orca auth login); used only with --as-person",
     positionals: [], flags: [
       { name: "name", type: "string", required: true, summary: "the panel account to log in as" },
       { name: "password-stdin", type: "boolean", summary: "an isolated test panel only: read the password as one line from stdin (refused for any path under the real ~/.orca)" },

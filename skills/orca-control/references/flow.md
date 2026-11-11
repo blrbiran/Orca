@@ -22,7 +22,7 @@ orca flow settings show --global
 set one flow setting in this project (or --global); needs a person token
 
 - What it does: sends control verb `set-flow-settings`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<field>`: effects.local|effects.cost|effects.external|effects.irreversible|rerunReview|rerunAskTimeoutSeconds|roles|allowedSkillSources|budgets.tokensPerRun|paramDefaults.<template>.<param>
 - `<value>`: a level (apply-flag|confirm|stage-only|follow-template), auto|review, an integer, JSON, or a preset's value
 - `--global`: the global layer (every project without its own value) instead of this project's
@@ -39,7 +39,7 @@ orca flow settings set paramDefaults.wechat-article.coverImage /covers/tea.png -
 remove flow settings from this project (or --global) so the next layer applies; needs a person token
 
 - What it does: sends control verb `set-flow-settings`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<field>` (one or more): effects.local|effects.cost|effects.external|effects.irreversible|rerunReview|rerunAskTimeoutSeconds|roles|allowedSkillSources|budgets.tokensPerRun|paramDefaults.<template>.<param>|paramDefaults
 - `--global`: the global layer (every project without its own value) instead of this project's
 
@@ -53,7 +53,7 @@ orca flow settings clear paramDefaults.wechat-article.coverImage --global --as-p
 lock one global flow setting (needs a person token): a locked field may only be tightened in a project
 
 - What it does: sends control verb `set-flow-locks`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<field>`: effects.<class>|allowedSkillSources|budgets.tokensPerRun
 
 ```
@@ -65,7 +65,7 @@ orca flow settings lock effects.irreversible --as-person
 unlock one global flow setting (needs a person token): a locked field may only be tightened in a project
 
 - What it does: sends control verb `set-flow-locks`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<field>`: effects.<class>|allowedSkillSources|budgets.tokensPerRun
 
 ```
@@ -181,7 +181,7 @@ orca flow plan fr-1234
 run the open plan: its candidates minus the skips (default: the model's proposed skips) plus additions; needs a person token
 
 - What it does: sends control verb `flow-rerun`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<run>`: a flow run id (fr-…) or a unique prefix
 - `--skip <skip>`: steps not to run, comma separated (replaces the proposal's skips)
 - `--add <add>`: non-candidate steps to run too, comma separated
@@ -196,7 +196,7 @@ orca flow rerun fr-1234 --skip cover,pick-title --as-person
 withdraw the open plan instead of running it: nothing re-runs, the feedback that made it is excluded; needs a person token
 
 - What it does: sends control verb `flow-rerun`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<run>`: a flow run id (fr-…) or a unique prefix
 - `--plan <n>`: the plan number (default: the open one)
 
@@ -238,7 +238,7 @@ orca flow revise fr-1234 --step brief --round 1 --file revise.json
 run a step the running plan asks about (it spends); needs a person token
 
 - What it does: sends control verb `flow-plan-step`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<run>`: a flow run id (fr-…) or a unique prefix
 - `--step <step>` (required): the step
 - `--plan <n>`: the plan number (default: the running one)
@@ -382,7 +382,7 @@ orca flow repin fr-1234 --version 2
 answer a step that waits for the person (an ask's form, a step's question, a clarify round, or consensus) or a feedback's clarify round; needs a person token
 
 - What it does: sends control verb `flow-answer`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<run>`: a flow run id (fr-…) or a unique prefix
 - `<step>` (optional): the waiting step (not with --feedback)
 - `--feedback <n>`: the message number of feedback whose clarify round waits (with --file or --consensus)
@@ -405,7 +405,7 @@ orca flow answer fr-1234 --feedback 7 --consensus --as-person
 confirm an effect card: its step runs now (needs a person token)
 
 - What it does: sends control verb `flow-effect`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<record>`: the effect record id (eff-…)
 
 ```
@@ -417,7 +417,7 @@ orca flow effect confirm eff-1234 --as-person
 enact a staged effect record: its step runs now (needs a person token)
 
 - What it does: sends control verb `flow-effect`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<record>`: the effect record id (eff-…)
 
 ```
@@ -429,7 +429,7 @@ orca flow effect enact eff-1234 --as-person
 discard a staged effect record: the step never runs (needs a person token)
 
 - What it does: sends control verb `flow-effect`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<record>`: the effect record id (eff-…)
 
 ```
@@ -441,7 +441,7 @@ orca flow effect discard eff-1234 --as-person
 raise a run's token pool; steps parked on an exhausted pool start again (needs a person token)
 
 - What it does: sends control verb `flow-pool`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<run>`: a flow run id (fr-…) or a unique prefix
 - `--tokens <n>` (required): how many tokens to add
 

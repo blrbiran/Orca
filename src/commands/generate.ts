@@ -49,7 +49,7 @@ export function generatorInputs(root: string): GeneratorInputs {
 }
 
 const who = (def: CommandDef): string =>
-  def.access === "token" ? "a person: needs a person token over the socket (`orca login`, then `--as-person`)"
+  def.access === "token" ? "a person: needs a person token over the socket (`orca auth login`, then `--as-person`)"
     : def.access === "panel-local" ? "anyone; runs here, needs no panel"
     : "open over the socket (a flag marked human-only still needs a person token)";
 

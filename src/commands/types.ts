@@ -67,6 +67,11 @@ export interface CommandIo {
   readSecret?(prompt: string): Promise<string>;
   /** The real ~/.orca --password-stdin refuses to touch (passwordStdin.ts); a seam for the criteria. Default: realOrcaDir(). */
   realOrcaDir?: string;
+  /**
+   * CLI browser login spec §6.11: open a URL in the system browser (`orca auth login`); a seam so no criterion opens a real
+   * one. Default: `open` (macOS) or `xdg-open`, no shell, detached. A rejection only means the URL is printed, not opened.
+   */
+  openUrl?(url: string): Promise<void>;
 }
 
 export type LocalHandler = (args: ParsedArgs, io: CommandIo) => Promise<number>;

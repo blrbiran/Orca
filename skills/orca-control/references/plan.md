@@ -55,7 +55,7 @@ orca plan save --group g-1a2b --entry pl-0123456789abcdef --as-person
 import a plan file (orca-plan-v1, or a scheduler plan file whose contracts are inlined) into this project's library; needs a person token
 
 - What it does: sends control verb `plan-library-import`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<path>`: the plan file; read here, never sent as a path
 - `--name <name>`: the entry's name; default: the file's name
 - `--entry <entry>`: append a version to this entry instead of making a new one

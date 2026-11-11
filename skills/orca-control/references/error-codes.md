@@ -41,6 +41,10 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `checkpoint-run-settled` | 409 |
 | `checkpoint-usage-high-water` | 409 |
 | `cleanup-not-recoverable` | 422 |
+| `cli-login-busy` | 429 |
+| `cli-login-denied` | 403 |
+| `cli-login-expired` | 409 |
+| `cli-login-unknown` | 404 |
 | `close-argument-conflict` | 400 |
 | `closing-row-refused` | 400 |
 | `command-id-conflict` | 409 |

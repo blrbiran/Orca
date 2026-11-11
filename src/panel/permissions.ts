@@ -89,7 +89,7 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
     if (p.dispatchedRun !== undefined)
       return { code: "control-dispatched-run-refused", message: `${verb}, as sent, is not done by a run Orca dispatched (${p.dispatchedRun}); a person does it, from the Web UI or an attended session.` };
     if (p.person !== undefined) return null;
-    return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca login\` and resend it with --as-person, or do it from the Web UI.` };
+    return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca auth login\` and resend it with --as-person, or do it from the Web UI.` };
   }
   if (p.kind === "user") return mayDoHumanOnly(p) ? null : humanOnly;
   // The classification is the verb's and fields', not the principal's: it holds whatever tier an entry is in.
@@ -98,5 +98,5 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
   if (socketTier(verb, payload) === "open") return null;
   // A token is its person's: an owner's opens the token tier; a member's answers the member's own refusal (I3).
   if (p.person !== undefined) return mayDoHumanOnly({ kind: "user", ...p.person }) ? null : humanOnly;
-  return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca login\` and resend it with --as-person, or do it from the Web UI.` };
+  return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca auth login\` and resend it with --as-person, or do it from the Web UI.` };
 }

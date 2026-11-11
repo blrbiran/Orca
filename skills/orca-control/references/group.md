@@ -143,7 +143,7 @@ close a proved terminal failed run's accounting (it stays failed; retry or archi
 set the group's budget limit
 
 - What it does: sends control verb `set-limit`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `--limit <limit>` (required): JSON {tokens,activeMs,attempts,sessions}
 
@@ -194,7 +194,7 @@ approve an agent resolving the group's integration conflict
 answer a folder change that stopped placement: --take-folder, --recheck or --withhold
 
 - What it does: sends control verb `resolve-folder-change`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `--take-folder`: keep the folder's changes and continue
 - `--recheck`: look at the folder again
@@ -206,7 +206,7 @@ answer a folder change that stopped placement: --take-folder, --recheck or --wit
 answer a stopped multi-directory landing: --retry-rest or --mark-resolved
 
 - What it does: sends control verb `multi-dir-landing`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `--retry-rest`: pre-check and land the directories not yet landed
 - `--mark-resolved`: record that the person landed them: they are not due again
@@ -248,7 +248,7 @@ orca group apply-estimate g1
 schedule this group from its archived plan: one library version pins the fires; needs a person token
 
 - What it does: sends control verb `schedule-from-group`.
-- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `--cron <cron>` (required): 5-field cron (minute hour day month weekday), at most hourly
 - `--token-limit <n>`: the fired groups' token limit; default: unlimited

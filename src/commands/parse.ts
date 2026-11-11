@@ -11,7 +11,7 @@ export const GLOBAL_FLAGS: readonly FlagDef[] = [
   { name: "help", type: "boolean", summary: "this command's help" },
   { name: "command-id", type: "string", summary: "use this id for a new request (a write)" },
   { name: "if-revision", type: "integer", summary: "send this revision instead of the one just read (a write)" },
-  { name: "as-person", type: "boolean", summary: "send the person token stored by orca login" },
+  { name: "as-person", type: "boolean", summary: "send the person token stored by orca auth login (or orca login)" },
 ];
 
 const NON_NEGATIVE = /^(0|[1-9][0-9]*)$/;

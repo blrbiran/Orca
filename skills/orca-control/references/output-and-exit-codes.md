@@ -21,6 +21,7 @@ When `request` is present the outcome is uncertain (timeout, dropped connection,
 
 - `orca status`: 0 every check ok (warnings allowed); 1 a check failed
 - `orca doctor`: 0 every check ok (warnings allowed); 1 a check failed
+- `orca auth login`: 2 the panel refused, the request was denied or expired, or its URL was not a loopback URL; 130 interrupted; the request was cancelled
 - `orca decision validate`: 0 every line valid; 1 a line rejected, or nothing found to validate; 2 downgraded (nothing rejected)
 - `orca decision metrics`: 0 reported; 1 refused by name; 6 reported in full, and some lines were malformed
 - `orca decision compact-reviews`: 0 reported (and applied); 1 refused by name
@@ -50,4 +51,4 @@ When `request` is present the outcome is uncertain (timeout, dropped connection,
 - `--help`: this command's help
 - `--command-id <command-id>`: use this id for a new request (a write)
 - `--if-revision <n>`: send this revision instead of the one just read (a write)
-- `--as-person`: send the person token stored by orca login
+- `--as-person`: send the person token stored by orca auth login (or orca login)
