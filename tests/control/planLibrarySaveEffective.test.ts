@@ -174,7 +174,7 @@ describe("plan-library-save from a group keeps the operator's agent choices (#16
       const command = { schema: "orca-raw-command-v1", commandId: "save-damaged", actorId: "human", expectedRevision: 0, verb: "plan-library-save",
         target: { kind: "plan-library" }, payload: { source: { kind: "group", groupId: "g" }, name: "weekly" } } as PlanLibraryCommand;
       const deps = { store: w.f.store, resolveRepository: () => join(w.f.root, "repo") };
-      // mutation: drop the override's schema check -> the unknown field reaches the codec as control-plan-rejected -> red
+      // mutation: drop the override's schema check -> the damaged layer is read as none and the save succeeds -> red
       const answer = withCommandContext("save-damaged", PERSON, () => applyPlanLibraryCommand(deps, command)) as { error?: { code: string } };
       expect(answer.error?.code).toBe("recovery-blocked");
     } finally { await w.f.dispose(); }
