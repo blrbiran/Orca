@@ -167,6 +167,9 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       expect(g(w.multiRepo!, "rev-parse", `${alphaTip}^2`)).toBe(drive.dirs[1].attemptSha);
       expect(g(w.repo, "log", "-1", "--format=%s", primaryTip)).toBe(`orca: land ${runId}`);
       expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe(`orca: land ${runId}`);
+      // Tester D10: every directory's landing names the group and task it lands.
+      expect(g(w.repo, "log", "-1", "--format=%b", primaryTip)).toBe("Orca-Group: g\nOrca-Task: a");
+      expect(g(w.multiRepo!, "log", "-1", "--format=%b", alphaTip)).toBe("Orca-Group: g\nOrca-Task: a");
       expect(g(w.repo, "show", `${primaryTip}:shared.txt`)).toBe("A");
       expect(g(w.multiRepo!, "show", `${alphaTip}:src/a.ts`)).toBe("export const a = 1;");
       // spec §10: one ledger, in the primary's commit; the extra landing carries none.

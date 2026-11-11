@@ -308,6 +308,11 @@ async function debugClosingOf(
  */
 type Landing = { kind: "not-produced" } | { kind: "deferred" } | { kind: "moved" } | { kind: "swapped"; commit: string };
 
+/** Tester D10: a landing's body names the group and task it lands, so `git log` alone says whose work it is. */
+function landingTrailers(run: DriverRun): string {
+  return `Orca-Group: ${run.groupId}${run.taskId === null ? "" : `\nOrca-Task: ${run.taskId}`}`;
+}
+
 async function landOnTip(
   deps: ExecutionDriverDeps, targetRepo: string, runId: string, groupId: string, old: string,
   produce: (landing: string) => Promise<string | null | "deferred">,
@@ -392,7 +397,7 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
     // Debug task plan Task 9: a debug run's closing rows ride the same commit (same -f).
     const closing = await debugClosingOf(deps, run, targetRepo, join(landing, ".decisions"), old);
     if (closing?.written != null) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", closing.written)]);
-    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
+    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`, "-m", landingTrailers(run)]);
     // Before the swap: a death after it finds the landing, skips this produce and still has these for markLanded.
     stagePending(deps, runId, pending, closing?.record ?? null, criteria?.flag ?? null, flowDecisions);
     const next = await revParse(landing, "HEAD");
@@ -608,7 +613,7 @@ async function produceMultiMerge(
       pending = ledger.pending;
       if (ledger.writtenIds.length > 0) await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
     }
-    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`]);
+    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: land ${runId}`, "-m", landingTrailers(run)]);
     // Before the swap: a death after it still has these for the landing's write.
     if (primaryDir) stagePending(deps, runId, pending, null, criteria?.flag ?? null);
     return { next: await revParse(landing, "HEAD") };
@@ -918,7 +923,7 @@ async function finishReconcile(
   } finally {
     if (ledgerDir !== null) await rm(ledgerDir, { recursive: true, force: true });
   }
-  const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `orca: land ${runId} (reconciled with ${(record.otherTaskIds ?? [record.otherTaskId]).join(", ")})`);
+  const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `orca: land ${runId} (reconciled with ${(record.otherTaskIds ?? [record.otherTaskId]).join(", ")})\n\n${landingTrailers(run)}`);
   await git(record.copyPath, [...QUIET_GIT, "update-ref", `refs/orca/merged/${runId}`, merged]);
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, record.old, async (landing) => {
     // A bare sha is fetchable because refs/orca/merged/<runId> advertises it in the copy.
