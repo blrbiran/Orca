@@ -195,3 +195,30 @@ the human to confirm or overturn.
 5. **A refused acceptance can be sent again** (a new command); a pending or landed one cannot.
 6. **The code-authored ledger record** is a `criteria` decision `<runId>/orca-operator-accept` (major), naming the principal,
    the command and the attempt; its undo is `git revert -m 1` of the landing merge.
+
+## 9. Correction: attempts in an unlimited group (2026-11-11, tester follow-up E §8, workstream W5)
+
+Recorded by the implementing session of `docs/superpowers/specs/2026-11-11-tester-followup-e-design.md` §8 (human ruling
+「其他都按你的建议走」). §7 item 7 above is kept as written; its **first consequence (a) is overridden** as follows. The
+second consequence (b) is unchanged.
+
+1. **Rule.** In a group whose `limit.tokens` is null, an explicit `retry-task` (a person's or an agent's: any sender but
+   `orca-auto`) starts its run with the task's own attempts and active time, not what is left of the lineage's. Orca's
+   own retries -- the ladder's level 1, the quota-wait and quota-probe retries, failover -- keep counting the lineage.
+2. **How.** The retry appends a `fresh-start` row to `work_grant_top_ups` (`kind: "fresh-start"`, `personAuthority`
+   false) crediting back the attempts and active time the lineage used beyond every earlier top-up and credit. It funds
+   the retried run and every later run exactly as a top-up does, so the claim's funded allowance, `readFundedAllowance`'s
+   check and `dispatchedPolicy` need no change. Tokens and sessions are never credited. A fresh-start row is not an
+   agent's top-up (`agentTopUpSum`) and not a board line (`topUps` in the group view); the `task-retried` activity
+   records it as `freshStart`. No schema change: the field is optional on the row body.
+3. **Bounds.** The credit never exceeds what the group's own `activeMs` / `attempts` limits leave the claim (read after
+   the failed run's remainder is released), so a retry is never left ready and unclaimable. A retry's own top-up still
+   has to fit that headroom (refused `group-budget-unavailable` otherwise, as before). Spend caps, the T2 funding floor
+   (`retry-funding-below-attempt-cost`, ladder only) and the ladder bound are unchanged. The lineage is still the
+   lineage in Orca's record: the funded allowance's `inheritedUsage` keeps counting every attempt used.
+4. **Visible.** The `task-retried` receipt carries `nextRun: {attempts, activeMs}` when the rule applied (absent
+   otherwise, so every other receipt is unchanged); `orca task retry` prints "the new run of <t> gets N attempts and M min
+   active time (fresh: the group has no token limit)".
+5. **Finite groups** are unchanged byte for byte: `tests/control/finiteRetryGolden.test.ts` pins a finite `optional-v1`
+   group and a finite-legacy group (grant, funded allowance, dispatched policy, and the next retry's refusal) against a
+   golden captured before the change.

@@ -2276,7 +2276,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
   // The receipt copies the marker (usageSettlement.ts), whose schema ties a null work token charge to the unmetered method.
   z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor", "known-zero"]) }).strict(),
-  z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema }).strict(),
+  // Tester follow-up E §8: `nextRun`, what the new run starts with, when an explicit retry in a group with no token limit
+  // gave it fresh attempts and active time (absent otherwise, so every other receipt is as it was).
+  z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema, nextRun: z.object({ attempts: safeInteger, activeMs: safeInteger }).strict().optional() }).strict(),
   z
     .object({
       kind: z.literal("recovery-observed"),

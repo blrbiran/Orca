@@ -19,6 +19,12 @@ export const topUpBodySchema = z.object({
   by: z.string().min(1),
   personAuthority: z.boolean(),
   at: safeInteger,
+  /**
+   * Tester follow-up E §8: `fresh-start` -- not work anyone added, but an explicit retry in a group with no token limit
+   * crediting back the attempts and active time the lineage used, so the retried run starts with the task's own (absent:
+   * a top-up). It funds later runs exactly as a top-up does; it is not an agent's top-up (agentTopUpSum) nor a board line.
+   */
+  kind: z.literal("fresh-start").optional(),
 }).strict();
 export type TopUpBody = z.infer<typeof topUpBodySchema>;
 export interface TopUpRow extends TopUpBody { fromRunId: string; workItemId: string }
@@ -50,9 +56,9 @@ export function topUpSum(store: ControlStore, groupId: string, workItemId: strin
   return rows.reduce<Amount>((total, row) => plus(total, parsed(row.body).amount), { ...ZERO });
 }
 
-/** The group's agent top-ups (personAuthority false), summed: what `agentTopUpCap` bounds. */
+/** The group's agent top-ups (personAuthority false; a fresh-start credit is no one's top-up), summed: what `agentTopUpCap` bounds. */
 export function agentTopUpSum(store: ControlStore, groupId: string): Amount {
-  return groupTopUps(store, groupId).filter(row => !row.personAuthority).reduce<Amount>((total, row) => plus(total, row.amount), { ...ZERO });
+  return groupTopUps(store, groupId).filter(row => !row.personAuthority && row.kind !== "fresh-start").reduce<Amount>((total, row) => plus(total, row.amount), { ...ZERO });
 }
 
 /** The authored grant plus a top-up; an unbounded token ceiling stays unbounded (`null + n = null`). */

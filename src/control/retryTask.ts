@@ -120,6 +120,19 @@ export function autoRetryFundingRefusal(store: ControlStore, groupId: string, ta
   return fresh.tokens !== null && perAttemptTokens !== null && fresh.tokens < perAttemptTokens ? `retry-funding-below-attempt-cost:${fresh.tokens}/${perAttemptTokens}` : null;
 }
 
+/**
+ * Tester follow-up E §8 (overrides budget spec 2026-11-11 §7 item 7's first consequence): the attempts and active time an
+ * explicit retry in a group whose `limit.tokens` is null credits back -- what the lineage used beyond every earlier top-up
+ * and credit, so authored + top-ups + credit - lineage is the task's own amount again (plus this retry's top-up). Null
+ * when the rule does not apply: a finite group (byte for byte as before), or a retry Orca sent itself (the ladder, quota
+ * retries, failover: they keep counting the lineage). Tokens and sessions are never credited.
+ */
+function freshStartWant(store: ControlStore, groupId: string, command: RetryTaskCommand, inherited: Amount, prior: Amount): Amount | null {
+  if (readGroup(store, groupId).limit.tokens !== null) return null;
+  if (command.actorId === "orca-auto" || commandPrincipalFor(command.commandId) === "orca-auto") return null;
+  return { tokens: 0, sessions: 0, attempts: Math.max(0, inherited.attempts - prior.attempts), activeMs: Math.max(0, inherited.activeMs - prior.activeMs) };
+}
+
 /** Normal failed-recovery retry keeps its real failure; no-dispatch consumption has separate proof and authority. */
 function recordSavedOrdinaryRetry(store:ControlStore,runId:string,commandId:string):void {
   const run=readRunBody(store,runId);
@@ -268,11 +281,29 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           // Retry work top-up spec 2026-11-06 §2: the new run (the newest) reads the authored grant plus every top-up, and this one.
           if(incoming!==null&&dimensions.every(d=>incoming[d]===0))throw new ControlError("retry-top-up-empty");
           if(incoming!==null&&incoming.tokens>0&&work.grant.work.tokens===null)throw new ControlError("retry-top-up-no-effect","tokens");
-          const authored=withTopUp(work.grant.work,add(topUpSum(store,groupId,taskId,null),incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}));
-          const left=remainingBudget(authored,inherited);
+          // Tester follow-up E §8: in a group with no token limit, an explicit retry (a person's or an agent's; never Orca's
+          // own -- the ladder and the quota retries keep counting the lineage) credits back the attempts and active time the
+          // lineage used beyond earlier top-ups, so the new run starts with the task's own.
+          const prior=topUpSum(store,groupId,taskId,null);
+          const want=freshStartWant(store,groupId,command,inherited,prior);
+          const authored=withTopUp(work.grant.work,add(add(prior,incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}),want??{tokens:0,activeMs:0,attempts:0,sessions:0}));
+          let left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
           const personAuthority=incoming===null?false:authorizeWorkTopUp(store,groupId,command.commandId,incoming,'retry-top-up');
           if(!released && !closed){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
+          let freshStart:Amount|null=null;
+          if(want!==null){
+            // Never more than the group's own non-token limits leave the claim (decideFundedAllowance, fundingReleased), read
+            // after the release above as the claim will see it: a credit the claim could not fund would strand the task ready.
+            const live=readGroup(store,groupId),handoff=work.grant.handoff,credit={...want};
+            for(const d of ["activeMs","attempts"] as const)credit[d]=Math.min(want[d],Math.max(0,live.limit[d]-live.used[d]-live.reserved[d]-handoff[d]-(left[d]-want[d])));
+            left={...left,activeMs:left.activeMs-(want.activeMs-credit.activeMs),attempts:left.attempts-(want.attempts-credit.attempts)};
+            if(left.attempts===0||left.activeMs===0)throw new ControlError("task-not-retryable","authored-budget-exhausted");
+            if(credit.attempts>0||credit.activeMs>0){
+              appendTopUp(store,groupId,taskId,runId,{amount:credit,commandId:command.commandId,by:commandPrincipalFor(command.commandId)??command.actorId,personAuthority:false,at:store.now(),kind:"fresh-start"});
+              freshStart=credit;
+            }
+          }
           if(incoming!==null){
             // Spec §2 "Headroom": the claim's own non-token fit (fundedAllowance.ts decideFundedAllowance, fundingReleased), read
             // after the failed run's remainder is released as the claim will see it; refused here so the task is never left
@@ -285,10 +316,11 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
-          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming})}});
+          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming}),...(freshStart===null?{}:{freshStart})}});
           if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, commandPrincipalFor(command.commandId) ?? command.actorId);
           deps.beforeCommit?.();
-          return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
+          // The receipt says what the new run starts with when the fresh-start rule applied (the CLI prints it).
+          return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId,...(want===null?{}:{nextRun:{attempts:left.attempts,activeMs:left.activeMs}})});
         }
         const retrying = held || released || closed || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
         const grant = both(retrying ? run.grant : work.grant), remaining = released || closed ? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } : both(run.remaining);

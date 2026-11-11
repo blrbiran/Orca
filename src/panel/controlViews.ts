@@ -1018,7 +1018,8 @@ function workViews(
 
 /** The task's top-up lines (spec §2 "The board"); absent when it has none, so a view without one is as it was. */
 function topUpsView(rows: readonly TopUpRow[], taskId: string): { topUps?: NonNullable<WorkItemViewV1["topUps"]> } {
-  const mine = rows.filter(row => row.workItemId === taskId).map(row => ({ amount: row.amount, by: row.by, at: row.at, fromRunId: row.fromRunId }));
+  // Tester follow-up E §8: a fresh-start credit is not work anyone added (the task-retried activity records it).
+  const mine = rows.filter(row => row.workItemId === taskId && row.kind !== "fresh-start").map(row => ({ amount: row.amount, by: row.by, at: row.at, fromRunId: row.fromRunId }));
   return mine.length === 0 ? {} : { topUps: mine };
 }
 

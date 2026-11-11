@@ -388,7 +388,13 @@ export const WORK_ROWS: CommandDef[] = [
       return { taskId: task(c), runId: await currentRun(c), ...(c.args.flags["allow-observed-paths"] === true ? { allowObservedPaths: true } : {}), ...(typeof c.args.flags.agent === "string" ? { agent: c.args.flags.agent } : {}), ...(work === undefined ? {} : { work }) };
     } }),
     // Tester follow-up B T2 (#202): the fresh grant the retry's next run gets, read before the write (print-only).
-    format: (body: unknown) => { const lines = retryNote; retryNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } },
+    format: (body: unknown) => {
+      // Tester follow-up E §8: what the new run starts with, when the receipt says (an explicit retry in a group with no token limit).
+      const next = (body as { result?: { taskId?: string; nextRun?: { attempts: number; activeMs: number } } } | null)?.result;
+      const fresh = next?.nextRun === undefined ? [] : [`the new run of ${next.taskId} gets ${next.nextRun.attempts} attempts and ${Math.round(next.nextRun.activeMs / 60_000)} min active time (fresh: the group has no token limit)`];
+      const lines = [...retryNote, ...fresh]; retryNote = [];
+      return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
+    } },
   verb({ domain: "task", action: "continue", summary: "continue a task's current run from its newest complete checkpoint; --note tells its agent something", verb: "continue-task", positionals: [GROUP, TASK],
     flags: NOTE_FLAGS,
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/continue`,
