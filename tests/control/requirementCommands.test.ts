@@ -122,6 +122,27 @@ describe("requirement-answer and requirement-consensus (N1 spec §11.1 items 2-3
     } finally { await x.dispose(); }
   });
 
+  // Tester follow-up E §7 (#251): an answer queued the next round whenever the frontier was open, so a person who wanted
+  // to stop after this round had to wait out a round they did not want (or agree first, dropping their answers). With
+  // `finish: true` the answer closes clarification in the same command: no next round, consensus at this round with no
+  // open questions, draft 1 queued -- and the split is drafted from the answers just given.
+  it("finish: answers the round and closes clarification at once; the split prompt carries these answers (#251)", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }, { purpose: "split", output: VALID_SPLIT }] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      const payload = { ...recommendedAll(1, x), answers: [{ id: "R1.Q1", kind: "recommended" }, { id: "R1.Q2", kind: "text", text: "As links, relative to the note" }], finish: true };
+      expect(rawAuthorityCommandSchema.safeParse(x.command("requirement-answer", payload)).success).toBe(true);
+      expect(rawAuthorityCommandSchema.safeParse(x.command("requirement-answer", { ...payload, finish: false })).success).toBe(false);
+      expect(x.service.answerRequirement(x.command("requirement-answer", payload))).toMatchObject({ result: { kind: "requirement-answered", roundNo: 1, nextRoundNo: null, finished: true } });
+      expect(latestRound(x.store, "r")!.roundNo).toBe(1);
+      expect(x.round(1)).toMatchObject({ state: "answered", closedByConsensus: false, answers: [{ id: "R1.Q1", text: "CommonMark" }, { id: "R1.Q2", kind: "text", text: "As links, relative to the note" }] });
+      expect(readRequirementGroup(x.store, "r").requirement.consensus).toMatchObject({ roundNo: 1, openQuestions: [] });
+      await x.until(() => x.fake.calls.accept.length === 2);
+      const split = x.fake.calls.accept[1]!;
+      expect(split.work.kind === "single-call" && split.work.prompt).toContain("As links, relative to the note");
+    } finally { await x.dispose(); }
+  });
+
   it("refuses a partial answer, a stale round number and an unknown decision id, changing nothing", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "clarify", output: ROUND_ONE }] });
     try {

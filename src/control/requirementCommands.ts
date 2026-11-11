@@ -256,7 +256,8 @@ export function applyRequirementAnswer(deps: RequirementCommandDeps, command: Re
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const id = command.target.groupId, payload = command.payload;
-      notStopped(deps.store, clarifying(deps.store, id));
+      const group = clarifying(deps.store, id);
+      notStopped(deps.store, group);
       // After consensus the latest round is never awaiting answers (consensus closes it), so this check also refuses that.
       const round = latestRound(deps.store, id);
       if (round === null || round.roundNo !== payload.roundNo || round.state !== "awaiting-answers" || round.result === null) return invalid("round-not-awaiting-answers");
@@ -272,7 +273,14 @@ export function applyRequirementAnswer(deps: RequirementCommandDeps, command: Re
         const a = given.get(q.id)!;
         return { id: q.id, kind: a.kind, text: a.kind === "text" ? a.text : q.recommendedAnswer };
       });
-      writeRound(deps.store, id, { ...round, state: "answered", answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: nowOf(deps).toISOString() });
+      const answered = { ...round, state: "answered" as const, answers, glossaryDecisions: payload.glossaryDecisions, adrDecisions: payload.adrDecisions, answeredAt: nowOf(deps).toISOString() };
+      writeRound(deps.store, id, answered);
+      // Tester follow-up E §7 (#251): `finish` closes clarification here, in this transaction: no next round, and the
+      // consensus is taken over the round just answered, so the split is drafted from these answers.
+      if (payload.finish === true) {
+        const wakeId = closeClarification(deps, group, answered, `answer-finish-${context.nextCommandRevision}`);
+        return commandSuccess(context, { kind: "requirement-answered", roundNo: round.roundNo, nextRoundNo: null, wakeId, finished: true });
+      }
       // Clarify caps spec §3.3: at the round cap clarification stops as at an empty frontier; requirement-clarify-more grants one more.
       // Flow engine spec §10.3: the cap counts chain positions, not round numbers (a revision appends a higher number).
       const chainLength = activeChain(readRounds(deps.store, id)).chain.length;
@@ -396,20 +404,29 @@ export function applyRequirementConsensus(deps: RequirementCommandDeps, command:
       // a round's call is claimed only while it is drafting (pendingRequirementCall), and every way out of drafting
       // (settlement, interruption) closes the run in the same transaction. Should that ever stop holding, consensus must not start a draft
       // beside a call still in flight, so this refuses rather than trusting the round state.
-      if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
-      const understood = chainRounds(readRounds(deps.store, id)).filter((r) => r.result !== null);
-      if (understood.length === 0) invalid("no-understanding-yet");
-      const now = nowOf(deps).toISOString();
-      let openQuestions: string[] = [];
-      if (round.state === "awaiting-answers") {
-        openQuestions = round.result!.questions.map((q) => q.id);
-        writeRound(deps.store, id, { ...round, state: "answered", closedByConsensus: true, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: now });
-      }
-      // Flow engine spec §10.1: what consensus does is the requirement host's (draft 1 and its split call, unchanged).
-      const wakeId = requirementHost(deps.store, group).onConsensus({ roundNo: round.roundNo, at: now, openBranches: understood.at(-1)!.result!.openBranches, openQuestions, tag: `consensus-${context.nextCommandRevision}` })!;
+      const wakeId = closeClarification(deps, group, round, `consensus-${context.nextCommandRevision}`);
       return commandSuccess(context, { kind: "requirement-consensus", roundNo: round.roundNo, draftNo: 1, wakeId });
     },
   }).body);
+}
+
+/**
+ * Consensus at `round` (already checked to be in CONSENSUS_ROUND_STATES): requirement-consensus, and requirement-answer
+ * with `finish` (tester follow-up E §7, #251) in the same transaction as its answers. Returns draft 1's wake id.
+ */
+function closeClarification(deps: RequirementCommandDeps, group: ReturnType<typeof clarifying>, round: NonNullable<ReturnType<typeof latestRound>>, tag: string): string {
+  const id = group.groupId;
+  if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
+  const understood = chainRounds(readRounds(deps.store, id)).filter((r) => r.result !== null);
+  if (understood.length === 0) invalid("no-understanding-yet");
+  const now = nowOf(deps).toISOString();
+  let openQuestions: string[] = [];
+  if (round.state === "awaiting-answers") {
+    openQuestions = round.result!.questions.map((q) => q.id);
+    writeRound(deps.store, id, { ...round, state: "answered", closedByConsensus: true, answers: [], glossaryDecisions: [], adrDecisions: [], answeredAt: now });
+  }
+  // Flow engine spec §10.1: what consensus does is the requirement host's (draft 1 and its split call, unchanged).
+  return requirementHost(deps.store, group).onConsensus({ roundNo: round.roundNo, at: now, openBranches: understood.at(-1)!.result!.openBranches, openQuestions, tag })!;
 }
 
 /** Spec §11.1 item 4 (DR9): the person sends a draft back in their own words; the next draft starts a fresh retry count. */

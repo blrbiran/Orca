@@ -1040,6 +1040,9 @@ const effectiveRequirementOpenPayloadSchema = z.object({
 }).strict();
 export const requirementAnswerPayloadSchema = z.object({
   roundNo: positiveSafeInteger, answers: z.array(answerInputSchema), glossaryDecisions: z.array(decisionInputSchema), adrDecisions: z.array(decisionInputSchema),
+  // Tester follow-up E §7 (#251): answer and close clarification in one command. Only `true` is sent; absent keeps a
+  // plain answer's bytes (and its replay hash).
+  finish: z.literal(true).optional(),
 }).strict();
 export const requirementConsensusPayloadSchema = z.object({ roundNo: positiveSafeInteger }).strict();
 export const requirementDraftFeedbackPayloadSchema = z.object({
@@ -2292,7 +2295,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
     .strict(),
   // N1 spec §11.1: the requirement commands' results.
   z.object({ kind: z.literal("requirement-opened"), groupId: idSchema, requirementId: z.string().regex(/^[a-f0-9]{32}$/), roundNo: z.literal(1), wakeId: nonemptyString }).strict(),
-  z.object({ kind: z.literal("requirement-answered"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
+  // #251: `finished` (with `wakeId` the draft's) when the answer also closed clarification.
+  z.object({ kind: z.literal("requirement-answered"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable(), finished: z.literal(true).optional() }).strict(),
   z.object({ kind: z.literal("requirement-consensus"), roundNo: positiveSafeInteger, draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-draft-rejected"), draftNo: positiveSafeInteger, nextDraftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-clarify-more"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),

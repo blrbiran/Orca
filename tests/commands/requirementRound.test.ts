@@ -91,3 +91,42 @@ describe("the panel's answer-set refusal reaches the person with the ids it name
     expect(out.stderr).toMatch(/missing R2\.Q3/);
   });
 });
+
+// Tester follow-up E §7 (#251): `requirement answer --finish` answers the round and closes clarification in one command
+// (payload `finish: true`; a plain answer keeps its bytes). A plain answer that queued the next round says so and names
+// --finish, and a consensus the panel refuses because that round is drafting names the round and --finish.
+describe("requirement answer --finish, and saying that a plain answer drafts the next round (#251)", () => {
+  const answered = (result: Record<string, unknown>) => ({ "POST groups/g-alpha/requirement/answer": { status: 200, body: { commandId: "c", commandRevision: 6, result: { kind: "requirement-answered", roundNo: 2, ...result } } } });
+
+  it("--finish sends finish: true beside the filled answers", async () => {
+    const w = await world({}, view(ROUND));
+    expect((await cli(["requirement", "answer", "g-alpha", "--finish", "--json"], w.dir)).code).toBe(0);
+    expect(w.posts().map((post) => post.payload)).toEqual([{
+      roundNo: 2, answers: ["R2.Q1", "R2.Q2", "R2.Q3"].map((id) => ({ id, kind: "recommended" })),
+      glossaryDecisions: [{ id: "R2.G1", accept: true }, { id: "R2.G2", accept: true }], adrDecisions: [{ id: "R2.ADR1", accept: true }], finish: true,
+    }]);
+  });
+
+  it("a plain answer that queued a round says it is drafting and names --finish; a finishing one says clarification closed", async () => {
+    const next = await world({}, { ...view(ROUND), ...answered({ nextRoundNo: 3, wakeId: "w" }) });
+    const plain = await cli(["requirement", "answer", "g-alpha"], next.dir);
+    expect(plain.code, plain.stderr).toBe(0);
+    expect(plain.stdout).toContain("round 3 is now drafting; use --finish to stop after a round");
+    const done = await world({}, { ...view(ROUND), ...answered({ nextRoundNo: null, wakeId: "w", finished: true }) });
+    const finished = await cli(["requirement", "answer", "g-alpha", "--finish"], done.dir);
+    expect(finished.stdout).toContain("clarification closed at round 2 with these answers; draft 1 is drafting");
+    expect(finished.stdout).not.toContain("--finish");
+    const stopped = await world({}, { ...view(ROUND), ...answered({ nextRoundNo: null, wakeId: null }) });
+    expect((await cli(["requirement", "answer", "g-alpha"], stopped.dir)).stdout).not.toContain("drafting");
+  });
+
+  it("a consensus refused because the latest round is drafting names that round and --finish", async () => {
+    const refusal = { "POST groups/g-alpha/requirement/consensus": { status: 409, body: { error: { code: "group-state-invalid", message: "group-state-invalid:round-state", commandRevision: 5, evidenceIds: [], retryable: false } } } };
+    const w = await world({}, { ...view({ roundNo: 2, state: "drafting", result: null }), ...refusal });
+    const out = await cli(["requirement", "consensus", "g-alpha"], w.dir);
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("orca: round 2 is drafting (the round your last answer queued); wait for it and agree then, or answer with --finish next time to stop clarifying after a round\n");
+    const answeredRound = await world({}, { ...view({ ...ROUND, state: "answered" }), ...refusal });
+    expect((await cli(["requirement", "consensus", "g-alpha"], answeredRound.dir)).stderr).not.toContain("--finish");
+  });
+});

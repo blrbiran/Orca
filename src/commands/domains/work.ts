@@ -117,6 +117,32 @@ const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) 
 } });
 
 /**
+ * Tester follow-up E §7 (#251): an answer that queued the next round says so and names --finish (the tester did not
+ * know the round they answered was not the last); one that closed clarification says the split is next.
+ */
+const answeredFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
+  const result = (body as { result?: { kind?: unknown; roundNo?: unknown; nextRoundNo?: unknown; finished?: unknown } } | null)?.result;
+  const printed = row.format(body);
+  if (result?.kind !== "requirement-answered") return printed;
+  if (result.finished === true) return `${printed}\nclarification closed at round ${String(result.roundNo)} with these answers; draft 1 is drafting`;
+  return typeof result.nextRoundNo === "number" ? `${printed}\nround ${result.nextRoundNo} is now drafting; use --finish to stop after a round` : printed;
+} });
+
+/**
+ * #251: the panel refuses consensus (`group-state-invalid:round-state`) while the latest round is drafting -- the round
+ * a plain answer queued. Name it and --finish, read from the requirement view; any other refusal gets no hint.
+ */
+async function consensusHint(error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> {
+  if (error.code !== "group-state-invalid" || !/(^|:)round-state$/.test(error.message) || c === undefined) return undefined;
+  const view = await requirement(c);
+  const roundNo = view.summary.requirement?.roundNo ?? null;
+  const round = view.rounds?.find((r) => r.roundNo === roundNo);
+  return round?.state === "drafting"
+    ? `round ${roundNo} is drafting (the round your last answer queued); wait for it and agree then, or answer with --finish next time to stop clarifying after a round`
+    : undefined;
+}
+
+/**
  * Issue #144(d)/#140 (dogfood run 3, session 86352010): the result line is cut at 160 characters, which hid a blocked
  * estimate's state and reason. Import and estimate print both on their own lines after it; their JSON is unchanged. The
  * import result names the reason `estimateReasonCode` (planImport.ts), the estimate result `reasonCode`.
@@ -167,15 +193,20 @@ export const WORK_ROWS: CommandDef[] = [
         : generic;
     },
     examples: ["orca requirement open --idea \"add a dark mode\"", "orca requirement open --idea \"add a dark mode\" --agent claude-main"] }),
-  verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults",
+  answeredFormat(verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults",
     verb: "requirement-answer", positionals: [GROUP],
     flags: [
       { name: "answer", type: "string", repeatable: true, summary: "<questionId> or <questionId>=<text>" },
       { name: "glossary", type: "string", repeatable: true, summary: "<id>=accept|reject" }, { name: "adr", type: "string", repeatable: true, summary: "<id>=accept|reject" },
+      // Tester follow-up E §7 (#251).
+      { name: "finish", type: "boolean", summary: "close clarification with these answers: no next round is drafted, and the split is drafted from this round" },
     ],
     route: (c) => `groups/${group(c)}/requirement/answer`,
-    payload: async (c) => { const round = await currentRound(c); return { roundNo: round.roundNo, ...filledAnswer(c, round.row) }; },
-    hint: answerSetHint }),
+    payload: async (c) => {
+      const round = await currentRound(c);
+      return { roundNo: round.roundNo, ...filledAnswer(c, round.row), ...(c.args.flags.finish === true ? { finish: true } : {}) };
+    },
+    hint: answerSetHint })),
   verb({ domain: "requirement", action: "consensus", summary: "close clarification at the current round; a round still awaiting answers is refused unless --unanswered", verb: "requirement-consensus", positionals: [GROUP],
     flags: [{ name: "unanswered", type: "boolean", summary: "agree with a round still awaiting answers: its questions stay open and its glossary entries and ADRs are dropped" }],
     route: (c) => `groups/${group(c)}/requirement/consensus`,
@@ -184,7 +215,8 @@ export const WORK_ROWS: CommandDef[] = [
       const refusal = c.args.flags.unanswered === true ? null : unansweredRefusal(round.roundNo, round.row);
       if (refusal !== null) throw refusal;
       return { roundNo: round.roundNo };
-    } }),
+    },
+    hint: consensusHint }),
   verb({ domain: "requirement", action: "continue", summary: "grant exactly one more clarification round after the cap", verb: "requirement-clarify-more", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/clarify-more`, payload: async (c) => ({ roundNo: await roundNo(c) }) }),
   // Flow engine spec §10.3 (W-76): a new round revising round --round; the file holds {answers, glossaryDecisions,
