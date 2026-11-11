@@ -100,6 +100,44 @@ describe("T13: the listing of every collected run is stored and served", () => {
   });
 });
 
+// Tester #252 (spec 2026-11-11-tester-followup-e §6): ccloop lists an attempt's phases by name (execute, plan, verify), so
+// the Web showed execute above plan, and the Live region's follow -- the last recorded call of the listing -- sat on plan
+// while execute ran. Orca serves the listing by attempt, then phase rank (plan, execute, verify, then other phases by
+// name), then seq, so `orca run transcript` and the Web read one order.
+describe("tester #252: the listing is served in run order", () => {
+  it("orders by attempt, then plan, execute, verify, other phases by name, then seq -- whatever order ccloop stored", async () => {
+    const t = await driverHarness([{ taskId: "a" }]);
+    const web = await serve(t.h.store, "web"), socket = await serve(t.h.store, "socket");
+    try {
+      // The order ccloop's collect answers in: attempts numeric, phases by name, calls by start.
+      answerTranscripts(t, () => [
+        entry({ attempt: 1, phase: "execute", seq: 1, final: false }),
+        entry({ attempt: 1, phase: "plan", seq: 1, final: true }),
+        entry({ attempt: 1, phase: "verify", seq: 1, path: null, bytes: 0 }),
+        entry({ attempt: 2, phase: "execute", seq: 2 }),
+        entry({ attempt: 2, phase: "execute", seq: 1 }),
+        entry({ attempt: 2, phase: "repair", seq: 1 }),
+        entry({ attempt: 2, phase: "plan", seq: 1 }),
+        entry({ attempt: 2, phase: "fix", seq: 1 }),
+      ]);
+      const runId = await acceptedRun(t);
+      await collectInto(t.deps, readDriverRun(t.h.store, runId));
+      const order = (body: unknown): string[] => (body as { calls: Array<{ attempt: number; phase: string; seq: number }> }).calls.map((c) => `${c.attempt}/${c.phase}/${c.seq}`);
+      const expected = ["1/plan/1", "1/execute/1", "1/verify/1", "2/plan/1", "2/execute/1", "2/execute/2", "2/fix/1", "2/repair/1"];
+      // mutation: serve the stored order -> execute is listed above plan -> red
+      // mutation: drop the phase rank (phases by name) -> execute above plan -> red
+      // mutation: drop the seq tie-break -> 2/execute/2 above 2/execute/1 -> red
+      expect(order((await web.get(`/api/control/runs/${runId}/transcripts`, "owner")).body)).toEqual(expected);
+      // The CLI reads the same handler on the socket.
+      expect(order((await socket.get(`/api/control/runs/${runId}/transcripts`)).body)).toEqual(expected);
+      // What the Live region follows (web/src/AgentTranscript.tsx: the last recorded call of the listing) is the running
+      // execute of the first attempt, not the finished plan.
+      const firstAttempt = ((await web.get(`/api/control/runs/${runId}/transcripts`, "owner")).body as { calls: Array<{ attempt: number; phase: string; recorded: boolean; final: boolean }> }).calls.filter((c) => c.attempt === 1);
+      expect(firstAttempt.filter((c) => c.recorded).at(-1)).toMatchObject({ phase: "execute", final: false });
+    } finally { await web.close(); await socket.close(); await t.h.dispose(); }
+  });
+});
+
 describe("tester #116: a loop run's observed usage floor", () => {
   it("is kept beside the run from collect, shown by the run view, and an unchanged floor does not move the projection", async () => {
     const t = await driverHarness([{ taskId: "a" }]);

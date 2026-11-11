@@ -43,8 +43,10 @@ export const codexMapper: Mapper = (line) => {
     return it === null ? [event("unknown", { fields: { raw: { composite: line } } })] : item(type === "item.started" ? "started" : "completed", it);
   }
   if (type === "turn.completed") {
+    // Tester #254: every count the turn reported (cached and reasoning included), so the result row says what it cost.
     const usage = record(line.usage);
-    return [event("result", { num: { inputTokens: typeof usage?.input_tokens === "number" ? usage.input_tokens : undefined, outputTokens: typeof usage?.output_tokens === "number" ? usage.output_tokens : undefined } })];
+    const count = (name: string): number | undefined => (typeof usage?.[name] === "number" ? usage[name] : undefined);
+    return [event("result", { num: { inputTokens: count("input_tokens"), cachedInputTokens: count("cached_input_tokens"), outputTokens: count("output_tokens"), reasoningOutputTokens: count("reasoning_output_tokens") } })];
   }
   if (type === "turn.failed") return [event("result", { flag: { error: true }, fields: { text: plain(str(record(line.error)?.message)) } })];
   if (type === "error") return [event("notice", { meta: { notice: "runtime" }, fields: { text: plain(line.message) } })];

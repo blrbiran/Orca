@@ -40,6 +40,18 @@ export function noteTranscriptListing(store: ControlStore, runId: string, source
 /** One listing row as the browser gets it (§12.3): no `path`; the runtime and whether a transcript was recorded. */
 export interface ListingRow { attempt: number; phase: string; seq: number; runtime: Runtime | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null }
 
+/**
+ * Tester #252 (spec 2026-11-11-tester-followup-e §6): the order a run's calls are served in, so `orca run transcript` and
+ * the Web read one order. ccloop lists an attempt's phases by name (execute before plan); Orca serves them by attempt,
+ * then phase rank (plan, execute, verify, then any other phase by name), then seq.
+ */
+const PHASE_RANK: Readonly<Record<string, number>> = { plan: 0, execute: 1, verify: 2 };
+const phaseRank = (phase: string): number => PHASE_RANK[phase] ?? 3;
+export function inRunOrder<T extends Pick<TranscriptEntry, "attempt" | "phase" | "seq">>(entries: readonly T[]): T[] {
+  return [...entries].sort((a, b) => a.attempt - b.attempt || phaseRank(a.phase) - phaseRank(b.phase)
+    || (a.phase < b.phase ? -1 : a.phase > b.phase ? 1 : 0) || a.seq - b.seq);
+}
+
 export const runtimeOf = (entry: TranscriptEntry): Runtime | null => (entry.path === null ? null : (LISTING_PATH.exec(entry.path)?.[1] as Runtime | undefined) ?? null);
 
 export function findEntry(listing: StoredListing, attempt: number, phase: string, seq: number): TranscriptEntry {

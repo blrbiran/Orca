@@ -135,6 +135,16 @@ describe("normalisation per runtime (real shapes, synthetic content)", () => {
     expect(events[2]!.num!.exitCode).toBe(1);
   });
 
+  // Tester #254 (spec 2026-11-11-tester-followup-e §6): a codex result row showed nothing but "result"; its num keeps every
+  // count the turn reported, cached and reasoning included, and omits a count the turn did not report.
+  it("codex: turn.completed keeps input, cached, output and reasoning counts when present", async () => {
+    // mutation: drop cachedInputTokens from the mapper -> red; drop reasoningOutputTokens -> red
+    const full = await tail("codex", [{ type: "turn.completed", usage: { input_tokens: 1200, cached_input_tokens: 800, output_tokens: 90, reasoning_output_tokens: 40 } }]);
+    expect(full[0]!.num).toEqual({ inputTokens: 1200, cachedInputTokens: 800, outputTokens: 90, reasoningOutputTokens: 40 });
+    const bare = await tail("codex", [{ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 5 } }]);
+    expect(bare[0]!.num).toEqual({ inputTokens: 10, outputTokens: 5 });
+  });
+
   it("omp (C1): one source per piece of text -- message_end, tool_execution_end; deltas and toolResult messages never", async () => {
     const events = await tail("omp", [omp.session(), omp.start(), omp.messageStart("hel"), omp.delta("hel"), omp.textEnd("hello"), omp.messageEnd("hello", "pondering"), omp.toolStart("c1", "ls"), omp.toolUpdate("c1", "partial"), omp.toolEnd("c1", "a b"), omp.toolResultEnd("c1", "a b"), omp.userEnd("next"), omp.turnEnd(), omp.end()]);
     expect(kinds(events)).toEqual(["notice", "message", "tool_call", "tool_result", "message", "notice", "result"]);

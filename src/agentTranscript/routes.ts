@@ -18,7 +18,7 @@ import { readRun } from "../control/budget.js";
 import { sendControlError, sendMappedControlError } from "../panel/controlErrors.js";
 import type { Principal } from "../panel/permissions.js";
 import { panelIndexCache, type IndexCache } from "./lineIndex.js";
-import { finalNow, findEntry, liveBytes, openEntry, runtimeOf, storedListing, type ListingRow, type StoredListing } from "./listing.js";
+import { finalNow, findEntry, inRunOrder, liveBytes, openEntry, runtimeOf, storedListing, type ListingRow, type StoredListing } from "./listing.js";
 import { panelRedactor, type Redactor } from "./redact.js";
 import { TranscriptRefusal } from "./refusal.js";
 import { expandField, expandOversized, windowAfter, windowBefore, windowTail } from "./window.js";
@@ -71,7 +71,7 @@ export function registerTranscriptRoutes(app: Express, deps: TranscriptRouteDeps
         const listing = listingOf(deps.store, runId);
         if (!await supported(deps)) { res.json({ schema: "orca-run-transcripts-v1", runId, available: false, reason: "ccloop-transcripts-unsupported", calls: [] }); return; }
         const calls: ListingRow[] = [];
-        for (const entry of listing?.entries ?? []) {
+        for (const entry of inRunOrder(listing?.entries ?? [])) {
           calls.push({ attempt: entry.attempt, phase: entry.phase, seq: entry.seq, runtime: runtimeOf(entry), recorded: entry.path !== null, bytes: await liveBytes(listing!, entry), final: entry.final, truncatedAt: entry.truncatedAt });
         }
         res.json({ schema: "orca-run-transcripts-v1", runId, available: true, calls });
