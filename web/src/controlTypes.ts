@@ -439,6 +439,8 @@ export type RunViewV1 = {
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; retries: number; detail: string | null } | null;
   /** Quota failover spec §3 (session 3cfc2e73): the current run failed with quota, was not switched, and its installation rests. */
   quotaRest?: { installation: string; until: number; source: "vendor" | "default" };
+  /** Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; absent when none was sent. */
+  operatorAcceptance?: { state: "pending" | "landed" | "refused"; note: string; principal: string; at: number; reason: string | null; landedCommit: string | null };
   continuable?: boolean;
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */

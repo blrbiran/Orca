@@ -249,6 +249,12 @@ const persistedRunSchema = z.object({
   terminalClosure: terminalClosureSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
   transcripts: transcriptListingSchema.optional(),
+  // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner's accept-attempt intent and its outcome (acceptAttempt.ts
+  // OperatorAcceptance). The fields the view shows are checked; the driver's own bookkeeping passes through untouched.
+  operatorAcceptance: z.object({
+    state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: z.string().min(1), at: safeInteger,
+    reason: z.string().nullable(), landedCommit: z.string().nullable(),
+  }).passthrough().optional(),
 }).strict();
 
 function blocked(detail: string): never {
@@ -1220,6 +1226,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
       failureCause: run.drive?.failureCause ?? null,
       ...(quotaRest === undefined ? {} : { quotaRest }),
+      // Reviewed acceptance (#227): what the Web needs to say where an owner's acceptance stands; omitted when none.
+      ...(run.operatorAcceptance === undefined ? {} : { operatorAcceptance: { state: run.operatorAcceptance.state, note: run.operatorAcceptance.note,
+        principal: run.operatorAcceptance.principal, at: run.operatorAcceptance.at, reason: run.operatorAcceptance.reason, landedCommit: run.operatorAcceptance.landedCommit } }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),

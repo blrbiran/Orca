@@ -1874,6 +1874,9 @@ export const runViewSchema = z
     // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the task's current run failed with quota, was not
     // switched, and its installation rests (quotaRest.ts) until `until`; omitted otherwise.
     quotaRest: z.object({ installation: nonemptyString, until: safeInteger, source: z.enum(["vendor", "default"]) }).strict().optional(),
+    // Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; omitted when none was sent.
+    operatorAcceptance: z.object({ state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: nonemptyString, at: safeInteger,
+      reason: z.string().nullable(), landedCommit: z.string().nullable() }).strict().optional(),
     unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
