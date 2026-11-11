@@ -249,7 +249,7 @@ export type RoundBodyV1 = {
   adrDecisions: RequirementDecisionInputV1[] | null;
   answeredAt: string | null;
   closedByConsensus: boolean;
-  reasonCode: null | "clarify-output-invalid";
+  reasonCode: null | "clarify-output-invalid" | "clarify-call-failed";
   calls: RequirementCallRecordV1[];
   /** Flow engine spec §10.3 (W-76): set on a revision of round `revises` only. */
   revises?: number;
@@ -295,7 +295,7 @@ export type DraftViewV1 = {
   reasons: string[];
   layers: string[][] | null;
   implicitEdges: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null;
-  reasonCode: null | "split-output-invalid" | "split-validation-exhausted" | "requirement-revised";
+  reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised";
   calls: RequirementCallRecordV1[];
 };
 /** N1 spec §11.2: one requirement in full (src/control/webProtocol.ts requirementViewSchema, field for field). */

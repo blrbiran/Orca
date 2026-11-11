@@ -1352,7 +1352,9 @@ export const en = {
     saveSplit: "Save split to library",
     reason: {
       "clarify-output-invalid": "The model's answers for this round were invalid three times.",
+      "clarify-call-failed": "This round's call failed, so the model gave no answer to check; the failed call's code and details are shown with it.",
       "split-output-invalid": "The model's split was not valid JSON for a split three times.",
+      "split-call-failed": "The split's call failed, so the model gave no split to check; the failed call's code and details are shown with it.",
       "split-validation-exhausted": "The split failed code's checks three times; the last reasons are shown.",
       "requirement-budget-exhausted": "The next call does not fit the limit; raise the limit to go on.",
       "requirement-usage-unknown": "Some of this requirement's usage is unknown, so no further call is made. Settle the blocked call's usage (charge its grant), then it retries.",

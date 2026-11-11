@@ -208,3 +208,23 @@ build clone and `ORCA_AGENTS_TABLE` to a fake-only table — the scheduler suite
 ## Corrections found while planning (Orca session 026d10e3, 2026-10-15)
 
 The implementation plan `docs/superpowers/plans/2026-10-15-error-codes-and-start-guard.md` lists, in its section "Spec corrections found while planning" (K1-K8), where this text disagrees with the code and what is built instead; its "Controller rulings before execution" (R1-R5) settle the open points. Where they differ, the plan's corrected behaviour is what ships; the text above is kept as drafted.
+
+## Correction (2026-11-11, tester follow-up E, #125)
+
+Who: implementer W4 of tester follow-up E (worktree branch `worktree-agent-ab793ee1df4bcd755`), on top of main
+`docs(spec): tester follow-up E -- the rulings and the design for #241-#258 and the open items`. Ruling and design:
+`docs/superpowers/specs/2026-11-11-tester-followup-e-design.md` §0 (the human asked for the best whole-system answer
+across Orca and ccloop, without deferring to earlier rulings) and §7 (#125).
+
+§4.5's "fail the requirement at once with `reasonCode` `clarify-output-invalid` / `split-output-invalid`" no longer holds
+for call failures. A round or draft that ends because its last call failed (`record.outcome !== "complete"`) now ends
+with `reasonCode` `clarify-call-failed` / `split-call-failed`, whether it ended at once (a pre-spawn refusal) or after
+the automatic retries. The old codes' Web text says the model's output was invalid three times, which is false when no
+output came back. A round or draft whose last output came back and was judged invalid keeps `clarify-output-invalid` /
+`split-output-invalid` (or `split-validation-exhausted`). Both new codes are retried like the old ones.
+
+Unchanged: `lastInvalidReason` stays `no-output` (provider text is untrusted and gives the model nothing), the failed
+call's record keeps `reason: <code>` and, since session f958ec3f, `detail`, and the Web shows that code and detail beside
+the step's reason. The flow clarify kind does the same: its failed calls keep `detail`, and a clarify step whose last
+call failed ends with execution failure `clarify-call-failed`. A feedback intake's clarify round also ends
+`clarify-call-failed`; it records no calls, so it has no detail to keep. ccloop is unchanged.

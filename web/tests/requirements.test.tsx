@@ -5,6 +5,7 @@ import { ControlPanel } from "../src/ControlPanel.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import type { ControlConfigV1, ControlSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
+import i18n from "../src/i18n.js";
 
 // N1 spec §11.2: the round form (each question preset to "use recommended", switchable to free text, "accept all
 // recommended"), consensus with a second confirmation when open branches remain, and the draft's computed layers.
@@ -99,6 +100,33 @@ describe("the Requirements section (N1 spec §11.2)", () => {
     expect(screen.getByText(/were invalid three times/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+  });
+
+  // Tester follow-up E §7 (#125): a step whose last call failed says the call failed -- not that the model's output was
+  // invalid three times -- beside the failed call's code and the provider's words, and is retried like the old codes.
+  it("explains clarify-call-failed and split-call-failed in one line, beside the failed call's code and detail, with Retry", async () => {
+    const call = { runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed" as const, reason: "codex-turn-failed", detail: "upstream 502" };
+    const failedRound = requirementView("failed");
+    const clarify: RequirementViewV1 = { ...failedRound, summary: { ...failedRound.summary, requirement: { ...failedRound.summary.requirement!, reasonCode: "clarify-call-failed" } },
+      rounds: [{ ...failedRound.rounds[0]!, reasonCode: "clarify-call-failed", calls: [call] }] };
+    const onCommand = mount(clarify);
+    expect(screen.getByRole("alert").textContent).toContain("clarify-call-failed · This round's call failed, so the model gave no answer to check; the failed call's code and details are shown with it.");
+    expect(screen.getByRole("alert").textContent).not.toContain("invalid three times");
+    expect([...document.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("codex-turn-failed · upstream 502");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+    cleanup();
+    const base = requirementView("awaiting-review");
+    const split: RequirementViewV1 = { ...base, summary: { ...base.summary, requirement: { ...base.summary.requirement!, draftState: "failed", reasonCode: "split-call-failed" } },
+      drafts: [{ ...base.drafts[0]!, state: "failed", autoRetry: 2, draftHash: null, reasons: [], layers: null, implicitEdges: null, reasonCode: "split-call-failed", calls: [call] }] };
+    mount(split);
+    expect(screen.getByRole("alert").textContent).toContain("split-call-failed · The split's call failed, so the model gave no split to check; the failed call's code and details are shown with it.");
+    cleanup();
+    await i18n.changeLanguage("zh");
+    try {
+      render(<RequirementsPanel config={config as ControlConfigV1} summary={summaryWith(clarify) as ControlSummaryV1} views={{ r: clarify }} selected="r" agents={null} language="zh" onSelect={() => {}} onCommand={vi.fn()} />);
+      expect(screen.getByRole("alert").textContent).toContain("clarify-call-failed · 这一轮的调用失败了，模型没有给出可检查的回答；失败调用的代码和详情一并显示。");
+    } finally { await i18n.changeLanguage("en"); }
   });
 });
 

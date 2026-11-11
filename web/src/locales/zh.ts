@@ -1206,7 +1206,9 @@ export const zh: Translation<typeof en> = {
     saveSplit: "把拆分结果存入计划库",
     reason: {
       "clarify-output-invalid": "这一轮模型的输出连续三次不合格。",
+      "clarify-call-failed": "这一轮的调用失败了，模型没有给出可检查的回答；失败调用的代码和详情一并显示。",
       "split-output-invalid": "模型的拆分连续三次不是合格的结构。",
+      "split-call-failed": "拆分的调用失败了，模型没有给出可检查的拆分；失败调用的代码和详情一并显示。",
       "split-validation-exhausted": "拆分连续三次没通过代码校验；下面是最后一次的原因。",
       "requirement-budget-exhausted": "下一次调用超出上限；调高上限才能继续。",
       "requirement-usage-unknown": "这个需求有一部分用量未知，因此不再发起调用。请为受阻的那次调用结算用量（按它的额度记账），之后它会重试。",

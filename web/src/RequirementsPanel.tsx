@@ -36,12 +36,13 @@ type Round = View["rounds"][number];
 type Draft = View["drafts"][number];
 /** Every reason code this section can show, each with its one-line explanation (requirements.reason.*). */
 const REASONS = [
-  "clarify-output-invalid", "split-output-invalid", "split-validation-exhausted", "requirement-budget-exhausted", "requirement-usage-unknown",
+  "clarify-output-invalid", "clarify-call-failed", "split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-budget-exhausted", "requirement-usage-unknown",
   "requirement-export-conflict", "requirement-export-path-blocked", "requirement-export-pending", "requirement-not-split",
 ] as const;
 type Reason = (typeof REASONS)[number];
 /** The reasons recovery-retry lifts: a failed round or draft re-queues, a blocked export re-arms (spec §11.1, §15 item 11). */
-const RETRYABLE: readonly string[] = ["clarify-output-invalid", "split-output-invalid", "split-validation-exhausted", "requirement-export-conflict", "requirement-export-path-blocked"];
+// Tester follow-up E §7 (#125): a step whose last call failed is retried like one whose output was invalid.
+const RETRYABLE: readonly string[] = ["clarify-output-invalid", "clarify-call-failed", "split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-export-conflict", "requirement-export-path-blocked"];
 const BUDGET_EXHAUSTED = "requirement-budget-exhausted";
 const EXPORT_PENDING = "requirement-export-pending";
 const isReason = (code: string): code is Reason => (REASONS as readonly string[]).includes(code);
