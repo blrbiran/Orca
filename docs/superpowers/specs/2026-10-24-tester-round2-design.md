@@ -1114,3 +1114,18 @@ breach is recorded on the run (`run.breaches`, the view's `overGrant`) and shown
 summary's `overGrant` and its Board chip). The non-Web `group.stopped = true` branch is unchanged. Groups already blocked
 that way are repaired by the schema 21 → 22 migration. Design and criteria: `2026-11-05-review-exit-over-grant-start-queue-design.md`
 §3.2 and its §7.
+
+### 26. Correction to §20 item 2 (Orca session `5abcad7d`, seat W1, 2026-11-12; issue #195)
+
+Recorded by implementation seat W1 of tester follow-up F, on branch `worktree-agent-a855bae9ef1c9256e` based on main at
+`a12463a4` (`docs(sdd): tester follow-up F -- the human's blanket approvals for this round`). §20 item 2 is kept as
+written above (Rule 13). Human ruling on #195, verbatim (ledger `.superpowers/sdd/2026-11-12-tester-followup-f/progress.md`):
+「要改」; design `2026-11-12-tester-followup-f-design.md` §1.
+
+- `confirm` no longer refuses a null `contextPolicy.handoffAtContextTokens` under a worker profile that declares a context
+  window: nothing in production feeds `acceptContextObservation` (`src/control/contextControl.ts`), so a required
+  threshold did nothing. The reason item 2 gives for inventing a value is therefore gone.
+- The automatic confirm now sends the proposal's threshold as it stands -- `contextPolicy = proposal.contextPolicy`, as
+  §7.2 first said -- so an editable proposal's null stays null. It no longer substitutes the worker profile's declared
+  `contextWindowTokens`. The flow children's binding (`src/panel/flowAssembly.ts:69`) is not changed by this correction.
+- Criteria: `tests/control/autoConfirmUnlimited.test.ts` ("keeps the proposal's null context hand-off threshold …").

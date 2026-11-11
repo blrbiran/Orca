@@ -1794,3 +1794,26 @@ Human ruling D1 (`2026-11-05-review-exit-over-grant-start-queue-design.md` §1, 
 with no active run and no stop intent, and a criteria-review or ladder group once its verdict is recorded
 (`src/control/groupDone.ts`, activity kind `group-done`). The goal-review reserve is still not released and goal review
 is still not dispatched. A `blocked` group is never moved.
+
+## Correction (Orca session `5abcad7d`, seat W1, 2026-11-12) — a null context hand-off threshold is accepted (issue #195)
+
+Recorded by implementation seat W1 of tester follow-up F, on branch `worktree-agent-a855bae9ef1c9256e` based on main at
+`a12463a4`. The text above is left as written (Rule 13). Human ruling on #195, verbatim (ledger
+`.superpowers/sdd/2026-11-12-tester-followup-f/progress.md`): 「要改」, overriding the earlier ruling recorded in the
+handoff ("add an explicit off value when ccloop can observe context, do not relax `null`"). Design:
+`2026-11-12-tester-followup-f-design.md` §1.
+
+- **The context policy paragraph ("The handoff threshold is editable, must be a positive safe integer, and cannot exceed
+  the worker profile's context window. It is `null` when that window is unknown.")** A `null` threshold is now accepted
+  at `confirm` whatever the worker's window, declared or not. A number is still a positive safe integer bounded by the
+  worker profile's declared window, or -- when the profile declares none -- by the smallest window the tasks' frozen
+  worker selections name (`threshold-above-window:<n>`, `worker-window-unknown`; tester follow-up B, #203). The
+  "80 percent of that declared window" default is not filled in by anything: a proposal's threshold stays `null` until
+  someone names one, and the automatic confirm keeps it `null`.
+- Why: no installed agent reports context usage, so `acceptContextObservation` has no production caller and a threshold
+  does nothing. The CLI (`group confirm`, `proposal show`) and the Web budget editor say so, and call the field optional.
+- Nothing downstream requires a number: `acceptContextObservation` already treats `null` as "no threshold", the
+  execution snapshot only freezes and re-compares the value, and the task contracts sent to ccloop do not carry it.
+- Criteria: `tests/control/confirmWorkerWindow.test.ts` ("a declared profile window confirms with no threshold …"),
+  `tests/panel/confirmNullThreshold.test.ts` (Web API and control socket), `tests/commands/agentWalk.test.ts` (the CLI
+  on a real panel confirms with no threshold), `tests/commands/contextHandoff.test.ts`, `web/tests/tokenInput.test.tsx`.
