@@ -135,5 +135,12 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     for (let i = 0; i < rounds && !predicate(); i += 1) await driver.round();
     if (!predicate()) throw new Error("the driver did not reach the expected state");
   };
-  return { h, repo, repositories, service, fake, deps, dispatch, claim, body, until, driver: () => createExecutionDriver(deps) };
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — every driver this harness hands out is stopped
+  // before the fixture is disposed. A group whose tasks are all done now starts an off-round acceptance check (spec §5);
+  // a test that never stopped its driver removed the state directory under that check (ENOTEMPTY). stop() is idempotent.
+  const drivers: ExecutionDriver[] = [];
+  const dispose = h.dispose.bind(h);
+  h.dispose = async () => { for (const driver of drivers) await driver.stop(); await dispose(); };
+  const driver = (): ExecutionDriver => { const created = createExecutionDriver(deps); drivers.push(created); return created; };
+  return { h, repo, repositories, service, fake, deps, dispatch, claim, body, until, driver };
 }
