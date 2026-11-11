@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { planLibraryImportBody, registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
@@ -7,6 +7,7 @@ import { registerSocketProjectRoutes, type ProjectsDeps } from "./projects.js";
 import { CLIENT_HEADER, CLIENT_PATTERN, DISPATCHED_RUN_HEADER } from "../control/commandClient.js";
 import type { Principal } from "./permissions.js";
 import type { PanelAuth } from "./auth.js";
+import type { CliLoginRequests } from "./cliLogin.js";
 
 /** CLI v2 spec §15.5: the person token header. Sent by the CLI only with --as-person. */
 export const PERSON_TOKEN_HEADER = "x-orca-person-token";
@@ -24,7 +25,7 @@ export interface ControlSocketFailure { code: "control-socket-path-too-long" | "
  * may carry a person token (`auth`, the panel's accounts; without it no token is live), and `orca login`/`logout` mint
  * and revoke one here.
  */
-export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: ProjectsDeps, auth?: PanelAuth): Express {
+export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: ProjectsDeps, auth?: PanelAuth, cliLogin?: CliLoginDeps): Express {
   const app = express();
   // Spec §4.2: before the body is read and for every verb, GET included. Attribution only, never authorization (§6).
   app.use((req, res, next) => {
@@ -54,6 +55,7 @@ export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: Proje
   app.use(planLibraryImportBody);
   app.use(express.json({ limit: "64kb", verify: verifyControlJsonBody }));
   if (auth !== undefined) registerPersonRoutes(app, auth);
+  if (auth !== undefined && cliLogin !== undefined) registerCliLoginRoutes(app, auth, cliLogin);
   // CLI v2 spec §14 R4: plan registration over the socket, by the HTTP route's own handler (projects.ts).
   if (projects !== undefined) registerSocketProjectRoutes(app, projects);
   registerControlReadRoutes(app, deps, "socket");
@@ -85,6 +87,72 @@ function registerPersonRoutes(app: Express, auth: PanelAuth): void {
     auth.logout(current.claims.sid, auth.nowMs());
     res.json({ revoked: current.claims.sid });
   });
+}
+
+/** CLI browser login spec §6: the panel's open requests and the URL its Web app answers at (known after listen). */
+export interface CliLoginDeps { requests: CliLoginRequests; panelUrl: string }
+
+const intOrNull = (value: unknown): number | null => (Number.isSafeInteger(value) && (value as number) >= 0 ? value as number : null);
+
+/**
+ * CLI browser login spec §6: `orca auth login` starts a request, then polls with its request id until an owner approves or
+ * denies its code in the browser, or it expires; the person token is minted at that collect (§6.5). Every answer is at
+ * once (§6.3): a held response would delay the panel's shutdown. The token is the only secret any of these answers carries.
+ */
+function registerCliLoginRoutes(app: Express, auth: PanelAuth, deps: CliLoginDeps): void {
+  const refusedAs = { "cli-login-unknown": [404, "no open login request has this id (the panel may have restarted): run orca auth login again"], "cli-login-expired": [409, "the login request expired: run orca auth login again"], "cli-login-busy": [429, "too many login requests are open; let one finish or expire"] } as const;
+  const refuse = (res: Response, code: keyof typeof refusedAs): void => { const [status, message] = refusedAs[code]; sendControlError(res, status, code, message, { retryable: code === "cli-login-busy" }); };
+  const requestIdOf = (req: Request, res: Response): string | undefined => {
+    const requestId = (req.body as { requestId?: unknown } | undefined)?.requestId;
+    if (typeof requestId === "string") return requestId;
+    sendControlError(res, 400, "control-non-json-payload", "this route wants {requestId} as a string");
+    return undefined;
+  };
+  app.post("/api/control/person/cli-login", (req, res) => {
+    const principal = res.locals.orcaPrincipal as Principal;
+    // Spec §6.7: defence in depth beside the CLI's own refusal; a process that unsets the variable is not stopped.
+    if (principal.kind === "agent" && principal.dispatchedRun !== undefined) {
+      sendControlError(res, 403, "control-dispatched-run-refused", `orca auth login is not run by a run Orca dispatched (${principal.dispatchedRun}); a person runs it in a terminal they attend`);
+      return;
+    }
+    const body = (req.body ?? {}) as { pid?: unknown; ppid?: unknown; cwd?: unknown; startedAt?: unknown };
+    const started = deps.requests.start({
+      client: principal.kind === "agent" ? principal.client : "web",
+      pid: intOrNull(body.pid), ppid: intOrNull(body.ppid),
+      cwd: typeof body.cwd === "string" && body.cwd.length <= 4096 ? body.cwd : null,
+      startedAt: intOrNull(body.startedAt),
+    });
+    if ("refused" in started) { refuse(res, started.refused); return; }
+    res.json({ requestId: started.requestId, code: started.code, url: `${deps.panelUrl}/#cli-login/${started.code}`, expiresAt: started.expiresAt, pollMs: deps.requests.pollMs });
+  });
+  app.post("/api/control/person/cli-login/poll", (req, res) => {
+    const requestId = requestIdOf(req, res);
+    if (requestId === undefined) return;
+    const collected = deps.requests.collect(requestId);
+    if ("refused" in collected) { refuse(res, collected.refused); return; }
+    if (collected.state === "pending") { res.json({ state: "pending", pollMs: deps.requests.pollMs }); return; }
+    // Spec §6.5: the approver is read again here; one disabled or no longer an owner since approving issues nothing.
+    const approver = collected.state === "approved" ? auth.cliLoginApprover(collected.approverId) : null;
+    if (approver === null) {
+      sendControlError(res, 403, "cli-login-denied", collected.state === "denied" ? "the login request was denied in the browser" : "the account that approved may no longer approve a CLI login");
+      return;
+    }
+    const issued = auth.issuePersonToken(approver, auth.nowMs());
+    res.json({ token: issued.token, sid: issued.sid, user: { id: issued.user.id, name: issued.user.name }, expiresAt: issued.expiresAt });
+  });
+  app.post("/api/control/person/cli-login/cancel", (req, res) => {
+    const requestId = requestIdOf(req, res);
+    if (requestId === undefined) return;
+    const cancelled = deps.requests.cancel(requestId);
+    if ("refused" in cancelled) { refuse(res, cancelled.refused); return; }
+    res.json(cancelled);
+  });
+}
+
+/** Spec §6.1: the URL the CLI is given -- a wildcard bind is reached at 127.0.0.1, an IPv6 address in brackets. */
+export function panelUrlFor(bind: string, port: number): string {
+  const host = bind === "0.0.0.0" || bind === "::" || bind === "" ? "127.0.0.1" : bind.includes(":") ? `[${bind}]` : bind;
+  return `http://${host}:${port}`;
 }
 
 const isSocketAt = (path: string): boolean | null => {

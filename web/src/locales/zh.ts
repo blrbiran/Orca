@@ -2454,12 +2454,17 @@ export const zhErrors: Record<string, string> = {
   "owner-required": "只有所有者能做这件事。",
   "notice-not-found": "找不到这条提醒。",
   "session-not-found": "在你的会话里没有找到这个会话。",
+  // CLI browser login spec (2026-11-11) §6.12: `orca auth login`'s request (src/panel/controlSocket.ts, src/panel/authRoutes.ts).
+  "cli-login-denied": "这次命令行登录被拒绝了，或批准它的账号已不能再批准。",
+  "cli-login-expired": "这个命令行登录请求已过期，请在终端里重新运行 orca auth login。",
+  "cli-login-unknown": "没有这个代码的待处理命令行登录请求：它已被用过、已取消，或面板重启过。",
+  "cli-login-busy": "待处理的命令行登录请求太多了；等其中一个完成或过期后再试。",
   // Accounts spec §3.5: the human-only refusals, now also answered to a member in the Web UI (src/panel/humanOnly.ts).
   "control-verb-human-only": "只有登录 Web UI 的所有者能做这个操作。",
   "control-field-human-only": "这个字段只能由登录 Web UI 的所有者设置；去掉它再发送。",
   "control-dispatched-run-refused": "Orca 派出的运行不能做这个动作；请由人在 Web UI 或自己值守的终端会话里来做。",
-  "control-person-token-required": "这个动作需要人来做：先 `orca login`，再带 --as-person 重发，或在 Web UI 里做。",
-  "control-person-token-invalid": "person token 已失效（错误、过期或已吊销），请重新 `orca login`。",
+  "control-person-token-required": "这个动作需要人来做：先 `orca auth login`，再带 --as-person 重发，或在 Web UI 里做。",
+  "control-person-token-invalid": "person token 已失效（错误、过期或已吊销），请重新 `orca auth login`。",
   // Accounts spec §6.3: an agent's import over the spend caps' headroom, and the block shown on a group waiting on a cap.
   "control-limit-over-cap-headroom": "这次导入的额度超过了花费上限剩余的余量：{{message}}",
   // web/src/AuthGate.tsx's own check before a new password is sent (accounts spec §3.2).

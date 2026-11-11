@@ -43,6 +43,7 @@ import type { PanelOptions } from "./server.js";
 import type { StaticFiles } from "./staticFiles.js";
 import type { PanelAuth } from "./auth.js";
 import { authMiddleware, registerAuthRoutes } from "./authRoutes.js";
+import type { CliLoginRequests } from "./cliLogin.js";
 import { ensurePanelOperatorId, registerControlReadRoutes, type ControlReadApiDeps } from "./controlApi.js";
 import { archiveUnstartedDebugGroups } from "../control/debugGroup.js";
 import { principalLabel, type Principal } from "./permissions.js";
@@ -85,6 +86,8 @@ export interface ApiDeps {
   holdsRepository?: (repoId: string) => boolean;
   /** Accounts spec §3.3-§3.4: sessions; the /api middleware wants one on every route but POST /api/auth/login. */
   auth: PanelAuth;
+  /** CLI browser login spec §6: the open `orca auth login` requests an owner approves on the page; absent, no such routes. */
+  cliLogin?: CliLoginRequests;
 }
 
 /**
@@ -403,7 +406,7 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   app.use("/api", authMiddleware(deps.auth));
   // Ruling Q8: after the middleware, so every auth route but POST /api/auth/login gets the login, CSRF and
   // password-change checks.
-  registerAuthRoutes(app, deps.auth);
+  registerAuthRoutes(app, deps.auth, deps.cliLogin);
 
   if (deps.control) registerControlReadRoutes(app, deps.control, "web");
 

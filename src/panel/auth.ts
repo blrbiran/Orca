@@ -5,6 +5,7 @@ import { INITIAL_PASSWORD_FILE, ensureDefaultOwner } from "./accounts/initialOwn
 import { signAccessToken, verifyAccessToken, type AccessClaims } from "./accounts/jwt.js";
 import { hashPassword, verifyPassword } from "./accounts/password.js";
 import { loadOrCreateSigningKey } from "./accounts/signingKey.js";
+import { mayDoHumanOnly } from "./permissions.js";
 import { USER_NAME_PATTERN, openAccountsStore, type AccountsStore, type SessionKind, type UserRow } from "./accounts/store.js";
 
 export interface AuthenticatedUser { user: UserRow; claims: AccessClaims }
@@ -26,6 +27,13 @@ export interface PanelAuth {
   authenticate(token: string | undefined, nowMs: number): AuthenticatedUser | null;
   /** CLI v2 spec §15.3: `orca login`, over the control socket; the same password check and per-name throttle as login. */
   personLogin(name: string, password: string, nowMs: number): PersonLoginResult;
+  /** The token-minting half of personLogin, for an account already checked (CLI browser login spec §6: the collect). */
+  issuePersonToken(user: UserRow, nowMs: number): { token: string; sid: string; user: UserRow; expiresAt: number };
+  /**
+   * CLI browser login spec §6.5-§6.6: the account as it stands now, if it may approve a CLI login -- it exists, is not
+   * disabled, and may do human-only actions (an owner); else null.
+   */
+  cliLoginApprover(userId: string): UserRow | null;
   /** A live person token (x-orca-person-token), or null; a browser session's token is not one. */
   authenticatePerson(token: string, nowMs: number): AuthenticatedUser | null;
   /** A token with a new exp and the same sid; refuses (`login-required`) a session no longer active. */
@@ -121,6 +129,12 @@ export function createPanelAuth(input: {
     return user === null ? null : { user, claims };
   };
 
+  const issuePersonToken = (user: UserRow, nowMs: number): { token: string; sid: string; user: UserRow; expiresAt: number } => {
+    const { exp } = expiryOf(nowMs, days);
+    const sid = store.createSession(user.id, nowMs, exp * 1000, "cli");
+    return { token: mint(user, sid, nowMs).token, sid, user, expiresAt: exp * 1000 };
+  };
+
   return {
     store,
     sessionDays: days,
@@ -136,10 +150,12 @@ export function createPanelAuth(input: {
     personLogin(name, password, nowMs) {
       const checked = credentials(name, password, nowMs);
       if (!checked.ok) return checked;
-      const user = checked.user;
-      const { exp } = expiryOf(nowMs, days);
-      const sid = store.createSession(user.id, nowMs, exp * 1000, "cli");
-      return { ok: true, token: mint(user, sid, nowMs).token, sid, user, expiresAt: exp * 1000 };
+      return { ok: true, ...issuePersonToken(checked.user, nowMs) };
+    },
+    issuePersonToken,
+    cliLoginApprover(userId) {
+      const user = store.findById(userId);
+      return user !== null && user.disabledAt === null && mayDoHumanOnly({ kind: "user", userId: user.id, name: user.name, roles: user.roles }) ? user : null;
     },
     authenticatePerson(token, nowMs) { return authenticateKind(token, nowMs, "cli"); },
     authenticate(token, nowMs) { return authenticateKind(token, nowMs, "browser"); },

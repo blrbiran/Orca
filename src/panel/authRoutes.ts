@@ -5,7 +5,8 @@ import { AccountsRejection, type UserRow } from "./accounts/store.js";
 import { objectBody } from "./api.js";
 import { expiryOf, type AuthenticatedUser, type PanelAuth } from "./auth.js";
 import { controlErrorBody } from "./controlErrors.js";
-import { may, type Principal } from "./permissions.js";
+import type { CliLoginRefusal, CliLoginRequests } from "./cliLogin.js";
+import { may, mayDoHumanOnly, type Principal } from "./permissions.js";
 import { CSRF_REQUIRED, LOGIN_REQUIRED, PANEL_BAD_REQUEST, PASSWORD_CHANGE_REQUIRED } from "./rejection.js";
 
 export const AUTH_COOKIE = "orca_at";
@@ -112,8 +113,50 @@ function answer(res: Response, next: NextFunction, fn: () => void): void {
   }
 }
 
+/**
+ * CLI browser login spec (2026-11-11) §6: the page an owner approves `orca auth login` on. It shows what the requester
+ * reported about itself, labelled unverified (§6.2), and never either id's secret half: the request id and the token stay
+ * on the socket. Owner only (§6.6): a member, even a remote one, may not grant a token to a process on this machine.
+ */
+function registerCliLoginApproval(app: Express, auth: PanelAuth, requests: CliLoginRequests): void {
+  const approver = (res: Response): AuthenticatedUser | undefined => {
+    const current = currentUser(res);
+    if (current === undefined) return undefined;
+    if (mayDoHumanOnly(userPrincipal(current))) return current;
+    res.status(403).json({ code: "owner-required", message: "only an owner may approve a CLI login" });
+    return undefined;
+  };
+  const refused = (res: Response, code: CliLoginRefusal): void => {
+    if (code === "cli-login-expired") res.status(409).json({ code, message: "this login request expired; run orca auth login again in the terminal" });
+    else res.status(404).json({ code, message: "no open login request has this code" });
+  };
+  app.get("/api/auth/cli-login/:code", (req, res) => {
+    const current = approver(res);
+    if (current === undefined) return;
+    const seen = requests.view(String(req.params.code));
+    if ("refused" in seen) { refused(res, seen.refused); return; }
+    if (seen.state === "cancelled") { res.json(seen); return; }
+    res.json({
+      code: seen.code, state: seen.state, requestedAt: seen.requestedAt, expiresAt: seen.expiresAt,
+      reported: { ...seen.reported, verified: false }, account: { name: current.user.name }, tokenDays: auth.sessionDays,
+    });
+  });
+  app.post("/api/auth/cli-login/:code/approve", (req, res) => {
+    const current = approver(res);
+    if (current === undefined) return;
+    const done = requests.approve(String(req.params.code), current.user.id);
+    if ("refused" in done) refused(res, done.refused); else res.json(done);
+  });
+  app.post("/api/auth/cli-login/:code/deny", (req, res) => {
+    if (approver(res) === undefined) return;
+    const done = requests.deny(String(req.params.code));
+    if ("refused" in done) refused(res, done.refused); else res.json(done);
+  });
+}
+
 /** Accounts spec §3.2-§3.3, §8. Registered after `authMiddleware` (ruling Q8). */
-export function registerAuthRoutes(app: Express, auth: PanelAuth): void {
+export function registerAuthRoutes(app: Express, auth: PanelAuth, cliLogin?: CliLoginRequests): void {
+  if (cliLogin !== undefined) registerCliLoginApproval(app, auth, cliLogin);
   app.post("/api/auth/login", (req, res, next) => {
     const body = objectBody(req, res);
     if (body === undefined) return;

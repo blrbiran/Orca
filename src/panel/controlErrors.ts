@@ -26,6 +26,11 @@ const panelOnlyErrorStatuses = {
   "login-failed": 401,
   "login-throttled": 429,
   "owner-required": 403,
+  // CLI browser login spec (2026-11-11) §6.12: `orca auth login`'s request, refused by name on the socket and the Web.
+  "cli-login-denied": 403,
+  "cli-login-expired": 409,
+  "cli-login-unknown": 404,
+  "cli-login-busy": 429,
   // Accounts spec §6.3.2: an agent's import-plan or requirement-draft-accept whose limit exceeds the caps' headroom.
   "control-limit-over-cap-headroom": 403,
   // Spec 2026-10-15 ccloop error codes §4.2: ccloop exited non-zero; the message names its code (or `unknown`) and detail.

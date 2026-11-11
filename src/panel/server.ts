@@ -9,7 +9,8 @@ import { createPanelAuth } from "./auth.js";
 import { PANEL_HOST_NOT_ALLOWED, assertBindAllowed, isHostAllowed } from "./bindGuard.js";
 import { controlErrorBody } from "./controlErrors.js";
 import { verifyControlJsonBody, planLibraryImportBody } from "./controlApi.js";
-import { bindControlSocket, buildControlSocketApp, controlSocketPath, type ControlSocketHandle } from "./controlSocket.js";
+import { createCliLoginRequests } from "./cliLogin.js";
+import { bindControlSocket, buildControlSocketApp, controlSocketPath, panelUrlFor, type ControlSocketHandle } from "./controlSocket.js";
 import { CONTROL_SOCKET_MAX_BYTES, CONTROL_SOCKET_NAME } from "./controlSocketPath.js";
 import { projectsDepsOf } from "./projects.js";
 import { randomUUID } from "node:crypto";
@@ -263,6 +264,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     root: opts.accountsDir ?? controlRoot(env), by: opts.by, sessionDays: opts.sessionDays ?? 15,
     log: (line) => process.stderr.write(line), nowMs: () => clock().getTime(),
   });
+  // CLI browser login spec §6: one set of open requests, started on the socket and approved on the Web; the auth clock.
+  const cliLogin = createCliLoginRequests({ nowMs: auth.nowMs });
 
   // Assembly plan Task 5. Built before listen so that a process which cannot build its control
   // plane never accepts a connection that would then meet a half-built one. The epoch is its own
@@ -299,7 +302,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     },
   });
   buildApi(app, {
-    opts, reviews, statics, projects, auth,
+    opts, reviews, statics, projects, auth, cliLogin,
     ...(multiControlRepoId === undefined ? {} : { multiControlRepoId }),
     ...(control === null ? {} : { holdsRepository: (repoId: string) => control!.config.hasRepository(repoId) }),
     // Disabled means no `control` key at all -- byte-for-byte the shape that shipped before this
@@ -338,9 +341,11 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   // Agent entry spec §3.1: only the store's holder binds, and only after recovery -- the same ordering as the TCP listen.
   let socket: ControlSocketHandle | null = null;
   if (control !== null) {
+    const listening = server.address();
+    const cliLoginDeps = listening === null || typeof listening === "string" ? undefined : { requests: cliLogin, panelUrl: panelUrlFor(opts.bind, listening.port) };
     const bound = await bindControlSocket(
       buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true, multiControlRepoId,
-        (repoId) => control!.config.hasRepository(repoId)), auth),
+        (repoId) => control!.config.hasRepository(repoId)), auth, cliLoginDeps),
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {
