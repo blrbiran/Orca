@@ -29,7 +29,7 @@ orca requirement open --idea "add a dark mode"
 orca requirement open --idea "add a dark mode" --agent claude-main
 ```
 
-## `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>]`
+## `orca requirement answer <group> [--answer <answer>] [--glossary <glossary>] [--adr <adr>] [--finish]`
 
 answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults
 
@@ -39,6 +39,7 @@ answer the current round: --answer <qid> takes the recommendation, --answer <qid
 - `--answer <answer>` (repeatable): <questionId> or <questionId>=<text>
 - `--glossary <glossary>` (repeatable): <id>=accept|reject
 - `--adr <adr>` (repeatable): <id>=accept|reject
+- `--finish`: close clarification with these answers: no next round is drafted, and the split is drafted from this round
 
 ## `orca requirement consensus <group> [--unanswered]`
 
