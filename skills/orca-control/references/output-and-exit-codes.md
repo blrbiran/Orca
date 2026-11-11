@@ -49,6 +49,6 @@ When `request` is present the outcome is uncertain (timeout, dropped connection,
 - `--quiet`: print nothing on success
 - `--verbose`: print more
 - `--help`: this command's help
-- `--command-id <command-id>`: use this id for a new request (a write)
+- `--command-id <command-id>`: use this id for a write; an id already applied with the same arguments prints its outcome and sends nothing
 - `--if-revision <n>`: send this revision instead of the one just read (a write)
 - `--as-person`: send the person token stored by orca auth login (or orca login)

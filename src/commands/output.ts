@@ -43,10 +43,11 @@ export function printResponse(
   const hint = error === null ? undefined : options.hint?.(error);
   if (hint !== undefined) io.stderr(`orca: ${hint}\n`);
   if (response.commandId !== undefined) io.stderr(`orca: command id ${response.commandId}\n`);
-  // Issue #149 (session 3cfc2e73): a reused --command-id with a re-read revision is a different request (spec §14 R1 keeps
-  // the replay identity byte-exact); name the two commands that do look up or replay what that id already holds.
+  // Issue #149 (session 3cfc2e73): a reused --command-id naming other arguments, or another --if-revision, is a different
+  // request (spec §14 R1 keeps the replay identity byte-exact; a re-run with the same arguments is replayed by runWrite);
+  // name the two commands that do look up or replay what that id already holds.
   if (error?.code === "command-id-conflict" && response.commandId !== undefined) {
-    io.stderr(`orca: this command id already names a different request (a re-run re-reads the revision); see what it did with orca command show ${response.commandId} --group <group> (or its other scope flag), or replay the exact saved request with orca command retry --request <file|->\n`);
+    io.stderr(`orca: this command id already names a different request (other arguments, or another --if-revision); see what it did with orca command show ${response.commandId} --group <group> (or its other scope flag), or replay the exact saved request with orca command retry --request <file|->\n`);
   }
   if (request !== undefined) io.stderr(`orca: the outcome is uncertain; re-run with --json to keep the request for orca command retry\n`);
   return code;

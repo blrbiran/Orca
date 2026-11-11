@@ -4,8 +4,12 @@
  * the exact request so `orca command retry` can replay it.
  */
 import { randomUUID } from "node:crypto";
-import type { CliResponseV1 } from "../entry/envelope.js";
+import { commandArgumentsHash } from "../control/commandArguments.js";
+import { ControlError } from "../control/errors.js";
+import { idSchema } from "../control/schema.js";
+import { EntryRejection, type CliResponseV1 } from "../entry/envelope.js";
 import { controlSend } from "../entry/operations.js";
+import { scopesOf, targetOf } from "./commandScope.js";
 import type { SentRequest } from "./output.js";
 import { PanelAnswer, type PanelSession } from "./panelCommand.js";
 import type { CommandDef, VerbMapping, WriteContext } from "./types.js";
@@ -63,10 +67,49 @@ export function withCurrentRevision(response: CliResponseV1): CliResponseV1 {
   return { ...response, body: { ...(response.body as object), currentRevision: error.commandRevision ?? null } };
 }
 
-export async function runWrite(_def: CommandDef, mapping: VerbMapping, context: WriteContext, session: PanelSession): Promise<{ response: CliResponseV1; request?: SentRequest }> {
+/**
+ * Issue #149: a re-run with the same --command-id (after a timeout, say) re-reads the revision, so its raw request is not the
+ * booked one and the panel would refuse it as command-id-conflict even when the first attempt succeeded (spec §14 R1 keeps
+ * replay byte-exact). So the id is looked up first: booked with the same arguments (commandArgumentsHash of verb, target and
+ * the payload as it goes on the wire) -> its outcome, and nothing is sent. Booked with other arguments, not booked, or not
+ * answerable -> null, and the request is sent as before, so a real conflict stays the panel's command-id-conflict.
+ */
+async function bookedOutcome(verb: string, route: string, payload: unknown, commandId: string, context: WriteContext, session: PanelSession): Promise<CliResponseV1 | null> {
+  if (payload === undefined || !idSchema.safeParse(commandId).success) return null;
+  let sent: unknown;
+  let scopes: string[];
+  try {
+    // What the panel receives: JSON drops undefined fields, so they are not part of what it hashes either.
+    sent = JSON.parse(JSON.stringify(payload));
+    scopes = await scopesOf({ route, payload: sent, expectedRevision: 0, commandId }, context);
+  } catch (error) {
+    // A route with no known scope, or a read it needs refused: no lookup; the send decides as before.
+    if (error instanceof EntryRejection || error instanceof PanelAnswer) return null;
+    throw error;
+  }
+  for (const scope of scopes) {
+    const found = await session.fresh(`groups/${scope}/commands/${commandId}`);
+    if (found.status !== 200) continue;
+    const lookup = found.body as { originalStatus?: unknown; body?: unknown; argumentsHash?: unknown };
+    let mine: string;
+    try { mine = commandArgumentsHash({ verb, target: targetOf(route, sent, scope), payload: sent }); }
+    catch (error) { if (error instanceof ControlError) return null; throw error; }
+    if (lookup.argumentsHash !== mine || typeof lookup.originalStatus !== "number") return null;
+    return { schema: "orca-cli-response-v1", status: lookup.originalStatus, commandId, body: lookup.body };
+  }
+  return null;
+}
+
+export async function runWrite(_def: CommandDef, mapping: VerbMapping, context: WriteContext, session: PanelSession): Promise<{ response: CliResponseV1; request?: SentRequest; replayed?: true }> {
   const payload = await mapping.payload(context);
   const route = await mapping.route(context);
-  const expectedRevision = context.args.global.ifRevision ?? await readRevision(mapping, context);
+  const { commandId, ifRevision } = context.args.global;
+  // Issue #149: --if-revision names the exact request already, so it is sent as given (the ledger replays or refuses it).
+  if (commandId !== undefined && ifRevision === undefined) {
+    const booked = await bookedOutcome(mapping.verb, route, payload, commandId, context, session);
+    if (booked !== null) return { response: booked, replayed: true };
+  }
+  const expectedRevision = ifRevision ?? await readRevision(mapping, context);
   // Review M4 (session b37f7ce9): a command id names its entry, as controlSend's commandIdPrefix does -- `mcp-` when the
   // MCP server runs the CLI in-process (client `mcp` or `mcp:<name>`), `cli-` otherwise.
   const prefix = session.client === "mcp" || session.client.startsWith("mcp:") ? "mcp" : "cli";

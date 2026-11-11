@@ -131,7 +131,9 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
     if (mapping.kind === "read") return print(await runRead(def, mapping, context));
     if (mapping.kind === "verb") {
       const { runWrite } = await import("./write.js");
-      const { response, request } = await runWrite(def, mapping, context, session);
+      const { response, request, replayed } = await runWrite(def, mapping, context, session);
+      // Issue #149: stdout is what a fresh answer prints; stderr says the outcome is the booked one, not a new write.
+      if (replayed) io.stderr(`orca: replayed: command ${response.commandId} was already applied\n`);
       return print(response, request);
     }
     throw new Error(`orca ${def.domain}: a local row reached the panel runner`);

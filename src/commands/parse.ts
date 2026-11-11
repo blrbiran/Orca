@@ -9,7 +9,7 @@ export const GLOBAL_FLAGS: readonly FlagDef[] = [
   { name: "quiet", type: "boolean", summary: "print nothing on success" },
   { name: "verbose", type: "boolean", summary: "print more" },
   { name: "help", type: "boolean", summary: "this command's help" },
-  { name: "command-id", type: "string", summary: "use this id for a new request (a write)" },
+  { name: "command-id", type: "string", summary: "use this id for a write; an id already applied with the same arguments prints its outcome and sends nothing" },
   { name: "if-revision", type: "integer", summary: "send this revision instead of the one just read (a write)" },
   { name: "as-person", type: "boolean", summary: "send the person token stored by orca auth login (or orca login)" },
 ];
