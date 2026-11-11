@@ -173,3 +173,25 @@ group/cap binders are in `runLoop.ts`; a fully funded finite task carries no `to
    `commandChecksDecideGoal`; accept-attempt runs no ccloop and no agent.
 
 **Order.** A and overrun visibility first; accept-attempt second (larger, touches the landing path).
+
+## 8. Correction: `task accept-attempt` as built (2026-11-11, branch `feat/accept-attempt`, commits 3cf99d41..6589f45a)
+
+Recorded by the implementing session; §7 above is kept as written. Where the two differ, this is what the code does, for
+the human to confirm or overturn.
+
+1. **A changed check-defining file is refused, not flagged.** §7 item 2 says "refused or flagged exactly as stepC/stepD
+   would"; stepD lands a weakening with a flag, and re-runs a modification at base. accept-attempt refuses both
+   (`criteria-<kind>:<signals, files>`): the person accepts on the checks' word, so checks the attempt changed cannot give
+   it, and there is no base re-run here. Criterion 18 of the round asked for the refusal.
+2. **Refused by name beyond §7 item 5:** an attempt with no change against its base (`empty-attempt`, D14's case); a task
+   whose contract has no required checks (`no-required-checks`: nothing would be re-run); a merge conflict with the tip
+   (`merge-conflict:<paths>`); a task that moved on after the command (`task-moved:<status>`); a recovery (saved-result)
+   run. A run settled as `recovered` (`settled-recoverable`, task `held`) is out of scope: only `settled-failed` runs
+   (close-run, or a releasing usage settlement) are accepted; a held task can still be continued.
+3. **The snapshot used** is the run's newest archive snapshot (cleanup archives again after stepC); the command pins the one
+   it verified, and the driver rebuilds from exactly that one.
+4. **The driver waits instead of refusing** while the group is reconciling or stopped after the command was recorded; the
+   command itself refuses both.
+5. **A refused acceptance can be sent again** (a new command); a pending or landed one cannot.
+6. **The code-authored ledger record** is a `criteria` decision `<runId>/orca-operator-accept` (major), naming the principal,
+   the command and the attempt; its undo is `git revert -m 1` of the landing merge.
