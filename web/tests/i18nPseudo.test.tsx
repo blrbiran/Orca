@@ -376,7 +376,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling: 2026-11-06 session 86352010, human 「这次批准改写所有必要的判据。」: the activityKind `quota-probe` (quota rest probe spec 2026-11-06 §2) adds one: 203 + 1.
     // Ruling: 2026-11-08 session fe1f3fa6, human 「这次批准改写所有必要的判据」: the activityKind `saved-result-top-up` (the writer already inserts it; the wire enum had no words for it) adds one: 204 + 1.
     // Ruling: 2026-11-11 session f958ec3f, human 「这次批准改写所有必要的判据」: the activityKinds `attempt-accepted` and `attempt-accept-refused` (task accept-attempt, budget-defaults spec 2026-11-11 §7) add two: 205 + 2.
-    expect(ENUM_VALUES.length).toBe(207);
+    // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the theme family gains `lilac` (#200): 207 + 1.
+    expect(ENUM_VALUES.length).toBe(208);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

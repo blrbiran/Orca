@@ -9,11 +9,12 @@
  * first, then dark. No id was dropped, so a stored choice of any earlier name still applies.
  * Session 2026-10-29 (human picked 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬 and 「其他可以删掉」): ink, contrast, navy, lagoon and
  * terminal were dropped; a browser that stored one of them reads it as "system" (readTheme), its stored value untouched.
+ * Tester #200 (2026-11-11, tester follow-up E, human 「加」): the light candidate lilac (丁香) joins after rose.
  */
 export const THEME_KEY = "orca.panel.theme";
 export const THEME_PREFS = [
   "system", "light", "dark",
-  "frost", "rose",
+  "frost", "rose", "lilac",
   "violet", "dusk", "ember",
 ] as const;
 export type ThemePref = (typeof THEME_PREFS)[number];

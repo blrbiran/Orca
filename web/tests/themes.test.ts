@@ -65,7 +65,9 @@ describe("the theme list (session e236bbe4)", () => {
   // and no earlier id is dropped, so a stored choice of any of them still applies).
   it("offers system, the default pair, then the light candidates and the dark candidates, in that order", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」).
-    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "violet", "dusk", "ember"]);
+    // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #200 (human: 「加」) adds the light candidate
+    // `lilac` (丁香) after the other light candidates; this now encodes that order with it.
+    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "lilac", "violet", "dusk", "ember"]);
   });
 
   // The five dropped ids were stored by browsers that picked them; such a browser must land on a working theme (system),
@@ -231,5 +233,56 @@ describe.each(PINNED)("theme %s stays readable (WCAG AA)", (theme) => {
       expect(ratio(c("border-strong"), card), "control edge/card").toBeGreaterThanOrEqual(1.5);
       expect(ratio(selected, card), "selected/card").toBeGreaterThanOrEqual(1.1);
     }
+  });
+});
+
+/**
+ * Tester #200 (spec 2026-11-11-tester-followup-e-design.md §10, human: 「加」): the light candidate `lilac` paints a soft
+ * lilac page through ONE new optional token, --page-image (none for every other theme, so their page is unchanged),
+ * under white cards with a 16 px card radius and an accent from #847aff, darkened so the bar above holds. The tester's
+ * 36 px numbers are not taken: the type scale stays 14/18/22. Text sits on the gradient, so every stop is held to the
+ * page's bar too.
+ */
+describe("the page image and the lilac theme (#200)", () => {
+  const stops = (value: string): string[] => [...value.matchAll(/#[0-9a-f]{6}/gi)].map((m) => m[0]);
+  const hue = ([r, g, b]: Rgb): number => {
+    const [R, G, B] = [r, g, b].map((x) => x / 255) as Rgb; const max = Math.max(R, G, B), min = Math.min(R, G, B), d = max - min;
+    const h = max === R ? ((G - B) / d) % 6 : max === G ? (B - R) / d + 2 : (R - G) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+
+  it("paints the page image under the page colour, none unless a theme sets it", () => {
+    // mutation: drop the default -> the token is undefined for every theme, red here
+    expect(tokens("dark").get("--page-image")).toBe("none");
+    // mutation: paint only the colour -> red here
+    expect(css).toMatch(/\nbody \{[^}]*background-color: var\(--bg\); background-image: var\(--page-image\);/);
+    for (const theme of PINNED.filter((p) => p !== "dark" && p !== "lilac")) expect(tokens(theme).has("--page-image"), theme).toBe(false);
+  });
+
+  it("gives lilac a gradient page whose every stop keeps the page's bar", () => {
+    const { c, raw } = palette("lilac");
+    const image = raw("page-image");
+    expect(image).toMatch(/^linear-gradient\(/);
+    const colours = stops(image);
+    expect(colours.length).toBeGreaterThanOrEqual(2);
+    for (const stop of colours) {
+      const under = hex(stop);
+      // mutation: a deeper first stop (#d9d0ff) -> muted on it under 4.5, red here
+      expect(ratio(c("text"), under), `text on ${stop}`).toBeGreaterThanOrEqual(7);
+      expect(ratio(c("text-strong"), under), `text-strong on ${stop}`).toBeGreaterThanOrEqual(7);
+      expect(ratio(c("muted"), under), `muted on ${stop}`).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(c("accent"), under), `accent on ${stop}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("sets lilac's look: white cards, a 16px card radius, a light scheme, and #847aff's hue darkened to the bar", () => {
+    const { t, c } = palette("lilac");
+    expect([t.get("color-scheme"), t.get("--card"), t.get("--radius")]).toEqual(["light", "#ffffff", "16px"]);
+    // #847aff itself is 3.4:1 on white -- too low for link text; the accent keeps its hue and is darker.
+    expect(ratio(hex("#847aff"), hex("#ffffff"))).toBeLessThan(4.5);
+    expect(Math.abs(hue(c("accent")) - hue(hex("#847aff")))).toBeLessThanOrEqual(6);
+    expect(lum(c("accent"))).toBeLessThan(lum(hex("#847aff")));
+    // The type scale is the shared one: the theme sets no size token.
+    for (const name of ["--text-xs", "--text-sm", "--text-md", "--text-lg"]) expect(t.has(name), name).toBe(false);
   });
 });

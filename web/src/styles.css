@@ -59,6 +59,8 @@
   --dur: 120ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --nav-width: 240px;
+  /* Tester #200: an image painted over --bg on the page (body). Optional: only a theme that wants one sets it (lilac). */
+  --page-image: none;
 }
 :root[data-theme="light"] {
   color-scheme: light;
@@ -136,6 +138,26 @@
   --space-1: 5px; --space-2: 10px; --space-3: 15px; --space-4: 20px; --space-5: 30px;
   --control-h: 36px; --control-h-sm: 30px;
 }
+/* lilac (#200, human 「加」): a soft lilac page -- a faint gradient through --page-image -- under white cards with a 1px
+   edge, the roundest card corners, an accent from #847aff darkened until links and labels on it pass the bar; Inter. */
+:root[data-theme="lilac"] {
+  color-scheme: light;
+  --bg: #f3f0fc; --bg-elevated: #ffffff; --bg-hover: #ece8fa; --card: #ffffff;
+  --well: #f8f6fe; --field: #ffffff;
+  --page-image: linear-gradient(160deg, #efeaff 0%, #f3f0fc 45%, #f7f5fd 100%);
+  --border: #e3def5; --border-strong: #b3abd6; --text: #2a2640; --text-strong: #15122a; --muted: #5b5676;
+  --accent: #5a4ee0; --accent-subtle: rgba(132, 122, 255, 0.14); --accent-hover: #463bc2; --on-accent: #ffffff;
+  --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #2f5bd3;
+  --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
+  --cat-idle: rgba(91, 86, 118, 0.12); --cat-running: rgba(19, 122, 58, 0.15); --cat-waiting: rgba(161, 77, 6, 0.15);
+  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(90, 78, 224, 0.13);
+  --stall: #8a3c04;
+  --ok-subtle: rgba(19, 122, 58, 0.08); --warn-subtle: rgba(161, 77, 6, 0.08); --danger-subtle: rgba(180, 35, 24, 0.07); --info-subtle: rgba(47, 91, 211, 0.07);
+  --shadow: 0 1px 2px rgba(42, 38, 64, 0.05); --shadow-pop: 0 14px 36px rgba(42, 38, 64, 0.14), 0 2px 6px rgba(42, 38, 64, 0.06);
+  --font: var(--font-sans); --mono: var(--font-mono);
+  --radius-xs: 6px; --radius-sm: 10px; --radius: 16px;
+  --control-h: 34px; --control-h-sm: 28px;
+}
 /* violet: a Linear-style night -- near-black with a violet cast, a lilac-violet accent; Inter, small radii, compact. */
 :root[data-theme="violet"] {
   color-scheme: dark;
@@ -207,7 +229,7 @@ img, svg, video, canvas, audio, iframe, embed, object { display: revert; vertica
 img, video { max-width: revert; height: revert; }
 progress { vertical-align: revert; }
 
-body { margin: 0; background: var(--bg); color: var(--text); font: var(--text-md)/1.55 var(--font); }
+body { margin: 0; background-color: var(--bg); background-image: var(--page-image); background-attachment: fixed; color: var(--text); font: var(--text-md)/1.55 var(--font); }
 h1, h2, h3 { color: var(--text-strong); margin: 0 0 8px; line-height: 1.3; }
 h1 { font-size: 22px; } h2 { font-size: 18px; } h3 { font-size: var(--text-md); font-weight: 600; }
 p { margin: 0 0 8px; }
