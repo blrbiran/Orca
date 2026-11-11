@@ -39,7 +39,9 @@ beforeEach(() => {
       const shown = byRepo[params.get("projectKey") ?? ""] ?? records; // taken at request time: a held answer carries what was current then
       const held = holdSearch[query];
       if (held) await held;
-      return json({ projectKey: params.get("projectKey"), query, page: { records: shown, total: truncated?.total ?? shown.length, truncated: truncated !== null } });
+      // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the page carries #258's `offset` and
+      // `hasMore`, as the server's strict schema now always sends them; this fake answers one first page.
+      return json({ projectKey: params.get("projectKey"), query, page: { records: shown, total: truncated?.total ?? shown.length, truncated: truncated !== null, offset: 0, hasMore: truncated !== null } });
     }
     if (url.startsWith("/api/memory/item")) {
       const ref = new URL(url, "http://x").searchParams.get("ref");
@@ -159,7 +161,9 @@ describe("MemoryView (spec §5.2, W1)", () => {
   it("says how much was cut, and that a remote-less repository may show no project memory", async () => {
     records = [rec("1")]; truncated = { total: 7 };
     render(<MemoryView active />);
-    expect(await screen.findByText("Showing 1 of 7; narrow the search.")).toBeTruthy();
+    // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #258 replaced "Showing n of m; narrow the
+    // search." with the range line; this now encodes that a cut list says which matches it shows, out of how many.
+    expect(await screen.findByText("1–1 of 7")).toBeTruthy();
     expect(screen.getByText(/No project memory/)).toBeTruthy();
   });
 
