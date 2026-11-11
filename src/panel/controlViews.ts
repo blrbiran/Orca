@@ -485,7 +485,7 @@ function overGrantUnblocked(status: unknown, snapshot: GroupReadSnapshot): boole
   });
 }
 
-function cardFacts(store: ControlStore, groupId: string, body: Record<string, unknown>, taskIds: readonly string[], snapshot: GroupReadSnapshot) {
+function cardFacts(store: ControlStore, groupId: string, body: Record<string, unknown>, taskIds: readonly string[], snapshot: GroupReadSnapshot, planHash: string) {
   const tokens = (value: unknown): number | null => {
     const n = (value as { tokens?: unknown } | undefined)?.tokens;
     return typeof n === "number" ? n : null;
@@ -513,9 +513,12 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
   const major = findings.filter((row) => row.severity === "major").length;
+  // Budget defaults spec 2026-11-11 §7 item 4: absent in a finite group, so its card keeps its bytes.
+  const expectation = tokens(body.limit) === null ? cardExpectation(store, groupId, planHash, taskIds, snapshot) : null;
   return {
     budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure,
     ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
+    ...(expectation === null ? {} : { expectation }),
   };
 }
 
@@ -622,7 +625,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(archived !== null && overGrantUnblocked(body.status, readSnapshot!) ? { overGrant: true } : {}),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
-    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId), readSnapshot!) }),
+    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId), readSnapshot!, archived.planHash) }),
     ...(orchestration === null ? {} : { orchestration }),
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
     ...(escalation.length === 0 ? {} : { escalation }),
@@ -1346,24 +1349,54 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
  */
 function deriveExpectations(view: Pick<GroupViewV1, "ledger" | "plan" | "estimates" | "workItems">, snapshot: GroupReadSnapshot): void {
   if (view.ledger.groupLimit.tokens !== null) return;
-  let newest: EstimateViewV1 | null = null;
-  for (const estimate of view.estimates) {
-    if (estimate.state !== "ready" || estimate.output === null || estimate.output.planHash !== view.plan.planHash) continue;
-    if (newest === null || estimate.estimateVersion > newest.estimateVersion) newest = estimate;
-  }
+  const newest = newestReadyEstimate(view.estimates, view.plan.planHash);
   if (newest === null) return;
   for (const item of view.workItems) {
     const suggested = newest.output!.tasks.find(task => task.taskId === item.taskId);
     if (suggested === undefined) continue;
-    let usedTokens: number | null = 0;
-    for (const row of snapshot.runsByRowid) {
-      if (String(row.work_item_id) !== item.taskId) continue;
-      const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(String(row.id)), `run-invalid:${String(row.id)}`);
-      if (run.unknown.work || run.usageApproximate !== undefined) { usedTokens = null; break; }
-      usedTokens += run.cumulative.work.tokens;
-    }
-    item.expected = { tokens: suggested.work.tokens, estimateId: newest.estimateId, stale: newest.stale === true, usedTokens };
+    item.expected = { tokens: suggested.work.tokens, estimateId: newest.estimateId, stale: newest.stale === true, usedTokens: taskWorkUsed(snapshot, item.taskId) };
   }
+}
+
+type ExpectationSource = { estimateId: string; estimateVersion: number; state: string; output: { planHash: string; tasks: ReadonlyArray<{ taskId: string; work: { tokens: number } }> } | null; stale?: boolean };
+/** The newest ready estimate for this plan (by version), or null: the one whose work tokens are the tasks' expectation. */
+function newestReadyEstimate<E extends ExpectationSource>(estimates: readonly E[], planHash: string): E | null {
+  let newest: E | null = null;
+  for (const estimate of estimates) {
+    if (estimate.state !== "ready" || estimate.output === null || estimate.output.planHash !== planHash) continue;
+    if (newest === null || estimate.estimateVersion > newest.estimateVersion) newest = estimate;
+  }
+  return newest;
+}
+/** The work tokens a task's runs have used, or null when any of them has unknown or only approximate usage. */
+function taskWorkUsed(snapshot: GroupReadSnapshot, taskId: string): number | null {
+  let used = 0;
+  for (const row of snapshot.runsByRowid) {
+    if (String(row.work_item_id) !== taskId) continue;
+    const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(String(row.id)), `run-invalid:${String(row.id)}`);
+    if (run.unknown.work || run.usageApproximate !== undefined) return null;
+    used += run.cumulative.work.tokens;
+  }
+  return used;
+}
+/**
+ * §7 item 4 on the board card: the group's summed expectation over its tasks, and their summed use (null when any task's
+ * is unknown). Only for a group with no token limit and a ready estimate for its plan; one indexed read of its ready rows.
+ */
+function cardExpectation(store: ControlStore, groupId: string, planHash: string, taskIds: readonly string[], snapshot: GroupReadSnapshot): { expectedTokens: number; usedTokens: number | null } | null {
+  const ready = store.db.prepare("SELECT id FROM estimates WHERE group_id=? AND state='ready'").all(groupId).map(row => readEstimateRecord(store, groupId, String(row.id)));
+  const newest = newestReadyEstimate(ready, planHash);
+  if (newest === null) return null;
+  let expectedTokens = 0, usedTokens: number | null = 0, any = false;
+  for (const taskId of taskIds) {
+    const suggested = newest.output!.tasks.find(task => task.taskId === taskId);
+    if (suggested === undefined) continue;
+    any = true;
+    expectedTokens += suggested.work.tokens;
+    const used = taskWorkUsed(snapshot, taskId);
+    usedTokens = usedTokens === null || used === null ? null : usedTokens + used;
+  }
+  return any ? { expectedTokens, usedTokens } : null;
 }
 
 /** Clarify caps spec 2026-10-21 §3.6: the commands that start a drafting step (a round or a draft); retries are the same wait. */

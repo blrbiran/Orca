@@ -12,7 +12,7 @@ import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { WebControlService } from "../../src/control/webService.js";
-import { readControlGroup } from "../../src/panel/controlViews.js";
+import { readControlGroup, readGroupSummary } from "../../src/panel/controlViews.js";
 import { loop, type Fixture } from "./fixtures/taskLoop.js";
 import { webFixture, type WebFixtureTask } from "./fixtures/web.js";
 
@@ -306,6 +306,41 @@ describe("the group view derives each task's expectation (§7 items 2, 4; criter
       h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), claim.runId);
       // mutation: count an approximate run as known -> 4,800,000, red
       expect(expectedOf(h, "c")!.usedTokens).toBeNull();
+    } finally { await h.dispose(); }
+  });
+});
+
+describe("the board card carries the group's expectation (§7 item 4)", () => {
+  const cardOf = (h: Fixture) => readGroupSummary(h.store, "g").card;
+  it("in an unlimited group: the summed expectation and use, null use when unknown", async () => {
+    const h = await unlimitedFixture(HAND);
+    try {
+      const service = new WebControlService(h.deps);
+      expect(cardOf(h)).not.toHaveProperty("expectation");
+      await readyEstimate(h, service, await h.requestEstimate(service), "c");
+      // mutation: drop cardExpectation from cardFacts -> absent, red
+      expect(cardOf(h)?.expectation).toEqual({ expectedTokens: SUGGESTED.tokens, usedTokens: 0 });
+      expect(await service.confirm(h.command("confirm", { ...await h.confirmPayload(), budgetMode: "soft" }))).not.toHaveProperty("error");
+      expect(await service.start(h.command("start", {}))).not.toHaveProperty("error");
+      const claim = await deliverScheduledStart(h.deps, "g");
+      if (claim.kind !== "claimed") throw new Error(JSON.stringify(claim));
+      recordUsage(h.store, { runId: claim.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: SUGGESTED.tokens * 3.2, activeMs: 100, attempts: 1, sessions: 1 }, source: { artifactId: "usage", hash: "a".repeat(64) } });
+      // mutation: card use always 0 -> red
+      expect(cardOf(h)?.expectation).toEqual({ expectedTokens: SUGGESTED.tokens, usedTokens: SUGGESTED.tokens * 3.2 });
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(claim.runId)!.body));
+      body.unknown.work = true;
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), claim.runId);
+      expect(cardOf(h)?.expectation).toEqual({ expectedTokens: SUGGESTED.tokens, usedTokens: null });
+    } finally { await h.dispose(); }
+  });
+
+  it("is absent in a finite group's card", async () => {
+    const h = await webFixture(undefined, [HAND]);
+    try {
+      await readyEstimate(h, new WebControlService(h.deps), h.estimateId, "c");
+      // mutation: compute it in every group -> present, red
+      expect(cardOf(h)).toBeDefined();
+      expect(cardOf(h)).not.toHaveProperty("expectation");
     } finally { await h.dispose(); }
   });
 });

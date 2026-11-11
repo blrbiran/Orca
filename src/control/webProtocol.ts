@@ -1553,6 +1553,9 @@ export const groupSummarySchema = z
       // Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group (not dismissed) that another group
       // -- the review -- owns and names this one among its involved groups; present only when there is one.
       reviewFindings: z.object({ major: safeInteger, minor: safeInteger }).strict().optional(),
+      // Budget defaults spec 2026-11-11 §7 item 4: in a group with no token limit and a ready estimate for its plan, the
+      // tasks' summed expectation and summed use (null when any task's usage is unknown); absent otherwise.
+      expectation: z.object({ expectedTokens: safeInteger.nonnegative(), usedTokens: safeInteger.nonnegative().nullable() }).strict().optional(),
     }).strict().optional(),
     // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
     dependsOn: z.array(idSchema).min(1).optional(),
