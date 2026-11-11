@@ -6,6 +6,9 @@
  * the first outcome. `by`/`via` are the route's attribution (the person and the channel), stored on each version.
  */
 import { createHash } from "node:crypto";
+import { readGroupAgentOverrides } from "../agentFreeze.js";
+import type { PanelPartialSelection, PartialSelection } from "../agentSelection.js";
+import { panelPartialSelectionSchema } from "../schema.js";
 import { readArchivedPlan } from "../queries.js";
 import { effectiveTaskLabels, readTaskLabelState } from "../labels.js";
 import { effectivePlan, workBodyOf } from "../taskAmendments.js";
@@ -58,13 +61,38 @@ function repositoryPath(deps: PlanLibraryDeps, repoId: string): string {
  */
 function effectiveSavedPlan(store: ControlStore, groupId: string, archived: ControlPlanV1): ControlPlanV1 {
   const plan = effectivePlan(store, groupId, archived);
-  return { ...plan, tasks: plan.tasks.map((task) => {
+  // Issue #164: the panel's group layers (proposal-set-agent), folded into the plan's at the same level.
+  const overrides = readGroupAgentOverrides(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)));
+  const { agent: _agent, reconcileAgent: _reconcile, ...planRest } = plan;
+  const agent = foldAgentLayer(plan.agent, overrides.worker), reconcileAgent = foldAgentLayer(plan.reconcileAgent, overrides.reconcile);
+  return { ...planRest, ...(agent ? { agent } : {}), ...(reconcileAgent ? { reconcileAgent } : {}), tasks: plan.tasks.map((task) => {
     const work = workBodyOf(store, groupId, task.taskId);
     if (work === null) return task;
     const { labels } = effectiveTaskLabels(readTaskLabelState(work), task.labels);
-    const { labels: _archived, ...rest } = task;
-    return labels.length > 0 ? { ...rest, labels } : rest;
+    const override = panelPartialSelectionSchema.nullable().safeParse((work as { agentOverride?: unknown }).agentOverride ?? null);
+    if (!override.success) throw new ControlError("recovery-blocked", `agent-override-invalid:${task.taskId}`);
+    const taskAgent = foldAgentLayer(task.agent, override.data as PanelPartialSelection | null);
+    const { labels: _archived, agent: _taskAgent, ...rest } = task;
+    return { ...rest, ...(taskAgent ? { agent: taskAgent } : {}), ...(labels.length > 0 ? { labels } : {}) };
   }) };
+}
+
+/**
+ * Issue #164 (session f958ec3f): one level's plan layer with the panel's layer at that level folded over it, so a group
+ * imported from the saved document resolves as this one does with no panel layer of its own (agentSelection.ts
+ * levelLayers, ruling review R7): a null agent drops the plan's layer; a null field drops the plan's field; a panel
+ * agent other than the plan's drops the plan's model and context window, which were chosen for another agent (when the
+ * plan names no agent, for whichever the layers below give -- dropped too, rather than pinned to an agent they may not
+ * fit); the panel's own choices win. Undefined when nothing is left.
+ */
+function foldAgentLayer(plan: PartialSelection | undefined, panel: PanelPartialSelection | null | undefined): PartialSelection | undefined {
+  if (panel === undefined || panel === null) return plan;
+  const kept: PartialSelection = panel.agent === null || (typeof panel.agent === "string" && panel.agent !== plan?.agent) ? {} : { ...(plan ?? {}) };
+  for (const field of ["model", "contextWindow"] as const) if (panel[field] === null) delete kept[field];
+  if (typeof panel.agent === "string") kept.agent = panel.agent;
+  if (typeof panel.model === "string") kept.model = panel.model;
+  if (panel.contextWindow !== undefined && panel.contextWindow !== null) kept.contextWindow = panel.contextWindow;
+  return Object.keys(kept).length > 0 ? kept : undefined;
 }
 
 /** §5.3 (a), (b): the document, its project and origin from Orca's own data. Nothing is accepted or changed. */
