@@ -1,0 +1,174 @@
+{
+  "finiteOptional": {
+    "limitTokens": 50000000,
+    "first": {
+      "grant": {
+        "work": {
+          "tokens": 99000,
+          "activeMs": 14400000,
+          "attempts": 2,
+          "sessions": 3
+        },
+        "handoff": {
+          "tokens": 300000,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        }
+      },
+      "funded": {
+        "authoredTokenCeiling": 99000,
+        "bindingCauses": [
+          "task",
+          "group"
+        ],
+        "inheritedUsage": {
+          "tokens": 0,
+          "activeMs": 0,
+          "attempts": 0,
+          "sessions": 0
+        },
+        "grant": {
+          "work": {
+            "tokens": 99000,
+            "activeMs": 14400000,
+            "attempts": 2,
+            "sessions": 3
+          },
+          "handoff": {
+            "tokens": 300000,
+            "activeMs": 1800000,
+            "attempts": 0,
+            "sessions": 0
+          }
+        }
+      },
+      "policy": {
+        "maxAttempts": 2,
+        "tokenBudget": 99000,
+        "totalRuntimeBudgetMs": 14400000
+      }
+    },
+    "retried": {
+      "result": {
+        "kind": "task-retried",
+        "taskId": "a",
+        "fromRunId": "<the run retried>"
+      }
+    },
+    "second": {
+      "grant": {
+        "work": {
+          "tokens": 98990,
+          "activeMs": 14399995,
+          "attempts": 1,
+          "sessions": 2
+        },
+        "handoff": {
+          "tokens": 300000,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        }
+      },
+      "funded": {
+        "authoredTokenCeiling": 99000,
+        "bindingCauses": [
+          "task",
+          "group"
+        ],
+        "inheritedUsage": {
+          "tokens": 10,
+          "activeMs": 5,
+          "attempts": 1,
+          "sessions": 1
+        },
+        "grant": {
+          "work": {
+            "tokens": 98990,
+            "activeMs": 14399995,
+            "attempts": 1,
+            "sessions": 2
+          },
+          "handoff": {
+            "tokens": 300000,
+            "activeMs": 1800000,
+            "attempts": 0,
+            "sessions": 0
+          }
+        }
+      },
+      "policy": {
+        "maxAttempts": 1,
+        "tokenBudget": 98990,
+        "totalRuntimeBudgetMs": 14399995
+      }
+    },
+    "again": {
+      "error": {
+        "code": "task-not-retryable",
+        "message": "task-not-retryable:authored-budget-exhausted"
+      }
+    }
+  },
+  "finiteLegacy": {
+    "limitTokens": 6360000,
+    "first": {
+      "grant": {
+        "work": {
+          "tokens": 3000000,
+          "activeMs": 14400000,
+          "attempts": 2,
+          "sessions": 3
+        },
+        "handoff": {
+          "tokens": 300000,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        }
+      },
+      "funded": null,
+      "policy": {
+        "maxAttempts": 2,
+        "tokenBudget": 3000000,
+        "totalRuntimeBudgetMs": 14400000
+      }
+    },
+    "retried": {
+      "result": {
+        "kind": "task-retried",
+        "taskId": "a",
+        "fromRunId": "<the run retried>"
+      }
+    },
+    "second": {
+      "grant": {
+        "work": {
+          "tokens": 3000000,
+          "activeMs": 14400000,
+          "attempts": 2,
+          "sessions": 3
+        },
+        "handoff": {
+          "tokens": 300000,
+          "activeMs": 1800000,
+          "attempts": 0,
+          "sessions": 0
+        }
+      },
+      "funded": null,
+      "policy": {
+        "maxAttempts": 2,
+        "tokenBudget": 3000000,
+        "totalRuntimeBudgetMs": 14400000
+      }
+    },
+    "again": {
+      "error": {
+        "code": "group-reserve-insufficient",
+        "message": "group-reserve-insufficient:attempts:1"
+      }
+    }
+  }
+}
