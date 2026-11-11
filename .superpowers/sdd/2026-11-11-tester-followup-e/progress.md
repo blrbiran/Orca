@@ -64,3 +64,20 @@ Second message (after the controller's recommendations):
 | W7 | §10 #256 #258 #257 #84 #200 | Orca | | dispatched |
 
 Logs: `/private/tmp/orca-e1111/<workstream>/` (fixed path; scratchpads are replaced between turns).
+
+## Dispatch (2026-11-11)
+
+Correction to the workstream table above: §3 (#242) went to W4, not W2, to keep W2 to the landing path.
+Seven implementers dispatched in parallel: W1 in its own ccloop worktree (branch `e/codex-usage-after-error-row`),
+W2–W7 each in an isolated Orca worktree off `docs(spec): tester follow-up E -- …`. Shared rules for them:
+`/private/tmp/orca-e1111/implementer-rules.md` (fixed path; not in the repo). No implementer merges or pushes;
+the controller merges with `--ff-only` after rebasing and regenerating CLI docs.
+
+## Human authorization for the rest of the round (2026-11-11, verbatim)
+
+「这个session中，尽量将这些要做的task都完整做完」「这次批准改写所有必要的判据。」「这一轮允许必要的付费真跑。」
+「这一轮session如果需要repin ccloop，这个session临时允许你push ccloop到origin main。」
+「这一轮session，Orca仓库repin完成后临时允许你push Orca 到origin main。」
+「这一轮如果遇到卡住必须等人的事情，请继续做不必等人的部分。」「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」
+Consequence: commits marked `Ruling: pending (tester follow-up E)` are covered by the blanket criteria ruling and may
+merge; they are still listed in the round's summary for the human's review.
