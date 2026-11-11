@@ -56,7 +56,7 @@ orca run transcript run-1 --call 1/plan/1 --before 4096
 
 ## `orca run results <run>`
 
-a run's saved results
+a run's saved results: the task's explanation and outputs per attempt, and whether the saved result can be recovered
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
