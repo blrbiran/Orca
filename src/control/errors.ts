@@ -278,6 +278,9 @@ export const durableCommandErrorStatuses = {
   "budget-overflow": 422,
   // Loop plans spec §4.3 (C6): a loop task's work allocation is changed only by set-task-loop.
   "budget-owned-by-loop-plan": 422,
+  // Budget defaults spec 2026-11-11 §7 item 3: in a group with no token limit an estimate's task work is an expectation,
+  // never applied as a ceiling (a person's own finite value still is).
+  "estimate-advisory-in-unlimited-group": 422,
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,
   "control-capability-unsupported": 422,

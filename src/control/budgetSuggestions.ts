@@ -21,6 +21,8 @@ type LoopPlan = { planId: string; loopVersion: number; inputs: unknown; skills?:
 export interface SuggestionView {
   summary: { groupId: string; commandRevision: number };
   plan: { planHash: string };
+  // Budget defaults spec 2026-11-11 §7 item 3: the group's token limit decides whether an estimate's task work is a ceiling.
+  ledger: { groupLimit: { tokens: number | null } };
   proposal: { state: string; proposalVersion: number };
   allocations: ReadonlyArray<Allocation>;
   workItems: ReadonlyArray<{ taskId: string; loopPlan?: LoopPlan | null }>;
@@ -75,6 +77,25 @@ export function adviceOf<V extends SuggestionView>(view: V): { estimateId: strin
   return { estimateId: newest.estimateId, output: newest.output as OutputOf<V>, stale: newest.stale === true };
 }
 
+/**
+ * Budget defaults spec 2026-11-11 §7 items 1 and 3 (tester #224/#234/#238/#241/#162): in a group whose token limit is null
+ * an estimate's task work (tokens, attempts, active time) is an expectation, not a ceiling, so it is never offered as one;
+ * the server refuses it too (estimate-advisory-in-unlimited-group). Handoff and goal-review reserves are unaffected.
+ */
+export const estimateIsAdvisory = (view: { ledger: { groupLimit: { tokens: number | null } } }): boolean => view.ledger.groupLimit.tokens === null;
+const ADVISORY_DIMENSIONS: ReadonlyArray<SuggestionDimension> = ["tokens", "activeMs", "attempts"];
+const advisoryTaskWork = (view: SuggestionView, allocation: Allocation, dimension: SuggestionDimension): boolean =>
+  estimateIsAdvisory(view) && allocation.ownerKind === "task" && allocation.bucket === "work" && ADVISORY_DIMENSIONS.includes(dimension);
+
+/**
+ * §7 item 4: how far a task's known usage is from its expectation, as a multiple to one decimal (3.2 = used 3.2× the
+ * estimate); null when the usage is unknown or the expectation is 0.
+ */
+export function usedRatio(expected: { tokens: number; usedTokens: number | null }): number | null {
+  if (expected.usedTokens === null || expected.tokens <= 0) return null;
+  return Math.round((expected.usedTokens / expected.tokens) * 10) / 10;
+}
+
 function suggestedAmount(output: SuggestionOutput, allocation: Allocation): FullAmount | null {
   if (allocation.ownerKind === "goal-review" && allocation.bucket === "review") return output.goalReviewReserve;
   if (allocation.ownerKind !== "task" || (allocation.bucket !== "work" && allocation.bucket !== "handoff")) return null;
@@ -100,6 +121,7 @@ export function suggestedOperations(view: SuggestionView, scope: SuggestionScope
       const target = targetOf(view, allocation.ownerId, allocation.bucket, dimension);
       if (target === null) continue;
       if (scope.kind === "field" && budgetFieldKey(groupId, target) !== budgetFieldKey(groupId, scope.target)) continue;
+      if (advisoryTaskWork(view, allocation, dimension)) continue;
       if (suggested[dimension] === allocation.amount[dimension]) continue;
       operations.push({ target, value: suggested[dimension], provenance: "model", estimateId: advice.estimateId });
     }
@@ -131,6 +153,7 @@ export function suggestedLoopActions(view: SuggestionView, scope: SuggestionScop
     const workProvenance: Partial<Record<LoopWorkDimension, { provenance: "model"; estimateId: string }>> = {};
     for (const dimension of LOOP_WORK_DIMENSIONS) {
       if (scope.kind === "field" && budgetFieldKey(groupId, scope.target) !== budgetFieldKey(groupId, { scope: "task", taskId: allocation.ownerId, allocation: "work", dimension })) continue;
+      if (advisoryTaskWork(view, allocation, dimension)) continue;
       if (suggested[dimension] === allocation.amount[dimension]) continue;
       work[dimension] = suggested[dimension];
       workProvenance[dimension] = { provenance: "model", estimateId: advice.estimateId };

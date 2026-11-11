@@ -499,6 +499,17 @@ function verifyModelField(store: ControlStore, id: string, proposal: BudgetPropo
 }
 
 /**
+ * Budget defaults spec 2026-11-11 §7 item 3: in a group whose token limit is null, an estimate's task-work tokens, attempts
+ * and active time are an expectation, so a `model` value for one is refused by name -- an old Web bundle cannot set the
+ * ceiling either. A person's own (`human`) value is not refused; confirmation does not re-judge values applied before
+ * (§7 item 8), so this is checked only where a value is applied.
+ */
+function refuseAdvisoryTaskWork(limit: { tokens: number | null }, dimensions: readonly string[]): void {
+  const advisory = dimensions.find(d => d === "tokens" || d === "activeMs" || d === "attempts");
+  if (limit.tokens === null && advisory !== undefined) throw new ControlError("estimate-advisory-in-unlimited-group", advisory);
+}
+
+/**
  * W6: a suggestion is applied only from an estimate built from the tasks' current effective contracts. Not part of
  * verifyModelField: confirmation re-checks values already applied, and a later plan change does not undo them.
  */
@@ -603,6 +614,7 @@ export class WebControlService {
           const row = allocationFor(proposal, op.target);
           if (row.bucket === "work" && op.value !== null && op.value <= 0 && op.target.dimension!=="tokens") throw new ControlError("execution-policy-unrepresentable");
           if (op.provenance === "model") {
+            if (op.target.scope === "task" && op.target.allocation === "work") refuseAdvisoryTaskWork(payload.proposedGroupLimit ?? proposal.groupLimit, [op.target.dimension]);
             verifyModelField(this.store, id, proposal, op.target, op.value, op.estimateId!);
             refuseStaleEstimate(this.store, id, op.estimateId!);
           }
@@ -2386,6 +2398,7 @@ export class WebControlService {
           if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before) && skillsUnchanged) throw new ControlError("no-op-command");
           // W5: a dimension taken from an estimate is its suggestion for this task's work allocation (proposal-edit's rule).
           const modelDimensions = Object.entries(payload.workProvenance ?? {}).flatMap(([d, source]) => source ? [{ dimension: d as "tokens" | "activeMs" | "attempts", estimateId: source.estimateId }] : []);
+          refuseAdvisoryTaskWork(proposal.groupLimit, modelDimensions.map(({ dimension }) => dimension));
           for (const { dimension, estimateId } of modelDimensions) {
             verifyModelField(this.store, id, proposal, { scope: "task", taskId, allocation: "work", dimension }, next[dimension], estimateId);
           }

@@ -2245,6 +2245,7 @@ export const enErrors: Record<string, string> = {
   "dependency-not-done": "A task this one depends on is not done yet. Wait for it to finish.",
   "duplicate-proposal-target": "The proposal names the same target twice: {{detail}}",
   "duplicate-task-id": "A task id appears twice: {{detail}}",
+  "estimate-advisory-in-unlimited-group": "This group has no token limit, so an estimate's task work is its expectation, not a ceiling. To cap a task, enter its tokens yourself.",
   "estimate-in-flight": "An estimate is already running for this group. Wait for it to finish, then try again.",
   "estimate-stale": "This estimate predates a change to a loop plan, so its suggestions no longer apply. Choose \"Re-estimate\".",
   "execution-identity-conflict": "The execution's identity conflicts with the recorded one.",

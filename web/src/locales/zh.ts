@@ -2151,6 +2151,7 @@ export const zhErrors: Record<string, string> = {
   "dependency-not-done": "依赖的任务还没完成。",
   "duplicate-proposal-target": "提案里有重复的目标：{{message}}",
   "duplicate-task-id": "任务 id 重复：{{message}}",
+  "estimate-advisory-in-unlimited-group": "这个任务组没有 token 上限，估算的任务工作量只是预期，不作为上限。要给任务设上限，请自己填写它的 token 数。",
   "estimate-in-flight": "有一份估算正在进行。",
   "estimate-stale": "这份估算早于一次做法修改，它的建议不能再用。",
   "execution-identity-conflict": "执行身份冲突。",
