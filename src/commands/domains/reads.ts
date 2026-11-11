@@ -184,9 +184,15 @@ function formatFailureLines(work: FormatFailureWork | undefined): string[] {
 interface RunResultsBody {
   runId?: string; groupId?: string; taskId?: string | null; availability?: string; source?: { status: string; reason: string | null };
   attempts?: Array<{ attempt: number; current: boolean; execution: string; verification: string; outputs: Array<{ status: string }> }>;
+  recoverability?: Recoverability;
 }
 type Eligibility = { status: string; reason?: string } | { unreadable: string };
-const resultsEligibility = new WeakMap<object, Eligibility>();
+/**
+ * Tester follow-up F §4 (#183): whether the run's saved result can be recovered, as `run results` adds it to the results
+ * body (--json too, only-add): yes with the command that does it, no with the eligibility's reason, or unknown with the
+ * code the eligibility read failed with.
+ */
+interface Recoverability { recoverable: "yes" | "no" | "unknown"; reason: string | null; next: string | null }
 
 /** The refusal code of a read that failed (the panel's answer, or a refusal made here). */
 function readFailureCode(error: unknown): string {
@@ -195,28 +201,32 @@ function readFailureCode(error: unknown): string {
   return typeof code === "string" ? code : "unreadable";
 }
 
+function recoverabilityOf(eligibility: Eligibility, b: RunResultsBody): Recoverability {
+  if ("unreadable" in eligibility) return { recoverable: "unknown", reason: eligibility.unreadable, next: null };
+  if (eligibility.status !== "eligible") return { recoverable: "no", reason: eligibility.reason ?? eligibility.status, next: null };
+  return { recoverable: "yes", reason: null, next: b.taskId != null && b.groupId !== undefined ? `orca task verify-saved-result ${b.groupId} ${b.taskId}` : null };
+}
+
 /**
  * Tester #183 + D17: `run results` printed a truncated dump, so a rejected verification was invisible, and its availability
  * said nothing about recovery. One line per attempt, then whether the saved result can be recovered and the command that does it.
+ * Tester follow-up F §4 (#183): the availability is the task result capture's (the task's explanation and outputs), not
+ * the saved result's; `results: available` above `recoverable: no` read as a contradiction, so the line names what it is.
  */
 function runResultsText(body: unknown): string {
   const b = body as RunResultsBody;
   const source = b.source === undefined || b.source.status === "available" ? "" : ` (source ${b.source.status}${b.source.reason === null ? "" : `: ${b.source.reason}`})`;
-  const lines = [`run ${b.runId ?? "?"}  group ${b.groupId ?? "?"}  task ${b.taskId ?? "-"}`, `results: ${b.availability ?? "?"}${source}`];
+  const lines = [`run ${b.runId ?? "?"}  group ${b.groupId ?? "?"}  task ${b.taskId ?? "-"}`, `task explanation and outputs: ${b.availability ?? "?"}${source}`];
   for (const a of b.attempts ?? []) {
     const counts = new Map<string, number>();
     for (const output of a.outputs) counts.set(output.status, (counts.get(output.status) ?? 0) + 1);
     const outputs = a.outputs.length === 0 ? "0" : `${a.outputs.length} (${[...counts].map(([status, n]) => `${n} ${status}`).join(", ")})`;
     lines.push(`attempt ${a.attempt}${a.current ? " (current)" : ""}: execution ${a.execution}, verification ${a.verification}, outputs ${outputs}`);
   }
-  const eligibility = typeof body === "object" && body !== null ? resultsEligibility.get(body) : undefined;
-  if (eligibility === undefined) return lines.join("\n");
-  if ("unreadable" in eligibility) lines.push(`recoverable: unknown (${eligibility.unreadable})`);
-  else if (eligibility.status !== "eligible") lines.push(`recoverable: no (${eligibility.reason ?? eligibility.status})`);
-  else {
-    lines.push("recoverable: yes");
-    if (b.taskId != null && b.groupId !== undefined) lines.push(`next: orca task verify-saved-result ${b.groupId} ${b.taskId}`);
-  }
+  const r = b.recoverability;
+  if (r === undefined) return lines.join("\n");
+  lines.push(r.recoverable === "yes" ? "recoverable: yes" : `recoverable: ${r.recoverable} (${r.reason ?? "?"})`);
+  if (r.next !== null) lines.push(`next: ${r.next}`);
   return lines.join("\n");
 }
 
@@ -367,16 +377,16 @@ export const READ_ROWS: CommandDef[] = [
     ],
     examples: ["orca run transcript run-1", "orca run transcript run-1 --call 1/plan/1", "orca run transcript run-1 --call 1/plan/1 --before 4096"],
     paths: (c) => [transcriptPath(c)], format: transcriptText }),
-  read({ domain: "run", action: "results", summary: "a run's saved results", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/results`],
-    // --json (and --quiet) print the results body as before and read nothing more; the human lines also read eligibility.
+  read({ domain: "run", action: "results", summary: "a run's saved results: the task's explanation and outputs per attempt, and whether the saved result can be recovered",
+    positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/results`],
+    // Tester follow-up F §4 (#183): --json reads the eligibility too and adds `recoverability` to the body (only-add);
+    // --quiet prints nothing, so it reads nothing more.
     compose: async ([results], c) => {
-      const { json, quiet } = c.args.global;
-      if (json || quiet || typeof results !== "object" || results === null) return results;
+      if (c.args.global.quiet || typeof results !== "object" || results === null) return results;
       let eligibility: Eligibility;
       try { eligibility = await c.read(`runs/${ids(c, "run")}/saved-result-eligibility`) as Eligibility; }
       catch (error) { eligibility = { unreadable: readFailureCode(error) }; }
-      resultsEligibility.set(results, eligibility);
-      return results;
+      return { ...results, recoverability: recoverabilityOf(eligibility, results as RunResultsBody) };
     },
     format: runResultsText }),
   read({ domain: "run", action: "eligibility", summary: "whether a run's saved result can be verified instead of re-run", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/saved-result-eligibility`] }),

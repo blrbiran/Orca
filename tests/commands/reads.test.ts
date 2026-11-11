@@ -55,7 +55,9 @@ describe("reads whose body is the panel's GET body verbatim (spec §4)", () => {
   const cases: Array<[string[], string]> = [
     [["group", "list"], "summary"], [["group", "show", "g-al"], "groups/g-alpha"], [["requirement", "show", "g-alpha"], "groups/g-alpha/requirement"],
     [["decision", "list", "g-alpha"], "groups/g-alpha/decisions"], [["run", "activity", "run-1"], "runs/run-1/activity"],
-    [["run", "evidence", "run-1"], "runs/run-1/evidence"], [["run", "evidence", "run-1", "--id", "ev-2"], "runs/run-1/evidence/ev-2/content"], [["run", "results", "run-1"], "runs/run-1/results"],
+    // Ruling (2026-11-12, tester follow-up F): `run results` composes its body now (#183 adds recoverability to --json),
+    // so it moved from this verbatim list to the composed reads below.
+    [["run", "evidence", "run-1"], "runs/run-1/evidence"], [["run", "evidence", "run-1", "--id", "ev-2"], "runs/run-1/evidence/ev-2/content"],
     [["run", "eligibility", "run-1"], "runs/run-1/saved-result-eligibility"], [["correction", "list"], "corrections"],
     [["agent", "list"], "agents"], [["agent", "models", "claude-main"], "agents/claude-main/models"], [["usage", "show"], "usage?scope=all"],
     [["orchestration", "show"], "orchestration"], [["recovery", "list"], "recovery"], [["project", "list"], "projects"],
@@ -90,7 +92,17 @@ describe("reads whose body is the panel's GET body verbatim (spec §4)", () => {
 });
 
 describe("composed reads (spec §14 R6; proposal, task and project views)", () => {
-  it("run show = the group view's run entry + the activity head (newest 10) + the evidence summary", async () => {
+  it("run results = the results body + its recoverability, read from the eligibility (#183)", async () => {
+    const p = await panel();
+    const json = await cli(["run", "results", "run-1", "--json"], p.dir);
+    expect([json.code, json.stdout.split("\n").length], json.stderr).toEqual([0, 2]);
+    expect(json.json()).toEqual({ schema: "orca-cli-response-v1", status: 200, body: { ...RAW["runs/run-1/results"] as object, recoverability: { recoverable: "no", reason: "x", next: null } } });
+    const human = await cli(["run", "results", "run-1"], p.dir);
+    expect(human.code).toBe(0);
+    expect(human.stdout.trim().length).toBeGreaterThan(0);
+  });
+
+  it("run show =the group view's run entry + the activity head (newest 10) + the evidence summary", async () => {
     const p = await panel();
     const expected = {
       schema: "orca-run-show-v1", groupId: "g-alpha", run: GROUP.runs[0],

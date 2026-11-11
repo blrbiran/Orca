@@ -123,11 +123,34 @@ describe("human output (#140)", () => {
     expect(out.stdout).toContain("verification failed");
   });
 
-  it("run results --json prints the results body byte for byte and reads nothing else", async () => {
-    const p = await resultsPanel({ status: 200, body: { status: "unavailable", reason: "x" } });
+  // Ruling (2026-11-12, tester follow-up F): #183 asks --json for the recoverability too, so it now reads the eligibility
+  // and adds `recoverability` after the results body's own fields (only-add); the body's bytes before it are unchanged.
+  it("run results --json prints the results body byte for byte, with recoverability added after it", async () => {
+    const p = await resultsPanel({ status: 200, body: { status: "unavailable", reason: "saved-result-source-stale" } });
     const out = await cli(["run", "results", "run-1", "--json"], p.dir);
-    expect(out.stdout).toBe(`${JSON.stringify({ schema: "orca-cli-response-v1", status: 200, body: RESULTS })}\n`);
-    expect(p.requests.map((r) => r.path)).toEqual(["runs/run-1/results"]);
+    const recoverability = { recoverable: "no", reason: "saved-result-source-stale", next: null };
+    expect(out.stdout).toBe(`${JSON.stringify({ schema: "orca-cli-response-v1", status: 200, body: { ...RESULTS, recoverability } })}\n`);
+    expect(p.requests.map((r) => r.path)).toEqual(["runs/run-1/results", "runs/run-1/saved-result-eligibility"]);
+  });
+
+  // Tester follow-up F §4 (#183): a run with no capsule had `results: available` printed above `recoverable: no
+  // (saved-result-source-stale)`. The availability is the task's explanation and outputs, and the line says so.
+  it("run results names the task's explanation and outputs as what is available, apart from recoverability", async () => {
+    const p = await resultsPanel({ status: 200, body: { status: "unavailable", reason: "saved-result-source-stale" } });
+    const out = await cli(["run", "results", "run-1"], p.dir);
+    const lines = out.stdout.split("\n");
+    expect(lines[1]).toBe("task explanation and outputs: available");
+    expect(lines.filter((line) => line.startsWith("results:"))).toEqual([]);
+    expect(lines).toContain("recoverable: no (saved-result-source-stale)");
+  });
+
+  it("run results --json says how a recoverable saved result is recovered, and an unreadable eligibility is unknown", async () => {
+    const yes = await resultsPanel({ status: 200, body: { status: "eligible", authorityKind: "execution-without-final-v1", verificationOnly: true } });
+    expect((await cli(["run", "results", "run-1", "--json"], yes.dir)).json()).toMatchObject({ body: { recoverability: { recoverable: "yes", reason: null, next: "orca task verify-saved-result g-alpha t1" } } });
+    const unknown = await resultsPanel({ status: 404, body: { error: { code: "run-not-found", message: "No control run was found.", retryable: false } } });
+    const out = await cli(["run", "results", "run-1", "--json"], unknown.dir);
+    expect(out.code).toBe(0);
+    expect(out.json()).toMatchObject({ body: { recoverability: { recoverable: "unknown", reason: "run-not-found", next: null } } });
   });
 
   // Tester D19: nothing said which agent and model a run actually ran on; `agent list` shows only defaults.
