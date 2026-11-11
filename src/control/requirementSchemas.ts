@@ -78,7 +78,7 @@ export const roundBodySchema = z.object({
   waiting: z.enum(REQUIREMENT_WAITING).nullable(), result: clarifyResultSchema.nullable(),
   answers: z.array(answerSchema).nullable(), glossaryDecisions: z.array(decisionSchema).nullable(), adrDecisions: z.array(decisionSchema).nullable(),
   answeredAt: canonicalTimestampSchema.nullable(), closedByConsensus: z.boolean(),
-  reasonCode: z.literal("clarify-output-invalid").nullable(), calls: z.array(callRecordSchema),
+  reasonCode: z.enum(["clarify-output-invalid", "clarify-call-failed"]).nullable(), calls: z.array(callRecordSchema),
   /**
    * Flow engine spec §10.3 (W-76): a revision of round `revises`, appended, never overwriting it (clarifyChain.ts): its
    * result is round `revises`'s copied; the person's reason, who and through which channel; the superseded rounds
@@ -121,7 +121,7 @@ export const draftBodySchema = z.object({
   feedback: z.string().nullable(), output: z.union([splitOutputSchema, multiSplitOutputSchema]).nullable(), plan: z.record(z.unknown()).nullable(), draftHash: hash.nullable(),
   reasons: z.array(nonempty), layers: z.array(z.array(nonempty)).nullable(), implicitEdges: z.array(implicitEdgeSchema).nullable(),
   // `requirement-revised` (spec §10.3): an earlier clarify round was revised, so the draft no longer follows the requirement.
-  reasonCode: z.enum(["split-output-invalid", "split-validation-exhausted", "requirement-revised"]).nullable(), calls: z.array(callRecordSchema),
+  reasonCode: z.enum(["split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-revised"]).nullable(), calls: z.array(callRecordSchema),
 }).strict();
 export const requirementExportSchema = z.object({
   state: z.enum(["not-due", "pending", "done", "conflict"]), path: z.string().nullable(), commit: commit.nullable(), parent: commit.nullable(), detail: z.string().nullable(),

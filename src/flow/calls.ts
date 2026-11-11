@@ -12,7 +12,7 @@
  *
  * A pool that cannot fund the call parks the execution with `flow-pool-exhausted`, as for a work child.
  */
-import { callOf, type SettledRun } from "../control/requirementCalls.js";
+import { callOf, failureDetailOf, type SettledRun } from "../control/requirementCalls.js";
 import type { CallRecord } from "../control/requirementSchemas.js";
 import { randomUUID } from "node:crypto";
 import { add, subtract } from "../control/budget.js";
@@ -36,7 +36,8 @@ import type { CallRef } from "./spend.js";
 
 /** What a flow call's run row carries besides the shared single-call fields: the execution it answers. */
 export interface FlowCallIdentity { flowRunId: string; stepKey: string; seq: number }
-export type FlowCallResult = { runId: string; rawOutput: unknown; failure: string | null };
+/** `detail` (tester follow-up E §7, #125): ccloop's words for a failed call; present only on a step's execution, when there are some. */
+export type FlowCallResult = { runId: string; rawOutput: unknown; failure: string | null; detail?: string };
 
 const contractRowOf = (groupId: string, workItemId: string): string => `single-call-contract:${groupId}:${workItemId}`;
 
@@ -205,7 +206,9 @@ function giveBack(store: ControlStore, run: StoppedSingleCallRun, identity: Flow
 }
 
 /** The output (or the failure) on the execution, for the kernel's next pass; a call the execution no longer waits on is dropped. */
-function storeResult(store: ControlStore, identity: FlowCallIdentity, result: FlowCallResult): void {
+function storeResult(store: ControlStore, identity: FlowCallIdentity, withDetail: FlowCallResult): void {
+  // #125: only a step's execution keeps call records that show a detail; a plan's or an intake's result keeps its shape.
+  const { detail: _detail, ...result } = withDetail;
   if (identity.stepKey === PLAN_KEY) {
     if (planCallOf(store, identity)?.proposal.call?.runId === result.runId) setPlanCall(store, identity, { callResult: result });
     return;
@@ -217,7 +220,7 @@ function storeResult(store: ControlStore, identity: FlowCallIdentity, result: Fl
   const execution = executionOf(store, identity);
   const call = (execution?.body as { call?: { runId?: string } } | undefined)?.call;
   if (execution === undefined || execution.state !== "running" || call?.runId !== result.runId) return;
-  finishExecution(store, identity, "running", "running", Date.now(), { body: { ...(execution.body as object), callResult: result } });
+  finishExecution(store, identity, "running", "running", Date.now(), { body: { ...(execution.body as object), callResult: withDetail } });
 }
 
 export const FLOW_CALL_HANDLER: Omit<SingleCallHandler, "purpose"> = {
@@ -234,13 +237,13 @@ export const FLOW_CALL_HANDLER: Omit<SingleCallHandler, "purpose"> = {
     return { prompt: contract.prompt, responseSchema: contract.responseSchema, maxOutputTokens: contract.maxOutputTokens };
   },
   classify: () => null,
-  complete(deps, runRow, rawOutput, commitTerminal, failure = null) {
+  complete(deps, runRow, rawOutput, commitTerminal, failure = null, facts) {
     const release = deps.admissionGate?.enter();
-    try { deps.store.transaction(() => FLOW_CALL_HANDLER.completeInTransaction!(deps.store, runRow, rawOutput, commitTerminal, failure)); }
+    try { deps.store.transaction(() => FLOW_CALL_HANDLER.completeInTransaction!(deps.store, runRow, rawOutput, commitTerminal, failure, facts)); }
     finally { release?.(); }
   },
   // Flow call settlement spec 2026-11-01 §3 step 4 (session 43913afc): complete's core, shared with a person's settlement.
-  completeInTransaction(store, runRow, rawOutput, commitTerminal, failure = null) {
+  completeInTransaction(store, runRow, rawOutput, commitTerminal, failure = null, facts) {
     const receiptId = `single-call-result:${runRow.groupId}:${runRow.runId}`;
     if (store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='single-call-result'").get(receiptId)) return;
     commitTerminal();
@@ -251,7 +254,9 @@ export const FLOW_CALL_HANDLER: Omit<SingleCallHandler, "purpose"> = {
     const run = verifyStoppedSingleCall(store, row, { groupId: runRow.groupId, workItemId: runRow.workItemId, workGrant: grant }, "flow-call-ledger");
     assertCallUsageBooked(readGroup(store, run.groupId) as unknown as Parameters<typeof assertCallUsageBooked>[0], run, "flow-call-usage-unknown");
     giveBack(store, run, identity);
-    storeResult(store, identity, { runId: run.runId, rawOutput, failure });
+    // Tester follow-up E §7 (#125): a failed call keeps ccloop's words for why, as a requirement call's record does.
+    const detail = failure === null ? null : failureDetailOf(facts);
+    storeResult(store, identity, { runId: run.runId, rawOutput, failure, ...(detail === null ? {} : { detail }) });
     closeSingleCall(store, run.runId, { id: receiptId, kind: "single-call-result", body: { groupId: run.groupId, runId: run.runId } });
   },
   usageUnknownReason: "flow-call-usage-unknown",
@@ -268,11 +273,11 @@ export function interruptFlowCall(store: ControlStore, run: StoppedSingleCallRun
  * Task 8 deferral (d): a flow clarify round's record of one of its calls, as a requirement round keeps it (callOf):
  * the settled run's id and usage. Null when the execution's output came from no driver run (a criterion's fake port).
  */
-export function callRecordOf(store: ControlStore, runId: string | undefined, outcome: CallRecord["outcome"], reason: string | null): CallRecord | null {
+export function callRecordOf(store: ControlStore, runId: string | undefined, outcome: CallRecord["outcome"], reason: string | null, detail: string | null = null): CallRecord | null {
   if (runId === undefined) return null;
   const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
   if (row === undefined) return null;
-  return callOf(JSON.parse(String(row.body)) as SettledRun, outcome, reason);
+  return callOf(JSON.parse(String(row.body)) as SettledRun, outcome, reason, detail);
 }
 
 /** Whether a single-call run row is a flow call (its purpose may be `clarify`, shared with a requirement's). */

@@ -181,10 +181,11 @@ export const CLARIFY_KIND: KindDefinition = {
     writeRoundAt(store, key, { ...round, calls: withCall("valid", null), state: "awaiting-answers", result, lastInvalidReason: null });
     return { waiting: { ask: { kind: "clarify-round", roundNo: round.roundNo } } };
   },
-  callFailed(ctx, failure) {
+  callFailed(ctx, failure, detail = null) {
     const key = roundsKey(ctx.run, ctx.step.id, ctx.key.seq);
     const round = latestRoundAt(ctx.store, key);
-    const call = callRecordOf(ctx.store, callRunOf(ctx), "failed", failure);
+    // Tester follow-up E §7 (#125): the failed call keeps ccloop's detail, as a requirement round's does.
+    const call = callRecordOf(ctx.store, callRunOf(ctx), "failed", failure, detail);
     if (round !== null && round.state === "drafting" && call !== null) writeRoundAt(ctx.store, key, { ...round, calls: [...round.calls, call] });
   },
   projection: (record) => {

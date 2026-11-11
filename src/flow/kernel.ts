@@ -405,7 +405,10 @@ export async function applyOutcome(deps: FlowDeps, run: LoadedRun, execution: Ex
   const step = stepOf(run, key.stepKey);
   if ("invalid" in outcome) {
     if (body.retries >= MAX_AUTO_RETRIES) {
-      return applyOutcome(deps, run, execution, from, { failed: { reason: `${step.kind}-output-invalid`, record: { lastInvalidReason: outcome.invalid } } });
+      // Tester follow-up E §7 (#125): a clarify step whose last call failed (no output came back) says so, not that the
+      // model's output was invalid three times. Other kinds keep their reason (the design names the clarify path only).
+      const callFailed = step.kind === "clarify" && outcome.invalid.startsWith("call-failed:");
+      return applyOutcome(deps, run, execution, from, { failed: { reason: callFailed ? "clarify-call-failed" : `${step.kind}-output-invalid`, record: { lastInvalidReason: outcome.invalid } } });
     }
     const next: ExecutionRow = { ...execution, body: { ...body, retries: body.retries + 1, retryReason: outcome.invalid } };
     deps.store.transaction(() => finishExecution(deps.store, key, from, "running", at, { body: next.body }));
@@ -1183,7 +1186,7 @@ async function settleRunning(deps: FlowDeps, run: LoadedRun): Promise<boolean> {
     const body = current.body as ExecutionBody & { callResult?: FlowCallResult };
     if (step.kind === "work" && body.call === undefined && await pollChild(deps, run, current)) return true;
     if (body.callResult !== undefined && body.call !== undefined) {
-      await completeFlowCall(deps, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq }, body.callResult.rawOutput, body.callResult.failure);
+      await completeFlowCall(deps, { flowRunId: run.row.id, stepKey: step.id, seq: current.seq }, body.callResult.rawOutput, body.callResult.failure, body.callResult.detail ?? null);
       return true;
     }
   }
@@ -1269,7 +1272,7 @@ export async function advanceRun(deps: FlowDeps, flowRunId: string): Promise<voi
  * The single-call settlement's hook: the call this execution sent came back (`rawOutput`, or `failure`, ccloop's code).
  * The kind judges it; a call for an execution that no longer waits on one is ignored (a replay after a restart).
  */
-export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOutput: unknown, failure: string | null = null): Promise<void> {
+export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOutput: unknown, failure: string | null = null, detail: string | null = null): Promise<void> {
   if (key.stepKey === PLAN_KEY) return completePlanCall(deps, key.flowRunId, key.seq, rawOutput, failure);
   if (key.stepKey === FEEDBACK_KEY) return completeIntakeCall(deps, key.flowRunId, key.seq, rawOutput, failure);
   const run = loadRun(deps.store, key.flowRunId);
@@ -1277,7 +1280,7 @@ export async function completeFlowCall(deps: FlowDeps, key: ExecutionKey, rawOut
   if (execution === undefined || execution.state !== "running" || (execution.body as ExecutionBody).call === undefined) return;
   const kind = kindFor(deps, stepOf(run, key.stepKey));
   const ctx = contextFor(deps, run, execution);
-  if (failure !== null) kind?.callFailed?.(ctx, failure);
+  if (failure !== null) kind?.callFailed?.(ctx, failure, detail);
   const outcome: KindOutcome = kind?.collect === undefined ? { failed: { reason: "kind-has-no-collect" } }
     : failure !== null ? { invalid: `call-failed:${failure}` } : await guardCompose(deps, run, async () => kind.collect!(ctx, rawOutput, failure));
   const body = { ...(execution.body as ExecutionBody) };

@@ -296,7 +296,7 @@ export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: 
  * Issue #125 (session f958ec3f): the head of the provider's words for a failed call, from ccloop's record
  * (`failureCause.detail`), cut to CALL_DETAIL_MAX_BYTES on a character boundary; null when the record names none.
  */
-function failureDetailOf(facts: SingleCallRecordFacts | undefined): string | null {
+export function failureDetailOf(facts: SingleCallRecordFacts | undefined): string | null {
   const head = truncateUtf8(facts?.failureCause?.detail ?? "", CALL_DETAIL_MAX_BYTES);
   return head.length > 0 ? head : null;
 }
@@ -323,7 +323,9 @@ function recordClarify(store: ControlStore, group: RequirementGroup, target: Req
     Object.assign(round, { retries: round.retries + 1, lastInvalidReason: classified.reason });
     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
   } else {
-    Object.assign(round, { state: "failed", reasonCode: "clarify-output-invalid", lastInvalidReason: classified.reason });
+    // Tester follow-up E §7 (#125): a round whose last call failed (no output came back) says the call failed, not that
+    // the model's output was invalid three times; lastInvalidReason keeps quoting `no-output` into any later prompt.
+    Object.assign(round, { state: "failed", reasonCode: failure !== null ? "clarify-call-failed" : "clarify-output-invalid", lastInvalidReason: classified.reason });
   }
   writeRound(store, group.groupId, round);
 }
@@ -491,7 +493,8 @@ function recordSplit(store: ControlStore, group: RequirementGroup, target: Requi
     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
     return;
   } else {
-    Object.assign(draft, { state: "failed", reasonCode: ev.schemaValid ? "split-validation-exhausted" : "split-output-invalid" });
+    // Tester follow-up E §7 (#125): a draft whose last call failed says so, not that the split was invalid three times.
+    Object.assign(draft, { state: "failed", reasonCode: failure !== null ? "split-call-failed" : ev.schemaValid ? "split-validation-exhausted" : "split-output-invalid" });
   }
   writeDraft(store, group.groupId, draft);
 }

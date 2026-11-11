@@ -527,10 +527,12 @@ export const nonDurableControlErrorClassifications = {
   "shutdown-frozen-set-inconsistent": "internal",
   "start-proof-outcome-unknown": "internal",
   // N1 spec §11.1 (DR27): reason codes projected on a requirement's rounds, drafts and export, never command outcomes.
+  "clarify-call-failed": "internal",
   "clarify-output-invalid": "internal",
   "requirement-budget-exhausted": "internal",
   "requirement-export-conflict": "internal",
   "requirement-export-path-blocked": "internal",
+  "split-call-failed": "internal",
   "split-output-invalid": "internal",
   "split-validation-exhausted": "internal",
 } as const satisfies Record<string, NonDurableControlErrorClassification> &

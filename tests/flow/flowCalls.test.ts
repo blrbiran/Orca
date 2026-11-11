@@ -113,6 +113,28 @@ describe("flow single calls on the parent (§6.2)", () => {
       expect(w.latest(flowRunId, "brief")!.state).toBe("needs-person");
     } finally { await w.dispose(); }
   });
+
+  // Tester follow-up E §7 (#125): as a requirement round does, a flow clarify round's failed call keeps ccloop's detail
+  // (the provider's words), and a clarify step whose last call failed ends `clarify-call-failed`, not
+  // `clarify-output-invalid` (which says the model's output was invalid three times).
+  it("a flow clarify step's failed calls keep ccloop's detail, and three of them end it clarify-call-failed (#125)", async () => {
+    const { w, flowRunId, groupId } = await world(undefined, BRIEF, { idea: "Why tea" }); try {
+      const handler = singleCallHandler("clarify");
+      const fail = async () => {
+        await w.advance();
+        const run = callRuns(w, groupId).at(-1)!;
+        handler.complete({ store: w.store }, { ...run.body }, null, () => {
+          const row = JSON.parse(String(w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.id)!.body));
+          w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...row, state: "settled-restartable" }), run.id);
+        }, "codex-turn-failed", { outcome: "failed", failureCause: { cause: "transient", detail: "upstream 502" } });
+        await w.advance();
+      };
+      await fail(); await fail(); await fail();
+      const [round] = readRoundsAt(w.store, { groupId, stepKey: "brief", execSeq: 1 });
+      expect(round!.calls.map((c) => [c.outcome, c.reason, c.detail])).toEqual([1, 2, 3].map(() => ["failed", "codex-turn-failed", "upstream 502"]));
+      expect(w.latest(flowRunId, "brief")).toMatchObject({ state: "failed", body: { failure: "clarify-call-failed" } });
+    } finally { await w.dispose(); }
+  });
 });
 
 describe("the rerun proposal on the parent (§7.3, plan Task 11)", () => {

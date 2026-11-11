@@ -412,7 +412,9 @@ async function settleClarify(deps: FlowDeps, run: LoadedRun, intake: IntakeRow, 
     await requestClarify(deps, run, intake);
     return;
   }
-  deps.store.transaction(() => writeRoundAt(deps.store, key, { ...round, state: "failed", reasonCode: "clarify-output-invalid", lastInvalidReason: verdict.reason }));
+  // Tester follow-up E §7 (#125): a round whose last call failed says so. An intake round records no calls, so there is no
+  // call record to keep ccloop's detail on (the flow clarify kind's rounds do).
+  deps.store.transaction(() => writeRoundAt(deps.store, key, { ...round, state: "failed", reasonCode: failure !== null ? "clarify-call-failed" : "clarify-output-invalid", lastInvalidReason: verdict.reason }));
   await skipClarify(deps, run, intake);
 }
 

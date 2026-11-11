@@ -258,6 +258,25 @@ describe("feedback intake (gaps §4, G2)", { timeout: 60_000 }, () => {
     } finally { await w.dispose(); }
   });
 
+  // Tester follow-up E §7 (#125): the intake's clarify round says why it failed -- its last call failed, or the model's
+  // answers were invalid -- instead of always clarify-output-invalid. The intake goes on as asIs either way.
+  it("a clarify round whose last call failed ends clarify-call-failed; one exhausted on invalid answers stays clarify-output-invalid (#125)", async () => {
+    for (const [settle, reasonCode] of [
+      [(w: Awaited<ReturnType<typeof world>>) => w.answer(w.calls.length - 1, null, "codex-turn-failed"), "clarify-call-failed"],
+      [(w: Awaited<ReturnType<typeof world>>) => w.answer(w.calls.length - 1, { not: "a round" }), "clarify-output-invalid"],
+    ] as const) {
+      const w = await world(); try {
+        const id = await run(w);
+        const sent = await feedback(w, id, { text: "something feels off" });
+        await w.answer(w.calls.length - 1, { targets: [{ stepKey: "polish", why: "tone" }], clarity: "vague" });
+        for (let i = 0; i < 3; i += 1) await settle(w);
+        const key = { groupId: getFlowRun(w.store, id)!.groupId, stepKey: "@feedback", execSeq: sent.seq };
+        expect(readRoundsAt(w.store, key)[0], reasonCode).toMatchObject({ state: "failed", reasonCode });
+        expect(intakeOf(w, id, sent.seq)).toMatchObject({ state: "restating", body: { asIs: true, flags: ["clarify-skipped"] } });
+      } finally { await w.dispose(); }
+    }
+  });
+
   it("a run whose last step settles while an intake is still triaging is not done until the intake is planned", async () => {
     const w = await world(); try {
       const { flowRunId: id } = await w.start({ templateRef: "builtin/fb" });
