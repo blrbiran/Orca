@@ -43,8 +43,16 @@ export const extraLandingPathOf = (roots: WorkspaceRoots, runId: string, key: st
 export const conflictPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `conflict-${runId}`);
 /** Ruling R2 (#241): the scratch worktree a landing's merged tree is checked in before the work branch moves. */
 export const postMergeCheckPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `post-merge-${runId}`);
-/** Tester follow-up E §5: the scratch worktree a group's acceptance check runs in, at the group branch tip. */
-export const groupAcceptancePathOf = (roots: WorkspaceRoots, groupId: string): string => join(roots.workspacesRoot, `group-acceptance-${groupId}`);
+/**
+ * Tester follow-up E §5: the scratch worktree a group's acceptance check runs in, at the group branch tip. F §5 (w5): one per
+ * check (`check` is the runner's own counter), so an aborted check's late cleanup can never remove the next check's tree.
+ */
+export const groupAcceptancePathOf = (roots: WorkspaceRoots, groupId: string, check: number): string => join(roots.workspacesRoot, `group-acceptance-${groupId}.check-${check}`);
+/** Whether a leaf of workspacesRoot is an acceptance scratch worktree of `groupId`: this naming, or round E's single path. */
+export function isGroupAcceptancePathOf(name: string, groupId: string): boolean {
+  const prefix = `group-acceptance-${groupId}`;
+  return name === prefix || (name.startsWith(`${prefix}.check-`) && /^[0-9]+$/.test(name.slice(prefix.length + ".check-".length)));
+}
 export const reconcileRunsDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `reconcile-${runId}`);
 /** Syncskill integration spec §10.6: the run's skill snapshot, the plugin dir ccloop is handed (runIds are `run-<uuid>`, so no collision). */
 export const skillsPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `skills-${runId}`);

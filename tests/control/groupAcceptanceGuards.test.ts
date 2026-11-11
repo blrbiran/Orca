@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { write } from "../../src/control/executionDriver.js";
 import { acceptGroups, type GroupAcceptanceCheck, type GroupAcceptanceDeps } from "../../src/control/groupAcceptance.js";
-import { groupAcceptancePathOf } from "../../src/control/workspace.js";
+import { isGroupAcceptancePathOf } from "../../src/control/workspace.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Tester follow-up F §5 (#241 round E left these unwitnessed): the acceptance pass's guards. A driver stopped in the middle
@@ -21,6 +21,7 @@ type Checks = Map<string, GroupAcceptanceCheck>;
 const group = (t: Harness) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
 const acceptanceRows = (t: Harness) => readGroupActivity(t.h.store, "g", 200).filter((entry) => entry.kind === "group-acceptance");
 const tip = (t: Harness) => git(t.repo, "rev-parse", "refs/heads/orca/g");
+const scratchDirs = (t: Harness): string[] => readdirSync(t.deps.roots.workspacesRoot).filter((name) => isGroupAcceptancePathOf(name, "g"));
 const revisionOf = (t: Harness) => Number(t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision);
 
 async function waitFor(predicate: () => boolean, what: string, deadlineMs = 20_000): Promise<void> {
@@ -33,13 +34,14 @@ interface Scene { t: Harness; log: string; hold: string; red: string; checks: Ch
 
 /**
  * Only in the acceptance worktree: log `start <HEAD>`, wait while HOLD exists (bounded), log `end <HEAD>`, fail while RED
- * exists. Green everywhere else, so the tasks' own and post-merge checks pass.
+ * exists or when its own worktree is gone (base.txt is in every tree). Green everywhere else, so the tasks' own and
+ * post-merge checks pass.
  */
 async function scene(): Promise<Scene> {
   const dir = mkdtempSync(join(tmpdir(), "orca-accg-"));
   const log = join(dir, "log"), hold = join(dir, "hold"), red = join(dir, "red");
   const check = `case "$PWD" in *group-acceptance-*) h=$(git rev-parse HEAD); echo "start $h" >> '${log}'; `
-    + `i=0; while [ -f '${hold}' ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i+1)); done; echo "end $h" >> '${log}'; test ! -f '${red}' ;; *) true ;; esac`;
+    + `i=0; while [ -f '${hold}' ] && [ $i -lt 600 ]; do sleep 0.05; i=$((i+1)); done; echo "end $h" >> '${log}'; test -f base.txt && test ! -f '${red}' ;; *) true ;; esac`;
   writeFileSync(hold, "");
   const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [check] });
   try {
@@ -52,7 +54,7 @@ async function scene(): Promise<Scene> {
     }
     await driver.stop();
     // The parked state: both tasks landed, the check that was running aborted and nothing recorded (round E's criterion).
-    if (lines(log).length !== 1 || group(t).acceptance !== undefined || existsSync(groupAcceptancePathOf(t.deps.roots, "g"))) {
+    if (lines(log).length !== 1 || group(t).acceptance !== undefined || scratchDirs(t).length > 0) {
       throw new Error(`scene: not parked: ${JSON.stringify(lines(log))}`);
     }
   } catch (error) { await t.h.dispose(); throw error; }
@@ -100,7 +102,7 @@ describe("the group acceptance pass's guards (tester follow-up F §5; E §5, #24
       expect(s.checks.size).toBe(0);
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(lines(s.log)).toHaveLength(1);
-      expect(existsSync(groupAcceptancePathOf(s.t.deps.roots, "g"))).toBe(false);
+      expect(scratchDirs(s.t)).toEqual([]);
       expect(group(s.t).acceptance).toBeUndefined();
     } finally { await dispose(s); }
   });
@@ -161,7 +163,7 @@ describe("the group acceptance pass's guards (tester follow-up F §5; E §5, #24
       const moved = moveTip(s.t, "moved");
       expect(await acceptGroups(s.deps(), s.checks)).toBe(false);
       // The old check was killed: let it go and it never reaches its end.
-      await waitFor(() => !existsSync(groupAcceptancePathOf(s.t.deps.roots, "g")), "the old check's worktree to go");
+      await waitFor(() => scratchDirs(s.t).length === 0, "the old check's worktree to go");
       rmSync(s.hold); rmSync(s.red);
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(lines(s.log).some((line) => line === `end ${old}`)).toBe(false);
@@ -194,6 +196,52 @@ describe("the group acceptance pass's guards (tester follow-up F §5; E §5, #24
       expect(await acceptGroups(s.deps(), s.checks)).toBe(true);
       expect(group(s.t).acceptance).toMatchObject({ result: "passed", tip: moved });
       expect(acceptanceRows(s.t).map((row) => (row.body as { result: string; tip: string })).map((b) => [b.result, b.tip])).toEqual([["passed", moved]]);
+    } finally { await dispose(s); }
+  });
+
+  // Tester follow-up F §5 (w5): an aborted check is not waited for, so its removal can still run after the next one started.
+  // mutation: every check uses one fixed path again (round E's `group-acceptance-<g>`) -> red
+  it("an aborted check's late cleanup never touches the next check's worktree; the new tip's result is its own", async () => {
+    const s = await scene();
+    let release: () => void = () => undefined;
+    try {
+      const released = new Promise<void>((resolve) => { release = resolve; });
+      let held: string | null = null;
+      const deps = { ...s.deps(), beforeScratchRemoved: async (path: string) => { if (held === null) { held = path; await released; } } };
+      expect(await acceptGroups(deps, s.checks)).toBe(false);
+      await waitFor(() => lines(s.log).length === 2, "the check to start");
+      const moved = moveTip(s.t, "moved");
+      // Aborted: its removal now waits on `released`, its tree still on disk.
+      expect(await acceptGroups(deps, s.checks)).toBe(false);
+      await waitFor(() => held !== null, "the old check to reach its cleanup");
+      // The next check starts while the old one has not removed anything yet.
+      expect(await acceptGroups(deps, s.checks)).toBe(false);
+      await waitFor(() => lines(s.log).includes(`start ${moved}`), "the new check to start");
+      release();
+      await waitFor(() => !existsSync(held!), "the old check's removal");
+      rmSync(s.hold);
+      await settle(s);
+      expect(await acceptGroups(deps, s.checks)).toBe(true);
+      expect(lines(s.log).filter((line) => line.endsWith(moved))).toEqual([`start ${moved}`, `end ${moved}`]);
+      expect(group(s.t).acceptance).toMatchObject({ result: "passed", tip: moved });
+      expect(scratchDirs(s.t)).toEqual([]);
+    } finally { release(); await dispose(s); }
+  });
+
+  // mutation: drop the sweep before the worktree is added -> the leftovers stay -> red
+  it("a check removes this group's leftover scratch worktrees (a crash's, round E's path) and nothing of another group's", async () => {
+    const s = await scene(); try {
+      const root = s.t.deps.roots.workspacesRoot;
+      // A crash's leftover is a registered worktree; round E's path and the others are plain directories.
+      git(s.t.repo, "worktree", "add", "-q", "--detach", join(root, "group-acceptance-g.check-999"), "orca/g");
+      for (const name of ["group-acceptance-g", "group-acceptance-gx.check-1", "group-acceptance-g.checkout"]) mkdirSync(join(root, name));
+      rmSync(s.hold);
+      expect(await acceptGroups(s.deps(), s.checks)).toBe(false);
+      await settle(s);
+      expect(await acceptGroups(s.deps(), s.checks)).toBe(true);
+      expect(group(s.t).acceptance).toMatchObject({ result: "passed", tip: tip(s.t) });
+      expect(readdirSync(root).filter((name) => name.startsWith("group-acceptance-")).sort()).toEqual(["group-acceptance-g.checkout", "group-acceptance-gx.check-1"]);
+      expect(git(s.t.repo, "worktree", "list", "--porcelain")).not.toContain("group-acceptance-g.check-999");
     } finally { await dispose(s); }
   });
 });

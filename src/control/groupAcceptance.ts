@@ -5,7 +5,9 @@ import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { recordProjectionChange } from "./projectionJournal.js";
-import { QUIET_GIT, groupAcceptancePathOf, removeOwnPath, revParse, workBranchRef, type WorkspaceRoots } from "./workspace.js";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { QUIET_GIT, groupAcceptancePathOf, isGroupAcceptancePathOf, removeOwnPath, revParse, workBranchRef, type WorkspaceRoots } from "./workspace.js";
 import { unionSetup } from "./setupUnion.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git } from "../scheduler/gitExec.js";
@@ -47,7 +49,18 @@ export interface GroupAcceptanceDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository: (repoId: string) => string;
   dispatchedPersonDir?: string; admissionGate?: AdmissionGate;
   write: <T>(action: () => T) => T; stopped: () => boolean;
+  /** Test seam: awaited after a check's commands, before its scratch worktree is removed (a slow removal, on demand). */
+  beforeScratchRemoved?: (path: string) => Promise<void>;
 }
+
+/**
+ * Tester follow-up F §5 (w5): every check has its own scratch worktree. A check aborted because the tip moved is not waited
+ * for, so its removal can still be running when the next check starts; with one shared path it removed the next check's
+ * tree. `checkSeq` names them; `inUse` holds the paths whose check has not finished removing them, which the sweep before
+ * each start leaves alone. Anything else of this group's (a crash's leftover, round E's single path) is removed there.
+ */
+let checkSeq = 0;
+const inUse = new Set<string>();
 
 /** Every task done and no run of any phase active (integrationPass.ts groupComplete, read here to stay off its imports). */
 function tasksComplete(store: ControlStore, groupId: string): boolean {
@@ -140,21 +153,29 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
   if (deps.stopped()) return false;
   const controller = new AbortController();
   const entry: GroupAcceptanceCheck = { controller, tip, settled: null, done: Promise.resolve() };
-  entry.done = runAcceptance(deps, repo, groupId, tip, setup, commands, timeoutMs, controller.signal)
+  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, setup, commands, timeoutMs, controller.signal)
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
   checks.set(groupId, entry);
   return recorded !== null;
 }
 
-async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, tip: string, setup: string[], checks: string[], timeoutMs: number, signal: AbortSignal): Promise<PostMergeOutcome> {
-  const path = groupAcceptancePathOf(deps.roots, groupId);
-  await removeOwnPath(repo, deps.roots, path);
-  await git(repo, [...QUIET_GIT, "worktree", "add", "--detach", path, tip]);
-  // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
-  const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
+async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, setup: string[], checks: string[], timeoutMs: number, signal: AbortSignal): Promise<PostMergeOutcome> {
+  inUse.add(path);
   try {
-    return await runCheckSequence(path, setup, checks, timeoutMs, as, signal);
+    for (const name of readdirSync(deps.roots.workspacesRoot)) {
+      const stale = join(deps.roots.workspacesRoot, name);
+      if (isGroupAcceptancePathOf(name, groupId) && !inUse.has(stale)) await removeOwnPath(repo, deps.roots, stale);
+    }
+    await git(repo, [...QUIET_GIT, "worktree", "add", "--detach", path, tip]);
+    // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
+    const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
+    try {
+      return await runCheckSequence(path, setup, checks, timeoutMs, as, signal);
+    } finally {
+      await deps.beforeScratchRemoved?.(path);
+      await removeOwnPath(repo, deps.roots, path).catch(() => undefined);
+    }
   } finally {
-    await removeOwnPath(repo, deps.roots, path).catch(() => undefined);
+    inUse.delete(path);
   }
 }
