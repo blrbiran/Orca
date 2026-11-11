@@ -31,7 +31,7 @@ import { registerMemoryRoutes } from "./memoryApi.js";
 import { controlRepoKey } from "./controlOptions.js";
 import { projectsDepsOf, registerProjectRoutes } from "./projects.js";
 import type { ProjectRegistry } from "./projectRegistry.js";
-import { computePanelCoverage, reviewFlags, reviewedKeys, unreviewedHighTier } from "./coverage.js";
+import { computePanelCoverage, majorOutsideHighTier, reviewFlags, reviewedKeys, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
 import { DECISION_NOT_FOUND, projectForList } from "./listProjection.js";
 import type { DecisionListRow } from "./listProjection.js";
@@ -432,7 +432,11 @@ export function buildApi(app: Express, deps: ApiDeps): void {
     void (async () => {
       const { observations } = await currentMetrics(deps.opts);
       const reviews = await readReviews(deps.opts.correctionsDir);
-      res.json({ rows: await listRows(observations.repos, unreviewedHighTier(observations.decisions, reviews)) });
+      // Tester #257: beside the list, per project, the unreviewed major decisions it leaves out (outside the high tier).
+      res.json({
+        rows: await listRows(observations.repos, unreviewedHighTier(observations.decisions, reviews)),
+        majorOutsideHighTier: majorOutsideHighTier(observations.decisions, reviews),
+      });
     })().catch(next);
   });
 

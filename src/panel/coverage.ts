@@ -108,3 +108,23 @@ export function reviewFlags(
 ): { reviewed: boolean; highTier: boolean } {
   return { reviewed: reviewed.has(keyOf(d.projectKey, d.id)), highTier: isHighTier(d.scope, d.kind) };
 }
+
+/**
+ * Tester #257 (spec 2026-11-11-tester-followup-e-design.md §10): the Unreviewed default stays high tier and not
+ * reviewed (`unreviewedHighTier`); beside it, per project, how many unreviewed decisions graded major (an ungraded line
+ * reads as major) sit outside the high tier, so the page can say they exist. A project with none is absent. Same
+ * definitions of reviewed (`reviewedKeys`) and of the tier (`reviewFlags`) as the lists.
+ */
+export function majorOutsideHighTier(
+  decisions: readonly DecisionObservation[],
+  reviews: readonly ReviewRow[],
+): Record<string, number> {
+  const reviewed = reviewedKeys(reviews);
+  const counts: Record<string, number> = {};
+  for (const d of decisions) {
+    const flags = reviewFlags(d, reviewed);
+    if (flags.highTier || flags.reviewed || d.importance !== "major") continue;
+    counts[d.projectKey] = (counts[d.projectKey] ?? 0) + 1;
+  }
+  return counts;
+}

@@ -122,9 +122,12 @@ export interface MetricsResponse {
 /** GET /api/metrics -- src/panel/api.ts. */
 export const fetchMetrics = (): Promise<MetricsResponse> => getJson<MetricsResponse>("/api/metrics");
 
-/** GET /api/todo -- src/panel/api.ts, task 8 ruling K5. */
-export const fetchTodo = (): Promise<{ rows: DecisionListRow[] }> =>
-  getJson<{ rows: DecisionListRow[] }>("/api/todo");
+/**
+ * GET /api/todo -- src/panel/api.ts, task 8 ruling K5. Tester #257: `majorOutsideHighTier` counts, per project, the
+ * unreviewed major decisions the list leaves out; absent from an older server.
+ */
+export const fetchTodo = (): Promise<{ rows: DecisionListRow[]; majorOutsideHighTier?: Record<string, number> }> =>
+  getJson<{ rows: DecisionListRow[]; majorOutsideHighTier?: Record<string, number> }>("/api/todo");
 
 /** GET /api/decisions -- src/panel/api.ts; every listed decision with `reviewed` and `highTier` (spec §9.2(1)). */
 export const fetchDecisions = (): Promise<{ rows: DecisionStatusRow[] }> =>

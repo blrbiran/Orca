@@ -221,6 +221,45 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
     });
   });
 
+  // Tester #257 (spec 2026-11-11-tester-followup-e-design.md §10): the Unreviewed list stays high tier only, and
+  // /api/todo also counts, per project, the unreviewed major decisions outside the high tier, so the page can say so.
+  it("counts per project the unreviewed major decisions outside the high tier (#257)", async () => {
+    await withCorrectionsDir(async (dir) => {
+      const repo = await makeTargetRepo();
+      const dist = await makeDistFixture();
+      try {
+        // ORIGINAL: high tier, unreviewed (listed, not counted). Then outside the high tier: two major (one reviewed
+        // below), one ungraded (reads as major), one minor, and one high-tier major that is not outside.
+        const lowMajor: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/2", at: "2026-09-01T00:01:00.000Z", scope: "file", importance: "major" };
+        const lowReviewed: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/3", at: "2026-09-01T00:02:00.000Z", scope: "file", importance: "major" };
+        const lowUngraded: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/4", at: "2026-09-01T00:03:00.000Z", scope: "file" };
+        const lowMinor: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/5", at: "2026-09-01T00:04:00.000Z", scope: "file", importance: "minor" };
+        const lowKind: DecisionEvent = { ...ORIGINAL, id: "orca-dev-1/6", at: "2026-09-01T00:05:00.000Z", kind: "implementation", importance: "major" };
+        for (const event of [lowMajor, lowReviewed, lowUngraded, lowMinor, lowKind]) await appendEvent(repo.decisionsDir, "orca-dev-1", event);
+        await git(repo.path, ["add", "-A"]);
+        await git(repo.path, ["commit", "-m", "seed decisions outside the high tier"]);
+        const started = await createPanelServer(
+          parsePanelArgs(["--by", "tester", "--repo", `proj=${repo.path}`, "--dist", dist.dir], { ...process.env, ORCA_CORRECTIONS_DIR: dir }),
+        );
+        try {
+          const session = await sessionFor(started);
+          const reviewed = await session.fetch("/api/reviews", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectKey: "proj", decisionId: lowReviewed.id }) });
+          expect(reviewed.status).toBe(200);
+          const body = (await (await session.fetch("/api/todo")).json()) as { rows: Array<{ id: string }>; majorOutsideHighTier: unknown };
+          expect(body.rows.map((r) => r.id)).toEqual([ORIGINAL.id]);
+          // lowMajor, lowUngraded and lowKind (an implementation decision at repo scope is low tier).
+          // mutation: count reviewed rows too -> 4, red; count minor rows too -> 4, red; drop the field -> undefined, red
+          expect(body.majorOutsideHighTier).toStrictEqual({ proj: 3 });
+        } finally {
+          await started.close();
+        }
+      } finally {
+        await dist.cleanup();
+        await repo.cleanup();
+      }
+    });
+  });
+
   it("records NOTHING when the list is served", async () => {
     await withCorrectionsDir(async (dir) => {
       const repo = await makeTargetRepo();

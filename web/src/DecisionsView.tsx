@@ -33,12 +33,17 @@ export const HIDDEN_BY_FILTER = en.decisions.hiddenByFilter;
 export const HIDDEN_MINOR = en.decisions.hiddenMinor;
 export const NOT_IN_LIST = en.decisions.notInList;
 
-/** Spec §9.2(1). Unreviewed is the default and today's list; Reviewed is reviewed at any tier; All is every row. */
-export type DecisionStatus = "unreviewed" | "reviewed" | "all";
-export const DECISION_STATUSES: readonly DecisionStatus[] = ["unreviewed", "reviewed", "all"];
+/**
+ * Spec §9.2(1). Unreviewed is the default and today's list; Reviewed is reviewed at any tier; All is every row.
+ * Tester #257: "major-outside" is the unreviewed major decisions the default leaves out (outside the high tier).
+ */
+export type DecisionStatus = "unreviewed" | "reviewed" | "all" | "major-outside";
+export const DECISION_STATUSES: readonly DecisionStatus[] = ["unreviewed", "reviewed", "all", "major-outside"];
 
 export function rowsForStatus<R extends DecisionStatusRow>(rows: readonly R[], status: DecisionStatus): R[] {
-  return rows.filter((r) => status === "all" || (status === "reviewed" ? r.reviewed : r.highTier && !r.reviewed));
+  return rows.filter((r) => status === "all" || (status === "reviewed" ? r.reviewed
+    : status === "major-outside" ? !r.highTier && !r.reviewed && r.importance === "major"
+    : r.highTier && !r.reviewed));
 }
 
 export function filterRows(rows: readonly DecisionListRow[], filter: DecisionFilter): DecisionListRow[] {
@@ -112,6 +117,8 @@ export function DecisionsView(props: {
    */
   showMinor?: boolean;
   onShowMinor?: (next: boolean) => void;
+  /** Tester #257: unreviewed major decisions outside the high tier, for the projects in view (Unreviewed only). */
+  majorOutsideHighTier?: number;
 }): JSX.Element {
   const { t } = useTranslation();
   const name = useProjectName();
@@ -123,6 +130,7 @@ export function DecisionsView(props: {
   // Final review M-T8: the heading says which decisions are listed; Unreviewed (and no status select) keeps today's.
   const heading = props.status === "reviewed" ? { title: "decisions.titleReviewed", lede: "decisions.ledeReviewed" } as const
     : props.status === "all" ? { title: "decisions.titleAll", lede: "decisions.ledeAll" } as const
+    : props.status === "major-outside" ? { title: "decisions.titleMajorOutside", lede: "decisions.ledeMajorOutside" } as const
     : { title: "decisions.title", lede: "decisions.lede" } as const;
   // A detail stays open after its row leaves the list (filtered away, collapsed as minor, or reviewed); say which. A
   // collapsed minor row is matched by the filters, so its note says minor and offers the minor rows (handoff §4.2 item 7).
@@ -146,6 +154,13 @@ export function DecisionsView(props: {
         {t(heading.lede)}
       </p>
       <p className="kbd-hint">{t("decisions.keyHint")}</p>
+      {/* Tester #257: the default stays high tier; it says what it leaves out, with the one action that lists them. */}
+      {props.status === "unreviewed" && (props.majorOutsideHighTier ?? 0) > 0 && (
+        <p role="note" data-testid="major-outside">
+          {t("decisions.majorOutside", { count: props.majorOutsideHighTier })}{" "}
+          <button type="button" onClick={() => props.onStatus?.("major-outside")}>{t("decisions.majorOutsideShow")}</button>
+        </p>
+      )}
       <div className="filters flex flex-wrap gap-3 mb-3 [&_label]:m-0 [&_label]:flex-row [&_label]:items-center">
         {props.status !== undefined && (
           <label>

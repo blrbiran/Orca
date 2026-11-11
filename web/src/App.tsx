@@ -335,6 +335,8 @@ export function App(): JSX.Element {
   // Spec §9.2(1): Unreviewed reads /api/todo (home.todo, also the sidebar badge); the other two read /api/decisions.
   const [status, setStatus] = useState<DecisionStatus>("unreviewed");
   const [allRows, setAllRows] = useState<DecisionStatusRow[] | null>(null);
+  // Tester #257: /api/todo's per-project count of unreviewed major decisions outside the high tier, with its read's identity.
+  const [outsideHighTier, setOutsideHighTier] = useState<{ identity: string; counts: Record<string, number> }>({ identity: "", counts: {} });
   /** Taste refinement P1-3: reviews this browser recorded since it opened the panel, and a pending move to the next row. */
   const [reviewedThisSession, setReviewedThisSession] = useState(0);
   const [pendingAdvance, setPendingAdvance] = useState<{ reviewed: DecisionIdentity; before: DecisionListRow[] } | null>(null);
@@ -1020,6 +1022,7 @@ export function App(): JSX.Element {
       const body = await fetchTodo();
       if (identity !== sourceIdentityNow.current || seq !== todoSeq.current) return;
       setTodoSource({ identity, status: "available", data: body.rows, error: null });
+      setOutsideHighTier({ identity, counts: body.majorOutsideHighTier ?? {} });
     } catch (err) {
       if (identity !== sourceIdentityNow.current || seq !== todoSeq.current) return;
       setTodoSource((prior) => ({ ...sourceFailure(prior.identity === identity ? prior : loadingSource(), failureFrom(err).message), identity }));
@@ -1413,6 +1416,9 @@ export function App(): JSX.Element {
   // The Decisions pane's rows and filter, shared by both of its branches and by the review loop (taste refinement P1-3).
   const scopedDecisionRows = projects === null || scope.kind === "all" ? statusRows : statusRows.filter((row) => row.projectKey === project);
   const effectiveDecisionFilter = projects === null ? filter : { ...filter, projectKey: "" };
+  // Tester #257: summed over the projects the pane shows, the same scope rule as scopedDecisionRows.
+  const majorOutsideInView = outsideHighTier.identity !== sourceIdentity ? 0
+    : Object.entries(outsideHighTier.counts).reduce((sum, [key, n]) => sum + (projects === null || scope.kind === "all" || key === project ? n : 0), 0);
   const visibleDecisionRows = visibleByImportance(filterRows(scopedDecisionRows, effectiveDecisionFilter), showMinor);
 
   /**
@@ -1955,7 +1961,7 @@ export function App(): JSX.Element {
         {todo.status !== "available" && <p role="status">{t("overview.source.decisions")} · {t(`overview.status.${todo.status}`)}{todo.error ? ` · ${todo.error}` : ""}</p>}
         {projects === null ? (
           // Plan decision P2: without a project list the rows keep today's repository filter.
-          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={(row) => openDecisionRow(row, "push")} detail={detail} reviewedCount={reviewedThisSession} showMinor={showMinor} onShowMinor={setShowMinor} />
+          <DecisionsView rows={scopedDecisionRows} status={status} onStatus={setStatus} loading={statusLoading} sourceStatus={status === "unreviewed" ? todo.status : undefined} filter={effectiveDecisionFilter} onFilter={setFilter} selected={selected} onOpen={(row) => openDecisionRow(row, "push")} detail={detail} reviewedCount={reviewedThisSession} showMinor={showMinor} onShowMinor={setShowMinor} majorOutsideHighTier={majorOutsideInView} />
         ) : (
           // With one, the pane follows the global scope: rows are restricted here, and its repository select is the sidebar's.
           <DecisionsView
@@ -1971,6 +1977,7 @@ export function App(): JSX.Element {
             reviewedCount={reviewedThisSession}
             showMinor={showMinor}
             onShowMinor={setShowMinor}
+            majorOutsideHighTier={majorOutsideInView}
             scope={{
               projects,
               value: scope.kind === "all" ? ALL_PROJECTS : project ?? "",
