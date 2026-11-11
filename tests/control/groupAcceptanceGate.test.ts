@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { markGroupsDone } from "../../src/control/groupDone.js";
 import { prerequisiteDone } from "../../src/control/groupEdges.js";
 import { acceptanceSatisfied } from "../../src/control/groupAcceptanceRecord.js";
+import { groupComplete } from "../../src/control/integrationPass.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { openTestStore } from "./fixtures/store.js";
 
@@ -49,6 +50,16 @@ describe("the acceptance gate on done (tester follow-up E §5)", () => {
         group(h.store, 2, body);
         // The multi landing / placement clauses decide done; the acceptance gate does not hold either back.
         expect(acceptanceSatisfied(h.store, "g", body)).toBe(true);
+      } finally { await h.dispose(); }
+    }
+  });
+
+  // §5: a complete group is not delivered (trigger group, a PR marked ready, a multi landing) before it is accepted.
+  it("groupComplete, which gates delivery, answers false for a failed or missing acceptance and true for a passed one", async () => {
+    for (const [extra, complete] of [[{}, false], [record("failed"), false], [record("passed"), true]] as const) {
+      const h = await openTestStore(); try {
+        group(h.store, 2, extra);
+        expect(groupComplete(h.store, "g"), JSON.stringify(extra)).toBe(complete);
       } finally { await h.dispose(); }
     }
   });
