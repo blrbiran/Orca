@@ -125,6 +125,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `duplicate-correction-id` | 409 |
 | `duplicate-proposal-target` | 422 |
 | `duplicate-task-id` | 422 |
+| `estimate-advisory-in-unlimited-group` | 422 |
 | `estimate-in-flight` | 422 |
 | `estimate-stale` | 409 |
 | `execution-identity-conflict` | 409 |

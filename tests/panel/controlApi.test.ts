@@ -94,13 +94,22 @@ describe("web control acceptance over a real panel (task 10 step 1)", () => {
     const estimated = await view(panel);
     expect(estimated.estimates[0]).toMatchObject({ state: "ready", output, outputHash: sha256Canonical(output) });
     // The model's advice is only authority for the exact number it named.
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the budget
+    // defaults spec 2026-11-11 §7 item 3 -- this planId import has no token limit, so the estimate's task-work tokens are
+    // the expectation and are refused as a ceiling by name over HTTP; the model's advice is applied to the task's handoff
+    // reserve instead, which keeps today's apply behaviour (§7 item 1).
+    const workRefused = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, {
+      commandId: "accept-edit-work", expectedRevision: await revision(panel),
+      payload: { baseProposalVersion: estimated.proposal.proposalVersion, operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: ESTIMATE_WORK.tokens, provenance: "model", estimateId: estimated.estimates[0].estimateId }] },
+    });
+    expect([workRefused.status, (workRefused.body as { error?: { code?: string } }).error?.code]).toEqual([422, "estimate-advisory-in-unlimited-group"]);
     const edited = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, {
       commandId: "accept-edit", expectedRevision: await revision(panel),
-      payload: { baseProposalVersion: estimated.proposal.proposalVersion, operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: ESTIMATE_WORK.tokens, provenance: "model", estimateId: estimated.estimates[0].estimateId }] },
+      payload: { baseProposalVersion: estimated.proposal.proposalVersion, operations: [{ target: { scope: "task", taskId: "a", allocation: "handoff", dimension: "tokens" }, value: ESTIMATE_HANDOFF.tokens, provenance: "model", estimateId: estimated.estimates[0].estimateId }] },
     });
     expect(edited.status).toBe(200);
     expect(commandSuccessSchema.parse(edited.body).result).toMatchObject({ kind: "proposal-edited", proposalVersion: 2 });
-    expect((await view(panel)).allocations.find((row) => row.ownerKind === "task" && row.bucket === "work")!.fieldProvenance.tokens)
+    expect((await view(panel)).allocations.find((row) => row.ownerKind === "task" && row.bucket === "handoff")!.fieldProvenance.tokens)
       .toEqual({ provenance: "model", estimateId: estimated.estimates[0].estimateId });
 
     const binding = { profileId: "all", profileHash: config.profiles[0]!.profileHash };
