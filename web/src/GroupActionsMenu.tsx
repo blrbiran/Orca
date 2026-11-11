@@ -2,6 +2,7 @@ import { useId, useState, type JSX, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import type { ControlRefusal } from "./controlState.js";
+import { cardDispatchVerb } from "./groupCategory.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { groupCardRow, groupMore } from "./ui/classes.js";
 import { Menu, MenuItem } from "./ui/Menu.js";
@@ -21,11 +22,14 @@ export function GroupActionsMenu(props: {
   refusal?: ControlRefusal | null;
   /** Spec 2026-10-13-unmetered-usage-settlement §B.3: archive-run-active is resolved from the group's dispatch controls. */
   onOpenDispatch?: () => void;
+  /** Tester #94: where given (the Board), the menu also pauses or resumes, as a drag would (cardDispatchVerb). */
+  onDispatch?: (verb: "pause-dispatch" | "resume-dispatch") => void;
   children: (onContextMenu: (event: MouseEvent<HTMLElement>) => void) => JSX.Element;
 }): JSX.Element {
   const { t } = useTranslation();
   const ownerDescriptionId = useId();
   const [open, setOpen] = useState(false);
+  const dispatchVerb = props.onDispatch === undefined ? null : cardDispatchVerb(props.group);
   const archivePending = cardArchivePending(props.group);
   const archiveBlocked = props.onAction === undefined || archivePending;
   const context = (event: MouseEvent<HTMLElement>): void => { event.preventDefault(); setOpen(true); };
@@ -35,6 +39,9 @@ export function GroupActionsMenu(props: {
     <Menu open={open} onOpenChange={setOpen}
       trigger={<button type="button" className={`group-more ${groupMore}`} aria-label={t("control.groupMenu.more")} aria-describedby={ownerDescriptionId}>⋯</button>}>
       <MenuItem onSelect={props.onOpen}>{t("control.groupMenu.open")}</MenuItem>
+      {dispatchVerb !== null && (
+        <MenuItem onSelect={() => props.onDispatch?.(dispatchVerb)}>{t(dispatchVerb === "pause-dispatch" ? "control.group.pause" : "control.group.resume")}</MenuItem>
+      )}
       <MenuItem disabled={archiveBlocked} describedBy={archiveBlocked ? `archive-reason-${props.group.groupId}` : undefined}
         onSelect={() => props.onAction?.(props.group.groupId, props.group.archived ? "unarchive-group" : "archive-group", props.group.repoId)}>
         {t(props.group.archived ? "control.group.unarchive" : "control.group.archive")}

@@ -125,3 +125,14 @@ export function boardDrop(summary: GroupSummaryV1, to: BoardColumn): BoardDrop {
   if (from === "archived" && to === "done") return { verb: "unarchive-group" };
   return { refused: "not-allowed" };
 }
+
+/**
+ * Tester #94 (keyboard half): the pause or resume a card's menu offers -- exactly the one a drag would send (boardDrop to
+ * Queued pauses, to Running resumes), so the menu and the drag can never disagree. null: neither is allowed.
+ */
+export function cardDispatchVerb(summary: GroupSummaryV1): "pause-dispatch" | "resume-dispatch" | null {
+  const pause = boardDrop(summary, "queued");
+  if ("verb" in pause && pause.verb === "pause-dispatch") return "pause-dispatch";
+  const resume = boardDrop(summary, "running");
+  return "verb" in resume && resume.verb === "resume-dispatch" ? "resume-dispatch" : null;
+}

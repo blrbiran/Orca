@@ -147,8 +147,13 @@ export const confirmInline = "inline-flex flex-wrap items-center gap-2 rounded-c
 /** Board (tester round 2026-10-28): a card is an inset box; its badges are boxed (not pills) so a second line stays inside the border (issue #58). */
 export const boardCard = "cursor-grab rounded-control border border-line bg-well px-2.5 py-2 transition-colors hover:border-line-strong";
 export const boardCardBadge = "max-w-full rounded-control wrap-anywhere";
-/** The card's open control is a bare button (it was `all: unset`): no chrome, inherited type, no min height. */
-export const boardCardOpen = "inline min-h-0 cursor-pointer rounded-none border-0 bg-transparent p-0 text-start text-base leading-[inherit] font-semibold text-inherit shadow-none transition-none hover:bg-hover";
+/**
+ * The card's open control is a bare button (it was `all: unset`): no chrome, inherited type, no min height. Tester #17: it
+ * stacks the goal over the id and state line, and keeps clear of the card menu's ⋯ button (`groupMore`, top right).
+ */
+export const boardCardOpen = "flex min-h-0 min-w-0 flex-1 cursor-pointer flex-col items-start rounded-none border-0 bg-transparent p-0 pr-10 text-start text-base leading-[inherit] font-semibold text-inherit shadow-none transition-none hover:bg-hover";
+/** Tester #17: the id and state line under a Board card's goal, small and muted as on a Tasks card (groupCardName). */
+export const boardCardName = "text-xs font-normal text-muted wrap-anywhere";
 /** Tester #54: a dragged card's refusing columns dim. Padding, edge and fill come from the legacy labelled-section card rule, which out-ranks the old
  *  `.board-column` rule -- and so also its `[data-drop="allowed"]` accent outline, which never painted. Kept as it was (the migration does not change the look). */
 // Tester #54: while a card is dragged, a column that takes it shows a dashed accent edge (the legacy rule never painted:

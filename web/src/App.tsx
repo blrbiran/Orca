@@ -1908,7 +1908,9 @@ export function App(): JSX.Element {
               if (group.state === "clarifying") { setSelectedRequirement(group.groupId); navigate({ kind: "requirement", section: "requirements", groupId: group.groupId }); void readRequirement(group.groupId); return; }
               setSelectedGroup(group.groupId); navigate({ kind: "group", section: "tasks", groupId: group.groupId, region: null, taskId: null });
             }}
-            onCommand={(action) => { void sendControl(action); }} />
+            onCommand={(action) => { void sendControl(action); }}
+            // Tester #94: a card menu archives as a Tasks card does, and a refused card action is said on its card.
+            onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }} groupRefusals={control.refusals} />
         )}
       </SectionPane>
       <SectionPane section="requirements" active={section}>

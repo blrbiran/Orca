@@ -5,7 +5,7 @@
  * and the card stays where the summary puts it. A second view draws the person's edges between groups (§3.3, §9a.5).
  */
 import { hashFor } from "./sections.js";
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { DragEvent, JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
@@ -17,7 +17,9 @@ import { currentLanguage, enumText } from "./i18n.js";
 import { useClock } from "./clock.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 import { inScope, type GroupScope } from "./projectScope.js";
-import { boardCard as card, boardCardBadge as cardBadge, boardCardOpen as cardOpen, boardColumnBox as columnBox } from "./ui/classes.js";
+import { boardCard as card, boardCardBadge as cardBadge, boardCardName as cardName, boardCardOpen as cardOpen, boardColumnBox as columnBox, groupCardLead } from "./ui/classes.js";
+import { GroupActionsMenu } from "./GroupActionsMenu.js";
+import type { ControlRefusal } from "./controlState.js";
 import { minutesSince, updatedText } from "./relativeTime.js";
 import { KNOWN_FAILURE_CAUSES, knownCause } from "./RunReason.js";
 
@@ -31,6 +33,10 @@ export interface BoardViewProps {
   repoLabel?: (repoId: string) => string;
   onOpen: (group: GroupSummaryV1) => void;
   onCommand: (action: ControlAction) => void;
+  /** Tester #94: a card menu's archive and unarchive, through the same channel as a Tasks card (App's sendGroupCardAction). */
+  onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  /** A refused card action, said on its card as on Tasks. */
+  groupRefusals?: Record<string, ControlRefusal>;
   /** Flow engine spec §14.1: flow runs, each a card for its parent with a template badge (children are never cards). */
   flows?: FlowListV1["runs"];
   onOpenFlow?: (flowRunId: string) => void;
@@ -76,9 +82,11 @@ function needsYouReason(group: GroupSummaryV1): "refused" | "stopping" | "blocke
   return "recovery";
 }
 
-function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number; onOpen: () => void; onDragging?: (group: GroupSummaryV1 | null) => void }): JSX.Element {
+function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number; onOpen: () => void; onDragging?: (group: GroupSummaryV1 | null) => void;
+  onAction?: BoardViewProps["onGroupAction"]; onCommand: (action: ControlAction) => void; refusal?: ControlRefusal }): JSX.Element {
   const { t } = useTranslation();
   const { group } = props;
+  const base = useId();
   const o = group.orchestration;
   const waiting = o?.state === "waiting-prerequisite" ? t("board.card.waitingFor", { groups: o.waitingFor.join(", ") })
     : o?.state === "waiting-slot" ? t("board.card.waitingSlot")
@@ -91,13 +99,22 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
   const onDragStart = (event: DragEvent<HTMLElement>): void => { event.dataTransfer.setData("text/plain", group.groupId); props.onDragging?.(group); };
   return (
     <li className={card} draggable onDragStart={onDragStart} onDragEnd={() => props.onDragging?.(null)} data-testid={`board-card-${group.groupId}`}>
-      {/* Tester #49: the card's title says where it leads -- a clarifying group opens its requirement (App's onOpen). */}
-      <button type="button" className={cardOpen} title={t(group.state === "clarifying" ? "board.card.openRequirement" : "board.card.openGroup")} onClick={props.onOpen}>
-        {/* Ruling H8: the status light; decorative, the state is in this text. */}
-        <span className="led" data-led={groupLed(group)} aria-hidden="true" />
-        {group.groupId} · {enumText("groupState", group.state)}{props.repoText}
-      </button>
-      <CardGoal group={group} as="p" className={cardGoal} />
+      {/* Tester #94: the same menu as a Tasks card, so pause, resume and archive need no drag; pause and resume are the
+          commands a drag sends (cardDispatchVerb), archive goes through the Tasks card's channel. */}
+      <GroupActionsMenu group={group} onOpen={props.onOpen} onAction={props.onAction} refusal={props.refusal}
+        onDispatch={(verb) => props.onCommand({ verb, groupId: group.groupId, expectedRevision: group.commandRevision, payload: {} })}>{(onContextMenu) => (
+        // Tester #49: the card's title says where it leads -- a clarifying group opens its requirement (App's onOpen).
+        // Tester #17: what the group is for leads, as on a Tasks card; the id and state are the small line and its name.
+        <button type="button" className={cardOpen} title={t(group.state === "clarifying" ? "board.card.openRequirement" : "board.card.openGroup")} onClick={props.onOpen}
+          onContextMenu={onContextMenu} aria-labelledby={`${base}-name`} aria-describedby={`${base}-goal`}>
+          <span id={`${base}-goal`} className={groupCardLead}><CardGoal group={group} className={cardGoal} /></span>
+          <span id={`${base}-name`} className={cardName}>
+            {/* Ruling H8: the status light; decorative, the state is in this text. */}
+            <span className="led" data-led={groupLed(group)} aria-hidden="true" />
+            {group.groupId} · {enumText("groupState", group.state)}{props.repoText}
+          </span>
+        </button>
+      )}</GroupActionsMenu>
       {group.completion !== undefined && group.completion.total > 0 && (
         <progress value={group.completion.done} max={group.completion.total}
           aria-label={t("control.groupCard.progress", { done: group.completion.done, total: group.completion.total })} />
@@ -222,7 +239,8 @@ export function BoardView(props: BoardViewProps): JSX.Element {
                 <h3>{t(`board.column.${column}` as const)} <span className="nav-count">{cards.length + flowCards.length}</span></h3>
                 {decided !== null && "verb" in decided && <p className="mb-1.5 text-xs text-accent" data-testid={`board-drop-hint-${column}`}>{t(`board.dropHint.${decided.verb}` as const)}</p>}
                 <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                  {cards.map((group) => <BoardCard key={group.groupId} group={group} repoText={label(group.repoId)} now={now} onOpen={() => props.onOpen(group)} onDragging={setDragging} />)}
+                  {cards.map((group) => <BoardCard key={group.groupId} group={group} repoText={label(group.repoId)} now={now} onOpen={() => props.onOpen(group)} onDragging={setDragging}
+                    onAction={props.onGroupAction} onCommand={props.onCommand} {...(props.groupRefusals?.[group.groupId] === undefined ? {} : { refusal: props.groupRefusals[group.groupId] })} />)}
                   {flowCards.map((run) => <FlowCard key={run.flowRunId} run={run} onOpen={() => props.onOpenFlow?.(run.flowRunId)} />)}
                 </ul>
               </section>
