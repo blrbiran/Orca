@@ -67,6 +67,17 @@ verify the current run's saved result instead of re-running (after run eligibili
 - `<task>`: a task id or a unique prefix
 - `--work <work>`: add work for the verification run as JSON {tokens?,activeMs?,attempts?,sessions?}; a person may always, an agent within the top-up cap; refused to a run Orca dispatched
 
+## `orca task accept-attempt <group> <task> --run <run> --note <note>`
+
+land a failed, settled run's last attempt after Orca re-runs the task's checks on it (an owner's act)
+
+- What it does: sends control verb `accept-attempt`.
+- Who may: a person: needs a person token over the socket (`orca login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `<task>`: a task id or a unique prefix
+- `--run <run>` (required): the terminal run whose last attempt to accept (orca run show <run> names it)
+- `--note <note>` (required): why you accept it; recorded with the acceptance and in the run's decision ledger
+
 ## `orca task settle-usage <group> <task> --acknowledge <acknowledge>`
 
 settle a run's unknown usage (cannot be undone)

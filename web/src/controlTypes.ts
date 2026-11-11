@@ -575,7 +575,7 @@ export type EvidenceManifestV1 = {
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
 };
 /** Issue-fixes spec §5.2: one row of Orca's activity record. */
-export type ActivityKindV1 = "usage-settled" | "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "saved-result-top-up" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived" | "correction-closed" | "debug-open-failed" | "ladder-skipped" | "group-done" | "quota-probe";
+export type ActivityKindV1 = "usage-settled" | "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "saved-result-top-up" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived" | "correction-closed" | "debug-open-failed" | "ladder-skipped" | "group-done" | "quota-probe" | "attempt-accepted" | "attempt-accept-refused";
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
 /** GET /api/control/runs/:runId/activity -- the run's newest 200 rows, newest first. */
 export type RunActivityV1 = { schema: "orca-run-activity-v1"; runId: string; entries: ActivityEntryV1[] };
@@ -690,7 +690,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
@@ -762,6 +762,7 @@ export type CommandSuccessV1 = {
     | { kind: "multi-dir-landing-set"; groupId: string; action: "retry-rest" | "mark-resolved" }
     | { kind: "archived"; groupId: string; at: number }
     | { kind: "run-closed"; runId: string; taskId: string; alreadyClosed: boolean }
+    | { kind: "attempt-accept-requested"; runId: string; taskId: string }
     | { kind: "unarchived"; groupId: string }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }

@@ -7,6 +7,17 @@ A `retryable: true` error may be sent again with the same command id; anything e
 
 | code | status |
 |---|---|
+| `accept-attempt-debug-in-progress` | 409 |
+| `accept-attempt-group-reconciling` | 409 |
+| `accept-attempt-pending` | 409 |
+| `accept-attempt-person-required` | 409 |
+| `accept-attempt-run-not-current` | 409 |
+| `accept-attempt-run-not-settled` | 409 |
+| `accept-attempt-run-not-terminal` | 409 |
+| `accept-attempt-run-succeeded` | 409 |
+| `accept-attempt-snapshot-missing` | 409 |
+| `accept-attempt-snapshot-partial` | 409 |
+| `accept-attempt-unsupported` | 409 |
 | `active-unbounded-budget-conflict` | 409 |
 | `agent-context-unsupported` | 422 |
 | `agent-group-cap-invalid` | 422 |

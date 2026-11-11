@@ -426,6 +426,18 @@ export const WORK_ROWS: CommandDef[] = [
       const { sourceRunId, sourceAttempt, capsuleHash } = answer.recoveryOf;
       return { sourceRunId, sourceAttempt, capsuleHash, ...(work === undefined ? {} : { work }) };
     } }),
+  // Reviewed acceptance (spec 2026-11-11 §7): an owner lands a terminal, settled run's last attempt after Orca re-runs its checks.
+  verb({ domain: "task", action: "accept-attempt", summary: "land a failed, settled run's last attempt after Orca re-runs the task's checks on it (an owner's act)",
+    verb: "accept-attempt", positionals: [GROUP, TASK], access: "token",
+    flags: [
+      { name: "run", type: "string", required: true, summary: "the terminal run whose last attempt to accept (orca run show <run> names it)" },
+      { name: "note", type: "string", required: true, summary: "why you accept it; recorded with the acceptance and in the run's decision ledger" },
+    ],
+    route: (c) => `groups/${group(c)}/accept-attempt`,
+    payload: (c) => ({ taskId: task(c), runId: str(c, "run"), note: str(c, "note") }),
+    hint: (error) => error.code === "accept-attempt-run-not-settled"
+      ? "close the run's accounting first (orca group close-run, or orca task settle-usage), then accept its attempt"
+      : undefined }),
   verb({ domain: "task", action: "settle-usage", summary: "settle a run's unknown usage (cannot be undone)", verb: "settle-unknown-usage", positionals: [GROUP, TASK], access: "token",
     flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|release-unmetered|release-known-zero (the last only when ccloop proved the failed run spent nothing)" }],
     route: (c) => `groups/${group(c)}/settle-unknown-usage`,

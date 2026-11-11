@@ -45,6 +45,7 @@ import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurpos
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
+import { applyAcceptAttempt, prepareAcceptAttempt, type AcceptAttemptCommand } from "./acceptAttempt.js";
 import { applyRetryTask, autoRetryFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
 import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
@@ -1774,6 +1775,15 @@ export class WebControlService {
   /** Terminal run closure #169: release a proved terminal failure's unused reservation without accepting its work. */
   closeRun(command: CloseRunCommand): WebCommandResult {
     return this.mutate(() => applyCloseRun({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
+  }
+  /**
+   * Reviewed acceptance (spec 2026-11-11 §7): an owner accepts a terminal run's attempt. A replay answers first; the run's
+   * snapshot is read and verified before the transaction (artifacts are read asynchronously), then the intent is recorded.
+   */
+  async acceptAttempt(command: AcceptAttemptCommand): Promise<WebCommandResult> {
+    const replay = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command)); if (replay) return replay.body;
+    const prepared = await prepareAcceptAttempt(this.store, command.payload.runId);
+    return applyAcceptAttempt({ store: this.store, admissionGate: this.deps.admissionGate, ladderInProgress: confirmedLadderFor }, command, prepared) as WebCommandResult;
   }
   /**
    * Integration spec §7: an owner approves an agent's resolution of the conflict. The conflict's copy and pinned commit

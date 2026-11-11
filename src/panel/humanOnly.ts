@@ -24,6 +24,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "settle-unknown-usage": "human-only",
   // Terminal run closure #169: deterministic release of a proved terminal failure's unused reservation.
   "close-run": "any",
+  // Reviewed acceptance (spec 2026-11-11 §7, Q3): landing an attempt no recovery path accepts is an owner's act.
+  "accept-attempt": "human-only",
   // Spec 2026-11-06 soft-mode loop run settlement (d): Orca's own booking of an approximate floor (orca-auto); no route sends it.
   "settle-approximate-usage": "panel",
   "shutdown": "panel",
@@ -230,6 +232,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   // Multi-directory projects spec §9.7: as resolve-folder-change.
   "multi-dir-landing": "token",
   "settle-unknown-usage": "token",
+  // Reviewed acceptance (spec 2026-11-11 §7, Q3): an owner on the Web, or the socket agent with an owner's person token.
+  "accept-attempt": "token",
   "recovery-retry.acknowledge": "token",
   "apply-agent-update": "token",
   // Scheduled flows and groups spec §11.1 (I-3): a new entry copies data Orca already holds (open); appending a version

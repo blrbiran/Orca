@@ -105,6 +105,7 @@ const activityKind = {
   "run-settled": "settled", "task-retried": "task retried", "saved-result-top-up": "saved-result top-up", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
   archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed", "debug-open-failed": "debug group not opened",
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
+  "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -2210,6 +2211,17 @@ export const enErrors: Record<string, string> = {
   "run-closure-process-live": "The original process is still alive, so this run's accounting cannot be closed.",
   "run-closure-evidence": "The original report or stop proof needed to close is incomplete.",
   "run-closure-invalid": "The closure marker does not match the run's evidence; read the task again.",
+  "accept-attempt-run-not-terminal": "This run has not ended, so its attempt cannot be accepted yet.",
+  "accept-attempt-run-not-settled": "Close or settle this run's accounting first; accepting an attempt never changes what was spent.",
+  "accept-attempt-run-succeeded": "This run succeeded; its work lands the usual way.",
+  "accept-attempt-run-not-current": "Only the task's latest run, while the task is blocked on it, can have its attempt accepted.",
+  "accept-attempt-debug-in-progress": "A debug ladder is working on this run; wait for it to finish.",
+  "accept-attempt-group-reconciling": "The group is reconciling a landing; try again when it has finished.",
+  "accept-attempt-unsupported": "Accepting an attempt is not available for this kind of group yet.",
+  "accept-attempt-snapshot-missing": "This run kept no archive snapshot of its last attempt, so there is nothing to accept.",
+  "accept-attempt-snapshot-partial": "This run's archive snapshot is incomplete, so its attempt cannot be rebuilt.",
+  "accept-attempt-pending": "An acceptance of this attempt is already recorded.",
+  "accept-attempt-person-required": "Accepting an attempt is done by an owner.",
   "control-capability-unsupported": "A required capability is not supported: {{detail}}",
   "control-estimator-unconfigured": "The panel has no estimator profile configured. Restart it with an estimator profile to run estimates.",
   "control-evidence-unavailable": "Evidence is not available.",

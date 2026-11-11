@@ -630,6 +630,8 @@ export const commandVerbSchema = z.enum([
   "settle-approximate-usage",
   // Terminal run closure #169: end a proved terminal failure's accounting so its group can be archived.
   "close-run",
+  // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a terminal run's attempt after Orca re-runs its checks.
+  "accept-attempt",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -819,6 +821,8 @@ export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runI
 export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();
 /** Terminal run closure #169: the run whose accounting is closed; its group is the target. */
 export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
+/** Reviewed acceptance (spec 2026-11-11 §7): the terminal run whose last attempt lands after its checks, and why the person accepts it. */
+export const acceptAttemptPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -1225,6 +1229,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1327,6 +1332,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-unknown-usage"), target: groupCommandTargetSchema, payload: settleUnknownUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1784,6 +1790,8 @@ export const workItemViewSchema = z
 // Issue-fixes spec §5.2 (ruling H5): one row of Orca's activity record as the views show it (src/control/activity.ts).
 export const activityKindSchema = z.enum([
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
+  // Reviewed acceptance (spec 2026-11-11 §7): a person's accepted attempt landed after its checks, or was refused.
+  "attempt-accepted", "attempt-accept-refused",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2220,6 +2228,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
   // Terminal run closure #169: the accounting is closed; `alreadyClosed` is the idempotent replay.
   z.object({ kind: z.literal("run-closed"), runId: idSchema, taskId: idSchema, alreadyClosed: z.boolean() }).strict(),
+  // Reviewed acceptance (spec 2026-11-11 §7): the intent is recorded; the driver merges, checks and lands (or refuses) off-round.
+  z.object({ kind: z.literal("attempt-accept-requested"), runId: idSchema, taskId: idSchema }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),

@@ -10,7 +10,7 @@ import {
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   resolveFolderChangePayloadSchema, multiDirLandingPayloadSchema,
-  verifySavedResultPayloadSchema, closeRunPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
   scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
@@ -58,6 +58,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "resolve-integration-conflict": emptyPayloadSchema,
   "archive-group": emptyPayloadSchema, "unarchive-group": emptyPayloadSchema,
   "verify-saved-result": verifySavedResultPayloadSchema, "close-run": closeRunPayloadSchema,
+  // Reviewed acceptance (spec 2026-11-11 §7): an owner's accept-attempt (human-only, socket tier token).
+  "accept-attempt": acceptAttemptPayloadSchema,
   "approve-pending-decision": approvePendingDecisionPayloadSchema,
   "reject-pending-decision": rejectPendingDecisionPayloadSchema,
   "ratify-flagged-decision": ratifyFlaggedDecisionPayloadSchema,

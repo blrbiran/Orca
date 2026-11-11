@@ -3,7 +3,7 @@ import type { LastFailure, RunFailureCause } from "../../../src/control/driveRec
 import type { PathPolicyMissV1 } from "../../../src/control/pathPolicyMisses.js";
 import type { ToolRulesReport } from "../../../src/control/toolRules.js";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ControlError } from "../../../src/control/errors.js";
 import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
@@ -46,7 +46,7 @@ const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest
 export function fakeCcloopPort(input: {
   capabilities: CapabilityViewV1;
   behaviour(workItemId: string): FakeBehaviour;
-  files(workItemId: string): Record<string, string>;
+  files(workItemId: string): Record<string, string | null>;
   delayAccept?: () => Promise<void>;
   /** Final review I1: the work tokens the run reports (10 unless said otherwise), so a criterion can overspend a grant. */
   workTokens?: (workItemId: string) => number;
@@ -95,6 +95,8 @@ export function fakeCcloopPort(input: {
     execFileSync("git", ["clone", "-q", "--no-checkout", workspace, repo]);
     execFileSync("git", ["-C", repo, "checkout", "-q", "--detach", head]);
     for (const [path, content] of Object.entries(input.files(claim.workItemId))) {
+      // Reviewed acceptance (spec 2026-11-11 §7): null deletes the path, so an attempt can carry a deletion.
+      if (content === null) { rmSync(join(repo, path), { force: true }); continue; }
       mkdirSync(dirname(join(repo, path)), { recursive: true });
       writeFileSync(join(repo, path), content);
     }

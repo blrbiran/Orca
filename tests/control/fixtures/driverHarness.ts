@@ -26,7 +26,7 @@ export interface HarnessOptions {
   budgetMode?: "soft" | "strict";
   tokenPolicy?:WebFixtureOptions["tokenPolicy"];
   behaviour?: (workItemId: string) => FakeBehaviour;
-  files?: (workItemId: string) => Record<string, string>;
+  files?: (workItemId: string) => Record<string, string | null>;
   delayAccept?: () => Promise<void>;
   workTokens?: (workItemId: string) => number;
   /** Tester follow-up B T2 (#234): the work attempts a run reports (driverPort.ts; 1 unless said otherwise). */
