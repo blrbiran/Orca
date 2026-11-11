@@ -57,7 +57,7 @@ describe("charge observed usage beside the settle action", () => {
 
   it("the receipt and the activity name the observed floor as approximate", async () => {
     const settled = failed({ ...preview(), allowed: false, refusalReason: "run-usage-settled",
-      settlement: { method: "observed-floor", floorTokens: 1_234, reason: "terminal:failed", charged: { work: { tokens: 1_234, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } }, principal: "agent:cli", at: 1234, reservationDisposition: "committed" } as never });
+      settlement: { method: "observed-floor", floorTokens: 1_234, reason: "terminal:failed", charged: { work: { tokens: 1_234, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } }, principal: "agent:cli", at: 1234, reservationDisposition: "committed" } } as never);
     show(["owner"], settled);
     // mutation: drop the observed-floor receipt branch -> the conservative receipt, red
     expect(screen.getByTestId("observed-floor-receipt").textContent).toBe("Settled by agent:cli at 1970-01-01T00:00:01.234Z: at least 1,234 work tokens (observed usage, approximate)");
