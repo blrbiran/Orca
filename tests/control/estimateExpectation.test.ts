@@ -176,8 +176,8 @@ describe("the server refuses an estimate's task work as a ceiling in an unlimite
     } finally { await h.dispose(); }
   });
 
-  it("a finite group accepts the same model values (both verbs), as before", async () => {
-    for (const task of [LOOP, HAND]) {
+  for (const task of [LOOP, HAND]) it(`a finite group accepts the same model values, as before (${task === LOOP ? "set-task-loop" : "proposal-edit"})`, async () => {
+    {
       const h = await webFixture(undefined, [task]);
       try {
         const service = new WebControlService(h.deps);
@@ -194,8 +194,8 @@ describe("the server refuses an estimate's task work as a ceiling in an unlimite
 });
 
 describe("a person's own finite tokens in an unlimited group keep the ceiling (§7 item 3; criterion 10)", () => {
-  it("proposal-edit and set-task-loop with human tokens freeze as tokenBudget: N", async () => {
-    for (const task of [LOOP, HAND]) {
+  for (const task of [LOOP, HAND]) it(`human tokens freeze as tokenBudget: N (${task === LOOP ? "set-task-loop" : "proposal-edit"})`, async () => {
+    {
       const h = await unlimitedFixture(task);
       try {
         const service = new WebControlService(h.deps);
