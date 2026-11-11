@@ -48,3 +48,41 @@ Effect on C2: Orca seats may rewrite any necessary existing criterion (each rewr
 `Ruling (2026-11-12, tester follow-up F)`). ccloop: Rule 15 there still needs per-criterion naming by the human; a
 relayed blanket approval is not that, so ccloop seats add criteria only. Push: the Tier 0 gate blocks agent pushes
 regardless of chat authorisation (rounds C–E); expect to hand pushes back.
+
+## Seats as landed (controller, 2026-11-12; all `--ff-only` into main after rebase; subjects via `git log --grep`)
+
+Logs, mutation tables and clones: `/private/tmp/orca-f1112/<seat>/` (deletable).
+
+- W1 #195 (`fix(control): confirm accepts no context hand-off threshold; auto-confirm keeps it null (#195)` and 5 more):
+  null threshold accepted at confirm (Web, socket/CLI), auto-confirm and flow children keep null, CLI/Web say context
+  hand-off is not active; Web field blank with "not set". Spec corrections appended to
+  `2026-09-19-web-recoverable-control-design.md` and `2026-10-24-tester-round2-design.md` (§26). Rewritten:
+  `agentWalk`, `budgetI18n`, two `tokenInput` pins. Mutations 15, all red. Nothing downstream needed non-null.
+- W2 #116 (`feat(control): settle a finite run's unknown usage at ccloop's observed floor, explicitly (#116)` and 4
+  more): `--acknowledge charge-observed-floor` on `task settle-usage` and `recovery retry` (single calls), marker
+  `method:"observed-floor"`, approximate; Web button; flow calls refused `flow-call`. Soft-path arithmetic extracted
+  (`bookObservedFloor`, `bookCallFloor`). Rewritten: one `writesMore` title. Mutations 24, all red. Gap: ccloop's
+  saved-result recovery does not accept an `observed-floor` marker (same as known-zero / agent principals today).
+  Controller fixed a web typecheck error in its test fixture after rebase.
+- W3 #81 / D21 (`feat(web): fold low-frequency controls off the main paths; hide project changes from a member (#81, D21)`
+  and 5 more): Overview Import plan → More; group header Save-to-library / Schedule → "⋯"; requirement form Options
+  disclosure; Save split → "⋯"; Board has no primary; member hides project controls; no-agent notice; server
+  `PATCH /api/projects/:id` now owner-only too; `web/DESIGN.md` note appended. Mutations 19, all red.
+- W4 (`fix(cli): run results names the task's explanation and outputs apart from recoverability; --json adds
+  recoverability (#183)` and 6 more): #183, #173 (`--json` `warnings`, Web note), #162 (attempts ≥2 on apply),
+  empty-result explanation (CLI, Web, skill). Mutations 20, all red. Finding: an empty-result task has NO in-group exit
+  (`retry-task` refuses `task-not-retryable:run-state:settled`; `set-task-loop` refuses a started task); the text says
+  so and names a new group as the way forward. Controller follow-up fixed `RunReason` printing the literal code
+  (scanPanelText backstop).
+- W5 #241/#245 (`test(control,web): criteria for the group acceptance's guards, tip moves and its Problems placement
+  (#241)`, `fix(control): each group acceptance check gets its own scratch worktree (#241)` and 3 more): 12 new
+  criteria; `no-required-checks` / `no-task` proved unreachable (not faked); fixed a real race (an aborted check's late
+  cleanup could delete the next check's worktree; shared path) with per-check paths + leftover sweep. Mutations 13, all
+  red. Controller follow-up: `executionDriverE2E` E1 now waits for the acceptance record before reading the workspace
+  scene (it was red at this round's base too).
+- W6 #252: Orca side landed (`feat(transcript): accept a call's startedAt, order an attempt by it, show it per call
+  (#252)`), inert until ccloop emits `startedAt`. ccloop side STOPPED: the patch
+  (`/private/tmp/orca-f1112/w6/ccloop-startedAt.patch`, uncommitted in ccloop worktree
+  `.claude/worktrees/f-transcript-started`, branch `f/transcript-started-at`) turns 4 existing criteria in
+  `tests/control/collectTranscripts.test.ts` red (they `toEqual` exact entries); ccloop Rule 15 needs the human to name
+  them. Hence no ccloop push and no repin this round.
