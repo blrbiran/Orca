@@ -172,6 +172,11 @@ export function registerProjectRoutes(app: Express, deps: ProjectsDeps): void {
   });
 
   app.patch("/api/projects/:id", (req, res) => {
+    // Tester follow-up F §3 (D21): renaming a project or reordering a multi project's folders is an owner's, as adding one
+    // is (the Web hides these controls from a member). Same principal rule as the POST above.
+    const principal = res.locals.orcaPrincipal as Principal | undefined;
+    const refusal = principal === undefined ? null : projectAddRefusal(principal, "only an owner renames a project or changes its folders");
+    if (refusal !== null) { res.status(403).json({ code: refusal.code, message: refusal.message }); return; }
     if (!deps.registry) { res.status(409).json(FROM_COMMAND_LINE); return; }
     const body = req.body as { name?: unknown; dirs?: unknown } | undefined;
     const hasName = body?.name !== undefined;

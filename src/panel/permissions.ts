@@ -65,10 +65,12 @@ export const hasPauseAuthority = (p: Principal): boolean =>
  * an owner on the Web (a member: `owner-required`); on the socket an owner's person token (a member's token answers the
  * member's Web refusal, as I3 does), never a run Orca dispatched, token or not. Not a control verb: the registry is the
  * panel's projects file, outside the command ledger, as the plan registration beside it is.
+ * Tester follow-up F §3 (D21): `PATCH /api/projects/:id` (rename, a multi project's folder order) takes the same gate;
+ * `ownerMessage` names what a member was refused.
  */
-export function projectAddRefusal(p: Principal):
+export function projectAddRefusal(p: Principal, ownerMessage = "only an owner registers a project"):
   { code: "owner-required" | "control-dispatched-run-refused" | "control-person-token-required"; message: string } | null {
-  const ownerRequired = { code: "owner-required" as const, message: "only an owner registers a project" };
+  const ownerRequired = { code: "owner-required" as const, message: ownerMessage };
   if (p.kind === "user") return mayDoHumanOnly(p) ? null : ownerRequired;
   if (p.dispatchedRun !== undefined)
     return { code: "control-dispatched-run-refused", message: `orca project add is not done by a run Orca dispatched (${p.dispatchedRun}); a person registers a project, from the Web UI or an attended session.` };

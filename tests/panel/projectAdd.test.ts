@@ -71,6 +71,34 @@ describe("POST /api/projects is an owner's (tester follow-up E §9, D21)", { tim
   });
 });
 
+/**
+ * Tester follow-up F §3 (D21): renaming a project and reordering a multi project's folders (`PATCH /api/projects/:id`)
+ * take the add's gate -- the Web hides these controls from a member, and the server refuses one that asks anyway.
+ */
+describe("PATCH /api/projects/:id is an owner's (tester follow-up F §3, D21)", { timeout: 60_000 }, () => {
+  it("refuses a member's rename and folder order owner-required and changes nothing; an owner renames", async () => {
+    const w = world();
+    const { panel } = await boot(w);
+    const owner = await sessionFor(panel, w.env, "olga", "owner");
+    const member = await sessionFor(panel, w.env, "amy", "member");
+    const post = (body: unknown) => owner.fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect((await post({ name: "Web", path: w.gitRepo("web") })).status).toBe(201);
+    expect((await post({ name: "Api", path: w.gitRepo("api") })).status).toBe(201);
+    expect((await post({ name: "Shop", dirs: ["web", "api"] })).status).toBe(201);
+    const before = readFileSync(w.file, "utf8");
+    const patch = async (who: typeof owner, id: string, body: unknown) => {
+      const res = await who.fetch(`/api/projects/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      return [res.status, (await res.json() as { code?: string }).code ?? "ok"];
+    };
+    // mutation: drop the PATCH route's projectAddRefusal call -> [200, "ok"] on both, red
+    expect(await patch(member, "web", { name: "Renamed" })).toEqual([403, "owner-required"]);
+    expect(await patch(member, "shop", { dirs: ["api", "web"] })).toEqual([403, "owner-required"]);
+    expect(readFileSync(w.file, "utf8")).toBe(before);
+    expect(await patch(owner, "web", { name: "Renamed" })).toEqual([200, "ok"]);
+    expect((JSON.parse(readFileSync(w.file, "utf8")) as { projects: Array<{ id: string; name: string }> }).projects.find((p) => p.id === "web")?.name).toBe("Renamed");
+  });
+});
+
 describe("orca project add over the control socket (tester follow-up E §9, D21)", { timeout: 60_000 }, () => {
   it("wants an owner's person token, refuses a run Orca dispatched with one or without, and writes only for the owner", async () => {
     const w = world();
