@@ -1,8 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { acceptCheckPathOf, acceptRebuildPathOf } from "../../src/control/acceptAttemptDriver.js";
+import { latestRunSnapshot } from "../../src/control/acceptAttempt.js";
+import { acceptCheckPathOf, acceptRebuildPathOf, restoreSnapshotAttempt } from "../../src/control/acceptAttemptDriver.js";
 import { readRunActivity } from "../../src/control/activity.js";
 import { readArtifact } from "../../src/control/archive.js";
 import { acceptanceEvidence } from "../../src/control/checkpoints.js";
@@ -71,6 +72,28 @@ const gatedCheck = () => {
   return { heads, started, go, command: `echo x >> '${started}'; while [ ! -f '${go}' ]; do sleep 0.05; done; git rev-parse HEAD >> '${heads}'; test -f a` };
 };
 const lines = (path: string): string[] => readFileSync(path, "utf8").trim().split("\n");
+
+describe("the attempt rebuilt from the archive snapshot (criterion 17)", { timeout: 120_000 }, () => {
+  it("is the snapshot's tree path by path and byte by byte, with every path the attempt deleted gone", async () => {
+    const { t, runId } = await closedFailure({ taskId: "a", targetPaths: ["a", "base.txt", "d/**"] }, { files: () => ({ a: "a\n", "d/e": "e\n", "base.txt": null }) });
+    try {
+      const ref = latestRunSnapshot(t.h.store, runId)!;
+      const snapshot = snapshotSchema.parse(JSON.parse((await readArtifact(t.h.store, ref)).toString()));
+      const dir = acceptRebuildPathOf(t.deps.roots, runId);
+      const attempt = await restoreSnapshotAttempt(t.h.store, ref, dir, 1_700_000_000_000);
+      const files = snapshot.tree.filter((entry) => entry.kind === "file");
+      expect(snapshot.deleted).toEqual(["base.txt"]);
+      // Measured directly on the rebuilt commit: no check stands between the rebuild and this assertion.
+      expect(git(dir, "ls-tree", "-r", "--name-only", attempt).split("\n")).toEqual(files.map((entry) => entry.path));
+      for (const entry of files) expect(git(dir, "show", `${attempt}:${entry.path}`)).toBe((await readArtifact(t.h.store, entry.ref!)).toString().trim());
+      // A restart rebuilds the same commit (the fixed date), so the attempt it merges is the one it checked.
+      const again = await restoreSnapshotAttempt(t.h.store, ref, `${dir}-again`, 1_700_000_000_000);
+      expect(again).toBe(attempt);
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(`${dir}-again`, { recursive: true, force: true });
+    } finally { await t.h.dispose(); }
+  });
+});
 
 describe("accept-attempt lands an owner's accepted attempt after its checks (criteria 17, 20-23)", { timeout: 120_000 }, () => {
   it("rebuilds the attempt with its deletion, lands it by one merge commit whose tree the checks ran on, and records the acceptance; accounting untouched", async () => {
