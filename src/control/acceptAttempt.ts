@@ -41,8 +41,8 @@ export interface OperatorAcceptance {
 
 type AcceptRun = RunBody & { drive?: DriveRecord; mode?: string; recoveryOf?: unknown; operatorAcceptance?: OperatorAcceptance };
 
-export function operatorAcceptanceOf(run: { operatorAcceptance?: unknown }): OperatorAcceptance | null {
-  const value = run.operatorAcceptance;
+export function operatorAcceptanceOf(run: object): OperatorAcceptance | null {
+  const value = (run as { operatorAcceptance?: unknown }).operatorAcceptance;
   return value === undefined || value === null ? null : value as OperatorAcceptance;
 }
 

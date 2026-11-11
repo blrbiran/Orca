@@ -54,6 +54,7 @@ import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBr
 import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
+import { acceptPending, stepAcceptAttempt, type AcceptCheck } from "./acceptAttemptDriver.js";
 import { readDebugMark } from "./debugChecks.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { correctionTargetOf } from "../corrections/target.js";
@@ -83,6 +84,8 @@ import type { AgentSelection } from "./agentSelection.js";
 export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance"
   // Control run decisions plan Task 7: after an empty result's ledger-only commit swapped, before it is recorded.
   | "E-after-ledger-cas"
+  // Reviewed acceptance (spec 2026-11-11 §7): an accepted attempt's landing swapped, before it is recorded.
+  | "accept-after-cas"
   // Handoff delivery spec §9.2 R-H, §11 I5, §13.2 I-1.
   | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle"
   // Integration spec §6.1: the integration pass's outward actions (integrationPass.ts).
@@ -162,6 +165,8 @@ export interface DriverContext {
   multiPrechecks?: Map<string, MultiPrecheck>;
   /** Ruling R2 (#241): post-merge checks in flight, by run; a restart merges and checks again (nothing was written). */
   postMergeChecks?: Map<string, PostMergeCheck>;
+  /** Reviewed acceptance (spec 2026-11-11 §7): an accepted attempt's checks in flight, by run; a restart merges and checks again. */
+  acceptChecks?: Map<string, AcceptCheck>;
   /**
    * Tester #229/#230 (plan 2026-11-10 follow-up B, T1): transient step-E failures already retried, by run. In memory: a
    * restart grants at most TRANSIENT_E_RETRIES more, which is still bounded, and needs no drive-record field.
@@ -1510,7 +1515,9 @@ export function driverRunIds(store: ControlStore): string[] {
     if (!ours) continue;
     if (DRIVEN.has(run.state) || (run.state === "settled" && run.drive !== undefined && (!run.drive.cleanedUp || run.drive.publishError !== null))
       // Issue fixes spec §4.2(2): a settled-failed run until its evidence is archived and its workspace removed.
-      || (run.state === "settled-failed" && run.drive !== undefined && !run.drive.cleanedUp)) ids.push(runId);
+      || (run.state === "settled-failed" && run.drive !== undefined && !run.drive.cleanedUp)
+      // Reviewed acceptance (spec 2026-11-11 §7): a settled-failed run whose owner's acceptance is still to be carried out.
+      || (run.state === "settled-failed" && run.drive !== undefined && acceptPending(run))) ids.push(runId);
   }
   return ids;
 }
@@ -1556,7 +1563,8 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
     case "collected": return stepD(deps, runId, context);
     case "reconciling": return stepR(deps, runId, context);
     case "landed": case "settled": return stepE(deps, runId);
-    case "settled-failed": return stepCleanupFailed(deps, runId);
+    // Reviewed acceptance (spec 2026-11-11 §7): after the failed run's evidence is archived and its workspace removed.
+    case "settled-failed": return run.drive?.cleanedUp === true && acceptPending(run) ? stepAcceptAttempt(deps, runId, context) : stepCleanupFailed(deps, runId);
     default: return false;
   }
 }
@@ -1571,7 +1579,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), transientRetries: new Map() };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), acceptChecks: new Map(), transientRetries: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
@@ -1722,11 +1730,13 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       // Ruling R2: a post-merge check likewise; nothing moved, so the next driver merges and checks again.
       for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       // Belt and braces for the guard in startDebugCheck: anything started while the last round finished is aborted too.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       await stopping;
     },
     get crashed() { return crashed; },

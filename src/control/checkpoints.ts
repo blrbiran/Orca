@@ -153,6 +153,29 @@ export async function repairAcceptedWork(store:ControlStore,runId:string,deps:{a
 }
 
 /**
+ * Reviewed acceptance (spec 2026-11-11 §7 item 4): the one writer that marks a task done from an owner's accepted attempt
+ * (acceptAttemptDriver.ts), inside the write that records its landing. A failed run has no complete checkpoint, so
+ * commitCandidate and repairAcceptedWork never mark it done; this does, only when every invariant holds -- the run is the
+ * task's current, settled-failed run (its accounting already closed, and left as it is); its owner's acceptance is the one
+ * being recorded, with the landing staged; the acceptance outbox row names that landing's proof; and the task is blocked
+ * on this run at the run's target and graph versions. Anything else is `recovery-blocked`, and the write rolls back.
+ */
+export function completeAcceptedAttempt(store:ControlStore,runId:string):void {
+ const row=store.db.prepare("SELECT active,body FROM runs WHERE id=?").get(runId);
+ if(!row) throw new ControlError("run-not-found");
+ const run=JSON.parse(String(row.body)) as {groupId:string;workItemId:string;taskId:string|null;state:string;targetVersion:number;graphVersion:number;operatorAcceptance?:{state?:string;landedCommit?:string|null;proof?:ArtifactRef|null}};
+ const accepted=run.operatorAcceptance;
+ const outbox=store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='acceptance'").get("acceptance:"+runId);
+ const source=outbox===undefined?null:(JSON.parse(String(outbox.body)) as {runId?:unknown;accepted?:unknown;source?:ArtifactRef}).source;
+ const work=readWork(store,run.groupId,run.workItemId) as unknown as {status:string;currentRunId?:string|null;targetVersion:number};
+ const group=readGroup(store,run.groupId);
+ if(Number(row.active)!==0 || run.state!=="settled-failed" || run.taskId===null || accepted?.state!=="landed" || !accepted.landedCommit || !accepted.proof
+  || source==null || source.artifactId!==accepted.proof.artifactId || source.hash!==accepted.proof.hash
+  || work.currentRunId!==runId || work.status!=="blocked" || work.targetVersion!==run.targetVersion || group.graphVersion!==run.graphVersion) throw new ControlError("recovery-blocked","accepted-attempt-invariant");
+ work.status="done";saveWork(store,run.groupId,work as never);
+}
+
+/**
  * Handoff delivery spec §13.2 C-1 (controller decision): a handoff checkpoint's file and its row body are one and
  * the same canonical bytes, and its hash is sha256Canonical(candidate) -- the only identity that
  * readCommittedCheckpoint (file == body), exportResumeBundle (JSON.stringify(JSON.parse(file))) and

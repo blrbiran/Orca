@@ -15,9 +15,18 @@ const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.s
 
 /** Null when the command exits 0. A timeout kills its process group and is a failure; an abort is thrown, never read as an exit. */
 export async function runAsCheck(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure | null> {
+  const outcome = await runCheckRecorded(cwd, command, timeoutMs, as, signal);
+  return outcome.exit === "0" ? null : outcome;
+}
+
+/**
+ * Reviewed acceptance (spec 2026-11-11 §7): the same run, answering every command's exit and output tail -- a passing one
+ * too, because an operator-reviewed acceptance records what each setup and check command printed. `exit` is "0" on a pass.
+ */
+export async function runCheckRecorded(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure> {
   try {
     const answer = await spawnRunChild("sh", ["-lc", command], { cwd, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) });
-    return answer.code === 0 ? null : { command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
+    return { command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
   } catch (error) {
     if (!(error instanceof ChildTimeout)) throw error;
     return { command, exit: `timeout ${timeoutMs} ms`, tail: "" };
