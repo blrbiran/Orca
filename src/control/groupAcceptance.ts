@@ -78,8 +78,11 @@ export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string
   for (const row of store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
     if (deps.stopped()) break;
     const groupId = String(row.id);
+    let body: Record<string, unknown>;
+    // A row that does not parse is named by its own reads (as the done pass leaves it, groupDone.ts), not a second time here.
+    try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
     try {
-      if (await acceptGroup(deps, checks, groupId, JSON.parse(String(row.body)) as Record<string, unknown>)) moved = true;
+      if (await acceptGroup(deps, checks, groupId, body)) moved = true;
     } catch (error) {
       // This group's alone (a repository that does not resolve, a contract that does not read); tried again next round.
       process.stderr.write(`orca-driver: group ${groupId}: acceptance: ${error instanceof Error ? error.message : String(error)}\n`);
