@@ -105,6 +105,17 @@ function runsInCreationOrder(runs: readonly RunViewV1[]): readonly RunViewV1[] {
 /** #226 (i): a work item whose current run is in flight -- what the Live region lists. */
 const IN_FLIGHT: ReadonlySet<WorkItemViewV1["status"]> = new Set(["starting", "active", "continuing"]);
 
+/** The work Live lists as running now -- also what the Live tab's hint counts, so the two never disagree. */
+function runningNow(view: GroupViewV1): Array<{ taskId: string; run: RunViewV1 }> {
+  return view.workItems.flatMap((item) => {
+    const run = item.currentRunId === null ? undefined : view.runs.find((candidate) => candidate.runId === item.currentRunId);
+    return run !== undefined && (IN_FLIGHT.has(item.status) || item.category === "running") ? [{ taskId: item.taskId, run }] : [];
+  });
+}
+
+/** The runs the Problems region lists (a focused run is shown there too, but is not a problem the tab counts). */
+const isProblemRun = (run: RunViewV1): boolean => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined;
+
 /**
  * #226 (i): the group's Live region -- each work item running now with its run's phase, attempt, tokens and elapsed time
  * and its transcript, opened by itself on the latest call; with nothing running, the most recent run. `active` is the
@@ -115,11 +126,7 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number })
   const ticking = useClock(30_000);
   const now = props.now ?? ticking;
   const { view } = props;
-  const runOf = (runId: string | null): RunViewV1 | undefined => runId === null ? undefined : view.runs.find((run) => run.runId === runId);
-  const running = view.workItems.flatMap((item) => {
-    const run = runOf(item.currentRunId);
-    return run !== undefined && (IN_FLIGHT.has(item.status) || item.category === "running") ? [{ taskId: item.taskId, run }] : [];
-  });
+  const running = runningNow(view);
   const latest = running.length === 0 ? runsInCreationOrder(view.runs).at(-1) : undefined;
   const shown = latest === undefined ? running : [{ taskId: latest.taskId ?? latest.runId, run: latest }];
   const facts = (run: RunViewV1): string => [
@@ -718,7 +725,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {reviewWording(view.summary) !== null && <p>{t(reviewWording(view.summary) === "goal-review" ? "detail.goalReview" : "detail.tasksBlocked")}</p>}
       {/* Issue #47: the execution controls are one bar above the region tabs, shown whatever tab is open. */}
       {dispatchControls}
-      <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion} regions={{
+      {/* What Problems and Live hold, said on their tabs: the region's own lists, plus the group's refusal shown above. */}
+      <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion}
+        hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0), live: runningNow(view).length }} regions={{
         progress: <>
       {allLabels.length > 0 && (
         <div className="mb-2 flex flex-wrap items-start gap-2" role="toolbar" aria-label={t("control.group.filterRegion")}>
@@ -813,7 +822,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         problem: <>
       <h3>{t("detail.problem")}</h3>
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
-      {view.runs.filter(run => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
+      {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />
         {remedies(run, props.active !== false && region === "problem")}

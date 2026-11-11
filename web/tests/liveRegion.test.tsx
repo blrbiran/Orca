@@ -64,7 +64,9 @@ const running = (): GroupViewV1 => view(
 
 it("sits right after Progress among the region tabs", () => {
   mount(running());
-  expect(screen.getAllByRole("tab").map((tab) => tab.textContent).slice(0, 2)).toEqual(["Progress", "Live"]);
+  // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the tab order by
+  // each tab's accessible name -- a running group's Live tab also carries a count badge, which is not part of its name.
+  expect(screen.getAllByRole("tab").slice(0, 2)).toEqual([screen.getByRole("tab", { name: "Progress" }), liveTab()]);
 });
 
 it("lists the running task with its run's facts and its transcript open, and leaves finished work out", async () => {
