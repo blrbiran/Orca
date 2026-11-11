@@ -228,3 +228,41 @@ describe("human output (#140)", () => {
     expect(out.stdout).not.toContain("undefined");
   });
 });
+
+// Tester follow-up F §4: a task blocked because its attempt changed nothing printed only `empty-result` deep in a dump.
+describe("empty-result in words (tester follow-up F §4)", () => {
+  const EMPTY_RUN = { runId: "run-1", taskId: "t1", state: "settled-recoverable", outcome: "succeeded", blockedReason: "empty-result" };
+  const HEAD = "task t1: empty-result: run run-1 finished without changing any file, so there was nothing to land and the task stays blocked";
+  const emptyPanel = (runs: unknown[]) => fakePanel({
+    "GET summary": SUMMARY,
+    "GET groups/g-alpha": { status: 200, body: { ...GROUP, runs } },
+    "GET runs/run-1/activity": { status: 200, body: { schema: "orca-run-activity-v1", runId: "run-1", entries: [] } },
+    "GET runs/run-1/evidence": { status: 200, body: { schema: "orca-run-evidence-v1", runId: "run-1", entries: [] } },
+  });
+
+  it("group show, task show and run show say what happened and what can be done", async () => {
+    const p = await emptyPanel([EMPTY_RUN]);
+    for (const argv of [["group", "show", "g-alpha"], ["task", "show", "g-alpha", "t1"], ["run", "show", "run-1", "--group", "g-alpha"]]) {
+      const out = await cli(argv, p.dir);
+      expect(out.code, argv.join(" ")).toBe(0);
+      const lines = out.stdout.split("\n");
+      // mutation: drop emptyResultLines from that formatter -> red for that command
+      expect(lines, argv.join(" ")).toContain(HEAD);
+      expect(lines).toContain("  this attempt cannot be retried or accepted in this group: task retry refuses a finished run, and task accept-attempt an empty one");
+      expect(out.stdout).toContain("commandChecksDecideGoal");
+    }
+  });
+
+  it("names nothing for another blocked reason, or for an empty-result run that is no longer the task's current run", async () => {
+    const other = await emptyPanel([{ ...EMPTY_RUN, blockedReason: "settle-incomplete" }]);
+    expect((await cli(["group", "show", "g-alpha"], other.dir)).stdout).not.toContain("finished without changing any file");
+    const old = await emptyPanel([{ ...EMPTY_RUN, runId: "run-0" }]);
+    expect((await cli(["group", "show", "g-alpha"], old.dir)).stdout).not.toContain("finished without changing any file");
+    expect((await cli(["task", "show", "g-alpha", "t1"], old.dir)).stdout).not.toContain("finished without changing any file");
+  });
+
+  it("--json is unchanged: no added field", async () => {
+    const p = await emptyPanel([EMPTY_RUN]);
+    expect((await cli(["group", "show", "g-alpha", "--json"], p.dir)).stdout).not.toContain("finished without changing");
+  });
+});

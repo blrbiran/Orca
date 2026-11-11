@@ -2618,6 +2618,7 @@ export const zhErrors: Record<string, string> = {
   // Dir-requirements spec §9.3: a dir group's A2 found no work branch in the vault.
   "dir-base-missing": "这个任务组的文件夹起始快照缺失（Orca 的故障），任务没有启动。",
   "debug-repro": "Orca 的先复现检查没有通过：{{detail}}。请重试任务。",
+  "empty-result": "这次尝试跑完了，但没有改动任何文件，所以没有可合入的内容，任务保持受阻。在本组里它无法重试或接受。如果本就不需要改动：任务契约声明由命令检查判定目标（commandChecksDecideGoal）时，没有改动也能完成——在计划里设好，再在新组里运行这个任务。如果需要改动：在任务里写清要改什么，再在新组里运行。",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

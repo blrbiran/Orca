@@ -2718,6 +2718,8 @@ export const enErrors: Record<string, string> = {
   "dir-base-missing": "The group's starting snapshot of the folder is missing (an Orca fault), so the task was not started.",
   // Debug task plan Task 8: the detail is the check's reason, explained through debugRepro (web/src/refusalExplain.ts).
   "debug-repro": "Orca's reproduce-first check did not pass: {{detail}}. Retry the task.",
+  // Tester follow-up F §4: a settled run whose attempt changed nothing (executionDriver.ts EMPTY_RESULT_REASON).
+  "empty-result": "The attempt finished without changing any file, so there was nothing to land and the task stays blocked. It cannot be retried or accepted in this group. If no change was needed, a task whose contract lets its command checks decide the goal (commandChecksDecideGoal) completes without a landing: set that in the plan and run the task in a new group. If a change was needed, say in the task what to change and run it in a new group.",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

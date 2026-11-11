@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines } from "./verbs.js";
+import { emptyResultLines, formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines, type EmptyResultRun } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 
@@ -314,6 +314,12 @@ export const READ_ROWS: CommandDef[] = [
     compose: ([view], c) => {
       const v = view as GroupView;
       return { schema: "orca-task-show-v1", groupId: v.summary.groupId, revision: v.summary.commandRevision, task: v.workItems.find((w) => w.taskId === ids(c, "task")), runs: v.runs.filter((r) => r.taskId === ids(c, "task")) };
+    },
+    // Tester follow-up F §4 (empty-result): the task's current run, when its attempt changed nothing, in words.
+    format: (body) => {
+      const b = body as { task?: { currentRunId?: unknown }; runs?: EmptyResultRun[] };
+      const lines = emptyResultLines((b.runs ?? []).filter((run) => run.runId === b.task?.currentRunId));
+      return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } }),
   read({ domain: "run", action: "show", summary: "one run: its entry in the group view, the newest 10 activity rows, the evidence summary",
     positionals: [RUN], flags: [{ name: "group", type: "string", summary: "the run's group (default: found from the groups the summary lists)" }],
@@ -344,6 +350,7 @@ export const READ_ROWS: CommandDef[] = [
           ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),
         ...(b.run?.pathPolicyMisses?.length ? ["observed path misses:", ...b.run.pathPolicyMisses.map((miss) => `  ${miss.repoKey === null ? "" : `${miss.repoKey}:`}${miss.path}`), ...(b.run.taskId ? [`To allow only these paths: orca task retry ${b.groupId} ${b.run.taskId} --allow-observed-paths`] : [])] : []),
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
+        ...emptyResultLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
         ...postMergeCheckLines(b.run?.postMergeCheck),
       ];
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");

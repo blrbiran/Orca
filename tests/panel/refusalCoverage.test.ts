@@ -71,6 +71,8 @@ const VIEW_REASONS = [
   "multi-dir-writes-missing", "multi-dir-writes",
   // Task setup spec 2026-11-04 §4.6: a recovery run of a task with setup is blocked at dispatch (src/control/executionDriver.ts).
   "setup-unsupported-here",
+  // Tester follow-up F §4: a settled run whose attempt changed nothing (src/control/executionDriver.ts EMPTY_RESULT_REASON).
+  "empty-result",
 ];
 /**
  * Gaps spec §13 (plan Task 9): a flow message's rejection reason, and a feedback intake's failure, is a code (with a

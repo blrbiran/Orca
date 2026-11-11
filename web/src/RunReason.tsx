@@ -29,6 +29,11 @@ const ESCALATING_CAUSES: ReadonlySet<KnownFailureCause> = new Set(["required-che
 export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipReason }): JSX.Element | null {
   const {t}=useTranslation();const lineage=props.run.recoveryOf?<> · {t("control.savedResult.lineage",{runId:props.run.recoveryOf.sourceRunId,attempt:props.run.recoveryOf.sourceAttempt})}</>:null;
   if(props.run.savedResultOrdinaryRetry||props.run.outcome==="not-started")return <>{lineage} — {t("control.savedResult.notDispatched")}</>;
+  // Tester follow-up F §4: a settled run whose attempt changed nothing carries the driver's empty-result on a run that is
+  // neither blocked nor failed, so runReasonText gives nothing; its words (what happened, what can be done) are shown here.
+  if (props.run.blockedReason === "empty-result" && !hasFailureOutcome(props.run)) {
+    return <>{lineage} — <span data-testid="run-empty-result">{explainRunReason("empty-result")}</span> <code>empty-result</code></>;
+  }
   const raw = runReasonText(props.run);
   if (raw === null && props.run.failureCode === null && !hasFailureOutcome(props.run)
     && !["blocked", "settled-failed", "failed-before-provider"].includes(props.run.state)) return lineage;

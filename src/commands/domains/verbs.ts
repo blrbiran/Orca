@@ -203,13 +203,35 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   ];
 }
 
+/** A run as the group view lists it, for the empty-result lines. */
+export interface EmptyResultRun { runId?: unknown; taskId?: unknown; blockedReason?: unknown }
+
+/**
+ * Tester follow-up F §4 (empty-result): a task blocked because its attempt changed nothing (executionDriver.ts
+ * EMPTY_RESULT_REASON) showed only the bare code. Say what happened and what the operator can do today. Verified on this
+ * round's base: `task retry` refuses the finished run (task-not-retryable:run-state:settled) and `task set-loop` refuses
+ * a started task (task-already-started), so no command moves this task in its group; the ways on are a new group. An
+ * exit in the same group is out of scope this round (design §7).
+ */
+export function emptyResultLines(runs: readonly EmptyResultRun[]): string[] {
+  return runs.filter((run) => run.blockedReason === "empty-result").flatMap((run) => [
+    `task ${String(run.taskId ?? "?")}: empty-result: run ${String(run.runId ?? "?")} finished without changing any file, so there was nothing to land and the task stays blocked`,
+    "  this attempt cannot be retried or accepted in this group: task retry refuses a finished run, and task accept-attempt an empty one",
+    "  if no change was needed: a task whose contract lets its command checks decide the goal (verification.commandChecksDecideGoal, or the loop plan's input) completes without a landing; set it in the plan and run the task in a new group (orca group import)",
+    "  if a change was needed: say in the task what to change, and run it in a new group",
+  ]);
+}
+
 export function formatWithUnestimated(body: unknown): string {
   const b = body as (UnestimatedSource & { summary?: { groupId?: string; acceptance?: AcceptanceView }; groupId?: string }) | null;
   const groupId = b?.summary?.groupId ?? b?.groupId;
   const live = new Set(["starting", "unknown", "attempt-unknown", "running", "collected", "landed", "reconciling"]);
-  const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown }> }).runs ?? [];
+  const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown } & EmptyResultRun> }).runs ?? [];
   const count = runs.filter((run) => typeof run.taskId === "string" && typeof run.state === "string" && live.has(run.state)).length;
+  // Empty-result: only a task's current run (an older one was replaced and says nothing about the task now).
+  const current = new Set(((b as { workItems?: Array<{ currentRunId?: unknown }> } | null)?.workItems ?? []).map((item) => item.currentRunId));
   return withLines(text(body), [...(count > 0 ? [`execution: ${count} task run${count === 1 ? "" : "s"} in progress`] : []),
+    ...emptyResultLines(runs.filter((run) => current.has(run.runId))),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : [])]);
