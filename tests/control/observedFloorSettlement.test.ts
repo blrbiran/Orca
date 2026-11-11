@@ -153,6 +153,9 @@ describe("charge-observed-floor on a finite group's loop run (tester follow-up F
       const settled = t.body(runId);
       expect(settled.usageSettlement).toMatchObject({ method: "observed-floor", reservationDisposition: "recovered", floorTokens: 700 });
       expect(settled.remaining.work.tokens).toBe(after);
+      // A recovered run's lineage keeps the floor (provider-observed), unlike a recovered remaining-grant charge.
+      // mutation: drop observed-floor from lineageWorkUsage's keep list -> the floor is subtracted, red
+      expect(lineageWorkUsage(settled)).toEqual(settled.cumulative.work);
       expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "held", grant: settled.remaining });
       expect(Object.fromEntries(readBudgetProposal(t.h.store, "g").allocations.filter(a => a.ownerKind === "task").map(a => [a.bucket, a.state]))).toEqual({ work: "held", handoff: "held" });
       expect(hasValidUsageSettlement(t.h.store, settled)).toBe(true);
