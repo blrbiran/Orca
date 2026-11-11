@@ -1019,6 +1019,13 @@ function artifactIdsForRun(store: ControlStore, runId: string, run: z.infer<type
   return evidenceRefs(store, runId, String(row.group_id), run).map(ref => ref.evidenceId);
 }
 
+/** Tester D19: the installation and model the run was frozen with; omitted when it carries no frozen selection. */
+function runAgentView(run: unknown): Pick<RunViewV1, "agent"> {
+  const agent = (run as { agent?: { agent?: unknown; model?: unknown } | null }).agent;
+  if (agent == null || typeof agent.agent !== "string") return {};
+  return { agent: { installation: agent.agent, model: typeof agent.model === "string" && agent.model !== "" ? agent.model : null } };
+}
+
 function profileView(binding: z.infer<typeof executionProfileAuthoritySchema>): RunViewV1["profile"] {
   return { profileId: binding.profileId, profileHash: binding.profileHash };
 }
@@ -1192,7 +1199,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     return {
       runId,...(run.recoveryOf?{recoveryOf:run.recoveryOf,savedResultOrdinaryRetry:validSavedNoDispatch(store,run)}:{}), taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
       ...(run.purpose === undefined ? {} : { purpose: run.purpose }),
-      claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile,
+      claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile, ...runAgentView(run),
       ...(run.tokenPolicy?{tokenRemainingStatus:tokenRemainingStatus(run.grant[bucket].tokens,run.unknown[bucket])}:{}),
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       // Tester round 2 spec §4.2.2: the dimensions over the grant (an unlimited grant is never over).

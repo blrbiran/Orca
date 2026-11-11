@@ -85,6 +85,16 @@ it("lists the running task with its run's facts and its transcript open, and lea
   expect(within(livePanel()).queryByRole("region", { name: "Transcript of run-b" })).toBeNull();
 });
 
+// Tester D19: nothing said which agent and model a run actually ran on; its line names the frozen selection.
+it("names the agent and model the running task's run was frozen with", async () => {
+  const value = running();
+  value.runs = value.runs.map((r) => r.runId === "run-a" ? { ...r, agent: { installation: "codex", model: "gpt-5.1-codex" } } : r);
+  mount(value);
+  fireEvent.click(liveTab());
+  await flush();
+  expect(within(livePanel()).getByRole("region", { name: "Running: a" }).textContent).toContain("codex · gpt-5.1-codex");
+});
+
 it("asks nothing for the transcript while Live is hidden, and stops polling when the person leaves it", async () => {
   mount(running());
   await flush(5000);

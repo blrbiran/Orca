@@ -406,6 +406,8 @@ export type RunViewV1 = {
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
   profile: ProfileBindingV1;
+  /** Tester D19: the installation and model the run was frozen with; absent from older servers. */
+  agent?: { installation: string; model: string | null };
   used: Amount;
   remaining: BudgetAmount;
   /** Tester round 2 §4.2.2: the dimensions in which the run went over its grant; absent from older servers. */

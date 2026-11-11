@@ -592,6 +592,8 @@ export const en = {
       liveLatest: "Nothing is running. The most recent run:",
       liveNone: "Nothing has run yet.",
       liveFacts: "{{phase}} · attempt {{attempt}}",
+      liveAgent: "{{installation}} · {{model}}",
+      liveAgentDefault: "{{installation}} · default model",
       liveTokens: "{{tokens}} tokens",
       liveElapsed: "{{minutes}} min",
       start: "Start",

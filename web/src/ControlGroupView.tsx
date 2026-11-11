@@ -131,6 +131,10 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number })
   const shown = latest === undefined ? running : [{ taskId: latest.taskId ?? latest.runId, run: latest }];
   const facts = (run: RunViewV1): string => [
     t("control.group.liveFacts", { phase: enumText("runPhase", run.phase), attempt: run.providerAttemptOrdinal }),
+    // Tester D19: the agent and model this run was frozen with.
+    ...(run.agent === undefined ? [] : [run.agent.model === null
+      ? t("control.group.liveAgentDefault", { installation: run.agent.installation })
+      : t("control.group.liveAgent", { installation: run.agent.installation, model: run.agent.model })]),
     t("control.group.liveTokens", { tokens: shortTokens(run.used.tokens) }),
     ...(run.startedAt != null ? [t("control.group.liveElapsed", { minutes: Math.max(0, Math.floor(((run.endedAt ?? now) - run.startedAt) / 60_000)) })] : []),
   ].join(" · ");

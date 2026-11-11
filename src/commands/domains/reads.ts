@@ -194,6 +194,18 @@ function runResultsText(body: unknown): string {
   return lines.join("\n");
 }
 
+/**
+ * Tester D19: an installation's model here is the default a run gets when nothing chose another, not what any run ran on
+ * (`orca run show` names that); the line says so.
+ */
+function agentList(body: unknown): string {
+  const b = body as { installations?: Array<{ id: string; kind?: string; version?: string; defaults?: { model?: string } }>; rests?: Array<{ installation: string; until: number; source: string }> };
+  const lines = (b.installations ?? []).map((i) => `${i.id}  ${i.kind ?? "?"}  ${i.version ?? "?"}  default model ${i.defaults?.model ?? "?"}`);
+  if (lines.length === 0) lines.push("no agent installations");
+  for (const rest of b.rests ?? []) lines.push(`${rest.installation} rests until ${new Date(rest.until).toISOString()} (${rest.source})`);
+  return lines.join("\n");
+}
+
 export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
@@ -247,11 +259,13 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
         ...(b.run?.state === undefined ? [] : [`state: ${b.run.state}`]),
+        // Tester D19: the agent and model this run was frozen with, not the installation's default.
+        ...(b.run?.agent === undefined ? [] : [`agent: ${b.run.agent.installation}, model ${b.run.agent.model ?? "(the agent's default)"}`]),
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
         ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
@@ -304,7 +318,7 @@ export const READ_ROWS: CommandDef[] = [
   read({ domain: "run", action: "eligibility", summary: "whether a run's saved result can be verified instead of re-run", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/saved-result-eligibility`] }),
   read({ domain: "decision", action: "list", summary: "a group's landed, pending and unlanded decisions", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/decisions`] }),
   read({ domain: "correction", action: "list", summary: "every recorded correction, its debug groups and closed state", paths: () => ["corrections"] }),
-  read({ domain: "agent", action: "list", summary: "the agent installations the panel can run", paths: () => ["agents"] }),
+  read({ domain: "agent", action: "list", summary: "the agent installations the panel can run", paths: () => ["agents"], format: agentList }),
   // Session af2ceee1 F7: an agent could not read the preferences it was about to replace with `agent set-preferences`.
   read({ domain: "agent", action: "preferences", summary: "the operator's current agent preferences (defaultAgent, perAgent, estimator, reconcile, review) and their revision", paths: () => ["operator/agent-preferences"] }),
   read({ domain: "agent", action: "models", summary: "an installation's models", positionals: [{ name: "installation", summary: "an installation id", required: true }],

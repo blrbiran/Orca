@@ -465,6 +465,8 @@ export const zh: Translation<typeof en> = {
       liveLatest: "当前没有在运行的工作。最近一次运行：",
       liveNone: "还没有运行过。",
       liveFacts: "{{phase}} · 第 {{attempt}} 次尝试",
+      liveAgent: "{{installation}} · {{model}}",
+      liveAgentDefault: "{{installation}} · 默认模型",
       liveTokens: "{{tokens}} token",
       liveElapsed: "{{minutes}} 分钟",
       start: "开始",

@@ -1830,6 +1830,9 @@ export const runViewSchema = z
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,
+    // Tester D19: the installation and model the run was frozen with when claimed. Optional on the wire so older readers
+    // and fixtures are unaffected; omitted for a run that carries no frozen selection.
+    agent: z.object({ installation: idSchema, model: nonemptyString.nullable() }).strict().optional(),
     used: amountSchema,
     // Tester round 2 spec §4.2.2: the dimensions in which the run's cumulative exceeds its grant (its bucket), in
     // `dimensions` order. Optional on the wire so older fixtures parse; the server always gives it.

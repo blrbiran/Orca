@@ -130,6 +130,27 @@ describe("human output (#140)", () => {
     expect(p.requests.map((r) => r.path)).toEqual(["runs/run-1/results"]);
   });
 
+  // Tester D19: nothing said which agent and model a run actually ran on; `agent list` shows only defaults.
+  it("run show names the agent and model the run ran on", async () => {
+    const p = await fakePanel({
+      "GET summary": SUMMARY,
+      "GET groups/g-alpha": { status: 200, body: { ...GROUP, runs: [{ ...RUN, agent: { installation: "codex", model: "gpt-5.1-codex" } }] } },
+      "GET runs/run-1/activity": { status: 200, body: { schema: "orca-run-activity-v1", runId: "run-1", entries: [] } },
+      "GET runs/run-1/evidence": { status: 200, body: { schema: "orca-run-evidence-v1", runId: "run-1", entries: [] } },
+    });
+    const out = await cli(["run", "show", "run-1", "--group", "g-alpha"], p.dir);
+    expect(out.stdout.split("\n")).toContain("agent: codex, model gpt-5.1-codex");
+  });
+
+  it("agent list labels each installation's model as its default", async () => {
+    const p = await fakePanel({ "GET agents": { status: 200, body: { schema: "orca-agents-view-v1", installations: [
+      { id: "claude", kind: "claude", defaults: { model: "opus", contextWindow: "agent-default" }, contextOptions: ["agent-default"], version: "2.1.0" },
+      { id: "codex", kind: "codex", defaults: { model: "gpt-5.1-codex", contextWindow: 200000 }, contextOptions: [200000], version: "0.60.0" },
+    ] } } });
+    const out = await cli(["agent", "list"], p.dir);
+    expect(out.stdout.split("\n")).toEqual(["claude  claude  2.1.0  default model opus", "codex  codex  0.60.0  default model gpt-5.1-codex", ""]);
+  });
+
   it("plan show without --version prints no `document: undefined`", async () => {
     const p = await fakePanel({ [`GET plan-library/${ENTRY}`]: { status: 200, body: { entryId: ENTRY, projectId: "repo-1", head: null, versions: [] } } });
     const out = await cli(["plan", "show", ENTRY], p.dir);
