@@ -1001,6 +1001,9 @@ export const zh: Translation<typeof en> = {
       reconcileSlot: "协调槽",
       reviewSlot: "审查槽",
       save: "保存 agent 偏好",
+      currentDefault: "默认：{{agent}} · {{model}}",
+      currentDefaultAgent: "默认：{{agent}}",
+      noCurrentDefault: "未设置默认 agent",
     },
     updates: {
       title: "安装更新", detect: "重新检测", observedAt: "检测时间 {{time}}",

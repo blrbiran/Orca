@@ -102,9 +102,17 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
   const pendingId = installation?.pendingCommand?.commandId ?? props.unansweredCommandId;
   const updatePreview = installation?.preview;
   const selected = updatePreview && accepted.previewId === updatePreview.previewId ? accepted.ids : [];
+  // Issue #221: the folded row says the default in force -- the saved agent and its model (the operator's for that agent,
+  // else the installation's own default), not an unsaved draft.
+  const savedAgent = preferences.preferences.defaultAgent;
+  const savedModel = savedAgent === undefined ? undefined
+    : preferences.preferences.perAgent[savedAgent]?.model ?? installationOf(agents, savedAgent)?.defaults.model;
+  const inForce = savedAgent === undefined ? t("agents.settings.noCurrentDefault")
+    : savedModel === undefined ? t("agents.settings.currentDefaultAgent", { agent: savedAgent })
+    : t("agents.settings.currentDefault", { agent: savedAgent, model: savedModel });
   return (
     <details open={open} onToggle={(event) => { const next = event.currentTarget.open; setOpen(next); writeOpen(next); }}>
-    <summary><h3 className="inline">{t("agents.title")}</h3></summary>
+    <summary><h3 className="inline">{t("agents.title")}</h3> <span className="text-xs font-normal text-muted">{inForce}</span></summary>
     <section aria-label={t("agents.settings.region")}>
       <p>
         {t("agents.settings.operatorLine", { operatorId: preferences.operatorId, revision: preferences.revision })}
@@ -198,7 +206,8 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
         <SelectionFields agents={agents} prefix="agents:reconcile" label={t("agents.settings.reconcileSlot")} current={preferences.preferences.reconcile} inheritedAgent={roleInheritedAgent("reconcile")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
         <SelectionFields agents={agents} prefix="agents:review" label={t("agents.settings.reviewSlot")} current={preferences.preferences.review} inheritedAgent={roleInheritedAgent("review")} showMissingAgent={false} drafts={drafts} onDraft={onDraft} models={props.models} onRefreshModels={props.onRefreshModels} />
       </details>
-      <button type="button" disabled={invalid} onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
+      {/* DESIGN.md: one primary per view -- saving is this page's main action. */}
+      <button type="button" className="btn-primary" disabled={invalid} onClick={() => props.onSave(preferencesFromDrafts(agents, preferences, drafts), preferences.revision)}>{t("agents.settings.save")}</button>
     </section>
     </details>
   );

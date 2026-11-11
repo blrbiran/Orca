@@ -1138,6 +1138,9 @@ export const en = {
       reconcileSlot: "Reconcile slot",
       reviewSlot: "Review slot",
       save: "Save agent preferences",
+      currentDefault: "Default: {{agent}} · {{model}}",
+      currentDefaultAgent: "Default: {{agent}}",
+      noCurrentDefault: "No default agent",
     },
     updates: {
       title: "Installation updates", detect: "Detect again", observedAt: "Observed {{time}}",
