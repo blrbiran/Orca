@@ -446,6 +446,8 @@ export type ControlAction =
   | { verb: "settle-unknown-usage"; groupId: string; expectedRevision: number; payload: SettleUnknownUsagePayloadV1 }
   | { verb:"verify-saved-result";groupId:string;taskId:string;expectedRevision:number;payload:{sourceRunId:string;sourceAttempt:number;capsuleHash:string} }
   | { verb: "retry-task"; groupId: string; expectedRevision: number; payload: RetryTaskPayloadV1 }
+  // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a settled, failed run's last attempt after its checks.
+  | { verb: "accept-attempt"; groupId: string; expectedRevision: number; payload: { taskId: string; runId: string; note: string } }
   // Issue-fixes spec §6.3: archive and unarchive a group (empty payload).
   | { verb: "archive-group" | "unarchive-group"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
@@ -530,6 +532,8 @@ export function controlCommandPath(action: ControlAction): string {
     case "verify-saved-result":return `${group}/tasks/${segment(action.taskId)}/verify-saved-result`;
     case "retry-task":
       return `${group}/retry-task`;
+    case "accept-attempt":
+      return `${group}/accept-attempt`;
     case "set-group-integration":
       return `${group}/integration`;
     case "retry-integration":

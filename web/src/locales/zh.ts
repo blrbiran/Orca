@@ -603,6 +603,17 @@ export const zh: Translation<typeof en> = {
       methodApproximate: "由 Orca 按下限记入（用量未上报）",
       approximateRefused: "Orca 未能自动结清用量：{{code}}",
     },
+    acceptAttempt: {
+      open: "检查通过后接受这次尝试",
+      explain: "Orca 会把这次尝试合并到组分支上，在合并后的代码上运行任务的准备命令和必需检查，全部通过才落地。不会再次计费。",
+      checksHeading: "任务的检查",
+      note: "记录备注（必填）",
+      send: "发送接受",
+      cancel: "取消",
+      pending: "{{principal}} 请求接受这次尝试：Orca 正在合并后的代码上重新运行任务的检查。备注：{{note}}",
+      landed: "{{principal}} 已接受；检查通过，已作为 {{commit}} 落地。备注：{{note}}",
+      refused: "{{principal}} 请求的接受被拒绝：{{reason}}。备注：{{note}}",
+    },
     activity: {
       region: "{{runId}} 的近期活动",
       heading: "近期活动 · 最新窗口，按时间先后显示",

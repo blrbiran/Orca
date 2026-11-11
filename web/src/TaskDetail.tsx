@@ -25,6 +25,7 @@ import i18n, { enumText } from "./i18n.js";
 import { shortTokens } from "./TokenInput.js";
 import { usedRatio } from "../../src/control/budgetSuggestions.js";
 import { UsageSettlement } from "./UsageSettlement.js";
+import { AcceptAttempt } from "./AcceptAttempt.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import type { Role } from "./auth.js";
@@ -338,6 +339,9 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
                 <UsageSettlement key={JSON.stringify([view.summary.commandRevision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles}
                   archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
               )}
+              {/* Reviewed acceptance (spec 2026-11-11 §7, #227): an owner may land this failed attempt after its checks. */}
+              <AcceptAttempt run={run} item={item} roles={props.roles} archived={archived}
+                groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
             </li>
           ))}
         </ul>

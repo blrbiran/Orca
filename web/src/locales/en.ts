@@ -732,6 +732,18 @@ export const en = {
       methodApproximate: "booked at least by Orca (usage not reported)",
       approximateRefused: "Orca could not settle the usage automatically: {{code}}",
     },
+    // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a settled, failed run's attempt after its checks.
+    acceptAttempt: {
+      open: "Accept this attempt after checks",
+      explain: "Orca will merge this attempt onto the group branch, run the task's setup and required checks on the merged tree, and land it only if they all pass. Nothing is charged again.",
+      checksHeading: "The task's checks",
+      note: "Note for the record (required)",
+      send: "Send acceptance",
+      cancel: "Cancel",
+      pending: "{{principal}} asked to accept this attempt: Orca is re-running the task's checks on the merged tree. Note: {{note}}",
+      landed: "Accepted by {{principal}}; the checks passed and it landed as {{commit}}. Note: {{note}}",
+      refused: "The acceptance {{principal}} asked for was refused: {{reason}}. Note: {{note}}",
+    },
     activity: {
       region: "Recent activity of {{runId}}",
       heading: "Recent activity · newest window, oldest to newest",
