@@ -5,8 +5,9 @@
  * Multi-directory projects spec §4.2: "Group several projects" creates one from an ordered picker, and a multi row's
  * order can be edited. The downgrade notice is shown once per browser, before the first multi project is created.
  */
-import { useState, type FormEvent, type JSX } from "react";
+import { useContext, useState, type FormEvent, type JSX } from "react";
 import { useTranslation } from "react-i18next";
+import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import type { PanelRefusal, PostResult } from "./api.js";
 import { refusalText } from "./i18n.js";
 import { projectName, type ProjectsAnswerV1 } from "./project.js";
@@ -52,6 +53,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
   const [search, setSearch] = useState("");
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const editable = props.answer.editable === true;
+  const mayChange = mayHumanOnly(useContext(AccountContext));
   const projects = props.answer.projects;
   const withAll = props.onAll !== undefined && allowsAll(projects.length);
   const current = projects.find((p) => p.projectKey === props.project);
@@ -156,7 +158,9 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
             ]} />
         </label>
       )}
-      <div className="project-actions flex flex-wrap gap-1.5">
+      {/* Tester follow-up F §3 (D21): a member is offered no project change. The server refuses a member's
+          add (`POST /api/projects`, owner-required); rename and the folder order hide with it. */}
+      {mayChange && <div className="project-actions flex flex-wrap gap-1.5">
         <button type="button" className={projectAction} data-icon="add" disabled={!editable} title={editable ? undefined : t("project.fromCommandLine")} onClick={() => { setRefusal(null); setOpen("add"); }}>
           {t("project.add")}
         </button>
@@ -170,8 +174,8 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
         <button type="button" className={projectAction} disabled={!editable || current?.kind !== "multi"} onClick={openMultiEdit}>
           {t("project.multiEdit")}
         </button>
-      </div>
-      {!editable && <p className="caveat">{t("project.fromCommandLine")}</p>}
+      </div>}
+      {mayChange && !editable && <p className="caveat">{t("project.fromCommandLine")}</p>}
       {props.answer.fileError ? <p role="alert">{t("project.fileError", { message: props.answer.fileError })}</p> : null}
       {(props.answer.pendingRestart ?? []).length > 0 && (
         <p role="note">

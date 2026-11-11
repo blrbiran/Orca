@@ -99,7 +99,7 @@ export const zh: Translation<typeof en> = {
   shortcuts: { open: "键盘快捷键", title: "Orca 用到的按键", decisions: "j / k：下一条 / 上一条 · a：同意 · c：纠正 —— 在决策页、焦点在页面上时", retry: "r：重试打开的任务的运行 —— 在任务组里、提供“重试任务”时", arrows: "方向键：在区域标签和菜单项之间移动", close: "关闭" },
   nav: { overview: "概览", sections: "分区", more: "更多", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", settings: "设置", globalSettings: "全局设置", projectSettings: "项目设置", back: "← 返回{{label}}", routeMissing: "没有找到 {{id}}，显示{{section}}。", otherProject: "{{id}} 属于项目 {{project}}。", switchProject: "切换到 {{project}}" },
   overview: {
-    title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划",
+    title: "概览", progress: "进展", queue: "需要你处理", newRequirement: "新建需求", import: "导入计划", more: "更多",
     global: "全局控制", ownerUnknown: "所属项目未登记", ownerRequired: "这一步需要所有者处理。",
     scopeUnavailable: "项目登记不可用；所属项目可能尚未确定。", navigationUnavailable: "所属对象不可用或已变化。正在重新读取；刷新后再打开。",
     noProgress: "没有活跃的任务组。用上方的「新建需求」或「导入计划」开始。", nextMark: "下一步", noAttention: "目前没有需要你处理的事项。", viewAllDecisions: "查看全部 {{n}} 条决策", tasks: "任务：{{done}} / {{total}}", taskProgress: "计划任务完成度",
@@ -1091,6 +1091,8 @@ export const zh: Translation<typeof en> = {
     },
     capabilityNote: "需求澄清需要有消耗上界的单次调用。请选择支持此能力的 agent，或在任务控制中导入计划。",
     capabilityHint: "哪些 agent 能做需求澄清？",
+    options: "选项",
+    noAgentInstalled: "还没有安装任何 agent，这个需求暂时无法澄清。请先安装一个：",
     agentDefault: "你的默认",
     defaultResolved: "你的默认：{{agent}} · {{model}}",
     noDefaultAgent: "还没有设置默认 agent；请在这里选一个，或到 设置 > Agent 里设置。",
@@ -1220,6 +1222,7 @@ export const zh: Translation<typeof en> = {
     frontierEmpty: "模型没有要问的了。可以达成一致进入拆分，或再澄清一轮。",
     clarifyMore: "再澄清一轮",
     saveSplit: "把拆分结果存入计划库",
+    draftMore: "更多拆分操作",
     reason: {
       "clarify-output-invalid": "这一轮模型的输出连续三次不合格。",
       "clarify-call-failed": "这一轮的调用失败了，模型没有给出可检查的回答；失败调用的代码和详情一并显示。",
@@ -2009,6 +2012,7 @@ export const zh: Translation<typeof en> = {
   // Scheduled flows and groups spec 2026-10-24 §14: the group page's schedule origin and its two library actions.
   group: {
     scheduleThis: "定时运行这个任务组…",
+    more: "更多任务组操作",
     savePlan: "把计划存入计划库",
     startedBySchedule: "由定时任务 {{name}} 为 {{slot}} 启动",
     waitingSince: "自 {{slot}} 起等待你确认（{{reason}}）",

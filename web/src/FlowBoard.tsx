@@ -221,9 +221,11 @@ export function FlowBoard(props: BoardViewProps & { openFlowRunId?: string | nul
   if (open !== null) return <FlowRunPage flowRunId={open} onBack={() => setOpen(null)} />;
   // The human's request: the start is a top-left button on the board that opens the start dialog. While the dialog is
   // open its Start is the view's one primary button (web/DESIGN.md).
+  // Tester follow-up F §3 (#81, human 「要收起来」): the Board is for watching groups, so with the dialog closed it has no
+  // primary; starting a flow is a secondary button.
   const toolbar = (
     <>
-      <button type="button" className={starting ? undefined : "btn-primary"} aria-haspopup="dialog" aria-expanded={starting} onClick={() => setStarting(true)}>{t("flow.start.title")}</button>
+      <button type="button" aria-haspopup="dialog" aria-expanded={starting} onClick={() => setStarting(true)}>{t("flow.start.title")}</button>
       {starting && <FlowStartDialog onStarted={(flowRunId) => { setStarting(false); setOpen(flowRunId); }} onClose={closeStart} />}
     </>
   );

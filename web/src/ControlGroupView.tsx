@@ -11,6 +11,7 @@ import { ChargeRetry } from "./ChargeRetry.js";
 import type { JSX } from "react";
 import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { actionRow, chipRow, taskGoal } from "./ui/classes.js";
+import { Menu, MenuItem } from "./ui/Menu.js";
 import { useTranslation } from "react-i18next";
 import { scheduleIdFor, type ControlAction } from "./controlApi.js";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -375,6 +376,7 @@ function GroupLibraryActions({ view, onCommand }: { view: GroupViewV1; onCommand
   const { t } = useTranslation();
   const mayAct = mayHumanOnly(useContext(AccountContext));
   const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const goal = (view.summary.goal ?? view.plan.goal).slice(0, 200);
   const name0 = goal === "" ? view.summary.groupId : goal;
   // The server caps a schedule's name at 80; the library's name above keeps its 200.
@@ -400,10 +402,14 @@ function GroupLibraryActions({ view, onCommand }: { view: GroupViewV1; onCommand
   };
   return (
     <>
-      <button type="button" onClick={() => onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: { source: { kind: "group", groupId }, name: name0 } })}>
-        {t("group.savePlan")}
-      </button>{" "}
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{t("group.scheduleThis")}</button>
+      {/* Tester follow-up F §3 (#81, human 「要收起来」): both are rare, so they wait in the group's "⋯" menu, not its header. */}
+      <Menu open={menuOpen} onOpenChange={setMenuOpen}
+        trigger={<button type="button" className="ms-0" aria-label={t("group.more")}>⋯</button>}>
+        <MenuItem onSelect={() => onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: { source: { kind: "group", groupId }, name: name0 } })}>
+          {t("group.savePlan")}
+        </MenuItem>
+        <MenuItem onSelect={() => setOpen(true)}>{t("group.scheduleThis")}</MenuItem>
+      </Menu>
       {open && (
         <div role="dialog" aria-label={t("group.scheduleThis")}>
           <label>{t("settings.schedules.name")}<input type="text" maxLength={80} value={name} onChange={(event) => setName(event.currentTarget.value)} /></label>

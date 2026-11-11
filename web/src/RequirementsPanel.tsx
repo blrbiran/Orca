@@ -21,6 +21,7 @@ import { explainRefusal, explainRunReason } from "./refusalExplain.js";
 import type { PanelLanguage } from "./i18n.js";
 import { TokenInput, shortTokens } from "./TokenInput.js";
 import { Select } from "./ui/Select.js";
+import { Menu, MenuItem } from "./ui/Menu.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
@@ -212,9 +213,18 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         options={[...(all ? [{ value: "", label: t("project.chooseTarget"), disabled: true }] : []),
           ...choices.map((repo) => ({ value: repo.repoId, label: all ? props.repoLabel?.(repo.repoId) ?? repo.displayName : repo.displayName }))]} /></label>
       <label>{t("requirements.idea")}<textarea value={idea} onChange={(e) => edit({ idea: e.currentTarget.value })} required /></label>
-      {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);edit({tokens:null});}} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
-      <label>{t("requirements.contentLanguage")}<Select value={language} onValueChange={(value) => edit({ language: value as PanelLanguage })}
-        options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} /></label>
+      {/* Tester follow-up F §3 (#81, human 「要收起来」): the limit and the content language are rarely changed, so they fold
+          into a closed Options block; the agent line below stays on the first screen (#220). The summary names the values in
+          force, so a folded choice is never a hidden one. */}
+      <details data-requirement-options=""><summary>{t("requirements.options")} <span className="text-xs text-muted">{LANGUAGE_NAMES[language]}{mayLimit && tokens !== null ? ` · ${shortTokens(tokens)}` : ""}</span></summary>
+        {mayLimit && <TokenInput label={t("requirements.limit")} aria-label={t("requirements.limit")} min={0} value={tokens} allowEmpty emptyLabel={t("budget.unlimited")} onClear={()=>{setLimitBad(false);edit({tokens:null});}} onChange={(n) => { setLimitBad(false); edit({ tokens: n }); }} onInvalid={() => setLimitBad(true)} onReset={() => setLimitBad(false)} />}
+        <label>{t("requirements.contentLanguage")}<Select value={language} onValueChange={(value) => edit({ language: value as PanelLanguage })}
+          options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} /></label>
+      </details>
+      {/* Tester follow-up F §3: with no agent installed the call cannot run; say so before submit and point at the fix. */}
+      {props.agents !== null && props.agents.installations.length === 0 && (
+        <p role="note" data-tone="warn" data-testid="requirement-no-agent">{t("requirements.noAgentInstalled")} <a href="#settings/agents">{t("nav.settings")} › {t("settings.category.agents")}</a></p>
+      )}
       <AgentModelFields agents={props.agents} agent={agent} model={draft.model ?? ""} name="new-requirement-model" defaultOption
         onAgent={(value) => edit({ agent: value, model: "" })} onModel={(value) => edit({ model: value })} preferences={props.preferences ?? null}
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
@@ -319,6 +329,7 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
   // Scheduled flows and groups spec 2026-10-24 §13.3: the person may keep this split in the plan library.
   const maySave = mayHumanOnly(useContext(AccountContext)) && props.archived !== true && draft.draftHash !== null
     && (draft.state === "awaiting-review" || props.view.requirement.acceptedDraftNo === draft.draftNo);
+  const [moreOpen, setMoreOpen] = useState(false);
   return (
     <section aria-label={t("requirements.draft", { n: draft.draftNo })}>
       <h4>{t("requirements.draft", { n: draft.draftNo })} · {enumText("draftState", draft.state)}</h4>
@@ -354,10 +365,15 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
         </>
       )}
       {maySave && (
-        <div className={actionRow}><button type="button" onClick={() => props.onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: {
-          source: { kind: "requirement-draft", groupId, draftNo: draft.draftNo, draftHash: draft.draftHash! },
-          name: (props.view.requirement.slug ?? props.view.requirement.idea).slice(0, 200),
-        } })}>{t("requirements.saveSplit")}</button></div>
+        // Tester follow-up F §3 (#81, human 「要收起来」): saving a split to the library is rare beside reviewing it, so it
+        // waits in the draft's "⋯" menu.
+        <div className={actionRow}><Menu open={moreOpen} onOpenChange={setMoreOpen}
+          trigger={<button type="button" className="ms-0" aria-label={t("requirements.draftMore")}>⋯</button>}>
+          <MenuItem onSelect={() => props.onCommand({ verb: "plan-library-save", groupId, expectedRevision: 0, payload: {
+            source: { kind: "requirement-draft", groupId, draftNo: draft.draftNo, draftHash: draft.draftHash! },
+            name: (props.view.requirement.slug ?? props.view.requirement.idea).slice(0, 200),
+          } })}>{t("requirements.saveSplit")}</MenuItem>
+        </Menu></div>
       )}
     </section>
   );

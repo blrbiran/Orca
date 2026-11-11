@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { CardGoal } from "./CardGoal.js";
 import { enumText } from "./i18n.js";
@@ -9,6 +9,7 @@ import type { WorkItemCategoryV1 } from "./controlTypes.js";
 import type { OverviewModel, OverviewProgress, OverviewQueueRow } from "./overviewModel.js";
 import { overviewColumn as column, overviewRowButton as rowButton, overviewRowItem as rowItem, overviewRowList as rowList } from "./ui/classes.js";
 import type { OverviewTarget } from "./overviewNavigation.js";
+import { Menu, MenuItem } from "./ui/Menu.js";
 const rowText = "my-2";
 /** Taste refinement P1-4: the queue keeps every step that is not a decision review, and at most this many reviews. */
 export const OVERVIEW_DECISION_LIMIT = 3;
@@ -40,11 +41,22 @@ function QueueReason({ row }: { row: OverviewQueueRow }): JSX.Element {
   const words = row.kind === "decision-review" || row.kind === "command-unknown" ? null : explainRunReason(reasonCode(row.reason));
   return words === null ? <>{row.reason}</> : <>{words} <small><code>{row.reason}</code></small></>;
 }
+/**
+ * Tester follow-up F §3 (#81, human 「要收起来」): importing a plan is the rarer way to start work, so it leaves the row beside
+ * the primary "New requirement" and waits in a small "More" menu.
+ */
+function OverviewMore({ onImport }: { onImport: () => void }): JSX.Element {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return <Menu open={open} onOpenChange={setOpen} trigger={<button type="button" className="btn-quiet ms-0">{t("overview.more")}</button>}>
+    <MenuItem onSelect={onImport}>{t("overview.import")}</MenuItem>
+  </Menu>;
+}
 /** Progress first in DOM and narrow layouts; each queue row only opens its owner. */
 export function Overview(props: { model: OverviewModel; onOpen: (target: OverviewTarget) => void; onImport: () => void; onRequirement: () => void; onViewDecisions?: () => void }): JSX.Element {
  const { t } = useTranslation(); const { model } = props; const queue = visibleQueue(model.queue); const progress = splitProgress(model.progress);
  return <section aria-label={t("overview.title")} >
-  <div className="flex flex-wrap items-baseline justify-between gap-4"><h2>{t("overview.title")}</h2><div className="flex flex-wrap gap-2">{/* DESIGN.md: one primary per view; starting work is this page's main action. */}<button type="button" className="btn-primary ms-0" onClick={props.onRequirement}>{t("overview.newRequirement")}</button><button type="button" className={`${rowButton} ms-0`} onClick={props.onImport}>{t("overview.import")}</button></div></div>
+  <div className="flex flex-wrap items-baseline justify-between gap-4"><h2>{t("overview.title")}</h2><div className="flex flex-wrap gap-2">{/* DESIGN.md: one primary per view; starting work is this page's main action. */}<button type="button" className="btn-primary ms-0" onClick={props.onRequirement}>{t("overview.newRequirement")}</button><OverviewMore onImport={props.onImport} /></div></div>
   <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-8 max-[850px]:grid-cols-[minmax(0,1fr)] max-[850px]:gap-4">
    <section className={column} aria-label={t("overview.progress")}><h3>{t("overview.progress")}</h3>
     {model.scopeUnavailable && <p role="status">{t("overview.scopeUnavailable")}</p>}

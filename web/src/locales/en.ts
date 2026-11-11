@@ -238,7 +238,7 @@ export const en = {
   shortcuts: { open: "Keyboard shortcuts", title: "Keys Orca uses", decisions: "j / k: next / previous row · a: agree · c: correct — on the Decisions page, with focus on the page", retry: "r: retry the open task's run — in a group, where Retry task is offered", arrows: "Arrow keys: move between region tabs and menu items", close: "Close" },
   nav: { overview: "Overview", sections: "Sections", more: "More", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", settings: "Settings", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
   overview: {
-    title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan",
+    title: "Overview", progress: "Progress", queue: "Needs your attention", newRequirement: "New requirement", import: "Import plan", more: "More",
     global: "Global control", ownerUnknown: "owner not in registry", ownerRequired: "An owner must take this action.",
     scopeUnavailable: "Project registry unavailable; ownership may be unresolved.", navigationUnavailable: "This owner is no longer available or has changed. Re-reading sources; open it again after refresh.",
     noProgress: "No active groups. Start one with New requirement or Import plan above.", nextMark: "Next", noAttention: "Nothing needs your attention.", viewAllDecisions: "View all {{n}} decisions", tasks: "Tasks: {{done}} / {{total}}", taskProgress: "Plan task completion",
@@ -1236,6 +1236,8 @@ export const en = {
     },
     capabilityNote: "Clarification uses a bounded single call. Choose a supported agent, or import a plan in Task control.",
     capabilityHint: "Which agents can clarify?",
+    options: "Options",
+    noAgentInstalled: "No agent is installed, so this requirement cannot be clarified yet. Install one first:",
     agentDefault: "Your default",
     defaultResolved: "Your default: {{agent}} · {{model}}",
     noDefaultAgent: "No default agent is set; choose an agent here, or set one in Settings > Agent.",
@@ -1369,6 +1371,7 @@ export const en = {
     frontierEmpty: "The model has nothing left to ask. Agree to go on to the split, or ask for one more round.",
     clarifyMore: "Clarify one more round",
     saveSplit: "Save split to library",
+    draftMore: "More split actions",
     reason: {
       "clarify-output-invalid": "The model's answers for this round were invalid three times.",
       "clarify-call-failed": "This round's call failed, so the model gave no answer to check; the failed call's code and details are shown with it.",
@@ -2151,6 +2154,7 @@ export const en = {
   // Scheduled flows and groups spec 2026-10-24 §14: the group page's schedule origin and its two library actions.
   group: {
     scheduleThis: "Schedule this group…",
+    more: "More group actions",
     savePlan: "Save plan to library",
     startedBySchedule: "Started by schedule {{name}} for {{slot}}",
     waitingSince: "Waiting for you since {{slot}} ({{reason}})",
