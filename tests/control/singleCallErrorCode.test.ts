@@ -38,7 +38,10 @@ describe("where a failed call is stored (spec A §4.5)", () => {
     const x = await requirementHarness({ answers: [1, 2, 3].map(() => preSpawn("clarify", "omp-single-call-cap-exceeded")) });
     try {
       await x.until(() => x.round(1).state === "failed");
-      expect(x.round(1)).toMatchObject({ state: "failed", retries: 0, reasonCode: "clarify-output-invalid", lastInvalidReason: "no-output" });
+      // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 (design §12 names this rewrite) -- a round whose
+      // last call failed before it ran now ends clarify-call-failed, not clarify-output-invalid (the model gave no output to
+      // judge); lastInvalidReason still says no-output.
+      expect(x.round(1)).toMatchObject({ state: "failed", retries: 0, reasonCode: "clarify-call-failed", lastInvalidReason: "no-output" });
       expect(x.round(1).calls.map((call) => [call.outcome, call.reason])).toEqual([["failed", "omp-single-call-cap-exceeded"]]);
       expect(x.fake.calls.accept).toHaveLength(1);
     } finally { await x.dispose(); }
@@ -59,7 +62,9 @@ describe("where a failed call is stored (spec A §4.5)", () => {
     const x = await requirementHarness({ answers: [1, 2, 3].map(() => preSpawn("split", "omp-single-call-unavailable")), startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state === "failed");
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "failed", autoRetry: 0, reasonCode: "split-output-invalid", calls: [{ outcome: "failed", reason: "omp-single-call-unavailable" }] });
+      // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 (design §12 names this rewrite) -- a draft whose
+      // last call failed before it ran now ends split-call-failed, not split-output-invalid.
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "failed", autoRetry: 0, reasonCode: "split-call-failed", calls: [{ outcome: "failed", reason: "omp-single-call-unavailable" }] });
       expect(x.fake.calls.accept).toHaveLength(1);
     } finally { await x.dispose(); }
   });
