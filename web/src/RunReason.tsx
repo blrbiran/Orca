@@ -32,7 +32,7 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   // Tester follow-up F §4: a settled run whose attempt changed nothing carries the driver's empty-result on a run that is
   // neither blocked nor failed, so runReasonText gives nothing; its words (what happened, what can be done) are shown here.
   if (props.run.blockedReason === "empty-result" && !hasFailureOutcome(props.run)) {
-    return <>{lineage} — <span data-testid="run-empty-result">{explainRunReason("empty-result")}</span> <code>empty-result</code></>;
+    return <>{lineage} — <span data-testid="run-empty-result">{explainRunReason("empty-result")}</span> <code>{props.run.blockedReason}</code></>;
   }
   const raw = runReasonText(props.run);
   if (raw === null && props.run.failureCode === null && !hasFailureOutcome(props.run)

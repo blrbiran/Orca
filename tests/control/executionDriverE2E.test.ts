@@ -50,7 +50,11 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
       // Deviation D12: the default reserve cannot afford a reconciliation until another run settles.
       await startGroup(runtime, w.repoId, 10_000_000);
       runtime.startPump(50);
-      await until(() => { noBlocked(runtime); return ["a", "b", "c"].every((id) => workStatus(runtime, id) === "done") && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true); }, 360_000, "every task to settle");
+      await until(() => { noBlocked(runtime); return ["a", "b", "c"].every((id) => workStatus(runtime, id) === "done") && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true)
+        // Ruling (2026-11-12, tester follow-up F): since round E a group acceptance check runs after the last landing in its own
+        // scratch worktree; the scene below is read once that check is recorded and its worktree removed.
+        && JSON.parse(String(runtime.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).acceptance !== undefined
+        && !readdirSync(`${runtime.store.stateDir}.workspaces`).some((name) => name.startsWith("group-acceptance-")); }, 360_000, "every task to settle");
       const runs = workRuns(runtime);
       expect(runs.map((run) => run.body.state)).toEqual(["settled", "settled", "settled"]);
       expect(readControlGroup(runtime.store, runtime.epoch, "g").runs.map((run) => run.state)).toEqual(["settled-recoverable", "settled-recoverable", "settled-recoverable"]);
