@@ -29,11 +29,20 @@ let proposalNote: string[] = [];
 interface GroupView { summary: { groupId: string; repoId?: string; state?: string; commandRevision: number; completion?: { done: number; total: number }; counts?: Record<string, number>; stopState?: string | null; executionPending?: boolean; overGrant?: boolean; archived?: boolean; recoveryBlockerCount?: number; projectionSeq?: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
 interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string; counts?: { running?: number; blocked?: number; done?: number; idle?: number; waiting?: number }; completion?: { done: number; total: number }; stopState?: string | null; overGrant?: boolean; archived?: boolean }> }
 
-/** Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it. */
+/**
+ * Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it.
+ * Tester follow-up E §3 (#242): a named group must list the run too; no server route takes a group and a run together,
+ * so this is the only membership check, and it runs before the run's activity or evidence is read.
+ */
 async function groupOfRun(context: WriteContext, runId: string): Promise<string> {
   const summary = await context.read("summary") as Summary;
   const named = context.args.flags.group;
-  if (typeof named === "string") return resolveId("group", named, summary.groups.map((g) => g.groupId));
+  if (typeof named === "string") {
+    const groupId = resolveId("group", named, summary.groups.map((g) => g.groupId));
+    const view = await context.read(`groups/${groupId}`) as GroupView;
+    if (!view.runs.some((run) => run.runId === runId)) throw new EntryRejection("run-not-found", `run ${runId} is not in group ${groupId}`);
+    return groupId;
+  }
   for (const { groupId } of summary.groups) {
     let view: GroupView;
     try { view = await context.read(`groups/${groupId}`) as GroupView; } catch { continue; }

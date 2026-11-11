@@ -111,6 +111,20 @@ describe("composed reads (spec §14 R6; proposal, task and project views)", () =
     expect([out.code, out.json().body.error.code]).toEqual([1, "run-not-found"]);
   });
 
+  // Tester follow-up E §3 (#242): an explicit --group used to skip the only membership check, so run show printed
+  // another group's id beside this run's activity and evidence. It refuses before reading either; the group that does
+  // list the run still answers as before.
+  it("run show --group refuses a group whose view does not list the run, before reading activity or evidence (#242)", async () => {
+    const p = await panel();
+    const out = await cli(["run", "show", "run-1", "--group", "g-beta", "--json"], p.dir);
+    expect([out.code, out.json().body.error.code, out.json().body.error.message]).toEqual([1, "run-not-found", "run run-1 is not in group g-beta"]);
+    expect(p.requests.filter((r) => r.path.startsWith("runs/")).map((r) => r.path)).toEqual([]);
+    const human = await cli(["run", "show", "run-1", "--group", "g-beta"], p.dir);
+    expect(human.code).toBe(1);
+    expect(human.stderr).toContain("run-not-found: run run-1 is not in group g-beta");
+    expect((await cli(["run", "show", "run-1", "--group", "g-alpha", "--json"], p.dir)).json().body.groupId).toBe("g-alpha");
+  });
+
   it("proposal show, task show and project show compose their parts of the reads", async () => {
     const p = await panel();
     expect((await cli(["proposal", "show", "g-alpha", "--json"], p.dir)).json().body).toEqual({
