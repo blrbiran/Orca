@@ -102,7 +102,7 @@ stop: running tasks hand off and stop
 - `<group>`: a group id or a unique prefix
 - `--deadline <deadline>`: UTC YYYY-MM-DDTHH:mm:ss.sssZ
 
-## `orca group resume-handoff <group> [--continue <continue>]`
+## `orca group resume-handoff <group> [--continue <continue>] [--note <note>] [--note-scope <note-scope>]`
 
 resume after a completed handoff; --continue <task> continues that task from its checkpoint
 
@@ -110,6 +110,8 @@ resume after a completed handoff; --continue <task> continues that task from its
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `--continue <continue>` (repeatable): a task to continue (repeatable)
+- `--note <note>`: a note the continued run's agent reads at its next plan/execute (at most 4096 bytes)
+- `--note-scope <note-scope>`: next-attempt (default) or remaining-attempts
 
 ## `orca group archive <group>`
 

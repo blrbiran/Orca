@@ -644,3 +644,51 @@ describe("continue on a finished task (#150)", () => {
     } finally { await h.dispose(); }
   });
 });
+
+// #226 (ii) (tester follow-up C, 2026-11-11): a continued task may carry the operator's note. The flow page already
+// delivered one through a flow continuation (live transcript spec §10.5.2); a task's own continuation had no way to
+// carry one. The note rides the registered continuation into the claimed run's body, where A2 puts it into the start
+// envelope's work.operatorNote (executionDriver stepA2) -- the same path the flow note takes.
+describe("a continuation carries the operator's note (#226 ii)", () => {
+  const NOTE = { text: "the flaky test is test/queue.test.js; do not touch README", scope: "remaining-attempts" } as const;
+
+  it("continue-task: the note reaches the claimed continuation run", async () => {
+    // mutation: continue-task drops payload.operatorNote before registerContinuation -> the claimed run has none -> red
+    const ctx = await continuationFixture(); const { h, service } = ctx; try {
+      const a = await recoverablePredecessor(ctx, "a");
+      const result = await service.continueTask(h.taskCommand("continue-task", "a", { predecessorRunId: a.runId, checkpointId: a.checkpointId, operatorNote: NOTE }));
+      if ("error" in result || result.result.kind !== "task-continuing") throw new Error(JSON.stringify(result));
+      expect(continuationWakeBody(h.store, "g")!.continuations).toEqual([expect.objectContaining({ taskId: "a", operatorNote: NOTE })]);
+      expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "claimed", runId: result.result.pendingRunId });
+      expect(runRow(h.store, result.result.pendingRunId).operatorNote).toEqual(NOTE);
+    } finally { await h.dispose(); }
+  });
+
+  it("resume-from-handoff: each selection's own note, and none where none was given", async () => {
+    // mutation: resume-from-handoff ignores selection.operatorNote -> a's continuation has no note -> red
+    const ctx = await continuationFixture(); const { h, service } = ctx; try {
+      const a = await recoverablePredecessor(ctx, "a");
+      const b = await recoverablePredecessor(ctx, "b");
+      await stoppedAfterHandoff(ctx);
+      const result = await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [{ ...selection(a.predecessor), operatorNote: NOTE }, selection(b.predecessor)] }));
+      if ("error" in result || result.result.kind !== "resumed-from-handoff") throw new Error(JSON.stringify(result));
+      const continuations = continuationWakeBody(h.store, "g")!.continuations;
+      expect(continuations.find((c) => c.taskId === "a")).toMatchObject({ operatorNote: NOTE });
+      expect(continuations.find((c) => c.taskId === "b")).not.toHaveProperty("operatorNote");
+      await deliverScheduledStart(ctx.deps, "g");
+      await deliverScheduledStart(ctx.deps, "g");
+      const pending = Object.fromEntries(result.result.pendingRuns.map((run) => [run.taskId, run.pendingRunId]));
+      expect(runRow(h.store, pending.a!).operatorNote).toEqual(NOTE);
+      expect(runRow(h.store, pending.b!)).not.toHaveProperty("operatorNote");
+    } finally { await h.dispose(); }
+  });
+
+  it("the wire refuses an empty note, an unknown scope and one over 4096 UTF-8 bytes", async () => {
+    const { continueTaskPayloadSchema } = await import("../../src/control/webProtocol.js");
+    const base = { predecessorRunId: "run-1", checkpointId: "cp-1" };
+    expect(continueTaskPayloadSchema.safeParse({ ...base, operatorNote: NOTE }).success).toBe(true);
+    expect(continueTaskPayloadSchema.safeParse({ ...base, operatorNote: { text: "", scope: "next-attempt" } }).success).toBe(false);
+    expect(continueTaskPayloadSchema.safeParse({ ...base, operatorNote: { text: "x", scope: "forever" } }).success).toBe(false);
+    expect(continueTaskPayloadSchema.safeParse({ ...base, operatorNote: { text: "字".repeat(1366), scope: "next-attempt" } }).success).toBe(false);
+  });
+});

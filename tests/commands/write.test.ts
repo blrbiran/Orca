@@ -56,6 +56,11 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["task", "retry", "g-alpha", "t1"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1" }],
   [["task", "retry", "g-alpha", "t1", "--allow-observed-paths"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1", allowObservedPaths: true }],
   [["task", "continue", "g-alpha", "t1"], "groups/g-alpha/tasks/t1/continue", 5, { predecessorRunId: "run-1", checkpointId: "cp-1" }],
+  // #226 (ii): a note for the continued run; scope next-attempt unless --note-scope says otherwise.
+  [["task", "continue", "g-alpha", "t1", "--note", "use the fixture in test/data"], "groups/g-alpha/tasks/t1/continue", 5,
+    { predecessorRunId: "run-1", checkpointId: "cp-1", operatorNote: { text: "use the fixture in test/data", scope: "next-attempt" } }],
+  [["group", "resume-handoff", "g-alpha", "--continue", "t1", "--note", "n", "--note-scope", "remaining-attempts"], "groups/g-alpha/resume-from-handoff", 5,
+    { selections: [{ taskId: "t1", predecessorRunId: "run-1", checkpointId: "cp-1", operatorNote: { text: "n", scope: "remaining-attempts" } }] }],
   [["task", "set-loop", "g-alpha", "t1", "--file", loopFile], "groups/g-alpha/tasks/t1/loop", 5,
     { baseLoopVersion: 4, plan: "standard", inputs: { goal: "g", successCondition: "s", targetPaths: ["src"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null }, work: { tokens: 500, activeMs: 600, attempts: 3 } }],
   [["task", "set-labels", "g-alpha", "t1", "--label", "area:cli", "--label", "kind:bug"], "groups/g-alpha/tasks/t1/labels", 5, { labels: ["area:cli", "kind:bug"], baseLabelsVersion: 2 }],
@@ -188,5 +193,20 @@ describe("group import --project (issue 141)", () => {
     const out = await cli(["group", "import", "plan-a", "--group", "g-new", "--project", "proj", "--json"], w.dir);
     expect(out.code, out.stdout).toBe(0);
     expect(w.posts().map((p) => p.payload)).toEqual([{ groupId: "g-new", repoId: "repo-1", planId: "plan-a" }]);
+  });
+});
+
+describe("an operator note the CLI refuses before sending (#226 ii)", () => {
+  it.each([
+    [["task", "continue", "g-alpha", "t1", "--note-scope", "remaining-attempts"], "--note-scope goes with --note"],
+    [["task", "continue", "g-alpha", "t1", "--note", "x", "--note-scope", "forever"], "--note-scope wants"],
+    [["task", "continue", "g-alpha", "t1", "--note", "   "], "--note is empty"],
+    [["group", "resume-handoff", "g-alpha", "--note", "x"], "--note goes with --continue"],
+  ])("orca %j sends nothing", async (argv, message) => {
+    const w = await world();
+    const out = await cli([...argv, "--json"], w.dir);
+    expect(out.code).not.toBe(0);
+    expect(out.stdout + out.stderr).toContain(message);
+    expect(w.posts()).toHaveLength(0);
   });
 });

@@ -598,6 +598,7 @@ export const en = {
       resume: "Continue execution",
       continueSelected: "Continue selected tasks ({{n}})",
       continueTask: "Continue task {{taskId}}",
+      continueNote: { title: "Note for the continued work", text: "Note for the continued run (optional)", placeholder: "What the agent should know when it plans and executes again (optional)" },
       retryFromHead: "Retry creates a new run from the current group branch head and needs a new budget reservation.",
       continueFromCheckpoint: "Continue resumes the saved checkpoint using the held remainder.",
       resumeForRetry: "Resume without continuation clears the completed stop. Failed tasks stay failed until you choose Retry task.",

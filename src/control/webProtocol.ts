@@ -1,5 +1,5 @@
 import { recoveryOfSchema, savedResultSourceEligibilitySchema } from "./savedResultProtocol.js";
-import { budgetAmountSchema } from "./schema.js";
+import { budgetAmountSchema, operatorNoteSchema } from "./schema.js";
 import { z } from "zod";
 import { usageSettlementSchema } from "./usageSettlement.js";
 import { agentSelectionSchema, amountSchema, canonicalTimestampSchema, commandEnvelopeSchema, contextWindowSchema, idSchema, panelPartialSelectionSchema, partialSelectionSchema, runFailureCauseSchema, safeInteger } from "./schema.js";
@@ -795,11 +795,13 @@ export const planLibraryArchivePayloadSchema = z.object({ entryId: idSchema }).s
 export const handoffStopPayloadSchema = z.object({ handoffDeadlineAt: canonicalTimestampSchema.optional() }).strict();
 export const resumeFromHandoffPayloadSchema = z
   .object({
-    selections: z.array(z.object({ taskId: idSchema, predecessorRunId: idSchema, checkpointId: idSchema }).strict()),
+    // #226 (ii): each continued task may carry the operator's note into its continuation run (live transcript spec §10.5.2).
+    selections: z.array(z.object({ taskId: idSchema, predecessorRunId: idSchema, checkpointId: idSchema, operatorNote: operatorNoteSchema.optional() }).strict()),
   })
   .strict()
   .superRefine((value, ctx) => requireUnique(value.selections, (selection) => selection.taskId, ctx, ["selections"]));
-export const continueTaskPayloadSchema = z.object({ predecessorRunId: idSchema, checkpointId: idSchema }).strict();
+// #226 (ii): the operator's note for the continuation run, delivered as the start envelope's work.operatorNote.
+export const continueTaskPayloadSchema = z.object({ predecessorRunId: idSchema, checkpointId: idSchema, operatorNote: operatorNoteSchema.optional() }).strict();
 export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   // Spec 2026-10-27 single-call unknown usage §9 R1: a single call blocked on unknown usage is retried only with its grant's charge acknowledged.
   z.object({ scope: z.literal("run"), runId: idSchema, acknowledge: z.literal("charge-remaining-grant").optional() }).strict(),

@@ -31,6 +31,8 @@ import { Refusal } from "./Refusal.js";
 import { ReviseRound, chainEntries } from "./RequirementsPanel.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 import { Select } from "./ui/Select.js";
+// Spec §10.5: the note's cap, in UTF-8 bytes (the server counts the note plus the step's pending ones).
+import { NOTE_MAX_BYTES, utf8Bytes } from "./operatorNote.js";
 
 type Verb = "messages" | "plan" | "rerun" | "answer" | "effect" | "pool" | "plan-step";
 type Send = (verb: Verb, payload: Record<string, unknown>) => void;
@@ -604,17 +606,6 @@ function IntakeCard(props: { intake: FlowIntakeV1; steps: Step[]; runId: string;
   );
 }
 
-/** Spec §10.5: the note's cap, in UTF-8 bytes (the server counts the note plus the step's pending ones). */
-const NOTE_MAX_BYTES = 4096;
-function utf8Bytes(text: string): number {
-  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
-  let bytes = 0;
-  for (const ch of text) {
-    const code = ch.codePointAt(0)!;
-    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-  }
-  return bytes;
-}
 
 /** Spec §10.5: an operator's note for a running work step -- the step's next attempt only, or every remaining one. */
 function NoteForm(props: { step: Step; runId: string; send: Send }): JSX.Element {

@@ -101,3 +101,51 @@ describe("continuing after a handoff-stop (handoff delivery C-4, I-4)", () => {
     }
   });
 });
+
+// #226 (ii) (tester follow-up C, 2026-11-11): the person can tell a continued task's agent something. The note rides the
+// continuation the buttons already send; the continued run reads it at its next plan and execute (never mid-turn).
+describe("a note for the continued work (#226 ii)", () => {
+  const stopped = (): GroupViewV1 => view("handoff-complete", [completed, handedOff], [checkpoint("run-a", "a", "complete"), checkpoint("run-b", "b", "partial")]);
+  const mount = (value: GroupViewV1, onCommand = vi.fn()) => {
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "dispatch", taskId: null, runId: null }} view={value} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    return onCommand;
+  };
+  const noteBox = (): HTMLElement => screen.getByRole("textbox", { name: "Note for the continued run (optional)" });
+
+  it("the batch continuation carries the typed note on every selection, and an empty note adds nothing", () => {
+    // mutation: selections() leaves the note out -> the payload has no operatorNote -> red
+    const onCommand = mount(stopped());
+    fireEvent.change(noteBox(), { target: { value: "  run only test/queue.test.js first  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue selected tasks (1)" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "resume-from-handoff", groupId: "g", expectedRevision: 6,
+      payload: { selections: [{ taskId: "b", predecessorRunId: "run-b", checkpointId: "cp-b", operatorNote: { text: "run only test/queue.test.js first", scope: "next-attempt" } }] } });
+    expect((noteBox() as HTMLTextAreaElement).value, "sent, so cleared").toBe("");
+  });
+
+  it("a single task's continuation carries it too; with no note the payload is today's", () => {
+    // mutation: continue-task's payload skips withNote -> no operatorNote -> red at the first check
+    const value = stopped();
+    const resumed: GroupViewV1 = { ...value, summary: { ...value.summary, stopMode: null, stopState: null }, stop: null };
+    const onCommand = mount(resumed);
+    fireEvent.change(noteBox(), { target: { value: "keep the public API" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue task b" }));
+    expect(onCommand).toHaveBeenLastCalledWith({ verb: "continue-task", groupId: "g", taskId: "b", expectedRevision: 6,
+      payload: { predecessorRunId: "run-b", checkpointId: "cp-b", operatorNote: { text: "keep the public API", scope: "next-attempt" } } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue task b" }));
+    expect(onCommand).toHaveBeenLastCalledWith({ verb: "continue-task", groupId: "g", taskId: "b", expectedRevision: 6,
+      payload: { predecessorRunId: "run-b", checkpointId: "cp-b" } });
+  });
+
+  it("a note over 4096 bytes disables the continuations and says why", () => {
+    const onCommand = mount(stopped());
+    fireEvent.change(noteBox(), { target: { value: "字".repeat(1366) } });
+    expect(screen.getByText("The note is longer than 4096 bytes; shorten it.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Continue selected tasks (1)" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it("is not offered when nothing is continuable", () => {
+    mount(view("handoff-complete", [completed], [checkpoint("run-a", "a", "complete")]));
+    expect(screen.queryByRole("textbox", { name: "Note for the continued run (optional)" })).toBeNull();
+  });
+});

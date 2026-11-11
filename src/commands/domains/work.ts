@@ -13,6 +13,28 @@ import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
 import { text } from "./format.js";
 
+/**
+ * #226 (ii): a note for a continued task's run -- delivered at its plan and execute boundary as the start envelope's
+ * `work.operatorNote` (live transcript spec §10.5.2; ccloop's operatorNoteGate). Never injected into a running turn.
+ */
+const NOTE_SCOPES = ["next-attempt", "remaining-attempts"] as const;
+const NOTE_FLAGS = [
+  { name: "note", type: "string" as const, summary: "a note the continued run's agent reads at its next plan/execute (at most 4096 bytes)" },
+  { name: "note-scope", type: "string" as const, summary: "next-attempt (default) or remaining-attempts" },
+];
+function operatorNote(c: WriteContext): { text: string; scope: typeof NOTE_SCOPES[number] } | undefined {
+  const note = str(c, "note");
+  const scope = str(c, "note-scope");
+  if (note === undefined) {
+    if (scope !== undefined) throw invalid("--note-scope goes with --note");
+    return undefined;
+  }
+  if (note.trim() === "") throw invalid("--note is empty");
+  if (Buffer.byteLength(note, "utf8") > 4096) throw invalid(`--note is ${Buffer.byteLength(note, "utf8")} bytes; at most 4096`);
+  if (scope !== undefined && !(NOTE_SCOPES as readonly string[]).includes(scope)) throw invalid(`--note-scope wants ${NOTE_SCOPES.join(" or ")}`);
+  return { text: note, scope: (scope ?? "next-attempt") as typeof NOTE_SCOPES[number] };
+}
+
 type RoundView = ClarifyRoundView;
 interface RequirementView {
   summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } };
@@ -270,16 +292,18 @@ export const WORK_ROWS: CommandDef[] = [
     flags: [{ name: "deadline", type: "string", summary: "UTC YYYY-MM-DDTHH:mm:ss.sssZ" }],
     route: (c) => `groups/${group(c)}/handoff-stop`, payload: (c) => (str(c, "deadline") === undefined ? {} : { handoffDeadlineAt: str(c, "deadline") }) }),
   verb({ domain: "group", action: "resume-handoff", summary: "resume after a completed handoff; --continue <task> continues that task from its checkpoint", verb: "resume-from-handoff",
-    positionals: [GROUP], flags: [{ name: "continue", type: "string", repeatable: true, summary: "a task to continue (repeatable)" }],
+    positionals: [GROUP], flags: [{ name: "continue", type: "string", repeatable: true, summary: "a task to continue (repeatable)" }, ...NOTE_FLAGS],
     route: (c) => `groups/${group(c)}/resume-from-handoff`,
     payload: async (c) => {
       const items = (await groupView(c)).workItems;
+      const note = operatorNote(c);
+      if (note !== undefined && list(c, "continue").length === 0) throw invalid("--note goes with --continue <task>: only a continued task's run reads it");
       const selections = [];
       for (const given of list(c, "continue")) {
         const taskId = resolveId("task", given, items.map((w) => w.taskId));
         const runId = items.find((w) => w.taskId === taskId)!.currentRunId;
         if (runId === null) throw new EntryRejection("task-has-no-run", `task ${taskId} has no run to continue`);
-        selections.push({ taskId, predecessorRunId: runId, checkpointId: await checkpointOf(c, runId) });
+        selections.push({ taskId, predecessorRunId: runId, checkpointId: await checkpointOf(c, runId), ...(note === undefined ? {} : { operatorNote: note }) });
       }
       return { selections };
     } }),
@@ -365,9 +389,14 @@ export const WORK_ROWS: CommandDef[] = [
     } }),
     // Tester follow-up B T2 (#202): the fresh grant the retry's next run gets, read before the write (print-only).
     format: (body: unknown) => { const lines = retryNote; retryNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } },
-  verb({ domain: "task", action: "continue", summary: "continue a task's current run from its newest complete checkpoint", verb: "continue-task", positionals: [GROUP, TASK],
+  verb({ domain: "task", action: "continue", summary: "continue a task's current run from its newest complete checkpoint; --note tells its agent something", verb: "continue-task", positionals: [GROUP, TASK],
+    flags: NOTE_FLAGS,
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/continue`,
-    payload: async (c) => { const runId = await currentRun(c); return { predecessorRunId: runId, checkpointId: await checkpointOf(c, runId) }; } }),
+    payload: async (c) => {
+      const note = operatorNote(c);
+      const runId = await currentRun(c);
+      return { predecessorRunId: runId, checkpointId: await checkpointOf(c, runId), ...(note === undefined ? {} : { operatorNote: note }) };
+    } }),
   verb({ domain: "task", action: "set-loop", summary: "set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}", verb: "set-task-loop", positionals: [GROUP, TASK],
     flags: [{ name: "file", type: "string", required: true, summary: "the loop JSON" }],
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/loop`,

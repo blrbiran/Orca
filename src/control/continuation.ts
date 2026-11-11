@@ -285,7 +285,7 @@ export function applyResumeFromHandoff(deps: ContinuationDeps, command: ResumeFr
         if (groupStopState(store, groupId) !== "handoff-complete") throw new ControlError("group-state-invalid");
         const group = readGroupBody(store, groupId);
         const registrations = command.payload.selections
-          .map(selection => registerContinuation(store, groupId, selection, context.nextCommandRevision));
+          .map(({ operatorNote, ...selection }) => registerContinuation(store, groupId, selection, context.nextCommandRevision, operatorNote));
         store.db.prepare("DELETE FROM stop_intents WHERE group_id=?").run(groupId);
         group.stopped = false;
         saveGroupBody(store, group);
@@ -314,7 +314,8 @@ export function applyContinueTask(deps: ContinuationDeps, command: ContinueTaskC
         refuseFlowChild(store, groupId);
         const group = readGroupBody(store, groupId);
         if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("group-stopped");
-        const registered = registerContinuation(store, groupId, { taskId, ...command.payload }, context.nextCommandRevision);
+        const { operatorNote, ...predecessor } = command.payload;
+        const registered = registerContinuation(store, groupId, { taskId, ...predecessor }, context.nextCommandRevision, operatorNote);
         const wakeId = armContinuationWake(store, groupId, context.nextCommandRevision, [registered]);
         deps.beforeCommit?.();
         return commandSuccess(context, {

@@ -639,9 +639,11 @@ export type ImportPlanPayloadV1 = {
   estimateMode?: "strict" | "soft";
 };
 export type HandoffStopPayloadV1 = { handoffDeadlineAt?: string };
-export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string; checkpointId: string };
+/** #226 (ii): an operator note the continued run reads at its next plan/execute boundary. */
+export type OperatorNoteV1 = { text: string; scope: "next-attempt" | "remaining-attempts" };
+export type ContinuationSelectionV1 = { taskId: string; predecessorRunId: string; checkpointId: string; operatorNote?: OperatorNoteV1 };
 export type ResumeFromHandoffPayloadV1 = { selections: ContinuationSelectionV1[] };
-export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string };
+export type ContinueTaskPayloadV1 = { predecessorRunId: string; checkpointId: string; operatorNote?: OperatorNoteV1 };
 export type RecoveryRetryPayloadV1 = { scope: "run"; runId: string; acknowledge?: "charge-remaining-grant" } | { scope: "group"; groupId: string };
 /** CLI v2 spec §14 R2: `runId` is the run the person saw failing; the panel refuses task-run-moved once it is not current. */
 export type RetryTaskPayloadV1 = { taskId: string; runId?: string; allowObservedPaths?: true };

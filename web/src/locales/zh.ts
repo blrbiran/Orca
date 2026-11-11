@@ -472,6 +472,7 @@ export const zh: Translation<typeof en> = {
       resume: "继续执行",
       continueSelected: "继续选中的任务（{{n}}）",
       continueTask: "继续任务 {{taskId}}",
+      continueNote: { title: "给续跑工作的备注", text: "给续跑运行的备注（可选）", placeholder: "agent 再次 plan／execute 时需要知道的事（可选）" },
       retryFromHead: "重试会从当前组分支 head 创建新运行，并重新预留预算。",
       continueFromCheckpoint: "继续会从保存的 checkpoint 续跑，使用保留的剩余额度。",
       resumeForRetry: "不续跑恢复会清除已完成的停止。失败任务仍保持失败，之后可选择重试任务。",

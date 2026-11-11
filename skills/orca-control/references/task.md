@@ -25,14 +25,16 @@ start again a task whose current run failed (the run read now is the one retried
 - `--allow-observed-paths`: allow only the exact paths the last blocked run reported missing; inspect `orca run show` first
 - `--work <work>`: add work to the task's budget for this retry and every later run, as JSON {tokens?,activeMs?,attempts?,sessions?} (an omitted dimension adds 0); a person may always, an agent up to the orchestration agent top-up cap; refused to a run Orca dispatched; only a task under the optional token policy
 
-## `orca task continue <group> <task>`
+## `orca task continue <group> <task> [--note <note>] [--note-scope <note-scope>]`
 
-continue a task's current run from its newest complete checkpoint
+continue a task's current run from its newest complete checkpoint; --note tells its agent something
 
 - What it does: sends control verb `continue-task`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
+- `--note <note>`: a note the continued run's agent reads at its next plan/execute (at most 4096 bytes)
+- `--note-scope <note-scope>`: next-attempt (default) or remaining-attempts
 
 ## `orca task set-loop <group> <task> --file <file>`
 

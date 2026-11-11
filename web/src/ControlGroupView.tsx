@@ -47,6 +47,8 @@ import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
 import { isRetryKey } from "./reviewKeys.js";
 import { useClock } from "./clock.js";
+import { NOTE_MAX_BYTES, utf8Bytes, type NoteScope } from "./operatorNote.js";
+import { Select } from "./ui/Select.js";
 
 const short = (hash: string): string => hash.slice(0, 12);
 /** Estimate usable-answer spec, correction of 2026-10-20: a withdrawn estimate's reasonCode prefix (the reason follows). */
@@ -430,8 +432,15 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const unresolvedCount = unresolvedWork.size;
   const workCounts = ([["continuableWork", continuable.length], ["retryableWork", retryableCount], ["unresolvedWork", unresolvedCount]] as const)
     .filter(([, n]) => n > 0);
+  // #226 (ii): an optional note every continuation sent from here carries; the continued run reads it at its next plan
+  // and execute (ccloop operatorNoteGate) -- never injected into a running turn.
+  const [noteText, setNoteText] = useState("");
+  const [noteScope, setNoteScope] = useState<NoteScope>("next-attempt");
+  const noteBody = noteText.trim();
+  const noteTooLarge = utf8Bytes(noteBody) > NOTE_MAX_BYTES;
+  const withNote = <T extends object>(payload: T): T => (noteBody === "" ? payload : { ...payload, operatorNote: { text: noteBody, scope: noteScope } });
   const selections = (): ContinuationSelectionV1[] =>
-    continuable.map(({ run, checkpointId }) => ({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
+    continuable.map(({ run, checkpointId }) => withNote({ taskId: String(run.taskId), predecessorRunId: run.runId, checkpointId }));
   // Labels and progress spec §4.2: the label filter (any of) and the open task live in page memory only.
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -523,6 +532,15 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {!archived && view.summary.state === "ready" && view.summary.executionPending !== true && props.startQueued !== undefined && (
         <p role="status" data-testid="start-queued">{t("control.group.startQueued", { ahead: props.startQueued })}</p>
       )}
+      {!archived && continuable.length > 0 && (stopMode === null || (handoffActive && view.summary.stopState === "handoff-complete")) && (
+        <div className="continue-note grid max-w-2xl gap-2" role="group" aria-label={t("control.group.continueNote.title")}>
+          <textarea aria-label={t("control.group.continueNote.text")} placeholder={t("control.group.continueNote.placeholder")} value={noteText}
+            onChange={(event) => setNoteText(event.currentTarget.value)} />
+          <Select aria-label={t("flow.note.scope")} value={noteScope} onValueChange={setNoteScope}
+            options={[{ value: "next-attempt", label: t("flow.note.next-attempt") }, { value: "remaining-attempts", label: t("flow.note.remaining-attempts") }]} />
+          {noteTooLarge && <p data-tone="warn" role="status">{t("flow.note.tooLarge")}</p>}
+        </div>
+      )}
       {!archived && (
         <div role="toolbar" aria-label={t("control.group.dispatchActions")} className={actionRow}>
           {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
@@ -544,7 +562,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {handoffActive && view.summary.stopState === "handoff-complete" && continuable.length > 0 && (
             <button
               type="button"
-              onClick={() => onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } })}
+              disabled={noteTooLarge}
+              onClick={() => { onCommand({ verb: "resume-from-handoff", groupId, expectedRevision: revision, payload: { selections: selections() } }); setNoteText(""); }}
             >
               {t("control.group.continueSelected", { n: continuable.length })}
             </button>
@@ -555,13 +574,17 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
             <button
               key={run.runId}
               type="button"
-              onClick={() => onCommand({
-                verb: "continue-task",
-                groupId,
-                taskId: String(run.taskId),
-                expectedRevision: revision,
-                payload: { predecessorRunId: run.runId, checkpointId },
-              })}
+              disabled={noteTooLarge}
+              onClick={() => {
+                onCommand({
+                  verb: "continue-task",
+                  groupId,
+                  taskId: String(run.taskId),
+                  expectedRevision: revision,
+                  payload: withNote({ predecessorRunId: run.runId, checkpointId }),
+                });
+                setNoteText("");
+              }}
             >
               {t("control.group.continueTask", { taskId: String(run.taskId) })}
             </button>
