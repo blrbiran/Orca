@@ -177,6 +177,10 @@ describe("the decisions endpoints (spec sections 4.2 and 4.3.1)", () => {
                 question: open.question,
               },
             ],
+            // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #257 adds the per-project count of
+            // unreviewed major decisions outside the high tier; here the only one (lowTier) is reviewed, so it is empty.
+            // Still the exact bytes, so any other new key, or a row in the count, is red.
+            majorOutsideHighTier: {},
           });
           expect(await todo.text()).toBe(expectedTodo);
         } finally {
