@@ -4,9 +4,9 @@ import { SYSTEM_LABELS } from "./labels.js";
 import { choosePlanByLabels, documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
 import { classifyNpmCommand, npmCommandReason } from "./npmCommand.js";
 import { normalizeControlPlan } from "./planImport.js";
-import { isNpmLockfile } from "./requirementManifests.js";
+import { isNpmLockfile, MAX_PACKAGE_BYTES, packageOf } from "./requirementManifests.js";
 import { deepFreeze, fence } from "./requirementClarify.js";
-import { overviewPathExists, treeOf } from "./requirementOverview.js";
+import { GIT_READ_TIMEOUT_MS, overviewPathExists, readBlobs, treeOf, type TreeEntry } from "./requirementOverview.js";
 import type { DraftBody, MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
 import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
@@ -262,6 +262,22 @@ function needsRootNpmLockfile(command: string): boolean {
   });
 }
 
+/** Issue #135 (session f958ec3f): a check that evaluates code with `node -e/--eval/-p/--print` and calls `require(`. */
+const NODE_EVAL_REQUIRE = /\bnode\b[^;&|]*?\s(?:-e|-p|-pe|--eval|--print)(?:\s|=)[\s\S]*\brequire\s*\(/;
+
+/**
+ * Issue #135: the `type` of the package.json at the tree's root, read from the commit as the manifests are; null when
+ * there is none, it cannot be read or is too large, or it gives no type -- each leaves a check unjudged.
+ */
+async function rootPackageType(repo: string, commit: string, tree: readonly TreeEntry[]): Promise<string | null> {
+  const entry = tree.find((candidate) => candidate.path === "package.json");
+  if (entry === undefined) return null;
+  try {
+    const [blob] = await readBlobs(repo, [entry.oid], MAX_PACKAGE_BYTES + 1, GIT_READ_TIMEOUT_MS);
+    return blob === undefined || blob.length > MAX_PACKAGE_BYTES ? null : packageOf(blob)?.type ?? null;
+  } catch { return null; }
+}
+
 type Criterion = { readonly id: string; readonly text: string };
 /**
  * #204: the split's free-text successCondition lost an acceptance criterion's exact values (`todo/doing/done`), and the
@@ -409,6 +425,13 @@ export async function validateMultiSplitDraft(input: {
     if (!committedByDir.has(write.dir)) committedByDir.set(write.dir, (await treeOf(path, commit).catch(() => [])).map((entry) => entry.path));
     for (const missing of testsOutsideScope(write.checks, write.targetPaths, new Set(committedByDir.get(write.dir)!))) reasons.push(`check-write-scope:${task.taskId}:${write.dir}:${missing}`);
   }
+  // #135: a write's checks run in its directory, so that directory's root package.json says what require() would load.
+  for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
+    const path = input.paths.get(write.dir), commit = input.commits.get(write.dir);
+    if (path === undefined || commit === undefined || !write.checks.some((check) => NODE_EVAL_REQUIRE.test(check))) continue;
+    const tree = await treeOf(path, commit).catch(() => null);
+    if (tree !== null && (await rootPackageType(path, commit, tree)) === "module") reasons.push(`check-module-system:${task.taskId}:${write.dir}`);
+  }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -484,6 +507,11 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   // #130: NO_LOCKFILE_RULE in code -- an npm install that needs or writes a lockfile, where the root commits none.
   if (committedTree !== null && !committedTree.some((entry) => isNpmLockfile(entry.path))) {
     for (const task of output.tasks) for (const command of new Set(task.setup ?? [])) if (needsRootNpmLockfile(command)) reasons.push(`setup-lockfile:${task.taskId}:${command}`);
+  }
+  // #135: CHECK_SOURCE_RULE in code -- a `node -e` check that require()s, where the root package.json says type module.
+  const requiring = output.tasks.filter((task) => task.checks.some((check) => NODE_EVAL_REQUIRE.test(check)));
+  if (requiring.length > 0 && committedTree !== null && (await rootPackageType(input.repo, input.commit, committedTree)) === "module") {
+    for (const task of requiring) reasons.push(`check-module-system:${task.taskId}`);
   }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
@@ -561,6 +589,7 @@ export function explainSplitReason(reason: string): string | null {
     case "ledger-path": return "only the task's first writes entry (its primary directory) may name `.decisions` as a target path";
     case "bugfix-test-scope": return "this bugfix uses reproduce-first but its writable target paths include no regression test; add a test path or choose a loop without reproduce-first";
     case "setup-lockfile": return "this setup command runs `npm ci`, or an `npm install` that writes package-lock.json, but the repository root commits no package-lock.json or npm-shrinkwrap.json: `npm ci` fails without one, and a setup that creates the lockfile is refused; omit `setup` if nothing needs installing, else use `npm install --no-package-lock`";
+    case "check-module-system": return "this check runs `node -e` (or `--eval`, `-p`) with `require(`, but the package.json of the directory it runs in says \"type\": \"module\", so the repository's files are ES modules that require() cannot load as the check expects; run the repository's own test scripts (as `manifests` lists them), or load modules with `node --input-type=module -e` and `await import(...)`";
     case "check-write-scope": return "the task's check names a committed test file outside the task's targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file (or its directory as `<directory>/**`) to this task's targetPaths, or check only files this task may write";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";
