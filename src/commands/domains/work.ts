@@ -505,7 +505,11 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
   confirmNote = [...unestimatedLines(group(c), view, { afterConfirm: true }), ...fundingLines(funding)];
   const defaults = (await config(c)).defaults;
   const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;
-  if (preview.selectionsHash === null || preview.proposalVersion !== view.proposal.proposalVersion) {
+  // Tester #144(b): an already confirmed proposal is the panel's to answer (no-op-command), not this pre-check's. The panel
+  // refuses it before it compares selections, so an unresolved preview sends the all-zero hash -- which, should the
+  // proposal have been reopened meanwhile, matches no resolution and is refused there.
+  const confirmed = view.proposal.state === "confirmed";
+  if (!confirmed && (preview.selectionsHash === null || preview.proposalVersion !== view.proposal.proposalVersion)) {
     throw new EntryRejection("agent-selection-unresolved", unresolvedMessage(group(c), preview));
   }
   const flagFor = { worker: "worker-profile", handoff: "handoff-profile", goalReview: "goal-review-profile" } as const;
@@ -527,7 +531,7 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
     profileIds: { estimator: bindings.estimator?.profileId ?? null, worker: bindings.worker!.profileId, handoff: bindings.handoff!.profileId, goalReview: bindings.goalReview!.profileId },
     profileHashes: { estimator: bindings.estimator?.profileHash ?? null, worker: bindings.worker!.profileHash, handoff: bindings.handoff!.profileHash, goalReview: bindings.goalReview!.profileHash },
     contextPolicy: { handoffAtContextTokens: typeof tokens === "number" ? tokens : view.proposal.contextPolicy.handoffAtContextTokens },
-    selectionsHash: preview.selectionsHash,
+    selectionsHash: preview.selectionsHash ?? "0".repeat(64),
     ...(view.integration === undefined ? {} : { integrationHash: view.integration.schemeHash }),
     ...(c.args.flags.hold === true ? { hold: true } : {}),
   };

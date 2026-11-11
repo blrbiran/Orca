@@ -164,6 +164,19 @@ describe("refusals made here", () => {
     expect(w.posts()).toEqual([]);
   });
 
+  // Tester #144(b): a confirmed group got the CLI's own agent-selection-unresolved instead of the panel's no-op-command.
+  it("a confirm of an already confirmed group is sent, so the panel answers it, even when the selections no longer resolve", async () => {
+    const w = await world({}, {
+      "GET groups/g-alpha/agent-preview": { status: 200, body: { groupId: "g-alpha", proposalVersion: 3, selectionsHash: null } },
+      "POST groups/g-alpha/confirm": { status: 409, body: { error: { code: "no-op-command", message: "The command changes nothing.", retryable: false } } },
+    });
+    const binding = { profileId: "work-1", profileHash: H.work };
+    Object.assign(w.state.view.proposal, { state: "confirmed", budgetMode: "soft", profiles: { estimator: { profileId: "est-1", profileHash: H.est }, worker: binding, handoff: binding, goalReview: binding } });
+    const out = await cli(["group", "confirm", "g-alpha", "--json"], w.dir);
+    expect([out.code, out.json().body.error.code]).toEqual([2, "no-op-command"]);
+    expect(w.posts().map((p) => p.path)).toEqual(["groups/g-alpha/confirm"]);
+  });
+
   it("a task with no current run cannot be retried by the CLI's read", async () => {
     const w = await world();
     const out = await cli(["task", "retry", "g-alpha", "t2", "--json"], w.dir);
