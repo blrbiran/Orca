@@ -102,9 +102,10 @@ describe("orca mcp serve (CLI v2 spec §10)", () => {
     const client = await connect({ root: panel.dir, state: panel.dir, env: {} });
     try {
       const refused = await call(client, ["auth", "login"]);
+      // Measured first, directly: mutation "drop the MCP refusal" -> the start reaches the panel -> red here.
+      expect(panel.requests).toEqual([]);
       expect(refused.isError).toBe(true);
       expect(envelope(refused as never).body.error.code).toBe("cli-login-not-over-mcp");
-      expect(panel.requests).toEqual([]);
       const status = await call(client, ["auth", "status"]);
       expect((status as { content: Array<{ text: string }> }).content[0]!.text).toContain("person-token-missing");
     } finally {
