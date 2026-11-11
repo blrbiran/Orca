@@ -133,10 +133,13 @@ describe("an agent's walk on v2 commands only (CLI v2 spec §12.2)", { timeout: 
 
       // group confirm --hold → start → show
       expect((await ok("group", "show", "g")).body.plan.planHash).toBe(planHash);
-      // The profile declares a 1,000,000-token window, so confirm must name a handoff threshold within it (a null one is
-      // execution-policy-unrepresentable); --hold so the person's retry below is the only one (no escalation ladder).
+      // Ruling (2026-11-12, tester follow-up F): #195, human ruling 「要改」 -- confirm no longer requires a handoff threshold
+      // under a declared window (nothing in production reports context usage), so the walk confirms with none: the
+      // profile declares a 1,000,000-token window and the CLI sends null, which used to be execution-policy-unrepresentable.
+      // --hold so the person's retry below is the only one (no escalation ladder).
       // ERRATUM (#180): --hold stops only the automatic start; the setup failure below is what exempts the ladder.
-      await ok("group", "confirm", "g", "--hold", "--handoff-at-context-tokens", "1000000");
+      await ok("group", "confirm", "g", "--hold");
+      expect((await ok("group", "show", "g")).body.proposal.contextPolicy).toEqual({ handoffAtContextTokens: null });
       await ok("group", "start", "g");
       const shown = await ok("group", "show", "g");
       expect(shown.body.workItems.map((item: { taskId: string }) => item.taskId)).toEqual(["exporter"]);
