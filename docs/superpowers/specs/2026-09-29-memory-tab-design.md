@@ -356,3 +356,21 @@ Source: the ledger `.superpowers/sdd/2026-10-03-memory-tab/progress.md`, the two
 
 - **§2.1 and §3.3 (E1)** `ccmem-failed:<status>` has three kinds of status, not two: the exit code, the signal name, and the errno name of a spawn that never started ccmem (`ENOTDIR` for a repository path that is a file, `ENOEXEC` for an `ORCA_CCMEM_BIN` that is not a program). `ENOENT` and `EACCES` stay `ccmem-missing`. The family stays open and is shown as sent (§5.1).
 - **§3.3 (E2)** A status never contains spaces. When libuv has no name for an errno, Node puts its message in `code` (`Unknown system error -8` for `ENOEXEC`, Node v22.13.1 on macOS); the adapter names it from `os.constants.errno` by the error's `errno` instead, and answers `unknown` if no name matches. Node's message stays in the error message.
+
+## 12. Addition: paging (2026-11-11, tester follow-up E, implementer W7, branch `worktree-agent-a70119822c74c82c0`; the text above is kept verbatim)
+
+Source: tester #258 and `docs/superpowers/specs/2026-11-11-tester-followup-e-design.md` §10. Implemented in
+`feat(memory): list and search page by offset, and the Memory page loads more and says which matches it shows (#258)`
+(on top of `40b069ab`). Where this section and §3.5 / §5.1 / §5.2 disagree, this section wins.
+
+- **§3.5 and §5.1** `GET /api/memory/list` and `GET /api/memory/search` take `offset` besides `limit`: absent means 0;
+  otherwise decimal digits without a leading zero, 0 to 1,000,000; anything else (or a repeated `offset`) is
+  400 `memory-query-invalid`, checked before ccmem starts, as `limit` is. The page is `records = matches[offset,
+  offset + limit)` over the unchanged fixed order (pinned, newest update, larger ref).
+- **`MemoryPage`** gains `offset` (where this page starts) and `hasMore` (`offset + records.length < total`). `total` and
+  `truncated` keep their meaning (`truncated`: not every match is in this page, so a later page is `truncated` too).
+  The strict wire schema (`src/memory/wire.ts`) and the Web copy (`web/src/memoryTypes.ts`) carry both fields.
+- **§5.2** The first request is unchanged (no `offset`, server default `limit`). While `hasMore`, the list ends with a
+  secondary "Load more" button that reads the same list or search from where the shown list ends and appends it
+  (a ref already shown is not repeated). A list or search started meanwhile wins: the late page is dropped. A list
+  that does not show every match says which it shows, "1–50 of 508", in place of "Showing n of m; narrow the search."
