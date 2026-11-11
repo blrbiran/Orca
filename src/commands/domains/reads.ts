@@ -155,6 +155,45 @@ function formatFailureLines(work: FormatFailureWork | undefined): string[] {
   ];
 }
 
+interface RunResultsBody {
+  runId?: string; groupId?: string; taskId?: string | null; availability?: string; source?: { status: string; reason: string | null };
+  attempts?: Array<{ attempt: number; current: boolean; execution: string; verification: string; outputs: Array<{ status: string }> }>;
+}
+type Eligibility = { status: string; reason?: string } | { unreadable: string };
+const resultsEligibility = new WeakMap<object, Eligibility>();
+
+/** The refusal code of a read that failed (the panel's answer, or a refusal made here). */
+function readFailureCode(error: unknown): string {
+  const e = error as { response?: { body?: { error?: { code?: unknown } } }; code?: unknown };
+  const code = e?.response?.body?.error?.code ?? e?.code;
+  return typeof code === "string" ? code : "unreadable";
+}
+
+/**
+ * Tester #183 + D17: `run results` printed a truncated dump, so a rejected verification was invisible, and its availability
+ * said nothing about recovery. One line per attempt, then whether the saved result can be recovered and the command that does it.
+ */
+function runResultsText(body: unknown): string {
+  const b = body as RunResultsBody;
+  const source = b.source === undefined || b.source.status === "available" ? "" : ` (source ${b.source.status}${b.source.reason === null ? "" : `: ${b.source.reason}`})`;
+  const lines = [`run ${b.runId ?? "?"}  group ${b.groupId ?? "?"}  task ${b.taskId ?? "-"}`, `results: ${b.availability ?? "?"}${source}`];
+  for (const a of b.attempts ?? []) {
+    const counts = new Map<string, number>();
+    for (const output of a.outputs) counts.set(output.status, (counts.get(output.status) ?? 0) + 1);
+    const outputs = a.outputs.length === 0 ? "0" : `${a.outputs.length} (${[...counts].map(([status, n]) => `${n} ${status}`).join(", ")})`;
+    lines.push(`attempt ${a.attempt}${a.current ? " (current)" : ""}: execution ${a.execution}, verification ${a.verification}, outputs ${outputs}`);
+  }
+  const eligibility = typeof body === "object" && body !== null ? resultsEligibility.get(body) : undefined;
+  if (eligibility === undefined) return lines.join("\n");
+  if ("unreadable" in eligibility) lines.push(`recoverable: unknown (${eligibility.unreadable})`);
+  else if (eligibility.status !== "eligible") lines.push(`recoverable: no (${eligibility.reason ?? eligibility.status})`);
+  else {
+    lines.push("recoverable: yes");
+    if (b.taskId != null && b.groupId !== undefined) lines.push(`next: orca task verify-saved-result ${b.groupId} ${b.taskId}`);
+  }
+  return lines.join("\n");
+}
+
 export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
@@ -250,7 +289,18 @@ export const READ_ROWS: CommandDef[] = [
     ],
     examples: ["orca run transcript run-1", "orca run transcript run-1 --call 1/plan/1", "orca run transcript run-1 --call 1/plan/1 --before 4096"],
     paths: (c) => [transcriptPath(c)], format: transcriptText }),
-  read({ domain: "run", action: "results", summary: "a run's saved results", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/results`] }),
+  read({ domain: "run", action: "results", summary: "a run's saved results", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/results`],
+    // --json (and --quiet) print the results body as before and read nothing more; the human lines also read eligibility.
+    compose: async ([results], c) => {
+      const { json, quiet } = c.args.global;
+      if (json || quiet || typeof results !== "object" || results === null) return results;
+      let eligibility: Eligibility;
+      try { eligibility = await c.read(`runs/${ids(c, "run")}/saved-result-eligibility`) as Eligibility; }
+      catch (error) { eligibility = { unreadable: readFailureCode(error) }; }
+      resultsEligibility.set(results, eligibility);
+      return results;
+    },
+    format: runResultsText }),
   read({ domain: "run", action: "eligibility", summary: "whether a run's saved result can be verified instead of re-run", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/saved-result-eligibility`] }),
   read({ domain: "decision", action: "list", summary: "a group's landed, pending and unlanded decisions", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/decisions`] }),
   read({ domain: "correction", action: "list", summary: "every recorded correction, its debug groups and closed state", paths: () => ["corrections"] }),

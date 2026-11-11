@@ -81,6 +81,55 @@ describe("human output (#140)", () => {
     expect(out.stdout).toContain("task retry g-alpha t1 --allow-observed-paths");
   });
 
+  // Tester #183 + D17: `run results` printed a truncated dump, so a rejected verification was invisible, and `availability:
+  // available` said nothing about whether the saved result could still be recovered.
+  const OUTPUT = (status: string) => ({ outputId: `o-${status}`, path: `out/${status}.md`, label: status, origin: "reported", status, byteLength: 10 });
+  const RESULTS = {
+    schema: "orca-run-results-v1", runId: "run-1", groupId: "g-alpha", taskId: "t1", availability: "available", currentAttempt: 2,
+    source: { status: "available", reason: null },
+    attempts: [
+      { attempt: 1, current: false, execution: "partial", verification: "not-run", outputs: [] },
+      { attempt: 2, current: true, execution: "complete", verification: "failed", outputs: [OUTPUT("available"), OUTPUT("deleted")] },
+    ],
+  };
+  const resultsPanel = (eligibility: { status: number; body: unknown }) => fakePanel({
+    "GET runs/run-1/results": { status: 200, body: RESULTS }, "GET runs/run-1/saved-result-eligibility": eligibility,
+  });
+
+  it("run results prints one line per attempt with its verification, and why the saved result is not recoverable", async () => {
+    const p = await resultsPanel({ status: 200, body: { status: "unavailable", reason: "saved-result-verification-failed" } });
+    const out = await cli(["run", "results", "run-1"], p.dir);
+    expect(out.code).toBe(0);
+    const lines = out.stdout.split("\n");
+    expect(lines).toContain("attempt 1: execution partial, verification not-run, outputs 0");
+    expect(lines).toContain("attempt 2 (current): execution complete, verification failed, outputs 2 (1 available, 1 deleted)");
+    expect(lines).toContain("recoverable: no (saved-result-verification-failed)");
+    expect(out.stdout).not.toContain("next:");
+  });
+
+  it("run results names the command that recovers an eligible saved result", async () => {
+    const p = await resultsPanel({ status: 200, body: { status: "eligible", authorityKind: "execution-without-final-v1", verificationOnly: true } });
+    const out = await cli(["run", "results", "run-1"], p.dir);
+    const lines = out.stdout.split("\n");
+    expect(lines).toContain("recoverable: yes");
+    expect(lines).toContain("next: orca task verify-saved-result g-alpha t1");
+  });
+
+  it("run results says recoverability is unknown when the eligibility read is refused, and still prints the attempts", async () => {
+    const p = await resultsPanel({ status: 404, body: { error: { code: "run-not-found", message: "No control run was found.", retryable: false } } });
+    const out = await cli(["run", "results", "run-1"], p.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout.split("\n")).toContain("recoverable: unknown (run-not-found)");
+    expect(out.stdout).toContain("verification failed");
+  });
+
+  it("run results --json prints the results body byte for byte and reads nothing else", async () => {
+    const p = await resultsPanel({ status: 200, body: { status: "unavailable", reason: "x" } });
+    const out = await cli(["run", "results", "run-1", "--json"], p.dir);
+    expect(out.stdout).toBe(`${JSON.stringify({ schema: "orca-cli-response-v1", status: 200, body: RESULTS })}\n`);
+    expect(p.requests.map((r) => r.path)).toEqual(["runs/run-1/results"]);
+  });
+
   it("plan show without --version prints no `document: undefined`", async () => {
     const p = await fakePanel({ [`GET plan-library/${ENTRY}`]: { status: 200, body: { entryId: ENTRY, projectId: "repo-1", head: null, versions: [] } } });
     const out = await cli(["plan", "show", ENTRY], p.dir);
