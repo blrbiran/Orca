@@ -170,3 +170,14 @@ rebased tree before `merge --ff-only`:
 - ccloop main-tree `dist/` rebuilt with #249 after the Orca gates finished.
 - Not done, waits for the human: push ccloop (Tier 0 gate refused the agent's push), then repin Orca and push Orca and
   ccmem. No paid run was needed this round.
+
+## Repin (2026-11-12)
+
+- The human pushed ccloop main with #249 (and Orca main up to W4) mid-session. Repin in worktree
+  `.claude/worktrees/e-repin` (real `npm ci`, npm 10.9.9): `node scripts/pin-ccloop.mjs 2af2fb79…` — seven checks ok
+  (default-resolution E2E 12/12). Commit `chore(deps): pin ccloop to the codex usage kept after a mid-stream error row (#249)`.
+- Repin gate (`test-affected --base=main`, `ORCA_CCLOOP_BIN` = ccloop main-tree dist, log
+  `/private/tmp/orca-e1111/repin-gate.log`): 458 files; root 3,897 pass / 35 skipped / 1 red = known `orchestration`;
+  web 8/8. Fast-forwarded into main; main-tree `npm ci`, build, web build, 7777 kickstarted; `orca status` all ok,
+  ccloop `2af2fb7` pinned and installed.
+- Still waits for the human: push whatever `ls-remote` shows unpushed on the three mains.

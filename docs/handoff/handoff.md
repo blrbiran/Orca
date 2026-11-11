@@ -64,7 +64,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-11 深夜，会话 `e43cd52d`，测试者反馈 E 轮）—— #241 组级验收、#245 合并后检查留证、转录一批、#249（ccloop）、待裁项按控制器建议落地；Orca 全部 `--ff-only` 在本地 main，**未推**；ccloop #249 在 ccloop 本地 main，**未推、未 repin**（pin 仍是含 #225 的那笔）
+### 3.最新（2026-11-11 深夜，会话 `e43cd52d`，测试者反馈 E 轮）—— #241 组级验收、#245 合并后检查留证、转录一批、#249（ccloop）、待裁项按控制器建议落地；Orca 全部 `--ff-only` 在 main；ccloop #249 **人已推**，Orca **已 repin** 到它（主题行 `chore(deps): pin ccloop to the codex usage kept after a mid-stream error row (#249)`）；推到哪一笔以 `ls-remote` 现核
 
 - **人的话（原话，全文在台账 `.superpowers/sdd/2026-11-11-tester-followup-e/progress.md`）**：D 轮三组答案「同意」；#125(a)「你看下 Orca 和 ccloop 整体如何调整最优，先不要顾虑之前裁定的部分」；待裁项「其他都按你的建议走」、#200「加」；组级验收与 #251「其他都同意」；#243「这一轮先不做，下一轮我们讨论一下」；真浏览器「暂时不看，我之后发现问题会再找你」；本 session 范围「同意」；清理脚本人已执行；后又一揽子：「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」「…临时允许你 push ccloop…」「Orca 仓库 repin 完成后临时允许你 push Orca」「遇到卡住必须等人的事情，请继续做不必等人的部分」「有问题先按你的建议执行…在最后阶段报给我审核」。**agent 的 `git push` 被 Tier 0 闸门拦（聊天授权不解除）⇒ ccloop 没推 ⇒ 不能 repin ⇒ Orca 也没推。付费真跑没跑**（没有非付费不可的验证）。
 - **设计**：`docs/superpowers/specs/2026-11-11-tester-followup-e-design.md`（§0 裁定原话、§1–§10 各项、§12 授权的判据改写）；被推翻的旧 spec 各追加了带日期的更正节。七席并行实现（W1 ccloop、W2–W7 Orca），控制器逐个 rebase、重生成 CLI 文档、typecheck、重跑该席判据后 `--ff-only` 合入。
@@ -285,7 +285,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.0 接手顺序（会话 `e43cd52d` 2026-11-11 深夜收尾）
 
-1. **push 归人（agent 的 push 被 Tier 0 闸门拦，聊天授权不解除）**：先推 **ccloop** main（含 #249 一笔＋handoff），再在 Orca 里 repin：`node scripts/pin-ccloop.mjs <ccloop 那笔的 40 位 sha>`（只在装了真 `node_modules` 的工作树、npm 10 下跑；见 §3.3 repin 做法），repin 门＋主树 `npm ci`＋重建 ccloop 主树 `dist/`＋装 7777；然后推 **Orca** main（本轮全部提交＋repin）与 **ccmem** main（一笔 handoff）。远端只用 `ls-remote` 现核。
+1. **push 归人（agent 的 push 被 Tier 0 闸门拦，聊天授权不解除）**：用 `ls-remote` 现核后，推 Orca main、ccloop main、ccmem main 上尚未推的提交（本轮 W2、repin、handoff）。repin 已做完（pin-ccloop 七项 ok；repin 门 `test-affected --base=main` 选 458 文件：3,897 过／35 跳过／1 红＝既有 `orchestration`；主树 `npm ci` 与 7777 已装，`orca status` 报 ccloop `2af2fb7`）。
 2. **人审本轮按「先按你的建议执行」定的事**（§八 2c，都可逆）。
 3. **#243 下一轮先和人讨论**（人裁「这一轮先不做，下一轮我们讨论一下」）：Live 区的输入框；真正注入正在跑的回合违背转录 spec（`2026-10-23-live-transcript-design.md` 「Nothing is ever injected into a running turn」），ccloop 也做不到；可做的是「停下并带 note 续跑」（handoff-stop 是组级，会连同组内其它在跑任务一起冻住）。字号不一致那半已随 #244 修掉。
 4. **agent 能自己做的余项**：W2 登记的无判据处（合并后检查 `no-required-checks`／`no-task` 两种 why 无夹具可达；验收 Web 组件在 `ControlGroupView` 里的位置与 tab 计数；验收 pass 的停止守卫；tip 在检查中移动时的中止）；组级验收多仓／目录组（现记 `not-run`）；合并后检查与组级验收的记录跨重启只有组级验收持久（合并后检查的进行中状态仍只在内存）；#252 真实开始时间排序要 ccloop 在转录列表输出 `startedAt`（跨仓、两边 strict schema）；Web 新建项目表单对 member 仍可见（点了得 `owner-required`）；accept-attempt Web 的 diff stat 与非 loop 任务检查、`confirmedLadderFor` 接线判据；组详情 region 卸载（#219 残余）、依赖图层内排序（#232 残余）；D6 归档收进整棵 `run/worktrees/attempt-N`（先量）；scheduler 落地不带组／任务身份；failover 的单次调用与 flow 调用改派；#170；code-over-agent 清单。
@@ -479,7 +479,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：删去已了结的条目——各轮的 push 请求（2026-11-11 `ls-remote` 现核三仓本地 main＝`origin/main`）、已做的 repin（当前 pin 是 `chore(deps): pin ccloop to the zero-usage and prompt-mode exhausted fixes`）、`~~划掉~~` 的条目、已答复的问题（UI 信息架构四问、#158／#138 方向、#162／#173 取舍、#212、profile 升 v4、#168／#179／#157、流程第一期安全裁定、soft／failover D1–D6、F5／F6、O9 claude 付费段）、已查清的 `multiDirLandingD` 间歇红与 `dev checkpoint write`「挂住」（见 §3.A）、已不存在的清理路径（`/tmp/orca158-*`、`/tmp/chk-x`、`/private/tmp/orca-{ffec7b28,0e13a9b7,b37f7ce9}`、`.claude/worktrees/tester-followup-20261108`、ccloop 的 prunable worktree，2026-11-11 现测都已不在）；同类项各并成一条。更早（会话 `a3b2a7a7`）删过的见 git 历史。
 
-1. **push 与 repin**（会话 `e43cd52d`；agent 的 `git push` 被 Tier 0 闸门拦，人给的「临时允许 push」解不开闸门）：先推 ccloop main（#249＋handoff），再 repin Orca 到那笔、推 Orca main（本轮全部）与 ccmem main（handoff）。步骤见 §4.0 第 1 条。7777 已装上 Orca 本轮代码（pin 未变）。
+1. **push**（会话 `e43cd52d`；agent 的 `git push` 被 Tier 0 闸门拦，人给的「临时允许 push」解不开闸门）：三仓 main 上尚未推的提交（以 `ls-remote` 现核）。repin 已做、7777 已装上 repin 后的代码。
 2. **看真面板**（人 2026-11-11「暂时不看，我之后发现问题会再找你」——不催）：E 轮新 UI 全部只在 jsdom 测过：转录换行／工具调用合并成一行／结果行用量／‹ › 分页与范围／run 详情移到 runs 表下方（含 390 px 宽）；Overview「已完成（N）」折叠；Memory「加载更多」；Decisions「高层级之外的重要决策」提示；浮层淡入；lilac 主题；Problems 里的组级验收行（Recheck／Waive）；需求答题「回答并结束澄清」按钮。D 轮那批同样没在真浏览器看过。
 2c. **审本轮控制器按「先按你的建议执行」定的事**（D 轮的登录／预算／accept-attempt 三组答案人已「同意」，已删）：
    - #251：Web 的「回答并结束澄清」按钮**不**像 Consensus 那样在还有开放分支时二次确认（按钮文字已说明会结束澄清）。
