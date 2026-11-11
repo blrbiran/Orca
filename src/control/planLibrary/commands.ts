@@ -107,7 +107,16 @@ function savedSource(store: ControlStore, source: Extract<PlanLibraryCommand, { 
   // The same check acceptance makes (requirementCommands.ts): the hash names the stored plan the person saw.
   if (sha256Canonical(draft.plan) !== source.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
   const stored = draft.plan as { targetRepo: string };
-  return { projectId: group.requirement.repoId, raw: docFromSource(schedulerControlPlanSourceOf(stored, stored.targetRepo)),
+  const plan = schedulerControlPlanSourceOf(stored, stored.targetRepo);
+  // Tester follow-up E §7 (#250): acceptance seeds the agent picked on New requirement (the estimator override) as the
+  // group's worker layer when no worker override exists and the plan names no group agent (requirementCommands.ts,
+  // tester-round2 spec §6.2.1). The saved document gets the same seed, folded into the plan layer as a saved group's
+  // panel layer is (#164), so a group imported from it resolves the agent the accepted group would.
+  const overrides = readGroupAgentOverrides(group);
+  const seeded = overrides.estimator !== undefined && overrides.worker === undefined && plan.agent?.agent === undefined
+    ? foldAgentLayer(plan.agent, overrides.estimator) : plan.agent;
+  const { agent: _agent, ...planRest } = plan;
+  return { projectId: group.requirement.repoId, raw: docFromSource({ ...planRest, ...(seeded ? { agent: seeded } : {}) }),
     origin: { kind: "requirement-draft", groupId: source.groupId, draftNo: source.draftNo, draftHash: source.draftHash } };
 }
 

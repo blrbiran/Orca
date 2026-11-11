@@ -306,6 +306,26 @@ describe("plan-library-save from a requirement split (§5.3 (a), C8)", () => {
     } finally { await x.dispose(); }
   });
 
+  // Tester follow-up E §7 (#250): acceptance seeds the agent picked on New requirement (the estimator override) as the
+  // group's worker layer (tester-round2 spec §6.2.1), but a draft saved to the library kept no agent, so every import or
+  // schedule fire of it was agent-unselected on a machine with no defaultAgent. The saved document now carries that
+  // seed in its plan agent, folded as acceptance folds it; with no estimator override the document names no agent.
+  it("writes the requirement's estimator agent into the saved plan's agent when the plan names none (#250)", async () => {
+    const { x, run } = await reviewed();
+    try {
+      const draftHash = readDraft(x.store, "r", 1).draftHash!;
+      const savedAgent = (commandId: string) => {
+        const saved = run(lib(commandId, "plan-library-save", { source: { kind: "requirement-draft", groupId: "r", draftNo: 1, draftHash }, name: commandId }));
+        expect(saved.error, JSON.stringify(saved)).toBeUndefined();
+        return (JSON.parse(readVersion(x.store, saved.result!.entryId!, saved.result!.sha256!)!.doc) as { agent?: unknown }).agent;
+      };
+      expect(savedAgent("save-plain")).toBeUndefined();
+      const body = JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as Record<string, unknown>;
+      x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...body, agentOverrides: { estimator: { agent: "codex", model: "gpt-x", contextWindow: null } } }));
+      expect(savedAgent("save-seeded")).toEqual({ agent: "codex", model: "gpt-x" });
+    } finally { await x.dispose(); }
+  });
+
   it("refuses a wrong draftHash (plan-version-conflict) and stores nothing", async () => {
     const { x, run } = await reviewed();
     try {

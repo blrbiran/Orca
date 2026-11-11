@@ -494,7 +494,12 @@ function unresolvedMessage(groupId: string, preview: AgentPreview): string {
     const next = slot.outcome.kind === "unavailable" ? "ccloop could not be asked just now; retry" : `set it with orca proposal set-agent ${groupId} ${target} --agent <installation>`;
     return `${`${slot.key}: ${slot.outcome.kind} ${slot.outcome.code ?? ""}`.trimEnd()}; ${next}`;
   });
-  return `${failed.length} agent slot(s) do not resolve:\n  ${lines.join("\n  ")}`;
+  // Tester follow-up E §7 (#250): the group worker slot is the batch set (tester-round2 spec): it reaches every task's
+  // worker and the reconcile slot. Lead with it when one of those has no agent at all; a slot naming a missing
+  // installation is not fixed by it.
+  const batch = failed.some((slot) => (slot.slot === "worker" || slot.slot === "reconcile") && slot.outcome.code === "agent-unselected")
+    ? [`orca proposal set-agent ${groupId} --slot worker --agent <installation>  (sets every task and reconcile)`] : [];
+  return `${failed.length} agent slot(s) do not resolve:\n  ${[...batch, ...lines].join("\n  ")}`;
 }
 
 /**
