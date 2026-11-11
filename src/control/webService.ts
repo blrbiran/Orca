@@ -853,9 +853,11 @@ export class WebControlService {
         if (autoConfirmBlocker(this.store, JSON.parse(String(row.body)) as Record<string, unknown>, current) !== null || current === null) continue;
         const proposal = readBudgetProposal(this.store, groupId), plan = readArchivedPlan(this.store, groupId);
         const profileId = current.estimatorProfileId!, profileHash = current.estimatorProfileHash!;
-        // The worker profile's declared window is the handoff threshold when the proposal names none (the flow children's
-        // binding, flowAssembly.ts): confirm refuses a null threshold under a profile that declares a window.
-        const window = this.deps.profileRouter.resolve("task", profileId, profileHash).snapshot.profile.capabilities.contextWindowTokens;
+        // Tester follow-up F §1 (#195, human ruling 「要改」): the proposal's threshold is sent as it stands -- confirm accepts
+        // null whatever the worker's window, so the pass no longer invents one from that window. The worker profile is
+        // still resolved here so an unresolvable default stays a skip retried next pass, not a refusal booked under the
+        // proposal version's one command id.
+        this.deps.profileRouter.resolve("task", profileId, profileHash);
         let selectionsHash: string | null;
         // Review I1: only a resolution that answers "unresolved" is booked; a thrown one (a transient port failure) books
         // nothing, so the next pass tries again.
@@ -869,7 +871,7 @@ export class WebControlService {
             planHash: plan.planHash, proposalVersion: proposal.proposalVersion, budgetMode: current.estimateMode,
             profileIds: { estimator: profileId, worker: profileId, handoff: profileId, goalReview: profileId },
             profileHashes: { estimator: profileHash, worker: profileHash, handoff: profileHash, goalReview: profileHash },
-            contextPolicy: { handoffAtContextTokens: proposal.contextPolicy.handoffAtContextTokens ?? window },
+            contextPolicy: { handoffAtContextTokens: proposal.contextPolicy.handoffAtContextTokens },
             selectionsHash: selectionsHash ?? "0".repeat(64),
           },
         };
@@ -2172,7 +2174,9 @@ export class WebControlService {
           const window = selected.worker.snapshot.profile.capabilities.contextWindowTokens, threshold = payload.contextPolicy.handoffAtContextTokens;
           // Tester follow-up B T3 (#203): a profile that declares no window is checked against the frozen task selections'
           // windows below, once the slots are known to be resolved; a declared one is checked here, as before.
-          if (window !== null && (threshold === null || threshold > window)) throw new ControlError("execution-policy-unrepresentable", threshold === null ? undefined : `threshold-above-window:${window}`);
+          // Tester follow-up F §1 (#195, human ruling 「要改」): a null threshold is accepted whatever the window -- nothing
+          // in production feeds acceptContextObservation, so a required number would do nothing. A number is still bounded.
+          if (window !== null && threshold !== null && threshold > window) throw new ControlError("execution-policy-unrepresentable", `threshold-above-window:${window}`);
           const profiles = Object.fromEntries(Object.entries(selected).map(([slot, p]) => [slot, p === null ? null : { profileId: p.snapshot.profile.profileId, profileHash: p.profileHash }])) as { estimator: ProfileBindingV1 | null; worker: ProfileBindingV1; handoff: ProfileBindingV1; goalReview: ProfileBindingV1 };
           for (const row of proposal.allocations) for (const d of dimensions) {
             const source = row.fieldProvenance[d];

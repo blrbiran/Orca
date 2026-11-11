@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  checkpointOf, type ClarifyRoundView, config, currentRun, file, fillRoundAnswer, fundingLines, instructionLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  checkpointOf, type ClarifyRoundView, config, contextHandoffLines, currentRun, file, fillRoundAnswer, fundingLines, instructionLines, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -332,7 +332,7 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "budget-mode", type: "string", summary: "strict|soft when the proposal has none" },
       { name: "worker-profile", type: "string", summary: "bind the worker profile" }, { name: "handoff-profile", type: "string", summary: "bind the handoff profile" },
       { name: "goal-review-profile", type: "string", summary: "bind the goal-review profile" },
-      { name: "handoff-at-context-tokens", type: "integer", summary: "hand off at this many context tokens" },
+      { name: "handoff-at-context-tokens", type: "integer", summary: "optional: hand off at this many context tokens (not active: no installed agent reports context usage)" },
     ],
     route: (c) => `groups/${group(c)}/confirm`, payload: (c) => confirmPayload(c) }),
     // Session 3cfc2e73 D3: the confirm result carries no allocations; the lines come from the view the payload read.
@@ -602,11 +602,13 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
   const budgetMode = view.proposal.budgetMode ?? str(c, "budget-mode") ?? defaults?.estimateMode;
   if (budgetMode === undefined) throw new EntryRejection("confirm-budget-mode-missing", "the proposal has no budget mode; pass --budget-mode strict|soft");
   const tokens = c.args.flags["handoff-at-context-tokens"];
+  const threshold = typeof tokens === "number" ? tokens : view.proposal.contextPolicy.handoffAtContextTokens;
+  confirmNote.push(...contextHandoffLines(threshold));
   return {
     planHash: view.plan.planHash, proposalVersion: view.proposal.proposalVersion, budgetMode,
     profileIds: { estimator: bindings.estimator?.profileId ?? null, worker: bindings.worker!.profileId, handoff: bindings.handoff!.profileId, goalReview: bindings.goalReview!.profileId },
     profileHashes: { estimator: bindings.estimator?.profileHash ?? null, worker: bindings.worker!.profileHash, handoff: bindings.handoff!.profileHash, goalReview: bindings.goalReview!.profileHash },
-    contextPolicy: { handoffAtContextTokens: typeof tokens === "number" ? tokens : view.proposal.contextPolicy.handoffAtContextTokens },
+    contextPolicy: { handoffAtContextTokens: threshold },
     selectionsHash: preview.selectionsHash ?? "0".repeat(64),
     ...(view.integration === undefined ? {} : { integrationHash: view.integration.schemeHash }),
     ...(c.args.flags.hold === true ? { hold: true } : {}),

@@ -212,7 +212,6 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const observedEnforcement = view.proposal.profiles === null
     ? firstProfile === undefined ? t("common.unknown") : enumText("budgetEnforcement", firstProfile.observed.budgetEnforcement)
     : t("budget.frozenAtConfirmation");
-  const contextUnavailable = config.profiles.some((profile) => profile.observed.contextObservation === "unavailable");
   // Backlog #11(b) (Orca handoff §9.1): handoffControl "durable" and a handoffExecution are what dispatch requires of a
   // task or handoff profile (webDispatch.ts probeBlocksDispatch, budget.ts assertCapabilities); a group bound to one
   // that lacks them is refused as claim-capability-unavailable and nothing more, so the two values are named here.
@@ -335,9 +334,6 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
               ...config.profiles.filter((profile) => profile.allowedWorkKinds.includes(workKind)).map((profile) => ({ value: profile.profileId, label: profile.profileId }))]} /></label>;
         })}
       </fieldset>}
-      {contextUnavailable && (
-        <p role="note">{t("budget.contextUnavailable")}</p>
-      )}
       {handoffBlocked.map((profile) => (
         <p role="note" key={`handoff-capability:${profile.profileId}`}>
           {t("budget.handoffBlocked", { profileId: profile.profileId, control: enumText("handoffControl", profile.observed.handoffControl), execution: profile.observed.handoffExecution === null ? t("common.none") : enumText("handoffExecution", profile.observed.handoffExecution) })}
@@ -495,6 +491,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         allowEmpty
         onClear={() => onDraft(CONTEXT_POLICY_KEY(groupId), BLANK_DRAFT)}
       />
+      {/* Tester follow-up F §1 (#195): nothing in production feeds Orca a context observation, whatever a profile declares,
+          so the threshold is optional and does nothing; said beside the field every time, not only under some profiles. */}
+      <p role="note" data-testid="context-handoff-inactive">{t("budget.contextUnavailable")}</p>
       <p className="num">
         {/* Issue #79: the ledger's token figures short, as the rest of the panel writes them (TokenInput.tsx shortTokens). */}
         {t("budget.ledger", { used: shortTokens(view.ledger.used.tokens), committed: shortTokens(view.ledger.committedRemaining.tokens), reserve: view.ledger.explicitUnallocatedReserve.tokens===null?t("budget.unlimited"):shortTokens(view.ledger.explicitUnallocatedReserve.tokens) })}

@@ -2,6 +2,7 @@
 // with a bare execution-policy-unrepresentable, though each task's frozen selection names a window. Confirm now falls back
 // to the frozen worker selections' numeric window, and the refusal says which case it is.
 import { describe, expect, it } from "vitest";
+import { readBudgetProposal } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 
@@ -43,6 +44,17 @@ describe("confirm's handoff threshold against the worker window (#203)", () => {
       expect(await confirmAt(h, 200_000)).toMatchObject({ error: { code: "execution-policy-unrepresentable", message: "execution-policy-unrepresentable:worker-window-unknown" } });
       // No threshold under an unknown window confirms, as before.
       expect(await confirmAt(h, null)).toMatchObject({ result: { kind: "confirmed" } });
+    } finally { await h.dispose(); }
+  });
+
+  // Tester follow-up F §1 (#195, human ruling 「要改」): no installed agent reports context usage, so a threshold does
+  // nothing and is not required. Under a declared window a null threshold used to be a bare execution-policy-unrepresentable.
+  it("a declared profile window confirms with no threshold, frozen as null (#195)", async () => {
+    const h = await webFixture();
+    try {
+      expect(h.deps.profileRouter.resolve("task", "all", h.frozen.profileHash).snapshot.profile.capabilities.contextWindowTokens).toBe(1_000_000);
+      expect(await confirmAt(h, null)).toMatchObject({ result: { kind: "confirmed" } });
+      expect(readBudgetProposal(h.store, "g")).toMatchObject({ state: "confirmed", contextPolicy: { handoffAtContextTokens: null } });
     } finally { await h.dispose(); }
   });
 

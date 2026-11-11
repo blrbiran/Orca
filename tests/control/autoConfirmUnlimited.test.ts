@@ -42,6 +42,18 @@ async function passWithPredicate(h: Fixture, service: WebControlService, default
 }
 
 describe("H4: the automatic confirm of unlimited-token groups", () => {
+  // Tester follow-up F §1 (#195, human ruling 「要改」): the pass sends the proposal's threshold as it stands. It used to
+  // send the worker profile's declared window (1,000,000 here) in place of a null one, a number nothing acts on.
+  it("keeps the proposal's null context hand-off threshold instead of inventing the worker window (#195)", async () => {
+    const h = await unlimited(); try {
+      const service = new WebControlService(h.deps);
+      expect(readBudgetProposal(h.store, "g").contextPolicy).toEqual({ handoffAtContextTokens: null });
+      expect((await passWithPredicate(h, service)).result).toEqual({ confirmed: ["g"], refused: [] });
+      expect(JSON.parse(String(attemptRow(h)!.effective_payload_json))).toMatchObject({ contextPolicy: { handoffAtContextTokens: null } });
+      expect(readBudgetProposal(h.store, "g")).toMatchObject({ state: "confirmed", contextPolicy: { handoffAtContextTokens: null } });
+    } finally { await h.dispose(); }
+  });
+
   it("C19: confirms as orca-auto with start authorized, and the same pump pass starts it", async () => {
     const h = await unlimited(); try {
       const service = new WebControlService(h.deps);

@@ -178,6 +178,16 @@ export function fundingLines(preview: unknown): string[] {
   return ["funding at the current group limit (the authored allocations are requests, not grants):",
     ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.fundableTokens === null ? `nothing (${row.reason ?? "unavailable"})` : tokens(row.fundableTokens)}`)];
 }
+/**
+ * Tester follow-up F §1 (#195, human ruling 「要改」): the context hand-off threshold does nothing today -- no installed agent
+ * reports context usage, so nothing in production feeds Orca a context observation (contextControl.ts) -- and confirm no
+ * longer requires one. `orca group confirm` and `orca proposal show` say so under their human output; their JSON is unchanged.
+ */
+export function contextHandoffLines(threshold: number | null): string[] {
+  return [`context hand-off: not active (no installed agent reports context usage); ${threshold === null
+    ? "no threshold is set, and none is needed (--handoff-at-context-tokens is optional)"
+    : `the threshold ${threshold} is recorded, but nothing acts on it`}`];
+}
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string } }
 

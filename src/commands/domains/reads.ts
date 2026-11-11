@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { emptyResultLines, formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines, type EmptyResultRun } from "./verbs.js";
+import { contextHandoffLines, emptyResultLines, formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines, type EmptyResultRun } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 
@@ -308,7 +308,7 @@ export const READ_ROWS: CommandDef[] = [
     paths: (c) => [`groups/${ids(c, "group")}`, `groups/${ids(c, "group")}/funding-preview`],
     // Dogfood run 3 F23: the document carries no estimates, so its lines are read from the view it is composed from (the
     // confirm row's pattern, one command per CLI process); its JSON is unchanged.
-    compose: ([view, funding]) => { const v = view as Parameters<typeof proposalDocument>[0]; proposalNote = [...unestimatedLines(v.summary.groupId, v), ...fundingLines(funding)]; return proposalDocument(v); },
+    compose: ([view, funding]) => { const v = view as Parameters<typeof proposalDocument>[0]; proposalNote = [...unestimatedLines(v.summary.groupId, v), ...fundingLines(funding), ...contextHandoffLines(v.proposal.contextPolicy.handoffAtContextTokens)]; return proposalDocument(v); },
     format: (body) => { const lines = proposalNote; proposalNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   read({ domain: "task", action: "show", summary: "one task of a group and its runs", positionals: [GROUP, TASK], paths: (c) => [`groups/${ids(c, "group")}`],
     compose: ([view], c) => {

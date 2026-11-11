@@ -283,6 +283,14 @@ describe("BudgetEditor token fields", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
     expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: null } });
   });
+  // Tester follow-up F §1 (#195, human ruling 「要改」): nothing in production reports context usage, so the threshold does
+  // nothing; the editor says so beside the field whatever the profiles declare, and calls the field optional.
+  it("says beside the handoff field that context hand-off is not active and the field is optional (#195)", () => {
+    render(<Editor onCommand={vi.fn()} />);
+    expect(screen.getByRole("textbox", { name: "Hand off at context tokens (optional; blank keeps it unset)" })).toBeTruthy();
+    expect(screen.getByTestId("context-handoff-inactive").textContent)
+      .toBe("Context hand-off is not active: no installed agent reports context usage. The threshold is optional and nothing acts on it.");
+  });
   it("final review M-T10: the group limit's magnitude hint sits beside its input, outside the label's text", () => {
     render(<Editor onCommand={vi.fn()} />);
     const fieldset = screen.getByRole("group", { name: "Group limit" });

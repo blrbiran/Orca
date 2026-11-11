@@ -67,7 +67,7 @@ confirm the task plan as shown now; it starts when a slot is free unless --hold
 - `--worker-profile <worker-profile>`: bind the worker profile
 - `--handoff-profile <handoff-profile>`: bind the handoff profile
 - `--goal-review-profile <goal-review-profile>`: bind the goal-review profile
-- `--handoff-at-context-tokens <n>`: hand off at this many context tokens
+- `--handoff-at-context-tokens <n>`: optional: hand off at this many context tokens (not active: no installed agent reports context usage)
 
 ## `orca group start <group>`
 
