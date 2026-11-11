@@ -20,6 +20,7 @@ import {
   DIMENSIONS, adviceOf as sharedAdviceOf, budgetFieldKey, loopOwned, suggestedLoopActions as sharedSuggestedLoopActions,
   suggestedOperations as sharedSuggestedOperations, suggestionActions as sharedSuggestionActions, targetOf,
 } from "../../src/control/budgetSuggestions.js";
+import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../src/control/estimateInstructionAge.js";
 import { Select } from "./ui/Select.js";
 import type {
   BudgetAmount,
@@ -224,6 +225,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const manual: ManualConfirmChoice = { mode: manualMode, profiles: manualProfiles };
   const mode = confirmModeOf(view, config, manual);
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => confirmProfileOf(view, config, manual, kind);
+  // Tester follow-up F §4 (#173): the estimator profile the shown estimate came from (else the one confirm binds) pinned to
+  // an older estimate instruction is named, as `orca group estimate` / `group confirm` name it.
+  const estimatorProfileId = estimator?.profile?.profileId ?? confirmProfile("estimator")?.profileId ?? null;
+  const olderInstruction = olderEstimateInstruction(config.profiles.find((profile) => profile.profileId === estimatorProfileId)?.estimatorInstructionVersion);
   const shownSelectionsHash = props.selectionsHash ?? null;
   const blockers = confirmBlockers(view, config, shownSelectionsHash, mayLimit, drafts, manual);
   // Tester round 2 §7.3, §7.4 item 3: an unlimited-token group Orca may confirm on its own (absent autoConfirm: never).
@@ -432,6 +437,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         </section>
       ))}
       {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
+      {olderInstruction !== null && <p role="note" data-testid="budget-older-instruction">{t("budget.olderInstruction", { profileId: estimatorProfileId ?? "", version: olderInstruction, newest: NEWEST_ESTIMATE_INSTRUCTION })}</p>}
       {allSuggested.length > 0 && !archived && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
       {advice !== null && (
         <details>

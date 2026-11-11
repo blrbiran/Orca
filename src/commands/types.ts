@@ -138,6 +138,11 @@ export interface CommandDef {
   /** Human text for a 2xx body. */
   format(body: unknown): string;
   /**
+   * Tester follow-up F §4 (#173): the body --json prints for a 2xx answer, when the row adds what its human text says
+   * (only-add, e.g. `warnings`); default: the body as answered.
+   */
+  jsonBody?(body: unknown): unknown;
+  /**
    * Issue #143: the next step for a panel error, printed after its error line (human output only); undefined = none.
    * Tester follow-up E §7 (#246): it may read through the invocation's context (absent when the refusal came before
    * one existed); it is asked only for human output, and a hint that throws is no hint.

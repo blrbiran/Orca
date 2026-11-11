@@ -1026,6 +1026,7 @@ export const en = {
     applyRow: "Apply row",
     expected: "expected {{value}} (not a limit: the group has no token limit)",
     staleEstimate: "This estimate predates a plan change; estimate again to update the suggestions",
+    olderInstruction: "Estimator profile {{profileId}} uses estimate instruction {{version}}; the newest is {{newest}}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest.",
     applyAll: "Apply all suggestions",
     rationale: "Estimate rationale ({{estimateId}})",
     rationaleLine: "{{taskId}} · {{complexity}} · confidence {{confidence}} · {{rationale}}",

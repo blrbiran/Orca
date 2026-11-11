@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
 import { adviceOf, usedRatio, type SuggestionView } from "../../control/budgetSuggestions.js";
-import { ESTIMATE_INSTRUCTIONS } from "../../control/estimatePrompt.js";
+import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../control/estimateInstructionAge.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
 export const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
@@ -94,13 +94,13 @@ export interface ConfigView {
 
 /**
  * Tester follow-up B T3 (#224): a line naming an estimator profile pinned to an estimate instruction older than the newest
- * this Orca holds (estimatePrompt.ts ESTIMATE_INSTRUCTIONS); none when it is the newest, unknown or not reported.
+ * this Orca holds (estimateInstructionAge.ts); none when it is the newest, unknown or not reported.
+ * Tester follow-up F §4 (#173): the same words reach --json, as the answer's `warnings` (withWarnings, work.ts).
  */
 export function instructionLines(view: ConfigView, profileId: string | null | undefined): string[] {
-  const version = view.profiles.find((p) => p.profileId === profileId)?.estimatorInstructionVersion;
-  const newest = Math.max(...Object.keys(ESTIMATE_INSTRUCTIONS).map(Number));
-  if (typeof version !== "string" || !Object.hasOwn(ESTIMATE_INSTRUCTIONS, version) || Number(version) >= newest) return [];
-  return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${newest}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest`];
+  const version = olderEstimateInstruction(view.profiles.find((p) => p.profileId === profileId)?.estimatorInstructionVersion);
+  if (version === null) return [];
+  return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest`];
 }
 
 /** What the unestimated-default lines read: a group view, or `orca proposal show`'s document (no estimates in it). */

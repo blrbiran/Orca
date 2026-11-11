@@ -157,6 +157,16 @@ const estimateFormat = (row: CommandDef, reasonField: "estimateReasonCode" | "re
   return `${row.format(body)}\nestimate: ${result.estimateState}\nreason: ${typeof reason === "string" ? reason : "none"}${next}`;
 } });
 
+/**
+ * Tester follow-up F §4 (#173): the older-estimate-instruction warning (instructionLines) the payload of `group estimate`
+ * or `group confirm` found, for --json: the answer's body gains `warnings` (only-add; absent when there is none).
+ */
+let instructionWarnings: string[] = [];
+const withWarnings = (row: CommandDef): CommandDef => ({ ...row, jsonBody: (body) => {
+  const warnings = instructionWarnings; instructionWarnings = [];
+  return warnings.length === 0 || typeof body !== "object" || body === null ? body : { ...body, warnings };
+} });
+
 /** #224: the lines a row's payload left for its human output, after what the row prints (one command per CLI process). */
 let estimateNote: string[] = [];
 const withNote = (take: () => string[], row: CommandDef): CommandDef => ({ ...row, format: (body) => {
@@ -303,7 +313,7 @@ export const WORK_ROWS: CommandDef[] = [
         ...(str(c, "estimate-mode") === undefined ? {} : { estimateMode: str(c, "estimate-mode") }),
       };
     } }), "estimateReasonCode"),
-  withNote(() => { const lines = estimateNote; estimateNote = []; return lines; }, estimateFormat(verb({ domain: "group", action: "estimate", summary: "ask the estimator for budgets at the current proposal version", verb: "estimate", positionals: [GROUP],
+  withWarnings(withNote(() => { const lines = estimateNote; estimateNote = []; return lines; }, estimateFormat(verb({ domain: "group", action: "estimate", summary: "ask the estimator for budgets at the current proposal version", verb: "estimate", positionals: [GROUP],
     flags: [{ name: "estimator-profile", type: "string", summary: "default: the panel's estimator" }, { name: "mode", type: "string", summary: "strict|soft; default: the panel's" }],
     route: (c) => `groups/${group(c)}/estimates`,
     payload: async (c) => {
@@ -313,9 +323,10 @@ export const WORK_ROWS: CommandDef[] = [
       const mode = str(c, "mode") ?? defaults?.estimateMode;
       if (binding === null || mode === undefined) throw new EntryRejection("estimator-unconfigured", "the panel has no estimator default; pass --estimator-profile and --mode");
       estimateNote = instructionLines(view, binding.profileId);
+      instructionWarnings = estimateNote;
       return { proposalVersion: (await groupView(c)).proposal.proposalVersion, estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash, estimateMode: mode };
-    } }), "reasonCode")),
-  { ...verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
+    } }), "reasonCode"))),
+  withWarnings({ ...verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
     flags: [
       { name: "hold", type: "boolean", summary: "confirm only; start it later with orca group start" },
       { name: "budget-mode", type: "string", summary: "strict|soft when the proposal has none" },
@@ -325,7 +336,7 @@ export const WORK_ROWS: CommandDef[] = [
     ],
     route: (c) => `groups/${group(c)}/confirm`, payload: (c) => confirmPayload(c) }),
     // Session 3cfc2e73 D3: the confirm result carries no allocations; the lines come from the view the payload read.
-    format: (body: unknown) => { const lines = confirmNote; confirmNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } },
+    format: (body: unknown) => { const lines = confirmNote; confirmNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   queuedFormat(empty("group", "start", "start a confirmed group (one confirmed with --hold); at the running-group cap it is queued", "start", "start")),
   empty("group", "pause", "stop dispatching new runs (running ones finish)", "pause-dispatch", "pause-dispatch"),
   queuedFormat(empty("group", "resume", "dispatch again after a pause", "resume-dispatch", "resume-dispatch")),
@@ -583,7 +594,8 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
     return defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
   };
   const bindings = { estimator: await bind("estimator"), worker: await bind("worker"), handoff: await bind("handoff"), goalReview: await bind("goalReview") };
-  confirmNote.push(...instructionLines(await config(c), bindings.estimator?.profileId));
+  instructionWarnings = instructionLines(await config(c), bindings.estimator?.profileId);
+  confirmNote.push(...instructionWarnings);
   for (const kind of ["worker", "handoff", "goalReview"] as const) {
     if (bindings[kind] === null) throw new EntryRejection("confirm-profile-missing", `no ${kind} profile; pass --${flagFor[kind]} <id>`);
   }

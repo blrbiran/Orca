@@ -34,6 +34,8 @@ export type ControlConfigV1 = {
     observed: CapabilityViewV1;
     observedAt: string;
     probeFailureCode: string | null;
+    /** Tester follow-up B T3 (#224) / F §4 (#173): the estimator preflight's instruction version; null without one, absent from older panels. */
+    estimatorInstructionVersion?: string | null;
   }>;
   /** null when this panel was started without --estimator-profile/--estimate-mode (ruling R7). */
   defaults: null | { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };

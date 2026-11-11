@@ -32,9 +32,23 @@ describe("an older estimate instruction is named (#224)", () => {
     }
   });
 
-  it("--json carries no warning", async () => {
+  // Ruling (2026-11-12, tester follow-up F): #173 asks for the warning in --json too, so "--json carries no warning" is
+  // replaced: the answer's body gains `warnings` (only-add) under an older instruction, and stays as answered otherwise.
+  it.each([["group", "estimate", "g-alpha"], ["group", "confirm", "g-alpha"]])("orca %s %s --json carries the warning in body.warnings (#173)", async (...argv) => {
     const w = await world({}, configWith("1"));
-    const out = await cli(["group", "estimate", "g-alpha", "--json"], w.dir);
-    expect(out.stdout).not.toMatch(/warning/);
+    const out = await cli([...argv, "--json"], w.dir);
+    expect(out.code, out.stderr).toBe(0);
+    const body = out.json().body as { warnings?: string[] };
+    expect(body.warnings).toHaveLength(1);
+    expect(body.warnings![0]).toMatch(WARNING);
+  });
+
+  it("--json under the newest instruction has no warnings field", async () => {
+    const w = await world({}, configWith(NEWEST));
+    for (const argv of [["group", "estimate", "g-alpha"], ["group", "confirm", "g-alpha"]]) {
+      const out = await cli([...argv, "--json"], w.dir);
+      expect(out.code, out.stderr).toBe(0);
+      expect(out.json().body).not.toHaveProperty("warnings");
+    }
   });
 });

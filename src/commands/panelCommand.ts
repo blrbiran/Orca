@@ -118,7 +118,9 @@ async function runRead(def: CommandDef, mapping: ReadMapping, context: WriteCont
 export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: CommandIo): Promise<number> {
   let context: WriteContext | undefined;
   // #246: the hint is worked out before printing (it may read), and only when a person reads the output.
-  const print = async (response: CliResponseV1, request?: Parameters<typeof printResponse>[3]): Promise<number> => {
+  const print = async (answer: CliResponseV1, request?: Parameters<typeof printResponse>[3]): Promise<number> => {
+    // #173: a row may add to a 2xx body under --json what its human text says (only-add).
+    const response = args.global.json && def.jsonBody !== undefined && exitCodeFor(answer) === 0 ? { ...answer, body: def.jsonBody(answer.body) } : answer;
     const error = args.global.json || def.hint === undefined || exitCodeFor(response) === 0 ? null : errorOf(response.body);
     let hint: string | undefined;
     if (error !== null) { try { hint = await def.hint!(error, context); } catch { hint = undefined; } }
