@@ -25,6 +25,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 ## Type
 - Body 14px. h3 14px/600. h2 18px. h1 22px (Decisions' title is sized as an h2 so every page title matches).
 - Numbers that change (counts, rates, ids) use `font-variant-numeric: tabular-nums` where they sit in rows.
+- The agent transcript (`src/AgentTranscript.tsx`) sets its own type, the body's 14px / 1.55, so it reads the same in Live, the Runs pane and the task detail whatever box holds it (a table is 13px). Expanded fields wrap (`white-space: pre-wrap`, `overflow-wrap: anywhere`) and the event list never scrolls sideways; in the Runs pane the open run's transcript sits full width below the runs table, never in a cell (tester follow-up E, #244).
 - Key figures (tokens, durations, attempts) take the `num` utility class (tabular digits; `@utility num` in `src/index.css`), so a polled line or a column does not jitter (ruling H8).
 
 ## Components (session e236bbe4)

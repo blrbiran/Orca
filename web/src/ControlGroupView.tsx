@@ -857,6 +857,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 </>,
         runs: <>
       <h3>{t("control.group.runs")}</h3>
+      {/* Tester #244: the table scrolls in its own box on a narrow screen (its 40rem rule, DESIGN.md); the open run's
+          detail sits below it, full width, so the table's width never widens the transcript. */}
+      <div className="runs-table-box max-w-full overflow-x-auto">
       <table className="num runs-table">
         <thead>
           <tr>
@@ -890,21 +893,19 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td><Tokens n={run.used.tokens} />{run.usageApproximate !== undefined && <span className="badge" data-tone="warn" data-testid="usage-approximate">{run.usageApproximate.floorTokens === null ? t("control.group.usageApproximateNone") : t("control.group.usageApproximate")}</span>}</td>
               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
             </tr>
-            {openRunId === run.runId && (
-              <tr id={`run-detail-${run.runId}`} data-run-detail={run.runId}>
-                <td colSpan={6} className="min-w-0 border-t border-line bg-well p-3 text-start">
-                  <div className="min-w-0 max-w-full overflow-x-auto">
-                    <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen />
-                    <EvidenceLink runId={run.runId} />
-                    {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
-                  </div>
-                </td>
-              </tr>
-            )}
             </Fragment>
           ))}
         </tbody>
       </table>
+      </div>
+      {runsInCreationOrder(view.runs).flatMap((run, index) => openRunId === run.runId ? [(
+        <div key={run.runId} id={`run-detail-${run.runId}`} data-run-detail={run.runId} className="min-w-0 rounded-card border border-line bg-well p-3">
+          <h4 className="mt-0">{t("control.group.runDetail", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}</h4>
+          <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen />
+          <EvidenceLink runId={run.runId} />
+          {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
+        </div>
+      )] : [])}
 
 </>,
         technical: <>

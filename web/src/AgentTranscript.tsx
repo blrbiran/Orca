@@ -73,6 +73,10 @@ const inputLine = (text: string | undefined): string => {
   return firstLine(text.slice(2).trimStart()).replace(/^"((?:[^"\\]|\\.)*)":/, "$1:").replace(/,$/, "");
 };
 
+/** Tester #254: a row's numeric facts (a codex turn's token counts) in words, e.g. "input tokens 1200 · cached 800". */
+const numText = (num: Record<string, number> | undefined, t: TFunction): string =>
+  Object.entries(num ?? {}).map(([name, value]) => `${t(`transcript.numLabel.${name}`, { defaultValue: name })} ${value}`).join(" · ");
+
 function summary(event: TranscriptEventV1, t: TFunction): string {
   const f = event.fields ?? {};
   const meta = event.meta ?? {};
@@ -81,7 +85,7 @@ function summary(event: TranscriptEventV1, t: TFunction): string {
     case "tool_call": return `${meta.name ?? ""} ${inputLine(f.input?.text)}`;
     case "tool_result": return `${event.flag?.error === true ? t("transcript.toolError") : t("transcript.toolDone")} ${firstLine(f.output?.text)}`;
     case "file_change": return `${meta.change ?? ""} ${f.path?.text ?? ""}`;
-    case "result": return firstLine(f.text?.text);
+    case "result": return [firstLine(f.text?.text), numText(event.num, t)].filter((part) => part !== "").join(" · ");
     case "notice":
       if (meta.notice === "oversized") return t("transcript.oversized", { bytes: event.num?.bytes ?? 0, type: meta.type ?? "?" });
       if (meta.notice === "truncated") return t("transcript.truncatedAt", { bytes: event.num?.atBytes ?? 0 });
@@ -91,14 +95,76 @@ function summary(event: TranscriptEventV1, t: TFunction): string {
   }
 }
 
-/** One event: its first line; expanded, every field's head, and more pages on request. */
-function EventRow(props: { runId: string; call: CallKey; event: TranscriptEventV1 }): JSX.Element {
+const isOversized = (event: TranscriptEventV1): boolean => event.kind === "notice" && event.meta?.notice === "oversized";
+/** Tester #254: a row opens only when it has something to show (fields, or an oversized line's pages). */
+const expandable = (event: TranscriptEventV1 | null | undefined): boolean =>
+  event != null && (Object.keys(event.fields ?? {}).length > 0 || isOversized(event));
+
+/**
+ * One displayed row (tester #253): an event, or a tool call joined with its result. `result` is absent for every other
+ * event, null for a call whose result is not in what is loaded (still running, as far as this page knows).
+ */
+export interface Row { event: TranscriptEventV1; result?: TranscriptEventV1 | null }
+
+/**
+ * Tester #253: within the loaded events, a `tool_call` and the `tool_result` with the same `meta.id` read as one row. A
+ * result whose call is among the shown rows is folded into it; a result whose call is not shown keeps its own row. The
+ * API keeps both events (live transcript spec: the Web joins them).
+ */
+export function joinTools(shown: readonly TranscriptEventV1[], loaded: readonly TranscriptEventV1[]): Row[] {
+  const results = new Map<string, TranscriptEventV1>();
+  for (const event of loaded) {
+    const id = event.meta?.id;
+    if (event.kind === "tool_result" && id !== undefined && !results.has(id)) results.set(id, event);
+  }
+  const called = new Set(shown.flatMap((event) => (event.kind === "tool_call" && event.meta?.id !== undefined ? [event.meta.id] : [])));
+  return shown.flatMap((event): Row[] => {
+    const id = event.meta?.id;
+    if (event.kind === "tool_result" && id !== undefined && called.has(id)) return [];
+    if (event.kind === "tool_call" && id !== undefined) return [{ event, result: results.get(id) ?? null }];
+    return [{ event }];
+  });
+}
+
+/** A tool row's tone (DESIGN.md "Tone, not role"): done = ok, failed = danger, running = info. */
+function toolTone(row: Row): "ok" | "danger" | "info" | undefined {
+  if (row.event.kind === "tool_result") return row.event.flag?.error === true ? "danger" : "ok";
+  if (row.result === undefined) return undefined;
+  if (row.result === null) return "info";
+  return row.result.flag?.error === true ? "danger" : "ok";
+}
+
+/** One displayed row: its first line; expanded, every field's head of its event (and of the joined result). */
+function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Element {
+  const { t } = useTranslation();
+  const { event, result } = props.row;
+  const [expanded, setExpanded] = useState(false);
+  const tone = toolTone(props.row);
+  const status = result === undefined ? null : result === null ? t("transcript.toolRunning") : result.flag?.error === true ? t("transcript.toolFailed") : t("transcript.toolOk");
+  const line = <><span className="transcript-kind">{t(`transcript.kind.${event.kind}`)}</span> {summary(event, t)}{status !== null && <> · <span className="transcript-status">{status}</span></>}</>;
+  const opens = expandable(event) || expandable(result);
+  return (
+    <li className={`transcript-event transcript-${event.kind} min-w-0`} data-testid="transcript-event" data-tone={tone}>
+      {opens
+        ? <button type="button" className="max-w-full wrap-anywhere" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{line}</button>
+        : <span className="transcript-line wrap-anywhere">{line}</span>}
+      {opens && expanded && (
+        <div className="transcript-body min-w-0">
+          <EventBody runId={props.runId} call={props.call} event={event} />
+          {result != null && <EventBody runId={props.runId} call={props.call} event={result} />}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** One event's fields, expanded: each field's head, and more pages on request. */
+function EventBody(props: { runId: string; call: CallKey; event: TranscriptEventV1 }): JSX.Element {
   const { t } = useTranslation();
   const { event } = props;
-  const [expanded, setExpanded] = useState(false);
   const [extra, setExtra] = useState<Record<string, { text: string; next: number; pages: number }>>({});
   const [refusal, setRefusal] = useState<string | null>(null);
-  const oversized = event.kind === "notice" && event.meta?.notice === "oversized";
+  const oversized = isOversized(event);
   const more = (name: string | null): void => {
     const key = name ?? "";
     // Page 0 replaces the head (both start at 0); later pages append.
@@ -108,34 +174,28 @@ function EventRow(props: { runId: string; call: CallKey; event: TranscriptEventV
       (error: unknown) => setRefusal(controlFailureFrom(error).code),
     );
   };
+  // Tester #244: a field's text wraps (long lines and unbroken tokens alike); nothing in the list scrolls sideways.
   return (
-    <li className={`transcript-event transcript-${event.kind}`} data-testid="transcript-event">
-      <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-        <span className="transcript-kind">{t(`transcript.kind.${event.kind}`)}</span> {summary(event, t)}
-      </button>
-      {expanded && (
-        <div className="transcript-body">
-          {Object.entries(event.fields ?? {}).map(([name, field]) => {
-            const loaded = extra[name];
-            return (
-              <div key={name}>
-                <pre>{loaded === undefined ? field.text : loaded.text}</pre>
-                {field.more && (loaded === undefined || loaded.next < loaded.pages) && (
-                  <button type="button" onClick={() => more(name)}>{t("transcript.more", { name })}</button>
-                )}
-              </div>
-            );
-          })}
-          {oversized && (
-            <div>
-              {extra[""] !== undefined && <pre>{extra[""].text}</pre>}
-              {(extra[""] === undefined || extra[""].next < extra[""].pages) && <button type="button" onClick={() => more(null)}>{t("transcript.more", { name: "line" })}</button>}
-            </div>
-          )}
-          {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
+    <>
+      {Object.entries(event.fields ?? {}).map(([name, field]) => {
+        const loaded = extra[name];
+        return (
+          <div key={name} className="min-w-0">
+            <pre className="transcript-field whitespace-pre-wrap wrap-anywhere">{loaded === undefined ? field.text : loaded.text}</pre>
+            {field.more && (loaded === undefined || loaded.next < loaded.pages) && (
+              <button type="button" onClick={() => more(name)}>{t("transcript.more", { name })}</button>
+            )}
+          </div>
+        );
+      })}
+      {oversized && (
+        <div className="min-w-0">
+          {extra[""] !== undefined && <pre className="transcript-field whitespace-pre-wrap wrap-anywhere">{extra[""].text}</pre>}
+          {(extra[""] === undefined || extra[""].next < extra[""].pages) && <button type="button" onClick={() => more(null)}>{t("transcript.more", { name: "line" })}</button>}
         </div>
       )}
-    </li>
+      {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
+    </>
   );
 }
 
@@ -263,19 +323,30 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
     setFollow(true);
   };
   const tracking = loaded !== null && !loaded.final && anchor === null;
+  // Tester #255: where the view is. The window's offsets are bytes, so the rows are counted among the loaded events; "of n
+  // loaded" says when the call has more than is loaded (older lines before `start`, or newer ones past `end`).
+  const atOldest = first === 0 && loaded !== null && loaded.start === 0;
+  const atNewest = anchor === null && loaded !== null && loaded.end >= loaded.latest;
+  const whole = loaded !== null && loaded.start === 0 && loaded.end >= loaded.latest;
+  const range = { from: first + 1, to: first + rows.length, total: events.length };
   return (
-    <div className="transcript-call" data-testid="transcript-call">
+    <div className="transcript-call min-w-0" data-testid="transcript-call">
       {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
       {loaded?.source === "archive" && <p className="detail-note">{t("transcript.archived")}</p>}
-      <div>
-        <button type="button" disabled={first === 0 && (loaded === null || loaded.start === 0)} onClick={earlier}>{t("transcript.earlier")}</button>{" "}
-        <button type="button" disabled={anchor === null} onClick={later}>{t("transcript.later")}</button>{" "}
+      <div className="transcript-paging flex flex-wrap items-center gap-2">
+        <button type="button" className="ms-0" aria-label={t("transcript.earlier")} title={t("transcript.earlierTip", { n: MAX_ROWS })}
+          disabled={first === 0 && (loaded === null || loaded.start === 0)} onClick={earlier}><span aria-hidden="true">‹</span></button>
+        <button type="button" className="ms-0" aria-label={t("transcript.later")} title={t("transcript.laterTip", { n: MAX_ROWS })}
+          disabled={anchor === null} onClick={later}><span aria-hidden="true">›</span></button>
+        {rows.length > 0 && <span className="transcript-range num text-xs text-muted">{t(whole ? "transcript.range" : "transcript.rangeLoaded", range)}</span>}
+        {atNewest && <span className="text-xs text-muted">{t("transcript.atNewest")}</span>}
+        {atOldest && <span className="text-xs text-muted">{t("transcript.atOldest")}</span>}
         {loaded !== null && <span>{loaded.final ? t("transcript.final") : t("transcript.live")}</span>}
-        {tracking && follow && <span role="status" className="ms-2 text-xs text-muted">{t("transcript.following")}</span>}
-        {tracking && !follow && <button type="button" className="ms-2" onClick={() => setFollow(true)}>{t("transcript.follow")}</button>}
+        {tracking && follow && <span role="status" className="text-xs text-muted">{t("transcript.following")}</span>}
+        {tracking && !follow && <button type="button" className="ms-0" onClick={() => setFollow(true)}>{t("transcript.follow")}</button>}
       </div>
-      <ol ref={box} className="transcript-events max-h-[24rem] overflow-y-auto" onScroll={(event) => setFollow(atBottom(event.currentTarget))}>
-        {rows.map((event) => <EventRow key={keyOf(event)} runId={props.runId} call={call} event={event} />)}
+      <ol ref={box} className="transcript-events max-h-[24rem] min-w-0 overflow-y-auto overflow-x-hidden" onScroll={(event) => setFollow(atBottom(event.currentTarget))}>
+        {joinTools(rows, events).map((row) => <EventRow key={keyOf(row.event)} runId={props.runId} call={call} row={row} />)}
       </ol>
     </div>
   );
@@ -355,7 +426,9 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
   };
   const attempts = [...new Set((listing?.calls ?? []).map((call) => call.attempt))];
   return (
-    <section className="run-transcript" aria-label={t("transcript.region", { runId: props.runId })}>
+    // Tester #244: the transcript sets its own type (the body's 14px / 1.55), so Live, the Runs pane and the task detail
+    // read the same whatever the type of the box around it (a table is 13px).
+    <section className="run-transcript min-w-0 text-base leading-[1.55]" aria-label={t("transcript.region", { runId: props.runId })}>
       <button type="button" aria-expanded={expanded} onClick={() => { setAutoDone(true); picked.current = false; setExpanded(!expanded); if (expanded) { setOpenCall(null); releaseSlot(owner.current); } }}>
         {t("transcript.disclosure")}
       </button>
@@ -371,7 +444,9 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
                 {listing.calls.filter((call) => call.attempt === attempt).map((call) => (
                   <li key={`${call.phase}:${call.seq}`}>
                     <button type="button" disabled={!call.recorded} aria-expanded={sameCall(openCall, call)} onClick={() => toggleCall(call)}>
-                      {t("transcript.callLine", { phase: call.phase, seq: call.seq, runtime: call.runtime ?? t("transcript.notRecorded"), size: sizeText(call.bytes) })}
+                      {/* Tester #252: "call N" only when the phase has more than one call in this attempt. */}
+                      {t(listing.calls.filter((other) => other.attempt === attempt && other.phase === call.phase).length === 1 ? "transcript.callLineOne" : "transcript.callLine",
+                        { phase: call.phase, seq: call.seq, runtime: call.runtime ?? t("transcript.notRecorded"), size: sizeText(call.bytes) })}
                     </button>{" "}
                     <span>{call.final ? t("transcript.final") : t("transcript.live")}</span>
                     {call.truncatedAt !== null && <> · <span>{t("transcript.truncatedAt", { bytes: call.truncatedAt })}</span></>}
