@@ -373,6 +373,13 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/integration`, payload: (c) => ({ integration: schemeFromFlags(c) }) }),
   empty("group", "retry-integration", "a blocked or conflicted integration back to idle", "retry-integration", "integration/retry"),
   empty("group", "resolve-integration", "approve an agent resolving the group's integration conflict", "resolve-integration-conflict", "integration/resolve"),
+  // Tester follow-up E §5 (#241): the ways out of a failed group acceptance besides a moved tip.
+  empty("group", "recheck", "run a failed group acceptance again on the same tip (a flaky check)", "recheck-acceptance", "acceptance/recheck"),
+  verb({ domain: "group", action: "waive-acceptance", summary: "accept a group whose acceptance failed on its tip anyway (a person's act)",
+    verb: "waive-acceptance", positionals: [GROUP], access: "token",
+    flags: [{ name: "note", type: "string", required: true, summary: "why you accept the failed tip; recorded with the waiver and in the group's activity" }],
+    route: (c) => `groups/${group(c)}/acceptance/waive`, payload: (c) => ({ note: str(c, "note") }),
+    examples: ["orca group waive-acceptance g1 --note 'the red test is the known flaky one; tracked in #12'"] }),
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
   verb({ domain: "group", action: "folder-change", summary: "answer a folder change that stopped placement: --take-folder, --recheck or --withhold",
     verb: "resolve-folder-change", positionals: [GROUP], access: "token",

@@ -2168,6 +2168,8 @@ export const zhErrors: Record<string, string> = {
   "accept-attempt-snapshot-partial": "这个运行的归档快照不完整，无法重建它的尝试。",
   "accept-attempt-pending": "对这个尝试的接受已经记录过了。",
   "accept-attempt-person-required": "接受尝试需要由所有者来做。",
+  "group-acceptance-not-failed": "这个组的验收没有失败（{{detail}}），没有可重查或豁免的内容。",
+  "group-acceptance-person-required": "豁免失败的组验收需要由所有者来做。",
   "control-capability-unsupported": "所需能力不受支持：{{message}}",
   "control-estimator-unconfigured": "面板没有配置估算 profile。",
   "control-evidence-unavailable": "证据不可用。",

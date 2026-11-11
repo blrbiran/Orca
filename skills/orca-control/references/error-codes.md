@@ -164,6 +164,8 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `graph-cycle` | 422 |
 | `graph-dangling-dependency` | 422 |
 | `graph-version-conflict` | 409 |
+| `group-acceptance-not-failed` | 409 |
+| `group-acceptance-person-required` | 409 |
 | `group-already-exists` | 409 |
 | `group-archived` | 409 |
 | `group-budget-unavailable` | 422 |

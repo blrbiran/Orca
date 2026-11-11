@@ -243,6 +243,9 @@ export const durableCommandErrorStatuses = {
   "accept-attempt-snapshot-partial": 409,
   "accept-attempt-pending": 409,
   "accept-attempt-person-required": 409,
+  // Tester follow-up E §5 (#241): recheck and waive answer a failed group acceptance only; a waiver names a person.
+  "group-acceptance-not-failed": 409,
+  "group-acceptance-person-required": 409,
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,

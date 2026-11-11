@@ -51,6 +51,7 @@ import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
+import { applyRecheckAcceptance, applyWaiveAcceptance, type RecheckAcceptanceCommand, type WaiveAcceptanceCommand } from "./groupAcceptanceCommands.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
@@ -1768,6 +1769,14 @@ export class WebControlService {
   /** Integration spec §6.5: a blocked or conflicted integration back to idle (no git child; the next round retries it). */
   retryIntegration(command: RetryIntegrationCommand): WebCommandResult {
     return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
+  recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {
+    return this.mutate(() => applyRecheckAcceptance({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Tester follow-up E §5 (#241): a person accepts a group whose acceptance failed on its tip, with why. */
+  waiveAcceptance(command: WaiveAcceptanceCommand): WebCommandResult {
+    return this.mutate(() => applyWaiveAcceptance({ store: this.store }, command)) as WebCommandResult;
   }
   /** Dir-requirements spec §9.2: the person's answer to a stopped folder change (no git child; the next round acts). */
   resolveFolderChange(command: ResolveFolderChangeCommand): WebCommandResult {

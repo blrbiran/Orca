@@ -2265,6 +2265,8 @@ export const enErrors: Record<string, string> = {
   "accept-attempt-snapshot-partial": "This run's archive snapshot is incomplete, so its attempt cannot be rebuilt.",
   "accept-attempt-pending": "An acceptance of this attempt is already recorded.",
   "accept-attempt-person-required": "Accepting an attempt is done by an owner.",
+  "group-acceptance-not-failed": "This group's acceptance has not failed ({{detail}}); there is nothing to recheck or waive.",
+  "group-acceptance-person-required": "Waiving a failed group acceptance is done by an owner.",
   "control-capability-unsupported": "A required capability is not supported: {{detail}}",
   "control-estimator-unconfigured": "The panel has no estimator profile configured. Restart it with an estimator profile to run estimates.",
   "control-evidence-unavailable": "Evidence is not available.",

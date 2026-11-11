@@ -201,7 +201,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, the `repositories/<repoId>/checks/…` and `operator/checks/…` rows, `repositories/<repoId>/criteria-review`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, the `repositories/<repoId>/checks/…` and `operator/checks/…` rows, `repositories/<repoId>/criteria-review`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/acceptance/waive`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -236,6 +236,8 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/integration` | set-group-integration | `{"integration":{"delivery":"keep"}}` |
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
+| `POST groups/<groupId>/acceptance/recheck` | recheck-acceptance | `{}` |
+| `POST groups/<groupId>/acceptance/waive` | waive-acceptance | `{"note":"the red test is the known flaky one; tracked in #12"}` |
 | `POST groups/<groupId>/folder-change` | resolve-folder-change | `{"action":"take-folder"}` |
 | `POST groups/<groupId>/multi-dir-landing` | multi-dir-landing | `{"action":"retry-rest"}` |
 | `POST groups/<groupId>/archive` | archive-group | `{}` |

@@ -207,6 +207,9 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "set-group-integration": { call: (s, c) => s.setGroupIntegration(c), target: "group", payload: { integration: { delivery: "keep" } } },
   "retry-integration": { call: (s, c) => s.retryIntegration(c), target: "group", payload: {} },
   "resolve-integration-conflict": { call: (s, c) => s.resolveIntegrationConflict(c), target: "group", payload: {} },
+  // Tester follow-up E §5 (#241): the group acceptance's recheck (any) and waiver (a person) are group-targeted too.
+  "recheck-acceptance": { call: (s, c) => s.recheckAcceptance(c), target: "group", payload: {} },
+  "waive-acceptance": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.waiveAcceptance(c)), target: "group", payload: { note: "the red test is a known flake" } },
   "resolve-folder-change": { call: (s, c) => s.resolveFolderChange(c), target: "group", payload: { action: "recheck" } },
   "multi-dir-landing": { call: (s, c) => s.multiDirLanding(c), target: "group", payload: { action: "retry-rest" } },
   "set-task-labels": { call: (s, c) => s.setTaskLabels(c), target: "task", payload: { labels: null, baseLabelsVersion: 0 } },

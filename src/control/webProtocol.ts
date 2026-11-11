@@ -656,6 +656,9 @@ export const commandVerbSchema = z.enum([
   "set-group-integration",
   "retry-integration",
   "resolve-integration-conflict",
+  // Tester follow-up E §5 (#241): rerun a failed group acceptance on the same tip (any), or accept it anyway (a person).
+  "recheck-acceptance",
+  "waive-acceptance",
   "archive-group",
   "unarchive-group",
   "approve-pending-decision",
@@ -823,6 +826,8 @@ export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, 
 export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
 /** Reviewed acceptance (spec 2026-11-11 §7): the terminal run whose last attempt lands after its checks, and why the person accepts it. */
 export const acceptAttemptPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
+/** Tester follow-up E §5 (#241): why the person accepts a group whose acceptance failed on its tip. */
+export const waiveAcceptancePayloadSchema = z.object({ note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -1263,6 +1268,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
   // Dir-requirements spec §9.2: the person's answer to a stopped folder change.
   z.object({ ...rawCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
@@ -1366,6 +1373,8 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("multi-dir-landing"), target: groupCommandTargetSchema, payload: multiDirLandingPayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
@@ -2247,6 +2256,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-retried"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("integration-resolution-started"), groupId: idSchema }).strict(),
+  // Tester follow-up E §5 (#241): the failed record is cleared and the next round checks the tip again; or it is waived.
+  z.object({ kind: z.literal("acceptance-recheck-requested"), groupId: idSchema, tip: commitShaSchema }).strict(),
+  z.object({ kind: z.literal("acceptance-waived"), groupId: idSchema, tip: commitShaSchema }).strict(),
   // Dir-requirements spec §9.2: the answer was recorded; the next placement round does its work.
   z.object({ kind: z.literal("folder-change-resolved"), groupId: idSchema, action: folderChangeActionSchema }).strict(),
   // Multi-directory projects spec §9.7: the answer was recorded; the next round does the git and folder work.

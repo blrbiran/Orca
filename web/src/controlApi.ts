@@ -454,6 +454,9 @@ export type ControlAction =
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
   | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
+  // Tester follow-up E §5 (#241): a failed group acceptance, checked again (any), or accepted by an owner with why.
+  | { verb: "recheck-acceptance"; groupId: string; expectedRevision: number; payload: Record<string, never> }
+  | { verb: "waive-acceptance"; groupId: string; expectedRevision: number; payload: { note: string } }
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
   | { verb: "resolve-folder-change"; groupId: string; expectedRevision: number; payload: { action: "take-folder" | "recheck" | "withhold"; dir?: string } }
   // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
@@ -541,6 +544,10 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/integration/retry`;
     case "resolve-integration-conflict":
       return `${group}/integration/resolve`;
+    case "recheck-acceptance":
+      return `${group}/acceptance/recheck`;
+    case "waive-acceptance":
+      return `${group}/acceptance/waive`;
     case "resolve-folder-change":
       return `${group}/folder-change`;
     case "multi-dir-landing":

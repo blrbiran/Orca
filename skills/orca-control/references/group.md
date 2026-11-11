@@ -189,6 +189,27 @@ approve an agent resolving the group's integration conflict
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca group recheck <group>`
+
+run a failed group acceptance again on the same tip (a flaky check)
+
+- What it does: sends control verb `recheck-acceptance`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+
+## `orca group waive-acceptance <group> --note <note>`
+
+accept a group whose acceptance failed on its tip anyway (a person's act)
+
+- What it does: sends control verb `waive-acceptance`.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--note <note>` (required): why you accept the failed tip; recorded with the waiver and in the group's activity
+
+```
+orca group waive-acceptance g1 --note 'the red test is the known flaky one; tracked in #12'
+```
+
 ## `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]`
 
 answer a folder change that stopped placement: --take-folder, --recheck or --withhold

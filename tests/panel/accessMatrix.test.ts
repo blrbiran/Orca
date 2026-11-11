@@ -95,6 +95,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "release-unmetered" }, tier: "token", member: V },
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): human-only, socket tier token; a run Orca dispatched is always refused.
   { entry: "accept-attempt", payload: { taskId: "a", runId: "run-1", note: "looked at it" }, tier: "token", member: V },
+  // Tester follow-up E §5 (#241): accepting a failed group acceptance is a person's act (socket tier token).
+  { entry: "waive-acceptance", payload: { note: "known flake" }, tier: "token", member: V },
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },
   // Scheduled flows and groups spec §11.1 (I-3): a new library entry copies Orca's own data (open); appending a version to
   // one, importing outside bytes, and a library import's token limit or scheme are token; archiving is open.

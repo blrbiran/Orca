@@ -64,6 +64,10 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
   "resolve-integration-conflict": "human-only",
+  // Tester follow-up E §5 (#241): rerunning a failed acceptance spends nothing new and changes no rule (any principal);
+  // accepting a group whose final tree failed its checks is a person's act, named with why.
+  "recheck-acceptance": "any",
+  "waive-acceptance": "human-only",
   // Issue-fixes spec §6.3: archiving hides and freezes a group but deletes nothing; any principal may do it and undo it.
   "archive-group": "any",
   "unarchive-group": "any",
@@ -238,6 +242,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "settle-unknown-usage": (p) => (typeof p.acknowledge === "string" && AGENT_SETTLE_ACKNOWLEDGE.includes(p.acknowledge) ? "open" : "token"),
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): an owner on the Web, or the socket agent with an owner's person token.
   "accept-attempt": "token",
+  // Tester follow-up E §5 (#241): an owner on the Web, or the socket agent with an owner's person token.
+  "waive-acceptance": "token",
   // Tester follow-up E §8: the single call's settlement charges its remaining grant -- the open form of settle-unknown-usage.
   "recovery-retry.acknowledge": "open",
   "apply-agent-update": "token",
