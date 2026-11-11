@@ -18,6 +18,8 @@ import {
   revokeSession, shouldRefresh,
 } from "./auth.js";
 import type { AccountSession, Me, Notice, Role } from "./auth.js";
+import { parseCliLoginHash } from "./cliLogin.js";
+import { CliLoginPage } from "./CliLoginPage.js";
 import i18n from "./i18n.js";
 import { en } from "./locales/en.js";
 import { Refusal } from "./Refusal.js";
@@ -67,6 +69,14 @@ const localRefusal = (code: string, message: string): PanelRefusal => ({ status:
 export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   const { t } = useTranslation();
   const [state, setState] = useState<GateState>({ kind: "loading" });
+  // CLI browser login spec §6: `#cli-login/<CODE>` shows the approval page instead of the panel. Read from the hash, which
+  // the login form leaves alone, so a person who must log in first still lands there.
+  const [cliLoginCode, setCliLoginCode] = useState<string | null>(() => parseCliLoginHash(window.location.hash));
+  useEffect(() => {
+    const onHash = (): void => setCliLoginCode(parseCliLoginHash(window.location.hash));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const readSession = useCallback(async (): Promise<void> => {
     try {
@@ -119,6 +129,9 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   if (state.kind === "login") return <LoginForm ended={state.ended} changed={state.changed === true} onLoggedIn={() => void readSession()} />;
   // Human ruling 2026-10-08: the server ends every session of the user on a password change, this one too.
   if (state.kind === "change") return <ChangePasswordForm me={state.me} onChanged={() => setState({ kind: "login", ended: false, changed: true })} />;
+  if (cliLoginCode !== null) {
+    return <CliLoginPage code={cliLoginCode} onBack={() => { window.location.hash = ""; setCliLoginCode(null); }} />;
+  }
   return (
     <AccountContext.Provider value={state.me}>
       <AccountSettingsContext.Provider value={{ me: state.me, onPasswordChanged: () => setState({ kind: "login", ended: false, changed: true }) }}>
