@@ -1784,6 +1784,10 @@ export const workItemViewSchema = z
     // Retry work top-up spec 2026-11-06 §2 "The board": every top-up of the task, oldest first, so a run's grant above the
     // confirmed allocation is never unexplained. Absent when the task has none.
     topUps: z.array(z.object({ amount: amountSchema, by: nonemptyString, at: safeInteger, fromRunId: idSchema }).strict()).min(1).optional(),
+    // Budget defaults spec 2026-11-11 §7 items 2 and 4: in a group with no token limit, the task's work tokens from the newest
+    // ready estimate for the current plan -- its expectation, never a ceiling -- and the work tokens its runs used so far
+    // (null when any run's usage is unknown). Derived when the view is read, never stored; absent otherwise.
+    expected: z.object({ tokens: safeInteger.nonnegative(), estimateId: idSchema, stale: z.boolean(), usedTokens: safeInteger.nonnegative().nullable() }).strict().optional(),
   })
   .strict();
 

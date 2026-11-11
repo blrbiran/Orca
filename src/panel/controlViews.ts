@@ -1331,9 +1331,39 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     autoConfirm: autoConfirmView(store, body as unknown as Record<string, unknown>, proposal.proposalVersion),
   };
   view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
+  deriveExpectations(view, readSnapshot);
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;
+}
+
+/**
+ * Budget defaults spec 2026-11-11 §7 items 2 and 4: in a group with no token limit, each task's expectation is its work
+ * tokens in the newest ready estimate for the current plan (with that estimate's id and stale flag), and beside it the work
+ * tokens its runs have used -- null when any of them has unknown or only approximate usage. Derived from rows the view
+ * already read: estimates are immutable and none is created after confirm, so nothing is stored. A finite group, or one
+ * with no such estimate, gets none (its applied estimate is the ceiling the budget editor shows).
+ */
+function deriveExpectations(view: Pick<GroupViewV1, "ledger" | "plan" | "estimates" | "workItems">, snapshot: GroupReadSnapshot): void {
+  if (view.ledger.groupLimit.tokens !== null) return;
+  let newest: EstimateViewV1 | null = null;
+  for (const estimate of view.estimates) {
+    if (estimate.state !== "ready" || estimate.output === null || estimate.output.planHash !== view.plan.planHash) continue;
+    if (newest === null || estimate.estimateVersion > newest.estimateVersion) newest = estimate;
+  }
+  if (newest === null) return;
+  for (const item of view.workItems) {
+    const suggested = newest.output!.tasks.find(task => task.taskId === item.taskId);
+    if (suggested === undefined) continue;
+    let usedTokens: number | null = 0;
+    for (const row of snapshot.runsByRowid) {
+      if (String(row.work_item_id) !== item.taskId) continue;
+      const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(String(row.id)), `run-invalid:${String(row.id)}`);
+      if (run.unknown.work || run.usageApproximate !== undefined) { usedTokens = null; break; }
+      usedTokens += run.cumulative.work.tokens;
+    }
+    item.expected = { tokens: suggested.work.tokens, estimateId: newest.estimateId, stale: newest.stale === true, usedTokens };
+  }
 }
 
 /** Clarify caps spec 2026-10-21 §3.6: the commands that start a drafting step (a round or a draft); retries are the same wait. */

@@ -3,7 +3,8 @@
 // estimate takes from "Apply all" to a claim -- the shared transform's commands through the service, confirm's freeze,
 // the claim's funded grant and the policy the driver dispatches -- for both group kinds.
 import { describe, expect, it } from "vitest";
-import { suggestionActions, type SuggestionAction } from "../../src/control/budgetSuggestions.js";
+import { suggestionActions, usedRatio, type SuggestionAction } from "../../src/control/budgetSuggestions.js";
+import { recordUsage } from "../../src/control/usage.js";
 import { readRun } from "../../src/control/budget.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { dispatchedPolicy } from "../../src/control/executionDriver.js";
@@ -230,6 +231,75 @@ describe("no retroactive change (§7 item 8; criterion 11)", () => {
       // mutation: re-judge model fields at confirm (refuseAdvisoryTaskWork in confirm's model loop) -> refused, red
       const claimed = await confirmAndClaim(h, service, "soft");
       expect(claimed.derived).toMatchObject({ tokenBudget: SUGGESTED.tokens });
+    } finally { await h.dispose(); }
+  });
+});
+
+const expectedOf = (h: Fixture, taskId: string) => readControlGroup(h.store, "epoch", "g").workItems.find((item) => item.taskId === taskId)!.expected;
+
+describe("the group view derives each task's expectation (§7 items 2, 4; criteria 6, 7)", () => {
+  it("equals the newest ready estimate's work tokens and id; absent before one is ready", async () => {
+    const h = await unlimitedFixture(HAND);
+    try {
+      const service = new WebControlService(h.deps);
+      const estimateId = await h.requestEstimate(service);
+      // Queued, not ready: no expectation.
+      expect(expectedOf(h, "c")).toBeUndefined();
+      await readyEstimate(h, service, estimateId, "c");
+      // mutation: drop the derivation -> undefined, red
+      expect(expectedOf(h, "c")).toEqual({ tokens: SUGGESTED.tokens, estimateId, stale: false, usedTokens: 0 });
+      // Derived, not stored: confirm writes nothing for it, and it is still there after.
+      await service.confirm(h.command("confirm", { ...await h.confirmPayload(), budgetMode: "soft" }));
+      expect(expectedOf(h, "c")).toMatchObject({ tokens: SUGGESTED.tokens, estimateId });
+    } finally { await h.dispose(); }
+  });
+
+  it("is marked stale when a set-task-loop change made the estimate stale", async () => {
+    const h = await unlimitedFixture(LOOP);
+    try {
+      const service = new WebControlService(h.deps);
+      const estimateId = await readyEstimate(h, service, await h.requestEstimate(service), "a");
+      const work = workAmount(h, "a");
+      const changed = setLoop(h, { tokens: work.tokens, activeMs: work.activeMs, attempts: work.attempts });
+      (changed.payload as { inputs: { goal: string } }).inputs.goal = "write a, changed";
+      expect(errorOf(await service.setTaskLoop(changed))).toBeUndefined();
+      // mutation: always stale: false -> red
+      expect(expectedOf(h, "a")).toEqual({ tokens: SUGGESTED.tokens, estimateId, stale: true, usedTokens: 0 });
+    } finally { await h.dispose(); }
+  });
+
+  it("is absent in a finite group, where the applied estimate is the ceiling", async () => {
+    const h = await webFixture(undefined, [HAND]);
+    try {
+      const service = new WebControlService(h.deps);
+      await readyEstimate(h, service, h.estimateId, "c");
+      // mutation: derive it in every group -> present, red
+      expect(expectedOf(h, "c")).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
+  it("carries the task's used work tokens (ratio 3.2 at 3.2x), and null when its usage is unknown", async () => {
+    const h = await unlimitedFixture(HAND);
+    try {
+      const service = new WebControlService(h.deps);
+      await readyEstimate(h, service, await h.requestEstimate(service), "c");
+      expect(await service.confirm(h.command("confirm", { ...await h.confirmPayload(), budgetMode: "soft" }))).not.toHaveProperty("error");
+      expect(await service.start(h.command("start", {}))).not.toHaveProperty("error");
+      const claim = await deliverScheduledStart(h.deps, "g");
+      if (claim.kind !== "claimed") throw new Error(JSON.stringify(claim));
+      const used = SUGGESTED.tokens * 3.2;
+      recordUsage(h.store, { runId: claim.runId, generation: 1, eventSeq: 1, bucket: "work", cumulative: { tokens: used, activeMs: 100, attempts: 1, sessions: 1 }, source: { artifactId: "usage", hash: "a".repeat(64) } });
+      const expected = expectedOf(h, "c")!;
+      // mutation: usedTokens always 0 -> red
+      expect(expected.usedTokens).toBe(used);
+      expect(usedRatio(expected)).toBe(3.2);
+      // The run's work usage becomes unknown (written directly: the state a lost usage report leaves).
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(claim.runId)!.body));
+      body.unknown.work = true;
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), claim.runId);
+      // mutation: ignore unknown usage -> 4,800,000, red
+      expect(expectedOf(h, "c")!.usedTokens).toBeNull();
+      expect(usedRatio(expectedOf(h, "c")!)).toBeNull();
     } finally { await h.dispose(); }
   });
 });
