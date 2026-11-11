@@ -2385,7 +2385,11 @@ export const commandSuccessSchema = commandSuccessObjectSchema
   });
 
 export const commandLookupSchema = z
-  .object({ schema: z.literal("orca-command-lookup-v1"), originalStatus: safeInteger, body: z.union([commandSuccessSchema, commandErrorBodySchema]) })
+  .object({
+    schema: z.literal("orca-command-lookup-v1"), originalStatus: safeInteger, body: z.union([commandSuccessSchema, commandErrorBodySchema]),
+    // Issue #149: commandArgumentsHash of the booked request (verb, target, payload); optional, so older readers are unaffected.
+    argumentsHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  })
   .strict();
 
 export { canonicalTimestampSchema, commandEnvelopeSchema };

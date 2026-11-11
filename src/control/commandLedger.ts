@@ -1,5 +1,6 @@
 import {revokeRecoveryFence} from "./savedResultRecoveryPackage.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+import { commandArgumentsHash } from "./commandArguments.js";
 import { commandClientFor, commandPrincipalFor, ledgerPersonFor } from "./commandClient.js";
 import { ControlError, durableCommandErrorStatus } from "./errors.js";
 import { appendActivity } from "./activity.js";
@@ -442,10 +443,24 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
   });
 }
 
+/**
+ * Issue #149: what the booked request asked for, as commandArgumentsHash -- never the raw request, which may hold notes.
+ * `raw_request_json` is the canonical bytes of the parsed raw command (persistCommandOutcome), so its fields are hashed as
+ * stored, not re-parsed. A row whose stored request does not read back answers no hash (the field is optional on the wire).
+ */
+function argumentsHashOf(rawRequestJson: unknown): string | undefined {
+  if (typeof rawRequestJson !== "string") return undefined;
+  let value: { verb?: unknown; target?: unknown; payload?: unknown } | null;
+  try { value = JSON.parse(rawRequestJson) as typeof value; } catch { return undefined; }
+  if (value === null || typeof value !== "object" || typeof value.verb !== "string" || !("target" in value) || !("payload" in value)) return undefined;
+  return commandArgumentsHash({ verb: value.verb, target: value.target, payload: value.payload });
+}
+
 export function lookupCommandResult(store: ControlStore, groupId: string, commandId: string): CommandLookupV1 | null {
-  const row = store.db.prepare("SELECT original_status,body_json FROM commands WHERE group_id=? AND id=?")
-    .get(groupId, commandId) as Pick<CommandRow, "original_status" | "body_json"> | undefined;
+  const row = store.db.prepare("SELECT original_status,body_json,raw_request_json FROM commands WHERE group_id=? AND id=?")
+    .get(groupId, commandId) as (Pick<CommandRow, "original_status" | "body_json"> & { raw_request_json: unknown }) | undefined;
   if (!row || row.original_status === null || row.body_json === null) return null;
   const outcome = validatedOutcome(row.original_status, parsedBody(row.body_json));
-  return { schema: "orca-command-lookup-v1", originalStatus: outcome.status, body: outcome.body };
+  const argumentsHash = argumentsHashOf(row.raw_request_json);
+  return { schema: "orca-command-lookup-v1", originalStatus: outcome.status, body: outcome.body, ...(argumentsHash === undefined ? {} : { argumentsHash }) };
 }

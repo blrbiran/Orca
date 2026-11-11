@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { applyWebCommand, lookupCommandResult, preflightWebCommand, type StoredCommandOutcome, type WebCommandContext, type WebCommandInput } from "../../src/control/commandLedger.js";
+import { commandArgumentsHash } from "../../src/control/commandArguments.js";
 import { createGroup, setGroupStopped } from "../../src/control/commands.js";
 import { ControlError } from "../../src/control/errors.js";
 import { readVersions } from "../../src/control/queries.js";
-import type { CommandLookupV1, CommandSuccessV1, EffectiveAuthorityCommandV1, RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
+import { commandLookupSchema, type CommandLookupV1, type CommandSuccessV1, type EffectiveAuthorityCommandV1, type RawAuthorityCommandV1 } from "../../src/control/webProtocol.js";
 import type { GroupInput } from "../../src/control/types.js";
 import { openTestStore } from "./fixtures/store.js";
 
@@ -84,10 +85,13 @@ describe("web command ledger", () => {
       expect(first.body).toMatchObject({ result: { kind: "handoff-stopped", handoffDeadlineAt: deadlineA } });
       expect(calls).toBe(1);
       expect(readVersions(h.store, "g1")).toEqual({ commandRevision: 2, projectionSeq: 2 });
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the lookup
+      // carrying the booked request's argumentsHash (issue #149) beside the outcome.
       expect(lookupCommandResult(h.store, "g1", "web-stop")).toEqual({
         schema: "orca-command-lookup-v1",
         originalStatus: 202,
         body: first.body,
+        argumentsHash: commandArgumentsHash({ verb: "handoff-stop", target: { kind: "group", groupId: "g1" }, payload: {} }),
       });
       const row = h.store.db.prepare(`SELECT actor_id,verb,target_json,expected_revision,raw_request_json,raw_request_hash,
         effective_payload_json,effective_payload_hash,authority_command_json,authority_command_hash,original_status,
@@ -501,6 +505,61 @@ describe("web command ledger", () => {
       expect(valid.status).toBe(202);
       h.store.db.prepare("UPDATE commands SET body_json='{}' WHERE group_id='g1' AND id='corrupt-lookup'").run();
       expect(() => lookupCommandResult(h.store, "g1", "corrupt-lookup")).toThrow("control-command-result-invalid");
+    } finally {
+      await h.dispose();
+    }
+  });
+});
+
+// Issue #149: a CLI re-run of the same --command-id re-reads the revision, so its raw request is not the booked one. The
+// lookup answers a hash of what the booked request asked for (verb, target, payload) so the CLI can tell "the same
+// arguments, a moved revision" from "a different request" -- and never the raw request itself, which may hold notes.
+describe("the command lookup's argumentsHash (issue #149)", () => {
+  const hex = /^[0-9a-f]{64}$/;
+
+  it("ignores the revision and the command id, and changes when the payload or the target changes", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      createGroup(h.store, { ...group, groupId: "g2" }, { commandId: "create-2", expectedRevision: 0, by: "human" });
+      applyWebCommand(h.store, input(raw("at-1", 1), () => deadlineA, accepted));
+      applyWebCommand(h.store, input(raw("at-2", 2), () => deadlineA, accepted));
+      applyWebCommand(h.store, input({ ...raw("other-payload", 3), payload: { handoffDeadlineAt: deadlineB } }, () => deadlineB, accepted));
+      applyWebCommand(h.store, input({ ...raw("other-target", 1), target: { kind: "group", groupId: "g2" } }, () => deadlineA, accepted));
+      const hashOf = (scope: string, id: string) => lookupCommandResult(h.store, scope, id)?.argumentsHash;
+      const rows = h.store.db.prepare("SELECT id,expected_revision FROM commands WHERE id IN ('at-1','at-2') ORDER BY id").all();
+      // The two booked requests really differ in their revision (else "ignores the revision" would be vacuous).
+      expect(rows.map((r) => r.expected_revision)).toEqual([1, 2]);
+      const base = hashOf("g1", "at-1");
+      expect(base).toMatch(hex);
+      // mutation: hash the revision too -> red
+      expect(hashOf("g1", "at-2")).toBe(base);
+      expect(base).toBe(commandArgumentsHash({ verb: "handoff-stop", target: { kind: "group", groupId: "g1" }, payload: {} }));
+      // mutation: leave the payload out of the hash -> red
+      expect(hashOf("g1", "other-payload")).toMatch(hex);
+      expect(hashOf("g1", "other-payload")).not.toBe(base);
+      // mutation: leave the target out of the hash -> red
+      expect(hashOf("g2", "other-target")).toMatch(hex);
+      expect(hashOf("g2", "other-target")).not.toBe(base);
+    } finally {
+      await h.dispose();
+    }
+  });
+
+  it("the lookup never carries the raw request: exactly schema, originalStatus, body and argumentsHash", async () => {
+    const h = await openTestStore();
+    try {
+      createGroup(h.store, group, { commandId: "create", expectedRevision: 0, by: "human" });
+      // Booked stale (revision-conflict), whose body does not echo the payload, so the marker can only come from the request.
+      const marker = "2031-01-02T03:04:05.000Z";
+      const stale = applyWebCommand(h.store, input({ ...raw("stale-marker", 0), payload: { handoffDeadlineAt: marker } }, () => marker, accepted));
+      expect(stale.status).toBe(409);
+      const lookup = lookupCommandResult(h.store, "g1", "stale-marker");
+      expect(Object.keys(lookup ?? {}).sort()).toEqual(["argumentsHash", "body", "originalStatus", "schema"]);
+      expect(JSON.stringify(lookup)).not.toContain(marker);
+      expect(JSON.stringify(lookup)).not.toContain("expectedRevision");
+      // The wire schema takes the new field (it is optional there, so an older reader or row is unaffected).
+      expect(commandLookupSchema.safeParse(lookup).success).toBe(true);
     } finally {
       await h.dispose();
     }
