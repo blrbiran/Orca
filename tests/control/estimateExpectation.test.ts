@@ -300,6 +300,12 @@ describe("the group view derives each task's expectation (§7 items 2, 4; criter
       // mutation: ignore unknown usage -> 4,800,000, red
       expect(expectedOf(h, "c")!.usedTokens).toBeNull();
       expect(usedRatio(expectedOf(h, "c")!)).toBeNull();
+      // Known again, but only Orca's approximate floor (soft-mode booking): still not a usage to compare against.
+      body.unknown.work = false;
+      body.usageApproximate = { floorTokens: used, reason: "fixture", at: 1 };
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), claim.runId);
+      // mutation: count an approximate run as known -> 4,800,000, red
+      expect(expectedOf(h, "c")!.usedTokens).toBeNull();
     } finally { await h.dispose(); }
   });
 });
