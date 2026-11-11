@@ -93,3 +93,13 @@ tip moves during the check.
 
 Requirement-criteria review run (P0-1); an exit for `empty-result`; a plan-phase budget (#196/#224); early claim after
 landing (#192); a generic "allow this decision" (#189); calibrating the judge grant (#174); #243.
+
+## 8. Correction (2026-11-12, same session, controller)
+
+§1 said it "overrides the ruling recorded in handoff §5.2.8". That attribution was wrong. §5.2.8's ruling ("do not
+relax `null`") is about a profile's `contextWindowTokens` (estimate capability, `estimate-blocked-capability`), not
+about the confirm-time hand-off threshold `contextPolicy.handoffAtContextTokens` that W1 changed. §5.2.8 stands
+unchanged. What W1 actually overrides is the confirm refusal of a null threshold and auto-confirm filling the window,
+recorded in the spec sections W1 appended corrections to (`2026-09-19-web-recoverable-control-design.md`,
+`2026-10-24-tester-round2-design.md` §26). The human's 「要改」 was given on the controller's framing of a conflict; the
+change itself does not contradict any recorded ruling. Reported to the human at round end.

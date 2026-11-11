@@ -86,3 +86,8 @@ Logs, mutation tables and clones: `/private/tmp/orca-f1112/<seat>/` (deletable).
   `.claude/worktrees/f-transcript-started`, branch `f/transcript-started-at`) turns 4 existing criteria in
   `tests/control/collectTranscripts.test.ts` red (they `toEqual` exact entries); ccloop Rule 15 needs the human to name
   them. Hence no ccloop push and no repin this round.
+
+## Correction (controller, 2026-11-12)
+
+The triage told the human #195 conflicted with handoff §5.2.8. It does not: §5.2.8 is about `contextWindowTokens`;
+W1 changed `handoffAtContextTokens`. Spec §8 records the correction; reported to the human at round end.
