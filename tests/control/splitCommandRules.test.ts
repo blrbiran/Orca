@@ -248,6 +248,12 @@ describe("#168: a documentation-only task held to the repository-wide suite", ()
     }
   });
 
+  it("must not catch: a task naming no target path (no path is documentation; other rules judge the empty list)", async () => {
+    const out = await validateDocs({ targetPaths: [], checks: ["npm test"] });
+    // mutation: drop `targetPaths.length > 0` in docsOnlySuite ([].every is true) -> check-docs-only-suite:T1 -> red
+    expect(out.reasons).not.toContain("check-docs-only-suite:T1");
+  });
+
   it("judges each write of a multi-directory task by its own paths and checks", async () => {
     const multi = (writes: MultiSplitOutput["tasks"][number]["writes"]): MultiSplitOutput => ({ notes: "",
       tasks: [{ taskId: "t", title: "t", labels: [], goal: "G", successCondition: "S", writes, dependsOn: [], traces: ["AC1"] }] });
