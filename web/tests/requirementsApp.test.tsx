@@ -120,7 +120,8 @@ describe("App and the Requirements section (N1 spec §11.2, DR25)", () => {
     fireEvent.change(within(form).getByRole("textbox", { name: "Idea" }), { target: { value: "Let people print a page." } });
     fireEvent.click(within(form).getByRole("button", { name: "Start clarifying" }));
     const section = within(screen.getByRole("region", { name: "Requirements" }));
-    expect((await section.findByRole("alert")).textContent).toMatch(/^\S+ · /);
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the words before the code (#220).
+    expect((await section.findByRole("alert")).textContent).toMatch(/ · \S+$/);
     expect(requests).toContain("POST /api/control/requirements");
   });
 });
@@ -155,7 +156,8 @@ describe("App requirement archive routing", () => {
       // The list marks the open requirement (aria-current); once archived, none is open.
       await waitFor(() => expect(item.getAttribute("aria-current")).toBe("false"));
     }
-    else expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the words before the code (#220).
+    else expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/ · archive-call-in-flight$/)).toBeTruthy();
     expect(requests).not.toContain("GET /api/control/groups/r");
   });
 });
@@ -178,7 +180,8 @@ it.each(["clarifying", "draft"] as const)("recovers a lost %s requirement archiv
     return original(input, init);
   };
   window.location.hash = "#requirements"; render(<App />);
-  expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/^archive-call-in-flight ·/)).toBeTruthy();
+  // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the words before the code (#220).
+  expect(await within(await screen.findByRole("region", { name: "Requirements" })).findByText(/ · archive-call-in-flight$/)).toBeTruthy();
   expect(requests).toContain("GET /api/control/groups/r/commands/lost-archive");
   if (state === "clarifying") expect(requests).not.toContain("GET /api/control/groups/r");
   else await waitFor(() => expect(requests).toContain("GET /api/control/groups/r"));

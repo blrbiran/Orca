@@ -196,7 +196,8 @@ describe("an estimator refusal at requirement open", () => {
 
   it("names Orca's estimator check and explains every reason code, in English and Chinese", async () => {
     expect(explainEstimatorCheck(CHECK)).toBe(`Orca's estimator check refused this agent: ${EN_SINGLE} ${EN_CONTEXT}`);
-    expect(panel(CHECK)).toEqual([`agent-selection-rejected · Orca's estimator check refused this agent: ${EN_SINGLE} ${EN_CONTEXT}`]);
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the words before the code (#220).
+    expect(panel(CHECK)).toEqual([`Orca's estimator check refused this agent: ${EN_SINGLE} ${EN_CONTEXT} · agent-selection-rejected`]);
     await i18n.changeLanguage("zh");
     expect(explainEstimatorCheck(CHECK)).toBe(`Orca 的估算器检查拒绝了这个 agent：${ZH_SINGLE}${ZH_CONTEXT}`);
   });
@@ -205,7 +206,8 @@ describe("an estimator refusal at requirement open", () => {
     expect([explainEstimatorCheck("agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT"), explainEstimatorCheck("agent-selection-rejected:estimator:context-unavailable,omp-new-thing"),
       explainEstimatorCheck("agent-selection-rejected:a:single-call-unavailable")]).toEqual([null, null, null]);
     expect(explainEstimateReason("agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT")).toBe(EN_CATALOG);
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the words before the code (#220).
     expect(panel("agent-selection-rejected:estimator:omp-model-catalog-unavailable: spawn ENOENT")).toEqual([
-      `agent-selection-rejected · ccloop refused this agent selection: estimator:omp-model-catalog-unavailable: spawn ENOENT · ${EN_CATALOG}`]);
+      `ccloop refused this agent selection: estimator:omp-model-catalog-unavailable: spawn ENOENT · ${EN_CATALOG} · agent-selection-rejected`]);
   });
 });

@@ -192,7 +192,8 @@ describe("the Requirements section, the rest of its branches (N1 spec §11.2)", 
     const view = requirementView("answered");
     render(<RequirementsPanel config={config} summary={summaryWith(view)} views={{ r: view }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()}
       refusal={{ status: 422, code: "requirement-not-split", message: "requirement-not-split", commandRevision: 3 }} />);
-    expect(screen.getByRole("alert").textContent).toMatch(/^requirement-not-split · .*not been split/);
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the words before the code (#220).
+    expect(screen.getByRole("alert").textContent).toMatch(/not been split.* · requirement-not-split$/);
   });
 });
 

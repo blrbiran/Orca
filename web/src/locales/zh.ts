@@ -1042,6 +1042,8 @@ export const zh: Translation<typeof en> = {
     },
     capabilityNote: "需求澄清需要有消耗上界的单次调用。请选择支持此能力的 agent，或在任务控制中导入计划。",
     agentDefault: "你的默认",
+    defaultResolved: "你的默认：{{agent}} · {{model}}",
+    noDefaultAgent: "还没有设置默认 agent；请在这里选一个，或到 设置 > Agent 里设置。",
     model: "模型",
     modelUnlisted: "这个模型不在该 agent 的模型列表里；provider 可能会拒绝。",
     defaultUnlisted: "该 agent 的默认模型 {{model}} 不在它的模型列表里；请从列表里选一个。",

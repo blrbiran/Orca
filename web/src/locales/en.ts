@@ -1181,6 +1181,8 @@ export const en = {
     },
     capabilityNote: "Clarification uses a bounded single call. Choose a supported agent, or import a plan in Task control.",
     agentDefault: "Your default",
+    defaultResolved: "Your default: {{agent}} · {{model}}",
+    noDefaultAgent: "No default agent is set; choose an agent here, or set one in Settings > Agent.",
     model: "Model",
     modelUnlisted: "This model is not in the agent's model list; the provider may refuse it.",
     defaultUnlisted: "This agent's default model {{model}} is not in its model list; choose one from the list.",

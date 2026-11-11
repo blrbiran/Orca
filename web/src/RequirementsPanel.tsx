@@ -24,7 +24,8 @@ import { Select } from "./ui/Select.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
-import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, RequirementViewV1 } from "./controlTypes.js";
+import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, OperatorPreferencesV1, RequirementViewV1 } from "./controlTypes.js";
+import { requirementSelection } from "./requirementAgent.js";
 import { inScope } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import { EMPTY_DRAFTS, EMPTY_NEW_REQUIREMENT_FORM, NEW_REQUIREMENT_FORM, answerKey, feedbackKey, limitKey, setDraft } from "./detailDrafts.js";
@@ -50,32 +51,51 @@ function revisionOf(view: View): number { return view.summary.commandRevision; }
 /** What a requirement command may clear once it succeeded: the submitted draft, by its slot and key (spec §11 R2). */
 export interface Submitted { slot: DraftSlot; key: string; value: unknown }
 type OnCommand = (action: ControlAction, submitted?: Submitted) => void;
-/** Issue #220: each installation's model list as last read, and a read of one not yet asked for. */
-type ModelLists = { models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void };
+/**
+ * Issue #220: each installation's model list as last read, and a read of one not yet asked for; and the operator's agent
+ * preferences (null: not read yet), which decide what "your default" and an empty model box resolve to.
+ */
+type ModelLists = { models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void;
+  preferences?: OperatorPreferencesV1 | null };
 
 /**
  * Issue #220: the agent select and, once one is chosen, its model -- from the agent's catalog when it was read, the
- * placeholder its default. Shared by the New requirement form and the set-agent control (#236), so both choose alike.
- * `defaultOption` offers "your default" (no agent); without it the select starts empty until one is chosen.
+ * placeholder the model an empty box resolves to. Shared by the New requirement form and the set-agent control (#236), so
+ * both choose alike. `defaultOption` offers "your default" (no agent); without it the select starts empty until one is
+ * chosen. What "your default" and an empty box resolve to is the server's rule (web/src/requirementAgent.ts); without the
+ * preferences it falls back to the installation's default, as before.
  */
 function AgentModelFields(props: { agents: AgentsViewV1 | null; agent: string; model: string; name: string; defaultOption?: boolean;
   onAgent: (agent: string) => void; onModel: (model: string) => void } & ModelLists): JSX.Element {
   const { t } = useTranslation();
   const { agent } = props, model = props.model.trim();
-  const chosen = props.agents?.installations.find((row) => row.id === agent);
-  const listed = agent === "" ? undefined : props.models?.(agent);
+  const prefs = props.preferences ?? null;
+  const resolved = prefs === null ? (agent === "" ? null : { agent, model: null }) : requirementSelection(prefs, agent === "" ? undefined : agent);
+  // The installation the call will run on: the picked one, or "your default" resolved.
+  const runs = resolved === null ? undefined : props.agents?.installations.find((row) => row.id === resolved.agent);
+  const runsModel = runs === undefined ? null : resolved?.model ?? runs.defaults.model;
+  const listed = runs === undefined ? undefined : props.models?.(runs.id);
+  const onDefault = agent === "" && props.defaultOption === true;
+  // "Your default" reads its agent's catalog as a pick does, so its warning can show without a pick.
+  useEffect(() => { if (onDefault && runs !== undefined && props.models?.(runs.id) === undefined) props.onModels?.(runs.id); }, [onDefault, runs?.id]);
   const listId = `${props.name}-list`;
+  const unlisted = (shown: string): boolean => listed?.state === "ready" && listed.view.models.length > 0 && !listed.view.models.some((row) => row.model === shown);
   return (
     <>
       <label>{t("requirements.agent")}<Select value={agent} placeholder={t("requirements.chooseAgent")}
         onValueChange={(value) => { props.onAgent(value); if (value !== "" && props.models?.(value) === undefined) props.onModels?.(value); }}
         options={[...(props.defaultOption === true ? [{ value: "", label: t("requirements.agentDefault") }] : []),
           ...(props.agents?.installations ?? []).map((installation) => ({ value: installation.id, label: installation.id }))]} /></label>
+      {onDefault && prefs !== null && (resolved === null
+        ? <small role="note">{t("requirements.noDefaultAgent")}</small>
+        : runsModel !== null && <small>{t("requirements.defaultResolved", { agent: resolved.agent, model: runsModel })}</small>)}
+      {onDefault && runsModel !== null && unlisted(runsModel) && <small role="note">{t("requirements.defaultUnlisted", { model: runsModel })}</small>}
       {/* Issue #220: a model the provider's catalog does not list used to surface only after submit, with the fix in another
-          page; the model is chosen here, from the agent's catalog when it was read, and the placeholder is the default. */}
-      {chosen !== undefined && (
+          page; the model is chosen here, from the agent's catalog when it was read, and the placeholder is what an empty box
+          resolves to. */}
+      {agent !== "" && runs !== undefined && runsModel !== null && (
         <label>{t("requirements.model")}
-          <input name={props.name} value={props.model} placeholder={chosen.defaults.model} list={listed?.state === "ready" ? listId : undefined}
+          <input name={props.name} value={props.model} placeholder={runsModel} list={listed?.state === "ready" ? listId : undefined}
             onChange={(event) => props.onModel(event.currentTarget.value)} />
           {listed?.state === "ready" && (
             <datalist id={listId}>
@@ -84,8 +104,7 @@ function AgentModelFields(props: { agents: AgentsViewV1 | null; agent: string; m
           )}
           {listed?.state === "loading" && <small>{t("agents.models.loading")}</small>}
           {listed?.state === "ready" && model !== "" && !listed.view.models.some((row) => row.model === model) && <small role="note">{t("requirements.modelUnlisted")}</small>}
-          {listed?.state === "ready" && model === "" && listed.view.models.length > 0 && !listed.view.models.some((row) => row.model === chosen.defaults.model)
-            && <small role="note">{t("requirements.defaultUnlisted", { model: chosen.defaults.model })}</small>}
+          {model === "" && unlisted(runsModel) && <small role="note">{t("requirements.defaultUnlisted", { model: runsModel })}</small>}
         </label>
       )}
     </>
@@ -114,7 +133,7 @@ function SetAgent(props: { view: View; agents: AgentsViewV1 | null; onCommand: O
       <h5>{t("requirements.setAgent.title")}</h5>
       <p>{t("requirements.setAgent.why")}</p>
       <AgentModelFields agents={props.agents} agent={agent} model={model} name={`set-agent-model-${props.view.summary.groupId}`}
-        onAgent={(value) => { setAgent(value); setModel(""); }} onModel={setModel}
+        onAgent={(value) => { setAgent(value); setModel(""); }} onModel={setModel} preferences={props.preferences ?? null}
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
       <button type="submit" disabled={agent === ""}>{t("requirements.setAgent.submit")}</button>
     </form>
@@ -123,9 +142,7 @@ function SetAgent(props: { view: View; agents: AgentsViewV1 | null; onCommand: O
 
 function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 | null; language: PanelLanguage; onCommand: OnCommand;
   repoId?: string | null; onRepo?: (repoId: string) => void;
-  /** Issue #220: each installation's model list as last read, and a read of one not yet asked for. */
-  models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void;
-  scope?: GroupScope; targets?: readonly string[]; repoLabel?: (repoId: string) => string } & EditableDrafts): JSX.Element | null {
+  scope?: GroupScope; targets?: readonly string[]; repoLabel?: (repoId: string) => string } & ModelLists & EditableDrafts): JSX.Element | null {
   const { t } = useTranslation();
   // Accounts spec §3.5: requirement-open.limit is human-only. A member opens with the server's default limit instead.
   const mayLimit = mayHumanOnly(useContext(AccountContext));
@@ -198,7 +215,7 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
       <label>{t("requirements.contentLanguage")}<Select value={language} onValueChange={(value) => edit({ language: value as PanelLanguage })}
         options={PANEL_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NAMES[lang] }))} /></label>
       <AgentModelFields agents={props.agents} agent={agent} model={draft.model ?? ""} name="new-requirement-model" defaultOption
-        onAgent={(value) => edit({ agent: value, model: "" })} onModel={(value) => edit({ model: value })}
+        onAgent={(value) => edit({ agent: value, model: "" })} onModel={(value) => edit({ model: value })} preferences={props.preferences ?? null}
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
       <p role="note">{t("requirements.capabilityNote")}</p>
       <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
@@ -783,7 +800,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "run", runId: blockedRun.runId } })}>{t("requirements.retryRun")}</button></>}
         </p>
       )}
-      {!archived && blockedRun?.reason != null && AGENT_BLOCK.test(blockedRun.reason) && <SetAgent view={view} agents={props.agents} onCommand={props.onCommand}
+      {!archived && blockedRun?.reason != null && AGENT_BLOCK.test(blockedRun.reason) && <SetAgent view={view} agents={props.agents} onCommand={props.onCommand} preferences={props.preferences ?? null}
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />}
       {!archived && reason === BUDGET_EXHAUSTED && <RaiseLimit view={view} onCommand={props.onCommand} {...editable} />}
       </div>
@@ -886,6 +903,8 @@ function listName(group: ControlSummaryV1["groups"][number]): string | null {
 export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kind: "requirement" }> | null; config: ControlConfigV1; summary: ControlSummaryV1; views: Record<string, RequirementViewV1>; selected: string | null;
   agents: AgentsViewV1 | null; language: PanelLanguage; onSelect: (groupId: string) => void;
   models?: (installationId: string) => ModelListState | undefined; onModels?: (installationId: string) => void;
+  /** Issue #220: the operator's agent preferences (null: not read yet), so the forms say what an unchosen agent or model runs. */
+  preferences?: OperatorPreferencesV1 | null;
   onPrepare?: (groupId: string) => void;
   onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
   groupRefusals?: Record<string, ControlRefusal>;
@@ -924,11 +943,12 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
       {(props.summary.unreadable ?? []).filter((row) => row.requirement !== false).map((row) => (
         <p role="alert" data-tone="warn" key={row.groupId}>{t("control.unreadableGroup", { groupId: row.groupId, reason: row.reason })}</p>
       ))}
-      {refusal !== null && <p role="alert">{refusal.code} · {isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalWords(refusal)}</p>}
+      {/* Issue #220 follow-up: the words lead; the code stays after them for a search or a report. */}
+      {refusal !== null && <p role="alert">{isReason(refusal.code) ? t(`requirements.reason.${refusal.code}`, { groupId: props.selected ?? "" }) : refusalWords(refusal)} · {refusal.code}</p>}
       <div className="split">
         <nav aria-label={t("requirements.list")}>
           {/* Tester #36: the form to start one sits above the list, not after however many requirements there are. */}
-          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo}
+          <NewRequirement config={props.config} agents={props.agents} language={props.language} onCommand={onCommand} repoId={props.repoId} onRepo={props.onRepo} preferences={props.preferences ?? null}
             {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })}
             scope={scope} targets={props.targets} repoLabel={props.repoLabel} {...editable} />
           <div role="group" aria-label={t("requirements.filter.region")} className={groupFilter}>
@@ -949,7 +969,7 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
             )}</GroupActionsMenu>
           ))}
         </nav>
-        {view !== undefined && <Detail view={view} onCommand={onCommand} onPrepare={props.onPrepare} agents={props.agents}
+        {view !== undefined && <Detail view={view} onCommand={onCommand} onPrepare={props.onPrepare} agents={props.agents} preferences={props.preferences ?? null}
           {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} {...editable} />}
       </div>
     </section>
