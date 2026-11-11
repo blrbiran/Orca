@@ -45,14 +45,18 @@ it("releases an unknown nullable stop unmetered, still refusing a charge as unli
  }finally{await driver.stop();await x.h.dispose();}
 });
 
-it("a fresh retry preserves prior finite attempts and sessions under unlimited tokens",async()=>{
+// Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — spec 2026-11-11-tester-followup-e-design.md §8:
+// a person's explicit retry in a group with no token limit starts with the task's own attempts (3) and active time; its
+// sessions are still counted over the lineage (3 - 1 = 2), and the funded lineage still inherits every attempt used.
+// (Was: attempts 3 - 1 = 2, the lineage's remainder.)
+it("a fresh retry under unlimited tokens restarts the task's own attempts and keeps counting sessions and the lineage",async()=>{
  const x=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",killGraceMs:0,behaviour:()=>"failed"});const driver=x.driver();try {
   const first=await x.claim();await x.until(driver,()=>x.body(first).state==="blocked");
   expect(x.service.retryTask(x.h.command("retry-task",{taskId:"a"}))).not.toHaveProperty("error");
   await driver.round();await deliverScheduledStart(x.dispatch,"g");
   expect(x.h.store.db.prepare("SELECT id FROM runs WHERE group_id='g'").all()).toHaveLength(2);
   const next=String(x.h.store.db.prepare("SELECT id FROM runs WHERE group_id='g' ORDER BY rowid DESC LIMIT 1").get()!.id);expect(next).not.toBe(first);
-  expect(x.body(next).grant.work).toMatchObject({tokens:null,attempts:2,sessions:2});
+  expect(x.body(next).grant.work).toMatchObject({tokens:null,attempts:3,sessions:2});
   expect(x.body(next).tokenPolicy.inheritedUsage).toMatchObject({tokens:10,attempts:1,sessions:1});
  }finally{await driver.stop();await x.h.dispose();}
 });
