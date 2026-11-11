@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { openControlStore, type ControlStore } from "../../src/control/store.js";
 import { recordUsage } from "../../src/control/usage.js";
 import { readWebGroup } from "../../src/control/webService.js";
+import { autoRetryFundingRefusal } from "../../src/control/retryTask.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { readControlGroup, readGroupSummary } from "../../src/panel/controlViews.js";
@@ -140,15 +141,20 @@ describe("criterion 13: funding after a non-blocking breach", () => {
    * lineage's usage (fundedAllowance.ts decideFundedAllowance) -- so the task's next run is not funded and its retry is
    * refused authored-budget-exhausted (retryTask.ts). The group's other tasks keep running (criterion 10).
    */
-  it("in an unlimited group the breached task's retry is refused authored-budget-exhausted and the group stays unblocked", async () => {
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — spec 2026-11-11-tester-followup-e-design.md §8
+  // overrides budget spec 2026-11-11 §7 item 7's first consequence: in a group with no token limit the ladder's automatic
+  // retry still counts the lineage (refused authored-budget-exhausted), while a person's explicit retry starts its run
+  // with the task's own active time. (Was: the explicit retry refused authored-budget-exhausted.)
+  it("in an unlimited group the ladder refuses the breached task authored-budget-exhausted, an explicit retry starts it fresh, and the group stays unblocked", async () => {
     const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", behaviour: failingA }); try {
       smallActiveMs(t, "a");
       const { runId, driver } = await failedRun(t);
       expect(t.body(runId).breaches.length).toBeGreaterThan(0);
       expect(group(t).status).not.toBe("blocked");
+      expect(autoRetryFundingRefusal(t.h.store, "g", "a", runId)).toBe("authored-budget-exhausted");
       const plain = code(retry(t));
-      expect(plain).toMatchObject({ code: "task-not-retryable" });
-      expect(plain!.message).toContain("authored-budget-exhausted");
+      expect(plain).toBeNull();
+      expect(t.body(runId).state).toBe("settled-failed");
       expect(group(t).status).not.toBe("blocked");
       void driver;
     } finally { await t.h.dispose(); }

@@ -71,10 +71,22 @@ async function exhausted(options: HarnessOptions = {}, tasks = [{ taskId: "a" }]
   return { t, driver, first, behaviour };
 }
 
+/**
+ * Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — since spec 2026-11-11-tester-followup-e-design.md
+ * §8 an explicit retry in a group whose token limit is null starts with fresh attempts and active time, so the criteria
+ * below that pin top-up mechanics against the lineage's remainder (T1, T2, T3, T4, T7, T15) run in an optional-v1 group
+ * given a finite token limit before its first claim, where the lineage is still counted; their assertions are unchanged.
+ * The unlimited case: unlimitedRetryFreshAttempts.test.ts. (Was: the fixture's unlimited group.)
+ */
+const finiteLimit = (t: Harness): void => {
+  const limit = readControlGroup(t.h.store, "epoch", "g").ledger.groupLimit;
+  expect(code(t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 50_000_000 } })))).toBeNull();
+};
+
 describe("T1: a person's top-up funds the retried run without moving the earlier run's check", { timeout: 120_000 }, () => {
-  it("unlimited group, attempts exhausted: retry with work {attempts: 2} is applied, claimed with attempts 2, the first run still checks", async () => {
-    const { t, driver, first } = await exhausted(); try {
-      // Today's answer without a top-up (overGrantExit criterion 13): no exit.
+  it("finite optional-v1 group, attempts exhausted: retry with work {attempts: 2} is applied, claimed with attempts 2, the first run still checks", async () => {
+    const { t, driver, first } = await exhausted({}, undefined, finiteLimit); try {
+      // The answer without a top-up where the lineage is counted: no exit.
       expect(code(retry(t, OWNER, "a"))!.message).toContain("authored-budget-exhausted");
       expect(code(retry(t, OWNER, "a", { work: { attempts: 2 } }))).toBeNull();
       expect(rows(t)).toBe(1);
@@ -122,7 +134,7 @@ describe("T15: a topped-up run that was closed can be retried again", { timeout:
       const limit = readControlGroup(t.h.store, "epoch", "g").ledger.groupLimit;
       expect(code(t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10 } })))).toBeNull();
     };
-    const { t, driver, first } = await exhausted({ sealedOwnerProof: true }, undefined, roomy); try {
+    const { t, driver, first } = await exhausted({ sealedOwnerProof: true }, undefined, (t) => { finiteLimit(t); roomy(t); }); try {
       expect(code(retry(t, OWNER, "a", { work: { attempts: 2 } }))).toBeNull();
       const second = await claimAgain(t, driver);
       await failed(t, driver, second);
@@ -159,6 +171,7 @@ describe("T15: a topped-up run that was closed can be retried again", { timeout:
 describe("T2: a retry without work is today's retry", { timeout: 120_000 }, () => {
   it("leaves no row, and the claimed grant is the base's remaining", async () => {
     const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", behaviour: () => "failed" }); try {
+      finiteLimit(t);
       const first = await t.claim(); const driver = t.driver();
       await failed(t, driver, first);
       const answer = retry(t, OWNER, "a") as { result?: unknown };
@@ -174,7 +187,7 @@ describe("T2: a retry without work is today's retry", { timeout: 120_000 }, () =
 
 describe("T3, T9, T10: who may top up", { timeout: 120_000 }, () => {
   it("T3: an agent with cap null is refused retry-top-up-not-authorized and leaves no row; a person with cap null is applied", async () => {
-    const { t } = await exhausted(); try {
+    const { t } = await exhausted({}, undefined, finiteLimit); try {
       expect(code(retry(t, AGENT, "a", { work: { attempts: 2 } }))!.code).toBe("retry-top-up-not-authorized");
       expect(rows(t)).toBe(0);
       expect(code(retry(t, OWNER, "a", { work: { attempts: 2 } }))).toBeNull();
@@ -202,6 +215,7 @@ describe("T3, T9, T10: who may top up", { timeout: 120_000 }, () => {
 describe("T4: the agent cap is summed per group", { timeout: 120_000 }, () => {
   it("a second 60000-token top-up in one group passes a 100000 cap; a row of another group does not count", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { tokenPolicy: "optional-v1", behaviour: () => "failed" }); try {
+      finiteLimit(t);
       const driver = t.driver();
       const runA = await t.claim(); await failed(t, driver, runA);
       const runB = await t.claim(); await failed(t, driver, runB);
@@ -248,7 +262,7 @@ describe("T6: an authorized agent may set the global cap", () => {
 
 describe("T7: a later top-up never reaches the run it was retried from", { timeout: 120_000 }, () => {
   it("after a second top-up the second run still computes the same grant and its check passes", async () => {
-    const { t, driver } = await exhausted(); try {
+    const { t, driver } = await exhausted({}, undefined, finiteLimit); try {
       expect(code(retry(t, OWNER, "a", { work: { attempts: 1 } }))).toBeNull();
       const second = await claimAgain(t, driver);
       const before = JSON.stringify(allowance(t, second));
