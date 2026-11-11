@@ -29,6 +29,23 @@ describe("requirement open --agent (#143)", () => {
     expect([plain.code, plain.stderr.includes("pass --agent")]).toEqual([2, false]);
   });
 
+  // Tester follow-up E §7 (#246): with no defaultAgent and exactly one perAgent entry the preferences already name the
+  // only installation a person configured; the hint names it instead of a placeholder. Any other shape keeps the
+  // generic hint, and resolution itself is unchanged (no layer names an agent => agent-unselected).
+  it("names the single perAgent installation when there is no defaultAgent (#246)", async () => {
+    const prefs = (preferences: unknown) => ({ status: 200, body: { schema: "orca-agent-preferences-v1", operatorId: "operator-1", revision: 2, preferences } });
+    const one = await world({}, { "POST requirements": unselected, "GET operator/agent-preferences": prefs({ perAgent: { "codex-main": { model: "gpt-x" } } }) });
+    const named = await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], one.dir);
+    expect(named.code).toBe(2);
+    expect(named.stderr).toContain("orca: no agent is selected: pass --agent codex-main (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences\n");
+    const two = await world({}, { "POST requirements": unselected, "GET operator/agent-preferences": prefs({ perAgent: { "codex-main": {}, "claude-main": {} } }) });
+    expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], two.dir)).stderr).toContain("pass --agent <installation> (see orca agent list)");
+    const withDefault = await world({}, { "POST requirements": unselected, "GET operator/agent-preferences": prefs({ defaultAgent: "claude-main", perAgent: { "codex-main": {} } }) });
+    expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], withDefault.dir)).stderr).toContain("pass --agent <installation> (see orca agent list)");
+    const unreadable = await world({}, { "POST requirements": unselected, "GET operator/agent-preferences": { status: 500, body: { error: { code: "boom", message: "x", retryable: false } } } });
+    expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], unreadable.dir)).stderr).toContain("pass --agent <installation> (see orca agent list)");
+  });
+
   it("under --json stdout stays exactly one JSON line (the hint is for people)", async () => {
     const w = await world({}, { "POST requirements": unselected });
     const out = await cli(["requirement", "open", "--idea", "x", "--group", "g-a", "--json"], w.dir);

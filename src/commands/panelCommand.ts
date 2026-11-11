@@ -4,9 +4,9 @@
  */
 import { dispatchedRunHeaders } from "../control/commandClient.js";
 import { discoverSocketPath } from "../entry/discovery.js";
-import { EntryRejection, localError, type CliResponseV1 } from "../entry/envelope.js";
+import { EntryRejection, exitCodeFor, localError, type CliResponseV1 } from "../entry/envelope.js";
 import { controlGet, controlUpload } from "../entry/operations.js";
-import { printResponse } from "./output.js";
+import { errorOf, printResponse } from "./output.js";
 import { personTokenHeaders } from "./person.js";
 import { resolveId, resolveProject, type ProjectRef } from "./resolve.js";
 import type { CommandDef, CommandIo, ParsedArgs, ReadMapping, WriteContext } from "./types.js";
@@ -116,15 +116,21 @@ async function runRead(def: CommandDef, mapping: ReadMapping, context: WriteCont
 
 /** Run one read or verb row; a refusal made here is exit 1, the panel's error answer exit 2 (spec §7). */
 export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: CommandIo): Promise<number> {
-  const print = (response: CliResponseV1, request?: Parameters<typeof printResponse>[3]): number =>
-    printResponse(response, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(def.hint === undefined ? {} : { hint: def.hint }) }, io, request);
+  let context: WriteContext | undefined;
+  // #246: the hint is worked out before printing (it may read), and only when a person reads the output.
+  const print = async (response: CliResponseV1, request?: Parameters<typeof printResponse>[3]): Promise<number> => {
+    const error = args.global.json || def.hint === undefined || exitCodeFor(response) === 0 ? null : errorOf(response.body);
+    let hint: string | undefined;
+    if (error !== null) { try { hint = await def.hint!(error, context); } catch { hint = undefined; } }
+    return printResponse(response, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(hint === undefined ? {} : { hint: () => hint }) }, io, request);
+  };
   try {
     // Spec §6.3: the one command refused without --if-revision, before anything is asked of the panel.
     if (def.mapsTo.kind === "verb" && def.mapsTo.requiresIfRevision && args.global.ifRevision === undefined) {
       throw new EntryRejection("control-cli-argument-invalid", `orca ${def.domain} ${def.action} replaces a whole document: pass --if-revision <n> with the revision you based it on (orca proposal show)`);
     }
     const session = openSession(args, io);
-    const context = contextFor(args, io, session, await resolveIds(args, session));
+    context = contextFor(args, io, session, await resolveIds(args, session));
     // Issue 152: a --project the row never reads is still checked, so a misspelt one is refused, not silently ignored.
     if (args.global.project !== undefined) await context.project();
     const mapping = def.mapsTo;

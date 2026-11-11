@@ -10,7 +10,7 @@ export function envelope(response: CliResponseV1, request?: SentRequest): CliEnv
   return request === undefined ? response : { ...response, request };
 }
 
-function errorOf(body: unknown): { code: string; message: string } | null {
+export function errorOf(body: unknown): { code: string; message: string } | null {
   // The control routes answer {error:{code,message}}; the plans route answers {code,message} like the HTTP API.
   const error = (body as { error?: { code?: unknown; message?: unknown } } | null)?.error ?? body as { code?: unknown; message?: unknown } | null;
   return error && typeof error.code === "string" ? { code: error.code, message: typeof error.message === "string" ? error.message : "" } : null;

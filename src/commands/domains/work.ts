@@ -154,9 +154,18 @@ export const WORK_ROWS: CommandDef[] = [
       ...(str(c, "language") === undefined ? {} : { contentLanguage: str(c, "language") }), ...(str(c, "limit") === undefined ? {} : { limit: json(c, "limit") }),
       ...(str(c, "agent") === undefined ? {} : { agent: { agent: str(c, "agent") } }),
     }),
-    hint: (error) => error.code === "agent-selection-rejected" && error.message.startsWith("estimator:agent-unselected")
-      ? "no agent is selected: pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences"
-      : undefined,
+    hint: async (error, c) => {
+      if (error.code !== "agent-selection-rejected" || !error.message.startsWith("estimator:agent-unselected")) return undefined;
+      const generic = "no agent is selected: pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences";
+      // Tester follow-up E §7 (#246): with no defaultAgent and exactly one perAgent entry, name that installation.
+      let prefs: { defaultAgent?: unknown; perAgent?: unknown } | undefined;
+      try { prefs = c === undefined ? undefined : (await c.read("operator/agent-preferences") as { preferences?: typeof prefs }).preferences; }
+      catch { return generic; }
+      const perAgent = prefs?.perAgent !== null && typeof prefs?.perAgent === "object" ? Object.keys(prefs.perAgent) : [];
+      return prefs?.defaultAgent === undefined && perAgent.length === 1
+        ? `no agent is selected: pass --agent ${perAgent[0]} (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences`
+        : generic;
+    },
     examples: ["orca requirement open --idea \"add a dark mode\"", "orca requirement open --idea \"add a dark mode\" --agent claude-main"] }),
   verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults",
     verb: "requirement-answer", positionals: [GROUP],

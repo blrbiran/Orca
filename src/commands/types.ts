@@ -137,8 +137,12 @@ export interface CommandDef {
   examples: string[];
   /** Human text for a 2xx body. */
   format(body: unknown): string;
-  /** Issue #143: the next step for a panel error, printed after its error line (human output only); undefined = none. */
-  hint?(error: { code: string; message: string }): string | undefined;
+  /**
+   * Issue #143: the next step for a panel error, printed after its error line (human output only); undefined = none.
+   * Tester follow-up E §7 (#246): it may read through the invocation's context (absent when the refusal came before
+   * one existed); it is asked only for human output, and a hint that throws is no hint.
+   */
+  hint?(error: { code: string; message: string }, context?: WriteContext): string | undefined | Promise<string | undefined>;
 }
 
 export type FindResult = { def: CommandDef; rest: string[] } | { suggestion: string | null };
