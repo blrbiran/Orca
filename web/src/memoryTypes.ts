@@ -16,7 +16,8 @@ export interface MemoryRecord {
   updatedAt: string;
 }
 export const WEB_MEMORY_RECORD_FIELDS = ["ref", "scope", "projectKey", "kind", "content", "tags", "pinned", "source", "trust", "createdAt", "updatedAt"] as const;
-export interface MemoryPage { records: MemoryRecord[]; total: number; truncated: boolean }
+/** Tester #258: `offset` is where this page starts among the matches; `hasMore` says matches follow it. */
+export interface MemoryPage { records: MemoryRecord[]; total: number; truncated: boolean; offset: number; hasMore: boolean }
 export type MemoryHealth = { status: "ok" } | { status: "unavailable"; code: string; message: string };
 export interface MemoryStatusResponse {
   adapter: { id: string; capabilities: { search: true; get: true; recordCorrection: false } };

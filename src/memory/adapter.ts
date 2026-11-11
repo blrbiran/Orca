@@ -48,12 +48,15 @@ export interface MemoryRecord {
 export interface MemorySearchOptions {
   readonly query: string;  // "" means list everything in scope
   readonly limit: number;  // 1..200
+  readonly offset?: number; // matches skipped before this page, in the fixed order; absent means 0 (#258)
 }
 
 export interface MemoryPage {
   readonly records: readonly MemoryRecord[];
   readonly total: number;      // matches before `limit`
   readonly truncated: boolean; // total > records.length
+  readonly offset: number;     // where this page starts among the matches (#258)
+  readonly hasMore: boolean;   // matches follow this page: offset + records.length < total (#258)
 }
 
 export interface MemoryAdapter {

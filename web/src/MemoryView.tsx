@@ -41,6 +41,7 @@ export function MemoryView({ active, project, onProject }: {
   const [record, setRecord] = useState<MemoryRecord | null>(null);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const detailPane = useRef<HTMLDivElement>(null);
 
   const load = async (projectKey: string, query: string): Promise<void> => {
@@ -49,6 +50,7 @@ export function MemoryView({ active, project, onProject }: {
     setRefusal(null);
     setRecord(null);
     setLoading(true);
+    setLoadingMore(false);
     try {
       const answer = query === "" ? await fetchMemoryList(projectKey) : await fetchMemorySearch(projectKey, query);
       if (mine === latest.current) setPage(answer);
@@ -59,6 +61,29 @@ export function MemoryView({ active, project, onProject }: {
       }
     } finally {
       if (mine === latest.current) setLoading(false);
+    }
+  };
+
+  /**
+   * Tester #258: the next page of the shown list or search, from where it ends, appended. It counts as the newest list
+   * request, so a list or search started meanwhile wins and this answer is dropped.
+   */
+  const loadMore = async (): Promise<void> => {
+    if (page === null) return;
+    const mine = ++latest.current;
+    const shown = page;
+    setLoadingMore(true);
+    try {
+      const offset = shown.page.offset + shown.page.records.length;
+      const answer = shown.query === "" ? await fetchMemoryList(shown.projectKey, offset) : await fetchMemorySearch(shown.projectKey, shown.query, offset);
+      if (mine !== latest.current) return;
+      const known = new Set(shown.page.records.map((r) => r.ref));
+      const records = [...shown.page.records, ...answer.page.records.filter((r) => !known.has(r.ref))];
+      setPage({ ...shown, page: { records, total: answer.page.total, truncated: answer.page.total > records.length, offset: shown.page.offset, hasMore: answer.page.hasMore } });
+    } catch (err) {
+      if (mine === latest.current) setRefusal(failureFrom(err));
+    } finally {
+      if (mine === latest.current) setLoadingMore(false);
     }
   };
 
@@ -166,7 +191,9 @@ export function MemoryView({ active, project, onProject }: {
               </li>
             ))}
           </ul>
-          {page.page.truncated && <p className="caveat">{t("memory.truncated", { shown: page.page.records.length, total: page.page.total })}</p>}
+          {/* Tester #258: which matches are shown, and the next page while the server says more follow. */}
+          {page.page.records.length > 0 && page.page.records.length < page.page.total && <p className="caveat num">{t("memory.range", { from: page.page.offset + 1, to: page.page.offset + page.page.records.length, total: page.page.total })}</p>}
+          {page.page.hasMore && <button type="button" aria-busy={loadingMore || undefined} disabled={loadingMore} onClick={() => { void loadMore(); }}>{t("memory.loadMore")}</button>}
         </nav>
         </div>
         <div className="split-detail" ref={detailPane}>

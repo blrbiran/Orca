@@ -24,6 +24,9 @@ export const memoryPageSchema = z.object({
   records: z.array(memoryRecordSchema),
   total: z.number().int().nonnegative(),
   truncated: z.boolean(),
+  // Tester #258: where this page starts, and whether matches follow it (memory tab spec, 2026-11-11 addition).
+  offset: z.number().int().nonnegative(),
+  hasMore: z.boolean(),
 }).strict();
 
 export const memoryStatusResponseSchema = z.object({

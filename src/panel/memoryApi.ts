@@ -2,7 +2,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import type { ZodTypeAny } from "zod";
 import { MemoryError, type MemoryScope } from "../memory/adapter.js";
 import { createCcmemAdapter } from "../memory/ccmem.js";
-import { type Parsed, parseLimit, parseQuery, parseRef } from "../memory/search.js";
+import { type Parsed, parseLimit, parseOffset, parseQuery, parseRef } from "../memory/search.js";
 import { memoryItemResponseSchema, memoryPageResponseSchema, memoryStatusResponseSchema } from "../memory/wire.js";
 import { discoverRepos } from "../metrics/discover.js";
 import type { PanelOptions } from "./server.js";
@@ -69,15 +69,17 @@ export function registerMemoryRoutes(app: Express, opts: PanelOptions): void {
     })().catch(next);
   });
 
-  app.get("/api/memory/list", route((req) => [parseLimit(req.query.limit)], async (scope, req, res) => {
+  app.get("/api/memory/list", route((req) => [parseLimit(req.query.limit), parseOffset(req.query.offset)], async (scope, req, res) => {
     const limit = (parseLimit(req.query.limit) as { ok: true; value: number }).value;
-    sendChecked(res, memoryPageResponseSchema, { projectKey: scope.projectKey, query: "", page: await adapter.search(scope, { query: "", limit }) });
+    const offset = (parseOffset(req.query.offset) as { ok: true; value: number }).value;
+    sendChecked(res, memoryPageResponseSchema, { projectKey: scope.projectKey, query: "", page: await adapter.search(scope, { query: "", limit, offset }) });
   }));
 
-  app.get("/api/memory/search", route((req) => [parseQuery(req.query.q), parseLimit(req.query.limit)], async (scope, req, res) => {
+  app.get("/api/memory/search", route((req) => [parseQuery(req.query.q), parseLimit(req.query.limit), parseOffset(req.query.offset)], async (scope, req, res) => {
     const query = (parseQuery(req.query.q) as { ok: true; value: string }).value;
     const limit = (parseLimit(req.query.limit) as { ok: true; value: number }).value;
-    sendChecked(res, memoryPageResponseSchema, { projectKey: scope.projectKey, query, page: await adapter.search(scope, { query, limit }) });
+    const offset = (parseOffset(req.query.offset) as { ok: true; value: number }).value;
+    sendChecked(res, memoryPageResponseSchema, { projectKey: scope.projectKey, query, page: await adapter.search(scope, { query, limit, offset }) });
   }));
 
   app.get("/api/memory/item", route((req) => [parseRef(req.query.ref)], async (scope, req, res) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryRecord } from "../../src/memory/adapter.js";
-import { parseLimit, parseQuery, parseRef, searchRecords } from "../../src/memory/search.js";
+import { parseLimit, parseOffset, parseQuery, parseRef, searchRecords } from "../../src/memory/search.js";
 
 /**
  * Spec §3.5. Search is a substring filter in Orca, not ccmem's hybrid retrieval: ccmem's `list <query>` writes to its
@@ -74,5 +74,36 @@ describe("request parsing (spec §3.5, §5.1, Review Focus 2)", () => {
   it("takes a ref of 1-16 digits without a leading zero", () => {
     expect(parseRef("42")).toEqual({ ok: true, value: "42" });
     for (const bad of [undefined, "0", "042", "4a", "1".repeat(17), ["1"]]) expect(parseRef(bad).ok, String(bad)).toBe(false);
+  });
+});
+
+/**
+ * Tester #258 (spec 2026-11-11-tester-followup-e-design.md §10; memory tab spec, dated addition): a page starts at
+ * `offset` (default 0) over the same fixed order, and says where it starts and whether more follow. `truncated` keeps
+ * its meaning (not every match is in this page).
+ */
+describe("paging (#258)", () => {
+  const five = ["1", "2", "3", "4", "5"].map((ref, i) => rec(ref, { updatedAt: `2026-09-0${5 - i}T00:00:00.000Z` }));
+  it("pages through the fixed order without gaps or repeats", () => {
+    const first = searchRecords(five, { query: "", limit: 2 });
+    const second = searchRecords(five, { query: "", limit: 2, offset: 2 });
+    const last = searchRecords(five, { query: "", limit: 2, offset: 4 });
+    // mutation: ignore offset in the slice -> the second page repeats 1,2, red here
+    expect([first, second, last].map((page) => page.records.map((r) => r.ref))).toEqual([["1", "2"], ["3", "4"], ["5"]]);
+    // mutation: echo 0 instead of the offset -> red here
+    expect([first, second, last].map((page) => page.offset)).toEqual([0, 2, 4]);
+    // mutation: hasMore = truncated -> the last page (1 of 5 shown, truncated) says more follow, red here
+    expect([first, second, last].map((page) => page.hasMore)).toEqual([true, true, false]);
+    expect([first, second, last].map((page) => [page.total, page.truncated])).toEqual([[5, true], [5, true], [5, true]]);
+  });
+  it("answers an empty page past the end", () => {
+    expect(searchRecords(five, { query: "", limit: 2, offset: 9 })).toMatchObject({ records: [], total: 5, offset: 9, hasMore: false, truncated: true });
+  });
+  it("takes an offset of 0-1000000, default 0, decimal digits only", () => {
+    expect(parseOffset(undefined)).toEqual({ ok: true, value: 0 });
+    expect(parseOffset("0")).toEqual({ ok: true, value: 0 });
+    expect(parseOffset("150")).toEqual({ ok: true, value: 150 });
+    expect(parseOffset("1000000")).toEqual({ ok: true, value: 1000000 });
+    for (const bad of ["-1", "1000001", "01", "1.5", "1e2", "", " 1", ["1", "2"]]) expect(parseOffset(bad).ok, String(bad)).toBe(false);
   });
 });

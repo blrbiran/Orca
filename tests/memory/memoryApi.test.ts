@@ -64,6 +64,20 @@ describe("the memory routes (spec §5.1)", () => {
     expect(item).toMatchObject({ status: 200, body: { record: { ref: "3", content: "project three" } } });
   });
 
+  // Tester #258: list and search take an offset and say where the page starts and whether more follow.
+  it("pages list and search by offset (#258)", async () => {
+    const { json } = await panel();
+    const first = await json("/api/memory/list?projectKey=mem&limit=3");
+    const rest = await json("/api/memory/list?projectKey=mem&limit=3&offset=3");
+    expect(first.body.page).toMatchObject({ total: 4, offset: 0, hasMore: true, truncated: true });
+    expect(rest.body.page).toMatchObject({ total: 4, offset: 3, hasMore: false, truncated: true });
+    // mutation: the route drops the offset -> the second page repeats the first, red here
+    expect([...first.body.page.records, ...rest.body.page.records].map((r: { ref: string }) => r.ref).sort()).toEqual(["1", "2", "3", "4"]);
+    const search = await json("/api/memory/search?projectKey=mem&q=o&limit=1&offset=1");
+    expect(search.body.page).toMatchObject({ offset: 1 });
+    expect(search.body.page.records).toHaveLength(1);
+  });
+
   it("answers 404 memory-not-found for a ref this repository cannot see (M10)", async () => {
     const { json } = await panel();
     expect(await json("/api/memory/item?projectKey=mem&ref=99")).toMatchObject({ status: 404, body: { code: "memory-not-found" } });
@@ -84,6 +98,8 @@ describe("the memory routes (spec §5.1)", () => {
     ["/api/memory/search?projectKey=mem&q=a&q=b"],
     ["/api/memory/list?projectKey=mem&projectKey=mem"],
     ["/api/memory/list?projectKey=mem&limit=1&limit=2"],
+    ["/api/memory/list?projectKey=mem&offset=-1"],
+    ["/api/memory/search?projectKey=mem&q=a&offset=x"],
   ])("answers 400 memory-query-invalid for %s, without starting ccmem (M11, Review Focus 2)", async (path) => {
     const { fake, json } = await panel();
     expect(await json(path)).toMatchObject({ status: 400, body: { code: "memory-query-invalid" } });
