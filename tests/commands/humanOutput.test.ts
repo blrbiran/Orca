@@ -151,6 +151,34 @@ describe("human output (#140)", () => {
     expect(out.stdout.split("\n")).toEqual(["claude  claude  2.1.0  default model opus", "codex  codex  0.60.0  default model gpt-5.1-codex", ""]);
   });
 
+  // Tester #189: `decision list` printed a truncated dump, so the pendingId an approve or reject needs could not be read off it.
+  const DECISIONS = {
+    schema: "orca-group-decisions-v1", groupId: "g-alpha", projectKey: "proj", pendingCount: 1, flaggedCount: 0, groupFlags: [],
+    tasks: [{ taskId: "t1", runs: [{ runId: "run-1", settled: true, reported: "array",
+      decisions: [{ id: "run-1/agent-0", where: { kind: "landed" }, question: "Which parser?", chose: "the strict one", kind: "design", scope: "local", importance: "major", flag: null }],
+      pending: [
+        { pendingId: "p-1", reason: "undo-missing", question: "Drop the cache?", chose: "yes", undoHow: null, state: "pending", importance: "major" },
+        { pendingId: "p-2", reason: "undo-missing", question: "Rename the flag?", chose: "no", undoHow: null, state: "approved", importance: "minor" },
+      ],
+      unlanded: [] }, { runId: "run-2", settled: true, reported: "array", decisions: [], pending: [],
+      unlanded: [{ entryIndex: 0, question: "Keep the old route?", chose: "yes", importance: "major" }] }] }],
+  };
+
+  it("decision list prints each pending decision's id and the exact approve and reject commands", async () => {
+    const p = await fakePanel({ "GET summary": SUMMARY, "GET groups/g-alpha/decisions": { status: 200, body: DECISIONS } });
+    const out = await cli(["decision", "list", "g-alpha"], p.dir);
+    expect(out.code).toBe(0);
+    const lines = out.stdout.split("\n");
+    expect(lines).toContain("pending p-1 (run-1, major, undo-missing): Drop the cache? -> yes");
+    expect(lines).toContain("  approve: orca decision approve g-alpha p-1 --undo-how '<an executable undo>'");
+    expect(lines).toContain("  reject:  orca decision reject g-alpha p-1 [--because '<why>']");
+    // An entry a person already answered names its state and offers no command.
+    expect(lines).toContain("pending p-2 (run-1, minor, undo-missing): Rename the flag? -> no [approved]");
+    expect(out.stdout).not.toContain("approve g-alpha p-2");
+    expect(lines).toContain("unlanded run-2 #0 (major): Keep the old route? -> yes (never landed; no pending id to approve)");
+    expect(lines).toContain("landed run-1/agent-0 (major): Which parser? -> the strict one");
+  });
+
   it("plan show without --version prints no `document: undefined`", async () => {
     const p = await fakePanel({ [`GET plan-library/${ENTRY}`]: { status: 200, body: { entryId: ENTRY, projectId: "repo-1", head: null, versions: [] } } });
     const out = await cli(["plan", "show", ENTRY], p.dir);

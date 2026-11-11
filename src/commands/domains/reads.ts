@@ -206,6 +206,40 @@ function agentList(body: unknown): string {
   return lines.join("\n");
 }
 
+interface DecisionsBody {
+  groupId?: string; pendingCount?: number; flaggedCount?: number;
+  tasks?: Array<{ taskId: string; runs: Array<{
+    runId: string;
+    decisions?: Array<{ id: string; question: string; chose: string; importance: string; flag: { state: string } | null }>;
+    pending?: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; state: string; importance: string }>;
+    unlanded?: Array<{ entryIndex: number; question: string | null; chose: string | null; importance: string }>;
+  }> }>;
+}
+
+/**
+ * Tester #189: `decision list` printed a truncated dump, so the pendingId an approve or reject needs could not be read
+ * off it. One line per decision; a pending one still waiting gets the exact commands that answer it.
+ */
+function decisionList(body: unknown): string {
+  const b = body as DecisionsBody;
+  const group = b.groupId ?? "<group>";
+  const said = (question: string | null, chose: string | null) => `${question ?? "?"} -> ${chose ?? "?"}`;
+  const lines = [`group ${b.groupId ?? "?"}  pending ${b.pendingCount ?? 0}  flagged ${b.flaggedCount ?? 0}`];
+  for (const task of b.tasks ?? []) for (const run of task.runs) {
+    for (const d of run.decisions ?? []) lines.push(`landed ${d.id} (${d.importance}): ${said(d.question, d.chose)}${d.flag === null ? "" : ` [${d.flag.state}]`}`);
+    for (const p of run.pending ?? []) {
+      lines.push(`pending ${p.pendingId} (${run.runId}, ${p.importance}, ${p.reason}): ${said(p.question, p.chose)}${p.state === "pending" ? "" : ` [${p.state}]`}`);
+      if (p.state === "pending") {
+        lines.push(`  approve: orca decision approve ${group} ${p.pendingId} --undo-how '<an executable undo>'`);
+        lines.push(`  reject:  orca decision reject ${group} ${p.pendingId} [--because '<why>']`);
+      }
+    }
+    for (const u of run.unlanded ?? []) lines.push(`unlanded ${run.runId} #${u.entryIndex} (${u.importance}): ${said(u.question, u.chose)} (never landed; no pending id to approve)`);
+  }
+  if (lines.length === 1) lines.push("no decisions");
+  return lines.join("\n");
+}
+
 export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
@@ -316,7 +350,7 @@ export const READ_ROWS: CommandDef[] = [
     },
     format: runResultsText }),
   read({ domain: "run", action: "eligibility", summary: "whether a run's saved result can be verified instead of re-run", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/saved-result-eligibility`] }),
-  read({ domain: "decision", action: "list", summary: "a group's landed, pending and unlanded decisions", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/decisions`] }),
+  read({ domain: "decision", action: "list", summary: "a group's landed, pending and unlanded decisions", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/decisions`], format: decisionList }),
   read({ domain: "correction", action: "list", summary: "every recorded correction, its debug groups and closed state", paths: () => ["corrections"] }),
   read({ domain: "agent", action: "list", summary: "the agent installations the panel can run", paths: () => ["agents"], format: agentList }),
   // Session af2ceee1 F7: an agent could not read the preferences it was about to replace with `agent set-preferences`.
