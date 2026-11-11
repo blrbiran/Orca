@@ -412,6 +412,11 @@ describe("a scheduled group's page (spec §13.3, C13)", () => {
     ...over,
   });
   const send = (action: ControlAction): void => { void sendControlCommand(controlCommandPath(action), commandEnvelope(nextCommandId(), action)); };
+  /** Opens the "⋯" menu named `menu` and picks `item` from it. */
+  const fromMenu = (menu: string, item: string): void => {
+    fireEvent.click(screen.getByRole("button", { name: menu }));
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: item }));
+  };
   const page = (view: GroupViewV1, me: Me = owner): JSX.Element => as(me,
     <ControlGroupView view={view} config={config()} uncertain={[]} drafts={{}} onDraft={() => {}} onCommand={send} />);
 
@@ -431,7 +436,8 @@ describe("a scheduled group's page (spec §13.3, C13)", () => {
 
   it("M-C13a group-page-sends-schedule-set: sends one schedule-from-group and never schedule-set", async () => {
     render(page(groupView()));
-    fireEvent.click(screen.getByRole("button", { name: "Schedule this group…" }));
+    // Ruling (2026-11-12, tester follow-up F): #81 「要收起来」 moved this action from the header into the group's "⋯" menu.
+    fromMenu("More group actions", "Schedule this group…");
     const dialog = screen.getByRole("dialog", { name: "Schedule this group…" });
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Nightly two" } });
     fireEvent.change(within(dialog).getByLabelText("Cron (minute hour day month weekday), at most hourly"), { target: { value: "0 4 * * *" } });
@@ -455,7 +461,8 @@ describe("a scheduled group's page (spec §13.3, C13)", () => {
       integration: { scheme: DAYLIGHT, schemeHash: "h", frozen: false, state: "idle", reason: null, lastIntegrated: null, integratedCommit: null, pr: null },
     });
     render(page(withScheme));
-    fireEvent.click(screen.getByRole("button", { name: "Schedule this group…" }));
+    // Ruling (2026-11-12, tester follow-up F): #81 「要收起来」 moved this action from the header into the group's "⋯" menu.
+    fromMenu("More group actions", "Schedule this group…");
     const mode = screen.getByTestId("group-schedule-mode").textContent!;
     // mutation: render `.auto` for a group with a delivery scheme -> red
     expect(mode).not.toBe("Each fired group confirms on its own (unlimited tokens, no delivery scheme).");
@@ -464,7 +471,8 @@ describe("a scheduled group's page (spec §13.3, C13)", () => {
 
   it("sends the group source when the plan is saved to the library", async () => {
     render(page(groupView()));
-    fireEvent.click(screen.getByRole("button", { name: "Save plan to library" }));
+    // Ruling (2026-11-12, tester follow-up F): #81 「要收起来」 moved this action from the header into the group's "⋯" menu.
+    fromMenu("More group actions", "Save plan to library");
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.url).toBe("/api/control/plan-library/save");
     expect(posts[0]!.body).toEqual({
@@ -477,15 +485,17 @@ describe("a scheduled group's page (spec §13.3, C13)", () => {
   it("offers a member neither group action", () => {
     render(page(groupView(), member));
     // mutation: render either action for a member -> red
-    expect(screen.queryByRole("button", { name: "Save plan to library" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Schedule this group…" })).toBeNull();
+    // Ruling (2026-11-12, tester follow-up F): both actions now live only in the group's "⋯" menu (#81), so the menu's
+    // button is what must be absent; a query for the old header buttons could no longer go red.
+    expect(screen.queryByRole("button", { name: "More group actions" })).toBeNull();
   });
 
   it("offers an archived group neither group action", () => {
     render(page(groupView({ archived: true })));
     // mutation: render either action for an archived group -> red
-    expect(screen.queryByRole("button", { name: "Save plan to library" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Schedule this group…" })).toBeNull();
+    // Ruling (2026-11-12, tester follow-up F): both actions now live only in the group's "⋯" menu (#81), so the menu's
+    // button is what must be absent; a query for the old header buttons could no longer go red.
+    expect(screen.queryByRole("button", { name: "More group actions" })).toBeNull();
   });
 
   it("sends the draft's own hash when its split is saved to the library", async () => {
@@ -494,7 +504,8 @@ describe("a scheduled group's page (spec §13.3, C13)", () => {
     render(as(owner,
       <RequirementsPanel config={config()} summary={summaryWith(view)} views={{ r: view }} selected="r" agents={null}
         language="en" onSelect={() => {}} onCommand={send} />));
-    fireEvent.click(screen.getByRole("button", { name: "Save split to library" }));
+    // Ruling (2026-11-12, tester follow-up F): #81 「要收起来」 moved Save split into the draft's "⋯" menu.
+    fromMenu("More split actions", "Save split to library");
     await waitFor(() => expect(posts).toHaveLength(1));
     // mutation: send the draft number without its hash -> red
     expect(posts[0]!.url).toBe("/api/control/plan-library/save");
