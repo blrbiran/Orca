@@ -49,6 +49,7 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 - On touch (`pointer: coarse`) buttons, selects, inputs and nav items are at least 44px tall; checkboxes and radios keep their native size; the j/k/a/c hint is hidden.
   - Correction (2026-10-30, session b999cc81, same spec): the pickers are button triggers now, so the coarse-pointer rule reads `button, input`; a picker is still at least 44px tall through `button`.
 - Panes stay mounted; only `.section-pane:not([data-active="true"])` hides one.
+  - Correction (2026-11-10, ruling R1, #219; spec `docs/superpowers/specs/2026-09-27-panel-ui-redesign-design.md`, correction section): a non-current section is unmounted. `SectionPane` (`src/Shell.tsx`) renders its content only for the current section; every other pane is an empty marker carrying `data-active="false"`, and the CSS that hid inactive panes is gone. Unsent input that must survive leaving a section lives in App's draft stores. Inside a group, the detail regions (`src/GroupDetailRegions.tsx`) are still all mounted, the non-selected ones hidden by the `hidden` attribute, so a region switch keeps unfinished input.
 
 ## Status light (ruling H8, 2026-10-27)
 - A group card in the Tasks list and on the Board starts with a 7px dot, the `led` utility with `data-led` (`@utility led`, `src/index.css`), from `groupLed` (`groupCategory.ts`): running = `--ok` with a soft glow, failed/blocked (needs you) = `--danger`, waiting (started or queued, nothing going) = `--warn`, not started or settled = `--muted`, dimmed. Tone tokens only, so both themes follow.
@@ -57,5 +58,6 @@ Operate mode: a single developer reviews agent decisions and steers task groups.
 ## Settings and navigation (ruling H6, 2026-10-27)
 - The sidebar is one list in three bands (work · tools · Settings at the bottom), a thin rule above each later band.
 - Settings is one page: a category nav above the content; one category shows, the rest stay mounted and hidden by `.settings-category:not([data-active="true"])`.
+  - Correction (2026-11-10, ruling R1, #219, same spec correction): only the open category is rendered (`SettingsCategoryPane`, `src/GlobalSettings.tsx`); the others are empty markers, and on the project category the global settings are not rendered at all (`src/SettingsPage.tsx`). The hiding rule is gone from `styles.css`.
 - The category nav is a row of tabs (tester #64, revised by the human in session 3cd8fb02): links with `aria-current`, not an ARIA tablist; inactive items quiet (`--muted`), the open one underlined in the accent over the row's bottom rule; the row wraps when narrow (no horizontal scroll) and the content takes the full width below.
 

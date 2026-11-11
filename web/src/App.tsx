@@ -27,6 +27,12 @@
  * results are request records (web/src/decisionRequests.ts): a record is shown inline only
  * for the selected owner's active request, and every other record is shown in the
  * owner-labelled notice (DecisionOperations), so a result never lands on another decision.
+ *
+ * *** ERRATUM (2026-11-10, ruling R1, #219; panel UI redesign spec, correction section) ***
+ * The 2026-09-27 erratum's "every pane stays mounted" no longer holds: SectionPane renders only the
+ * current section, and the CSS that hid the others is gone. App-level criteria navigate to a section
+ * before reading it. Unsent input that must outlive leaving a section lives here, in App's draft stores.
+ * A group's detail regions are still all mounted, hidden by `hidden` (GroupDetailRegions.tsx).
  */
 import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";
