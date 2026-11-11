@@ -894,6 +894,7 @@ export const zh: Translation<typeof en> = {
     groupLimit: "组上限",
     setLimit: "设置上限",
     handoffAt: "上下文达到多少 token 时交接（可选；留空则不设）",
+    handoffUnset: "未设置",
     ledger: "已用 {{used}} · 已承诺 {{committed}} · 余量 {{reserve}}",
     deficit: " · 缺口 {{deficit}}",
     usageUnknown: " · 用量未知",

@@ -484,7 +484,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       <TokenInput
         label={t("budget.handoffAt")}
         aria-label={t("budget.handoffAt")}
-        value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens ?? 0)}
+        // Tester follow-up F §1 (#195): no threshold shows as a blank field marked "not set", not as "0".
+        value={tokenValueFor(drafts, CONTEXT_POLICY_KEY(groupId), view.proposal.contextPolicy.handoffAtContextTokens)}
+        emptyLabel={t("budget.handoffUnset")}
         readOnly={archived}
         onChange={(n) => onDraft(CONTEXT_POLICY_KEY(groupId), String(n))}
         onInvalid={() => onDraft(CONTEXT_POLICY_KEY(groupId), BAD_DRAFT)}

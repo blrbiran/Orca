@@ -231,7 +231,9 @@ describe("BudgetEditor token fields", () => {
     expect((screen.getByRole("textbox", { name: /^a work tokens/ }) as HTMLInputElement).value).toBe("3,000,000");
     const limits = within(screen.getByRole("group", { name: "Group limit" })).getAllByRole("textbox") as HTMLInputElement[];
     expect(limits[0]!.value).toBe("9,000,000");
-    expect((screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement).value).toBe("0");
+    // Ruling (2026-11-12, tester follow-up F): #195 -- a proposal with no threshold shows a blank field marked "not set";
+    // it used to show "0", which read as a threshold of zero.
+    expect((screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement).value).toBe("");
   });
   it("saves a typed grouped allocation as an integer and refuses invalid text instead of sending the old value", () => {
     const onCommand = vi.fn();
@@ -270,7 +272,9 @@ describe("BudgetEditor token fields", () => {
     render(<AccountContext.Provider value={owner}><EditorWith initial={stored} onCommand={vi.fn()} /></AccountContext.Provider>);
     expect(screen.queryByRole("alert")).toBeNull();
     expect((screen.getByRole("button", { name: "Confirm task plan" }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement).value).toBe("0");
+    // Ruling (2026-11-12, tester follow-up F): #195 -- a proposal with no threshold shows a blank field marked "not set";
+    // it used to show "0", which read as a threshold of zero.
+    expect((screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement).value).toBe("");
   });
   it("accepts a blank handoff field as unset: no error, and Confirm sends null (review I2)", () => {
     const onCommand = vi.fn();
@@ -290,6 +294,21 @@ describe("BudgetEditor token fields", () => {
     expect(screen.getByRole("textbox", { name: "Hand off at context tokens (optional; blank keeps it unset)" })).toBeTruthy();
     expect(screen.getByTestId("context-handoff-inactive").textContent)
       .toBe("Context hand-off is not active: no installed agent reports context usage. The threshold is optional and nothing acts on it.");
+  });
+  // Tester follow-up F §1 (#195): no threshold is a blank field marked "not set"; confirming it untouched sends null, and a
+  // typed number still sends that number.
+  it("shows no threshold as a blank field marked not set; untouched it confirms null, typed it confirms the number (#195)", () => {
+    const onCommand = vi.fn();
+    render(<Editor onCommand={onCommand} />);
+    const handoff = screen.getByRole("textbox", { name: /^Hand off at context tokens/ }) as HTMLInputElement;
+    expect(handoff.value).toBe("");
+    expect(handoff.closest(".token-field")!.textContent).toContain("not set");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
+    expect((onCommand.mock.calls[0]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: null } });
+    fireEvent.change(handoff, { target: { value: "200,000" } });
+    expect(handoff.closest(".token-field")!.textContent).not.toContain("not set");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
+    expect((onCommand.mock.calls[1]![0] as ControlAction).payload).toMatchObject({ contextPolicy: { handoffAtContextTokens: 200_000 } });
   });
   it("final review M-T10: the group limit's magnitude hint sits beside its input, outside the label's text", () => {
     render(<Editor onCommand={vi.fn()} />);

@@ -1034,6 +1034,7 @@ export const en = {
     groupLimit: "Group limit",
     setLimit: "Set limit",
     handoffAt: "Hand off at context tokens (optional; blank keeps it unset)",
+    handoffUnset: "not set",
     ledger: "used {{used}} · committed {{committed}} · reserve {{reserve}}",
     deficit: " · deficit {{deficit}}",
     usageUnknown: " · usage unknown",
