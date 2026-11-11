@@ -272,12 +272,11 @@ const GIT_STATE_CHECK = /\bgit(?:\s+(?:-C\s+\S+|-c\s+\S+|--[\w-]+(?:=\S+)?))*\s+
 /**
  * Issue #168 (tester follow-up E §9): a target path that is documentation -- `*.md`, `*.mdx`, `*.rst`, `*.txt`, anything
  * under the root's `docs/` (`docs/**` included), or a file named `README*`, `CHANGELOG*` or `LICENSE*`. Any other
- * `<directory>/**` and `**` may hold source, so they are not.
+ * `<directory>/**` and `**` may hold source and are not: their last segment, `**`, matches no name below.
  */
 function documentationPath(declared: string): boolean {
   const path = normalizeClaim(declared).normalized;
   if (path === "docs" || path.startsWith("docs/")) return true;
-  if (path === "**" || path.endsWith("/**")) return false;
   const name = path.slice(path.lastIndexOf("/") + 1);
   return /\.(?:md|mdx|rst|txt)$/i.test(name) || /^(?:README|CHANGELOG|LICENSE)/.test(name);
 }
