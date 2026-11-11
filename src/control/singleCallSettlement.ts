@@ -1,6 +1,6 @@
 import { readRun, saveRun, syncWebBudget, type RunRecord } from "./budget.js";
 import { recordActivity } from "./activity.js";
-import { settlingPersonFor } from "./commandClient.js";
+import { settlingPrincipalFor } from "./commandClient.js";
 import { zero } from "./commands.js";
 import { queueRequirementCall } from "./requirementRecords.js";
 import { singleCallCommitTerminal } from "./driverHandoff.js";
@@ -50,8 +50,10 @@ export function settleSingleCallUsageInTransaction(
   const block = settleableSingleCallBlock(run as never);
   if (block === null || run.groupId !== input.groupId) throw new ControlError("run-usage-not-settleable", "not-single-call-usage-unknown");
   // As settle-unknown-usage: an authenticated owner on the Web (the route refuses anyone else first, humanOnly.ts), or --
-  // tester #103, the recovery CLI -- an owner's person token on the socket (`recovery-retry.acknowledge` is token-tier).
-  const principal = settlingPersonFor(input.commandId);
+  // tester #103, the recovery CLI -- an owner's person token on the socket. Tester follow-up E §8: charging the grant is
+  // also a socket agent's without a token (`recovery-retry.acknowledge` is open-tier), booked to the agent; never a run
+  // Orca dispatched.
+  const principal = settlingPrincipalFor(input.commandId, "charge-remaining-grant");
   if (principal === null) throw new ControlError("run-usage-not-settleable", "owner-required");
   const group = readGroup(store, run.groupId);
   // A stop owns the group's calls in flight: it closes them (terminaliseRun) and the call is settled after (code review

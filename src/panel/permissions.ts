@@ -1,6 +1,6 @@
 import type { Role } from "./accounts/jwt.js";
 import type { CommandVerbV1 } from "../control/webProtocol.js";
-import { DISPATCHED_RUN_REFUSED, humanOnlyRefusal, socketTier } from "./humanOnly.js";
+import { DISPATCHED_RUN_REFUSED, SOCKET_TOKEN_NOTE, humanOnlyRefusal, socketTier } from "./humanOnly.js";
 import type { Attribution } from "../control/commandClient.js";
 import type { DirProjectOf } from "../control/dirGroup.js";
 
@@ -116,5 +116,7 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
   if (socketTier(verb, payload) === "open") return null;
   // A token is its person's: an owner's opens the token tier; a member's answers the member's own refusal (I3).
   if (p.person !== undefined) return mayDoHumanOnly({ kind: "user", ...p.person }) ? null : humanOnly;
-  return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca auth login\` and resend it with --as-person, or do it from the Web UI.` };
+  // Tester follow-up E §8: a verb an agent may send in another form says which.
+  const note = SOCKET_TOKEN_NOTE[verb];
+  return { code: "control-person-token-required", message: `${verb}, as sent, wants a person: log in with \`orca auth login\` and resend it with --as-person, or do it from the Web UI.${note === undefined ? "" : ` Without a token, ${note}.`}` };
 }

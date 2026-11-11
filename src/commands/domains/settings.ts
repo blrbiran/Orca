@@ -232,7 +232,7 @@ export const SETTINGS_ROWS: CommandDef[] = [
   recoveryFormat(verb({ domain: "recovery", action: "retry", summary: "resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure", verb: "recovery-retry",
     flags: [{ name: "run", type: "string", summary: "a blocked run" }, { name: "group", type: "string", summary: "a blocked group" },
       // Tester #103 (2026-10-28): the panel's "charge and retry" for a clarify, split or estimate call blocked on unknown usage.
-      { name: "acknowledge", type: "string", summary: "charge-remaining-grant: settle a single call's unknown usage (a requirement, estimate or flow call) by charging its remaining grant, then retry (--run only; needs a person token)" }],
+      { name: "acknowledge", type: "string", summary: "charge-remaining-grant: settle a single call's unknown usage (a requirement, estimate or flow call) by charging its remaining grant, then retry (--run only; an agent may send it without a person token, tester follow-up E §8; refused to a run Orca dispatched)" }],
     scopeId: async (c) => { const target = await recoveryTarget(c); return target.scope === "group" ? target.groupId : groupOfRunId(c, target.runId); },
     route: () => "recovery/retry", payload: async (c) => {
       const target = await recoveryTarget(c), acknowledge = str(c, "acknowledge");

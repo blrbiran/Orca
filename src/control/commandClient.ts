@@ -81,6 +81,27 @@ export function settlingPersonFor(commandId: string): string | null {
   return c.personAuthority === true && c.personPrincipal !== undefined && c.personPrincipal.startsWith("user:") ? c.personPrincipal : null;
 }
 /**
+ * Tester follow-up E §8 (#101/#104/#116): the settlement forms an orchestrating agent on the socket may send without a
+ * person token -- charging the whole remaining grant (never under-books; the grant was already reserved), and a known-zero
+ * release, which the code admits only when ccloop proved the run spent nothing. Releasing an unlimited remainder unmetered
+ * stays a person's. The socket tier (humanOnly.ts SOCKET_TIER) and the settlements' own check read this one list.
+ */
+export const AGENT_SETTLE_ACKNOWLEDGE: readonly string[] = ["charge-remaining-grant", "release-known-zero"];
+/**
+ * Who a usage settlement sent with `acknowledge` is booked to: the person (settlingPersonFor), else -- tester follow-up E
+ * §8 -- a socket agent's own principal (`agent:<client>`) for a form in AGENT_SETTLE_ACKNOWLEDGE, never for a run Orca
+ * dispatched; null for anyone else. Its ledger row records that principal and no person (usageSettlement.ts checks both).
+ */
+export function settlingPrincipalFor(commandId: string, acknowledge: string): string | null {
+  const person = settlingPersonFor(commandId);
+  if (person !== null) return person;
+  const c = forCommand(commandId);
+  if (c === null || c.client === "web" || c.dispatchedRun !== undefined || !c.principal.startsWith("agent:")) return null;
+  return AGENT_SETTLE_ACKNOWLEDGE.includes(acknowledge) ? c.principal : null;
+}
+/** The refusal's note when no one may settle: which forms an agent may send without a person token. */
+export const AGENT_SETTLE_NOTE = "an agent without a person token may send acknowledge charge-remaining-grant, or release-known-zero when ccloop proved the run spent nothing";
+/**
  * Socket usage settlement spec 2026-10-29 §2: the ledger row's `person_principal` -- the person token's account for a
  * socket command with person authority, null for a Web row (its principal already names the account) and for anyone else.
  */

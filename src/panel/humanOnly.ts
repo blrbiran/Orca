@@ -1,4 +1,5 @@
 import type { CommandVerbV1 } from "../control/webProtocol.js";
+import { AGENT_SETTLE_ACKNOWLEDGE, AGENT_SETTLE_NOTE } from "../control/commandClient.js";
 
 /**
  * Accounts spec §3.5 (extends agent entry spec §5, human ruling H3): every command verb and who may send it. `any`: every
@@ -231,10 +232,14 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "resolve-folder-change": "token",
   // Multi-directory projects spec §9.7: as resolve-folder-change.
   "multi-dir-landing": "token",
-  "settle-unknown-usage": "token",
+  // Tester follow-up E §8 (#101/#104/#116): charging the whole remaining grant (the grant was reserved; it never
+  // under-books) and a known-zero release (admitted only when ccloop proved it) are open; an unmetered release, and what
+  // the predicate cannot read, want a person. A run Orca dispatched is still refused every form (permissions.ts).
+  "settle-unknown-usage": (p) => (typeof p.acknowledge === "string" && AGENT_SETTLE_ACKNOWLEDGE.includes(p.acknowledge) ? "open" : "token"),
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): an owner on the Web, or the socket agent with an owner's person token.
   "accept-attempt": "token",
-  "recovery-retry.acknowledge": "token",
+  // Tester follow-up E §8: the single call's settlement charges its remaining grant -- the open form of settle-unknown-usage.
+  "recovery-retry.acknowledge": "open",
   "apply-agent-update": "token",
   // Scheduled flows and groups spec §11.1 (I-3): a new entry copies data Orca already holds (open); appending a version
   // changes what an existing entry offers every repin and one-off import (token). Importing outside bytes is the owner's
@@ -252,6 +257,14 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "schedule-from-group": "token",
   "import-plan.tokenLimit": "token",
   "import-plan.integration": "token",
+};
+
+/**
+ * Tester follow-up E §8: what the `control-person-token-required` refusal adds for a verb an agent may send in another
+ * form without a token, so the refusal says which (every other verb's refusal is unchanged).
+ */
+export const SOCKET_TOKEN_NOTE: Readonly<Partial<Record<CommandVerbV1, string>>> = {
+  "settle-unknown-usage": AGENT_SETTLE_NOTE,
 };
 
 /** The socket tier of a command: `token` when any human-only entry it carries is (an entry with no row is `token`); null when it carries none. */

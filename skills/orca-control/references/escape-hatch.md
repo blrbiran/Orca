@@ -70,8 +70,11 @@ orca control get groups/<groupId>/decisions
   pending events or insufficient budget still block it. `recovery-retry` does not substitute for failed-task retry.
 - A completed handoff can be resumed with an explicit empty continuation selection when no run should continue;
   first read the current stop revision and epoch and use the payload table below. Never delete stop records in SQL.
-- Unknown-usage settlement is **owner Web only**; socket/MCP operators must ask the human. Do not claim missing usage
-  is zero or retry past an unresolved charge. The conservative charge is not provider-reported usage.
+- Unknown-usage settlement (tester follow-up E §8): a socket/MCP agent without a person token may send
+  `acknowledge: "charge-remaining-grant"` (books the whole remaining grant) or `"release-known-zero"` (only when ccloop
+  proved the run spent nothing); `"release-unmetered"` is a person's (Web owner, or a person token). A run Orca dispatched
+  is refused every form. Do not claim missing usage is zero or retry past an unresolved charge. The conservative charge
+  is not provider-reported usage.
 - Saved-result verification is a distinct action after the eligibility read says `eligible`; its source run, attempt
   and capsule hash come from that answer. It skips execution, but validation/verification may consume model usage.
   `unavailable` is a reason to inspect evidence or use an otherwise legal ordinary retry, not an invitation to guess
@@ -316,3 +319,6 @@ Where the ids come from:
 - `entryId` (a plan library entry): `get plan-library?repoId=<repoId>` `.entries[].entryId`.
 
 D9 (2026-10-09, Codex implement_settlement, base 2c14e73): `settle-unknown-usage` is owner-only in an authenticated Web session. Member and socket/MCP agent calls receive 403 `control-verb-human-only`. The acknowledgement is not authentication. It conservatively charges both remaining grants and cannot be undone; use the Web read preview to see the amount.
+Since then: an owner's person token settles on the socket too (spec 2026-10-29), and since tester follow-up E §8
+(2026-11-11) a socket agent without a token may charge the remaining grant or settle a proved known zero, booked to the
+agent's own principal; `release-unmetered` stays a person's.

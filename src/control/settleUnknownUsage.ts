@@ -6,7 +6,7 @@ import { finiteCommitment } from "./tokenPolicy.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { settlingPersonFor } from "./commandClient.js";
+import { AGENT_SETTLE_NOTE, settlingPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
@@ -136,8 +136,10 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
   // Tester #103 review (2026-10-28) kept this the Web owner's: the marker is checked against this command's ledger row,
   // and a socket row recorded only `agent:<c>`. Socket usage settlement spec 2026-10-29: the row now also records the
   // person token's account (`person_principal`, ledgerPersonFor), so an owner's person token settles too, booked to it.
-  const principal = settlingPersonFor(command.commandId);
-  if (principal === null) throw new Error("control-verb-human-only: an owner (Web account or person token) required");
+  // Tester follow-up E §8: or a socket agent's own principal for charge-remaining-grant and release-known-zero (never a run
+  // Orca dispatched); its row records no person, and the marker names the agent.
+  const principal = settlingPrincipalFor(command.commandId, command.payload.acknowledge);
+  if (principal === null) throw new Error(`control-verb-human-only: an owner (Web account or person token) required; ${AGENT_SETTLE_NOTE}`);
   const release = deps.admissionGate?.enter();
   try {
     // Evidence read before authority transaction. Its exact run/report/checkpoint snapshot is rechecked inside it.

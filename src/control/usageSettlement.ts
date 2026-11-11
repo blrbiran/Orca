@@ -12,6 +12,9 @@ const pair = z.object({ work: amountSchema, handoff: amountSchema }).strict();
 /** Spec 2026-10-13-unmetered-usage-settlement-design.md §A.3: only the unlimited work token dimension is unmetered. */
 export const unmeteredChargeSchema = z.object({ work: amountSchema.extend({ tokens: z.null() }).strict(), handoff: amountSchema }).strict();
 const personFields = { commandId: idSchema, principal: z.string().regex(/^user:.+/) };
+// Tester follow-up E §8: charging the remaining grant and a proved known-zero may be a socket agent's (`agent:<client>`,
+// commandClient.ts settlingPrincipalFor); an unmetered release stays a person's (personFields).
+const settlerFields = { commandId: idSchema, principal: z.string().regex(/^(user|agent):.+/) };
 const markerFields = {
   at: safeInteger,
   groupId: idSchema, taskId: idSchema, workItemId: idSchema, runId: idSchema, generation: safeInteger.positive(), highWater: safeInteger,
@@ -21,7 +24,7 @@ const markerFields = {
   handoffResolution: z.object({ requestId: idSchema, previousState: z.literal("settled-unrecoverable"), previousFailureCode: z.literal("usage-unsettled"), checkpointId: idSchema, checkpointHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
 };
 export const usageSettlementSchema = z.union([
-  z.object({ method: z.literal("remaining-grant"), charged: pair, ...personFields, ...markerFields }).strict(),
+  z.object({ method: z.literal("remaining-grant"), charged: pair, ...settlerFields, ...markerFields }).strict(),
   z.object({ method: z.literal("owner-acknowledged-unmetered"), charged: unmeteredChargeSchema, ...personFields, ...markerFields }).strict(),
   // Spec 2026-11-06 soft-mode loop run settlement §3.2 (option (d), human's answer Q3): Orca's booking of a loop run's
   // observed floor in a group with no token limit, backed by its own `settle-approximate-usage` row under orca-auto.
@@ -29,7 +32,7 @@ export const usageSettlementSchema = z.union([
     floorTokens: safeInteger.nullable(), reason: z.string().min(1), ...markerFields }).strict(),
   // Issue #215 (human ruling 2026-11-09: option A): a failed run whose terminal carries ccloop's positive proof that
   // nothing was spent. It books zero and releases the reservation; only that proof admits this method.
-  z.object({ method: z.literal("known-zero"), charged: pair, ...personFields, ...markerFields }).strict(),
+  z.object({ method: z.literal("known-zero"), charged: pair, ...settlerFields, ...markerFields }).strict(),
 ]).superRefine((v, ctx) => {
   if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
@@ -47,7 +50,7 @@ export const singleCallUsageLowerBoundSchema = z.object({ tokens: safeInteger.po
  * (code review S1).
  */
 export const singleCallSettlementSchema = z.object({
-  method: z.literal("remaining-grant"), commandId: idSchema, principal: z.string().regex(/^user:.+/), at: safeInteger,
+  method: z.literal("remaining-grant"), ...settlerFields, at: safeInteger,
   groupId: idSchema, runId: idSchema, highWater: safeInteger, charged: amountSchema,
   usageLowerBound: singleCallUsageLowerBoundSchema.nullable(), blockedReason: z.string().min(1), disposition: z.enum(["completed", "interrupted", "stopped"]),
 }).strict();
@@ -210,7 +213,11 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     // stand in for the other.
     if (m.method === "approximate-floor") { if (row.verb !== "settle-approximate-usage" || row.principal !== "orca-auto") return false; }
     // A Web owner's row names the account as its principal; a socket row (spec 2026-10-29 §2) names it as person_principal.
-    else if (row.verb !== "settle-unknown-usage" || (row.client === "web" ? row.principal !== m.principal : row.person_principal !== m.principal)) return false;
+    // Tester follow-up E §8: an agent's settlement is backed by a socket row whose principal is that agent and which
+    // names no person.
+    else if (row.verb !== "settle-unknown-usage" || (row.client === "web" ? row.principal !== m.principal
+      : m.principal.startsWith("agent:") ? row.person_principal !== null || row.principal !== m.principal
+      : row.person_principal !== m.principal)) return false;
     const receipt = JSON.parse(String(row.body_json)).result;
     if (receipt?.kind !== "usage-settled" || receipt.runId !== run.runId || receipt.taskId !== run.taskId || receipt.generation !== run.generation
       || receipt.method !== m.method || receipt.at !== m.at || !settlementSame(receipt.charged, m.charged)) return false;

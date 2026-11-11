@@ -83,7 +83,7 @@ land a failed, settled run's last attempt after Orca re-runs the task's checks o
 settle a run's unknown usage (cannot be undone)
 
 - What it does: sends control verb `settle-unknown-usage`.
-- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
-- `--acknowledge <acknowledge>` (required): charge-remaining-grant|release-unmetered|release-known-zero (the last only when ccloop proved the failed run spent nothing)
+- `--acknowledge <acknowledge>` (required): charge-remaining-grant|release-known-zero|release-unmetered: an agent may send charge-remaining-grant, or release-known-zero when ccloop proved the failed run spent nothing, without a person token; release-unmetered needs a person token (orca auth login, then --as-person); refused to a run Orca dispatched
