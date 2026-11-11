@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExecutionDriver } from "../../src/control/executionDriver.js";
 import { readGroupActivity } from "../../src/control/activity.js";
-import { groupAcceptancePathOf } from "../../src/control/workspace.js";
+import { isGroupAcceptancePathOf } from "../../src/control/workspace.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Tester follow-up E §5 (#241): every task's checks ran on its own attempt and (R2) on its merge, yet a later landing can
@@ -36,6 +36,9 @@ function scratch(): { log: string; flag: string; check: string } {
   // Green everywhere but the acceptance worktree; there, red while the flag exists.
   return { log, flag, check: `echo "$PWD" >> '${log}'; case "$PWD" in *group-acceptance-*) test ! -f '${flag}' ;; *) true ;; esac` };
 }
+// Ruling (2026-11-12, tester follow-up F): each acceptance check now has its own scratch worktree
+// (`group-acceptance-<g>.check-<n>`), so these criteria name it by isGroupAcceptancePathOf instead of one fixed path.
+const scratchDirs = (t: Harness): string[] => readdirSync(t.deps.roots.workspacesRoot).filter((name) => isGroupAcceptancePathOf(name, "g"));
 const acceptanceCalls = (log: string): string[] => existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").filter((line) => basename(line).startsWith("group-acceptance-")) : [];
 
 describe("a group is accepted on its final tip before it is done (tester follow-up E §5, #241)", { timeout: 90_000 }, () => {
@@ -51,8 +54,8 @@ describe("a group is accepted on its final tip before it is done (tester follow-
       expect(record.result).toBe("failed");
       expect(record.tip).toBe(tip(t));
       expect(record.commands.map((c: { command: string; exit: string }) => [c.command, c.exit])).toEqual([[check, "1"]]);
-      expect(acceptanceCalls(log).map((path) => basename(path))).toEqual([basename(groupAcceptancePathOf(t.deps.roots, "g"))]);
-      expect(existsSync(groupAcceptancePathOf(t.deps.roots, "g"))).toBe(false);
+      expect(acceptanceCalls(log).map((path) => isGroupAcceptancePathOf(basename(path), "g"))).toEqual([true]);
+      expect(scratchDirs(t)).toEqual([]);
       // One activity row, with the record as its body; and the group is not done.
       expect(acceptanceRows(t).map((row) => row.body)).toEqual([record]);
       for (let i = 0; i < 5; i += 1) await driver.round();
@@ -114,7 +117,7 @@ describe("a group is accepted on its final tip before it is done (tester follow-
       const before = Date.now();
       await driver.stop();
       expect(Date.now() - before).toBeLessThan(15_000);
-      expect(existsSync(groupAcceptancePathOf(t.deps.roots, "g"))).toBe(false);
+      expect(scratchDirs(t)).toEqual([]);
       expect(group(t).acceptance).toBeUndefined();
       expect(acceptanceRows(t)).toEqual([]);
     } finally { await t.h.dispose(); }
