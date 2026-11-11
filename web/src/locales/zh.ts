@@ -603,6 +603,10 @@ export const zh: Translation<typeof en> = {
       methodApproximate: "由 Orca 按下限记入（用量未上报）",
       approximateRefused: "Orca 未能自动结清用量：{{code}}",
     },
+    structuredOutput: {
+      hint: "服务商拒绝了结构化输出请求（--output-schema）。请在 agents 表里给 codex 安装 {{installation}} 设置 \"structuredOutput\": \"prompt\"；ccloop 不会自动选择它。",
+      hintAny: "服务商拒绝了结构化输出请求（--output-schema）。请在 agents 表里给这个运行用的 codex 安装设置 \"structuredOutput\": \"prompt\"；ccloop 不会自动选择它。",
+    },
     acceptAttempt: {
       open: "检查通过后接受这次尝试",
       explain: "Orca 会把这次尝试合并到组分支上，在合并后的代码上运行任务的准备命令和必需检查，全部通过才落地。不会再次计费。",

@@ -8,6 +8,7 @@ import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } fr
 import { compact, field, text } from "./format.js";
 import { formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
+import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
@@ -293,7 +294,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null } } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -303,6 +304,9 @@ export const READ_ROWS: CommandDef[] = [
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
         ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
+        // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode.
+        ...(rejectsOutputSchema([cause?.detail, b.run?.diagnosis?.failureCause?.detail, b.run?.stopReason])
+          ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),
         ...(b.run?.pathPolicyMisses?.length ? ["observed path misses:", ...b.run.pathPolicyMisses.map((miss) => `  ${miss.repoKey === null ? "" : `${miss.repoKey}:`}${miss.path}`), ...(b.run.taskId ? [`To allow only these paths: orca task retry ${b.groupId} ${b.run.taskId} --allow-observed-paths`] : [])] : []),
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
       ];

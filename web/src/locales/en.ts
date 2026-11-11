@@ -732,6 +732,11 @@ export const en = {
       methodApproximate: "booked at least by Orca (usage not reported)",
       approximateRefused: "Orca could not settle the usage automatically: {{code}}",
     },
+    // #122: a third-party provider refused codex's --output-schema; ccloop's opt-in prompt mode is the way out.
+    structuredOutput: {
+      hint: "The provider refused the structured-output request (--output-schema). Set \"structuredOutput\": \"prompt\" on the codex installation {{installation}} in the agents table; ccloop never chooses it on its own.",
+      hintAny: "The provider refused the structured-output request (--output-schema). Set \"structuredOutput\": \"prompt\" on the codex installation this run used, in the agents table; ccloop never chooses it on its own.",
+    },
     // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a settled, failed run's attempt after its checks.
     acceptAttempt: {
       open: "Accept this attempt after checks",

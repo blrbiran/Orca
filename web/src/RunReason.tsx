@@ -8,6 +8,7 @@ import type { RunViewV1 } from "./controlTypes.js";
 import { codedNextStep } from "./ccloopCodes.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { hasFailureOutcome, reasonCode, runReasonText } from "./runFacts.js";
+import { rejectsOutputSchema } from "../../src/control/structuredOutputHint.js";
 
 /** Failure-cause spec 2026-10-21 §5: the causes this panel words; any other (a newer ccloop's) reads as `unknown`. */
 export const KNOWN_FAILURE_CAUSES = ["auth", "quota", "rate-limited", "provider-5xx", "network", "context-overflow", "stalled", "executable-missing",
@@ -48,7 +49,11 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   // until the vendor's named reset, or the default rest's end.
   const rest = props.run.quotaRest;
   const restLine = rest === undefined ? null : <span data-testid="run-quota-rest">{t(`control.quotaRest.${rest.source}`, { installation: rest.installation, time: new Date(rest.until).toLocaleString() })} </span>;
-  return <>{lineage} — {causeLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}<FormatFailureWorkLines work={props.run.diagnosis?.formatFailureWork} /></>;
+  // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode on that installation.
+  const installation = props.run.agent?.installation;
+  const schemaLine = !rejectsOutputSchema([failure?.detail, props.run.diagnosis?.failureCause?.detail, props.run.stopReason]) ? null
+    : <span data-testid="run-structured-output-hint">{installation === undefined ? t("control.structuredOutput.hintAny") : t("control.structuredOutput.hint", { installation })} </span>;
+  return <>{lineage} — {causeLine}{schemaLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}<FormatFailureWorkLines work={props.run.diagnosis?.formatFailureWork} /></>;
 }
 
 type FormatFailureWork = NonNullable<NonNullable<RunViewV1["diagnosis"]>["formatFailureWork"]>;

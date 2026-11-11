@@ -142,6 +142,24 @@ describe("human output (#140)", () => {
     expect(out.stdout.split("\n")).toContain("agent: codex, model gpt-5.1-codex");
   });
 
+  // #122: a third-party provider behind codex answers --output-schema with a 400 about the response format; the way out is
+  // ccloop's opt-in prompt mode on that installation, which ccloop never picks by itself. Mutation (seen red, Rule 9): the
+  // shared predicate always false -> the hint line is gone.
+  it("run show hints at structuredOutput prompt when the provider refused the output schema, and only then", async () => {
+    const refused = "codex-exit-error: unexpected status 400 Bad Request: {\"error\":{\"message\":\"Invalid parameter: 'text.format' is not supported\"}}";
+    const show = async (detail: string) => {
+      const p = await fakePanel({
+        "GET summary": SUMMARY,
+        "GET groups/g-alpha": { status: 200, body: { ...GROUP, runs: [{ ...RUN, agent: { installation: "codex-proxy", model: "m" }, failureCause: { ...RUN.failureCause, detail } }] } },
+        "GET runs/run-1/activity": { status: 200, body: { schema: "orca-run-activity-v1", runId: "run-1", entries: [] } },
+        "GET runs/run-1/evidence": { status: 200, body: { schema: "orca-run-evidence-v1", runId: "run-1", entries: [] } },
+      });
+      return (await cli(["run", "show", "run-1", "--group", "g-alpha"], p.dir)).stdout.split("\n");
+    };
+    expect(await show(refused)).toContain("hint: the provider refused the structured-output request (--output-schema). Set \"structuredOutput\": \"prompt\" on the codex installation codex-proxy in the agents table; ccloop never chooses it on its own.");
+    expect((await show(DETAIL)).filter((line) => line.startsWith("hint:"))).toEqual([]);
+  });
+
   it("agent list labels each installation's model as its default", async () => {
     const p = await fakePanel({ "GET agents": { status: 200, body: { schema: "orca-agents-view-v1", installations: [
       { id: "claude", kind: "claude", defaults: { model: "opus", contextWindow: "agent-default" }, contextOptions: ["agent-default"], version: "2.1.0" },
