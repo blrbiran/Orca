@@ -21,7 +21,7 @@ export function Menu(props: { open: boolean; onOpenChange: (open: boolean) => vo
         {props.trigger}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content ref={content} align="end" sideOffset={4} loop collisionPadding={8}
+        <DropdownMenu.Content ref={content} align="end" sideOffset={4} loop collisionPadding={8} data-overlay="menu"
           // The button's own press is not "outside": its click toggles the menu closed.
           onPointerDownOutside={(event) => { if (trigger.current?.contains(event.target as Node)) event.preventDefault(); }}
           className="z-50 grid min-w-[170px] gap-0.5 rounded-card border border-line-strong bg-elevated p-1 text-fg shadow-float [&>small]:px-3 [&>small]:pb-1 [&>small]:text-xs [&>small]:text-muted">

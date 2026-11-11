@@ -324,8 +324,22 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 .dep-done rect { fill: var(--cat-done); stroke: var(--info); }
 @keyframes dep-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 .dep-node.dep-running rect { animation: dep-pulse 2.4s ease-in-out infinite; }
+/* Tester #84 (spec 2026-11-11-tester-followup-e-design.md §10; DESIGN.md motion correction): an overlay (src/ui/Dialog,
+   Menu, Select; each Content carries data-overlay, Radix sets data-state) fades and scales in over the motion token as it
+   opens, from the side it opened on; the dialog's scrim only fades. Closing is NOT animated: Radix waits for an exit
+   animation before it unmounts, so none keeps a closed overlay gone at once. A collapsible block (<details>) fades its
+   content in. List reordering stays unanimated. All of it stops under prefers-reduced-motion (the block below). */
+@keyframes overlay-in { from { opacity: 0; scale: 0.96; } to { opacity: 1; scale: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+[data-overlay][data-state="open"] { animation: overlay-in var(--dur) var(--ease); }
+[data-overlay="scrim"][data-state="open"] { animation-name: fade-in; }
+[data-overlay="menu"] { transform-origin: var(--radix-dropdown-menu-content-transform-origin); }
+[data-overlay="select"] { transform-origin: var(--radix-select-content-transform-origin); }
+details[open] > :not(summary) { animation: fade-in var(--dur) var(--ease); }
 @media (prefers-reduced-motion: reduce) {
   .dep-node.dep-running rect { animation: none; }
+  /* #84: the same selectors as the rules that start the motion, so this later rule wins at equal specificity. */
+  [data-overlay][data-state="open"], details[open] > :not(summary) { animation: none; }
   *, *::before, *::after { transition-duration: 0.01ms !important; }
   button:active:not(:disabled) { transform: none; }
 }

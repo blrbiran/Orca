@@ -46,7 +46,7 @@ export function Select<const V extends string>(props: SelectProps<V>): JSX.Eleme
         <RadixSelect.Icon className="text-muted" aria-hidden>▾</RadixSelect.Icon>
       </RadixSelect.Trigger>
       <RadixSelect.Portal>
-        <RadixSelect.Content position="popper" sideOffset={4} collisionPadding={8}
+        <RadixSelect.Content position="popper" sideOffset={4} collisionPadding={8} data-overlay="select"
           className="z-50 max-h-[min(360px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-card border border-line-strong bg-elevated text-fg shadow-float">
           <RadixSelect.ScrollUpButton className="flex h-6 cursor-default items-center justify-center text-muted" aria-hidden>▴</RadixSelect.ScrollUpButton>
           <RadixSelect.Viewport className="p-1">

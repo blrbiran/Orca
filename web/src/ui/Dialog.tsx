@@ -11,9 +11,9 @@ export function Dialog(props: { trigger: ReactElement; title: string; closeLabel
     <RadixDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <RadixDialog.Trigger asChild>{props.trigger}</RadixDialog.Trigger>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-scrim" />
+        <RadixDialog.Overlay data-overlay="scrim" className="fixed inset-0 z-40 bg-scrim" />
         {/* aria-describedby={undefined}: the body is a list, not one description sentence (Radix asks for either). */}
-        <RadixDialog.Content aria-describedby={undefined}
+        <RadixDialog.Content aria-describedby={undefined} data-overlay="dialog"
           className="fixed top-1/2 left-1/2 z-50 m-0 max-h-[calc(100dvh-32px)] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-line-strong bg-card p-5 text-fg shadow-float">
           <RadixDialog.Title className="mb-2 text-xl">{props.title}</RadixDialog.Title>
           {props.children}
