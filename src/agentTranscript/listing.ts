@@ -38,7 +38,7 @@ export function noteTranscriptListing(store: ControlStore, runId: string, source
 }
 
 /** One listing row as the browser gets it (§12.3): no `path`; the runtime and whether a transcript was recorded. */
-export interface ListingRow { attempt: number; phase: string; seq: number; runtime: Runtime | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null }
+export interface ListingRow { attempt: number; phase: string; seq: number; runtime: Runtime | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string }
 
 /**
  * Tester #252 (spec 2026-11-11-tester-followup-e §6): the order a run's calls are served in, so `orca run transcript` and
@@ -47,8 +47,15 @@ export interface ListingRow { attempt: number; phase: string; seq: number; runti
  */
 const PHASE_RANK: Readonly<Record<string, number>> = { plan: 0, execute: 1, verify: 2 };
 const phaseRank = (phase: string): number => PHASE_RANK[phase] ?? 3;
-export function inRunOrder<T extends Pick<TranscriptEntry, "attempt" | "phase" | "seq">>(entries: readonly T[]): T[] {
-  return [...entries].sort((a, b) => a.attempt - b.attempt || phaseRank(a.phase) - phaseRank(b.phase)
+/**
+ * Tester #252 (spec 2026-11-12-tester-followup-f §6): within an attempt whose every call carries ccloop's `startedAt`, the
+ * calls are served by start time (a retried plan after an execute reads after it); ties, and any attempt with a call
+ * lacking it (an older ccloop, a call that never registered a process), keep the phase-rank order above.
+ */
+export function inRunOrder<T extends Pick<TranscriptEntry, "attempt" | "phase" | "seq" | "startedAt">>(entries: readonly T[]): T[] {
+  const untimed = new Set(entries.filter((entry) => entry.startedAt === undefined).map((entry) => entry.attempt));
+  const started = (entry: T): number => (untimed.has(entry.attempt) ? 0 : Date.parse(entry.startedAt!));
+  return [...entries].sort((a, b) => a.attempt - b.attempt || started(a) - started(b) || phaseRank(a.phase) - phaseRank(b.phase)
     || (a.phase < b.phase ? -1 : a.phase > b.phase ? 1 : 0) || a.seq - b.seq);
 }
 

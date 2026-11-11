@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { currentLanguage } from "./i18n.js";
 import { controlFailureFrom, fetchRunTranscripts, fetchTranscriptPage, fetchTranscriptWindow, type TranscriptWindowAsk } from "./controlApi.js";
 import type { RunTranscriptsV1, TranscriptCallV1, TranscriptEventV1, TranscriptWindowV1 } from "./controlTypes.js";
 
@@ -352,6 +353,13 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
   );
 }
 
+/** Tester #252 (spec 2026-11-12-tester-followup-f §6): a call's start as a compact local clock time; the full date on hover. */
+const STARTED_CLOCK: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" };
+function startedTime(startedAt: string): JSX.Element {
+  const at = new Date(startedAt);
+  return <time data-testid="transcript-call-started" dateTime={startedAt} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>;
+}
+
 function sizeText(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
@@ -443,6 +451,7 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
               <ul>
                 {listing.calls.filter((call) => call.attempt === attempt).map((call) => (
                   <li key={`${call.phase}:${call.seq}`}>
+                    {call.startedAt !== undefined && <>{startedTime(call.startedAt)}{" "}</>}
                     <button type="button" disabled={!call.recorded} aria-expanded={sameCall(openCall, call)} onClick={() => toggleCall(call)}>
                       {/* Tester #252: "call N" only when the phase has more than one call in this attempt. */}
                       {t(listing.calls.filter((other) => other.attempt === attempt && other.phase === call.phase).length === 1 ? "transcript.callLineOne" : "transcript.callLine",

@@ -72,7 +72,7 @@ export function registerTranscriptRoutes(app: Express, deps: TranscriptRouteDeps
         if (!await supported(deps)) { res.json({ schema: "orca-run-transcripts-v1", runId, available: false, reason: "ccloop-transcripts-unsupported", calls: [] }); return; }
         const calls: ListingRow[] = [];
         for (const entry of inRunOrder(listing?.entries ?? [])) {
-          calls.push({ attempt: entry.attempt, phase: entry.phase, seq: entry.seq, runtime: runtimeOf(entry), recorded: entry.path !== null, bytes: await liveBytes(listing!, entry), final: entry.final, truncatedAt: entry.truncatedAt });
+          calls.push({ attempt: entry.attempt, phase: entry.phase, seq: entry.seq, runtime: runtimeOf(entry), recorded: entry.path !== null, bytes: await liveBytes(listing!, entry), final: entry.final, truncatedAt: entry.truncatedAt, ...(entry.startedAt === undefined ? {} : { startedAt: entry.startedAt }) });
         }
         res.json({ schema: "orca-run-transcripts-v1", runId, available: true, calls });
       } catch (error) { sendError(res, error); }

@@ -1310,7 +1310,7 @@ export type FlowMessageV1 = {
 export type FlowJournalV1 = { schema: "orca-flow-journal-v1"; flowRunId: string; messages: FlowMessageV1[] };
 
 /** Live transcript spec §12.3: one call of a run's transcripts listing (src/agentTranscript/listing.ts). No path, ever. */
-export interface TranscriptCallV1 { attempt: number; phase: string; seq: number; runtime: "claude" | "codex" | "omp" | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null }
+export interface TranscriptCallV1 { attempt: number; phase: string; seq: number; runtime: "claude" | "codex" | "omp" | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string }
 /** GET /api/control/runs/:runId/transcripts. `available: false` -- the ccloop records no transcripts (`reason`). */
 export interface RunTranscriptsV1 { schema: "orca-run-transcripts-v1"; runId: string; available: boolean; reason?: string; calls: TranscriptCallV1[] }
 /** A served field: its redacted head, its full length in code units, and whether expanding shows more. */
