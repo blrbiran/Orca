@@ -59,6 +59,21 @@ describe("independent evidence archive",{timeout:30000},()=>{
    expect(await readFile(join(h.sourceDir,"stdout.log"),"utf8")).toBe("raw stdout.log\n");
   }finally{await h.dispose();}
  });
+ // Tester D6: captureSnapshot wrote a full `git bundle --all` plus one file per index blob into <stateDir>/staging and
+ // never removed them once archived, so every archived run left ~the whole repository behind (~375 MB observed).
+ it("leaves no snapshot bundle or blob in staging after an archive, nor after a failure at any publication",async()=>{
+  const h=await archiveCase();try{
+   const staging=join(h.store.stateDir,"staging");let publications=0;
+   await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof:h.stopProof},{beforePublish:()=>{publications++;}});
+   expect(await readdir(staging)).toEqual([]);
+   expect(publications).toBeGreaterThan(2);
+   for(let failAt=1;failAt<=publications;failAt++){
+    let seen=0;
+    await expect(archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof:h.stopProof},{beforePublish:()=>{if(++seen===failAt)throw new Error("injected-"+failAt);}})).rejects.toThrow("injected-"+failAt);
+    expect({failAt,staging:await readdir(staging)}).toEqual({failAt,staging:[]});
+   }
+  }finally{await h.dispose();}
+ });
  it("syncs file contents before publishing a readable immutable reference",async()=>{
   const h=await openTestStore();try{
    const steps:string[]=[];

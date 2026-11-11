@@ -42,14 +42,20 @@ export async function captureSnapshot(store:ControlStore,repo:string,missing:str
  const head=git(repo,"rev-parse","HEAD").toString().trim();
  const initialIndex=git(repo,"ls-files","--stage","-z");const refs=git(repo,"show-ref","--head").toString();
  const oldMask=process.umask(0o077);
- try {git(repo,"bundle","create",bundlePath,"--all","HEAD");}finally{process.umask(oldMask);}
- // Git output is staging evidence, never an executable hook/config archive.
- const bundle=await archiveFile(store,bundlePath,deps);const index:SnapshotV1["index"]=[];
+ // Tester D6: the bundle and each blob are staging copies; once archived (or on failure) they are removed.
+ let bundle:ArtifactRef;
+ try {
+  try {git(repo,"bundle","create",bundlePath,"--all","HEAD");}finally{process.umask(oldMask);}
+  // Git output is staging evidence, never an executable hook/config archive.
+  bundle=await archiveFile(store,bundlePath,deps);
+ }finally{await rm(bundlePath,{force:true});}
+ const index:SnapshotV1["index"]=[];
  for(const raw of initialIndex.toString().split("\0").filter(Boolean)) {
   const tab=raw.indexOf("\t"),path=raw.slice(tab+1);const [mode,oid,stage]=raw.slice(0,tab).split(" ");
   if(mode==="160000") {missing.push("submodule:"+path);index.push({path,mode,oid,stage:Number(stage),ref:null});continue;}
-  const blob=join(staging,randomUUID());await blobFile(repo,oid,blob);
-  const ref=await archiveFile(store,blob,deps);index.push({path,mode,oid,stage:Number(stage),ref});
+  const blob=join(staging,randomUUID());
+  try {await blobFile(repo,oid,blob);index.push({path,mode,oid,stage:Number(stage),ref:await archiveFile(store,blob,deps)});}
+  finally{await rm(blob,{force:true});}
  }
  const tree=await captureTree(store,repo,"repo/",missing,deps,[".git"]);
  const paths=new Set(tree.map(e=>e.path));const deleted=index.filter(e=>!paths.has(e.path)).map(e=>e.path);
