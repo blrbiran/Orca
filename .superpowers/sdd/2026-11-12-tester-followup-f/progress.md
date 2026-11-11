@@ -36,3 +36,15 @@ Design: `docs/superpowers/specs/2026-11-12-tester-followup-f-design.md`.
 ## Seats
 
 (Filled as seats report: branch, commits by subject, criteria added/rewritten, mutations, gate log path.)
+
+## Human words, later in the session (verbatim, 2026-11-12)
+
+「这个session中，尽量将这些要做的task都完整做完，这个session暂时不要考虑context大小。
+这次批准改写所有必要的判据。这一轮允许必要的付费真跑。这一轮session如果需要repin ccloop，这个session临时允许你push ccloop到origin main。这一轮session，Orca仓库repin完成后临时允许你push Orca 到origin main。
+这一轮如果遇到卡住必须等人的事情，请继续做不必等人的部分。必须等人的事情你可以在session最后总结的时候告诉我并记录到 handoff.md 中。等下一个session再接着继续做。我现在要去休息了。
+这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」
+
+Effect on C2: Orca seats may rewrite any necessary existing criterion (each rewrite in its own commit, comment
+`Ruling (2026-11-12, tester follow-up F)`). ccloop: Rule 15 there still needs per-criterion naming by the human; a
+relayed blanket approval is not that, so ccloop seats add criteria only. Push: the Tier 0 gate blocks agent pushes
+regardless of chat authorisation (rounds C–E); expect to hand pushes back.
