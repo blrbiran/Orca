@@ -27,6 +27,7 @@ import { MultiDirLandingBlock } from "./MultiDirLanding.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
 import { RunOutputBound } from "./RunOutputBound.js";
+import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf, shownWorkStatus } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -901,6 +902,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {runsInCreationOrder(view.runs).flatMap((run, index) => openRunId === run.runId ? [(
         <div key={run.runId} id={`run-detail-${run.runId}`} data-run-detail={run.runId} className="min-w-0 rounded-card border border-line bg-well p-3">
           <h4 className="mt-0">{t("control.group.runDetail", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}</h4>
+          <RunPostMergeCheck check={run.postMergeCheck} />
           <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen />
           <EvidenceLink runId={run.runId} />
           {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}

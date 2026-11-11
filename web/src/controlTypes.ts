@@ -441,6 +441,8 @@ export type RunViewV1 = {
   quotaRest?: { installation: string; until: number; source: "vendor" | "default" };
   /** Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; absent when none was sent. */
   operatorAcceptance?: { state: "pending" | "landed" | "refused"; note: string; principal: string; at: number; reason: string | null; landedCommit: string | null };
+  /** Tester follow-up E §4 (#245): what the landing's post-merge check did; absent when the run did not land through it. */
+  postMergeCheck?: PostMergeCheckV1;
   continuable?: boolean;
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
@@ -584,12 +586,19 @@ export type EvidenceManifestV1 = {
   runId: string;
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
 };
+/** Tester follow-up E §4 (#245): one command a check Orca ran itself, with its exit ("0" on a pass) and wall-clock time. */
+export type CheckRunCommandV1 = { command: string; exit: string; ms: number };
+export type PostMergeCheckV1 = {
+  result: "passed" | "failed" | "not-needed"; why?: "fast-forward" | "tree-equal" | "no-required-checks" | "no-task";
+  attemptSha: string; mergedSha: string; oldTip: string; commands: CheckRunCommandV1[]; tail?: string;
+};
 /** Issue-fixes spec §5.2: one row of Orca's activity record. */
 // Tester follow-up E §2: the activity reader accepts exactly these kinds; tests/panel/webParity.test.ts holds the set equal
 // to the server's ACTIVITY_KINDS.
 export const WEB_ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
+  "post-merge-check",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };

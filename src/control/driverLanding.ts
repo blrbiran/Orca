@@ -31,8 +31,9 @@ import { netChangeSet } from "../scheduler/harvest.js";
 import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
 import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
 import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, postMergeCheckPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
-import { firstFailingSetup, runAsCheck, type CheckFailure } from "./checkCommand.js";
-import type { ReconcileRecord } from "./driveRecord.js";
+import { runCheckRecorded, type CheckFailure } from "./checkCommand.js";
+import { recordActivity } from "./activity.js";
+import type { CheckRunCommand, PostMergeCheckRecord, ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PlanFile, PlanTask } from "../scheduler/planFile.js";
 import type { FrozenSlot } from "./agentSelection.js";
@@ -57,10 +58,12 @@ export async function findLanding(targetRepo: string, base: string, tip: string,
   return hit[0]!;
 }
 
-export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommit: string | null, landedDirs: Record<string, string> | null = null): void {
+export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommit: string | null, landedDirs: Record<string, string> | null = null, postMergeCheck: PostMergeCheckRecord | null = null): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
     if (run.state !== "collected" && run.state !== "reconciling") return;
+    // Tester follow-up E §4 (#245): a passed check writes its activity row with the landing; not-needed writes the field only.
+    if (postMergeCheck?.result === "passed") recordActivity(deps.store, { groupId: run.groupId, taskId: run.taskId, runId, kind: "post-merge-check", body: postMergeCheck });
     run.state = "landed";
     landedWithPending(deps.store, run);
     // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move. A multi run's primary is
@@ -72,6 +75,7 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
       ...run.drive!, landedCommit,
       ...(run.drive!.landingPlan === null ? {} : { landingPlan: null }),
       ...(landedDirs === null ? {} : { landedDirs }),
+      ...(postMergeCheck === null ? {} : { postMergeCheck }),
     };
     saveDriverRun(deps.store, run);
   });
@@ -361,16 +365,21 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
     checks.delete(runId);
     if ("error" in checked.settled) throw checked.settled.error;
     if (checked.old === old) {
-      if (checked.settled.failure !== null) { blockRun(deps, runId, "D", postMergeBlockReason(runId, run.groupId, old, checked.settled.failure)); return true; }
+      const { failure, commands } = checked.settled.outcome;
+      const record: PostMergeCheckRecord = { result: failure === null ? "passed" : "failed", attemptSha: drive.attemptSha!, mergedSha: checked.next, oldTip: old, commands,
+        ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }) };
+      if (failure !== null) { blockOnPostMergeCheck(deps, runId, postMergeBlockReason(runId, run.groupId, old, failure), record); return true; }
       await deps.beforeCas?.();
       // A moved tip only (as below): the next round merges onto the new tip and checks that tree.
       if (!(await compareAndSwap(targetRepo, workBranchRef(run.groupId), checked.next, old))) return false;
       deps.crash?.("D-after-cas");
-      markLanded(deps, runId, checked.next);
+      markLanded(deps, runId, checked.next, null, record);
       return true;
     }
     // The tip moved while the check ran: the tree it checked will never land. Merge onto the new tip, and check that.
   }
+  // Tester follow-up E §4 (#245): why this landing's merge needed no post-merge check, recorded with the landing.
+  let notNeeded: PostMergeCheckRecord["why"] | null = null;
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, old, async (landing) => {
     // Into the target's shared refs: the incoming ref is how the attempt stays reachable until settle.
     await git(landing, [...QUIET_GIT, "fetch", "--no-tags", join(drive.sourceDir, "repo"), `+${drive.attemptSha}:${incomingRefOf(runId)}`]);
@@ -408,6 +417,10 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
         startPostMergeCheck(deps, context, targetRepo, runId, old, next, contract);
         return "deferred";
       }
+      notNeeded = run.taskId === null ? "no-task" : "no-required-checks";
+    } else {
+      // The tip is still the attempt's base (the merge only adds the ledger), or it moved by trees equal to the attempt's.
+      notNeeded = old === drive.base ? "fast-forward" : "tree-equal";
     }
     return next;
   });
@@ -416,7 +429,8 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
   // A moved tip only (final review I2): any other failed swap threw from compareAndSwap and blocks the run.
   if (landed.kind === "moved") return false;
   deps.crash?.("D-after-cas");
-  markLanded(deps, runId, landed.commit);
+  markLanded(deps, runId, landed.commit, null, notNeeded === null ? null
+    : { result: "not-needed", why: notNeeded, attemptSha: drive.attemptSha!, mergedSha: landed.commit, oldTip: old, commands: [] });
   return true;
 }
 
@@ -434,7 +448,8 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
  * A red blocks at D; `orca recovery retry --run <id>` (resumeBlockedDriverRun: back to `collected`) merges onto the
  * then-current tip and checks again, after a person fixed the group branch.
  */
-export interface PostMergeCheck { controller: AbortController; old: string; next: string; settled: { failure: CheckFailure | null } | { error: unknown } | null }
+export interface PostMergeOutcome { failure: CheckFailure | null; commands: CheckRunCommand[] }
+export interface PostMergeCheck { controller: AbortController; old: string; next: string; settled: { outcome: PostMergeOutcome } | { error: unknown } | null }
 /** For a step called outside a driver (a criterion calling stepD itself); a driver owns its own map. */
 const unownedPostMergeChecks = new Map<string, PostMergeCheck>();
 function postMergeChecksOf(context: DriverContext | undefined): Map<string, PostMergeCheck> {
@@ -454,28 +469,50 @@ function startPostMergeCheck(deps: ExecutionDriverDeps, context: DriverContext |
   const entry: PostMergeCheck = { controller: new AbortController(), old, next, settled: null };
   postMergeChecksOf(context).set(runId, entry);
   void runPostMergeCheck(deps, targetRepo, runId, next, contract, entry.controller.signal)
-    .then((failure) => { entry.settled = { failure }; }, (error: unknown) => { entry.settled = { error }; });
+    .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
 }
 
-async function runPostMergeCheck(deps: ExecutionDriverDeps, targetRepo: string, runId: string, next: string, contract: TaskContract, signal: AbortSignal): Promise<CheckFailure | null> {
+async function runPostMergeCheck(deps: ExecutionDriverDeps, targetRepo: string, runId: string, next: string, contract: TaskContract, signal: AbortSignal): Promise<PostMergeOutcome> {
   const path = postMergeCheckPathOf(deps.roots, runId);
   await removeOwnPath(targetRepo, deps.roots, path);
   await git(targetRepo, [...QUIET_GIT, "worktree", "add", "--detach", path, next]);
   // The commands are the task's; they run as this run, with the panel's empty person directory (as the debug checks).
   const as = { runId, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
-  const timeoutMs = contract.executionPolicy.perAttemptTimeoutMs;
   try {
     // Task setup spec 2026-11-04 §4.6: a fresh worktree has no dependencies; a failed setup is named as `setup: <cmd>`.
-    const setup = await firstFailingSetup(path, contract.context.setupCommands ?? [], timeoutMs, as, signal);
-    if (setup !== null) return { ...setup, command: `setup: ${setup.command}` };
-    for (const command of contract.verification.requiredChecks) {
-      const failure = await runAsCheck(path, command, timeoutMs, as, signal);
-      if (failure !== null) return failure;
-    }
-    return null;
+    return await runCheckSequence(path, contract.context.setupCommands ?? [], contract.verification.requiredChecks, contract.executionPolicy.perAttemptTimeoutMs, as, signal);
   } finally {
     await removeOwnPath(targetRepo, deps.roots, path).catch(() => undefined);
   }
+}
+
+/**
+ * Setup commands, then checks, each as ccloop runs a required check; the first that does not exit 0 stops it. Every
+ * command that ran is recorded with its exit and wall-clock time (tester follow-up E §4, #245); a setup command is named
+ * `setup: <cmd>` there and in the failure.
+ */
+export async function runCheckSequence(cwd: string, setup: readonly string[], checks: readonly string[], timeoutMs: number, as: Parameters<typeof runCheckRecorded>[3], signal?: AbortSignal): Promise<PostMergeOutcome> {
+  const commands: CheckRunCommand[] = [];
+  const steps = [...setup.map((command) => ({ command, name: `setup: ${command}` })), ...checks.map((command) => ({ command, name: command }))];
+  for (const step of steps) {
+    const started = performance.now();
+    const answer = await runCheckRecorded(cwd, step.command, timeoutMs, as, signal);
+    commands.push({ command: step.name, exit: answer.exit, ms: Math.round(performance.now() - started) });
+    if (answer.exit !== "0") return { failure: { ...answer, command: step.name }, commands };
+  }
+  return { failure: null, commands };
+}
+
+/** blockRun, with the post-merge record on the drive and its activity row in the same transaction (§4). */
+function blockOnPostMergeCheck(deps: ExecutionDriverDeps, runId: string, reason: string, record: PostMergeCheckRecord): void {
+  write(deps, () => {
+    const run = readDriverRun(deps.store, runId);
+    if (run.drive === undefined) throw new ControlError("recovery-blocked", `drive-missing:${runId}`);
+    run.state = "blocked";
+    run.drive = { ...run.drive, postMergeCheck: record, blockedAt: "D", blockedReason: reason };
+    saveDriverRun(deps.store, run);
+    recordActivity(deps.store, { groupId: run.groupId, taskId: run.taskId, runId, kind: "post-merge-check", body: record });
+  });
 }
 
 /** First line `post-merge-check-failed:<command>`; then the exit, the way out, and the end of its output, bounded. */

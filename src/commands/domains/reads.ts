@@ -146,6 +146,22 @@ function transcriptText(body: unknown): string {
   return [`${b.runtime ?? "?"} window [${b.start ?? "?"}, ${b.end ?? "?"})${b.final ? " final" : " live"}`, ...(lines.length === 0 ? ["(no events)"] : lines)].join("\n");
 }
 
+interface PostMergeCheckView { result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string }
+
+/**
+ * Tester follow-up E §4 (#245): one line for what the landing's post-merge check did -- passed (how many commands, how
+ * long), not needed (why), or failed (the command and its exit) with its output tail on indented lines below.
+ */
+export function postMergeCheckLines(check: PostMergeCheckView | undefined): string[] {
+  if (check === undefined) return [];
+  if (check.result === "not-needed") return [`post-merge check: not needed (${check.why ?? "?"})`];
+  const n = check.commands.length;
+  const ran = `(${n} command${n === 1 ? "" : "s"}, ${Math.round(check.commands.reduce((sum, c) => sum + c.ms, 0) / 1000)} s)`;
+  if (check.result === "passed") return [`post-merge check: passed ${ran}`];
+  const last = check.commands.at(-1);
+  return [`post-merge check: failed: ${last?.command ?? "?"} exited ${last?.exit ?? "?"} ${ran}`, ...(check.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`)];
+}
+
 /**
  * Session 3cfc2e73 D7 (#158): an omp execute format failure keeps the attempt's work only under ccloop's attempt refs.
  * Name them, what each changed against the attempt's base, and the read-only git to look at it, so a person can take
@@ -303,7 +319,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null } } } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null } }; postMergeCheck?: PostMergeCheckView } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -318,6 +334,7 @@ export const READ_ROWS: CommandDef[] = [
           ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),
         ...(b.run?.pathPolicyMisses?.length ? ["observed path misses:", ...b.run.pathPolicyMisses.map((miss) => `  ${miss.repoKey === null ? "" : `${miss.repoKey}:`}${miss.path}`), ...(b.run.taskId ? [`To allow only these paths: orca task retry ${b.groupId} ${b.run.taskId} --allow-observed-paths`] : [])] : []),
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
+        ...postMergeCheckLines(b.run?.postMergeCheck),
       ];
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");
     } }),

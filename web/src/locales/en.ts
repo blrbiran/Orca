@@ -106,6 +106,7 @@ const activityKind = {
   archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed", "debug-open-failed": "debug group not opened",
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
   "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
+  "post-merge-check": "post-merge check",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -567,6 +568,12 @@ export const en = {
       runs: "Runs",
       runLabel: "Run {{n}}", runDetail: "{{run}}: transcript and evidence",
       evidenceCount: "Evidence IDs ({{n}})",
+      // Tester follow-up E §4 (#245): what the landing's post-merge check did.
+      postMergePassed_one: "Post-merge check passed ({{count}} command, {{seconds}} s)",
+      postMergePassed_other: "Post-merge check passed ({{count}} commands, {{seconds}} s)",
+      postMergeNotNeeded: "Post-merge check not needed ({{why}})",
+      postMergeFailed: "Post-merge check failed: {{command}} exited {{exit}}",
+      postMergeWhy: { "fast-forward": "the tip was the attempt's base", "tree-equal": "the merged tree equals the tested one", "no-required-checks": "the task has no required checks", "no-task": "the run has no task" },
       runsTh: { run: "run", phase: "phase", state: "state", profile: "profile", used: "used", remaining: "remaining", evidence: "evidence" },
       attempt: " · attempt {{attempt}} in this run (claim {{claim}})",
       taskRun: " · run {{n}} of this task",

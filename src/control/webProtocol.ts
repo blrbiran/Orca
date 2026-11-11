@@ -1802,6 +1802,8 @@ export const activityKindSchema = z.enum([
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   // Reviewed acceptance (spec 2026-11-11 §7): a person's accepted attempt landed after its checks, or was refused.
   "attempt-accepted", "attempt-accept-refused",
+  // Tester follow-up E §4 (#245): a post-merge check's outcome, written with the landing or the block.
+  "post-merge-check",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -1880,6 +1882,13 @@ export const runViewSchema = z
     // Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; omitted when none was sent.
     operatorAcceptance: z.object({ state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: nonemptyString, at: safeInteger,
       reason: z.string().nullable(), landedCommit: z.string().nullable() }).strict().optional(),
+    // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check did (driveRecord.ts postMergeCheckRecordSchema);
+    // omitted for a run that did not land through it and for a record written before the field.
+    postMergeCheck: z.object({
+      result: z.enum(["passed", "failed", "not-needed"]), why: z.enum(["fast-forward", "tree-equal", "no-required-checks", "no-task"]).optional(),
+      attemptSha: commitShaSchema, mergedSha: commitShaSchema, oldTip: commitShaSchema,
+      commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()), tail: z.string().max(2048).optional(),
+    }).strict().optional(),
     unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,

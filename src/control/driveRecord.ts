@@ -106,6 +106,23 @@ export const closingSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("closed-by-human-first"), commit: z.string().min(1) }).strict(),
 ]);
 
+/**
+ * Tester follow-up E §4 (#245): one command a check Orca ran itself (checkCommand.ts): its exit as runCheckRecorded names
+ * it ("0" on a pass, a number, or `timeout <n> ms`) and its wall-clock time. A setup command is named `setup: <cmd>`.
+ */
+export const checkRunCommandSchema = z.object({ command: z.string().min(1), exit: z.string().min(1), ms: safeInteger }).strict();
+export type CheckRunCommand = z.infer<typeof checkRunCommandSchema>;
+export const POST_MERGE_NOT_NEEDED = ["fast-forward", "tree-equal", "no-required-checks", "no-task"] as const;
+export const postMergeCheckRecordSchema = z.object({
+  result: z.enum(["passed", "failed", "not-needed"]),
+  why: z.enum(POST_MERGE_NOT_NEEDED).optional(),
+  attemptSha: commitSchema, mergedSha: commitSchema, oldTip: commitSchema,
+  commands: z.array(checkRunCommandSchema),
+  // The failing command's output tail, bounded as the block reason bounds it; on a failure only.
+  tail: z.string().max(2048).optional(),
+}).strict();
+export type PostMergeCheckRecord = z.infer<typeof postMergeCheckRecordSchema>;
+
 /** Everything the driver writes into a run body, in one closed record (spec §7.4). */
 export const driveRecordSchema = z.object({
   workspaceMode: z.enum(["worktree", "clone"]),
@@ -212,6 +229,10 @@ export const driveRecordSchema = z.object({
     z.object({ result: z.literal("passed") }).strict(),
     z.object({ result: z.literal("failed"), command: z.string().min(1) }).strict(),
   ]).nullable().default(null),
+  // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check (ruling R2) did. Optional, not defaulted:
+  // a drive record written before this field, and every run that did not land through stepD's clean merge, stays byte
+  // for byte what it was.
+  postMergeCheck: postMergeCheckRecordSchema.optional(),
 }).strict();
 export type DriveRecord = z.infer<typeof driveRecordSchema>;
 

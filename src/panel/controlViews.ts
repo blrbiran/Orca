@@ -1230,6 +1230,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Reviewed acceptance (#227): what the Web needs to say where an owner's acceptance stands; omitted when none.
       ...(run.operatorAcceptance === undefined ? {} : { operatorAcceptance: { state: run.operatorAcceptance.state, note: run.operatorAcceptance.note,
         principal: run.operatorAcceptance.principal, at: run.operatorAcceptance.at, reason: run.operatorAcceptance.reason, landedCommit: run.operatorAcceptance.landedCommit } }),
+      // Tester follow-up E §4 (#245): the post-merge check's record, as the drive holds it; omitted when there is none.
+      ...(run.drive?.postMergeCheck === undefined ? {} : { postMergeCheck: run.drive.postMergeCheck }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),
