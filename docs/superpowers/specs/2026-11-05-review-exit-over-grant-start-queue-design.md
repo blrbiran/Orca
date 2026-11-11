@@ -300,3 +300,39 @@ Departures from §3.2/§3.3, each a reversible controller decision (Rule 1 rung 
 7. **The confirm/show line** is printed by the CLI's human formatters (`unestimatedLines`, `commands/domains/verbs.ts`)
    for a task whose work `tokens` is null with provenance `complex-1m-default`; the reopen step is named as a proposal
    edit (`orca proposal replace … --if-revision`), the CLI's way to reopen a confirmed, not-yet-started proposal.
+
+## Correction (tester follow-up E, 2026-11-11) — D1's done also needs a group acceptance
+
+Written by implementer W2 of tester follow-up E (worktree branch `worktree-agent-a63acfd42065e0f4d`), on top of
+`feat(web): a failed group acceptance is a problem on the Board, in Problems and in group show (#241)`. Authority: the human's
+ruling on #241's group acceptance check, 「其他都同意」, recorded in
+`docs/superpowers/specs/2026-11-11-tester-followup-e-design.md` §0 and designed there in §5. The text of §3.1 above is
+unchanged; where it and this section disagree, this section holds.
+
+**What changes in D1.** §3.1's rule — "all tasks done and landed ⇒ the group becomes `done` automatically" — now also
+needs the group accepted on its final tip. Each task's required checks ran on its own attempt's tree and (ruling R2) on its
+merge, yet a later landing could break an earlier task's checks unseen (the tester's group was 7/7 done while its final
+`npm test` failed). As built:
+
+- **The pass** (`src/control/groupAcceptance.ts`, every driver round, before the integration pass): for a confirmed group
+  whose tasks are all done with no active run, the union of the done tasks' setup commands, then the union of their
+  required checks (each once, first-seen order), run in a scratch worktree at the tip of `orca/<g>`, off the round as the
+  post-merge check runs, each bounded by the longest `perAttemptTimeoutMs` among the tasks.
+- **The record** is the group body's `acceptance` (`tip`, `result` passed / failed / not-needed / not-run / waived, the
+  commands with exit and ms, the failing output tail, a waiver's who and why), keyed by tip: a restart does not rerun what
+  is recorded for the current tip; a tip that moves is checked again by itself. passed, failed and waived write a
+  `group-acceptance` activity row.
+- **The gate** (`src/control/groupAcceptanceRecord.ts` `acceptanceSatisfied`, a DB read with no git child) is read by
+  `prerequisiteDone` (`src/control/groupEdges.ts`) — so neither this done pass nor a dependent group moves on a failed
+  acceptance — and by `groupComplete` (`src/control/integrationPass.ts`), so a complete group is not delivered (trigger
+  `group`, a PR marked ready, a multi landing) before it is accepted. A satisfied record is passed, not-needed, not-run
+  or waived. With no record yet, a group that needs none by definition is accepted: at most one task landed (its own
+  checks ran on that tree), or a multi-directory or folder group (recorded `not-run`, a known gap). Any other group waits
+  for the pass.
+- **A failure** keeps the group out of `done` and shows the problem `group-acceptance-failed:<command>` on the Board, in
+  the group's Problems tab and in `orca group show`. Ways out besides a moved tip: `orca group recheck <g>` (any principal;
+  the next round checks the same tip again) and `orca group waive-acceptance <g> --note <why>` (human only, socket tier
+  token; the record becomes `waived` with who and why).
+
+Unchanged: the verdict groups' cause (a criteria-review judge or a ladder group whose verdict is recorded) is not gated, a
+`blocked` group is never touched, and who holds a slot (§3.1's second half) is as before.
