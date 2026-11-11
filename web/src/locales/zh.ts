@@ -887,6 +887,7 @@ export const zh: Translation<typeof en> = {
     expected: "预期 {{value}}（不是上限：任务组没有 token 上限）",
     staleEstimate: "这份估算早于一次做法修改；重新估算以更新建议",
     olderInstruction: "估算 profile {{profileId}} 用的是估算指令 {{version}}，最新的是 {{newest}}。它的估算按旧指令做；要用最新的，请更新该 profile 的 estimatorPreflight.instructionVersion。",
+    attemptsRaised: "任务 {{taskId}}：估算给的工作尝试次数是 {{estimated}}；应用时设为 {{applied}}，因为应用估算至少设 {{min}} 次。",
     applyAll: "应用全部建议",
     rationale: "估算理由（{{estimateId}}）",
     rationaleLine: "{{taskId}} · {{complexity}} · 置信度 {{confidence}} · {{rationale}}",

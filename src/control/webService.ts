@@ -8,6 +8,7 @@ import { peerCode, peerFailure } from "./ccloopPort.js";
 import {retainSavedInterruption,readDriverRun,describeError,groupStopped} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+import { appliedWorkAttempts } from "./budgetSuggestions.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
 import { budgetAmountSchema, safeInteger } from "./schema.js";
@@ -492,11 +493,19 @@ function allocationFor(proposal: BudgetProposalRecord, target: EffectiveProposal
   if (!row) throw new ControlError("work-not-found");
   return row;
 }
-function verifyModelField(store: ControlStore, id: string, proposal: BudgetProposalRecord, target: EffectiveProposalEditPayload["operations"][number]["target"], value: number|null, estimateId: string): void {
+/**
+ * Tester follow-up F §4 (#162): a task's work attempts is applied as appliedWorkAttempts of the estimate's (at least 2).
+ * `appliedBefore` (confirmation's re-check of values already in the proposal) also accepts the estimate's own number, which
+ * an apply before this rule wrote.
+ */
+function verifyModelField(store: ControlStore, id: string, proposal: BudgetProposalRecord, target: EffectiveProposalEditPayload["operations"][number]["target"], value: number|null, estimateId: string, appliedBefore = false): void {
   const estimate = readEstimateRecord(store, id, estimateId);
   if (estimate.state !== "ready" || !estimate.output || estimate.output.planHash !== proposal.planHash) throw new ControlError("proposal-version-conflict");
   const suggestion = target.scope === "goal-review" ? estimate.output.goalReviewReserve : estimate.output.tasks.find(t => t.taskId === target.taskId)?.[target.allocation];
-  if (!suggestion || suggestion[target.dimension] !== value) throw new ControlError("proposal-version-conflict");
+  if (!suggestion) throw new ControlError("proposal-version-conflict");
+  const estimated = suggestion[target.dimension];
+  const applied = target.scope === "task" && target.allocation === "work" && target.dimension === "attempts" ? appliedWorkAttempts(estimated) : estimated;
+  if (value !== applied && !(appliedBefore && value === estimated)) throw new ControlError("proposal-version-conflict");
 }
 
 /**
@@ -2170,7 +2179,7 @@ export class WebControlService {
             if (source.provenance !== "model") continue;
             if (row.ownerKind === "reserve") throw new ControlError("proposal-version-conflict");
             const target = row.ownerKind === "goal-review" ? { scope: "goal-review" as const, dimension: d } : { scope: "task" as const, taskId: row.ownerId, allocation: row.bucket as "work" | "handoff", dimension: d };
-            verifyModelField(this.store, id, proposal, target, row.amount[d], source.estimateId!);
+            verifyModelField(this.store, id, proposal, target, row.amount[d], source.estimateId!, true);
           }
           // Spec §6.4 step 2: any failed slot refuses the whole confirmation, named after the first one by key.
           if ("failure" in prepared) throw prepared.failure;

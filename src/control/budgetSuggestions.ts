@@ -96,10 +96,19 @@ export function usedRatio(expected: { tokens: number; usedTokens: number | null 
   return Math.round((expected.usedTokens / expected.tokens) * 10) / 10;
 }
 
+/**
+ * Tester follow-up F §4 (#162): an estimate's task-work attempts is applied as at least this many, so the first exhausted
+ * attempt is not the end of the task. The server re-checks an applied value against appliedWorkAttempts (webService.ts
+ * verifyModelField); handoff and goal-review attempts are applied as estimated.
+ */
+export const MIN_APPLIED_WORK_ATTEMPTS = 2;
+export const appliedWorkAttempts = (estimated: number): number => Math.max(estimated, MIN_APPLIED_WORK_ATTEMPTS);
+
 function suggestedAmount(output: SuggestionOutput, allocation: Allocation): FullAmount | null {
   if (allocation.ownerKind === "goal-review" && allocation.bucket === "review") return output.goalReviewReserve;
   if (allocation.ownerKind !== "task" || (allocation.bucket !== "work" && allocation.bucket !== "handoff")) return null;
-  return output.tasks.find((task) => task.taskId === allocation.ownerId)?.[allocation.bucket] ?? null;
+  const amount = output.tasks.find((task) => task.taskId === allocation.ownerId)?.[allocation.bucket] ?? null;
+  return amount !== null && allocation.bucket === "work" ? { ...amount, attempts: appliedWorkAttempts(amount.attempts) } : amount;
 }
 
 /**

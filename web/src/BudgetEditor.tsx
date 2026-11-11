@@ -17,7 +17,7 @@ import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText, refusalText } from "./i18n.js";
 import { TokenInput, parseTokens, shortTokens } from "./TokenInput.js";
 import {
-  DIMENSIONS, adviceOf as sharedAdviceOf, budgetFieldKey, loopOwned, suggestedLoopActions as sharedSuggestedLoopActions,
+  DIMENSIONS, MIN_APPLIED_WORK_ATTEMPTS, adviceOf as sharedAdviceOf, appliedWorkAttempts, budgetFieldKey, estimateIsAdvisory, loopOwned, suggestedLoopActions as sharedSuggestedLoopActions,
   suggestedOperations as sharedSuggestedOperations, suggestionActions as sharedSuggestionActions, targetOf,
 } from "../../src/control/budgetSuggestions.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../src/control/estimateInstructionAge.js";
@@ -438,6 +438,12 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       ))}
       {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
       {olderInstruction !== null && <p role="note" data-testid="budget-older-instruction">{t("budget.olderInstruction", { profileId: estimatorProfileId ?? "", version: olderInstruction, newest: NEWEST_ESTIMATE_INSTRUCTION })}</p>}
+      {/* Tester follow-up F §4 (#162): a task's work attempts the estimate put below the floor is applied raised; say so. */}
+      {advice !== null && !advice.stale && !archived && !estimateIsAdvisory(view) && advice.output.tasks.filter((task) => task.work.attempts < MIN_APPLIED_WORK_ATTEMPTS).map((task) => (
+        <p role="note" key={`attempts-raised:${task.taskId}`} data-testid={`budget-attempts-raised-${task.taskId}`}>
+          {t("budget.attemptsRaised", { taskId: task.taskId, estimated: task.work.attempts, applied: appliedWorkAttempts(task.work.attempts), min: MIN_APPLIED_WORK_ATTEMPTS })}
+        </p>
+      ))}
       {allSuggested.length > 0 && !archived && <button type="button" onClick={() => applySuggestions(allSuggested)}>{t("budget.applyAll")}</button>}
       {advice !== null && (
         <details>

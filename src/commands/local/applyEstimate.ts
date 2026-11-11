@@ -8,7 +8,9 @@
  */
 import { randomUUID } from "node:crypto";
 import { EntryRejection, exitCodeFor, localError, type CliResponseV1 } from "../../entry/envelope.js";
-import { adviceOf, estimateIsAdvisory, suggestionActions, type SuggestionAction, type SuggestionView } from "../../control/budgetSuggestions.js";
+import {
+  MIN_APPLIED_WORK_ATTEMPTS, adviceOf, appliedWorkAttempts, estimateIsAdvisory, suggestionActions, type SuggestionAction, type SuggestionOutput, type SuggestionView,
+} from "../../control/budgetSuggestions.js";
 import { printResponse, type SentRequest } from "../output.js";
 import type { CommandIo, ParsedArgs } from "../types.js";
 
@@ -20,7 +22,7 @@ interface Planned { verb: SuggestionAction["verb"]; route: string; payload: unkn
 interface Applied extends Planned { commandId: string; expectedRevision: number; commandRevision: number | null }
 
 export function formatApplied(body: unknown): string {
-  const b = body as { groupId: string; estimateId: string; dryRun: boolean; actions: Planned[]; applied: Applied[]; expectations?: Array<{ taskId: string; tokens: number }> };
+  const b = body as { groupId: string; estimateId: string; dryRun: boolean; actions: Planned[]; applied: Applied[]; expectations?: Array<{ taskId: string; tokens: number }>; raisedAttempts?: RaisedAttempts[] };
   const list = b.dryRun ? b.actions : b.applied;
   // Budget defaults spec 2026-11-11 §7 item 5: in a group with no token limit the estimate is each task's expectation; no
   // task-work ceiling is sent, so "already matches / nothing to apply" would misstate what happened.
@@ -43,7 +45,18 @@ export function formatApplied(body: unknown): string {
     }
   }
   if (list.some((entry) => entry.verb === "set-task-loop")) lines.push("  a loop task's sessions are not set by an estimate (R10)");
+  for (const r of b.raisedAttempts ?? []) lines.push(`  task ${r.taskId} work attempts: the estimate said ${r.estimated}; raised to ${r.applied}, as an applied estimate sets at least ${MIN_APPLIED_WORK_ATTEMPTS}`);
   return lines.join("\n");
+}
+
+/** Tester follow-up F §4 (#162): a task-work attempts the shared transform raised to the floor, from what the estimate said. */
+interface RaisedAttempts { taskId: string; estimated: number; applied: number }
+function raisedAttempts(output: SuggestionOutput, actions: SuggestionAction[]): RaisedAttempts[] {
+  const sent = (taskId: string) => actions.some((action) => action.verb === "proposal-edit"
+    ? action.payload.operations.some((op) => op.target.scope === "task" && op.target.taskId === taskId && op.target.allocation === "work" && op.target.dimension === "attempts")
+    : action.taskId === taskId && action.payload.workProvenance.attempts !== undefined);
+  return output.tasks.filter((task) => task.work.attempts < MIN_APPLIED_WORK_ATTEMPTS && sent(task.taskId))
+    .map((task) => ({ taskId: task.taskId, estimated: task.work.attempts, applied: appliedWorkAttempts(task.work.attempts) }));
 }
 
 export async function runApplyEstimate(args: ParsedArgs, io: CommandIo): Promise<number> {
@@ -58,9 +71,12 @@ export async function runApplyEstimate(args: ParsedArgs, io: CommandIo): Promise
     if (advice === null) throw new EntryRejection("estimate-not-ready", `${ids.group} has no ready estimate for its current plan on an editable proposal (orca proposal show; orca group estimate)`);
     if (advice.stale) throw new EntryRejection("estimate-stale", `the newest estimate of ${ids.group} predates a set-task-loop change; run orca group estimate again`);
     const actions = suggestionActions(view, { kind: "all" });
+    const raised = raisedAttempts(advice.output, actions);
     const base = { schema: "orca-apply-estimate-v1", groupId: view.summary.groupId, estimateId: advice.estimateId, dryRun: args.flags["dry-run"] === true,
       // §7 item 5: present only in a group with no token limit, so a finite group's answer keeps its bytes.
-      ...(estimateIsAdvisory(view) ? { expectations: advice.output.tasks.map((task) => ({ taskId: task.taskId, tokens: task.work.tokens })) } : {}) };
+      ...(estimateIsAdvisory(view) ? { expectations: advice.output.tasks.map((task) => ({ taskId: task.taskId, tokens: task.work.tokens })) } : {}),
+      // #162: present only when an attempts was raised to the floor (only-add).
+      ...(raised.length === 0 ? {} : { raisedAttempts: raised }) };
     const planned: Planned[] = actions.map((action) => ({ verb: action.verb, route: routeOf(action), payload: action.payload }));
     if (base.dryRun || actions.length === 0) return print({ schema: "orca-cli-response-v1", status: 200, body: { ...base, actions: planned, applied: [] } });
     const prefix = session.client === "mcp" || session.client.startsWith("mcp:") ? "mcp" : "cli";
