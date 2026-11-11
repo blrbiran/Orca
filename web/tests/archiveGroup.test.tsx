@@ -60,7 +60,9 @@ describe("archiving from the group view (spec §6.3)", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);
     const before = allRegionActions().length;
     // Final review M1: the failed run is still active, so Archive group is not among them (archive-run-active).
-    expect(before).toBeGreaterThanOrEqual(10);
+    // Ruling (2026-11-12, tester follow-up F): #81 「要收起来」 folded Save plan to library and Schedule this group… into
+    // one "⋯" menu button, so the open group's header carries one action button fewer (10 -> 9).
+    expect(before).toBeGreaterThanOrEqual(9);
     open.unmount();
     render(<ControlGroupView view={archived(view([item], [failed]))} {...props} />);
     fireEvent.click(screen.getAllByRole("button", { name: "a" })[0]!);

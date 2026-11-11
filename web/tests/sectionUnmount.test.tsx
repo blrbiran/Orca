@@ -181,7 +181,9 @@ describe("unsent input survives leaving its section (R1, #219)", () => {
   it("does not reopen the import dialog an Overview link opened once its section was left", async () => {
     window.location.hash = "#overview";
     render(<App />);
-    fireEvent.click(await within(await screen.findByRole("region", { name: "Overview" })).findByRole("button", { name: "Import plan" }));
+    // Ruling (2026-11-12, tester follow-up F): #81 「要收起来」 moved Overview's Import plan into its "More" menu.
+    fireEvent.click(await within(await screen.findByRole("region", { name: "Overview" })).findByRole("button", { name: "More" }));
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Import plan" }));
     await screen.findByRole("region", { name: "Import plan" });
     await go("#overview");
     await go("#tasks");
