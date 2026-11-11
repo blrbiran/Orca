@@ -153,6 +153,22 @@ describe("each surface (spec A §4.6 table)", () => {
       "agent 版本与记录的不一致：recorded 1.2.0, found 1.3.0", "ccloop-failed:agent-version-drift: recorded 1.2.0, found 1.3.0"]);
   });
 
+  // Issue #125 (session f958ec3f): a failed call keeps the provider's own words ccloop recorded (`detail`); the failed-call
+  // line shows them after the code and its explanation, and adds nothing when the call has none.
+  it("a failed requirement's failed-call line ends with the call's detail when it has one", () => {
+    const view = requirementView("failed");
+    const failedWith = (detail?: string): RequirementViewV1 => ({ ...view, rounds: [{ ...view.rounds[0]!, calls: [{ runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed", reason: "omp-new-thing", ...(detail === undefined ? {} : { detail }) }] }] });
+    const statusLines = (shown: RequirementViewV1) => {
+      const { container } = render(<RequirementsPanel config={config} summary={summaryWith(shown)} views={{ r: shown }} selected="r" agents={null} language="en" onSelect={() => {}} onCommand={vi.fn()} />);
+      const lines = [...container.querySelectorAll('p[role="status"]')].map((p) => p.textContent);
+      cleanup();
+      return lines;
+    };
+    // mutation: do not render the detail -> the line is the bare code -> red
+    expect(statusLines(failedWith("You've hit your usage limit"))).toContain("omp-new-thing · You've hit your usage limit");
+    expect(statusLines(failedWith())).toContain("omp-new-thing");
+  });
+
   // Fix-wave ruling (final review m1): the blocked-run line already shows the reason with its code, so an unknown code's
   // words (the bare code) are not added after it.
   it("an unknown code is shown once on the blocked-run line", () => {

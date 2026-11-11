@@ -217,6 +217,8 @@ export type RequirementCallRecordV1 = {
   usage: Amount | null;
   outcome: "valid" | "invalid" | "failed" | "interrupted";
   reason: string | null;
+  /** Issue #125: a failed call's head of the provider's words, from ccloop's record; absent when it named none. */
+  detail?: string;
 };
 export type ClarifyResultV1 = {
   slug: string | null;

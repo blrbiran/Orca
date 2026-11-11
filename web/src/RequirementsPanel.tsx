@@ -793,7 +793,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}
         </p>
       )}
-      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason}{explainBesideCode(failedCall.reason) !== null ? ` · ${explainBesideCode(failedCall.reason)}` : ""}</p>}
+      {!archived && failedCall?.reason != null && <p role="status">{failedCall.reason}{explainBesideCode(failedCall.reason) !== null ? ` · ${explainBesideCode(failedCall.reason)}` : ""}{failedCall.detail !== undefined ? ` · ${failedCall.detail}` : ""}</p>}
       {!archived && blockedRun !== null && (
         <p role="alert">{blockedRun.reason !== null && <>{blockedRun.reason}{blockedWords !== null ? ` · ${blockedWords}` : ""} · </>}
           {blockedCharge !== null ? <ChargeRetry charge={blockedCharge}
