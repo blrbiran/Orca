@@ -105,6 +105,10 @@ describe("an agent's settlement is booked to the agent (tester follow-up E §8)"
       // A person's principal on an agent's row is invalid too (the row named no person).
       forged.usageSettlement.principal = "user:u-owner";
       expect(hasValidUsageSettlement(t.h.store, forged)).toBe(false);
+      // An agent's marker is backed only by a row that names no person: the same row with a person on it is not the agent's.
+      // mutation: drop `row.person_principal !== null` from the agent branch of the validator -> true, red
+      t.h.store.db.prepare("UPDATE commands SET person_principal='user:u-owner' WHERE id=?").run(commandId);
+      expect(hasValidUsageSettlement(t.h.store, after)).toBe(false);
     } finally { await t.h.dispose(); }
   });
 

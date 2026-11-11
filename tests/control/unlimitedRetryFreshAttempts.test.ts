@@ -117,6 +117,20 @@ describe("an explicit retry in an unlimited group starts with fresh attempts and
     } finally { await t.h.dispose(); }
   });
 
+  it("a group whose limits leave no attempt is refused by name and the task is left as it was, never ready with nothing", async () => {
+    // Measured (fixture, 2026-11-11): after the failed run the group has used 2 attempts and reserves 2, so 4 leaves none.
+    const { t, first } = await failedOnce(2, 4);
+    try {
+      const before = work(t);
+      const answer = retry(t, OWNER);
+      // mutation: drop the zero-left refusal after the headroom cap -> admitted with 0 attempts, red
+      expect(answer.error).toMatchObject({ code: "task-not-retryable" });
+      expect(answer.error!.message).toContain("authored-budget-exhausted");
+      expect([work(t).status, work(t).currentRunId]).toEqual([before.status, first]);
+      expect(Number(t.h.store.db.prepare("SELECT count(*) AS n FROM work_grant_top_ups").get()!.n)).toBe(0);
+    } finally { await t.h.dispose(); }
+  });
+
   it("a retry with a top-up starts with the task's own attempts plus the top-up; the board shows only the top-up", async () => {
     const { t, driver } = await failedOnce(2);
     try {
@@ -124,7 +138,7 @@ describe("an explicit retry in an unlimited group starts with fresh attempts and
         const command = t.h.command("retry-task", { taskId: "a", work: { attempts: 1 } } as never);
         return withCommandContext(command.commandId, routedCommandContext("web", OWNER, BY), () => t.service.retryTask(command)) as { result?: Record<string, unknown> };
       })();
-      // mutation: credit the lineage only up to the authored amount, ignoring this retry's top-up -> 2, red
+      // mutation: leave this retry's top-up out of the fresh start's authored amount -> 2, red
       expect(retried.result).toMatchObject({ nextRun: { attempts: 3, activeMs: AUTHORED_ACTIVE_MS } });
       const lines = readControlGroup(t.h.store, "epoch", "g").workItems.find((item) => item.taskId === "a")!.topUps!;
       expect(lines.map((line) => line.amount.attempts)).toEqual([1]);
