@@ -179,15 +179,40 @@ export function fundingLines(preview: unknown): string[] {
     ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.fundableTokens === null ? `nothing (${row.reason ?? "unavailable"})` : tokens(row.fundableTokens)}`)];
 }
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
+interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string } }
+
+/**
+ * Tester follow-up E §5 (#241): the group's acceptance on its final tip. A failed one is the problem
+ * `group-acceptance-failed:<command>`, with its output tail and the two commands that answer it; anything else is one line.
+ */
+export function acceptanceLines(groupId: string, a: AcceptanceView | undefined): string[] {
+  if (a === undefined) return [];
+  const tip = a.tip === null ? "" : ` on ${a.tip.slice(0, 12)}`;
+  const n = a.commands.length;
+  const ran = `(${n} command${n === 1 ? "" : "s"}, ${Math.round(a.commands.reduce((sum, c) => sum + c.ms, 0) / 1000)} s)`;
+  if (a.result === "passed") return [`acceptance: passed${tip} ${ran}`];
+  if (a.result === "not-needed") return [`acceptance: not needed (${a.why ?? "?"})`];
+  if (a.result === "not-run") return [`acceptance: not run (${a.why ?? "?"})`];
+  if (a.result === "waived") return [`acceptance: waived${tip} by ${a.waived?.by ?? "?"}: ${a.waived?.note ?? ""}`];
+  const last = a.commands.at(-1);
+  return [
+    `problem: group-acceptance-failed:${last?.command ?? "?"} (exited ${last?.exit ?? "?"} on orca/${groupId}${a.tip === null ? "" : ` at ${a.tip.slice(0, 12)}`})`,
+    ...(a.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`),
+    `next: orca group recheck ${groupId}  (a flaky check: run it again on this tip)`,
+    `  or: orca group waive-acceptance ${groupId} --note '<why>'  (a person accepts this tip anyway)`,
+  ];
+}
+
 export function formatWithUnestimated(body: unknown): string {
-  const b = body as (UnestimatedSource & { summary?: { groupId?: string }; groupId?: string }) | null;
+  const b = body as (UnestimatedSource & { summary?: { groupId?: string; acceptance?: AcceptanceView }; groupId?: string }) | null;
   const groupId = b?.summary?.groupId ?? b?.groupId;
   const live = new Set(["starting", "unknown", "attempt-unknown", "running", "collected", "landed", "reconciling"]);
   const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown }> }).runs ?? [];
   const count = runs.filter((run) => typeof run.taskId === "string" && typeof run.state === "string" && live.has(run.state)).length;
   return withLines(text(body), [...(count > 0 ? [`execution: ${count} task run${count === 1 ? "" : "s"} in progress`] : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
-    ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0]))]);
+    ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
+    ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : [])]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

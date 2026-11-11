@@ -753,6 +753,17 @@ export const en = {
       hintAny: "The provider refused the structured-output request (--output-schema). Set \"structuredOutput\": \"prompt\" on the codex installation this run used, in the agents table; ccloop never chooses it on its own.",
     },
     // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a settled, failed run's attempt after its checks.
+    // Tester follow-up E §5 (#241): a group whose acceptance failed on its final tip.
+    groupAcceptance: {
+      failed: "The group's final tree failed {{command}} (exit {{exit}}) at {{tip}}; the group is not done.",
+      recheck: "Recheck",
+      waive: "Waive…",
+      waiveExplain: "Accept this failed tip anyway: the group is delivered and done as it is. A tip that moves is checked again.",
+      note: "Why you accept the failed tip",
+      send: "Accept this tip anyway",
+      cancel: "Cancel",
+      boardFailed: "Group acceptance failed: {{command}}",
+    },
     acceptAttempt: {
       open: "Accept this attempt after checks",
       explain: "Orca will merge this attempt onto the group branch, run the task's setup and required checks on the merged tree, and land it only if they all pass. Nothing is charged again.",

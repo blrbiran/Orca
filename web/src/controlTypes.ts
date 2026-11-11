@@ -126,6 +126,8 @@ export type GroupSummaryV1 = {
   escalation?: GroupEscalationV1[];
   /** Tester #174: criteria-review judges for this group's flagged tasks; a failed judge stays visible on the parent. */
   criteriaReviews?: GroupCriteriaReviewV1[];
+  /** Tester follow-up E §5 (#241): the group's acceptance on its final tip; `problem` is set when it failed. */
+  acceptance?: GroupAcceptanceV1;
   /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
   scheduleStart?: { scheduleId: string; name: string; slot: number; waitingReason: string | null };
 };
@@ -585,6 +587,11 @@ export type EvidenceManifestV1 = {
   schema: "orca-run-evidence-v1";
   runId: string;
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
+};
+/** Tester follow-up E §5 (#241): a group's acceptance on its final tip (src/control/groupAcceptanceRecord.ts). */
+export type GroupAcceptanceV1 = {
+  tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir";
+  commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
 };
 /** Tester follow-up E §4 (#245): one command a check Orca ran itself, with its exit ("0" on a pass) and wall-clock time. */
 export type CheckRunCommandV1 = { command: string; exit: string; ms: number };

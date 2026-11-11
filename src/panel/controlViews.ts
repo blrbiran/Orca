@@ -24,6 +24,7 @@ import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
+import { acceptanceOf, acceptanceProblem } from "../control/groupAcceptanceRecord.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
@@ -576,6 +577,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const escalation = archived === null ? [] : escalationsOf(store, groupId);
   // Tester #174: a judge's outcome (a failed one especially) is shown on the group whose task was flagged.
   const criteriaReviews = criteriaReviewsOf(store, groupId);
+  // Tester follow-up E §5 (#241): the group's acceptance on its tip; a failed one is a problem named by its command.
+  const acceptance = acceptanceOf(body);
+  const acceptanceProblemCode = acceptanceProblem(acceptance);
   // Dir-requirements spec §9.4: a dir group's placement record, without the journal's `from/to` (not the panel's business).
   const placement = dirWorkspaceOf(body) === null ? null : readPlacement((body as { placement?: unknown }).placement);
   // Multi-directory projects spec §12: a multi group's directories and landing, as its integration region shows them. The
@@ -636,6 +640,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
     ...(escalation.length === 0 ? {} : { escalation }),
     ...(criteriaReviews.length === 0 ? {} : { criteriaReviews }),
+    ...(acceptance === null ? {} : { acceptance: { ...acceptance, ...(acceptanceProblemCode === null ? {} : { problem: acceptanceProblemCode }) } }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(multiSummary === null ? {} : { multiDir: multiSummary }),
     ...(debugMark === null ? {} : { debug: {

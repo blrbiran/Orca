@@ -620,6 +620,16 @@ export const zh: Translation<typeof en> = {
       hint: "服务商拒绝了结构化输出请求（--output-schema）。请在 agents 表里给 codex 安装 {{installation}} 设置 \"structuredOutput\": \"prompt\"；ccloop 不会自动选择它。",
       hintAny: "服务商拒绝了结构化输出请求（--output-schema）。请在 agents 表里给这个运行用的 codex 安装设置 \"structuredOutput\": \"prompt\"；ccloop 不会自动选择它。",
     },
+    groupAcceptance: {
+      failed: "组的最终树没有通过 {{command}}（退出码 {{exit}}），位置 {{tip}}；这个组还没有完成。",
+      recheck: "重新检查",
+      waive: "豁免…",
+      waiveExplain: "仍然接受这个没通过的分支顶端：组按现状交付并完成。分支顶端移动后会重新检查。",
+      note: "为什么接受这个没通过的分支顶端",
+      send: "仍然接受这个分支顶端",
+      cancel: "取消",
+      boardFailed: "组验收失败：{{command}}",
+    },
     acceptAttempt: {
       open: "检查通过后接受这次尝试",
       explain: "Orca 会把这次尝试合并到组分支上，在合并后的代码上运行任务的准备命令和必需检查，全部通过才落地。不会再次计费。",

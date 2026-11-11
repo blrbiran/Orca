@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { acceptanceSatisfied } from "../../src/control/groupAcceptanceRecord.js";
+import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
@@ -62,6 +63,19 @@ describe("recheck and waive a failed group acceptance (tester follow-up E §5)",
       const command = t.h.command("waive-acceptance", { note: "n" });
       expect(asOwner(command.commandId, () => t.service.waiveAcceptance(command))).toMatchObject({ error: { code: "group-acceptance-not-failed" } });
       expect(body(t).acceptance).toEqual(record);
+    } finally { await t.h.dispose(); }
+  });
+
+  // §5: the failure is a problem the Board, Problems and `group show` read from the group summary, named by its command.
+  it("the group summary carries the record, and a failed one names its problem group-acceptance-failed:<command>", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      expect(readGroupSummary(t.h.store, "g").acceptance).toBeUndefined();
+      setAcceptance(t, FAILED);
+      expect(readGroupSummary(t.h.store, "g").acceptance).toEqual({ ...FAILED, problem: "group-acceptance-failed:npm test" });
+      setAcceptance(t, { ...FAILED, result: "passed", tail: undefined });
+      const passed = readGroupSummary(t.h.store, "g").acceptance;
+      expect(passed?.result).toBe("passed");
+      expect(passed?.problem).toBeUndefined();
     } finally { await t.h.dispose(); }
   });
 

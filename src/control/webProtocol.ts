@@ -1585,6 +1585,16 @@ export const groupSummarySchema = z
     criteriaReviews: z.array(z.object({
       taskId: idSchema, debugGroupId: idSchema, state: z.enum(["debugging", "justified", "restored", "failed"]), reason: z.string().nullable(),
     }).strict()).min(1).optional(),
+    // Tester follow-up E §5 (#241): the group's acceptance on its final tip (groupAcceptanceRecord.ts); `problem` is
+    // `group-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
+    acceptance: z.object({
+      tip: commitShaSchema.nullable(), result: z.enum(["passed", "failed", "not-needed", "not-run", "waived"]),
+      why: z.enum(["single-landing", "multi-repo", "dir"]).optional(),
+      commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
+      tail: z.string().max(2048).optional(), at: safeInteger,
+      waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
+      problem: nonemptyString.optional(),
+    }).strict().optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),

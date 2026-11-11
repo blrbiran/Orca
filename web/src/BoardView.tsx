@@ -146,6 +146,10 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
             : t("board.card.criteriaReviewFailed", { taskId: entry.taskId, reason: entry.reason ?? "" })}
         </p>
       ))}
+      {/* Tester follow-up E §5 (#241): the group's final tree failed its tasks' checks, so it is not done. */}
+      {group.acceptance?.result === "failed" && (
+        <p className="detail-note" data-tone="danger" data-testid="board-card-acceptance">{t("control.groupAcceptance.boardFailed", { command: group.acceptance.commands.at(-1)?.command ?? "?" })}</p>
+      )}
       {group.stopState !== null && <span className={`badge ${cardBadge}`}>{enumText("stopState", group.stopState)}</span>}
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}

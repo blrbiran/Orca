@@ -22,7 +22,9 @@ export function needsAttention(summary: GroupSummaryV1): boolean {
   // still settling is. A paused group with a blocked task or a recovery blocker still needs them through those clauses.
   return (summary.counts?.blocked ?? 0) - escalating > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
     || (summary.stopState != null && summary.stopState !== "handoff-complete" && summary.stopState !== "paused")
-    || summary.orchestration?.refusal?.persistent === true;
+    || summary.orchestration?.refusal?.persistent === true
+    // Tester follow-up E §5 (#241): a group whose final tree failed its acceptance waits for a recheck, a waiver or a fix.
+    || summary.acceptance?.result === "failed";
 }
 
 export function groupCategory(summary: GroupSummaryV1): GroupCategory {
