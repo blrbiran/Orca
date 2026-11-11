@@ -147,15 +147,24 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
       expect(JSON.parse(readFileSync(w.claudeMarker, "utf8")).maxOutputTokensEnv).toBe("64000");
       expect(w.worktrees()).toEqual(worktreesBefore);
 
-      // Apply one suggestion as the model's (Web spec §5.5): only the work tokens of task a.
-      const applied = runtime.service.editProposal(raw(runtime, "apply", "proposal-edit", {
+      // Apply one suggestion as the model's (Web spec §5.5).
+      // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the budget
+      // defaults spec 2026-11-11 §7 items 1 and 3 -- this planId import has no token limit, so task a's work tokens are the
+      // expectation and are refused as a ceiling by name; the suggestion applied is task a's handoff tokens, which keep
+      // today's apply behaviour.
+      const refused = runtime.service.editProposal(raw(runtime, "apply-work", "proposal-edit", {
         baseProposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
         operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: SUGGESTED_WORK.tokens, provenance: "model", estimateId }],
       }));
+      expect("error" in refused ? refused.error.code : refused.result.kind).toBe("estimate-advisory-in-unlimited-group");
+      const applied = runtime.service.editProposal(raw(runtime, "apply", "proposal-edit", {
+        baseProposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
+        operations: [{ target: { scope: "task", taskId: "a", allocation: "handoff", dimension: "tokens" }, value: 10_000, provenance: "model", estimateId }],
+      }));
       expect("error" in applied ? applied.error : applied.result.kind).toBe("proposal-edited");
-      const work = readBudgetProposal(runtime.store, "g").allocations.find((a) => a.ownerKind === "task" && a.ownerId === "a" && a.bucket === "work")!;
-      expect(work.amount.tokens).toBe(180_000);
-      expect(work.fieldProvenance.tokens).toEqual({ provenance: "model", estimateId });
+      const handoff = readBudgetProposal(runtime.store, "g").allocations.find((a) => a.ownerKind === "task" && a.ownerId === "a" && a.bucket === "handoff")!;
+      expect(handoff.amount.tokens).toBe(10_000);
+      expect(handoff.fieldProvenance.tokens).toEqual({ provenance: "model", estimateId });
 
       const confirmed = await confirmSoft(runtime, "confirm");
       expect("error" in confirmed ? confirmed.error : "confirmed").toBe("confirmed");
