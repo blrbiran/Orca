@@ -81,3 +81,92 @@ the controller merges with `--ff-only` after rebasing and regenerating CLI docs.
 「这一轮如果遇到卡住必须等人的事情，请继续做不必等人的部分。」「这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核。」
 Consequence: commits marked `Ruling: pending (tester follow-up E)` are covered by the blanket criteria ruling and may
 merge; they are still listed in the round's summary for the human's review.
+
+## W1 landed in ccloop (2026-11-11)
+
+- ccloop commit `fix(codex): a phase that fails on a mid-stream error row carries its completed turn's usage (#249)`
+  (branch `e/codex-usage-after-error-row`) fast-forwarded into ccloop main. 5 new criteria
+  (`tests/runtime/codex/usageAfterErrorRow.test.ts`), no existing criterion changed; mutations M0–M3 in
+  `/private/tmp/orca-e1111/w1-ccloop/mutations.md`. Gate: typecheck/build 0; full suite 2,585 pass / 15 fail /
+  7 pending under load 34–52, one known red, the 14 others (timeouts, ENOTEMPTY, perf) all green rerun alone (7 files).
+- Differences from the design: the call's own `outcome.json` keeps `observedTokens:null` (written before decoding;
+  null for every completed call by design) — the fix shows in `failure-cause.json` `usageObserved:true`, the thrown
+  error's observed tokens and the run's booked phase usage. The plan/verify catch also covers later failures after a
+  completed turn (booked rather than null). `savedResultRecovery.ts` still refuses this stream shape (unchanged).
+- The implementer declined the relayed blanket criteria ruling for ccloop (ccloop Rule 15 wants the human to name
+  each criterion); it needed none.
+- `git push origin main` for ccloop was refused by the Tier 0 gate (chat authorization does not lift it). The push
+  and the Orca repin to that commit wait for the human. ccloop's `dist/` is not rebuilt yet: Orca implementers use it
+  as `ORCA_CCLOOP_BIN`, and a rebuild during their gates gives false reds.
+
+## W3 merged (2026-11-11)
+
+- Branch `worktree-agent-aeabfebf8f5133e9e` (3 commits: server listing order + codex result counts; Web wrap / tool join /
+  result counts / paging; criteria rewrites) rebased onto main (only docs commits in between) and fast-forwarded.
+- Rewrites (blanket ruling): `web/tests/agentTranscript.test.tsx:33`, `taskDetailTranscript.test.tsx:58,62,157`,
+  `liveRegion.test.tsx:131`, `runsTableOrder.test.tsx:47-56` — "call N" label and run detail moved below the table.
+- Differences: the paging range counts loaded events ("rows a–b of n loaded"; the API's offsets are bytes); running
+  tool rows are toned `info`; `leading-[1.55]` is an arbitrary Tailwind value. #244's 390px claim is pinned on structure
+  only (no browser measurement).
+- Gate (before rebase, 716 files): Web 207/207; root 6 reds = known `orchestration`, `executionDriverE2E` R-F and
+  `schedulerBridge` green alone, `startForm` and `allowanceHeldSettlement` also red on an unchanged main clone (load).
+  22 mutations all red (`/private/tmp/orca-e1111/w3-transcript/mutations.md`).
+
+## W7 merged (2026-11-11)
+
+- Branch `worktree-agent-a70119822c74c82c0` (8 commits: #256 Completed block, #258 memory offset paging + spec §12,
+  #257 count of major decisions outside the high tier, #84 overlay motion + DESIGN.md correction, #200 lilac theme)
+  rebased onto main after W3 (clean) and fast-forwarded.
+- Difference: #257 needed a small server change — `/api/todo` also answers `majorOutsideHighTier: {projectKey: n}`
+  (the default view reads only `/api/todo`); a fourth status "Major, outside the high tier" reads `/api/decisions`.
+  lilac's accent is `#5a4ee0` (same hue as `#847aff`, which is 3.4:1 on white).
+- Rewrites (blanket ruling): `web/tests/memoryView.test.tsx` truncation text and fake wire shape;
+  `tests/panel/decisionsApi.test.ts` `/api/todo` exact bytes; `themes.test.ts` THEME_PREFS order; `i18nPseudo` 207→208.
+- Gate: implementer's affected run (454 files) — every red green alone; 40 mutations all red
+  (`/private/tmp/orca-e1111/w7-web/mutations.md`). After the rebase onto W3: root and web typecheck 0, full Web suite
+  222/222 files, 1,991/1,991 tests (`/private/tmp/orca-e1111/w7-web/post-rebase-web.log`).
+
+## W6, W5, W4 merged; W2 rebased (2026-11-11, late)
+
+Each branch was rebased onto the then-current main, `npm run gen:cli-docs` rerun (no change each time), root and web
+typecheck 0, and the workstream's own criteria (plus accessMatrix / skill / refusalCoverage where touched) rerun on the
+rebased tree before `merge --ff-only`:
+- W6 (`orca project add`, owner-only Web add; #168 `check-docs-only-suite`): 5 files 46/46. No existing criterion
+  changed. Gate code read by the controller (the safety classifier had timed out on this agent): socket route refuses
+  dispatched runs, no-token and member tokens; the Web route skips the gate only when no principal is set (buildApi's
+  authMiddleware always sets one; only bare-mounted criteria have none). Real `~/.orca/projects.json` untouched (mtime
+  2026-10-17). The Web form is not hidden from members (they get `owner-required`).
+- W5 (agent settlement: charge-remaining-grant / proved known-zero open, release-unmetered person-only, booked to
+  `agent:<client>`; recovery-retry acknowledge open; fresh attempts/active time on an explicit retry in an unlimited
+  group via a `fresh-start` row in `work_grant_top_ups`, capped by the group's own attempts/activeMs room, else
+  `authored-budget-exhausted`; finite groups pinned by a golden captured first): 13 files 108/108. Rewrites in own
+  commits: settleUnknownUsage, singleCallUsageSettle, testerStuckStates, accessMatrix, overGrantExit 13, retryTopUp
+  T1–T4/T7/T15 (moved to a finite group), tokenPolicyStop.
+- W4 (#242, #246 hint, #250 refusal line + draft save seeds the estimator agent, #125 `clarify-call-failed` /
+  `split-call-failed`, #251 `answer --finish`): 12 root files 184/184, web requirements 27/27. Only rewrite:
+  `singleCallErrorCode` two assertions (§12). Two mutations stay green and are registered, not given invented criteria
+  (M4b unreachable condition, M11c redundant RETRYABLE entry). Open for the human: the Web "Answer and finish
+  clarifying" button does not ask the second confirmation Consensus asks when branches are open.
+- W2 (§2 activity kinds parity, §4 post-merge record, §5 group acceptance + `group recheck` / `group waive-acceptance`):
+  its worktree path is redacted in tool output, so the controller rebased its final commit in a new worktree
+  `.claude/worktrees/e-w2-acceptance` (branch `e/w2-group-acceptance`). Conflicts resolved by the controller:
+  `web/src/ControlGroupView.tsx` (the post-merge line moved into W3's run detail below the runs table);
+  `web/tests/i18nPseudo.test.tsx` (lilac + post-merge-check + group-acceptance ⇒ 210); `src/panel/humanOnly.ts`
+  (W2's `waive-acceptance: token` beside W5's `recovery-retry.acknowledge: open`). Typecheck 0 both.
+  Deviations W2 reports: no record ⇒ accepted when ≤1 task landed or a multi/dir group (a strict gate turned 28 red);
+  the record lives on the group body (`acceptance`, keyed by tip; no migration); not a recovery blocker (would block
+  the dispatch that fixes it); driverHarness now stops drivers at teardown (fixture rewrite).
+- Round gate on the combined tree: `test-affected --base=<round-D handoff commit>`, log
+  `/private/tmp/orca-e1111/round-gate.log`.
+
+## W2 merged; round gate; install (2026-11-11, late)
+
+- Round gate on the combined tree (W2 rebased on W3–W7; `test-affected --base=<round-D handoff commit>`, log
+  `/private/tmp/orca-e1111/round-gate.log`): 944 files (727 root, 217 web), typecheck 0; root 6,477 pass / 40 skipped /
+  2 red = known `orchestration` "admits a debug group…" + `criteriaBaseRun` "a restart while the re-run is in flight…"
+  (git `index.lock`; 18/18 alone, `/private/tmp/orca-e1111/round-rerun-criteriaBaseRun.log`); Web 1,915/1,915.
+- `e/w2-group-acceptance` fast-forwarded into main. Built (`npm run build`, web build), 7777 restarted with
+  `launchctl kickstart -k`; `orca status` all ok, ccloop pin still `095dbdf`.
+- ccloop main-tree `dist/` rebuilt with #249 after the Orca gates finished.
+- Not done, waits for the human: push ccloop (Tier 0 gate refused the agent's push), then repin Orca and push Orca and
+  ccmem. No paid run was needed this round.
