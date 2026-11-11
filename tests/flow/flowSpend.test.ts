@@ -281,3 +281,22 @@ describe("sumSpend (gaps §10)", () => {
     expect(sumSpend([])).toMatchObject({ tokens: null, unknownReason: "no tool runs", usd: null, usdReason: "the tool reports no money amount", runs: [] });
   });
 });
+
+// Tester follow-up E §7 (#125): a failed flow call now carries ccloop's detail to a step's execution. An intake's (and a
+// plan's) call result is stored under a strict schema with no `detail`, so the detail must stay off it: otherwise a
+// failed feedback-triage call that ccloop gave words for would throw inside its settlement instead of being retried.
+describe("a failed intake call with ccloop's detail settles and retries (#125)", { timeout: 60_000 }, () => {
+  it("the failed feedback-triage call is settled through the real port and the triage is asked again", async () => {
+    const t = await settledRun(); try {
+      const sent = await acceptMessage(t.w.deps, t.flowRunId, { by: "ann", via: "cli:test", requestId: "fb-1", kind: "feedback", target: { kind: "run" },
+        body: { text: "too sweet", anchors: [{ quote: "Engineers think better with a warm cup." }] } } as Parameters<typeof acceptMessage>[2]);
+      const run = runRows(t.w, t.groupId).filter((r) => r.active === 1 && r.body.purpose === "feedback-triage").at(-1)!;
+      expect(() => singleCallHandler("feedback-triage" as "flow-draft").complete({ store: t.w.store }, { ...run.body } as never, null, () => {
+        const row = JSON.parse(String(t.w.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.id)!.body));
+        t.w.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...row, state: "settled-restartable" }), run.id);
+      }, "codex-turn-failed", { outcome: "failed", failureCause: { cause: "transient", detail: "upstream 502" } })).not.toThrow();
+      await t.w.advance();
+      expect(getIntake(t.w.store, t.flowRunId, sent.seq)!.body.calls.filter((c) => c.purpose === "feedback-triage")).toHaveLength(2);
+    } finally { await t.w.dispose(); }
+  });
+});

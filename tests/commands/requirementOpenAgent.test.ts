@@ -44,6 +44,10 @@ describe("requirement open --agent (#143)", () => {
     expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], withDefault.dir)).stderr).toContain("pass --agent <installation> (see orca agent list)");
     const unreadable = await world({}, { "POST requirements": unselected, "GET operator/agent-preferences": { status: 500, body: { error: { code: "boom", message: "x", retryable: false } } } });
     expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], unreadable.dir)).stderr).toContain("pass --agent <installation> (see orca agent list)");
+    // The hint is for people: under --json it is not worked out, so the preferences are not read for it.
+    const json = await world({}, { "POST requirements": unselected });
+    expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a", "--json"], json.dir)).code).toBe(2);
+    expect(json.requests.filter((r) => r.path === "operator/agent-preferences")).toEqual([]);
   });
 
   it("under --json stdout stays exactly one JSON line (the hint is for people)", async () => {

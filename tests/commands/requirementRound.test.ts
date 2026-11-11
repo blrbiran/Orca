@@ -128,5 +128,9 @@ describe("requirement answer --finish, and saying that a plain answer drafts the
     expect(out.stderr).toContain("orca: round 2 is drafting (the round your last answer queued); wait for it and agree then, or answer with --finish next time to stop clarifying after a round\n");
     const answeredRound = await world({}, { ...view({ ...ROUND, state: "answered" }), ...refusal });
     expect((await cli(["requirement", "consensus", "g-alpha"], answeredRound.dir)).stderr).not.toContain("--finish");
+    // Another refusal while a round drafts (a call in flight) is not about the drafting round: no hint.
+    const other = { "POST groups/g-alpha/requirement/consensus": { status: 409, body: { error: { code: "group-state-invalid", message: "group-state-invalid:call-in-flight", commandRevision: 5, evidenceIds: [], retryable: false } } } };
+    const inFlight = await world({}, { ...view({ roundNo: 2, state: "drafting", result: null }), ...other });
+    expect((await cli(["requirement", "consensus", "g-alpha"], inFlight.dir)).stderr).not.toContain("--finish");
   });
 });
