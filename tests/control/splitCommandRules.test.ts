@@ -1,12 +1,14 @@
 /**
- * Tester issues #130 and #135 (Orca session f958ec3f, 2026-11-11): rules the split instruction states (NO_LOCKFILE_RULE,
- * CHECK_SOURCE_RULE) that a model sometimes ignores. Each ignored rule was a guaranteed failed paid run, so code now
+ * Tester issues #130, #135 and #136 (Orca session f958ec3f, 2026-11-11): rules the split instruction states
+ * (NO_LOCKFILE_RULE, CHECK_SOURCE_RULE, NO_VERIFY_ONLY_RULE) that a model sometimes ignores. Each ignored rule was a guaranteed failed paid run, so code now
  * hands such a draft back with a reason the next draft is told the meaning of:
  * - #130 `setup-lockfile:<task>:<command>`: `npm ci`, or an `npm install` / `npm i` that would write package-lock.json,
  *   in a repository whose root commits no package-lock.json or npm-shrinkwrap.json (npm ci fails; ccloop refuses a setup
  *   that changes non-ignored files).
  * - #135 `check-module-system:<task>` (multi: `<task>:<dir>`): a `node -e/--eval/-p` check calling `require(` where the
  *   package.json at that directory's root says `"type": "module"`.
+ * - #136 `check-git-state:<task>` (multi: `<task>:<dir>`): a check reading history or the diff instead of the delivered
+ *   files (`git diff --name-only`, `git diff --stat`, `git rev-parse`, `git log`); `git diff --exit-code` stays allowed.
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
@@ -112,6 +114,25 @@ describe("#135: a node -e check that require()s in an ES module package", () => 
   });
 });
 
+describe("#136: a check that inspects git history or the diff", () => {
+  it("hands back git diff --name-only/--stat, git rev-parse and git log", async () => {
+    for (const check of ["git diff --name-only HEAD | grep -x src/a.js", "git diff HEAD~1 --stat", "test \"$(git rev-parse HEAD)\" != base", "git log --oneline -1 | grep -q a", "git -C . log -1"]) {
+      const out = await validate("cjs", draft({ checks: [check] }));
+      // mutation: drop the check-git-state push in validateSplitDraft -> [] -> red
+      expect(out.reasons, check).toEqual(["check-git-state:T1"]);
+    }
+  });
+
+  it("keeps git diff --exit-code, which asserts the delivered files are unchanged by a formatter", async () => {
+    for (const check of ["git diff --exit-code", "npx prettier --write src && git diff --exit-code -- src"]) {
+      const out = await validate("cjs", draft({ checks: [check] }));
+      // mutation: match any `git diff` -> check-git-state:T1 -> red
+      expect(out.reasons, check).toEqual([]);
+      expect(out.ok, check).toBe(true);
+    }
+  });
+});
+
 describe("the multi-directory split, per write's directory", () => {
   const multi = (writes: MultiSplitOutput["tasks"][number]["writes"]): MultiSplitOutput => ({ notes: "",
     tasks: [{ taskId: "t", title: "t", labels: [], goal: "G", successCondition: "S", writes, dependsOn: [], traces: ["AC1"] }] });
@@ -140,14 +161,24 @@ describe("the multi-directory split, per write's directory", () => {
     expect(out.reasons).toEqual([]);
     expect(out.ok).toBe(true);
   });
+
+  it("hands back a git-state check in any write", async () => {
+    const out = await validateMulti(multi([
+      { dir: "main", targetPaths: ["src/a.js"], checks: ["npm test"] },
+      { dir: "other", targetPaths: ["src/a.js"], checks: ["git diff --name-only HEAD"] },
+    ]));
+    // mutation: drop the check-git-state push in validateMultiSplitDraft -> [] -> red
+    expect(out.reasons).toEqual(["check-git-state:t:other"]);
+  });
 });
 
 describe("the meanings the next draft is told", () => {
   it("explains each new reason, and a revision prompt carries the explanation", () => {
-    const reasons = ["setup-lockfile:T1:npm ci", "check-module-system:T1", "check-module-system:t:main"];
+    const reasons = ["setup-lockfile:T1:npm ci", "check-module-system:T1", "check-module-system:t:main", "check-git-state:T1"];
     for (const reason of reasons) expect(explainSplitReason(reason), reason).not.toBeNull();
     expect(explainSplitReason("setup-lockfile:T1:npm ci")).toMatch(/--no-package-lock/);
     expect(explainSplitReason("check-module-system:T1")).toMatch(/"type": "module"/);
+    expect(explainSplitReason("check-git-state:T1")).toMatch(/git diff --exit-code/);
     const prompt = buildSplitPrompt({ document: "doc", overview: { canonicalJson: "{}", hash: "0".repeat(64) },
       earlierDrafts: [{ draftNo: 1, output: draft(), feedback: null, reasons } as never] });
     for (const reason of reasons) expect(prompt).toContain(`${reason} -- ${explainSplitReason(reason)}`.replaceAll("\"", "\\\""));

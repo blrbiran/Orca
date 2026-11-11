@@ -262,6 +262,13 @@ function needsRootNpmLockfile(command: string): boolean {
   });
 }
 
+/**
+ * Issue #136 (session f958ec3f): a check reading history or the diff -- `git diff --name-only` / `--stat`, `git rev-parse`,
+ * `git log`, after any global options (`-C <dir>`, `-c <k=v>`, `--no-pager`) -- tests what was committed, not what was
+ * delivered, and breaks once an earlier task has landed. `git diff --exit-code` (a formatter left nothing changed) is not.
+ */
+const GIT_STATE_CHECK = /\bgit(?:\s+(?:-C\s+\S+|-c\s+\S+|--[\w-]+(?:=\S+)?))*\s+(?:rev-parse\b|log\b|diff\b[^;&|)]*\s--(?:name-only|stat)\b)/;
+
 /** Issue #135 (session f958ec3f): a check that evaluates code with `node -e/--eval/-p/--print` and calls `require(`. */
 const NODE_EVAL_REQUIRE = /\bnode\b[^;&|]*?\s(?:-e|-p|-pe|--eval|--print)(?:\s|=)[\s\S]*\brequire\s*\(/;
 
@@ -432,6 +439,10 @@ export async function validateMultiSplitDraft(input: {
     const tree = await treeOf(path, commit).catch(() => null);
     if (tree !== null && (await rootPackageType(path, commit, tree)) === "module") reasons.push(`check-module-system:${task.taskId}:${write.dir}`);
   }
+  // #136: as the single-repository validator's, per write.
+  for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
+    if (write.checks.some((check) => GIT_STATE_CHECK.test(check))) reasons.push(`check-git-state:${task.taskId}:${write.dir}`);
+  }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -513,6 +524,8 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   if (requiring.length > 0 && committedTree !== null && (await rootPackageType(input.repo, input.commit, committedTree)) === "module") {
     for (const task of requiring) reasons.push(`check-module-system:${task.taskId}`);
   }
+  // #136: NO_VERIFY_ONLY_RULE in code -- a check that reads git history or the diff instead of the delivered files.
+  for (const task of output.tasks) if (task.checks.some((check) => GIT_STATE_CHECK.test(check))) reasons.push(`check-git-state:${task.taskId}`);
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -590,6 +603,7 @@ export function explainSplitReason(reason: string): string | null {
     case "bugfix-test-scope": return "this bugfix uses reproduce-first but its writable target paths include no regression test; add a test path or choose a loop without reproduce-first";
     case "setup-lockfile": return "this setup command runs `npm ci`, or an `npm install` that writes package-lock.json, but the repository root commits no package-lock.json or npm-shrinkwrap.json: `npm ci` fails without one, and a setup that creates the lockfile is refused; omit `setup` if nothing needs installing, else use `npm install --no-package-lock`";
     case "check-module-system": return "this check runs `node -e` (or `--eval`, `-p`) with `require(`, but the package.json of the directory it runs in says \"type\": \"module\", so the repository's files are ES modules that require() cannot load as the check expects; run the repository's own test scripts (as `manifests` lists them), or load modules with `node --input-type=module -e` and `await import(...)`";
+    case "check-git-state": return "this check reads git history or the diff (`git diff --name-only`, `git diff --stat`, `git rev-parse` or `git log`), so it tests what was committed rather than the delivered files, and fails once an earlier task has landed; check the delivered files or run the repository's tests instead (`git diff --exit-code`, asserting a formatter changed nothing, is fine), and do not write verify-only tasks";
     case "check-write-scope": return "the task's check names a committed test file outside the task's targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file (or its directory as `<directory>/**`) to this task's targetPaths, or check only files this task may write";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";
