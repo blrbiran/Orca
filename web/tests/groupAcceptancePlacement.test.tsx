@@ -44,7 +44,7 @@ describe("the failed group acceptance in the group view (tester follow-up F §5;
     expect(rows()).toEqual([]);
   });
 
-  // mutation: the hint leaves out the blockers or the problem runs once the acceptance is counted -> not 3 -> red
+  // mutation: the `+ (acceptance failed ? 1 : 0)` term leaves the Problems hint -> 2 instead of 3 -> red
   it("adds one to what the Problems tab already counts", () => {
     mount(troubled());
     expect(problemHint()).toBe("2");
@@ -53,7 +53,8 @@ describe("the failed group acceptance in the group view (tester follow-up F §5;
     expect(problemHint()).toBe("3");
   });
 
-  // mutation: GroupAcceptanceProblem rendered in the Progress region (or in both) -> not inside the problem panel once -> red
+  // mutation: GroupAcceptanceProblem moved to the Progress region -> its panel is progress -> red
+  // mutation: rendered in Progress as well -> two rows -> red
   // mutation: rendered after the problem runs -> order -> red
   it("lives in the Problems region only, once, after the recovery blockers and before the problem runs", () => {
     mount(troubled(FAILED));
