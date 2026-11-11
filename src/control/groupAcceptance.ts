@@ -40,7 +40,8 @@ export function saveAcceptance(store: ControlStore, groupId: string, record: Gro
   recordProjectionChange(store, [groupId]);
 }
 
-export interface GroupAcceptanceCheck { controller: AbortController; tip: string; settled: { outcome: PostMergeOutcome } | { error: unknown } | null }
+/** `done` settles once the check is over, its scratch worktree removed included (driver stop() waits on it). */
+export interface GroupAcceptanceCheck { controller: AbortController; tip: string; settled: { outcome: PostMergeOutcome } | { error: unknown } | null; done: Promise<void> }
 
 export interface GroupAcceptanceDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository: (repoId: string) => string;
@@ -137,10 +138,11 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
   if (recorded !== null) deps.write(() => saveAcceptance(store, groupId, null));
   // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver checks again.
   if (deps.stopped()) return false;
-  const entry: GroupAcceptanceCheck = { controller: new AbortController(), tip, settled: null };
-  checks.set(groupId, entry);
-  void runAcceptance(deps, repo, groupId, tip, setup, commands, timeoutMs, entry.controller.signal)
+  const controller = new AbortController();
+  const entry: GroupAcceptanceCheck = { controller, tip, settled: null, done: Promise.resolve() };
+  entry.done = runAcceptance(deps, repo, groupId, tip, setup, commands, timeoutMs, controller.signal)
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
+  checks.set(groupId, entry);
   return recorded !== null;
 }
 

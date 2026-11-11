@@ -1753,6 +1753,9 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
+      // Tester follow-up E §5: an aborted group acceptance check is waited for until its scratch worktree is gone, so a
+      // restart (or anything removing the state directory) never races its git or its commands. It records nothing.
+      await Promise.all([...(context.acceptanceChecks?.values() ?? [])].map((check) => check.done));
       await stopping;
     },
     get crashed() { return crashed; },

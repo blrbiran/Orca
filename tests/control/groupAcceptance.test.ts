@@ -101,6 +101,25 @@ describe("a group is accepted on its final tip before it is done (tester follow-
     } finally { await t.h.dispose(); }
   });
 
+  // A stopped driver leaves no acceptance check half-done: stop() aborts it and waits until its scratch worktree is gone, so
+  // whatever comes next (a restart, a test's teardown removing the state directory) never races its git or its commands.
+  it("stop() aborts a running acceptance check and returns only once its scratch worktree is removed, recording nothing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orca-acc-"));
+    const started = join(dir, "started");
+    const check = `case "$PWD" in *group-acceptance-*) touch '${started}'; sleep 30 ;; *) true ;; esac`;
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [check] }); try {
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => existsSync(started));
+      const before = Date.now();
+      await driver.stop();
+      expect(Date.now() - before).toBeLessThan(15_000);
+      expect(existsSync(groupAcceptancePathOf(t.deps.roots, "g"))).toBe(false);
+      expect(group(t).acceptance).toBeUndefined();
+      expect(acceptanceRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("a group with one landed task records not-needed, runs nothing, writes no acceptance row, and is done", async () => {
     const { log, flag, check } = scratch();
     writeFileSync(flag, "red\n");
