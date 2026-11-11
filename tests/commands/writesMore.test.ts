@@ -77,6 +77,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["recovery", "retry", "--group", "g-al"], "recovery/retry", 5, { scope: "group", groupId: "g-alpha" }],
   // Tester #103 (2026-10-28): the panel's charge-and-retry of a single call blocked on unknown usage, from the CLI.
   [["recovery", "retry", "--run", "run-1", "--acknowledge", "charge-remaining-grant"], "recovery/retry", 5, { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" }],
+  // Tester follow-up F §2 (#116): or the call's observed floor, approximate.
+  [["recovery", "retry", "--run", "run-1", "--acknowledge", "charge-observed-floor"], "recovery/retry", 5, { scope: "run", runId: "run-1", acknowledge: "charge-observed-floor" }],
 ];
 
 describe("project, decision, correction, agent, usage, orchestration, recovery writes (spec §4)", () => {
@@ -89,7 +91,9 @@ describe("project, decision, correction, agent, usage, orchestration, recovery w
     expect(posts.map((p) => ({ path: p.path, expectedRevision: p.expectedRevision, payload: p.payload }))).toEqual([{ path, expectedRevision: revision, payload }]);
   });
 
-  it("--acknowledge goes only with --run and only as charge-remaining-grant, refused before anything is sent (tester #103)", async () => {
+  // Ruling (2026-11-12, tester follow-up F): #116 「要改」 admits charge-observed-floor beside charge-remaining-grant on a
+  // single call's retry, so the title no longer says "only as charge-remaining-grant"; the refused cases are unchanged.
+  it("--acknowledge goes only with --run and only as charge-remaining-grant or charge-observed-floor, refused before anything is sent (tester #103)", async () => {
     for (const argv of [["recovery", "retry", "--group", "g-al", "--acknowledge", "charge-remaining-grant"], ["recovery", "retry", "--run", "run-1", "--acknowledge", "release-unmetered"]]) {
       const w = await world();
       const out = await cli([...argv, "--json"], w.dir);
