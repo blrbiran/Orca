@@ -106,3 +106,70 @@ hatch covers the cases the tester showed; a policy that skips checks by default 
 - **Q3.** `task accept-attempt` human-only (recommended), or also an agent with a person token's delegation?
 - **Q4.** Should a finite group keep today's per-task ceilings exactly (recommended), or also switch to expectations
   under the group limit?
+
+## 7. Review round 1 and the answers taken (2026-11-11, Orca session `f958ec3f`)
+
+The human was away and asked the session to proceed on its own recommendations and report them for review afterwards
+("这一轮执行过程中如果有问题，先按你的建议执行。执行完在最后阶段报给我审核"), and approved rewriting necessary criteria for
+this round ("这次批准改写所有必要的判据"). An independent reviewer read this proposal against the code at the commit that
+added it. §1–§6 are kept as written; **this section wins where they disagree.**
+
+**Answers.** Q1: **A**. Q2: the estimator's attempts and active time are **advisory too** (an applied `activeMs` also
+shrinks the per-attempt timeout, `executionSnapshot.ts` around the freeze block; "apply when larger" would give one field
+two meanings). Q3: `task accept-attempt` is a `human-only` verb with socket tier `token` — an owner in the Web UI, or a
+socket agent carrying an owner's person token; a run Orca dispatched is always refused (the existing machinery; there is
+no Web-only tier). Q4: finite groups keep today's per-task ceilings **exactly** (byte-identical).
+
+**Corrected citations (§2).** Apply: `suggestedOperations` (proposal-edit) and `suggestedLoopActions` (set-task-loop) in
+`budgetSuggestions.ts`, re-checked by `verifyModelField` in `webService.ts` at edit and again at confirm. Dispatch:
+`dispatchedPolicy` in `executionDriver.ts` (`withinGrant` is the helper above it). The null grant with no binders comes
+from `fundedAllowance.ts`, the envelope's `tokenPolicy` from `webDispatch.ts`; the CLI "unlimited (default, not
+estimated)" lines are in `src/commands/domains/verbs.ts`. ccloop: `parkAllowance` and the live-threshold suppression for
+group/cap binders are in `runLoop.ts`; a fully funded finite task carries no `tokenPolicy` and keeps the mid-call stop.
+
+**Option A, made precise.**
+1. Scope: **task work** amounts only (tokens, attempts, activeMs) in a group whose `limit.tokens` is null. Handoff and
+   goal-review reserves are finite-only amounts and keep today's apply behaviour.
+2. Where the expectation lives: **derived when the view is read**, not stored — the task's work tokens from the newest
+   ready estimate whose `planHash` matches the plan, with its `estimateId` and `stale` flag. Estimates are immutable
+   rows and none is created after confirm, so this needs no write, no schema change and no migration.
+3. The suggestion module skips task-work dimensions when the group's token limit is null (the view gains the group
+   limit structurally), and the **server refuses** `model` provenance on task-work amounts in an unlimited group
+   (proposal-edit and set-task-loop), so an old Web bundle cannot set a ceiling either. A person's explicit (`human`)
+   finite tokens are still accepted and keep the ceiling and #225's mid-call stop.
+4. Overrun is shown: expected vs used (ratio; "unknown" when usage is unknown) on the task, the board card and the CLI.
+5. Wording: CLI `apply-estimate` in an unlimited group says the estimate is now the expectation (not "already matches /
+   nothing to apply"); `group show` / `proposal show` name the expectation instead of "ready but not applied"; the
+   "to estimate:" hint says an estimate is advisory in unlimited groups. Rewriting the pinned lines in
+   `tests/commands/unestimatedDefault.test.ts` is covered by the round's approval; #145/#160 behaviour (unestimated tasks
+   confirm unlimited) is unchanged.
+6. Spend caps are "enforced at claim and at phase boundaries; one phase can overshoot" (ccloop switches the live
+   threshold off when a cap binds) — not a hard bound.
+7. Consequences recorded, not changed now: (a) attempts and active time are counted across a task's whole run lineage
+   under optional-v1, so a first run that uses all 3 default attempts cannot be retried without a top-up — the same
+   shape as #234 in the attempts dimension; it goes to the human as its own question. (b) An unlimited group's
+   integration-conflict run gets the 3,000,000 default instead of the largest estimate.
+8. No retroactive change: confirmed groups keep their frozen contracts; an editable proposal that already carries finite
+   `model` tokens confirms as before. A person converts one with a proposal-edit to `tokens: null` (provenance human).
+
+**`task accept-attempt`, corrected (§4).**
+1. The attempt commit comes from the **run's archive snapshot** (HEAD bundle, index and full tree), rebuilt into a fresh
+   repository; refused by name when the snapshot is missing or partial. `refs/ccloop/run/attempts/N` is shared and
+   overwritten by later runs, and the workspace is deleted after a failed run is settled. `--attempt` is dropped: only
+   the last attempt has lasting evidence.
+2. Before checks: the same write-set harvest (out-of-bounds paths refused) and criteria-change classification as the
+   success path (an attempt that weakened its own tests is refused or flagged exactly as stepC/stepD would).
+3. Two-phase: the command records the intent; the driver merges onto the group branch tip in memory and runs the task's
+   setup and required checks **on the merged tree** with Orca's own runner (the post-merge check path), writes nothing
+   until a compare-and-swap of the group branch, and re-merges and re-checks if the tip moved. A restart re-checks.
+4. On pass: one merge commit (second parent = the attempt), an acceptance artifact `review: "operator-reviewed"`
+   (principal, note, commandId, attemptSha, merged commit, setup and check commands with exit codes and output tails),
+   an activity row, a code-authored record in `.decisions/<runId>.jsonl` inside the landing commit; the agent's own
+   reported decisions ride along unchanged, none are invented. A new, named writer sets `work.status = "done"`.
+5. Refused when: the run is not terminal, not settled, or succeeded; the task is done; a debug ladder holds the run; the
+   group is reconciling, stopped, archived, a flow child, multi-dir or a `dir` project (v1).
+6. Accounting is untouched (byte-identical usage, ledger, allocations).
+7. The verify-only analogy in §4 is wrong: that path is a dispatched ccloop run that only re-runs checks under
+   `commandChecksDecideGoal`; accept-attempt runs no ccloop and no agent.
+
+**Order.** A and overrun visibility first; accept-attempt second (larger, touches the landing path).
