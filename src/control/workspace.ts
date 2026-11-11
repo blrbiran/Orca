@@ -43,6 +43,8 @@ export const extraLandingPathOf = (roots: WorkspaceRoots, runId: string, key: st
 export const conflictPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `conflict-${runId}`);
 /** Ruling R2 (#241): the scratch worktree a landing's merged tree is checked in before the work branch moves. */
 export const postMergeCheckPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `post-merge-${runId}`);
+/** Tester follow-up E §5: the scratch worktree a group's acceptance check runs in, at the group branch tip. */
+export const groupAcceptancePathOf = (roots: WorkspaceRoots, groupId: string): string => join(roots.workspacesRoot, `group-acceptance-${groupId}`);
 export const reconcileRunsDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `reconcile-${runId}`);
 /** Syncskill integration spec §10.6: the run's skill snapshot, the plugin dir ccloop is handed (runIds are `run-<uuid>`, so no collision). */
 export const skillsPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `skills-${runId}`);

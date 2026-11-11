@@ -12,6 +12,9 @@ import type { ControlStore } from "./store.js";
  * - it is a system verdict group (controller decision, spec §3.1): a criteria-review judge or a ladder group whose verdict is
  *   recorded (`systemDebug.settled`, written by the settle pass, webService.ts). A judge's justified verdict is a
  *   D14-blocked task (protect-acceptance-criteria spec §5: "settled by its run"), which never meets the first rule.
+ * Tester follow-up E §5 (#241) overrides D1: `delivered` also needs the group accepted on its final tip (prerequisiteDone
+ * reads groupAcceptance.ts's record: passed, not-needed, not-run or waived); a failed or not-yet-run acceptance keeps it
+ * out of done.
  * A `blocked` group is never touched (Final review I1: the block is its brake). The status change and its activity row are
  * one savepoint per group, so one group's failure is its own. Answers the groups it moved.
  */

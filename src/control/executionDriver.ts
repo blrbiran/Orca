@@ -55,6 +55,7 @@ import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
 import { acceptPending, stepAcceptAttempt, type AcceptCheck } from "./acceptAttemptDriver.js";
+import type { GroupAcceptanceCheck } from "./groupAcceptance.js";
 import { readDebugMark } from "./debugChecks.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { correctionTargetOf } from "../corrections/target.js";
@@ -167,6 +168,8 @@ export interface DriverContext {
   postMergeChecks?: Map<string, PostMergeCheck>;
   /** Reviewed acceptance (spec 2026-11-11 §7): an accepted attempt's checks in flight, by run; a restart merges and checks again. */
   acceptChecks?: Map<string, AcceptCheck>;
+  /** Tester follow-up E §5 (#241): group acceptance checks in flight, by group; a restart checks a tip with no record again. */
+  acceptanceChecks?: Map<string, GroupAcceptanceCheck>;
   /**
    * Tester #229/#230 (plan 2026-11-10 follow-up B, T1): transient step-E failures already retried, by run. In memory: a
    * restart grants at most TRANSIENT_E_RETRIES more, which is still bounded, and needs no drive-record field.
@@ -1580,7 +1583,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), acceptChecks: new Map(), transientRetries: new Map() };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), acceptChecks: new Map(), acceptanceChecks: new Map(), transientRetries: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
@@ -1671,6 +1674,16 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     // after the runs: an await before them would let a stop() issued with the round land before the round's first step.
     try { if (await exportPendingRequirements(deps)) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Tester follow-up E §5 (#241): a group whose tasks are all done is accepted on its final tip before the integration
+    // pass delivers it and the done pass marks it. Loaded on first use, not imported (the import-cycle rule, as groupDone).
+    try {
+      const { acceptGroups } = await import("./groupAcceptance.js");
+      if (await acceptGroups({
+        store: deps.store, roots: deps.roots, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate,
+        ...(deps.dispatchedPersonDir === undefined ? {} : { dispatchedPersonDir: deps.dispatchedPersonDir }),
+        write: (action) => write(deps, action), stopped: () => context.stopped,
+      }, context.acceptanceChecks ?? (context.acceptanceChecks = new Map()))) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
@@ -1732,12 +1745,14 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       // Ruling R2: a post-merge check likewise; nothing moved, so the next driver merges and checks again.
       for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       // Belt and braces for the guard in startDebugCheck: anything started while the last round finished is aborted too.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       await stopping;
     },
     get crashed() { return crashed; },

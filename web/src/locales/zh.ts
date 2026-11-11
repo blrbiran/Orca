@@ -2072,7 +2072,7 @@ export const zh: Translation<typeof en> = {
       archived: "已归档", unarchived: "已取消归档", "correction-closed": "纠正已关闭", "debug-open-failed": "调试组未能打开",
       "ladder-skipped": "未自动重试", "group-done": "组已完成", "quota-probe": "额度探针",
       "attempt-accepted": "尝试已接受", "attempt-accept-refused": "尝试未被接受",
-      "post-merge-check": "合并后检查",
+      "post-merge-check": "合并后检查", "group-acceptance": "组验收",
     },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
     proposalState: { editable: "可编辑", confirmed: "已确认" },

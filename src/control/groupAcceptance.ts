@@ -1,0 +1,155 @@
+import { recordActivity } from "./activity.js";
+import { isGroupArchived } from "./archivedMark.js";
+import { runCheckSequence, type PostMergeOutcome } from "./checkCommand.js";
+import { groupRepoId, isDirGroup } from "./dirGroup.js";
+import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+import { isMultiGroup } from "./multiGroup.js";
+import { recordProjectionChange } from "./projectionJournal.js";
+import { QUIET_GIT, groupAcceptancePathOf, removeOwnPath, revParse, workBranchRef, type WorkspaceRoots } from "./workspace.js";
+import { unionSetup } from "./setupUnion.js";
+import { isDirFlowGroup } from "../flow/groups.js";
+import { git } from "../scheduler/gitExec.js";
+import type { AdmissionGate } from "./admissionGate.js";
+import { acceptanceOf, landedTaskCount, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import type { ControlStore } from "./store.js";
+
+/**
+ * Tester follow-up E §5 (#241): a group is accepted on its final tree before it is delivered and done. Each task's required
+ * checks ran on its own attempt's tree, and (ruling R2) on its merge; a later landing can still break an earlier task's
+ * checks unseen -- the tester's group had every task done while its final `npm test` failed. Overrides review-exit spec
+ * 2026-11-05 §3.1 D1 ("all tasks done and landed => done automatically"): done also needs a satisfied acceptance.
+ *
+ * A pass by code (Rule 5), every driver round before the integration pass. For each group whose tasks are all done with
+ * no active run: the union of the done tasks' setup commands, then the union of their required checks (each once, first
+ * seen order), in a scratch worktree at the tip of `orca/<g>`, off the round (as the post-merge check), each command bounded
+ * by the longest `perAttemptTimeoutMs` among the tasks. The outcome is kept on the group body as `acceptance`, keyed by the
+ * tip it ran on, so a restart does not run again what is recorded for the current tip, and a tip that moved (a retried task,
+ * a person's fix) is checked again. Not needed when at most one task landed (its own checks ran on that tree); a
+ * multi-directory or folder group is recorded `not-run` (a known gap: no single tree to check). passed, failed and waived
+ * write a `group-acceptance` activity row; not-needed and not-run write the record only (as §4's post-merge record).
+ */
+export * from "./groupAcceptanceRecord.js";
+
+/** Writes (or removes) the record inside the caller's transaction, re-reading the body there. */
+export function saveAcceptance(store: ControlStore, groupId: string, record: GroupAcceptance | null): void {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined) return;
+  const body = JSON.parse(String(row.body)) as Record<string, unknown>;
+  if (record === null) delete body.acceptance; else body.acceptance = record;
+  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(body), groupId);
+  recordProjectionChange(store, [groupId]);
+}
+
+export interface GroupAcceptanceCheck { controller: AbortController; tip: string; settled: { outcome: PostMergeOutcome } | { error: unknown } | null }
+
+export interface GroupAcceptanceDeps {
+  store: ControlStore; roots: WorkspaceRoots; resolveRepository: (repoId: string) => string;
+  dispatchedPersonDir?: string; admissionGate?: AdmissionGate;
+  write: <T>(action: () => T) => T; stopped: () => boolean;
+}
+
+/** Every task done and no run of any phase active (integrationPass.ts groupComplete, read here to stay off its imports). */
+function tasksComplete(store: ControlStore, groupId: string): boolean {
+  const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
+    .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
+  if (tasks.length === 0 || tasks.some((work) => work.status !== "done")) return false;
+  return store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) === undefined;
+}
+
+/** The union the acceptance runs: setup first, then checks, each command once in first-seen order; the longest bound. */
+export function acceptanceCommands(store: ControlStore, groupId: string): { setup: string[]; checks: string[]; timeoutMs: number } {
+  const contracts = store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid").all(groupId)
+    .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string; taskId?: string | null })
+    .filter((work) => work.kind === "task" && work.status === "done" && typeof work.taskId === "string")
+    .map((work) => readConfirmedTaskExecution(store, groupId, work.taskId!).contract);
+  const checks: string[] = [];
+  for (const contract of contracts) for (const command of contract.verification.requiredChecks) if (!checks.includes(command)) checks.push(command);
+  return {
+    setup: unionSetup(contracts.map((contract) => contract.context.setupCommands)) ?? [],
+    checks,
+    timeoutMs: Math.max(...contracts.map((contract) => contract.executionPolicy.perAttemptTimeoutMs)),
+  };
+}
+
+/** One round of the pass; answers whether anything was recorded. */
+export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string, GroupAcceptanceCheck>): Promise<boolean> {
+  const { store } = deps;
+  let moved = false;
+  for (const row of store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
+    if (deps.stopped()) break;
+    const groupId = String(row.id);
+    try {
+      if (await acceptGroup(deps, checks, groupId, JSON.parse(String(row.body)) as Record<string, unknown>)) moved = true;
+    } catch (error) {
+      // This group's alone (a repository that does not resolve, a contract that does not read); tried again next round.
+      process.stderr.write(`orca-driver: group ${groupId}: acceptance: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+  return moved;
+}
+
+async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupAcceptanceCheck>, groupId: string, body: Record<string, unknown>): Promise<boolean> {
+  const { store } = deps;
+  // Any confirmed group whose tasks are done, whatever its status: the integration pass delivers a blocked group's work too.
+  if (body.planHash === undefined || isGroupArchived(store, groupId)) return false;
+  if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) return false;
+  if (!tasksComplete(store, groupId)) return false;
+  const recorded = acceptanceOf(body);
+  if (isMultiGroup(store, groupId) || isDirGroup(store, groupId) || isDirFlowGroup(store, groupId)) {
+    if (recorded?.result === "not-run") return false;
+    const why = isMultiGroup(store, groupId) ? "multi-repo" : "dir";
+    deps.write(() => saveAcceptance(store, groupId, { tip: null, result: "not-run", why, commands: [], at: store.now() }));
+    return true;
+  }
+  const repo = deps.resolveRepository(groupRepoId(store, groupId));
+  const tip = await revParse(repo, workBranchRef(groupId));
+  const inFlight = checks.get(groupId);
+  if (inFlight !== undefined) {
+    if (inFlight.settled === null) {
+      if (inFlight.tip === tip) return false;
+      // The tip moved under a running check: its tree will never be delivered. Stop it; the next round checks the new tip.
+      inFlight.controller.abort();
+      checks.delete(groupId);
+      return false;
+    }
+    checks.delete(groupId);
+    if ("error" in inFlight.settled) throw inFlight.settled.error;
+    if (inFlight.tip !== tip) return false;
+    const { failure, commands } = inFlight.settled.outcome;
+    const record: GroupAcceptance = { tip, result: failure === null ? "passed" : "failed", commands, at: store.now(),
+      ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }) };
+    deps.write(() => {
+      saveAcceptance(store, groupId, record);
+      recordActivity(store, { groupId, kind: "group-acceptance", body: { ...record } });
+    });
+    return true;
+  }
+  if (recorded !== null && recorded.tip === tip) return false;
+  if (landedTaskCount(store, groupId) <= 1) {
+    deps.write(() => saveAcceptance(store, groupId, { tip, result: "not-needed", why: "single-landing", commands: [], at: store.now() }));
+    return true;
+  }
+  const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId);
+  // A record for an earlier tip says nothing about this one: removed before the check starts, so nothing reads it as current.
+  if (recorded !== null) deps.write(() => saveAcceptance(store, groupId, null));
+  // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver checks again.
+  if (deps.stopped()) return false;
+  const entry: GroupAcceptanceCheck = { controller: new AbortController(), tip, settled: null };
+  checks.set(groupId, entry);
+  void runAcceptance(deps, repo, groupId, tip, setup, commands, timeoutMs, entry.controller.signal)
+    .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
+  return recorded !== null;
+}
+
+async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, tip: string, setup: string[], checks: string[], timeoutMs: number, signal: AbortSignal): Promise<PostMergeOutcome> {
+  const path = groupAcceptancePathOf(deps.roots, groupId);
+  await removeOwnPath(repo, deps.roots, path);
+  await git(repo, [...QUIET_GIT, "worktree", "add", "--detach", path, tip]);
+  // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
+  const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
+  try {
+    return await runCheckSequence(path, setup, checks, timeoutMs, as, signal);
+  } finally {
+    await removeOwnPath(repo, deps.roots, path).catch(() => undefined);
+  }
+}

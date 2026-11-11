@@ -1804,6 +1804,8 @@ export const activityKindSchema = z.enum([
   "attempt-accepted", "attempt-accept-refused",
   // Tester follow-up E §4 (#245): a post-merge check's outcome, written with the landing or the block.
   "post-merge-check",
+  // Tester follow-up E §5 (#241): a group acceptance passed, failed, or was waived.
+  "group-acceptance",
 ]);
 export const activityEntrySchema = z
   .object({

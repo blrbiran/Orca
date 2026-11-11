@@ -106,7 +106,7 @@ const activityKind = {
   archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed", "debug-open-failed": "debug group not opened",
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
   "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
-  "post-merge-check": "post-merge check",
+  "post-merge-check": "post-merge check", "group-acceptance": "group acceptance",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;

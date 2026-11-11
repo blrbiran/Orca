@@ -31,9 +31,9 @@ import { netChangeSet } from "../scheduler/harvest.js";
 import { markersRemaining, materialiseConflict, pinConflictCommit, rebuildMergeCommit, synthesizeReconcileContractOf } from "../scheduler/reconcile.js";
 import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveDriverRun, write, type DriverContext, type DriverRun, type ExecutionDriverDeps } from "./executionDriver.js";
 import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, postMergeCheckPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
-import { runCheckRecorded, type CheckFailure } from "./checkCommand.js";
+import { runCheckSequence, type CheckFailure, type PostMergeOutcome } from "./checkCommand.js";
 import { recordActivity } from "./activity.js";
-import type { CheckRunCommand, PostMergeCheckRecord, ReconcileRecord } from "./driveRecord.js";
+import type { PostMergeCheckRecord, ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PlanFile, PlanTask } from "../scheduler/planFile.js";
 import type { FrozenSlot } from "./agentSelection.js";
@@ -448,7 +448,6 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
  * A red blocks at D; `orca recovery retry --run <id>` (resumeBlockedDriverRun: back to `collected`) merges onto the
  * then-current tip and checks again, after a person fixed the group branch.
  */
-export interface PostMergeOutcome { failure: CheckFailure | null; commands: CheckRunCommand[] }
 export interface PostMergeCheck { controller: AbortController; old: string; next: string; settled: { outcome: PostMergeOutcome } | { error: unknown } | null }
 /** For a step called outside a driver (a criterion calling stepD itself); a driver owns its own map. */
 const unownedPostMergeChecks = new Map<string, PostMergeCheck>();
@@ -484,23 +483,6 @@ async function runPostMergeCheck(deps: ExecutionDriverDeps, targetRepo: string, 
   } finally {
     await removeOwnPath(targetRepo, deps.roots, path).catch(() => undefined);
   }
-}
-
-/**
- * Setup commands, then checks, each as ccloop runs a required check; the first that does not exit 0 stops it. Every
- * command that ran is recorded with its exit and wall-clock time (tester follow-up E §4, #245); a setup command is named
- * `setup: <cmd>` there and in the failure.
- */
-export async function runCheckSequence(cwd: string, setup: readonly string[], checks: readonly string[], timeoutMs: number, as: Parameters<typeof runCheckRecorded>[3], signal?: AbortSignal): Promise<PostMergeOutcome> {
-  const commands: CheckRunCommand[] = [];
-  const steps = [...setup.map((command) => ({ command, name: `setup: ${command}` })), ...checks.map((command) => ({ command, name: command }))];
-  for (const step of steps) {
-    const started = performance.now();
-    const answer = await runCheckRecorded(cwd, step.command, timeoutMs, as, signal);
-    commands.push({ command: step.name, exit: answer.exit, ms: Math.round(performance.now() - started) });
-    if (answer.exit !== "0") return { failure: { ...answer, command: step.name }, commands };
-  }
-  return { failure: null, commands };
 }
 
 /** blockRun, with the post-merge record on the drive and its activity row in the same transaction (§4). */

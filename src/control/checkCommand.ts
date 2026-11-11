@@ -1,5 +1,6 @@
 import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, spawnRunChild } from "./integrationGit.js";
+import type { CheckRunCommand } from "./driveRecord.js";
 
 /**
  * One command Orca runs itself the way ccloop runs a contract's required checks (runLoop.js runRequiredChecks): `sh -lc` in
@@ -40,4 +41,24 @@ export async function firstFailingSetup(cwd: string, commands: readonly string[]
     if (failure !== null) return failure;
   }
   return null;
+}
+
+/** What a sequence of setup and check commands did: the first failure (null when all passed) and every command that ran. */
+export interface PostMergeOutcome { failure: CheckFailure | null; commands: CheckRunCommand[] }
+
+/**
+ * Setup commands, then checks, each as ccloop runs a required check; the first that does not exit 0 stops it. Every
+ * command that ran is recorded with its exit and wall-clock time (tester follow-up E §4, #245); a setup command is named
+ * `setup: <cmd>` there and in the failure.
+ */
+export async function runCheckSequence(cwd: string, setup: readonly string[], checks: readonly string[], timeoutMs: number, as: Parameters<typeof runCheckRecorded>[3], signal?: AbortSignal): Promise<PostMergeOutcome> {
+  const commands: CheckRunCommand[] = [];
+  const steps = [...setup.map((command) => ({ command, name: `setup: ${command}` })), ...checks.map((command) => ({ command, name: command }))];
+  for (const step of steps) {
+    const started = performance.now();
+    const answer = await runCheckRecorded(cwd, step.command, timeoutMs, as, signal);
+    commands.push({ command: step.name, exit: answer.exit, ms: Math.round(performance.now() - started) });
+    if (answer.exit !== "0") return { failure: { ...answer, command: step.name }, commands };
+  }
+  return { failure: null, commands };
 }

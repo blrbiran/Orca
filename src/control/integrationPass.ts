@@ -1,4 +1,5 @@
 import { readdirSync } from "node:fs";
+import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { flagDecision } from "./flaggedDecisions.js";
 import { ORCHESTRATION_ACTOR } from "./orchestration.js";
@@ -186,7 +187,10 @@ export function groupComplete(store: ControlStore, groupId: string): boolean {
   const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
     .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
   if (tasks.some((work) => work.status !== "done")) return false;
-  return store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId) === undefined;
+  if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined) return false;
+  // Tester follow-up E §5 (#241): a complete group is delivered only once it is accepted on its final tip.
+  const body = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  return body !== undefined && acceptanceSatisfied(store, groupId, JSON.parse(String(body.body)));
 }
 
 /**
