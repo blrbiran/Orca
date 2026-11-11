@@ -26,3 +26,28 @@ An agent should receive checks it can satisfy using the files its task may chang
 ## Constraints and verification
 
 No new protocol field or database migration. English code, tests, spec and skill; Chinese handoff. Targeted tests first, with a demonstrated red criterion for each new behavior, then `npm test` (which chooses affected tests and runs typecheck) per Orca Rule 18. No release-only verification or paid model call. A separate design will address #158's missing OMP malformed-final capsule; this document does not weaken its recovery gates.
+
+## Correction (2026-11-11, tester follow-up E §9)
+
+Recorded by implementer W6 of tester follow-up E (branch `worktree-agent-a1c2084145e7fd802`, on top of
+`docs(spec): tester follow-up E -- the rulings and the design for #241-#258 and the open items`). The text above stays as
+written; this section overrides part of it.
+
+- The #168 bullet "This is guidance, not a new refusal rule" no longer holds. By the human's ruling recorded in
+  `docs/superpowers/specs/2026-11-11-tester-followup-e-design.md` §0 and §9, split validation hands a draft back with
+  `check-docs-only-suite:<task>` (multi-directory: `check-docs-only-suite:<task>:<dir>`) when every target path of a
+  task (of a write) is documentation and one of its checks runs a repository-wide suite. The tester lost 116k tokens to
+  such a task, and #130/#135/#136 had already moved prompt rules into validation.
+- Documentation is `*.md`, `*.mdx`, `*.rst`, `*.txt`, `docs/**` (anything under the root's `docs/`), `README*`,
+  `CHANGELOG*` and `LICENSE*`. A repository-wide suite is `npm test` / `npm run test` (pnpm, yarn alike), `vitest` /
+  `vitest run` and `jest` (bare or by `npx`), `pytest` (or `python -m pytest`) and `cargo test` with no positional argument,
+  `go test ./...`, and `make test`. A check with a path or filter, another script (`npm run test:docs`) or a changed
+  directory (`cd docs && npm test`) is not judged.
+- This rule is narrower in one way and wider in another than the guidance above. Narrower: it reads only the shape of
+  the check, not whether the suite is red at the base commit (nothing is run during split validation, as the third
+  bullet requires). Wider: a documentation-only task is now handed back even if its suite passes at the base commit;
+  that suite belongs to an implementation task or to the group acceptance (tester follow-up E §5).
+- The split instruction is unchanged (CHECK_OWNERSHIP_RULE keeps its bytes; the version stays 5), as for the #130, #135
+  and #136 hand-backs. The next draft learns the reason's meaning from `explainSplitReason`.
+- Criteria: `tests/control/splitCommandRules.test.ts`, describe "#168: a documentation-only task held to the
+  repository-wide suite", whose must-catch and must-not-catch tables list the samples.

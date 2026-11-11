@@ -184,3 +184,100 @@ describe("the meanings the next draft is told", () => {
     for (const reason of reasons) expect(prompt).toContain(`${reason} -- ${explainSplitReason(reason)}`.replaceAll("\"", "\\\""));
   });
 });
+
+/**
+ * Tester follow-up E §9 (#168): CHECK_OWNERSHIP_RULE in code. A task whose every target path is documentation, holding a
+ * required check that runs the repository-wide suite, is handed back `check-docs-only-suite:<task>` (multi:
+ * `<task>:<dir>`): the tester's documentation task could not repair an `npm test` failing in source it could not write.
+ * The two tables are the scanner's must-catch and must-not-catch samples; a check with a path, a filter, another script
+ * or another directory is not the repository-wide suite.
+ */
+describe("#168: a documentation-only task held to the repository-wide suite", () => {
+  let docs = { path: "", commit: "" };
+  beforeAll(() => {
+    const path = join(root, "docs-repo");
+    writeTree(path, {
+      "package.json": JSON.stringify({ name: "d", scripts: { test: "node --test", "test:docs": "node --test docs" } }), "package-lock.json": "{}\n",
+      "README.md": "# d\n", "docs/guide.md": "# guide\n", "src/a.js": "module.exports = 1;\n",
+    });
+    gitIn(path, "init", "-q", "-b", "main"); gitIn(path, "add", "-A"); gitIn(path, "commit", "-qm", "base");
+    docs = { path, commit: gitIn(path, "rev-parse", "HEAD") };
+  });
+  const validateDocs = (task: Partial<SplitOutput["tasks"][number]>) => {
+    const output = draft(task);
+    return validateSplitDraft({ output, repo: docs.path, commit: docs.commit, criterionIds: ["AC1"], adrIds: [],
+      plan: expandSplitDraft(output, { targetRepo: docs.path, ccloopBin: "/bin/false", runsDir: join(root, "runs"), groupId: "r", statement: "A.", acceptanceCriteria: [{ id: "AC1", text: "a changes." }] }) });
+  };
+
+  const SUITES = ["npm test", "npm run test", "CI=1 npm test -- --silent", "npm test 2>&1 | tail -n 5", "test -s README.md && npm test", "pnpm test", "yarn test",
+    "npx vitest run", "npx vitest", "vitest run --reporter=dot", "npx jest", "jest --ci", "pytest", "python3 -m pytest -q", "go test ./...", "cargo test", "make test"];
+  it("must catch: each repository-wide suite as a documentation task's check", async () => {
+    for (const check of SUITES) {
+      const out = await validateDocs({ targetPaths: ["README.md"], checks: [check] });
+      // mutation: drop the check-docs-only-suite push in validateSplitDraft -> [] -> red
+      expect(out.reasons, check).toEqual(["check-docs-only-suite:T1"]);
+      expect(out.ok, check).toBe(false);
+    }
+  });
+
+  it("must catch: every documentation path shape", async () => {
+    for (const targetPaths of [["docs/guide.md"], ["docs/**"], ["notes.txt"], ["guide.rst"], ["docs/api.mdx"], ["README.md", "CHANGELOG.md"], ["LICENSE"]]) {
+      const out = await validateDocs({ targetPaths, checks: ["npm test"] });
+      // mutation: drop the docs/ branch of documentationPath -> [] for docs/** -> red
+      expect(out.reasons, targetPaths.join(",")).toEqual(["check-docs-only-suite:T1"]);
+    }
+  });
+
+  const NARROW = ["test -s README.md", "grep -q x README.md", "npx vitest run tests/docs.test.ts", "npm test -- tests/docs.test.ts", "npm run test:docs",
+    "pytest tests/test_docs.py", "go test ./docs", "cargo test docs", "make docs", "make -C docs test", "cd docs && npm test", "npx markdownlint README.md", "jest README"];
+  it("must not catch: a check that reads the documents or runs a narrowed test", async () => {
+    for (const check of NARROW) {
+      const out = await validateDocs({ targetPaths: ["README.md"], checks: [check] });
+      // mutation: count any npm/vitest invocation as the suite (ignore positionals) -> check-docs-only-suite:T1 -> red
+      expect(out.reasons, check).toEqual([]);
+      expect(out.ok, check).toBe(true);
+    }
+  });
+
+  it("must not catch: a task that may also change source, or claims a directory that may hold it", async () => {
+    for (const targetPaths of [["src/a.js"], ["README.md", "src/a.js"], ["src/**"], ["**"]]) {
+      const out = await validateDocs({ targetPaths, checks: ["npm test"] });
+      // mutation: `some` for `every` in docsOnlySuite -> check-docs-only-suite:T1 for README.md + src/a.js -> red
+      expect(out.reasons, targetPaths.join(",")).toEqual([]);
+      expect(out.ok, targetPaths.join(",")).toBe(true);
+    }
+  });
+
+  it("judges each write of a multi-directory task by its own paths and checks", async () => {
+    const multi = (writes: MultiSplitOutput["tasks"][number]["writes"]): MultiSplitOutput => ({ notes: "",
+      tasks: [{ taskId: "t", title: "t", labels: [], goal: "G", successCondition: "S", writes, dependsOn: [], traces: ["AC1"] }] });
+    const validateMulti = (output: MultiSplitOutput) => {
+      const dirs = [{ key: "main", path: repos.cjs.path }, { key: "other", path: docs.path }];
+      const expanded = expandMultiSplitDraft(output, { targetRepo: repos.cjs.path, ccloopBin: "/bin/false", runsDir: join(root, "runs"), groupId: "r", statement: "G", successConditions: ["S"], dirs });
+      return validateMultiSplitDraft({ output, plan: expanded.plan, contracts: expanded.contracts, expandReasons: expanded.reasons,
+        paths: new Map([["main", repos.cjs.path], ["other", docs.path]]), commits: new Map([["main", repos.cjs.commit], ["other", docs.commit]]), criterionIds: ["AC1"], adrIds: [] });
+    };
+    const handedBack = await validateMulti(multi([
+      { dir: "main", targetPaths: ["src/a.js"], checks: ["npm test"] },
+      { dir: "other", targetPaths: ["docs/guide.md"], checks: ["npm test"] },
+    ]));
+    // mutation: drop the check-docs-only-suite push in validateMultiSplitDraft -> [] -> red
+    expect(handedBack.reasons).toEqual(["check-docs-only-suite:t:other"]);
+    const kept = await validateMulti(multi([
+      { dir: "main", targetPaths: ["src/a.js"], checks: ["npm test"] },
+      { dir: "other", targetPaths: ["docs/guide.md"], checks: ["grep -q guide docs/guide.md"] },
+    ]));
+    expect(kept.reasons).toEqual([]);
+    expect(kept.ok).toBe(true);
+  });
+
+  it("tells the next draft what the reason means, in the revision prompt", () => {
+    const reason = "check-docs-only-suite:T1";
+    // mutation: drop the check-docs-only-suite case in explainSplitReason -> null -> red
+    expect(explainSplitReason(reason)).toMatch(/every target path of this task is documentation/);
+    expect(explainSplitReason("check-docs-only-suite:t:other")).toBe(explainSplitReason(reason));
+    const prompt = buildSplitPrompt({ document: "doc", overview: { canonicalJson: "{}", hash: "0".repeat(64) },
+      earlierDrafts: [{ draftNo: 1, output: draft(), feedback: null, reasons: [reason] } as never] });
+    expect(prompt).toContain(`${reason} -- ${explainSplitReason(reason)}`);
+  });
+});

@@ -269,6 +269,51 @@ function needsRootNpmLockfile(command: string): boolean {
  */
 const GIT_STATE_CHECK = /\bgit(?:\s+(?:-C\s+\S+|-c\s+\S+|--[\w-]+(?:=\S+)?))*\s+(?:rev-parse\b|log\b|diff\b[^;&|)]*\s--(?:name-only|stat)\b)/;
 
+/**
+ * Issue #168 (tester follow-up E §9): a target path that is documentation -- `*.md`, `*.mdx`, `*.rst`, `*.txt`, anything
+ * under the root's `docs/` (`docs/**` included), or a file named `README*`, `CHANGELOG*` or `LICENSE*`. Any other
+ * `<directory>/**` and `**` may hold source, so they are not.
+ */
+function documentationPath(declared: string): boolean {
+  const path = normalizeClaim(declared).normalized;
+  if (path === "docs" || path.startsWith("docs/")) return true;
+  if (path === "**" || path.endsWith("/**")) return false;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return /\.(?:md|mdx|rst|txt)$/i.test(name) || /^(?:README|CHANGELOG|LICENSE)/.test(name);
+}
+
+/**
+ * Issue #168: a check segment that runs a repository-wide suite -- `npm test` / `npm run test` (pnpm, yarn alike),
+ * `vitest` / `vitest run` or `jest` (bare or by `npx`), `pytest` (or `python -m pytest`) and `cargo test`, each with no
+ * positional argument (a path or filter narrows it); `go test ./...`; `make test`. Leading `NAME=value` assignments and
+ * redirections are skipped. A check that changes directory (`cd`, `pushd`) runs another package's suite and is not judged.
+ */
+function runsRepositorySuite(check: string): boolean {
+  const segments = check.replace(/\d*>&\d+|&?\d*>>?\s*\S+|\d*<\s*\S+/g, " ").split(/&&|\|\||[;|&]/)
+    .map((segment) => segment.trim().split(/\s+/).filter((token) => token.length > 0));
+  if (segments.some((tokens) => tokens[0] === "cd" || tokens[0] === "pushd")) return false;
+  return segments.some((tokens) => {
+    const words = tokens.slice(Math.max(0, tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token))));
+    const positional = (from: number): string[] => words.slice(from).filter((word) => !word.startsWith("-"));
+    const [first, second, third] = words;
+    if (first === "npm" || first === "pnpm" || first === "yarn") {
+      if (second === "test") return positional(2).length === 0;
+      return second === "run" && third === "test" && positional(3).length === 0;
+    }
+    const runner = first === "npx" ? words.slice(1) : first === "python" || first === "python3" ? (second === "-m" ? words.slice(2) : []) : words;
+    const at = words.length - runner.length;
+    if (runner[0] === "vitest") return positional(at + (runner[1] === "run" ? 2 : 1)).length === 0;
+    if (runner[0] === "jest" || runner[0] === "pytest") return positional(at + 1).length === 0;
+    if (first === "cargo" && second === "test") return positional(2).length === 0;
+    if (first === "go" && second === "test") return positional(2).includes("./...");
+    return first === "make" && positional(1).length === 1 && positional(1)[0] === "test";
+  });
+}
+
+/** Issue #168: a write whose every target path is documentation, holding a check that runs a repository-wide suite. */
+const docsOnlySuite = (targetPaths: readonly string[], checks: readonly string[]): boolean =>
+  targetPaths.length > 0 && targetPaths.every(documentationPath) && checks.some(runsRepositorySuite);
+
 /** Issue #135 (session f958ec3f): a check that evaluates code with `node -e/--eval/-p/--print` and calls `require(`. */
 const NODE_EVAL_REQUIRE = /\bnode\b[^;&|]*?\s(?:-e|-p|-pe|--eval|--print)(?:\s|=)[\s\S]*\brequire\s*\(/;
 
@@ -443,6 +488,10 @@ export async function validateMultiSplitDraft(input: {
   for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
     if (write.checks.some((check) => GIT_STATE_CHECK.test(check))) reasons.push(`check-git-state:${task.taskId}:${write.dir}`);
   }
+  // #168: as the single-repository validator's, per write: a write's checks run in its directory, against its paths.
+  for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
+    if (docsOnlySuite(write.targetPaths, write.checks)) reasons.push(`check-docs-only-suite:${task.taskId}:${write.dir}`);
+  }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -526,6 +575,8 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   }
   // #136: NO_VERIFY_ONLY_RULE in code -- a check that reads git history or the diff instead of the delivered files.
   for (const task of output.tasks) if (task.checks.some((check) => GIT_STATE_CHECK.test(check))) reasons.push(`check-git-state:${task.taskId}`);
+  // #168: CHECK_OWNERSHIP_RULE in code -- a documentation-only task held to a repository-wide suite it cannot repair.
+  for (const task of output.tasks) if (docsOnlySuite(task.targetPaths, task.checks)) reasons.push(`check-docs-only-suite:${task.taskId}`);
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -604,6 +655,7 @@ export function explainSplitReason(reason: string): string | null {
     case "setup-lockfile": return "this setup command runs `npm ci`, or an `npm install` that writes package-lock.json, but the repository root commits no package-lock.json or npm-shrinkwrap.json: `npm ci` fails without one, and a setup that creates the lockfile is refused; omit `setup` if nothing needs installing, else use `npm install --no-package-lock`";
     case "check-module-system": return "this check runs `node -e` (or `--eval`, `-p`) with `require(`, but the package.json of the directory it runs in says \"type\": \"module\", so the repository's files are ES modules that require() cannot load as the check expects; run the repository's own test scripts (as `manifests` lists them), or load modules with `node --input-type=module -e` and `await import(...)`";
     case "check-git-state": return "this check reads git history or the diff (`git diff --name-only`, `git diff --stat`, `git rev-parse` or `git log`), so it tests what was committed rather than the delivered files, and fails once an earlier task has landed; check the delivered files or run the repository's tests instead (`git diff --exit-code`, asserting a formatter changed nothing, is fine), and do not write verify-only tasks";
+    case "check-docs-only-suite": return "every target path of this task is documentation, but a required check runs the repository-wide test suite (such as `npm test`, `pytest` or `go test ./...`), which this task cannot repair if it fails in source it may not change; check the delivered documents instead (for example `test -s README.md` or `grep -q '<heading>' docs/guide.md`), or run only a test that reads them; the repository-wide suite belongs to a task that changes source";
     case "check-write-scope": return "the task's check names a committed test file outside the task's targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file (or its directory as `<directory>/**`) to this task's targetPaths, or check only files this task may write";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";
