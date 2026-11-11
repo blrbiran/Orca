@@ -29,6 +29,19 @@ describe("the Requirements section (N1 spec §11.2)", () => {
       glossaryDecisions: [{ id: "R1.G1", accept: true }], adrDecisions: [{ id: "R1.ADR1", accept: true }] } });
   });
 
+  // Tester follow-up E §7 (#251): a secondary button answers the round as set and closes clarification in the same command
+  // (payload finish: true); "Send answers" keeps its payload without the key.
+  it("Answer and finish clarifying sends the answers as set with finish: true; Send answers sends no finish", () => {
+    const onCommand = mount(requirementView("awaiting-answers"));
+    const second = screen.getByRole("group", { name: /R1\.Q2/ });
+    fireEvent.click(within(second).getByRole("radio", { name: "Own answer" }));
+    fireEvent.change(within(second).getByRole("textbox"), { target: { value: "As links" } });
+    fireEvent.click(screen.getByRole("button", { name: "Answer and finish clarifying" }));
+    expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "requirement-answer", payload: { roundNo: 1, answers: [{ id: "R1.Q1", kind: "recommended" }, { id: "R1.Q2", kind: "text", text: "As links" }], finish: true } });
+    fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
+    expect(onCommand.mock.calls[1]![0].payload).not.toHaveProperty("finish");
+  });
+
   it("sends a free-text answer and a rejected proposal as the person set them", () => {
     const onCommand = mount(requirementView("awaiting-answers"));
     const second = screen.getByRole("group", { name: /R1\.Q2/ });

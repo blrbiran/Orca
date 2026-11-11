@@ -430,3 +430,21 @@ model wrote a check that walked the directory and asserted it held only `README.
    (version 2)"); the single-repository pin `PINNED.splitPrompt` in `tests/control/multiDirOverview.test.ts` and the
    fake port's prompt heads in `tests/control/fixtures/requirementHarness.ts` move to version 2 (rewrites authorised in
    session `7753e97d`).
+
+## 17. Correction: answer and finish clarifying (2026-11-11, tester follow-up E, #251; the text above is kept as written)
+
+Who: implementer W4 of tester follow-up E (branch `worktree-agent-ab793ee1df4bcd755`), on top of main
+`docs(spec): tester follow-up E -- the rulings and the design for #241-#258 and the open items`. Ruling: the human's
+「其他都同意」 on #251's `--finish` (`docs/superpowers/specs/2026-11-11-tester-followup-e-design.md` §0, §7).
+
+This extends §11.1 item 2 and Correction 3 (an answer queues the next round while the frontier is open). A
+`requirement-answer` payload may carry `finish: true` (only `true`; absent keeps a plain answer's bytes). It answers the
+round as item 2 says and then, in the same transaction, takes consensus at that round as item 3 does: no next round
+is queued (as when the frontier is empty or the round cap of `2026-10-21-clarify-scope-caps-design.md` §3.3 is reached),
+the consensus lists no open questions, and draft 1 is queued, so the split is drafted from the answers just given. The
+result is `requirement-answered` with `nextRoundNo: null`, `wakeId` the draft's, and `finished: true`. Every refusal of
+item 3 still applies (a call in flight, no understanding yet). The CLI sends it with `orca requirement answer … --finish`,
+and the Web answer form has a secondary button, "Answer and finish clarifying". A plain CLI answer that queued a round
+says "round N is now drafting; use --finish to stop after a round". When consensus is refused `round-state` because the
+latest round is drafting, the CLI hint names that round and `--finish`. The Web's second confirmation on open branches
+(Consensus) is not asked by the finishing button.

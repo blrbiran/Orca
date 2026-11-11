@@ -1277,6 +1277,7 @@ export const en = {
     why: "Why: {{why}}",
     acceptAll: "Accept all recommended",
     sendAnswers: "Send answers",
+    answerAndFinish: "Answer and finish clarifying",
     accept: "Accept",
     reject: "Reject",
     noQuestions: "The model has no more questions.",

@@ -673,6 +673,8 @@ export type RequirementAnswerPayloadV1 = {
   answers: RequirementAnswerInputV1[];
   glossaryDecisions: RequirementDecisionInputV1[];
   adrDecisions: RequirementDecisionInputV1[];
+  /** Tester follow-up E §7 (#251): answer and close clarification in one command. */
+  finish?: true;
 };
 export type RequirementConsensusPayloadV1 = { roundNo: number };
 export type RequirementDraftFeedbackPayloadV1 = { draftNo: number; feedback: string };
@@ -796,7 +798,7 @@ export type CommandSuccessV1 = {
     | { kind: "task-retried"; taskId: string; fromRunId: string; nextRun?: { attempts: number; activeMs: number } }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: "answer" | "consensus" | "review" | "call" | "person" }
     | { kind: "requirement-opened"; groupId: string; requirementId: string; roundNo: 1; wakeId: string }
-    | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null }
+    | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null; finished?: true }
     | { kind: "requirement-consensus"; roundNo: number; draftNo: number; wakeId: string }
     | { kind: "requirement-draft-rejected"; draftNo: number; nextDraftNo: number; wakeId: string }
     | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }

@@ -240,12 +240,15 @@ function RoundForm(props: { view: View; round: Round; onCommand: OnCommand } & E
   const current: AnswerDraft = stored ?? { choice: {}, decisions: {} };
   const setChoice = (id: string, value: AnswerChoice): void => props.onDraft("answer", key, { ...current, choice: { ...current.choice, [id]: value } });
   const setDecision = (id: string, accept: boolean): void => props.onDraft("answer", key, { ...current, decisions: { ...current.decisions, [id]: accept } });
-  const send = (all: boolean) => props.onCommand({ verb: "requirement-answer", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
+  // Tester follow-up E §7 (#251): `finish` answers and closes clarification in one command (no next round is drafted).
+  const send = (all: boolean, finish = false) => props.onCommand({ verb: "requirement-answer", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
+    ...(finish ? { finish: true as const } : {}),
     roundNo: props.round.roundNo,
     answers: result.questions.map((q) => { const c = all ? { kind: "recommended" as const } : choiceOf(q.id); return c.kind === "text" ? { id: q.id, kind: "text", text: c.text } : { id: q.id, kind: "recommended" }; }),
     glossaryDecisions: result.glossary.map((entry) => ({ id: entry.id, accept: decisionOf(entry.id) })),
     adrDecisions: result.adrs.map((adr) => ({ id: adr.id, accept: decisionOf(adr.id) })),
   } }, stored === undefined ? undefined : { slot: "answer", key, value: stored });
+  const unfilled = result.questions.some((q) => { const c = choiceOf(q.id); return c.kind === "text" && c.text.trim() === ""; });
   const decision = (id: string, label: string) => (
     <fieldset key={id} aria-label={`${id} ${label}`}>
       <legend>{id} {label}</legend>
@@ -272,7 +275,8 @@ function RoundForm(props: { view: View; round: Round; onCommand: OnCommand } & E
       {[...result.glossary.map((entry) => decision(entry.id, entry.term)), ...result.adrs.map((adr) => decision(adr.id, adr.title))]}
       <div className={actionRow}>
         <button type="button" onClick={() => send(true)}>{t("requirements.acceptAll")}</button>
-        <button type="submit" disabled={result.questions.some((q) => { const c = choiceOf(q.id); return c.kind === "text" && c.text.trim() === ""; })}>{t("requirements.sendAnswers")}</button>
+        <button type="submit" disabled={unfilled}>{t("requirements.sendAnswers")}</button>
+        <button type="button" disabled={unfilled} onClick={() => send(false, true)}>{t("requirements.answerAndFinish")}</button>
       </div>
     </form>
   );

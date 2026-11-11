@@ -1133,6 +1133,7 @@ export const zh: Translation<typeof en> = {
     why: "理由：{{why}}",
     acceptAll: "全部采用推荐答案",
     sendAnswers: "提交回答",
+    answerAndFinish: "回答并结束澄清",
     accept: "接受",
     reject: "不接受",
     noQuestions: "模型没有更多问题了。",
