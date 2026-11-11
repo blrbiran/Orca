@@ -6,7 +6,7 @@ import type { CommandVerbV1 } from "../../control/webProtocol.js";
 import { EntryRejection } from "../../entry/envelope.js";
 import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
-import { adviceOf, type SuggestionView } from "../../control/budgetSuggestions.js";
+import { adviceOf, usedRatio, type SuggestionView } from "../../control/budgetSuggestions.js";
 import { ESTIMATE_INSTRUCTIONS } from "../../control/estimatePrompt.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
@@ -110,6 +110,7 @@ export interface UnestimatedSource {
   proposal?: { state?: string; proposalVersion?: number };
   summary?: { state?: string; archived?: boolean };
   estimates?: SuggestionView["estimates"];
+  ledger?: { groupLimit: { tokens: number | null } };
 }
 
 /**
@@ -127,6 +128,22 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
   // adviceOf answers only for an editable proposal; a confirmed one keeps its ready estimate for after a reopen.
   const ready = source.plan === undefined || source.estimates === undefined ? null
     : adviceOf({ plan: source.plan, proposal: { state: "editable", proposalVersion: source.proposal?.proposalVersion ?? 0 }, estimates: source.estimates } as SuggestionView);
+  // Budget defaults spec 2026-11-11 §7 item 5: in a group with no token limit an estimate is each task's expectation, not a
+  // ceiling, so a ready one is named by what it expects -- never as "not applied" -- and there is nothing to apply.
+  if (source.ledger?.groupLimit.tokens === null) {
+    const advisory = "in a group with no token limit an estimate is advisory: each task's expected tokens, not a ceiling";
+    if (ready !== null) {
+      const expected = (taskId: string) => ready.output.tasks.find((t) => t.taskId === taskId)?.work.tokens;
+      const lines = tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${expected(a.ownerId) === undefined ? "default, not estimated" : `default; expected ${expected(a.ownerId)} tokens from estimate ${ready.estimateId}`})`);
+      if (source.summary?.state === "done" || source.summary?.archived === true) return lines;
+      return [...lines, `${advisory}; to cap a task, set its tokens (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>)`];
+    }
+    if (source.summary?.state === "done" || source.summary?.archived === true) return tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (default, not estimated)`);
+    const reopen = `before the group starts, reopen its proposal with a proposal edit (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>), then `;
+    const editable = opts.afterConfirm !== true && source.proposal?.state === "editable";
+    return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (default, not estimated)`),
+      `to estimate: ${editable ? "" : reopen}orca group estimate ${groupId}, orca group confirm ${groupId} (${advisory})`];
+  }
   const state = ready === null ? "default, not estimated" : `default; estimate ${ready.estimateId} is ready but not applied`;
   // A settled or archived group may still carry the default, but can no longer act on pre-start budget advice.
   if (source.summary?.state === "done" || source.summary?.archived === true) {
@@ -138,6 +155,19 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
     ? `to estimate: ${editable ? "" : reopen}orca group estimate ${groupId}, orca group apply-estimate ${groupId}, orca group confirm ${groupId}`
     : `to apply it: ${editable ? "" : reopen}orca group apply-estimate ${groupId} (--dry-run shows what it sets), orca group confirm ${groupId}`;
   return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${state})`), path];
+}
+/**
+ * Budget defaults spec 2026-11-11 §7 item 4: per task that has an expectation (the view derives one only in a group with no
+ * token limit) and has run, what it used against what was expected -- "×3.2" -- or "unknown" when its usage is unknown.
+ */
+export function expectationLines(source: { workItems?: Array<{ taskId: string; lineageRunIds?: string[]; expected?: { tokens: number; estimateId: string; stale: boolean; usedTokens: number | null } }> }): string[] {
+  return (source.workItems ?? []).flatMap((item) => {
+    const e = item.expected;
+    if (e === undefined || (item.lineageRunIds?.length ?? 0) === 0) return [];
+    const ratio = usedRatio(e);
+    const used = e.usedTokens === null ? "unknown" : `${e.usedTokens} tokens${ratio === null ? "" : ` (×${ratio} its estimate)`}`;
+    return [`task ${item.taskId}: used ${used}; expected ${e.tokens} tokens from estimate ${e.estimateId}${e.stale ? " (stale)" : ""}`];
+  });
 }
 const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
 /** Issue #212: the authored work allocation is a request; a claim funds what the group limit leaves after handoffs. */
@@ -156,7 +186,8 @@ export function formatWithUnestimated(body: unknown): string {
   const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown }> }).runs ?? [];
   const count = runs.filter((run) => typeof run.taskId === "string" && typeof run.state === "string" && live.has(run.state)).length;
   return withLines(text(body), [...(count > 0 ? [`execution: ${count} task run${count === 1 ? "" : "s"} in progress`] : []),
-    ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : [])]);
+    ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
+    ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0]))]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

@@ -8,7 +8,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { EntryRejection, exitCodeFor, localError, type CliResponseV1 } from "../../entry/envelope.js";
-import { adviceOf, suggestionActions, type SuggestionAction, type SuggestionView } from "../../control/budgetSuggestions.js";
+import { adviceOf, estimateIsAdvisory, suggestionActions, type SuggestionAction, type SuggestionView } from "../../control/budgetSuggestions.js";
 import { printResponse, type SentRequest } from "../output.js";
 import type { CommandIo, ParsedArgs } from "../types.js";
 
@@ -20,10 +20,16 @@ interface Planned { verb: SuggestionAction["verb"]; route: string; payload: unkn
 interface Applied extends Planned { commandId: string; expectedRevision: number; commandRevision: number | null }
 
 export function formatApplied(body: unknown): string {
-  const b = body as { groupId: string; estimateId: string; dryRun: boolean; actions: Planned[]; applied: Applied[] };
+  const b = body as { groupId: string; estimateId: string; dryRun: boolean; actions: Planned[]; applied: Applied[]; expectations?: Array<{ taskId: string; tokens: number }> };
   const list = b.dryRun ? b.actions : b.applied;
-  if (list.length === 0) return `${b.groupId}: the proposal already matches estimate ${b.estimateId}; nothing to apply`;
-  const lines = [`${b.groupId}: ${b.dryRun ? "would send" : "sent"} ${list.length} command(s) from estimate ${b.estimateId}`];
+  // Budget defaults spec 2026-11-11 §7 item 5: in a group with no token limit the estimate is each task's expectation; no
+  // task-work ceiling is sent, so "already matches / nothing to apply" would misstate what happened.
+  const expected = b.expectations === undefined ? [] : [
+    `${b.groupId}: the group has no token limit, so estimate ${b.estimateId} is recorded as the expectation, not a ceiling`,
+    ...b.expectations.map((e) => `  task ${e.taskId}: expected ${e.tokens} tokens`),
+  ];
+  if (list.length === 0) return expected.length > 0 ? expected.join("\n") : `${b.groupId}: the proposal already matches estimate ${b.estimateId}; nothing to apply`;
+  const lines = [...expected, `${b.groupId}: ${b.dryRun ? "would send" : "sent"} ${list.length} command(s) from estimate ${b.estimateId}`];
   for (const entry of list) {
     const payload = entry.payload as { operations?: Array<{ target: Record<string, string>; value: number }>; work?: Record<string, number | null>; workProvenance?: Record<string, unknown> };
     if (entry.verb === "proposal-edit") {
@@ -52,7 +58,9 @@ export async function runApplyEstimate(args: ParsedArgs, io: CommandIo): Promise
     if (advice === null) throw new EntryRejection("estimate-not-ready", `${ids.group} has no ready estimate for its current plan on an editable proposal (orca proposal show; orca group estimate)`);
     if (advice.stale) throw new EntryRejection("estimate-stale", `the newest estimate of ${ids.group} predates a set-task-loop change; run orca group estimate again`);
     const actions = suggestionActions(view, { kind: "all" });
-    const base = { schema: "orca-apply-estimate-v1", groupId: view.summary.groupId, estimateId: advice.estimateId, dryRun: args.flags["dry-run"] === true };
+    const base = { schema: "orca-apply-estimate-v1", groupId: view.summary.groupId, estimateId: advice.estimateId, dryRun: args.flags["dry-run"] === true,
+      // §7 item 5: present only in a group with no token limit, so a finite group's answer keeps its bytes.
+      ...(estimateIsAdvisory(view) ? { expectations: advice.output.tasks.map((task) => ({ taskId: task.taskId, tokens: task.work.tokens })) } : {}) };
     const planned: Planned[] = actions.map((action) => ({ verb: action.verb, route: routeOf(action), payload: action.payload }));
     if (base.dryRun || actions.length === 0) return print({ schema: "orca-cli-response-v1", status: 200, body: { ...base, actions: planned, applied: [] } });
     const prefix = session.client === "mcp" || session.client.startsWith("mcp:") ? "mcp" : "cli";

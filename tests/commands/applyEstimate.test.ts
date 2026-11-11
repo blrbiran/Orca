@@ -21,13 +21,16 @@ const OUTPUT = {
   ],
   goalReviewReserve: amount(900),
 };
-function adviceView(over: { stale?: boolean; state?: string; output?: unknown; proposalState?: string } = {}) {
+function adviceView(over: { stale?: boolean; state?: string; output?: unknown; proposalState?: string; unlimited?: boolean } = {}) {
   return {
     schema: "orca-control-group-v1", epoch: "e", changeSeq: 9,
     summary: { groupId: "g-alpha", repoId: "repo-1", state: "draft", commandRevision: 5 },
     plan: { repoId: "repo-1", planId: "plan-a", planHash: H.plan, goal: "ship", successConditions: [] },
     proposal: { state: over.proposalState ?? "editable", proposalVersion: 3, planHash: H.plan, budgetMode: null, contextPolicy: { handoffAtContextTokens: null }, profiles: null, executionSnapshotHash: null },
-    ledger: { groupLimit: amount(null) },
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes a finite group
+    // (the only kind whose estimate is applied as a ceiling, spec 2026-11-11 §7 Q4), so #156's criteria below pin that path;
+    // `unlimited` gives the group with no token limit, where the estimate is the expectation (§7 item 5).
+    ledger: { groupLimit: amount(over.unlimited ? null : 50_000) },
     allocations: [
       { ownerKind: "task", ownerId: "t1", bucket: "work", state: "draft-encumbered", amount: amount(null), fieldProvenance: prov },
       { ownerKind: "task", ownerId: "t1", bucket: "handoff", state: "draft-encumbered", amount: amount(0, 10, 0, 0), fieldProvenance: prov },
@@ -118,6 +121,32 @@ describe("orca group apply-estimate (#156)", () => {
     expect(out.code).toBe(0);
     expect(w.posts()).toEqual([]);
     expect(out.stdout).toContain("nothing to apply");
+  });
+
+  it("an unlimited group: the estimate is recorded as the expectation, exit 0, and no task-work ceiling is sent (§7 item 5)", async () => {
+    const w = await advisedWorld(adviceView({ unlimited: true }));
+    const out = await cli(["group", "apply-estimate", "g-alpha"], w.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("the group has no token limit, so estimate est-new is recorded as the expectation, not a ceiling");
+    // mutation: drop the expectation lines from formatApplied -> red
+    expect(out.stdout).toContain("  task t1: expected 800 tokens");
+    expect(out.stdout).toContain("  task t2: expected 300 tokens");
+    expect(out.stdout).not.toContain("already matches");
+    // Only the goal review's tokens (and no handoff here: both already match) go out; never a task's work.
+    const ops = w.posts().flatMap((p) => (p.payload as { operations?: Array<{ target: { scope: string; allocation?: string } }> }).operations ?? []);
+    expect(w.posts().map((p) => p.path)).toEqual(["groups/g-alpha/proposal/edit"]);
+    expect(ops.filter((op) => op.target.scope === "task" && op.target.allocation === "work")).toEqual([]);
+    // With nothing left to send, it still names the expectation rather than "nothing to apply".
+    const settled = adviceView({ unlimited: true });
+    settled.allocations[4]!.amount = amount(900);
+    const w2 = await advisedWorld(settled);
+    const quiet = await cli(["group", "apply-estimate", "g-alpha"], w2.dir);
+    expect([quiet.code, w2.posts()]).toEqual([0, []]);
+    expect(quiet.stdout).toContain("recorded as the expectation");
+    expect(quiet.stdout).not.toContain("nothing to apply");
+    // A finite group's JSON answer carries no expectations key (its bytes are as before).
+    const finite = await cli(["group", "apply-estimate", "g-alpha", "--json", "--dry-run"], (await advisedWorld()).dir);
+    expect(finite.json().body).not.toHaveProperty("expectations");
   });
 
   it("stops at the first refusal and names what was applied before it", async () => {
