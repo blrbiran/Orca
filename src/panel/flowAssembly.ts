@@ -7,8 +7,9 @@
  * - `children`: `work` steps as hidden child groups the driver runs on the vault (flow/childPort.ts).
  * - `confirmParent`: what a new run's parent is confirmed with (writer's call, ledgered): its single calls take the
  *   panel's estimator profile and the starting person's estimator layer (as a requirement's calls do); its children take
- *   that same profile for worker, handoff and goal review, the panel's estimate mode as their budget mode, and a context
- *   handoff at the worker profile's window. The estimator layer is the starting command's operator's (preferences live
+ *   that same profile for worker, handoff and goal review, the panel's estimate mode as their budget mode, and no context
+ *   handoff threshold (tester follow-up F §1, #195: nothing reports context usage, so a threshold would do nothing; it
+ *   used to be the worker profile's window). The estimator layer is the starting command's operator's (preferences live
  *   under the operator id, not the person's name). A panel with no estimator profile, or a profile that does not serve
  *   every kind, refuses the start `flow-profiles-unresolved`.
  * - `agents`: the installations ccloop's table names, in its order (the first is today's default selection), read at
@@ -50,10 +51,10 @@ export function createPanelFlow(input: PanelFlowInput): PanelFlow {
   const confirmParent = async (run: { flowRunId: string; groupId: string; projectId: string | null; by?: string; operatorId?: string }): Promise<FlowParentConfirmation> => {
     const defaults = input.importDeps.defaults();
     if (defaults?.estimatorProfileId == null || defaults.estimatorProfileHash === null) throw new FlowRefusal("flow-profiles-unresolved", "the panel has no estimator profile");
-    let profile: ReturnType<ExecutionProfileRouter["resolve"]>, worker: ReturnType<ExecutionProfileRouter["resolve"]>;
+    let profile: ReturnType<ExecutionProfileRouter["resolve"]>;
     try {
       profile = router.resolve("budget-estimate", defaults.estimatorProfileId, defaults.estimatorProfileHash);
-      worker = router.resolve("task", defaults.estimatorProfileId, defaults.estimatorProfileHash);
+      router.resolve("task", defaults.estimatorProfileId, defaults.estimatorProfileHash);
       router.resolve("handoff", defaults.estimatorProfileId, defaults.estimatorProfileHash);
       router.resolve("goal-review", defaults.estimatorProfileId, defaults.estimatorProfileHash);
     } catch (error) { throw new FlowRefusal("flow-profiles-unresolved", (error as Error).message); }
@@ -66,7 +67,8 @@ export function createPanelFlow(input: PanelFlowInput): PanelFlow {
       call: { profile: binding, agentSlot: slot.outcome.slot, maxOutputTokens: singleCallOutputBound(preflight.maxOutputTokens, slot.observation.resolution) },
       children: {
         budgetMode: defaults.estimateMode, profiles: { estimator: binding, worker: binding, handoff: binding, goalReview: binding },
-        contextPolicy: { handoffAtContextTokens: worker.snapshot.profile.capabilities.contextWindowTokens },
+        // Tester follow-up F §1 (#195, human ruling 「要改」): confirm accepts null whatever the window, as for any group.
+        contextPolicy: { handoffAtContextTokens: null },
       },
     };
   };
