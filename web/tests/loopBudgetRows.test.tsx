@@ -10,7 +10,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BudgetEditor, budgetFieldKey, editedOperations, suggestedOperations } from "../src/BudgetEditor.js";
 import type { Amount, CapabilityViewV1, ControlConfigV1, EstimateViewV1, GroupViewV1, LoopPlanViewV1 } from "../src/controlTypes.js";
 
-const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
+// Ruling (2026-11-12, tester follow-up F): #162 applies a task's work attempts as at least 2, so this fixture's attempts
+// (meant to already match the estimate, an unchanged dimension) moved from 1 to 2; at 1 they would now be suggested.
+const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 2, sessions: 1 });
 const human = { provenance: "human", estimateId: null } as const;
 const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
 const PLAN = "a".repeat(64);
@@ -104,7 +106,7 @@ describe("a loop task's work row is the plan card's (spec §4.3)", () => {
     const model = { provenance: "model", estimateId: "est-1" };
     expect(onCommand.mock.calls.map((call) => call[0])).toEqual([{
       verb: "set-task-loop", groupId: "g", taskId: "a", expectedRevision: 3,
-      payload: { baseLoopVersion: 0, plan: "bugfix", inputs: LOOP_PLAN.inputs, work: { tokens: 4_000, activeMs: 40_000, attempts: 1 }, workProvenance: { tokens: model, activeMs: model } },
+      payload: { baseLoopVersion: 0, plan: "bugfix", inputs: LOOP_PLAN.inputs, work: { tokens: 4_000, activeMs: 40_000, attempts: 2 }, workProvenance: { tokens: model, activeMs: model } },
     }]);
     expect(screen.getByRole("button", { name: "Apply row c work" })).toBeTruthy();
   });

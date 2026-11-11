@@ -9,7 +9,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BudgetEditor, suggestedOperations } from "../src/BudgetEditor.js";
 import type { Amount, ControlConfigV1, EstimateViewV1, GroupViewV1 } from "../src/controlTypes.js";
 
-const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
+// Ruling (2026-11-12, tester follow-up F): #162 applies a task's work attempts as at least 2, so this fixture's attempts
+// (meant to already match the estimate, an unchanged dimension) moved from 1 to 2; at 1 they would now be suggested.
+const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 2, sessions: 1 });
 const human = { provenance: "human", estimateId: null } as const;
 const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;

@@ -79,12 +79,15 @@ describe("orca group apply-estimate (#156)", () => {
     ]);
     // What the transform decided, spelled out: t2's work tokens and the goal review's tokens through proposal-edit; t1
     // (a loop task) through set-task-loop with workProvenance for the dimensions that change; t1's sessions never.
+    // Ruling (2026-11-12, tester follow-up F): #162 applies a task's work attempts as at least 2; both tasks' estimates say 1
+    // against a proposal of 1, so each now also sends attempts 2 (t2 through proposal-edit, t1 through set-task-loop).
     expect(expected[0]!.payload).toEqual({ baseProposalVersion: 3, operations: [
       { target: { scope: "task", taskId: "t2", allocation: "work", dimension: "tokens" }, value: 300, provenance: "model", estimateId: "est-new" },
+      { target: { scope: "task", taskId: "t2", allocation: "work", dimension: "attempts" }, value: 2, provenance: "model", estimateId: "est-new" },
       { target: { scope: "goal-review", dimension: "tokens" }, value: 900, provenance: "model", estimateId: "est-new" },
     ] });
-    expect(expected[1]!.payload).toEqual({ baseLoopVersion: 2, plan: "standard", inputs: INPUTS, work: { tokens: 800, activeMs: 20, attempts: 1 },
-      workProvenance: { tokens: { provenance: "model", estimateId: "est-new" }, activeMs: { provenance: "model", estimateId: "est-new" } } });
+    expect(expected[1]!.payload).toEqual({ baseLoopVersion: 2, plan: "standard", inputs: INPUTS, work: { tokens: 800, activeMs: 20, attempts: 2 },
+      workProvenance: { tokens: { provenance: "model", estimateId: "est-new" }, activeMs: { provenance: "model", estimateId: "est-new" }, attempts: { provenance: "model", estimateId: "est-new" } } });
     expect(out.json().body).toMatchObject({ schema: "orca-apply-estimate-v1", estimateId: "est-new", dryRun: false, applied: [{ commandRevision: 6 }, { commandRevision: 7 }] });
   });
 
@@ -113,8 +116,9 @@ describe("orca group apply-estimate (#156)", () => {
 
   it("a proposal already at its suggestions: nothing to apply, nothing sent", async () => {
     const view = adviceView();
-    view.allocations[0]!.amount = amount(800, 20, 1, 1);
-    view.allocations[2]!.amount = amount(300);
+    // Ruling (2026-11-12, tester follow-up F): at its suggestions means work attempts 2 now (#162's floor over the estimate's 1).
+    view.allocations[0]!.amount = amount(800, 20, 2, 1);
+    view.allocations[2]!.amount = amount(300, 10, 2);
     view.allocations[4]!.amount = amount(900);
     const w = await advisedWorld(view);
     const out = await cli(["group", "apply-estimate", "g-alpha"], w.dir);
@@ -147,6 +151,24 @@ describe("orca group apply-estimate (#156)", () => {
     // A finite group's JSON answer carries no expectations key (its bytes are as before).
     const finite = await cli(["group", "apply-estimate", "g-alpha", "--json", "--dry-run"], (await advisedWorld()).dir);
     expect(finite.json().body).not.toHaveProperty("expectations");
+  });
+
+  // Tester follow-up F §4 (#162): an estimate's attempts=1 made the first exhausted attempt the end of the task.
+  it("raises a task's work attempts below 2 to 2 and says so; an estimate of 2 or more is not named (#162)", async () => {
+    const out = await cli(["group", "apply-estimate", "g-alpha", "--dry-run"], (await advisedWorld()).dir);
+    expect(out.code).toBe(0);
+    // mutation: drop the raisedAttempts line from formatApplied -> red
+    expect(out.stdout).toContain("  task t1 work attempts: the estimate said 1; raised to 2, as an applied estimate sets at least 2");
+    expect(out.stdout).toContain("  task t2 work attempts: the estimate said 1; raised to 2, as an applied estimate sets at least 2");
+    const json = await cli(["group", "apply-estimate", "g-alpha", "--dry-run", "--json"], (await advisedWorld()).dir);
+    expect(json.json().body.raisedAttempts).toEqual([{ taskId: "t1", estimated: 1, applied: 2 }, { taskId: "t2", estimated: 1, applied: 2 }]);
+    // An estimate of 3 attempts is applied as 3 and named nowhere.
+    const three = adviceView({ output: { ...OUTPUT, tasks: OUTPUT.tasks.map((task) => ({ ...task, work: { ...task.work, attempts: 3 } })) } });
+    const plain = await cli(["group", "apply-estimate", "g-alpha", "--dry-run", "--json"], (await advisedWorld(three)).dir);
+    expect(plain.json().body).not.toHaveProperty("raisedAttempts");
+    const ops = (plain.json().body.actions as Array<{ payload: { operations?: Array<{ target: { dimension: string; allocation?: string }; value: number }>; work?: { attempts: number } } }>);
+    expect(ops[0]!.payload.operations!.filter((op) => op.target.allocation === "work" && op.target.dimension === "attempts").map((op) => op.value)).toEqual([3]);
+    expect(ops[1]!.payload.work!.attempts).toBe(3);
   });
 
   it("stops at the first refusal and names what was applied before it", async () => {

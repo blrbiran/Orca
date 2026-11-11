@@ -11,7 +11,9 @@ import { App } from "../src/App.js";
 import { BudgetEditor } from "../src/BudgetEditor.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, EstimateViewV1, GroupViewV1, LoopPlanViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
 
-const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
+// Ruling (2026-11-12, tester follow-up F): #162 applies a task's work attempts as at least 2, so this fixture's attempts
+// (meant to already match the estimate, an unchanged dimension) moved from 1 to 2; at 1 they would now be suggested.
+const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 2, sessions: 1 });
 const human = { provenance: "human", estimateId: null } as const;
 const provenance = { tokens: human, activeMs: human, attempts: human, sessions: human };
 const PLAN = "a".repeat(64);
@@ -76,7 +78,7 @@ describe("the budget editor applies a loop task's work suggestion through set-ta
     const onCommand = vi.fn();
     render(<BudgetEditor view={view()} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     fireEvent.click(screen.getByRole("button", { name: "use 4000 for a work tokens" }));
-    expect(onCommand.mock.calls.map((call) => call[0])).toEqual([loopAction({ tokens: 4_000, activeMs: 30_000, attempts: 1 }, { tokens: model })]);
+    expect(onCommand.mock.calls.map((call) => call[0])).toEqual([loopAction({ tokens: 4_000, activeMs: 30_000, attempts: 2 }, { tokens: model })]);
     expect(screen.getByRole("button", { name: "use 40000 for a work activeMs" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /for a work attempts/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /for a work sessions/ })).toBeNull();
@@ -95,7 +97,7 @@ describe("the budget editor applies a loop task's work suggestion through set-ta
     render(<BudgetEditor view={view()} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} onCommands={onCommands} />);
     fireEvent.click(screen.getByRole("button", { name: "Apply all suggestions" }));
     expect(onCommand).not.toHaveBeenCalled();
-    expect(onCommands.mock.calls.map((call) => call[0])).toEqual([[cEdit, loopAction({ tokens: 4_000, activeMs: 40_000, attempts: 1 }, { tokens: model, activeMs: model })]]);
+    expect(onCommands.mock.calls.map((call) => call[0])).toEqual([[cEdit, loopAction({ tokens: 4_000, activeMs: 40_000, attempts: 2 }, { tokens: model, activeMs: model })]]);
   });
 
   it("offers no loop suggestion from a stale estimate (W6: the server refuses it as estimate-stale)", () => {
@@ -166,7 +168,7 @@ describe("Apply all over a loop task and a plain task (W5, human ruling H16)", (
     await settled(2);
     expect(posts()).toEqual([
       { url: EDIT_ROUTE, body: expect.objectContaining({ expectedRevision: 3, payload: cEdit.payload }) },
-      { url: LOOP_ROUTE, body: expect.objectContaining({ expectedRevision: 11, payload: loopAction({ tokens: 4_000, activeMs: 40_000, attempts: 1 }, { tokens: model, activeMs: model }).payload }) },
+      { url: LOOP_ROUTE, body: expect.objectContaining({ expectedRevision: 11, payload: loopAction({ tokens: 4_000, activeMs: 40_000, attempts: 2 }, { tokens: model, activeMs: model }).payload }) },
     ]);
   });
 

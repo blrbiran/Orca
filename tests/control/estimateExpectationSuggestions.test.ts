@@ -82,7 +82,16 @@ describe("a finite group: byte-identical to before (§7 Q4)", () => {
     // run against the unchanged src/: the value below is the hash that run printed (log golden-suggestions-base.log).
     // mutation: apply the null-limit guard to every group -> the finite output loses its task-work suggestions, red
     const actions = suggestionActions(view(5_000_000) as never, { kind: "all" });
-    expect(sha256Canonical(actions)).toBe("530ad67758d15bb1dd674eb5da04eb0010868e6352a6c133f5d38ed01410016e");
+    // Ruling (2026-11-12, tester follow-up F): #162 applies a task's work attempts as at least 2, so t2's (estimated 1) is
+    // sent as 2. The output differs from the golden by exactly that one value: put the estimate's 1 back, and the bytes are
+    // the golden's again.
+    const t2Attempts = (op: { target: { scope: string; taskId?: string; allocation?: string; dimension: string } }) =>
+      op.target.scope === "task" && op.target.taskId === "t2" && op.target.allocation === "work" && op.target.dimension === "attempts";
+    const edit = actions[0]!;
+    if (edit.verb !== "proposal-edit") throw new Error("proposal-edit first");
+    expect(edit.payload.operations.filter(t2Attempts).map((op) => op.value)).toEqual([2]);
+    const before = [{ ...edit, payload: { ...edit.payload, operations: edit.payload.operations.map((op) => (t2Attempts(op) ? { ...op, value: 1 } : op)) } }, ...actions.slice(1)];
+    expect(sha256Canonical(before)).toBe("530ad67758d15bb1dd674eb5da04eb0010868e6352a6c133f5d38ed01410016e");
     // Not an empty golden: the finite output does carry both task-work routes.
     expect(actions.map((action) => action.verb)).toEqual(["proposal-edit", "set-task-loop"]);
   });
