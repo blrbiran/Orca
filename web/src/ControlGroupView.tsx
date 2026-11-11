@@ -546,7 +546,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           {/* Issue-fixes spec §3.2 (4): start refuses every stop intent (stop-mode-conflict), so it is not offered under one. */}
           {/* Feedback #53: a Web-started group stays ready through its first run; executionPending is the server's "not startable". */}
           {view.summary.state === "ready" && view.summary.executionPending !== true && stopMode === null && (
-            <button type="button" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
+            // DESIGN.md: one primary per view -- a ready group's Start is its main action.
+            <button type="button" className="btn-primary" onClick={() => onCommand({ verb: "start", groupId, expectedRevision: revision, payload: {} })}>{t("control.group.start")}</button>
           )}
           {/* Tester #15: a done group dispatches nothing more, so there is nothing to pause or hand off. A draft keeps both: a
               pause there holds the start that confirming would otherwise bring. */}

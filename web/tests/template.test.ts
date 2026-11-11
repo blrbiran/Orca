@@ -41,9 +41,12 @@ describe("page template (P2-6)", () => {
   it("keeps one primary action on Requirements, Chains, the loop plan and plan import (spec §7)", () => {
     const read = (f: string): string => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
     // Ruling: Tasks adds one primary dialog entry; inside it the two import targets remain mutually exclusive.
-    const expected: Record<string, number> = { "RequirementsPanel.tsx": 1, "ChainPanel.tsx": 1, "LoopPlanCard.tsx": 1, "ControlPanel.tsx": 3 };
+    // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes that an open group's
+    // Start (ControlGroupView) is Tasks' primary, so the Import entry and the loop plan's submit are secondary (the dialog keeps its
+    // two mutually exclusive targets). Overview's primary and the DOM count per view are web/tests/onePrimary.test.tsx.
+    const expected: Record<string, number> = { "RequirementsPanel.tsx": 1, "ChainPanel.tsx": 1, "LoopPlanCard.tsx": 0, "ControlPanel.tsx": 2, "ControlGroupView.tsx": 1 };
     for (const [f, n] of Object.entries(expected)) {
-      expect(read(f).match(/className="btn-primary"/g)?.length, f).toBe(n);
+      expect(read(f).match(/className="btn-primary"/g)?.length ?? 0, f).toBe(n);
     }
   });
   it("does not recolour a disabled primary on hover (final review M1)", () => {

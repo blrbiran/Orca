@@ -489,7 +489,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {!archived && editable && (autoEligible
         ? <p role="note" data-testid="auto-confirm-pending">{t("budget.autoConfirm.pending")}</p>
         : <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>)}
-      {!archived && <button type="button" disabled={blockers.length > 0} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
+      {/* DESIGN.md: one primary per view -- while the proposal is open, confirming it is the group's main action. */}
+      {!archived && <button type="button" className={editable ? "btn-primary" : undefined} disabled={blockers.length > 0} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
       {!archived && editable && <button type="button" disabled={blockers.length > 0} onClick={() => submitConfirm(true)}>{t("budget.confirmHold")}</button>}
     </section>
   );

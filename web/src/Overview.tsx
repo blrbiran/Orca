@@ -30,7 +30,7 @@ function QueueReason({ row }: { row: OverviewQueueRow }): JSX.Element {
 export function Overview(props: { model: OverviewModel; onOpen: (target: OverviewTarget) => void; onImport: () => void; onRequirement: () => void; onViewDecisions?: () => void }): JSX.Element {
  const { t } = useTranslation(); const { model } = props; const queue = visibleQueue(model.queue);
  return <section aria-label={t("overview.title")} >
-  <div className="flex flex-wrap items-baseline justify-between gap-4"><h2>{t("overview.title")}</h2><div className="flex flex-wrap gap-2"><button type="button" className={`${rowButton} ms-0`} onClick={props.onRequirement}>{t("overview.newRequirement")}</button><button type="button" className={`${rowButton} ms-0`} onClick={props.onImport}>{t("overview.import")}</button></div></div>
+  <div className="flex flex-wrap items-baseline justify-between gap-4"><h2>{t("overview.title")}</h2><div className="flex flex-wrap gap-2">{/* DESIGN.md: one primary per view; starting work is this page's main action. */}<button type="button" className="btn-primary ms-0" onClick={props.onRequirement}>{t("overview.newRequirement")}</button><button type="button" className={`${rowButton} ms-0`} onClick={props.onImport}>{t("overview.import")}</button></div></div>
   <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-8 max-[850px]:grid-cols-[minmax(0,1fr)] max-[850px]:gap-4">
    <section className={column} aria-label={t("overview.progress")}><h3>{t("overview.progress")}</h3>
     {model.scopeUnavailable && <p role="status">{t("overview.scopeUnavailable")}</p>}

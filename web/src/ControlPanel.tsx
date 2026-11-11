@@ -356,7 +356,8 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {recovery.dispatchBlocked && <p role="alert" data-tone="danger">{t("control.dispatchBlockedRecovery")}</p>}
       <div id="overview-control-import" tabIndex={-1} data-overview-region="import">
         <Dialog open={importOpen} onOpenChange={setImportOpen}
-          trigger={<button type="button" className="btn-primary">{t("control.import.entry")}</button>}
+          // DESIGN.md: one primary per view -- an open group's Start or Confirm is this page's; importing is secondary.
+          trigger={<button type="button">{t("control.import.entry")}</button>}
           title={t("control.import.region")} closeLabel={t("control.import.close")}>
           {/* Keyed by repository, so another project starts on its own first plan. */}
           <ImportForm

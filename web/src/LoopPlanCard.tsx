@@ -212,7 +212,8 @@ function LoopPlanEditor(props: LoopPlanCardProps & { plan: LoopPlanViewV1; curre
         </label>
       ))}
       {blocked !== null && <p role="alert">{blocked}</p>}
-      <button type="submit" className="btn-primary" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
+      {/* DESIGN.md: one primary per view -- the group's Start or Confirm is it, so this change form's submit is secondary. */}
+      <button type="submit" disabled={blocked !== null}>{consequence?.text ?? blocked}</button>
       <button type="button" onClick={() => onDraft(key, "")}>{t("loopPlan.discard")}</button>
     </form>
   );
