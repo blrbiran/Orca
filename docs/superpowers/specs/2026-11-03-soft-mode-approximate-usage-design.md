@@ -65,3 +65,21 @@ Changing the finite-mode settlement; flow pools; how ccloop measures the floor.
 - **Not done: loop runs** (criteria 1, 2, 6 of §5 for tasks). Their settlement writes a `usageSettlement` marker validated against the command ledger's principal (`settlingPersonFor`, `hasValidUsageSettlement`), and ccloop's saved-result recovery receipt checks that principal (`client`/`personPrincipal`, ccloop `savedResultRecovery.ts`). An automatic principal is therefore a cross-repo contract change: design it with ccloop first. Until then an unlimited group's loop run with unknown usage still waits for `settle-unknown-usage` (`release-unmetered`, which books nothing).
 - **D4 (runs already blocked when this ships)** is not done either: a single call already blocked at C keeps the person's charge path.
 - Criteria: `tests/control/softModeApproximateUsage.test.ts` (5), `web/tests/requirementUsageApproximate.test.tsx` (2), `web/tests/estimateChargeRetry.test.tsx` (last describe). Mutations S1–S10 seen red.
+
+## 8. Correction (2026-11-12, tester follow-up F §2, #116; Orca session `5abcad7d`, seat w2, on main `b858261c`)
+
+The text above is kept as written. §6 ("changing the finite-mode settlement" out of scope) and the rule that finite groups
+keep the person's charge of the whole grant no longer hold as stated, by the human's 「要改」 on #116 (ledger
+`.superpowers/sdd/2026-11-12-tester-followup-f/progress.md`, decision C3):
+
+- A requirement or estimate call blocked on unknown usage in a **finite** group may now be settled with
+  `recovery-retry --acknowledge charge-observed-floor` as well as `charge-remaining-grant`: it books the call's observed
+  floor (`singleCallUsageLowerBound`, the record's `usageLowerBound` this design reads) by the same arithmetic as §2 here
+  (`bookCallFloor`, extracted from `bookApproximateFloorInTransaction` in `src/control/approximateUsage.ts`), marks the
+  run `usageApproximate`, and records `singleCallSettlement.method: "observed-floor"` (only-add). It needs a known floor
+  (`observed-floor-unknown` otherwise) and a finite remainder (`unlimited-remainder`), and is explicit, never automatic.
+  Principal as `charge-remaining-grant` (person or `agent:<client>`; refused to a run Orca dispatched).
+- **Flow calls are unchanged**: the form is refused for them (`run-usage-not-settleable:flow-call`); they keep the
+  grant charge, as §2 keeps them out of the soft path.
+- Criteria: `tests/control/observedFloorSettlement.test.ts` (single-call describe), `tests/flow/flowCallSettlement.test.ts`
+  (the flow-call refusal), `web/tests/observedFloorSettlement.test.tsx` (ChargeRetry).

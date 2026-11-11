@@ -518,3 +518,29 @@ unchanged (Rule 13); where it differs from the answers below, the answers rule.
   can only under-count.
 - **Q7: exclude.** Recovery and saved-result verification runs keep the person's path (§3.3 step 1 as written). No C7.
 - **Q8: `orca-auto`**, as orchestration, failover and schedules already write it.
+
+## 7. Correction (2026-11-12, tester follow-up F §2, #116; Orca session `5abcad7d`, seat w2, on main `b858261c`)
+
+The text above is kept as written. What changed, by the human's 「要改」 on #116 (ledger
+`.superpowers/sdd/2026-11-12-tester-followup-f/progress.md`, decision C3):
+
+- A **finite** group's loop run with unknown usage is no longer limited to `charge-remaining-grant` (or a proved
+  `release-known-zero`). `settle-unknown-usage` takes a fourth acknowledgement, **`charge-observed-floor`**, admitted only
+  when the run's work token remainder is finite **and** ccloop's floor is known from the source this design's pass reads
+  (the run's `usageLowerBound`); otherwise `run-usage-not-settleable` with detail `observed-floor-unknown` (no floor) or
+  `unlimited-remainder`. An unlimited remainder keeps its forms (`release-unmetered`, and this pass).
+- It is **explicit, never automatic** in a finite group (C3: the limit is the operator's statement, so under-charging it
+  needs someone to say so). The pass here is unchanged and still settles only groups with no token limit.
+- It books exactly as §3.2/§3.4 here (the arithmetic is now one function, `bookObservedFloor` in
+  `src/control/settleUnknownUsage.ts`, which this pass calls too): the floor itself is booked as work usage, the run is
+  marked `usageApproximate`, and the marker has this design's shape (`floorTokens`, `reason`) with
+  **`method: "observed-floor"`** (schema extended only-add, `src/control/usageSettlement.ts`) and the settler's principal:
+  a person (`user:<id>`) or a socket agent without a token (`agent:<client>`), as `charge-remaining-grant`; a run Orca
+  dispatched is refused. Its own `settle-unknown-usage` row backs it (not `settle-approximate-usage`).
+- The finite-legacy `group-reserve-insufficient` check of a handoff-stopped run is kept; for this form it counts the
+  floor plus the remainder after it (re-parked), not twice the remainder.
+- Known gap: ccloop's saved-result recovery parses only `remaining-grant` and `approximate-floor` markers (ccloop
+  `src/control/savedResultRecovery.ts`); a run settled `observed-floor` is not recoverable there until ccloop learns the
+  method (as with `known-zero` and agent principals today). Not changed this round (ccloop criteria are added only by
+  per-criterion human naming).
+- Criteria: `tests/control/observedFloorSettlement.test.ts`, `web/tests/observedFloorSettlement.test.tsx`.
