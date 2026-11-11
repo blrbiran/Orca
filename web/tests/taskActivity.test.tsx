@@ -49,6 +49,14 @@ describe("the task detail's run activity (spec §6.5)", () => {
     } finally { await i18n.changeLanguage("en"); }
   });
 
+  // Tester follow-up E §2: the Web refused the whole response on a kind it did not know, so any run with a saved-result
+  // top-up showed activity-response-invalid instead of its activity.
+  it("accepts a run whose activity carries a saved-result top-up row", async () => {
+    entries = [{ seq: 5, groupId: "g", taskId: "a", runId: "run-a", at: AT + 2000, kind: "saved-result-top-up", body: {} }, ...entries];
+    const answer = await fetchRunActivity("run-a");
+    expect(answer.entries.map((entry) => entry.kind)).toEqual(["saved-result-top-up", "run-settled", "run-blocked", "phase", "run-started"]);
+  });
+
   it("reads the current run's activity from its route and lists the newest window chronologically, above the runs and their evidence", async () => {
     detail();
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });

@@ -16,7 +16,9 @@ import type { DecisionKind as WebDecisionKind } from "../../web/src/types.js";
 import { DECISION_KINDS, type DecisionKind as ServerDecisionKind } from "../../src/ledger/types.js";
 import { CORRECTION_KINDS } from "../../src/corrections/schema.js";
 import { CUSTOM_LABEL_PREFIX, SYSTEM_LABELS } from "../../src/control/labels.js";
-import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
+import { CUSTOM_LABEL_PREFIX as WEB_CUSTOM_LABEL_PREFIX, WEB_ACTIVITY_KINDS, WEB_SYSTEM_LABELS, WEB_WORK_ITEM_CATEGORIES } from "../../web/src/controlTypes.js";
+import { ACTIVITY_KINDS } from "../../src/control/activity.js";
+import { activityKindSchema } from "../../src/control/webProtocol.js";
 import { WORK_ITEM_CATEGORIES } from "../../src/control/workItemCategory.js";
 import type { FlowSettingsRead as ServerFlowSettingsRead } from "../../src/flow/settings.js";
 import { FLOW_EFFECT_CLASSES, FLOW_LOCKABLE_PATHS } from "../../src/flow/settingsSchema.js";
@@ -148,6 +150,13 @@ describe("web/src/types.ts stays in lockstep with the server shapes (task 8 ruli
   // Issue-fixes spec §6.1: the web's category list is the server's table, in order (the graph legend draws it).
   it("WEB_WORK_ITEM_CATEGORIES is the same list as WORK_ITEM_CATEGORIES", () => {
     expect([...WEB_WORK_ITEM_CATEGORIES]).toEqual([...WORK_ITEM_CATEGORIES]);
+  });
+
+  // Tester follow-up E §2: the Web's activity reader refuses a whole response on a kind it does not know, so a server kind
+  // missing here (saved-result-top-up was) turns every run that carries it into activity-response-invalid.
+  it("WEB_ACTIVITY_KINDS is the same SET as the server's ACTIVITY_KINDS and its wire enum", () => {
+    expect([...WEB_ACTIVITY_KINDS].sort()).toEqual([...ACTIVITY_KINDS].sort());
+    expect([...WEB_ACTIVITY_KINDS].sort()).toEqual([...activityKindSchema.options].sort());
   });
 
   // Flow engine spec §11.2 (plan Task 16): the flow settings form offers exactly the server's classes and lockable paths.

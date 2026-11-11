@@ -1,4 +1,5 @@
 import type {PanelPartialSelectionV1, SavedResultEligibilityV1} from "./controlTypes.js";
+import { WEB_ACTIVITY_KINDS } from "./controlTypes.js";
 /**
  * Task 9: the browser's only door to the control plane.
  *
@@ -176,7 +177,7 @@ export const fetchTranscriptPage = (runId: string, call: { attempt: number; phas
 export const fetchSavedResultEligibility=(runId:string):Promise<SavedResultEligibilityV1>=>controlGet(`/api/control/runs/${segment(runId)}/saved-result-eligibility`);
 
 /** GET /api/control/runs/:runId/activity -- issue-fixes spec §5.2: the run's newest 200 activity rows. */
-const activityKinds = new Set(["usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe", "attempt-accepted", "attempt-accept-refused"]);
+const activityKinds = new Set<string>(WEB_ACTIVITY_KINDS);
 function activityResponse(runId: string, value: unknown): RunActivityV1 {
   const invalid = (): never => { throw new ControlRequestError({ status: 200, code: "activity-response-invalid", message: i18n.t("control.activity.responseInvalid"), commandRevision: null }); };
   if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();
