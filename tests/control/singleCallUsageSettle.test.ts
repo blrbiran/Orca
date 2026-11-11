@@ -174,12 +174,15 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
     } finally { await x.dispose(); }
   });
 
-  it("a principal that is not an authenticated owner is refused", async () => {
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — a socket agent without a person token may now
+  // charge a single call's grant (spec 2026-11-11-tester-followup-e-design.md §8; agentUsageSettlement.test.ts), so the
+  // refused principal here is a run Orca dispatched. (Was: a plain `agent:cli`, refused.)
+  it("a run Orca dispatched, or a person principal off the Web without person authority, is refused", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
     try {
       await x.until(() => x.runs()[0]?.state === "blocked");
       const command = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
-      expect(await refusal(withCommandContext(command.commandId, { client: "cli", principal: "agent:cli" }, () => x.service.recoveryRetry(command as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "owner-required" });
+      expect(await refusal(withCommandContext(command.commandId, { client: "cli", principal: "agent:cli", dispatchedRun: "run-dispatched" }, () => x.service.recoveryRetry(command as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "owner-required" });
       // Code review m3: an owner's principal on another client than the Web is refused too (as settle-unknown-usage).
       const socket = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
       expect(await refusal(withCommandContext(socket.commandId, { client: "cli", principal: "user:owner" }, () => x.service.recoveryRetry(socket as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "owner-required" });
@@ -428,9 +431,12 @@ describe("ccloop's record with the lower bound (§5 O1)", () => {
 });
 
 describe("who may acknowledge the charge (§9 R1: as settle-unknown-usage, an owner's act)", () => {
-  it("the route refuses the acknowledgement to anyone but an owner, and wants a person token on the socket; a plain retry stays open", () => {
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the acknowledgement is open on the socket
+  // (an agent may charge the grant without a person token, spec 2026-11-11-tester-followup-e-design.md §8); a Web member
+  // is still refused it. (Was: socket tier token.)
+  it("the route refuses the acknowledgement to a Web member, and is open on the socket; a plain retry stays open", () => {
     expect(humanOnlyRefusal("recovery-retry", { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" })?.code).toBe("control-field-human-only");
-    expect(socketTier("recovery-retry", { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" })).toBe("token");
+    expect(socketTier("recovery-retry", { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" })).toBe("open");
     expect(humanOnlyRefusal("recovery-retry", { scope: "run", runId: "run-1" })).toBeNull();
     expect(socketTier("recovery-retry", { scope: "run", runId: "run-1" })).toBeNull();
   });

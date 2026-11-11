@@ -104,7 +104,11 @@ describe("#102: a requirement call blocked on unknown usage across a restart", (
 // person authority (permissions.ts hasPersonAuthority). A task run's settle-unknown-usage too since session 2026-10-29
 // (spec 2026-10-29-socket-usage-settlement-design.md; below).
 const TOKEN = { client: "cli", principal: "agent:cli", personAuthority: true, personPrincipal: "user:u-owner" };
-const DISPATCHED = { client: "cli", principal: "agent:cli", personAuthority: false, personPrincipal: "user:u-owner" };
+// Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the context the routes give a run Orca dispatched
+// (routedCommandContext) also names that run; a socket agent without person authority but not dispatched may now charge
+// the grant (spec 2026-11-11-tester-followup-e-design.md §8), so the refused principal is the dispatched run.
+// (Was: no `dispatchedRun`, which stood for any principal without person authority.)
+const DISPATCHED = { client: "cli", principal: "agent:cli", personAuthority: false, personPrincipal: "user:u-owner", dispatchedRun: "run-dispatched" };
 
 describe("#103: settling over the socket with an owner's person token", () => {
   it("a single call's charge-and-retry is booked to the token's owner; without person authority it is refused", async () => {

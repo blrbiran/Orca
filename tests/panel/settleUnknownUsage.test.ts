@@ -32,9 +32,16 @@ describe("D9 transport permission and accounting", () => {
         expect(status).toBe(200); expect(body.result.kind).toBe("usage-settled");
         expect(t.body(runId).usageSettlement.principal).toBe("user:owner-1");
         expect(t.h.store.db.prepare("SELECT client,principal FROM commands WHERE id=?").get(envelope.commandId)).toEqual({ client: "web", principal: "user:owner-1" });
+      } else if (socket) {
+        // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — an agent on the socket without a person
+        // token may charge the remaining grant (spec 2026-11-11-tester-followup-e-design.md §8); it is booked to the agent
+        // itself, never to a person, and its ledger row names no person. (Was: 403 control-person-token-required.)
+        expect(status).toBe(200); expect(body.result.kind).toBe("usage-settled");
+        expect(t.body(runId).usageSettlement.principal).toBe("agent:mcp:test");
+        expect(t.h.store.db.prepare("SELECT client,principal,person_principal FROM commands WHERE id=?").get(envelope.commandId)).toEqual({ client: "mcp:test", principal: "agent:mcp:test", person_principal: null });
       } else {
-        // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): the token tier on the socket; a member as before (I3).
-        expect(status).toBe(403); expect(body.error.code).toBe(socket ? "control-person-token-required" : "control-verb-human-only");
+        // CLI v2 spec §15.1 (plan Task 10; Ruling: 这次批准改写所有必要的判据 (b37f7ce9); 允许改必要的test (8b1469ea)): a member as before (I3).
+        expect(status).toBe(403); expect(body.error.code).toBe("control-verb-human-only");
         expect(t.body(runId).usageSettlement).toBeUndefined(); expect(t.h.store.db.prepare("SELECT * FROM usage_ledger ORDER BY id").all()).toEqual(before);
         expect(t.h.store.db.prepare("SELECT id FROM commands WHERE id=?").get(envelope.commandId)).toBeUndefined();
       }

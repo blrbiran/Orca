@@ -89,6 +89,10 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "clear-spend-cap", payload: {}, tier: "token", member: V },
   { entry: "set-usage-calendar", payload: {}, tier: "token", member: V },
   { entry: "settle-unknown-usage", payload: {}, tier: "token", member: V },
+  // Tester follow-up E §8: an agent may charge the grant or settle a proved zero without a token; unmetered wants a person.
+  { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "charge-remaining-grant" }, tier: "open", member: V },
+  { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "release-known-zero" }, tier: "open", member: V },
+  { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "release-unmetered" }, tier: "token", member: V },
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): human-only, socket tier token; a run Orca dispatched is always refused.
   { entry: "accept-attempt", payload: { taskId: "a", runId: "run-1", note: "looked at it" }, tier: "token", member: V },
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },
@@ -100,7 +104,9 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "plan-library-archive", payload: { entryId: "pl-0123456789abcdef" }, tier: "open", member: V },
   { entry: "import-plan.tokenLimit", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, tokenLimit: 5 }, tier: "token", member: F },
   // Spec 2026-10-27 single-call unknown usage §9 R1: acknowledging the charge of a blocked call's grant (as settle-unknown-usage).
-  { entry: "recovery-retry.acknowledge", payload: { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" }, tier: "token", member: F },
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — charging a single call's grant is open on the
+  // socket (spec 2026-11-11-tester-followup-e-design.md §8), as settle-unknown-usage's charge form. (Was: tier token.)
+  { entry: "recovery-retry.acknowledge", payload: { scope: "run", runId: "run-1", acknowledge: "charge-remaining-grant" }, tier: "open", member: F },
   { entry: "import-plan.integration", payload: { groupId: "g", repoId: "repo", libraryEntry: {}, integration: { delivery: "keep" } }, tier: "token", member: F },
   // Scheduled flows and groups spec 2026-10-24 §11.1 (Task 5): setting a schedule (its pool and token limit are budgets, its
   // scheme a delivery choice) and making one from a group are token; enabling is token, and disabling, removing and
