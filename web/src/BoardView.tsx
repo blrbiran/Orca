@@ -22,6 +22,7 @@ import { GroupActionsMenu } from "./GroupActionsMenu.js";
 import type { ControlRefusal } from "./controlState.js";
 import { minutesSince, updatedText } from "./relativeTime.js";
 import { KNOWN_FAILURE_CAUSES, knownCause } from "./RunReason.js";
+import { expectedText } from "./TaskDetail.js";
 
 export interface BoardPrefs { view: "board" | "graph"; showArchived: boolean }
 
@@ -155,6 +156,10 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
           {facts.pendingDecisions > 0 ? ` · ${t("board.card.decisions", { count: facts.pendingDecisions })}` : ""}
           {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: causeText(facts.firstFailure.cause) })}` : ""}
         </p>
+      )}
+      {/* Budget defaults spec 2026-11-11 §7 item 4: an unlimited group's estimate as an expectation -- shown, never enforced. */}
+      {facts?.expectation !== undefined && (
+        <p className="detail-note num" data-testid="board-card-expectation">{expectedText({ tokens: facts.expectation.expectedTokens, usedTokens: facts.expectation.usedTokens })}</p>
       )}
       {/* Tester #229 (plan follow-up B, T1/T10): a run blocked after landing resumes in place; the failure names the command. */}
       {facts?.firstFailure?.next !== undefined && (

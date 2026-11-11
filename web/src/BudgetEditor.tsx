@@ -230,6 +230,14 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const unlimitedGroup = view.ledger.groupLimit.tokens === null;
   const autoEligible = unlimitedGroup && view.autoConfirm?.eligible === true;
   const refusedCode = view.autoConfirm?.refusedCode ?? null;
+  // Budget defaults spec 2026-11-11 §7 items 1, 4: in an unlimited group an estimate's task-work tokens are offered as no
+  // ceiling (the shared transform sends none); the task's work tokens cell names the expectation instead.
+  const expectedCell = (allocation: { ownerKind: string; ownerId: string; bucket: string }, dimension: string): JSX.Element | null => {
+    if (!unlimitedGroup || dimension !== "tokens" || allocation.ownerKind !== "task" || allocation.bucket !== "work") return null;
+    const expected = view.workItems.find((item) => item.taskId === allocation.ownerId)?.expected;
+    return expected === undefined ? null
+      : <small className="block num" data-testid={`budget-expected-${allocation.ownerId}`}>{t("budget.expected", { value: shortTokens(expected.tokens) })}</small>;
+  };
   const toLimit = (): void => { document.getElementById(`group-limit-${groupId}`)?.querySelector<HTMLInputElement>("input")?.focus(); };
   // The checklist's lines; the list is rendered only when it has one (an empty <ul> names nothing).
   const checklist = [
@@ -353,6 +361,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                   return (
                     <td key={dimension}>
                       {allocation.amount[dimension]}{owned ? <small>{t("budget.changeInCard")}</small> : null}
+                      {expectedCell(allocation, dimension)}
                       {loopValue !== null && !archived && (
                         <button type="button" aria-label={t("budget.useFor", { value: loopValue, owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
                           onClick={() => applySuggestions([loopAction!])}>{t("budget.use", { value: loopValue })}</button>
@@ -387,6 +396,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
                       )}
                       <small>{provenanceText(allocation.fieldProvenance[dimension])}</small>
                     </label>
+                    {expectedCell(allocation, dimension)}
                     {fieldOperation !== undefined && !archived && (
                       <button type="button" aria-label={t("budget.useFor", { value: fieldOperation.value??t("budget.unlimited"), owner: allocation.ownerId, bucket: enumText("bucket", allocation.bucket), dimension: enumText("dimension", dimension) })}
                         onClick={() => applySuggestions(suggestionActions(view, { kind: "field", target }))}>{t("budget.use", { value: fieldOperation.value??t("budget.unlimited") })}</button>

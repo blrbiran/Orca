@@ -109,6 +109,8 @@ export type GroupSummaryV1 = {
     budget: { usedTokens: number; limitTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string } | null;
     /** Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group that a review group owns; absent when none. */
     reviewFindings?: { major: number; minor: number };
+    /** Budget defaults spec 2026-11-11 §7 item 4: a group with no token limit -- its tasks' summed expectation and use (null: unknown). */
+    expectation?: { expectedTokens: number; usedTokens: number | null };
   };
   /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
   dependsOn?: string[];
@@ -382,6 +384,8 @@ export type WorkItemViewV1 = {
   category?: WorkItemCategoryV1;
   /** Retry work top-up spec 2026-11-06 §2 "The board": every top-up of the task, oldest first; absent when none. */
   topUps?: Array<{ amount: Amount; by: string; at: number; fromRunId: string }>;
+  /** Budget defaults spec 2026-11-11 §7 items 2, 4: a group with no token limit -- the estimate's work tokens as an expectation; absent otherwise. */
+  expected?: { tokens: number; estimateId: string; stale: boolean; usedTokens: number | null };
 };
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;

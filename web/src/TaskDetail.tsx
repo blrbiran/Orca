@@ -23,6 +23,7 @@ import { explainBesideCode } from "./ccloopCodes.js";
 import { hasFailureOutcome, reasonCode, retryRunOpen, savedResultSourceRunId, taskRunNumber } from "./runFacts.js";
 import i18n, { enumText } from "./i18n.js";
 import { shortTokens } from "./TokenInput.js";
+import { usedRatio } from "../../src/control/budgetSuggestions.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
@@ -59,6 +60,19 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
       ? i18n.t("control.progress.tokensOfZero", { used: shortTokens(progress.tokens.used) })
       : i18n.t("control.progress.tokensPercent", { percent: Math.floor((progress.tokens.used * 100) / progress.tokens.grant) });
   return i18n.t("control.progress.line", { step, attempt, tokens });
+}
+
+/**
+ * Budget defaults spec 2026-11-11 §7 item 4: an estimate's work tokens as an expectation (a group with no token limit), and
+ * once there is usage, how far it went: "expected 1.5M · used 4.8M (×3.2)", or "used unknown". Shown, never enforced.
+ */
+export function expectedText(expected: { tokens: number; usedTokens: number | null; stale?: boolean }): string {
+  const base = i18n.t("control.progress.expected", { expected: shortTokens(expected.tokens) }) + (expected.stale === true ? i18n.t("control.progress.expectedStale") : "");
+  if (expected.usedTokens === 0) return base;
+  const ratio = usedRatio({ tokens: expected.tokens, usedTokens: expected.usedTokens });
+  return expected.usedTokens === null || ratio === null
+    ? i18n.t("control.progress.expectedUsedUnknown", { base })
+    : i18n.t("control.progress.expectedUsed", { base, used: shortTokens(expected.usedTokens), ratio });
 }
 
 /** Spec §3.5, as enumText: where the labels came from in words; a source this panel has no words for is shown as sent. */
