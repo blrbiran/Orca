@@ -55,11 +55,13 @@ const props = (over: Partial<Parameters<typeof ControlGroupView>[0]> = {}, group
 const taskDetail = (root: HTMLElement): HTMLElement => root.querySelector('[data-task-id="a"]') as HTMLElement;
 const runsRow = (root: HTMLElement): HTMLElement => {
   const row = root.querySelector(`tr[data-run-id="${RUN}"]`) as HTMLElement;
-  const detail = root.querySelector(`tr[data-run-detail="${RUN}"]`) as HTMLElement | null;
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #244: the open run's detail is a full-width box
+  // below the runs table, no longer a table row, so it is found by its data-run-detail hook alone.
+  const detail = root.querySelector(`[data-run-detail="${RUN}"]`) as HTMLElement | null;
   if (detail !== null) return detail;
   // Ruling: one run-row disclosure opens the full-width transcript and evidence detail.
   fireEvent.click(row.querySelector('button[aria-expanded]')!);
-  return root.querySelector(`tr[data-run-detail="${RUN}"]`) as HTMLElement;
+  return root.querySelector(`[data-run-detail="${RUN}"]`) as HTMLElement;
 };
 async function openIn(scope: HTMLElement): Promise<void> {
   // Ruling: the task's current run and an expanded run row both open the latest recorded call.
@@ -154,7 +156,8 @@ describe("the task's current run opens by itself (tester #113)", () => {
     fireEvent.click(disclosure(taskDetail(container)));
     await flush();
     expect(disclosure(taskDetail(container)).getAttribute("aria-expanded")).toBe("true");
-    expect(within(taskDetail(container)).getByRole("button", { name: /execute · call 1/ })).toBeTruthy();
+    // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #252: the one execute call is labelled without "call N".
+    expect(within(taskDetail(container)).getByRole("button", { name: /^execute · codex · / })).toBeTruthy();
     expect(within(taskDetail(container)).queryAllByTestId("transcript-call")).toHaveLength(0);
   });
 });

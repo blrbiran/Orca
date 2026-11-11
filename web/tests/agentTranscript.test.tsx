@@ -30,7 +30,9 @@ const flush = async (): Promise<void> => { await act(async () => { await vi.adva
 async function openCall(): Promise<void> {
   fireEvent.click(screen.getByRole("button", { name: "Transcript" }));
   await flush();
-  fireEvent.click(screen.getByRole("button", { name: /execute · call 1/ }));
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #252: a phase with one call in its attempt is
+  // labelled without "call N", so the listing's one execute call reads "execute · claude · …".
+  fireEvent.click(screen.getByRole("button", { name: /^execute · claude · / }));
   await flush();
 }
 

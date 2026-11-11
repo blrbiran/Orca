@@ -128,7 +128,9 @@ it("shows the most recent run when nothing runs", async () => {
 // autoOpen read the listing once, so a run whose first call was not yet recorded stayed closed, and execute never replaced
 // plan. The Live region now follows: it re-reads the listing every LISTING_POLL_MS while shown.
 const callButton = (scope: HTMLElement, phase: string, seq: number): HTMLElement =>
-  within(scope).getByRole("button", { name: new RegExp(`^${phase} · call ${seq} `) });
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #252: "call N" is shown only when the phase has
+  // more than one call in its attempt, so a call is found by its phase and, when present, its seq.
+  within(scope).getByRole("button", { name: new RegExp(`^${phase} · (call ${seq} · )?codex · `) });
 
 it("opens a call recorded after Live was shown, without a press", async () => {
   // mutation: drop the listing re-read (setInterval) -> the first, empty listing is the last one read -> red

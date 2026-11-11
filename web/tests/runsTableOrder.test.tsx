@@ -44,7 +44,10 @@ beforeEach(async () => { await i18n.changeLanguage("en"); });
 afterEach(cleanup);
 
 describe("the Runs table's order (feedback #59)", () => {
-  it("opens one run's transcript and evidence across all six columns", () => {
+  // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #244: the open run's transcript and evidence are
+  // a full-width box below the runs table (was: a detail row spanning its six columns), so the table's 40rem narrow-screen
+  // width never widens the transcript. The box is what the row's disclosure controls.
+  it("opens one run's transcript and evidence full width below the table, outside it", () => {
     const container = renderRuns([{ ...run("run-a", 1), evidenceIds: ["ev-1"] }]);
     const table = container.querySelector('[data-overview-region="runs"] table')!;
     expect(table.classList.contains("runs-table")).toBe(true);
@@ -52,8 +55,9 @@ describe("the Runs table's order (feedback #59)", () => {
     const trigger = table.querySelector<HTMLButtonElement>('tr[data-run-id="run-a"] button[aria-expanded="false"]')!;
     expect(trigger.getAttribute("aria-label")).toBe("Open run Run 1");
     fireEvent.click(trigger);
-    const detail = table.querySelector('tr[data-run-detail="run-a"]')!;
-    expect(detail.querySelector("td")?.getAttribute("colspan")).toBe("6");
+    const detail = container.querySelector('[data-overview-region="runs"] [data-run-detail="run-a"]')!;
+    expect(detail.closest("table")).toBeNull();
+    expect(detail.id).toBe(trigger.getAttribute("aria-controls"));
     expect(detail.querySelector('section[aria-label="Transcript of run-a"] button')).toBeTruthy();
     expect(detail.querySelector("button")?.textContent).toMatch(/Transcript|evidence/);
     expect(detail.querySelectorAll("button").length).toBeGreaterThanOrEqual(2);
