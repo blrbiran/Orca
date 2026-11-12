@@ -51,7 +51,12 @@ export interface StartEnvelopeWork {
   additionalRepos?: Array<{ key: string; targetRepo: string; base: string }>;
   /** Live transcript spec §10.5.2: the operator note a flow continuation carries; absent for every other run (no key). */
   operatorNote?: OperatorNote;
+  /** Tester follow-up G §10.2: the run's handoff directories (taskHandoffs.ts); absent for a recovery (no key). */
+  handoff?: HandoffDirs;
 }
+
+/** Tester follow-up G §10.2 (ccloop C1): absolute, canonical, outside the source directory and every repository. */
+export interface HandoffDirs { inputDir: string; outputDir: string }
 
 /** The checks both translations share (see toStartEnvelope's comment), and the claim built from the run row. */
 function frozenClaim(envelope: DispatchEnvelopeV1, run: unknown): { frozen: DispatchEnvelopeV1; claim: StartEnvelope["claim"] } {
@@ -126,6 +131,7 @@ export function toStartEnvelope(
       ...(work.priorFailures !== undefined ? { priorFailures: work.priorFailures } : {}),
       ...(work.additionalRepos !== undefined ? { additionalRepos: work.additionalRepos } : {}),
       ...(work.operatorNote !== undefined ? { operatorNote: work.operatorNote } : {}),
+      ...(work.handoff !== undefined ? { handoff: work.handoff } : {}),
     },
   };
   // Parsed against the repository's own start-envelope schema rather than merely typed as one, so
