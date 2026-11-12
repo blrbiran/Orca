@@ -63,7 +63,7 @@ describe("task reopen: revoke a no-change completion and run it again with a not
   }, 60000);
 
   it("reopen leaves a landed dependent done", async () => {
-    const { t, runId } = await noChangeDone([{ taskId: "a", verifierType: "agent" }, { taskId: "b", dependsOn: ["a"] }], (id) => (id === "a" ? {} : { b: "b\n" }));
+    const { t, runId } = await noChangeDone([{ taskId: "a", verifierType: "agent" }, { taskId: "b", dependsOn: ["a"] }], (id): Record<string, string | null> => (id === "a" ? {} : { b: "b\n" }));
     try {
       const b = await claimAgain(t);
       await t.until(t.driver(), () => t.body(b).drive?.cleanedUp === true);
