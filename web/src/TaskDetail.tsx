@@ -26,6 +26,7 @@ import { shortTokens } from "./TokenInput.js";
 import { usedRatio } from "../../src/control/budgetSuggestions.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { AcceptAttempt } from "./AcceptAttempt.js";
+import { NoChangeRecord } from "./NoChange.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import type { Role } from "./auth.js";
@@ -344,6 +345,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
               {/* Reviewed acceptance (spec 2026-11-11 §7, #227): an owner may land this failed attempt after its checks. */}
               <AcceptAttempt run={run} item={item} roles={props.roles} archived={archived}
                 groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
+              {/* Tester follow-up G spec §1.2, §1.4, §10.1: the no-change record and its revoke / accept actions. */}
+              <NoChangeRecord run={run} item={item} archived={archived} groupId={groupId} revision={view.summary.commandRevision} onCommand={onCommand} />
             </li>
           ))}
         </ul>

@@ -66,6 +66,8 @@ export interface NoChangeCompletion {
   runId: string; ordinal: number;
   decidedBy: "agent-verifier" | "command-checks" | "judge" | "person" | `agent:${string}`;
   at: number;
+  /** The agent's explanation (≤2048 bytes), the judge's finding, or the person's note: what the task view shows beside the marker. */
+  why: string | null;
 }
 
 type NoChangeWork = { workItemId: string; noChangeCompletion?: NoChangeCompletion; noChangeCount?: number };
@@ -81,7 +83,7 @@ export function recordNoChangeCompletionInTransaction(store: ControlStore, input
 }): NoChangeCompletion {
   const work = readWork(store, input.groupId, input.taskId) as unknown as NoChangeWork;
   const ordinal = (work.noChangeCount ?? 0) + 1;
-  const completion: NoChangeCompletion = { runId: input.runId, ordinal, decidedBy: input.decidedBy, at: store.now() };
+  const completion: NoChangeCompletion = { runId: input.runId, ordinal, decidedBy: input.decidedBy, at: store.now(), why: input.note ?? input.judge?.finding ?? input.explanation };
   work.noChangeCompletion = completion;
   work.noChangeCount = ordinal;
   saveWork(store, input.groupId, work as never);

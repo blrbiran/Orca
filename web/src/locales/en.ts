@@ -781,6 +781,21 @@ export const en = {
       cancel: "Cancel",
       boardFailed: "Group acceptance failed: {{command}}",
     },
+    // Tester follow-up G spec §1.2, §1.4, §10.1: a task completed (or stopped) with no change, and its two actions.
+    noChange: {
+      chip: "no change",
+      chipNth: "no change · time {{n}}",
+      record: "Completed with no change, decided by {{by}}",
+      recordNth: "Completed with no change (time {{n}}), decided by {{by}}",
+      finding: "The goal judge said: {{finding}}",
+      reopen: "Revoke and re-run",
+      reopenExplain: "The no-change completion is withdrawn and the task runs again in this group; your note is given to its agent. Tasks that already used this result are not rolled back.",
+      accept: "Accept as no change",
+      acceptExplain: "The task is marked done with no change; say why no change is the right result.",
+      note: "Note (at most 2048 bytes)",
+      send: "Send",
+      cancel: "Cancel",
+    },
     acceptAttempt: {
       open: "Accept this attempt after checks",
       explain: "Orca will merge this attempt onto the group branch, run the task's setup and required checks on the merged tree, and land it only if they all pass. Nothing is charged again.",
@@ -2753,7 +2768,8 @@ export const enErrors: Record<string, string> = {
   // Debug task plan Task 8: the detail is the check's reason, explained through debugRepro (web/src/refusalExplain.ts).
   "debug-repro": "Orca's reproduce-first check did not pass: {{detail}}. Retry the task.",
   // Tester follow-up F §4: a settled run whose attempt changed nothing (executionDriver.ts EMPTY_RESULT_REASON).
-  "empty-result": "The attempt finished without changing any file, so there was nothing to land and the task stays blocked. It cannot be retried or accepted in this group. If no change was needed, a task whose contract lets its command checks decide the goal (commandChecksDecideGoal) completes without a landing: set that in the plan and run the task in a new group. If a change was needed, say in the task what to change and run it in a new group.",
+  // Tester follow-up G §1: a provable no change completes or is judged; what is left here is not one.
+  "empty-result": "The attempt finished without changing any file, so there was nothing to land and the task stays blocked. It is not a provable no change (its tree differs from its base, or it is a criteria-review verdict), so it cannot complete in this group and Revoke and re-run does not apply. If a change was needed, say in the task what to change and run it in a new group.",
   // Tester follow-up G spec §10.1: a provable no change that waits for a person (noChangeJudge.ts, reopenTask.ts NO_CHANGE_BLOCKS).
   "no-change-twice": "The task changed nothing again after Orca re-ran it with the goal judge's finding. Accept it as no change, or reopen it with a note saying what to change.",
   "no-change-judge-failed": "Orca's goal judge call failed ({{detail}}), so nobody decided whether the unchanged tree meets the goal. Accept it as no change, or reopen it with a note.",

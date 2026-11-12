@@ -1022,6 +1022,8 @@ function workViews(
       category: categoryOf(readSnapshot, body),
       ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash, snapshot?.skills?.find(entry => entry.taskId === task.taskId)?.names),
       ...topUpsView(topUps, task.taskId),
+      // Tester follow-up G spec §1.2: the task's no-change record (who decided, the ordinal); omitted when it has none.
+      ...noChangeView((body as { noChangeCompletion?: unknown }).noChangeCompletion),
     };
     // Tester #230: the driver blocks the run alone and leaves the stored work item `running` (scheduling, close-run and
     // recovery read that), so a person reads the task as blocked when its current run is -- the brief's count and the
@@ -1030,6 +1032,13 @@ function workViews(
     if (view.status === "active" && view.category === "blocked") view.status = "blocked";
     return view;
   });
+}
+
+const noChangeCompletionSchema = z.object({ runId: idSchema, ordinal: safeInteger.positive(), decidedBy: z.string().min(1), at: safeInteger, why: z.string().nullable() }).strict();
+function noChangeView(value: unknown): { noChangeCompletion?: z.infer<typeof noChangeCompletionSchema> } {
+  if (value === undefined) return {};
+  const parsed = noChangeCompletionSchema.safeParse(value);
+  return parsed.success ? { noChangeCompletion: parsed.data } : blocked("work-item-no-change-invalid");
 }
 
 /** The task's top-up lines (spec §2 "The board"); absent when it has none, so a view without one is as it was. */
@@ -1265,6 +1274,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
         principal: run.operatorAcceptance.principal, at: run.operatorAcceptance.at, reason: run.operatorAcceptance.reason, landedCommit: run.operatorAcceptance.landedCommit } }),
       // Tester follow-up E §4 (#245): the post-merge check's record, as the drive holds it; omitted when there is none.
       ...(run.drive?.postMergeCheck === undefined ? {} : { postMergeCheck: run.drive.postMergeCheck }),
+      // Tester follow-up G spec §10.1: the goal judge of a no-change run; omitted for every other run.
+      ...(run.drive?.noChangeJudge === undefined ? {} : { noChangeJudge: run.drive.noChangeJudge }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),

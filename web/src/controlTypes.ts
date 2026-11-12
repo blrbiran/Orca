@@ -383,6 +383,8 @@ export type WorkItemViewV1 = {
   progress?: WorkItemProgressV1 | null;
   // Loop plans spec §4.1: optional here so literal fixtures need no edit; the server always sends both.
   loopPlan?: LoopPlanViewV1 | null;
+  /** Tester follow-up G spec §1.2: the task's no-change completion; absent when it has none. */
+  noChangeCompletion?: NoChangeCompletionV1;
   objective?: { goal: string; successCondition: string };
   /** Issue-fixes spec §6.1: the server's display category; optional so literal fixtures need no edit. */
   category?: WorkItemCategoryV1;
@@ -454,6 +456,8 @@ export type RunViewV1 = {
   attemptReview?: { requiredChecks: string[]; setupCommands: string[]; diff: { shortstat: string; stat: string[] } | null };
   /** Tester follow-up E §4 (#245): what the landing's post-merge check did; absent when the run did not land through it. */
   postMergeCheck?: PostMergeCheckV1;
+  /** Tester follow-up G spec §10.1: the goal judge of a no-change run; absent for every other run. */
+  noChangeJudge?: { runId: string | null; state: "pending" | "met" | "not-met" | "cannot-judge" | "failed" | "unfunded"; finding?: string };
   continuable?: boolean;
   evidenceIds: string[];
   /** Board spec 2026-10-03 D4: optional here so literal fixtures need no edit; the server always sends it. */
@@ -608,6 +612,8 @@ export type PostMergeCheckV1 = {
   result: "passed" | "failed" | "not-needed" | "skipped"; why?: "fast-forward" | "tree-equal" | "no-required-checks" | "no-task" | "stopped";
   attemptSha: string; mergedSha: string; oldTip: string; commands: CheckRunCommandV1[]; tail?: string;
 };
+/** Tester follow-up G spec §1.2: who decided a task completed with no change ("agent-verifier", "command-checks", "judge", "person", "agent:<client>"), and which time. */
+export interface NoChangeCompletionV1 { runId: string; ordinal: number; decidedBy: string; at: number; why: string | null }
 /** Issue-fixes spec §5.2: one row of Orca's activity record. */
 // Tester follow-up E §2: the activity reader accepts exactly these kinds; tests/panel/webParity.test.ts holds the set equal
 // to the server's ACTIVITY_KINDS.

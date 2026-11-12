@@ -41,6 +41,7 @@ import type {
 } from "./controlTypes.js";
 import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, expectedText, progressText } from "./TaskDetail.js";
+import { NoChangeChip } from "./NoChange.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { planText } from "./LoopPlanCard.js";
@@ -793,7 +794,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               </td>
               <td>{enumText("workStatus", shownWorkStatus(item))}{view.runs.filter(run => run.runId === item.currentRunId).map(run => <RunReason key={run.runId} run={run} />)}
                 {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run, props.active !== false && region === "progress"))}</td>
-              <td><LabelChips labels={item.labels} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
+              <td><LabelChips labels={item.labels} /><NoChangeChip item={item} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}{item.expected !== undefined && <small className="block num" data-testid={`task-expected-${item.taskId}`}>{expectedText(item.expected)}</small>}</td>
               <td>{item.currentRunId ?? t("common.none")}</td>
               <td>{item.pendingRunId ?? t("common.none")}</td>

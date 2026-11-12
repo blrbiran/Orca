@@ -231,13 +231,38 @@ export interface EmptyResultRun { runId?: unknown; taskId?: unknown; blockedReas
  * a started task (task-already-started), so no command moves this task in its group; the ways on are a new group. An
  * exit in the same group is out of scope this round (design §7).
  */
+// Tester follow-up G spec §1 / §10.1: a provable no change now completes (or is judged); empty-result is left only for an
+// attempt that is not a provable no change (its tree differs from its base, or it is a criteria-review verdict).
 export function emptyResultLines(runs: readonly EmptyResultRun[]): string[] {
   return runs.filter((run) => run.blockedReason === "empty-result").flatMap((run) => [
     `task ${String(run.taskId ?? "?")}: empty-result: run ${String(run.runId ?? "?")} finished without changing any file, so there was nothing to land and the task stays blocked`,
-    "  this attempt cannot be retried or accepted in this group: task retry refuses a finished run, and task accept-attempt an empty one",
-    "  if no change was needed: a task whose contract lets its command checks decide the goal (verification.commandChecksDecideGoal, or the loop plan's input) completes without a landing; set it in the plan and run the task in a new group (orca group import)",
+    "  this attempt is not a provable no change (its tree differs from its base, or it is a criteria-review verdict), so it cannot complete in this group and orca task reopen does not apply",
     "  if a change was needed: say in the task what to change, and run it in a new group",
   ]);
+}
+
+/** Tester follow-up G spec §1.2: a task's no-change record as the group view lists it. */
+export interface NoChangeItem { taskId?: unknown; currentRunId?: unknown; noChangeCompletion?: { runId?: unknown; ordinal?: unknown; decidedBy?: unknown } }
+const NO_CHANGE_BLOCK_PREFIXES = ["no-change-twice", "no-change-judge-failed", "no-change-judge-unfunded", "no-change-not-met"];
+
+/**
+ * Tester follow-up G spec §1.2, §1.4, §10.1: each task completed with no change (who decided, a second time said so) and
+ * its revoke command; each task stopped as a provable no change and the two commands that answer it.
+ */
+export function noChangeLines(groupId: string, items: readonly NoChangeItem[], runs: readonly EmptyResultRun[]): string[] {
+  const done = items.filter((item) => item.noChangeCompletion !== undefined).flatMap((item) => {
+    const record = item.noChangeCompletion!, task = String(item.taskId ?? "?");
+    const nth = record.ordinal === 2 ? ", 2nd time" : typeof record.ordinal === "number" && record.ordinal > 2 ? `, ${record.ordinal}th time` : "";
+    return [`task ${task}: no change (${String(record.decidedBy ?? "?")}${nth}) in run ${String(record.runId ?? "?")}`,
+      `  revoke: orca task reopen ${groupId} ${task} --note '<what to change>'`];
+  });
+  const stopped = runs.filter((run) => typeof run.blockedReason === "string" && NO_CHANGE_BLOCK_PREFIXES.some((p) => run.blockedReason === p || (run.blockedReason as string).startsWith(`${p}:`))).flatMap((run) => {
+    const task = String(run.taskId ?? "?");
+    return [`task ${task}: ${String(run.blockedReason)}: run ${String(run.runId ?? "?")} changed nothing and waits for a decision`,
+      `next: orca task accept-no-change ${groupId} ${task} --note '<why>'`,
+      `  or: orca task reopen ${groupId} ${task} --note '<what to change>'`];
+  });
+  return [...done, ...stopped];
 }
 
 export function formatWithUnestimated(body: unknown): string {
@@ -250,6 +275,7 @@ export function formatWithUnestimated(body: unknown): string {
   const current = new Set(((b as { workItems?: Array<{ currentRunId?: unknown }> } | null)?.workItems ?? []).map((item) => item.currentRunId));
   return withLines(text(body), [...(count > 0 ? [`execution: ${count} task run${count === 1 ? "" : "s"} in progress`] : []),
     ...emptyResultLines(runs.filter((run) => current.has(run.runId))),
+    ...(typeof groupId === "string" ? noChangeLines(groupId, (b as { workItems?: NoChangeItem[] } | null)?.workItems ?? [], runs.filter((run) => current.has(run.runId))) : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : [])]);

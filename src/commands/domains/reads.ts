@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { contextHandoffLines, emptyResultLines, formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun } from "./verbs.js";
+import { contextHandoffLines, emptyResultLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -370,8 +370,9 @@ export const READ_ROWS: CommandDef[] = [
     },
     // Tester follow-up F §4 (empty-result): the task's current run, when its attempt changed nothing, in words.
     format: (body) => {
-      const b = body as { task?: { currentRunId?: unknown }; runs?: EmptyResultRun[] };
-      const lines = emptyResultLines((b.runs ?? []).filter((run) => run.runId === b.task?.currentRunId));
+      const b = body as { groupId?: string; task?: NoChangeItem; runs?: EmptyResultRun[] };
+      const current = (b.runs ?? []).filter((run) => run.runId === b.task?.currentRunId);
+      const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current)];
       return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } }),
   read({ domain: "run", action: "show", summary: "one run: its entry in the group view, the newest 10 activity rows, the evidence summary",

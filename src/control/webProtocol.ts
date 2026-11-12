@@ -1820,6 +1820,8 @@ export const workItemViewSchema = z
     loopPlan: loopPlanViewSchema.nullable().optional(),
     // Loop plans spec §4.1 (Drafter finding F4): the effective contract's goal and success condition.
     objective: z.object({ goal: nonemptyString, successCondition: nonemptyString }).strict().optional(),
+    // Tester follow-up G spec §1.2: the task's no-change completion (who decided, which time); omitted when it has none.
+    noChangeCompletion: z.object({ runId: idSchema, ordinal: positiveSafeInteger, decidedBy: nonemptyString, at: safeInteger, why: z.string().nullable() }).strict().optional(),
     // Issue-fixes spec §6.1: the item's display category, computed once on the server. Optional on the wire like labels;
     // the server always gives it.
     category: z.enum(WORK_ITEM_CATEGORIES).optional(),
@@ -1934,6 +1936,8 @@ export const runViewSchema = z
     // the attempt's diff against the run's base (null until read, or when it cannot be); omitted for any other run.
     attemptReview: z.object({ requiredChecks: z.array(z.string()), setupCommands: z.array(z.string()),
       diff: z.object({ shortstat: z.string(), stat: z.array(z.string()) }).strict().nullable() }).strict().optional(),
+    // Tester follow-up G spec §10.1: the goal judge of a command-verified no-change run; omitted for every other run.
+    noChangeJudge: z.object({ runId: idSchema.nullable(), state: z.enum(["pending", "met", "not-met", "cannot-judge", "failed", "unfunded"]), finding: z.string().optional() }).strict().optional(),
     // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check did (driveRecord.ts postMergeCheckRecordSchema);
     // omitted for a run that did not land through it and for a record written before the field.
     postMergeCheck: z.object({
