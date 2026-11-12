@@ -52,13 +52,14 @@ export function landedRunCount(store: Pick<ControlStore, "db">, groupId: string)
  * The gate the done pass, the integration pass and a dependent's prerequisite read (DB only, no git child). A recorded
  * acceptance answers by its result. With none recorded yet, a group that needs none by definition is accepted -- at most
  * one task landed (its own checks ran on that tree), or a multi-directory or folder group (always `not-run`, a known gap)
- * -- and any other group waits for the acceptance pass. A work branch found missing (#278) satisfies only a group already
- * `done` (it stays done, and its dependents keep reading it so); any other group has no tree to accept and waits.
+ * -- and any other group waits for the acceptance pass. A work branch found missing (#278) answers as no record would, and
+ * also satisfies a group already `done` (it stays done, and its dependents keep reading it so); any other group that
+ * needs an acceptance has no tree to accept and waits.
  */
 export function acceptanceSatisfied(store: Pick<ControlStore, "db">, groupId: string, body: unknown): boolean {
   const record = acceptanceOf(body);
-  if (record?.why === "work-branch-missing") return (body as { status?: unknown }).status === "done";
-  if (record !== null) return SATISFIED.has(record.result);
+  if (record?.why === "work-branch-missing" && (body as { status?: unknown }).status === "done") return true;
+  if (record !== null && record.why !== "work-branch-missing") return SATISFIED.has(record.result);
   const b = (body ?? {}) as { multiDir?: unknown; dirWorkspace?: unknown };
   if (b.multiDir != null || b.dirWorkspace != null) return true;
   return landedTaskCount(store, groupId) <= 1;
