@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { ExecutionDriver } from "../../src/control/executionDriver.js";
 import { decideFundedAllowance } from "../../src/control/fundedAllowance.js";
 import { planCeilingRaises } from "../../src/control/liveCeilingRaise.js";
+import { refreshCeilingReserves } from "../../src/control/liveCeiling.js";
 import { readGroup } from "../../src/control/queries.js";
 import { committedTokens } from "../../src/control/spendCaps.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
@@ -233,6 +234,26 @@ describe("a reconciliation in an expectation-model group is funded under the har
       expect(after.used.tokens + after.reserved.tokens).toBe(held.used.tokens + held.reserved.tokens);
       expect(after.used.tokens + after.reserved.tokens).toBeLessThanOrEqual(after.limit.tokens);
       await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("H10: a run whose execution ended with its work usage unknown keeps its unused ceiling held", async () => {
+    // A landed run is blocked usage-unknown only at its settle; until then its ceiling must not come back as unspent.
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", behaviour: () => "stoppable" });
+    try {
+      const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
+      const set = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 10 * M } }));
+      if ("error" in set) throw new Error(`set-limit refused: ${JSON.stringify(set)}`);
+      const id = await t.claim();
+      const body = t.body(id);
+      const outstanding = body.liveCeiling.tokens - body.cumulative.work.tokens;
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...body, state: "landed", unknown: { ...body.unknown, work: true } }), id);
+      t.h.store.transaction(() => refreshCeilingReserves(t.h.store));
+      expect((readGroup(t.h.store, "g") as unknown as { liveCeilingReserved: number }).liveCeilingReserved).toBe(outstanding);
+      // Known usage: the same ended run gives its unused ceiling back.
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...body, state: "landed" }), id);
+      t.h.store.transaction(() => refreshCeilingReserves(t.h.store));
+      expect((readGroup(t.h.store, "g") as unknown as { liveCeilingReserved: number }).liveCeilingReserved).toBe(0);
     } finally { await t.h.dispose(); }
   });
 });
