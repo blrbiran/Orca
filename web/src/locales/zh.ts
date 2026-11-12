@@ -2165,6 +2165,7 @@ export const zh: Translation<typeof en> = {
       "no-change-completed": "无改动完成", "no-change-revoked": "无改动已撤销", "no-change-judged": "目标已评判", "requirement-review": "需求复核",
       "allowance": "放行",
       "landing-watch": "落地后检查",
+      "handoff-invalid": "交接无效", "live-note-delivered": "备注已送达", "live-note-undelivered": "备注未送达",
     },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
     proposalState: { editable: "可编辑", confirmed: "已确认" },

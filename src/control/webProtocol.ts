@@ -1935,6 +1935,8 @@ export const activityKindSchema = z.enum([
   "landing-watch",
   // Tester follow-up G §6.3 (#189): an allowance granted, revoked, or applied to a request.
   "allowance",
+  // Tester follow-up G Parts 4–5: an invalid or missing handoff; a Live note delivered, or never delivered.
+  "handoff-invalid", "live-note-delivered", "live-note-undelivered",
 ]);
 export const activityEntrySchema = z
   .object({

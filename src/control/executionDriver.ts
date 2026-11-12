@@ -69,6 +69,7 @@ import { openRequestOf, singleCallCommitTerminal, stepH, visitOrder } from "./dr
 import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
+import { ingestRunHandoff, prepareRunHandoff } from "./taskHandoffs.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { bookRejectedZeroInTransaction } from "./quotaProbeCall.js";
 import { FAILURE_DETAIL_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
@@ -87,6 +88,8 @@ import type { AgentSelection } from "./agentSelection.js";
  */
 
 export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance"
+  // Tester follow-up G Part 4: after a run's handoff was ingested (and its activity row written), before it lands or blocks.
+  | "C-after-handoff"
   // Control run decisions plan Task 7: after an empty result's ledger-only commit swapped, before it is recorded.
   | "E-after-ledger-cas"
   // Reviewed acceptance (spec 2026-11-11 §7): an accepted attempt's landing swapped, before it is recorded.
@@ -485,10 +488,14 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // continuation copies its predecessor's entries; a saved-result recovery carries none (ccloop refuses them there).
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId: run.taskId, runId }, { recovery: recovery !== null, predecessorRunId: continued?.predecessorRunId ?? null });
   const packageRecord=recovery?{...materializeRecoveryPackage(store,drive.sourceDir,recovery),recoveryOf:recovery.recoveryOf}:undefined;
+  // Tester follow-up G Part 4 / §10.2: every run's handoff directories (§10.5: every group), filled from the dependency
+  // edges; a saved-result recovery builds no prompt, so it carries none (ccloop refuses them beside `mode`).
+  const handoff = recovery === null && run.mode === undefined && run.recoveryOf === undefined ? prepareRunHandoff(store, run.groupId, run.taskId, runId) : undefined;
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
     sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...skillEnvelopeKey(prepared.kind, skills),
     ...(operatorNote === undefined ? {} : { operatorNote }),
+    ...(handoff === undefined ? {} : { handoff }),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
@@ -574,12 +581,15 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
   const contract = prepared.runtime, skills = prepared.skills;
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId, runId }, { recovery: false, predecessorRunId: null });
   const additionalRepos = preparedDirs.slice(1).map(({ key, targetRepo, base }) => ({ key, targetRepo, base }));
+  // Tester follow-up G Part 4: as stepA2 (a multi run is never a recovery).
+  const handoff = prepareRunHandoff(store, run.groupId, taskId, runId);
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
     sourceDir: drive.sourceDir, targetRepo: primary.targetRepo, base: primary.base,
     ...(additionalRepos.length === 0 ? {} : { additionalRepos }),
     ...(priorFailures !== undefined ? { priorFailures } : {}),
     ...skillEnvelopeKey(prepared.kind, skills),
     ...(operatorNote === undefined ? {} : { operatorNote }),
+    handoff,
   }, contract, null);
   const envelopeHash = sha256Canonical(envelope);
   return write(deps, () => {
@@ -932,6 +942,17 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'report', ?, 0) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(`report:${runId}`, JSON.stringify({ source })));
   deps.crash?.("C-after-terminal");
   const outcome = report.terminal.outcome;
+  // Tester follow-up G Part 4.6: the run's handoff is ingested whatever its outcome, before anything lands or blocks; a
+  // missing or malformed one is an activity row, never a failure, and an ingest that throws blocks nothing either.
+  if (run.mode === undefined && run.recoveryOf === undefined) {
+    try {
+      const ingested = ingestRunHandoff(store, { groupId: run.groupId, taskId: run.taskId, runId }, outcome, report.handoffFiles ?? null);
+      if (ingested.activity) write(deps, () => recordActivity(store, { groupId: run.groupId, taskId: run.taskId, runId, kind: "handoff-invalid", body: { handoff: ingested.record.handoff, summary: ingested.record.summary } }));
+    } catch (error) {
+      process.stderr.write(`orca-driver: handoff ingest ${runId}: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  }
+  deps.crash?.("C-after-handoff");
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&report.terminal.waitingCause==="token-allowance")throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if(report.terminal.waitingCause==="token-allowance")return settleTokenAllowance(deps,runId,report);
   if (outcome !== "succeeded") {

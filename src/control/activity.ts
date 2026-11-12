@@ -26,7 +26,10 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   // Tester follow-up G §6.2 (#269): a check turned red after a landing, or green again.
   | "landing-watch"
   // Tester follow-up G §6.3 (#189): an allowance granted, revoked, or applied to a request.
-  | "allowance";
+  | "allowance"
+  // Tester follow-up G Part 4.6: a run's handoff was invalid, or a succeeded run left none. Part 5.2 / 5.5: a Live note
+  // reached its agent at a phase start, or its task ended before it did.
+  | "handoff-invalid" | "live-note-delivered" | "live-note-undelivered";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
@@ -34,6 +37,7 @@ export const ACTIVITY_KINDS = [
   "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",
   "landing-watch",
   "allowance",
+  "handoff-invalid", "live-note-delivered", "live-note-undelivered",
 ] as const satisfies readonly ActivityKind[];
 export type ActivityRow = { groupId: string; taskId?: string | null; runId?: string | null; kind: ActivityKind; body: Record<string, unknown> };
 export type ActivityEntry = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKind; body: Record<string, unknown> };

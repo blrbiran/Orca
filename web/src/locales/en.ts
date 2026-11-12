@@ -110,6 +110,7 @@ const activityKind = {
   "no-change-completed": "no change completed", "no-change-revoked": "no change revoked", "no-change-judged": "goal judged", "requirement-review": "requirement review",
   "allowance": "allowance",
   "landing-watch": "landing watch",
+  "handoff-invalid": "handoff invalid", "live-note-delivered": "note delivered", "live-note-undelivered": "note not delivered",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
