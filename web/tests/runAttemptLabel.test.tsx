@@ -16,7 +16,10 @@ const twoRuns = () => view([workItem({ taskId: "a", status: "active", currentRun
   run({ runId: "run-2", state: "running", claimOrdinal: 2, providerAttemptOrdinal: 1, createdOrdinal: 2 }),
 ]);
 const stateCells = (container: HTMLElement): string[] => [...container.querySelectorAll("tr[data-run-id] td.run-state")].map((cell) => cell.textContent ?? "");
-const shown = () => stateCells(render(<ControlGroupView view={twoRuns()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container);
+// Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so the
+// Runs table is read with the Runs region open (the focus an Overview link gives), in either language.
+const RUNS = { kind: "group", groupId: "g", region: "runs", taskId: null, runId: null } as const;
+const shown = () => stateCells(render(<ControlGroupView focus={RUNS} view={twoRuns()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container);
 
 describe("the Runs table's attempt and run number (feedback #61)", () => {
   it("names the attempt within its run and the task's run number, in English", () => {
@@ -39,7 +42,7 @@ const uncounted = () => view([workItem({ taskId: "b", status: "active", currentR
   run({ runId: "rb-3", taskId: "b", state: "running", claimOrdinal: 3, providerAttemptOrdinal: 1, createdOrdinal: 3 }),
   run({ runId: "est-run", taskId: null, estimateId: "est-1", phase: "estimate", claimOrdinal: 4, providerAttemptOrdinal: 4, createdOrdinal: 4 }),
 ]);
-const shownUncounted = () => stateCells(render(<ControlGroupView view={uncounted()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container);
+const shownUncounted = () => stateCells(render(<ControlGroupView focus={RUNS} view={uncounted()} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container);
 
 // The guard in runNumberOf only matters when an uncounted run FOLLOWS a counted one of its task: as the task's first run it counts 0 anyway.
 describe("a run its task does not count shows no task run number (feedback #61)", () => {
