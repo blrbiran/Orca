@@ -53,6 +53,13 @@ const CHECK_OWNERSHIP_RULE = [
   "A repository-wide test that already passes may still be required to stay passing. If it must be made to pass, assign it to a task allowed to change the failing source or tests.",
 ].join(" ");
 /**
+ * Issue #280 (full suite spec 2026-11-12 §6; version stays 5, as #130/#135/#136 kept theirs): a split traced "all existing
+ * tests still pass" to a documentation task that could change no code. Group acceptance owns that criterion: it runs the
+ * project's full suite once on the group's final tree. Every criterion must still be traced (`untraced`), and code cannot
+ * tell a regression criterion from another (Rule 5), so where it is traced is said here.
+ */
+export const REGRESSION_CRITERIA_RULE = "- A criterion that only asks that existing behaviour keep working across the repository (such as \"all existing tests still pass\") is checked by Orca's group acceptance, which runs the project's full-suite command, when it has one, once on the group's final tree. It is no single task's job: never trace it to a documentation or investigate task, do not add the repository-wide suite to a task's checks for it, and trace it to the tasks that change source.";
+/**
  * Issue #136 (session 3cfc2e73, human ruling D1-D8 「其余都同意」; version stays 3): a split wrote a verify-only task whose
  * check was `git diff --name-only HEAD | grep -x src/math.js`; the task it verified had already landed, so the agent added
  * a meaningless comment to make a diff. A task changes files, and a check runs a command against what is delivered.
@@ -97,6 +104,7 @@ const SPLIT_INSTRUCTION_V5 = [
   "- `checks` are shell commands, run in the repository, that pass only when the task is done.",
   CHECK_SOURCE_RULE,
   CHECK_OWNERSHIP_RULE,
+  REGRESSION_CRITERIA_RULE,
   NO_VERIFY_ONLY_RULE,
   "- Each task may give \"setup\": the commands that make its checks runnable in a fresh clone (install dependencies, generate code). Infer them from \"manifests\" for the directories the task touches; use the lockfile's installer in its clean form (npm ci, pnpm install --frozen-lockfile, yarn install --immutable). " + NO_LOCKFILE_RULE + " Prefer the repository's own install and check scripts; in an npm workspace, install at the root. Omit \"setup\" (or give null) when nothing is needed.",
   "- A check that runs a package script must name one already in that package's \"scripts\" in \"manifests\" (and a workspace the root lists); never plan to add a script so that a check exists. Checks that are not package scripts are fine.",
@@ -140,6 +148,7 @@ export const SPLIT_INSTRUCTION_MULTI_V5 = [
   `- \`writes[].targetPaths\` are paths relative to that directory's root, ${PATH_SHAPES}`,
   "- `writes[].checks` are shell commands, run in that directory, that pass only when the task is done.",
   CHECK_OWNERSHIP_RULE,
+  REGRESSION_CRITERIA_RULE,
   "- Before the tasks run, Orca commits the agreed requirement document to the primary directory at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the primary directory while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "- List `writes` in the project's registered order (as `project-overview` lists the directories), one entry per directory, each directory at most once; the first entry is the task's primary directory and its `checks` must not be empty.",
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
@@ -309,9 +318,23 @@ function runsRepositorySuite(check: string): boolean {
   });
 }
 
-/** Issue #168: a write whose every target path is documentation, holding a check that runs a repository-wide suite. */
-const docsOnlySuite = (targetPaths: readonly string[], checks: readonly string[]): boolean =>
-  targetPaths.length > 0 && targetPaths.every(documentationPath) && checks.some(runsRepositorySuite);
+/**
+ * Issue #280 (full suite spec 2026-11-12 §6): a task whose deliverable is a document -- its plan (`loopPlan`, else by its
+ * labels) is `design` ("The deliverable is a document; change no code.") or `investigate` ("...change nothing else") --
+ * cannot repair a failing suite whatever its target paths name: the tester's `README.md` + `test/readme.test.js` task did
+ * not count as documentation-only by its paths, ran the whole suite four times and could fix nothing.
+ */
+function documentDeliverable(task: { loopPlan?: string; labels: string[] }): boolean {
+  const planId = task.loopPlan ?? choosePlanByLabels(task.labels).planId;
+  return planId === "design" || planId === "investigate";
+}
+
+/**
+ * Issue #168: a write whose every target path is documentation, holding a check that runs a repository-wide suite.
+ * #280: or any write of a task whose deliverable is a document (`documentDeliverable`), whatever its paths.
+ */
+const docsOnlySuite = (targetPaths: readonly string[], checks: readonly string[], documentTask: boolean): boolean =>
+  (documentTask || (targetPaths.length > 0 && targetPaths.every(documentationPath))) && checks.some(runsRepositorySuite);
 
 /** Issue #135 (session f958ec3f): a check that evaluates code with `node -e/--eval/-p/--print` and calls `require(`. */
 const NODE_EVAL_REQUIRE = /\bnode\b[^;&|]*?\s(?:-e|-p|-pe|--eval|--print)(?:\s|=)[\s\S]*\brequire\s*\(/;
@@ -489,7 +512,7 @@ export async function validateMultiSplitDraft(input: {
   }
   // #168: as the single-repository validator's, per write: a write's checks run in its directory, against its paths.
   for (const task of output.tasks) for (const write of orderWrites(task.writes, keys)) {
-    if (docsOnlySuite(write.targetPaths, write.checks)) reasons.push(`check-docs-only-suite:${task.taskId}:${write.dir}`);
+    if (docsOnlySuite(write.targetPaths, write.checks, documentDeliverable(task))) reasons.push(`check-docs-only-suite:${task.taskId}:${write.dir}`);
   }
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
@@ -575,7 +598,7 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   // #136: NO_VERIFY_ONLY_RULE in code -- a check that reads git history or the diff instead of the delivered files.
   for (const task of output.tasks) if (task.checks.some((check) => GIT_STATE_CHECK.test(check))) reasons.push(`check-git-state:${task.taskId}`);
   // #168: CHECK_OWNERSHIP_RULE in code -- a documentation-only task held to a repository-wide suite it cannot repair.
-  for (const task of output.tasks) if (docsOnlySuite(task.targetPaths, task.checks)) reasons.push(`check-docs-only-suite:${task.taskId}`);
+  for (const task of output.tasks) if (docsOnlySuite(task.targetPaths, task.checks, documentDeliverable(task))) reasons.push(`check-docs-only-suite:${task.taskId}`);
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
@@ -654,7 +677,7 @@ export function explainSplitReason(reason: string): string | null {
     case "setup-lockfile": return "this setup command runs `npm ci`, or an `npm install` that writes package-lock.json, but the repository root commits no package-lock.json or npm-shrinkwrap.json: `npm ci` fails without one, and a setup that creates the lockfile is refused; omit `setup` if nothing needs installing, else use `npm install --no-package-lock`";
     case "check-module-system": return "this check runs `node -e` (or `--eval`, `-p`) with `require(`, but the package.json of the directory it runs in says \"type\": \"module\", so the repository's files are ES modules that require() cannot load as the check expects; run the repository's own test scripts (as `manifests` lists them), or load modules with `node --input-type=module -e` and `await import(...)`";
     case "check-git-state": return "this check reads git history or the diff (`git diff --name-only`, `git diff --stat`, `git rev-parse` or `git log`), so it tests what was committed rather than the delivered files, and fails once an earlier task has landed; check the delivered files or run the repository's tests instead (`git diff --exit-code`, asserting a formatter changed nothing, is fine), and do not write verify-only tasks";
-    case "check-docs-only-suite": return "every target path of this task is documentation, but a required check runs the repository-wide test suite (such as `npm test`, `pytest` or `go test ./...`), which this task cannot repair if it fails in source it may not change; check the delivered documents instead (for example `test -s README.md` or `grep -q '<heading>' docs/guide.md`), or run only a test that reads them; the repository-wide suite belongs to a task that changes source";
+    case "check-docs-only-suite": return "this task's deliverable is a document (its plan is design or investigate) or every target path of this task is documentation, but a required check runs the repository-wide test suite (such as `npm test`, `pytest` or `go test ./...`), which this task cannot repair if it fails in source it may not change; check the delivered documents instead (for example `test -s README.md` or `grep -q '<heading>' docs/guide.md`), or run only a test that reads them; the repository-wide suite belongs to a task that changes source";
     case "check-write-scope": return "the task's check names a committed test file outside the task's targetPaths, so the task could not change that test to make the check pass (another task writing it does not count); add the file (or its directory as `<directory>/**`) to this task's targetPaths, or check only files this task may write";
     case "import":
       if (parts[1] === "duplicate-dependency") return "the task names the same dependency twice";
