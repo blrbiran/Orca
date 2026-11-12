@@ -203,6 +203,8 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "resume-from-handoff": { call: (s, c) => s.resumeFromHandoff(c), target: "group", payload: { selections: [] } },
   "set-limit": { call: (s, c) => s.setLimit(c), target: "group", payload: { limit: { tokens: 1, activeMs: 1, attempts: 1, sessions: 1 } } },
   "continue-task": { call: (s, c) => s.continueTask(c), target: "task", payload: { predecessorRunId: "run-x", checkpointId: "cp-x" } },
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — add-live-note (spec Part 5) is task-targeted too.
+  "add-live-note": { call: (s, c) => s.addLiveNote(c), target: "task", payload: { text: "a note" } },
   "recovery-retry": { call: (s, c) => s.recoveryRetry(c), target: "group", payload: { scope: "group", groupId: "g" } },
   "set-group-integration": { call: (s, c) => s.setGroupIntegration(c), target: "group", payload: { integration: { delivery: "keep" } } },
   "retry-integration": { call: (s, c) => s.retryIntegration(c), target: "group", payload: {} },
