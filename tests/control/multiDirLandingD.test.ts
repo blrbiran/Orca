@@ -165,11 +165,12 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       // Each landing is a merge of that directory's own attempt into its own work branch.
       expect(g(w.repo, "rev-parse", `${primaryTip}^2`)).toBe(drive.dirs[0].attemptSha);
       expect(g(w.multiRepo!, "rev-parse", `${alphaTip}^2`)).toBe(drive.dirs[1].attemptSha);
-      expect(g(w.repo, "log", "-1", "--format=%s", primaryTip)).toBe(`orca: land ${runId}`);
-      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe(`orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("write **" here), its run id an Orca-Run trailer.
+      expect(g(w.repo, "log", "-1", "--format=%s", primaryTip)).toBe("write **");
+      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe("write **");
       // Tester D10: every directory's landing names the group and task it lands.
-      expect(g(w.repo, "log", "-1", "--format=%b", primaryTip)).toBe("Orca-Group: g\nOrca-Task: a");
-      expect(g(w.multiRepo!, "log", "-1", "--format=%b", alphaTip)).toBe("Orca-Group: g\nOrca-Task: a");
+      expect(g(w.repo, "log", "-1", "--format=%b", primaryTip)).toBe(`Orca-Group: g\nOrca-Task: a\nOrca-Run: ${runId}`);
+      expect(g(w.multiRepo!, "log", "-1", "--format=%b", alphaTip)).toBe(`Orca-Group: g\nOrca-Task: a\nOrca-Run: ${runId}`);
       expect(g(w.repo, "show", `${primaryTip}:shared.txt`)).toBe("A");
       expect(g(w.multiRepo!, "show", `${alphaTip}:src/a.ts`)).toBe("export const a = 1;");
       // spec §10: one ledger, in the primary's commit; the extra landing carries none.
@@ -212,7 +213,8 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       expect(g(w.multiRepo!, "rev-parse", `${drive.landedDirs.alpha}^2`)).toBe(alpha.attemptSha);
       expect(inTree(w.multiRepo!, drive.landedDirs.alpha, `.decisions/${runId}.jsonl`)).toBe(false);
       // One landing per directory: the replay found the first and merged only the second.
-      const landings = g(w.repo, "log", "--format=%s", `${main.base}..${primaryAfterCrash}`).split("\n").filter((line) => line === `orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("write **" here), its run id an Orca-Run trailer.
+      const landings = g(w.repo, "log", "--format=%(trailers:key=Orca-Run,valueonly)", `${main.base}..${primaryAfterCrash}`).split("\n").filter((line) => line === runId);
       expect(landings).toHaveLength(1);
       expect(g(w.repo, "rev-list", "--count", "--min-parents=2", `${main.base}..${primaryAfterCrash}`)).toBe("1");
     } finally { await w.teardown(); }
@@ -278,7 +280,8 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       expect(flags.map((row) => row.source)).toEqual(["test-change"]);
       expect(flags[0]!.evidence).toContain("changed: src/check.ts");
       expect(inTree(w.repo, primaryTip, "src/a.ts")).toBe(false);
-      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe(`orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("write **" here), its run id an Orca-Run trailer.
+      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe("write **");
       expect(g(w.multiRepo!, "show", `${alphaTip}:src/a.ts`)).toBe("export const a = 1;");
       expect(g(w.multiRepo!, "show", `${alphaTip}:src/check.ts`)).toBe("export const check = 2;");
       expect(inTree(w.multiRepo!, alphaTip, `.decisions/${runId}.jsonl`)).toBe(false);
@@ -305,7 +308,8 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
       expect(drive.landedCommit).toBe(null);
       expect(drive.landedDirs).toEqual({ alpha: alphaTip });
       expect(g(w.repo, "rev-parse", "refs/heads/orca/g")).toBe(primaryAtExport);
-      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe(`orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("write **" here), its run id an Orca-Run trailer.
+      expect(g(w.multiRepo!, "log", "-1", "--format=%s", alphaTip)).toBe("write **");
       // What a landed run owes: the acceptance proof, so the settle marks the task done.
       expect(runtime.store.db.prepare("SELECT id FROM outbox WHERE id=? AND kind='acceptance'").get(`acceptance:${runId}`)).toBeDefined();
       const work = JSON.parse(String(runtime.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)) as { status: string };
