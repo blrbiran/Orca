@@ -91,6 +91,8 @@ function ownPort(port: ExecutionPort): ExecutionPort {
   const readTaskResultEvidence=port.readTaskResultEvidence?.bind(port);
   // Issue #124 (session 3cfc2e73): the estimator check reads the installation's catalog through the profile's port.
   const listModels=port.listModels?.bind(port);
+  // Tester follow-up G spec §2.1: the driver raises a running run's live ceiling through the profile's port.
+  const setLiveCeiling=port.setLiveCeiling?.bind(port);
   const owned: ExecutionPort = {
     ...Object.fromEntries(["savedResultSourceEligibility","savedResultEligibility","collectSavedResultEvidence","readSavedResultEvidence","settleSavedResult","readSavedResultSettlement","settleLostWorker"].flatMap(key=>{const method=port[key as keyof ExecutionPort];return typeof method==="function"?[[key,method.bind(port)]]:[]})),
     ...(readFeatures?{readFeatures:()=>readFeatures()}:{}),
@@ -104,6 +106,7 @@ function ownPort(port: ExecutionPort): ExecutionPort {
     ...(collectTaskResults?{collectTaskResults:(input,afterRevision)=>collectTaskResults(input,afterRevision)}:{}),
     ...(readTaskResultEvidence?{readTaskResultEvidence:(input,manifestRef,ref)=>readTaskResultEvidence(input,manifestRef,ref)}:{}),
     ...(listModels?{listModels:(installation,refresh)=>listModels(installation,refresh)}:{}),
+    ...(setLiveCeiling?{setLiveCeiling:(input,ceiling)=>setLiveCeiling(input,ceiling)}:{}),
   };
   return Object.freeze(owned);
 }

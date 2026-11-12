@@ -73,6 +73,8 @@ export interface HarnessOptions {
   multiDirProjectOf?: MultiDirProjectOf;
   /** Issue #209: the agent catalog the driver's port answers (the router copies the port, so it is set before). */
   listModels?: ExecutionPort["listModels"];
+  /** Tester follow-up G spec §2.1: ccloop's `live-ceiling` method as the driver's port answers it (set before the router copies the port). */
+  setLiveCeiling?: ExecutionPort["setLiveCeiling"];
 }
 
 /**
@@ -107,6 +109,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   if (options.listModels !== undefined) fake.port.listModels = options.listModels;
+  if (options.setLiveCeiling !== undefined) fake.port.setLiveCeiling = options.setLiveCeiling;
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
     roots: controlWorkspaceRoots(h.store.stateDir),

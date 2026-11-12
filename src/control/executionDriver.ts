@@ -14,6 +14,7 @@ import { topUpSum } from "./workTopUp.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
+import { raiseCeilings } from "./liveCeilingRaise.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
 import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
@@ -1669,6 +1670,37 @@ export function stepOf(run: DriverRun): DriveStep {
   }
 }
 
+/**
+ * Tester follow-up G spec §2.1 (plan O3): tell ccloop each accepted run's raised ceiling. The raise was reserved when it was
+ * written; only ccloop's answer (or its stale refusal: it already holds that revision or a newer one) marks it delivered.
+ * Any other failure leaves it for the next pass, the reservation held.
+ */
+export async function deliverLiveCeilings(deps: ExecutionDriverDeps): Promise<boolean> {
+  let delivered = false;
+  for (const row of deps.store.db.prepare("SELECT id FROM runs WHERE active=1 AND json_extract(body,'$.liveCeiling') IS NOT NULL ORDER BY id").all()) {
+    const run = readDriverRun(deps.store, String(row.id));
+    const ceiling = liveCeilingOf(run);
+    if (ceiling === null || ceiling.deliveredRevision >= ceiling.revision || run.state !== "accepted" || run.drive?.envelopeHash == null) continue;
+    const port = portFor(deps, run);
+    if (port.setLiveCeiling === undefined) continue;
+    let answered: number;
+    try { answered = (await port.setLiveCeiling(readStartEnvelope(deps.store, run), { protocol: 1, revision: ceiling.revision, tokens: ceiling.tokens, cause: ceiling.cause })).revision; }
+    catch (error) {
+      if (peerErrorCode(error) !== "control-live-ceiling-stale") continue;
+      answered = ceiling.revision;
+    }
+    write(deps, () => {
+      const current = readDriverRun(deps.store, run.runId);
+      const now = liveCeilingOf(current);
+      if (now === null) return;
+      (current as { liveCeiling?: unknown }).liveCeiling = { ...now, deliveredRevision: Math.max(now.deliveredRevision, Math.min(answered, now.revision)) };
+      saveDriverRun(deps.store, current);
+    });
+    delivered = true;
+  }
+  return delivered;
+}
+
 /** Tester follow-up G spec §2.1: the ceiling frozen into the start envelope is the one ccloop holds once it accepts it. */
 function noteCeilingInEnvelope(run: DriverRun, envelope: StartEnvelope): void {
   const ceiling = liveCeilingOf(run);
@@ -1839,8 +1871,13 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       throw error;
     }
     // Tester follow-up G spec §2.1: a run that ended gives back the unused part of its live ceiling.
-    try { if (write(deps, () => refreshCeilingReserves(deps.store)).length > 0) progressed = true; }
+    // Plan O3: raise running ceilings from free headroom (reserved in this write), then tell ccloop.
+    try {
+      if (write(deps, () => refreshCeilingReserves(deps.store)).length > 0) progressed = true;
+      if (write(deps, () => raiseCeilings(deps.store, (deps.now?.() ?? new Date()).getTime())).length > 0) progressed = true;
+    }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return false; throw error; }
+    if (await deliverLiveCeilings(deps)) progressed = true;
     for (const runId of visitOrder(deps.store)) {
       if (context.stopped) break;
       // #192: a run settling on the lane is the lane's until its step E answered.
