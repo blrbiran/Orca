@@ -443,3 +443,27 @@ ccloop now says `tokenPolicy: "optional-v1"` (as the pinned ccloop does); the im
 - (l) Two real-ccloop criteria pin token-allowance parking, which only a pre-release group does (`allowanceHeldSettlement`,
   `tokenPolicyRuntime`); the real-ccloop world imports through the service, which takes no `modelVersion`, so they were
   left red rather than given a new import path.
+
+## 14. Follow-up H, second pass (2026-11-13, same seat; branch rebased onto `b177c19c`): §13.4 (k) and (l) closed
+
+Appended; §13 stands as written, and its §13.4 "left open" items are superseded by this section.
+
+### 14.1 (k) Unknown usage of an expectation-model run settles at its ceiling (ruling R4)
+- **Arithmetic (builder's call, reversible):** such a run may have spent anything up to its live ceiling, so what its
+  unknown usage could have cost is the ceiling's unused part, `ceiling.tokens - cumulative.work.tokens`. That part stays
+  held in `liveCeilingReserved` from the moment it is unknown -- ended or not, active or not (a handoff-stopped run leaves
+  `active`) -- until the usage is settled. The only admitted settlement is `charge-remaining-grant` (refusal name
+  `finite-remainder` for any other); it books the whole unused part as used (marker method `remaining-grant`, charged
+  work tokens = that part) together with the handoff remainder, and the re-derivation in the same write gives the hold
+  back, so `used + reserved` is unchanged by the settlement and never passes the limit.
+- `charge-observed-floor` is not admitted for such a run: booking the floor alone would release the rest of the ceiling as
+  unspent, which R4 forbids. `release-unmetered` stays the path of a run with no ceiling (an unlimited group's run with
+  no pause line).
+- Criteria H9, H10 (`tests/control/reconcileFunding.test.ts`); mutations M12-M15, M16b, M17.
+
+### 14.2 (l) Token-allowance parking criteria on a pre-release world
+`importControlPlanAsync` now forwards the in-process `modelVersion` option `importControlPlan` already had (type only; no
+payload field, route or flag). The real-ccloop world fixture takes a test-only `preRelease` option that imports with
+`modelVersion: null`; `allowanceHeldSettlement` and `tokenPolicyRuntime`'s saved-allowance renewal use it, since parking
+at a token grant exists only in a pre-release group. (Setting the marker off after import would not do: the import has
+already written the task's work tokens as null.)
