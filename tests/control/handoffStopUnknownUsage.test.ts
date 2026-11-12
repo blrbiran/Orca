@@ -13,8 +13,8 @@ import { driverHarness } from "./fixtures/driverHarness.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 
-async function stopped(tokenPolicy: "optional-v1" | undefined, tokenBudget: number | null, behaviour: "stoppable-usage-unknown" | "stoppable-handoff-usage-unknown" = "stoppable-usage-unknown") {
-  const x = await driverHarness([{ taskId: "a", tokenBudget }], { ...(tokenPolicy ? { tokenPolicy } : {}), killGraceMs: 0, behaviour: () => behaviour });
+async function stopped(tokenPolicy: "optional-v1" | undefined, tokenBudget: number | null, behaviour: "stoppable-usage-unknown" | "stoppable-handoff-usage-unknown" = "stoppable-usage-unknown", modelVersion?: null) {
+  const x = await driverHarness([{ taskId: "a", tokenBudget }], { ...(tokenPolicy ? { tokenPolicy } : {}), ...(modelVersion === null ? { modelVersion: null } : {}), killGraceMs: 0, behaviour: () => behaviour });
   const driver = x.driver();
   const id = await x.claim();
   await x.until(driver, () => x.body(id).state === "accepted");
@@ -78,7 +78,10 @@ describe("handoff-stopped run with unknown usage", { timeout: 60_000 }, () => {
   });
 
   it("optional-v1, finite: charges the remaining grant from the reservation, then continues", async () => {
-    const { x, driver, id } = await stopped("optional-v1", 1_000_000); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a finite authored task grant, charged and then
+    // funded again at its authored size, is a pre-release group's rule (spec G §2.2); this names that model. The
+    // expectation-model equivalent -- the unused live ceiling held and charged in full -- is reconcileFunding.test.ts H9.
+    const { x, driver, id } = await stopped("optional-v1", 1_000_000, "stoppable-usage-unknown", null); try {
       const before = group(x);
       expect((await settle(x, id, "release-unmetered")).error.message).toBe("run-usage-not-settleable:finite-remainder");
       expect((await settle(x, id, "charge-remaining-grant")).error).toBeUndefined();
