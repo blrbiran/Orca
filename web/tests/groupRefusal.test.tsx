@@ -72,7 +72,9 @@ describe("a group's refusal stays with its group (spec §2.2(d))", () => {
     // At the top: before the actions and before the budget editor.
     const pause = within(g1).getByRole("button", { name: "Pause new tasks" });
     expect(notice.compareDocumentPosition(pause) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(notice.compareDocumentPosition(g1.querySelector('[aria-label="Budget proposal"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: the budget editor is rendered only while
+    // Preparation is the selected region, so "before the budget editor" is read against Preparation's panel, where it sits.
+    expect(notice.compareDocumentPosition(g1.querySelector('[role="tabpanel"][data-overview-region="preparation"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Only there: the code is on screen once (not also on the panel's own line).
     expect(screen.getAllByText(/stop-mode-conflict/)).toHaveLength(1);
 
