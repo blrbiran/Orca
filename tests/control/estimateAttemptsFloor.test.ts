@@ -27,10 +27,13 @@ async function readyEstimate(h: Fixture, service: WebControlService, taskId: str
 const workAttempts = (h: Fixture, taskId: string) => readBudgetProposal(h.store, "g").allocations.find((a) => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work")!.amount.attempts;
 const attemptsOp = (taskId: string, value: number, estimateId: string) => ({ target: { scope: "task", taskId, allocation: "work", dimension: "attempts" }, value, provenance: "model", estimateId });
 
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an estimate is applied to a task's work only in a
+// group created before the follow-up G release (spec G §12.1: an expectation-model group never applies it there); new
+// groups default to the expectation model, so these criteria name the pre-release model (`modelVersion: null`).
 describe("an applied estimate sets a task's work attempts to at least 2 (#162)", () => {
   for (const [task, verb] of [[{ taskId: "a", loop: loop("a") } as WebFixtureTask, "set-task-loop"], [{ taskId: "c" } as WebFixtureTask, "proposal-edit"]] as const) {
     it(`${verb}: the estimate's 1 is applied as 2, and the server accepts it`, async () => {
-      const h = await webFixture(undefined, [task]);
+      const h = await webFixture(undefined, [task], { modelVersion: null });
       try {
         const service = new WebControlService(h.deps);
         await readyEstimate(h, service, task.taskId);
@@ -48,7 +51,7 @@ describe("an applied estimate sets a task's work attempts to at least 2 (#162)",
   }
 
   it("the server refuses the estimate's own 1 as a model value now, and accepts 2", async () => {
-    const h = await webFixture(undefined, [{ taskId: "c" }]);
+    const h = await webFixture(undefined, [{ taskId: "c" }], { modelVersion: null });
     try {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service, "c");
@@ -61,7 +64,7 @@ describe("an applied estimate sets a task's work attempts to at least 2 (#162)",
   });
 
   it("confirmation still accepts attempts 1 an apply before this rule wrote", async () => {
-    const h = await webFixture(undefined, [{ taskId: "c" }]);
+    const h = await webFixture(undefined, [{ taskId: "c" }], { modelVersion: null });
     try {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service, "c");
