@@ -242,6 +242,9 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "approve-pending-decision": { call: (s, c) => s.approvePendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` } },
   "reject-pending-decision": { call: (s, c) => s.rejectPendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0" } },
   "ratify-flagged-decision": { call: (s, c) => s.ratifyFlaggedDecision(c), target: "group", payload: { decisionId: "run-a/agent-0" } },
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — tester follow-up G §6.3 (#189): the two allowance verbs are group-targeted.
+  "allow-request": { call: (s, c) => s.allowRequest(c), target: "group", payload: { request: { kind: "pending-decision", pendingId: "pending-run-a-0" }, scope: "group" } },
+  "revoke-allowance": { call: (s, c) => s.revokeAllowance(c), target: "group", payload: { allowanceId: "allow-1" } },
   "add-group-dependency": { call: (s, c) => s.addGroupDependency(c), target: "group", payload: { dependsOn: "other" } },
   "remove-group-dependency": { call: (s, c) => s.removeGroupDependency(c), target: "group", payload: { dependsOn: "other" } },
   "correction-debug-open": { call: (s, c) => s.openCorrectionDebugGroup(c), target: "group", payload: { correctionId: "c_0123456789abcdef" } },
