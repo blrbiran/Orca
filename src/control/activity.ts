@@ -22,12 +22,15 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   // Tester follow-up G spec §10.1: the goal judge answered not-met / cannot-judge, or its call failed.
   | "no-change-judged"
   // Tester follow-up G spec §3: a requirement review round's result, a fix task it opened, or a person's or agent's exit.
-  | "requirement-review";
+  | "requirement-review"
+  // Tester follow-up G §6.2 (#269): a check turned red after a landing, or green again.
+  | "landing-watch";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
   "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",
+  "landing-watch",
 ] as const satisfies readonly ActivityKind[];
 export type ActivityRow = { groupId: string; taskId?: string | null; runId?: string | null; kind: ActivityKind; body: Record<string, unknown> };
 export type ActivityEntry = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKind; body: Record<string, unknown> };

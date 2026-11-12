@@ -62,3 +62,26 @@ export async function runCheckSequence(cwd: string, setup: readonly string[], ch
   }
   return { failure: null, commands };
 }
+
+/** Tester follow-up G §6.2 (#269): every check's outcome, not only the first failure's; `tail` only for a non-zero exit. */
+export interface EveryCheckOutcome { setupFailure: CheckFailure | null; commands: Array<{ command: string; exit: string; ms: number; tail?: string }> }
+
+/**
+ * The landing watch's run: setup commands in order, stopping at the first that fails (the checks are then not run); otherwise
+ * every check runs, red or green, so each one's state is known. A setup command is named `setup: <cmd>`.
+ */
+export async function runEveryCheck(cwd: string, setup: readonly string[], checks: readonly string[], timeoutMs: number, as: Parameters<typeof runCheckRecorded>[3], signal?: AbortSignal): Promise<EveryCheckOutcome> {
+  const commands: EveryCheckOutcome["commands"] = [];
+  const run = async (command: string, name: string): Promise<CheckFailure> => {
+    const started = performance.now();
+    const answer = await runCheckRecorded(cwd, command, timeoutMs, as, signal);
+    commands.push({ command: name, exit: answer.exit, ms: Math.round(performance.now() - started), ...(answer.exit === "0" ? {} : { tail: answer.tail }) });
+    return { ...answer, command: name };
+  };
+  for (const command of setup) {
+    const answer = await run(command, `setup: ${command}`);
+    if (answer.exit !== "0") return { setupFailure: answer, commands };
+  }
+  for (const command of checks) await run(command, command);
+  return { setupFailure: null, commands };
+}

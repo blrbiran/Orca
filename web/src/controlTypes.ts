@@ -636,6 +636,7 @@ export const WEB_ACTIVITY_KINDS = [
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
   "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",
+  "landing-watch",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };

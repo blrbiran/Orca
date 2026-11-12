@@ -53,6 +53,13 @@ export function isGroupAcceptancePathOf(name: string, groupId: string): boolean 
   const prefix = `group-acceptance-${groupId}`;
   return name === prefix || (name.startsWith(`${prefix}.check-`) && /^[0-9]+$/.test(name.slice(prefix.length + ".check-".length)));
 }
+/** Tester follow-up G §6.2 (#269): the scratch worktree one landing watch runs the group's checks in (one per watch, as acceptance). */
+export const landingWatchPathOf = (roots: WorkspaceRoots, groupId: string, check: number): string => join(roots.workspacesRoot, `landing-watch-${groupId}.check-${check}`);
+/** Whether a leaf of workspacesRoot is a landing-watch scratch worktree of `groupId`. */
+export function isLandingWatchPathOf(name: string, groupId: string): boolean {
+  const prefix = `landing-watch-${groupId}.check-`;
+  return name.startsWith(prefix) && /^[0-9]+$/.test(name.slice(prefix.length));
+}
 export const reconcileRunsDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `reconcile-${runId}`);
 /** Syncskill integration spec §10.6: the run's skill snapshot, the plugin dir ccloop is handed (runIds are `run-<uuid>`, so no collision). */
 export const skillsPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `skills-${runId}`);

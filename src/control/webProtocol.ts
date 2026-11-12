@@ -1885,6 +1885,8 @@ export const activityKindSchema = z.enum([
   "no-change-judged",
   // Tester follow-up G spec §3: a requirement review round, its fix task, or an exit.
   "requirement-review",
+  // Tester follow-up G §6.2 (#269): a check turned red after a landing, or green again.
+  "landing-watch",
 ]);
 export const activityEntrySchema = z
   .object({

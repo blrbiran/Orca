@@ -70,11 +70,14 @@ function tasksComplete(store: ControlStore, groupId: string): boolean {
   return store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) === undefined;
 }
 
-/** The union the acceptance runs: setup first, then checks, each command once in first-seen order; the longest bound. */
-export function acceptanceCommands(store: ControlStore, groupId: string): { setup: string[]; checks: string[]; timeoutMs: number } {
+/**
+ * The union the acceptance runs: setup first, then checks, each command once in first-seen order; the longest bound. The
+ * done tasks' (acceptance), or every task's (`all`: the landing watch, tester follow-up G §6.2 A3).
+ */
+export function acceptanceCommands(store: ControlStore, groupId: string, which: "done" | "all" = "done"): { setup: string[]; checks: string[]; timeoutMs: number } {
   const contracts = store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid").all(groupId)
     .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string; taskId?: string | null })
-    .filter((work) => work.kind === "task" && work.status === "done" && typeof work.taskId === "string")
+    .filter((work) => work.kind === "task" && (which === "all" || work.status === "done") && typeof work.taskId === "string")
     .map((work) => readConfirmedTaskExecution(store, groupId, work.taskId!).contract);
   const checks: string[] = [];
   for (const contract of contracts) for (const command of contract.verification.requiredChecks) if (!checks.includes(command)) checks.push(command);
@@ -160,17 +163,25 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
 }
 
 async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, setup: string[], checks: string[], timeoutMs: number, signal: AbortSignal): Promise<PostMergeOutcome> {
+  // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
+  const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
+  return runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, (tree) => runCheckSequence(tree, setup, checks, timeoutMs, as, signal));
+}
+
+/**
+ * A scratch worktree at `tip` for `body`, then removed (tester follow-up G §6.2: shared with the landing watch). This owner's
+ * leftovers (`isOwnLeftover`) that no running check holds are swept first; the path is held in `inUse` until it is removed.
+ */
+export async function runOnScratchTip<T>(deps: GroupAcceptanceDeps, repo: string, path: string, isOwnLeftover: (name: string) => boolean, tip: string, body: (path: string) => Promise<T>): Promise<T> {
   inUse.add(path);
   try {
     for (const name of readdirSync(deps.roots.workspacesRoot)) {
       const stale = join(deps.roots.workspacesRoot, name);
-      if (isGroupAcceptancePathOf(name, groupId) && !inUse.has(stale)) await removeOwnPath(repo, deps.roots, stale);
+      if (isOwnLeftover(name) && !inUse.has(stale)) await removeOwnPath(repo, deps.roots, stale);
     }
     await git(repo, [...QUIET_GIT, "worktree", "add", "--detach", path, tip]);
-    // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
-    const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
     try {
-      return await runCheckSequence(path, setup, checks, timeoutMs, as, signal);
+      return await body(path);
     } finally {
       await deps.beforeScratchRemoved?.(path);
       await removeOwnPath(repo, deps.roots, path).catch(() => undefined);

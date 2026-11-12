@@ -58,6 +58,7 @@ import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/s
 import { abortPostMergeChecks, recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
 import { acceptPending, stepAcceptAttempt, type AcceptCheck } from "./acceptAttemptDriver.js";
 import type { GroupAcceptanceCheck } from "./groupAcceptance.js";
+import type { LandingWatchCheck } from "./landingWatch.js";
 import { readDebugMark } from "./debugChecks.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { correctionTargetOf } from "../corrections/target.js";
@@ -132,6 +133,8 @@ export interface ExecutionDriverDeps {
   settleSlowMs?: number;
   /** Tester follow-up G §6.1 (#192) test seam: awaited on the settle lane right before a landed run's step E. */
   beforeSettle?: (runId: string) => Promise<void>;
+  /** Tester follow-up G §6.2 (#269) test seam: handed to the landing watch's scratch worktree runner (groupAcceptance.ts). */
+  beforeScratchRemoved?: (path: string) => Promise<void>;
   /**
    * Test seam only: overrides handoffGraceMsOf(run) (agent selection spec §6.6: the run's frozen killGraceMs + 60 s).
    * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** it overrides handoffGraceMsOf(run, window): max(killGraceMs, frozen recovery window + 5 s) + 60 s.
@@ -175,6 +178,8 @@ export interface DriverContext {
   acceptChecks?: Map<string, AcceptCheck>;
   /** Tester follow-up E §5 (#241): group acceptance checks in flight, by group; a restart checks a tip with no record again. */
   acceptanceChecks?: Map<string, GroupAcceptanceCheck>;
+  /** Tester follow-up G §6.2 (#269): landing watches in flight, by group; a restart watches the uncovered landings again. */
+  landingWatches?: Map<string, LandingWatchCheck>;
   /**
    * Tester #229/#230 (plan 2026-11-10 follow-up B, T1): transient step-E failures already retried, by run. In memory: a
    * restart grants at most TRANSIENT_E_RETRIES more, which is still bounded, and needs no drive-record field.
@@ -1828,6 +1833,16 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
         write: (action) => write(deps, action), stopped: () => context.stopped,
       }, context.acceptanceChecks ?? (context.acceptanceChecks = new Map()))) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Tester follow-up G §6.2 (#269): a landing since the last watch runs the group's checks on its tip, off the round.
+    try {
+      const { watchLandings } = await import("./landingWatch.js");
+      if (await watchLandings({
+        store: deps.store, roots: deps.roots, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate,
+        ...(deps.dispatchedPersonDir === undefined ? {} : { dispatchedPersonDir: deps.dispatchedPersonDir }),
+        ...(deps.beforeScratchRemoved === undefined ? {} : { beforeScratchRemoved: deps.beforeScratchRemoved }),
+        write: (action) => write(deps, action), stopped: () => context.stopped,
+      }, context.landingWatches ?? (context.landingWatches = new Map()))) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Tester follow-up G spec §3: a requirement group accepted on its tip is reviewed against its acceptance criteria before
     // it can be done. Loaded on first use, not imported (the import-cycle rule, as the acceptance pass).
     try {
@@ -1899,6 +1914,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       abortPostMergeChecks(deps, context);
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.landingWatches?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       // #192: a settle on the lane is finished, not cut: its run is written to settled before the store can go away.
@@ -1908,9 +1924,11 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       abortPostMergeChecks(deps, context);
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
+      for (const check of context.landingWatches?.values() ?? []) check.controller.abort();
       // Tester follow-up E §5: an aborted group acceptance check is waited for until its scratch worktree is gone, so a
       // restart (or anything removing the state directory) never races its git or its commands. It records nothing.
       await Promise.all([...(context.acceptanceChecks?.values() ?? [])].map((check) => check.done));
+      await Promise.all([...(context.landingWatches?.values() ?? [])].map((check) => check.done));
       await stopping;
     },
     get crashed() { return crashed; },

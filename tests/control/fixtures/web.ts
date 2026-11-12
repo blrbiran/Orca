@@ -42,7 +42,9 @@ export interface WebFixtureTask { taskId: string; dependsOn?: string[]; targetVe
   /** The contract explicitly states that its command checks decide the goal (2026-11-08 no-change completion). */
   commandChecksDecideGoal?: boolean;
   /** Tester follow-up G spec §10.1: the contract's verification.verifierType ("command" unless said otherwise). */
-  verifierType?: "command" | "agent" }
+  verifierType?: "command" | "agent";
+  /** Tester follow-up G §6.2 (#269): this task's verification.requiredChecks, over the fixture-wide `requiredChecks`. */
+  requiredChecks?: string[] }
 /**
  * Agent selection plan T10 (spec §6.2): the importing operator's ("human") preferences -- `null` leaves them unset, absent
  * seeds a default agent so the import-time estimator slot resolves -- and the plan's group layers (R7: no estimatorAgent).
@@ -103,7 +105,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
       context: { repoPath: repo, targetPaths: task.targetPaths ?? [task.taskId], relevantDocs: [], buildTestCommands: ["true"], constraints: [], ...(task.contextExtra ?? {}) },
       executionPolicy: { autonomyLevel: "L2", maxAttempts: 9, perAttemptTimeoutMs: task.perAttemptTimeoutMs ?? 60_000, totalRuntimeBudgetMs: 90_000, tokenBudget: task.tokenBudget===undefined?99_000:task.tokenBudget, worktreeRequired: true, partialOutcomeRecoveryWindowMs: 30_000 },
       safetyPolicy: { allowlistPaths: [], denylistPaths: [], maxFilesTouched: 1, humanGateConditions: [] },
-      verification: { verifierType: task.verifierType ?? "command", requiredChecks: options.requiredChecks ?? ["true"], rejectOn: ["failure"], evidenceRequired: [], ...(task.commandChecksDecideGoal === true ? { commandChecksDecideGoal: true } : {}) },
+      verification: { verifierType: task.verifierType ?? "command", requiredChecks: task.requiredChecks ?? options.requiredChecks ?? ["true"], rejectOn: ["failure"], evidenceRequired: [], ...(task.commandChecksDecideGoal === true ? { commandChecksDecideGoal: true } : {}) },
       escalationAndExit: { escalationTargets: [], pauseOn: [], stopOn: [], terminalStates: ["succeeded", "blocked_waiting_human", "exhausted", "cancelled", "failed"] } };
     const contractPath = join(h.root, `contract-${task.taskId}.json`);
     await writeFile(contractPath, canonicalBytes(contract));
