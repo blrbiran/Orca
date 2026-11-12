@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { recordActivity } from "./activity.js";
+import { landingSubject, landingTrailers, taskGoalOf } from "./landingMessage.js";
 import { readArtifact, within, writeArtifact } from "./archive.js";
 import { operatorAcceptanceOf, type OperatorAcceptance, type StagedAcceptance } from "./acceptAttempt.js";
 import { runCheckRecorded, type CheckFailure } from "./checkCommand.js";
@@ -182,7 +183,7 @@ async function mergeOnTip(
     const evidence = runEvidence(runId, attemptSha, await ccloopEvidenceString(deps.ccloopBin));
     const ledger = await writeRunLedger(join(landing, ".decisions"), { ledgerRun: runId, reported, codeAuthored: [acceptanceDecision(runId, run.groupId, intent, attemptSha, at)], at, evidence });
     await git(landing, [...QUIET_GIT, "add", "-f", join(".decisions", `${runId}.jsonl`)]);
-    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", `orca: accept ${runId}`]);
+    await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "commit", "--no-edit", "-m", landingSubject(taskGoalOf(deps.store, run), "accept", runId), "-m", landingTrailers(run)]);
     return { next: await revParse(landing, "HEAD"), pending: ledger.pending };
   } finally {
     await removeOwnPath(targetRepo, deps.roots, landing);
