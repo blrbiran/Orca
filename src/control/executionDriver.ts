@@ -26,6 +26,7 @@ import { hashPayload } from "./commands.js";
 import { peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+import { allDirsUnchanged, noChangeExplanationOf, noChangeRouteOf, recordNoChangeCompletionInTransaction } from "./noChange.js";
 import { privateDirectory } from "./paths.js";
 import { publishPending } from "./projection.js";
 import { readBudgetProposal, readGroup, readWork } from "./queries.js";
@@ -1010,15 +1011,31 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     }
   }
   // No-change completion (2026-11-08, design Correction 2): only a contract that declares its command checks decide the
-  // goal, and only an attempt whose Git tree equals its base tree, may complete without a landing. The proof is measured
-  // here from the result repository; a differing tree leaves D14 exactly as it was.
+  // goal, and only an attempt whose Git tree equals its base tree, may complete without a landing (the declaration is no
+  // longer required -- follow-up G, below). The proof is measured here from the result repository; a differing tree leaves
+  // D14 exactly as it was.
+  // Tester follow-up G spec §1.1 / §10.1: the proof is measured for every succeeded empty run, declared or not; stepE
+  // decides by route (noChange.ts) whether it completes, asks the goal judge, or keeps D14. A multi run has a proof only
+  // when every directory's tree equals its base: the primary's proof in `noChange`, every directory's in `noChangeDirs`.
   let noChange: NonNullable<DriveRecord["noChange"]> | null = null;
-  if (measured.empty && multiDirs === null && drive.base !== null && contract.verification.commandChecksDecideGoal === true) {
+  let noChangeDirs: NonNullable<DriveRecord["noChangeDirs"]> | null = null;
+  const treeOf = async (repoDir: string, rev: string) => (await git(repoDir, [...QUIET_GIT, "rev-parse", `${rev}^{tree}`])).trim();
+  if (measured.empty && multiDirs === null && drive.base !== null) {
     const resultRepo = join(drive.sourceDir, "repo");
-    const tree = async (rev: string) => (await git(resultRepo, [...QUIET_GIT, "rev-parse", `${rev}^{tree}`])).trim();
-    const [baseTree, attemptTree] = [await tree(drive.base), await tree(attemptSha)];
-    if (baseTree === attemptTree) {
+    const [baseTree, attemptTree] = [await treeOf(resultRepo, drive.base), await treeOf(resultRepo, attemptSha)];
+    if (allDirsUnchanged([{ baseTree, attemptTree }])) {
       noChange = { base: drive.base, attempt: attemptSha, baseTree, attemptTree, contractHash: sha256Canonical(contract), requiredChecks: [...contract.verification.requiredChecks] };
+    }
+  } else if (measured.empty && multiDirs !== null) {
+    const dirs: NonNullable<DriveRecord["noChangeDirs"]> = [];
+    for (const [index, dir] of multiDirs.entries()) {
+      const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+      dirs.push({ key: dir.key, base: dir.base, attempt: dirAttempts[index]!, baseTree: await treeOf(resultRepo, dir.base), attemptTree: await treeOf(resultRepo, dirAttempts[index]!) });
+    }
+    if (allDirsUnchanged(dirs)) {
+      const primary = dirs[0]!;
+      noChange = { base: primary.base, attempt: primary.attempt, baseTree: primary.baseTree, attemptTree: primary.attemptTree, contractHash: sha256Canonical(contract), requiredChecks: [...contract.verification.requiredChecks] };
+      noChangeDirs = dirs;
     }
   }
   return write(deps, () => {
@@ -1029,6 +1046,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     current.state = measured.empty ? "landed" : "collected";
     current.drive = {
       ...current.drive!, outcome, attemptSha, landedCommit: null, noChange,
+      ...(noChangeDirs === null ? {} : { noChangeDirs }),
       ...(multiDirs === null ? {} : { dirs: multiDirs.map((dir, index) => ({ ...dir, attemptSha: dirAttempts[index]! })) }),
     };
     saveDriverRun(store, current);
@@ -1361,7 +1379,13 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     const landed = landedAnywhere(drive);
     // No-change completion (2026-11-08): the C proof is used only when it names this run's attempt; anything else keeps
     // D14's empty-result block. `acceptanceEvidence` re-checks the same binding before it counts the task done.
-    const noChange = !landed && drive.noChange !== null && drive.noChange.attempt === drive.attemptSha ? drive.noChange : null;
+    const proved = !landed && drive.noChange !== null && drive.noChange.attempt === drive.attemptSha ? drive.noChange : null;
+    // Tester follow-up G spec §1.1 / §10.1: a bound proof completes the task directly only on the `complete` route (an
+    // agent verifier approved the goal, or the contract declares its command checks decide it); `judge` and `none` keep
+    // D14 here (the judge's call is claimed below once the run is settled, Task 5).
+    const taskContract = proved === null ? null : readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
+    const noChange = proved !== null && noChangeRouteOf(taskContract!, readGroup(store, run.groupId)) === "complete" ? proved : null;
+    const noChangeDecidedBy = taskContract?.verification.verifierType === "agent" ? "agent-verifier" as const : "command-checks" as const;
     if (!landed && drive.ledgerCommit === null) {
       const recorded = await recordEmptyResultDecisions(deps, runId);
       if (recorded !== "settle") return recorded === "blocked";
@@ -1373,7 +1397,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
       // ran the contract's requiredChecks in this run and it ended `succeeded`.
       const source = await writeArtifact(store, `acceptance-${runId}`, Buffer.from(JSON.stringify(landed
         ? { runId, checksPassed: true, landing: "landed", commit: drive.landedCommit, ...(drive.landedDirs === null ? {} : { dirs: drive.landedDirs }), ...(raw.verificationOnly===true?{verificationOnly:true as const}:{}), intent: `drive:${runId}` }
-        : { runId, checksPassed: true, landing: "no-change", commit: noChange!.attempt, noChange: noChange!, ...(raw.verificationOnly===true?{verificationOnly:true as const}:{}), intent: `drive:${runId}` })), archiveAdmission(deps));
+        : { runId, checksPassed: true, landing: "no-change", commit: noChange!.attempt, noChange: noChange!, decidedBy: noChangeDecidedBy, ...(raw.verificationOnly===true?{verificationOnly:true as const}:{}), intent: `drive:${runId}` })), archiveAdmission(deps));
       write(deps, () => store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run(`acceptance:${runId}`, JSON.stringify({ runId, accepted: true, source })));
     }
     deps.crash?.("E-after-acceptance");
@@ -1389,7 +1413,12 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
       ...(raw.verificationOnly===true?{verificationOnly:true as const}:{}),
     };
     candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
-    await commitCandidate(store, candidate, archiveAdmission(deps));
+    // Spec §1.2: the no-change record is written in the settle's own transaction, once the task is done.
+    const explanation = noChange === null ? null : await noChangeExplanationOf(store, runId);
+    await commitCandidate(store, candidate, { ...archiveAdmission(deps), ...(noChange === null ? {} : { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
+      if ((readWork(tx, settledCandidate.groupId, settledCandidate.workItemId) as { status: string }).status !== "done") return;
+      recordNoChangeCompletionInTransaction(tx, { groupId: settledCandidate.groupId, taskId: settledCandidate.workItemId, runId, decidedBy: noChangeDecidedBy, explanation });
+    } }) });
     mark("commit");
     reportSlowSettle();
     if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }

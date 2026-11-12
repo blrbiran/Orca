@@ -1830,6 +1830,8 @@ export const activityKindSchema = z.enum([
   "post-merge-check",
   // Tester follow-up E §5 (#241): a group acceptance passed, failed, or was waived.
   "group-acceptance",
+  // Tester follow-up G spec §1.2: a task completed with no change.
+  "no-change-completed",
 ]);
 export const activityEntrySchema = z
   .object({
