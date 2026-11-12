@@ -48,7 +48,7 @@ const projectRead = (over: Partial<ChecksReadV1> = {}): ChecksReadV1 => ({
   scheduled: [{ ...S(WEEKLY, "global"), scope: "global" }],
   locks: ["integrationCheck.command"],
   state: [{ kind: "integration-check", target: "main", state: state() }, { kind: "model-review", target: "main", state: state() }],
-  revision: 3, nextSlots: { weekly: [SLOT] }, ...over,
+  revision: 3, nextSlots: { weekly: [SLOT] }, suggestedCommand: null, ...over,
 });
 
 let posts: Array<{ url: string; body: { expectedRevision: number; payload: unknown } }>;

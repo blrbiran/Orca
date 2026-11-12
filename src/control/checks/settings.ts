@@ -100,10 +100,14 @@ export const checksReadSchema = z.object({
   // slots by id (empty when disabled, or when the panel's time zone cannot be read) -- the Web keeps no copy of the cron.
   revision: z.number().int().min(0),
   nextSlots: z.record(z.string(), z.array(z.number().int())),
+  // Full suite spec 2026-11-12 §3 (#279): the full-suite command code detected in the project's checkout, shown with Adopt
+  // and never run until a person adopts it; null for the global read and once a command is set.
+  suggestedCommand: z.string().min(1).nullable(),
 }).strict();
 export type ChecksReadV1 = z.infer<typeof checksReadSchema>;
 
-export function checksRead(store: ControlStore, repoId: string | null, now: number = store.now()): ChecksReadV1 {
+/** `suggest`: the full-suite suggestion for the project's checkout (fullSuite.ts), asked only when no command is set. */
+export function checksRead(store: ControlStore, repoId: string | null, now: number = store.now(), suggest: () => string | null = () => null): ChecksReadV1 {
   const effective = effectiveChecks(store, repoId);
   const timeZone = readUsageCalendar(store).timeZone;
   const slotsOf = (entry: ScheduledCheck): number[] => {
@@ -114,6 +118,7 @@ export function checksRead(store: ControlStore, repoId: string | null, now: numb
     schema: "orca-checks-v1", repoId, ...effective, state: repoId === null ? [] : listCheckStates(store, repoId),
     revision: repoId === null ? orchestrationRevision(store) : readRepositorySettingsBody(store, repoId)?.revision ?? 0,
     nextSlots: Object.fromEntries(effective.scheduled.map((entry) => [entry.value.id, slotsOf(entry.value)])),
+    suggestedCommand: repoId === null || effective.kinds["integration-check"].command.value !== null ? null : suggest(),
   });
 }
 

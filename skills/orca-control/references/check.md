@@ -51,6 +51,17 @@ orca check set integration-check --on --no-command
 orca check set model-review --budget-tokens 500000 --global
 ```
 
+## `orca check adopt`
+
+set this project's full-suite (integration-check) command to the one Orca detected (check show: suggestedCommand); needs a person token
+
+- What it does: sends control verb `set-check-settings`.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+
+```
+orca check adopt --as-person
+```
+
 ## `orca check reset <kind> <field>... [--global]`
 
 remove a kind's fields from this project (or --global) so the next layer applies

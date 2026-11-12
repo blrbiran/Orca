@@ -12,7 +12,8 @@ import { unionSetup } from "./setupUnion.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { acceptanceOf, landedRunCount, landedTaskCount, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import { fullSuiteCommand, suggestFullSuiteCommand } from "./fullSuite.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -34,6 +35,10 @@ import type { ControlStore } from "./store.js";
  * every round: `not-run: work-branch-missing`, keyed by the runs landed so far, so later rounds skip the group without a
  * git child until a new landing. Any other failure (a lock, a repository that does not resolve) is tried again next round
  * and logged once per distinct message per group, not every round.
+ *
+ * Full suite spec 2026-11-12 (#279): after a green union, the project's full-suite command (its integration-check command,
+ * fullSuite.ts) runs once in the same tree and bound, once more if red: green on the retry passes as flaky, red twice
+ * fails. With it set, one landing is checked too. With none set, nothing more runs and the record names the suggestion.
  */
 export * from "./groupAcceptanceRecord.js";
 
@@ -47,8 +52,13 @@ export function saveAcceptance(store: ControlStore, groupId: string, record: Gro
   recordProjectionChange(store, [groupId]);
 }
 
-/** `done` settles once the check is over, its scratch worktree removed included (driver stop() waits on it). */
-export interface GroupAcceptanceCheck { controller: AbortController; tip: string; settled: { outcome: PostMergeOutcome } | { error: unknown } | null; done: Promise<void> }
+/**
+ * `done` settles once the check is over, its scratch worktree removed included (driver stop() waits on it). `suite`: the
+ * full-suite command it runs after the union (full suite spec 2026-11-12 §4), null when none was set as it started.
+ */
+export interface GroupAcceptanceCheck { controller: AbortController; tip: string; suite: string | null; settled: { outcome: AcceptanceOutcome } | { error: unknown } | null; done: Promise<void> }
+/** The union's outcome and, after it, the full suite's: each of its runs' exits (empty when it did not run). */
+export interface AcceptanceOutcome extends PostMergeOutcome { suiteExits: string[] }
 
 export interface GroupAcceptanceDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository: (repoId: string) => string;
@@ -157,9 +167,10 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     checks.delete(groupId);
     if ("error" in inFlight.settled) throw inFlight.settled.error;
     if (inFlight.tip !== tip) return false;
-    const { failure, commands } = inFlight.settled.outcome;
+    const { failure, commands, suiteExits } = inFlight.settled.outcome;
     const record: GroupAcceptance = { tip, result: failure === null ? "passed" : "failed", commands, at: store.now(),
-      ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }) };
+      ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }),
+      fullSuite: fullSuiteRecord(inFlight.suite, repo, suiteExits) };
     deps.write(() => {
       saveAcceptance(store, groupId, record);
       recordActivity(store, { groupId, kind: "group-acceptance", body: { ...record } });
@@ -167,8 +178,10 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     return true;
   }
   if (recorded !== null && recorded.tip === tip) return false;
-  if (landedTaskCount(store, groupId) <= 1) {
-    deps.write(() => saveAcceptance(store, groupId, { tip, result: "not-needed", why: "single-landing", commands: [], at: store.now() }));
+  // Full suite spec §4: the project's full-suite command as this check starts; with one set, a single landing is checked too.
+  const suite = fullSuiteCommand(store, groupRepoId(store, groupId));
+  if (landedTaskCount(store, groupId) <= maxLandingsWithoutAcceptance(suite)) {
+    deps.write(() => saveAcceptance(store, groupId, { tip, result: "not-needed", why: "single-landing", commands: [], at: store.now(), fullSuite: fullSuiteRecord(suite, repo, []) }));
     return true;
   }
   const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId);
@@ -177,17 +190,39 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
   // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver checks again.
   if (deps.stopped()) return false;
   const controller = new AbortController();
-  const entry: GroupAcceptanceCheck = { controller, tip, settled: null, done: Promise.resolve() };
-  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, setup, commands, timeoutMs, controller.signal)
+  const entry: GroupAcceptanceCheck = { controller, tip, suite, settled: null, done: Promise.resolve() };
+  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, setup, commands, suite, timeoutMs, controller.signal)
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
   checks.set(groupId, entry);
   return recorded !== null;
 }
 
-async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, setup: string[], checks: string[], timeoutMs: number, signal: AbortSignal): Promise<PostMergeOutcome> {
+/**
+ * Full suite spec §3-§4: what the record says of the suite. Unset: the suggestion code detects in the repository's checkout
+ * (never run; human: 「人采纳才用」). Set: each run's exit, and flaky when it passed only on the retry.
+ */
+function fullSuiteRecord(suite: string | null, repo: string, exits: string[]): FullSuiteRecord {
+  return { command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits, flaky: exits.length === 2 && exits[1] === "0" };
+}
+
+async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal): Promise<AcceptanceOutcome> {
   // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
   const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
-  return runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, (tree) => runCheckSequence(tree, setup, checks, timeoutMs, as, signal));
+  return runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {
+    const union = await runCheckSequence(tree, setup, checks, timeoutMs, as, signal);
+    if (union.failure !== null || suite === null) return { ...union, suiteExits: [] };
+    // Full suite spec §4: after a green union, the project's suite in the same tree and bound; a red run is run once more.
+    const commands = [...union.commands], suiteExits: string[] = [];
+    let failure: PostMergeOutcome["failure"] = null;
+    for (let run = 0; run < 2; run += 1) {
+      const outcome = await runCheckSequence(tree, [], [suite], timeoutMs, as, signal);
+      commands.push(...outcome.commands);
+      suiteExits.push(outcome.commands[0]!.exit);
+      failure = outcome.failure;
+      if (failure === null) break;
+    }
+    return { failure, commands, suiteExits };
+  });
 }
 
 /**

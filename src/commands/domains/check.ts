@@ -70,6 +70,16 @@ export const CHECK_ROWS: CommandDef[] = [
     ],
     examples: ["orca check set model-review --off", "orca check set integration-check --on --no-command", "orca check set model-review --budget-tokens 500000 --global"],
     route: layerRoute("settings"), payload: (c) => ({ kind: kindOf(c), set: settingsSet(c), clear: [] }) }),
+  // Full suite spec 2026-11-12 §3 (#279): adopting the detected full-suite command is setting it -- the same verb, tier and
+  // lock rule as `check set integration-check --command`. The suggestion is the panel's, read fresh; none is refused.
+  verb({ domain: "check", action: "adopt", summary: "set this project's full-suite (integration-check) command to the one Orca detected (check show: suggestedCommand); needs a person token",
+    verb: "set-check-settings", scope: "repository", access: "token", examples: ["orca check adopt --as-person"],
+    route: projectRoute("settings"),
+    payload: async (c) => {
+      const read = await c.read(`checks?repoId=${encodeURIComponent((await c.project()).repoId)}`) as { suggestedCommand?: unknown };
+      if (typeof read.suggestedCommand !== "string") throw invalid("nothing to adopt: this project has a command set, or Orca detected none (check show)");
+      return { kind: "integration-check", set: { command: read.suggestedCommand }, clear: [] };
+    } }),
   verb({ domain: "check", action: "reset", summary: "remove a kind's fields from this project (or --global) so the next layer applies",
     verb: "set-check-settings", scope: layerScope,
     positionals: [KIND, { name: "field", summary: "enabled|trigger|command (integration-check); enabled|trigger|budgetTokens|maxGroupsPerReview (model-review)", required: true, variadic: true }],

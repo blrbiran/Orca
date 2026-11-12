@@ -186,6 +186,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca check show [--global]` — the effective check settings, where each value comes from, locks, scheduled checks and each check's state
 - `orca check findings <review>` — a model review's record: range, groups, valid findings, dropped findings with reasons
 - `orca check set <kind> [--global] [--on] [--off] [--trigger <trigger>] [--command <command>] [--no-command] [--budget-tokens <budget-tokens>] [--max-groups <max-groups>]` — set a check kind's fields in this project (or --global); --command and --budget-tokens need a person token
+- `orca check adopt` — set this project's full-suite (integration-check) command to the one Orca detected (check show: suggestedCommand); needs a person token (person token)
 - `orca check reset <kind> <field>... [--global]` — remove a kind's fields from this project (or --global) so the next layer applies
 - `orca check schedule <id> [--global] [--kind <kind>] [--cron <cron>] [--off] [--remove]` — add, replace or remove a scheduled check in this project (or --global); adding or enabling one needs a person token
 - `orca check lock [--lock <lock>]` — set the global lock list (needs a person token); no --lock clears every lock (person token)

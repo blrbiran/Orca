@@ -785,6 +785,12 @@ export const en = {
       cancel: "Cancel",
       boardFailed: "Group acceptance failed: {{command}}",
       branchMissing: "Group acceptance did not run: the work branch {{branch}} no longer exists. A later landing checks it again.",
+      // Full suite spec 2026-11-12 §5 (#279): warnings about the project's full suite; never blocking.
+      suiteNotSet: "No full test suite ran at acceptance: this project has no full-suite command (Settings → Checks → Integration check → Command).",
+      suiteSuggested: "Orca detected {{command}}; it runs only once adopted.",
+      adopt: "Adopt {{command}}",
+      adopted: "Adopted: the next acceptance runs it.",
+      suiteFlaky: "The full suite {{command}} failed once and passed on the retry (flaky).",
     },
     // Tester follow-up G spec §1.2, §1.4, §10.1: a task completed (or stopped) with no change, and its two actions.
     // Tester follow-up G spec §3.3, §3.5: a requirement group's review and its exits.
@@ -1820,6 +1826,9 @@ export const en = {
       overriddenByLock: "overridden by lock",
       value: { on: "on", off: "off", noCommand: "the groups' own checks" },
       commandPlaceholder: "for example: npm ci && npm test",
+      suiteExplain: "This command is also the project's full test suite: group acceptance runs it on each group's final tree after the tasks' own checks. With none set, no full suite runs.",
+      suggested: "Detected: {{command}} (not run until adopted)",
+      adopt: "Adopt",
       save: "Save",
       override: "Override",
       reset: "Reset to inherited",

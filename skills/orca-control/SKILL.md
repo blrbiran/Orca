@@ -83,7 +83,7 @@ any command (`--json`: as data; ask for one domain, the whole list is large); `o
 | see or change how many groups run at once | `orca orchestration show / set` | references/orchestration.md |
 | see what blocks dispatch, or retry recovery | `orca recovery list`, `orca recovery retry` | references/recovery.md |
 | change the project's workspace, default delivery or criteria review | `orca project set-workspace-mode`, `project set-integration`, `project set-criteria-review` | references/project.md |
-| see, set, schedule, lock or run a check | `orca check show / findings / set / schedule / lock / run / resume` | references/check.md |
+| see, set, adopt, schedule, lock or run a check | `orca check show / findings / set / adopt / schedule / lock / run / resume` | references/check.md |
 | start a flow on a folder, or watch one | `orca flow settings show`, `orca flow start <template> --dir <dir>`, `flow list`, `flow show <r>`, `flow journal <r>` | references/flow.md |
 | steer a flow run or its steps | `orca flow feedback / edit / plan / rerun / discard-plan / rewind / revise / params / pause / resume / stop / retry / repin` | references/flow.md |
 | skip, defer, fill, include or accept a step; answer an ask; effects; pool | `orca flow skip / defer / fill / include / accept / answer`, `flow effect confirm / enact / discard`, `flow pool raise` | references/flow.md |

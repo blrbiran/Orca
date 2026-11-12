@@ -30,6 +30,7 @@ import { RunReason } from "./RunReason.js";
 import { RunOutputBound } from "./RunOutputBound.js";
 import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
 import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
+import { GroupFullSuiteWarning } from "./GroupFullSuiteWarning.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
 import { LandingWatchProblem } from "./LandingWatchProblem.js";
 import { GroupAllowances } from "./GroupAllowances.js";
@@ -852,6 +853,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {/* Tester follow-up E §5 (#241): a failed group acceptance, with Recheck, and Waive for an owner. */}
       <GroupAcceptanceProblem groupId={groupId} acceptance={view.summary.acceptance} roles={props.roles} archived={archived} revision={revision} onCommand={onCommand} />
+      {/* Full suite spec 2026-11-12 §5 (#279): no full-suite command set (with the suggestion and Adopt), or a flaky suite; never blocking. */}
+      <GroupFullSuiteWarning repoId={view.plan.repoId} acceptance={view.summary.acceptance} archived={archived} />
       {/* Tester follow-up G spec §3.3, §3.5: the requirement review and its exits. */}
       <RequirementReviewPanel groupId={groupId} review={view.summary.requirementReview} archived={archived} revision={revision} onCommand={onCommand} />
       {/* Tester follow-up G §6.2 (#269): a check that turned red on the group branch after a landing. */}

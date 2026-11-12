@@ -3,6 +3,7 @@
  * done pass, the integration pass and the views read. Type imports only, so modules on the driver's import cycle can read
  * it without pulling in the acceptance runner (groupAcceptance.ts).
  */
+import { fullSuiteCommand } from "./fullSuite.js";
 import type { ControlStore } from "./store.js";
 
 export type GroupAcceptanceResult = "passed" | "failed" | "not-needed" | "not-run" | "waived";
@@ -20,7 +21,14 @@ export interface GroupAcceptance {
   at: number;
   /** waive-acceptance: who accepted the failed tip anyway, and why. */
   waived?: { by: string; note: string; at: number };
+  /**
+   * Full suite spec 2026-11-12 §4 (#279): the project's full-suite command this acceptance ran after the union (null: none
+   * set -- then `suggestion` is what code detected, never run), each run's exit (a red first run is run once more), and
+   * whether it passed only on the retry. Absent on records written before it, and on not-run.
+   */
+  fullSuite?: FullSuiteRecord;
 }
+export interface FullSuiteRecord { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean }
 
 const SATISFIED: ReadonlySet<GroupAcceptanceResult> = new Set(["passed", "not-needed", "not-run", "waived"]);
 
@@ -56,13 +64,34 @@ export function landedRunCount(store: Pick<ControlStore, "db">, groupId: string)
  * also satisfies a group already `done` (it stays done, and its dependents keep reading it so); any other group that
  * needs an acceptance has no tree to accept and waits.
  */
-export function acceptanceSatisfied(store: Pick<ControlStore, "db">, groupId: string, body: unknown): boolean {
+export function acceptanceSatisfied(store: ControlStore, groupId: string, body: unknown): boolean {
   const record = acceptanceOf(body);
   if (record?.why === "work-branch-missing" && (body as { status?: unknown }).status === "done") return true;
   if (record !== null && record.why !== "work-branch-missing") return SATISFIED.has(record.result);
-  const b = (body ?? {}) as { multiDir?: unknown; dirWorkspace?: unknown };
+  const b = (body ?? {}) as { multiDir?: unknown; dirWorkspace?: unknown; plan?: { repoId?: unknown } };
   if (b.multiDir != null || b.dirWorkspace != null) return true;
-  return landedTaskCount(store, groupId) <= 1;
+  const landed = landedTaskCount(store, groupId);
+  // Full suite spec §4: with a full-suite command set, one landing waits for the acceptance too. Settings that cannot be
+  // read wait as well: the acceptance pass names that error every round (groupAcceptance.ts acceptGroups).
+  let suite: string | null;
+  try { suite = typeof b.plan?.repoId === "string" ? fullSuiteCommand(store, b.plan.repoId) : null; } catch { return false; }
+  return landed <= maxLandingsWithoutAcceptance(suite);
+}
+
+/**
+ * Full suite spec §4: the most landings a group may have and still need no acceptance -- one (its own checks ran on that
+ * tree), or none once the project has a full-suite command (the suite ran on no task's tree).
+ */
+export function maxLandingsWithoutAcceptance(suite: string | null): number {
+  return suite === null ? 1 : 0;
+}
+
+/** Full suite spec §5: the warning a recorded acceptance gives about its full suite (never a blocking problem); else null. */
+export function fullSuiteWarning(record: GroupAcceptance | null): string | null {
+  const suite = record?.fullSuite;
+  if (record === null || suite === undefined || record.result === "failed") return null;
+  if (suite.command === null) return "full-suite-not-set";
+  return suite.flaky ? `full-suite-flaky:${suite.command}` : null;
 }
 
 /** The command a failed acceptance stopped at (the last one it ran). */

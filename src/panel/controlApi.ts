@@ -37,6 +37,7 @@ import { groupRepoIdOf } from "../control/usageLedger.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
 import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
+import { suggestFullSuiteCommand } from "../control/fullSuite.js";
 import { readFlowSettings } from "../flow/settings.js";
 import { FolderTooLarge, listFolderImages, readBuiltinTemplates } from "../flow/startForm.js";
 import { loadBuiltin } from "../flow/template/load.js";
@@ -456,7 +457,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendControlError(res, 404, "control-target-not-allowed", "No trusted repository has this id.");
       return;
     }
-    try { res.json(checksRead(deps.store, repoId)); } catch (error) { sendMappedControlError(res, error); }
+    // Full suite spec 2026-11-12 §3: the suggestion is read from the project's checkout, by code; it is never run.
+    const path = repoId === null ? null : deps.service?.repositoryPathOf(repoId) ?? null;
+    try { res.json(checksRead(deps.store, repoId, deps.store.now(), () => (path === null ? null : suggestFullSuiteCommand(path)))); } catch (error) { sendMappedControlError(res, error); }
   });
   // Flow engine spec §11.2, §14.2: the effective flow settings, each field with its source layer and lock; `?repoId=` for
   // a project, none for the global layer alone. A read.

@@ -1667,6 +1667,10 @@ export const groupSummarySchema = z
       tail: z.string().max(2048).optional(), at: safeInteger,
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       problem: nonemptyString.optional(),
+      // Full suite spec 2026-11-12 §4-§5 (#279): the project's full-suite command and its runs' exits (null: none set, with
+      // the suggestion code detected); `warning` is `full-suite-not-set` or `full-suite-flaky:<command>`, never blocking.
+      fullSuite: z.object({ command: nonemptyString.nullable(), suggestion: nonemptyString.nullable(), exits: z.array(nonemptyString).max(2), flaky: z.boolean() }).strict().optional(),
+      warning: nonemptyString.optional(),
     }).strict().optional(),
     // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is
     // `requirement-review-not-passed:<why>` when it did not pass. Optional so a group without one parses unchanged.

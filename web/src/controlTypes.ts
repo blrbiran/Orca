@@ -634,6 +634,8 @@ export type RequirementReviewV1 = {
 export type GroupAcceptanceV1 = {
   tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
+  /** Full suite spec 2026-11-12 §4-§5 (#279): the full-suite command and its runs' exits; `warning` never blocks. */
+  fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean }; warning?: string;
 };
 /** Tester follow-up G §6.3 (#189): the request an allowance was granted from or covers (src/control/groupAllowances.ts). */
 export type AllowanceRequestKindV1 =
@@ -971,6 +973,8 @@ export type ChecksReadV1 = {
   state: Array<{ kind: CheckKindV1; target: string; state: CheckStateV1 }>;
   revision: number;
   nextSlots: Record<string, number[]>;
+  /** Full suite spec 2026-11-12 §3: the full-suite command code detected (never run until adopted); null when set or none. */
+  suggestedCommand: string | null;
 };
 /** Spec §6.5, §7: GET /api/control/checks/reviews/:reviewGroupId -- the review's record and its dismissals. */
 export type ReviewFindingV1 = {

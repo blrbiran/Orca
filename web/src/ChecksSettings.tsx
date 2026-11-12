@@ -175,9 +175,20 @@ function KindSection(props: { kind: CheckKindV1; view: ChecksReadV1; layer: Laye
       <Field {...common} name="trigger" sourced={fields[props.kind].trigger} show={(value) => triggerText(value, t)}
         edit={(draft, set) => <TriggerEditor value={draft} onChange={set} />} />
       {props.kind === "integration-check" ? (
+        <>
         <Field {...common} name="command" sourced={fields["integration-check"].command} show={(value) => value ?? t("settings.checks.value.noCommand")} normalize={(value) => value?.trim() ?? null}
           edit={(draft, set) => <input type="text" aria-label={t("settings.checks.field.command")} placeholder={t("settings.checks.commandPlaceholder")} value={draft ?? ""}
             onChange={(event) => set(event.currentTarget.value.trim() === "" ? null : event.currentTarget.value)} />} />
+          {/* Full suite spec 2026-11-12 §2-§3 (#279): the command is also the project's full suite at group acceptance; a
+              detected suggestion is only shown, and runs once a person adopts it (「人采纳才用」). */}
+          <p>{t("settings.checks.suiteExplain")}</p>
+          {props.view.suggestedCommand !== null && (
+            <p data-testid="check-suggested-command">
+              {t("settings.checks.suggested", { command: props.view.suggestedCommand })}
+              {props.may && <> <button type="button" onClick={() => props.send("set-check-settings", { kind: "integration-check", set: { command: props.view.suggestedCommand }, clear: [] })}>{t("settings.checks.adopt")}</button></>}
+            </p>
+          )}
+        </>
       ) : (
         <>
           <Field {...common} name="budgetTokens" sourced={fields["model-review"].budgetTokens} show={String} edit={number(t("settings.checks.field.budgetTokens"), 1)} />
