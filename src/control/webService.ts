@@ -54,6 +54,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyRecheckAcceptance, applyWaiveAcceptance, type RecheckAcceptanceCommand, type WaiveAcceptanceCommand } from "./groupAcceptanceCommands.js";
 import { applyReopenTask, type ReopenTaskCommand } from "./reopenTask.js";
+import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
@@ -1789,6 +1790,11 @@ export class WebControlService {
   /** Tester follow-up G spec §1.4: revoke a task's no-change completion and run it again in the group with a note. */
   reopenTask(command: ReopenTaskCommand): WebCommandResult {
     return this.mutate(() => applyReopenTask({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
+  }
+  /** Tester follow-up G spec §10.1: accept a stopped no-change task as done; the proof is written before the transaction. */
+  async acceptNoChange(command: AcceptNoChangeCommand): Promise<WebCommandResult> {
+    const source = await writeAcceptNoChangeProof(this.store, command);
+    return this.mutate(() => applyAcceptNoChange({ store: this.store, admissionGate: this.deps.admissionGate }, command, source)) as WebCommandResult;
   }
   /** Tester follow-up E §5 (#241): a person accepts a group whose acceptance failed on its tip, with why. */
   waiveAcceptance(command: WaiveAcceptanceCommand): WebCommandResult {

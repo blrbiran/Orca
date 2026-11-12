@@ -73,6 +73,8 @@ const VIEW_REASONS = [
   "setup-unsupported-here",
   // Tester follow-up F §4: a settled run whose attempt changed nothing (src/control/executionDriver.ts EMPTY_RESULT_REASON).
   "empty-result",
+  // Tester follow-up G spec §10.1: a provable no change that waits for a person (noChangeJudge.ts, reopenTask.ts).
+  "no-change-twice", "no-change-judge-failed", "no-change-judge-unfunded", "no-change-judge-usage-unknown", "no-change-judge-base-missing", "no-change-not-met",
 ];
 /**
  * Gaps spec §13 (plan Task 9): a flow message's rejection reason, and a feedback intake's failure, is a code (with a

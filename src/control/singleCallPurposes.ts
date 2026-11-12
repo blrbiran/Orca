@@ -13,6 +13,7 @@ import { completeEstimateInStore, completeEstimateInTransaction } from "./estima
 import { ControlError } from "./errors.js";
 import { CLARIFY_HANDLER, SPLIT_HANDLER } from "./requirementCalls.js";
 import { QUOTA_PROBE_HANDLER } from "./quotaProbeCall.js";
+import { NO_CHANGE_JUDGE_HANDLER } from "./noChangeJudge.js";
 import type { DriveRecord } from "./driveRecord.js";
 
 /**
@@ -123,6 +124,9 @@ const HANDLERS: Readonly<Record<SingleCallPurpose, SingleCallHandler>> = Object.
   estimate: ESTIMATE, clarify: CLARIFY_ANY, split: SPLIT_HANDLER,
   "flow-draft": flowHandler("flow-draft"), "flow-review": flowHandler("flow-review"), "flow-ask": flowHandler("flow-ask"), "rerun-proposal": flowHandler("rerun-proposal"),
   "feedback-triage": flowHandler("feedback-triage"), "quota-probe": QUOTA_PROBE_HANDLER,
+  // Tester follow-up G: read when asked, not when this module loads -- noChangeJudge.ts reaches this module back through
+  // the control import cycle (reopenTask.ts), so its handler is not yet defined while this table is built.
+  get "no-change-judge"() { return NO_CHANGE_JUDGE_HANDLER; },
 });
 
 export function singleCallHandler(purpose: SingleCallPurpose): SingleCallHandler {

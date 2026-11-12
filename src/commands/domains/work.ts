@@ -551,6 +551,12 @@ export const WORK_ROWS: CommandDef[] = [
     flags: [{ name: "note", type: "string", required: true, summary: "what the agent should know; delivered as the new run's operator note (at most 2048 bytes)" }],
     route: (c) => `groups/${group(c)}/reopen-task`,
     payload: async (c) => ({ taskId: task(c), runId: await currentRun(c), note: str(c, "note") }) }),
+  // Tester follow-up G spec §10.1: accept a task stopped as a provable no change (no change twice, the judge unfunded or failed).
+  verb({ domain: "task", action: "accept-no-change", summary: "accept a task that stopped with no change on its current run as done, with why",
+    verb: "accept-no-change", positionals: [GROUP, TASK], access: "open",
+    flags: [{ name: "note", type: "string", required: true, summary: "why no change is the right result; recorded with the acceptance (at most 2048 bytes)" }],
+    route: (c) => `groups/${group(c)}/accept-no-change`,
+    payload: async (c) => ({ taskId: task(c), runId: await currentRun(c), note: str(c, "note") }) }),
   // Tester follow-up E §8: an agent may charge the grant or settle a proved zero without a person token; release-unmetered
   // wants one (humanOnly.ts SOCKET_TIER), so the verb is open and its flag says which form is a person's.
   verb({ domain: "task", action: "settle-usage", summary: "settle a run's unknown usage (cannot be undone)", verb: "settle-unknown-usage", positionals: [GROUP, TASK], access: "open",

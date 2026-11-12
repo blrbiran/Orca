@@ -413,7 +413,7 @@ export type RunViewV1 = {
   state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "collected" | "landed" | "reconciling" | "blocked";
   phase: "estimate" | "work" | "handoff" | "single-call";
   /** N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase. */
-  purpose?: "clarify" | "split" | "quota-probe";
+  purpose?: "clarify" | "split" | "quota-probe" | "no-change-judge";
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
   profile: ProfileBindingV1;
@@ -615,7 +615,7 @@ export const WEB_ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
-  "no-change-completed", "no-change-revoked",
+  "no-change-completed", "no-change-revoked", "no-change-judged",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
@@ -734,7 +734,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
@@ -831,6 +831,7 @@ export type CommandSuccessV1 = {
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "task-retried"; taskId: string; fromRunId: string; nextRun?: { attempts: number; activeMs: number } }
     | { kind: "task-reopened"; taskId: string; fromRunId: string }
+    | { kind: "no-change-accepted"; taskId: string; runId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: "answer" | "consensus" | "review" | "call" | "person" }
     | { kind: "requirement-opened"; groupId: string; requirementId: string; roundNo: 1; wakeId: string }
     | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null; finished?: true }

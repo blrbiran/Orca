@@ -8,7 +8,7 @@ import { singleCallClaimRowOf } from "./singleCall.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
 import type { SingleCallRunRow } from "./singleCallPurposes.js";
 import { claimCapBlocking } from "./spendCaps.js";
-import { writeCanonicalRecord } from "./snapshot.js";
+import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
@@ -74,6 +74,18 @@ export function claimGroupSingleCallInTransaction(store: ControlStore, input: {
   syncWebBudget(store, group, null);
   saveGroup(store, group);
   return { runId };
+}
+
+/** The work item a group's own call runs on is named by its purpose: `<purpose>-<key>` (the view checks the prefix). */
+export function isGroupCallWorkItem(purpose: GroupCallPurpose, workItemId: string): boolean {
+  return workItemId.startsWith(`${purpose}-`);
+}
+
+/** The call's frozen contract (canonical record named by its `single-call-contract` row), or null when it cannot be read. */
+export function readGroupCallContract(store: ControlStore, groupId: string, workItemId: string): Record<string, unknown> | null {
+  const row = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='single-call-contract'").get(`single-call-contract:${groupId}:${workItemId}`);
+  if (row === undefined) return null;
+  try { return JSON.parse(readCanonicalRecord(store, String((JSON.parse(String(row.body)) as { contractHash: string }).contractHash))); } catch { return null; }
 }
 
 /** The unused grant back to the call's group (usage booking already took what the call spent out of `reserved`). */

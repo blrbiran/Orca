@@ -107,7 +107,7 @@ const activityKind = {
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
   "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
   "post-merge-check": "post-merge check", "group-acceptance": "group acceptance",
-  "no-change-completed": "no change completed", "no-change-revoked": "no change revoked",
+  "no-change-completed": "no change completed", "no-change-revoked": "no change revoked", "no-change-judged": "goal judged",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -2597,6 +2597,7 @@ export const enErrors: Record<string, string> = {
   "task-has-no-loop-plan": "This task has no loop plan.",
   "task-loop-version-conflict": "The loop plan changed after you started your draft. Read it again, then submit.",
   "task-run-moved": "This task has run again since you looked ({{detail}} is no longer its current run). Read the group again, then decide.",
+  "no-change-not-acceptable": "This task cannot be accepted as no change now ({{detail}}). Accept as no change is for a task stopped with no change on its current run.",
   "task-not-reopenable": "This task cannot be reopened now ({{detail}}). Reopen is for a task that completed (or stopped) with no change on its current run.",
   "task-not-retryable": "This task cannot be retried now ({{detail}}). Retry task is for a task whose run ended in a ccloop failure; a run blocked for another reason has Retry run.",
   "usage-event-conflict": "A usage event conflicts with the recorded one.",
@@ -2753,6 +2754,13 @@ export const enErrors: Record<string, string> = {
   "debug-repro": "Orca's reproduce-first check did not pass: {{detail}}. Retry the task.",
   // Tester follow-up F §4: a settled run whose attempt changed nothing (executionDriver.ts EMPTY_RESULT_REASON).
   "empty-result": "The attempt finished without changing any file, so there was nothing to land and the task stays blocked. It cannot be retried or accepted in this group. If no change was needed, a task whose contract lets its command checks decide the goal (commandChecksDecideGoal) completes without a landing: set that in the plan and run the task in a new group. If a change was needed, say in the task what to change and run it in a new group.",
+  // Tester follow-up G spec §10.1: a provable no change that waits for a person (noChangeJudge.ts, reopenTask.ts NO_CHANGE_BLOCKS).
+  "no-change-twice": "The task changed nothing again after Orca re-ran it with the goal judge's finding. Accept it as no change, or reopen it with a note saying what to change.",
+  "no-change-judge-failed": "Orca's goal judge call failed ({{detail}}), so nobody decided whether the unchanged tree meets the goal. Accept it as no change, or reopen it with a note.",
+  "no-change-judge-unfunded": "The group cannot fund the goal judge ({{detail}}), so nobody decided whether the unchanged tree meets the goal. Accept it as no change, or reopen it with a note.",
+  "no-change-judge-usage-unknown": "The goal judge call's usage is unknown; charge the call's grant to settle it.",
+  "no-change-judge-base-missing": "The run's base commit is missing, so the goal judge could not be asked.",
+  "no-change-not-met": "The goal judge said the goal is not met, but the re-run could not start ({{detail}}). Reopen it with a note, or accept it as no change.",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

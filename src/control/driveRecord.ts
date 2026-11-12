@@ -202,6 +202,9 @@ export const driveRecordSchema = z.object({
   }).strict().nullable().default(null),
   // Tester follow-up G spec §1 (multi-repo): every directory's tree proof of a multi run whose directories are all
   // unchanged; `noChange` keeps the primary's. Absent for every other run (optional, so no other record gains a byte).
+  // Tester follow-up G spec §10.1: the goal judge of a command-verified no-change run -- its run, what it answered, and
+  // the finding. Absent for every other run (optional, so no other record gains a byte).
+  noChangeJudge: z.object({ runId: z.string().nullable(), state: z.enum(["pending", "met", "not-met", "cannot-judge", "failed", "unfunded"]), finding: z.string().optional() }).strict().optional(),
   noChangeDirs: z.array(z.object({ key: z.string().min(1), base: commitSchema, attempt: commitSchema, baseTree: commitSchema, attemptTree: commitSchema }).strict()).optional(),
   // Debug task plan Task 8 (design §12.8): the reproduce-first check of a debug run. `checking` is written before the check
   // touches the workspace and holds what a restart needs to restore it (fix round 1, R1): the attempt, the symbolic ref and

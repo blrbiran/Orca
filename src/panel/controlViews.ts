@@ -46,6 +46,7 @@ import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProp
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS } from "../control/quotaProbeCall.js";
+import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
 import { CLARIFY_CAPS } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { activeChain, chainRounds } from "../control/clarifyChain.js";
@@ -224,7 +225,7 @@ const persistedRunSchema = z.object({
   predecessorRunId: idSchema.optional(),
   phase: z.enum(["estimate", "work", "handoff", "single-call"]),
   // N1 DR1: a `single-call` run names its purpose, and the overview its prompt was built from once A2 stored it.
-  purpose: z.enum(["clarify", "split", "quota-probe"]).optional(),
+  purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge"]).optional(),
   overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
   claimOrdinal: safeInteger.positive().nullable(),
   // Quota failover spec 2026-11-03 §8: the task's switch count at this claim (agentSwitch.ts).
@@ -1117,6 +1118,12 @@ function outputBoundView(store: ControlStore, groupId: string, run: { runId: str
   if (run.phase === "estimate") {
     try { bound = readEstimateContract(store, groupId, run.estimateId!).maxOutputTokens; } catch { return blocked(`run-estimate-contract:${run.runId}`); }
   } else if ((run as { purpose?: string }).purpose === "quota-probe") bound = QUOTA_PROBE_MAX_OUTPUT_TOKENS;
+  else if (isGroupCallPurpose((run as { purpose?: string }).purpose)) {
+    // Tester follow-up G: a group's own call states its output cap in its frozen contract (groupSingleCall.ts).
+    const cap = readGroupCallContract(store, groupId, (run as { workItemId?: string }).workItemId ?? "")?.maxOutputTokens;
+    if (typeof cap !== "number") return blocked(`run-group-call-contract:${run.runId}`);
+    bound = cap;
+  }
   else bound = readRequirementGroup(store, groupId).requirement.maxOutputTokens;
   // Task 12 review fix 2: byModel is cumulative, so only the newest work event counts; without a breakdown there is no
   // observed output to compare (never an older event's breakdown).
@@ -1157,6 +1164,11 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Quota rest probe spec 2026-11-06 §2: a probe runs on the failed task's own agent and profile, on its own work item.
       if (run.taskId !== null || run.estimateId !== null || run.claimOrdinal !== null || run.handoffProfile !== null
         || !run.workItemId.startsWith("quota-probe-") || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-quota-probe-identity:${runId}`);
+      profile = profileView(run.executionProfile);
+    } else if (run.phase === "single-call" && isGroupCallPurpose(run.purpose)) {
+      // Tester follow-up G: a group's own call (goal judge, requirement review) runs on a work item named by its purpose.
+      if (run.taskId !== null || run.estimateId !== null || run.claimOrdinal !== null || run.handoffProfile !== null
+        || !isGroupCallWorkItem(run.purpose, run.workItemId) || run.executionProfile.workKind !== "budget-estimate") return blocked(`run-group-call-identity:${runId}`);
       profile = profileView(run.executionProfile);
     } else if (run.phase === "single-call") {
       // N1 DR26: a clarify or split call of the requirement this group was, frozen with the requirement's profile and agent.

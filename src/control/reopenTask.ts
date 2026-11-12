@@ -29,7 +29,7 @@ export type ReopenTaskCommand = Extract<RawAuthorityCommandV1, { verb: "reopen-t
  * The blocks a provable no change can stop in while it waits for a person (spec §10.1): written on the run's drive record
  * by the goal judge's path (noChangeJudge.ts). Listed here so "what can be reopened" is one predicate.
  */
-export const NO_CHANGE_BLOCKS = ["no-change-twice", "no-change-judge-failed", "no-change-judge-unfunded"] as const;
+export const NO_CHANGE_BLOCKS = ["no-change-twice", "no-change-judge-failed", "no-change-judge-unfunded", "no-change-not-met"] as const;
 
 /** The goal judge's work item for a task's no-change run (noChangeJudge.ts claims on it). */
 export const noChangeJudgeWorkItemId = (workRunId: string): string => `no-change-judge-${workRunId}`;
@@ -37,7 +37,7 @@ export const noChangeJudgeWorkItemId = (workRunId: string): string => `no-change
 type ReopenWork = {
   workItemId: string; taskId: string; status: string; currentRunId?: string | null; pendingRunId?: string | null;
   grant: { work: Amount; handoff: Amount }; noChangeCompletion?: { runId: string }; reopenNote?: { text: string; scope: string };
-  fundingReleased?: boolean;
+  fundingReleased?: boolean; noChangeRerun?: unknown;
 };
 
 const acceptedRow = (store: ControlStore, runId: string): { runId: string; accepted: boolean; source: unknown } | null => {
@@ -124,6 +124,8 @@ export function reopenNoChangeTaskInTransaction(store: ControlStore, input: { gr
   work.pendingRunId = null;
   work.reopenNote = { text: input.note, scope: "remaining-attempts" };
   delete work.noChangeCompletion;
+  // A person's or an agent's reopen starts the judge's count over; the judge's own re-run sets it again after this.
+  delete work.noChangeRerun;
   saveWork(store, groupId, work as never);
   setAllocationStates(store, groupId, taskId, "confirmed");
   const resumed = readGroup(store, groupId);

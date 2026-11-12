@@ -232,6 +232,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "accept-attempt": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.acceptAttempt(c)), target: "group", payload: { taskId: "a", runId: "run-a", note: "reviewed by hand" } },
   // Tester follow-up G spec §1.4: reopening a no-change task is group-targeted, so an archived group refuses it too.
   "reopen-task": { call: (s, c) => s.reopenTask(c), target: "group", payload: { taskId: "a", runId: "run-a", note: "n" } },
+  "accept-no-change": { call: (s, c) => s.acceptNoChange(c), target: "group", payload: { taskId: "a", runId: "run-a", note: "n" } },
   "verify-saved-result": { call: (s, c) => s.verifySavedResult(c), target: "task", payload: { sourceRunId: "run-a", sourceAttempt: 1, capsuleHash: "a".repeat(64) } },
   "archive-group": { call: (s, c) => s.archiveGroup(c), target: "group", payload: {} },
   "approve-pending-decision": { call: (s, c) => s.approvePendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` } },

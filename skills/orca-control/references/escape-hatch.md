@@ -229,6 +229,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/close-run` | close-run | `{"runId":"run-0123456789abcdef"}` |
 | `POST groups/<groupId>/accept-attempt` | accept-attempt | `{"taskId":"a","runId":"run-a","note":"read the diff; land it after its checks"}` |
 | `POST groups/<groupId>/reopen-task` | reopen-task | `{"taskId":"a","runId":"run-a","note":"the goal also needs the README updated"}` |
+| `POST groups/<groupId>/accept-no-change` | accept-no-change | `{"taskId":"a","runId":"run-a","note":"base.txt already does this; no change was needed"}` |
 | `POST groups/<groupId>/tasks/<taskId>/verify-saved-result` | verify-saved-result | `{"sourceRunId":"run1","sourceAttempt":1,"capsuleHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST groups/<groupId>/settle-unknown-usage` | settle-unknown-usage | `{"taskId":"a","runId":"run-a","generation":1,"acknowledge":"charge-remaining-grant"}` |
 | `POST requirements` | requirement-open | `{"groupId":"g1","repoId":"r1","idea":"what to build"}` |

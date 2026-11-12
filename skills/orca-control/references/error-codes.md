@@ -218,6 +218,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `multi-dir-no-single-path` | 422 |
 | `multi-dir-plan-import-unsupported` | 422 |
 | `multi-dir-project-setting-unsupported` | 422 |
+| `no-change-not-acceptable` | 409 |
 | `no-chose-instead` | 400 |
 | `no-op-command` | 422 |
 | `numeric-overflow` | 422 |

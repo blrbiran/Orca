@@ -10,7 +10,7 @@ import {
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   resolveFolderChangePayloadSchema, multiDirLandingPayloadSchema,
-  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
   scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
@@ -61,7 +61,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   // Reviewed acceptance (spec 2026-11-11 §7): an owner's accept-attempt (human-only, socket tier token).
   "accept-attempt": acceptAttemptPayloadSchema,
   // Tester follow-up G spec §1.4: reopen a no-change task with a note (any).
-  "reopen-task": reopenTaskPayloadSchema,
+  "reopen-task": reopenTaskPayloadSchema, "accept-no-change": acceptNoChangePayloadSchema,
   // Tester follow-up E §5 (#241): a failed group acceptance's recheck (any) and waiver (human-only, socket tier token).
   "recheck-acceptance": emptyPayloadSchema, "waive-acceptance": waiveAcceptancePayloadSchema,
   "approve-pending-decision": approvePendingDecisionPayloadSchema,

@@ -27,6 +27,7 @@ import { peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { allDirsUnchanged, noChangeExplanationOf, noChangeRouteOf, recordNoChangeCompletionInTransaction } from "./noChange.js";
+import { routeNoChangeJudgeInTransaction } from "./noChangeJudge.js";
 import { privateDirectory } from "./paths.js";
 import { publishPending } from "./projection.js";
 import { readBudgetProposal, readGroup, readWork } from "./queries.js";
@@ -1384,7 +1385,8 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     // agent verifier approved the goal, or the contract declares its command checks decide it); `judge` and `none` keep
     // D14 here (the judge's call is claimed below once the run is settled, Task 5).
     const taskContract = proved === null ? null : readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
-    const noChange = proved !== null && noChangeRouteOf(taskContract!, readGroup(store, run.groupId)) === "complete" ? proved : null;
+    const route = proved === null ? "none" : noChangeRouteOf(taskContract!, readGroup(store, run.groupId));
+    const noChange = route === "complete" ? proved : null;
     const noChangeDecidedBy = taskContract?.verification.verifierType === "agent" ? "agent-verifier" as const : "command-checks" as const;
     if (!landed && drive.ledgerCommit === null) {
       const recorded = await recordEmptyResultDecisions(deps, runId);
@@ -1415,10 +1417,13 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
     // Spec §1.2: the no-change record is written in the settle's own transaction, once the task is done.
     const explanation = noChange === null ? null : await noChangeExplanationOf(store, runId);
-    await commitCandidate(store, candidate, { ...archiveAdmission(deps), ...(noChange === null ? {} : { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
+    // §10.1: on the judge route the goal judge is claimed in the same transaction (or the run names why not).
+    await commitCandidate(store, candidate, { ...archiveAdmission(deps), ...(noChange !== null ? { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
       if ((readWork(tx, settledCandidate.groupId, settledCandidate.workItemId) as { status: string }).status !== "done") return;
       recordNoChangeCompletionInTransaction(tx, { groupId: settledCandidate.groupId, taskId: settledCandidate.workItemId, runId, decidedBy: noChangeDecidedBy, explanation });
-    } }) });
+    } } : route === "judge" ? { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
+      routeNoChangeJudgeInTransaction(tx, { groupId: settledCandidate.groupId, taskId: settledCandidate.workItemId, runId, at: (deps.now?.() ?? new Date()).getTime() });
+    } } : {}) });
     mark("commit");
     reportSlowSettle();
     if (readDriverRun(store, runId).state !== "settled") { blockRun(deps, runId, "E", "settle-incomplete"); return true; }
@@ -1427,6 +1432,8 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     if (!landed && noChange === null) write(deps, () => {
       const current = readDriverRun(store, runId);
       if (current.state !== "settled" || current.drive === undefined || current.drive.blockedReason !== null) return;
+      // Tester follow-up G §10.1: a run the goal judge is deciding is not an empty result.
+      if (current.drive.noChangeJudge !== undefined) return;
       current.drive = { ...current.drive, blockedReason: EMPTY_RESULT_REASON };
       saveDriverRun(store, current);
     });

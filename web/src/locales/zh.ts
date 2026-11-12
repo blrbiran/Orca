@@ -2116,7 +2116,7 @@ export const zh: Translation<typeof en> = {
       "ladder-skipped": "未自动重试", "group-done": "组已完成", "quota-probe": "额度探针",
       "attempt-accepted": "尝试已接受", "attempt-accept-refused": "尝试未被接受",
       "post-merge-check": "合并后检查", "group-acceptance": "组验收",
-      "no-change-completed": "无改动完成", "no-change-revoked": "无改动已撤销",
+      "no-change-completed": "无改动完成", "no-change-revoked": "无改动已撤销", "no-change-judged": "目标已评判",
     },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
     proposalState: { editable: "可编辑", confirmed: "已确认" },
@@ -2495,6 +2495,7 @@ export const zhErrors: Record<string, string> = {
   "task-has-no-loop-plan": "这个任务没有 loop 做法。",
   "task-loop-version-conflict": "你开始草稿后做法已被改过，请重新读取后再提交。",
   "task-run-moved": "你查看之后这个任务又运行过了（{{detail}} 已不是它的当前运行）。请重新读取任务组再决定。",
+  "no-change-not-acceptable": "这个任务现在不能按无改动接受（{{detail}}）。「按无改动接受」只用于在当前运行上以无改动停住的任务。",
   "task-not-reopenable": "这个任务现在不能重新打开（{{detail}}）。「撤销并重跑」只用于在当前运行上以无改动完成（或停住）的任务。",
   "task-not-retryable": "这个任务现在不能重试（{{detail}}）。「重试任务」只用于运行以 ccloop 失败结束的任务；因别的原因阻塞的运行请用「重试运行」。",
   "usage-event-conflict": "用量事件冲突。",
@@ -2648,6 +2649,12 @@ export const zhErrors: Record<string, string> = {
   "dir-base-missing": "这个任务组的文件夹起始快照缺失（Orca 的故障），任务没有启动。",
   "debug-repro": "Orca 的先复现检查没有通过：{{detail}}。请重试任务。",
   "empty-result": "这次尝试跑完了，但没有改动任何文件，所以没有可合入的内容，任务保持受阻。在本组里它无法重试或接受。如果本就不需要改动：任务契约声明由命令检查判定目标（commandChecksDecideGoal）时，没有改动也能完成——在计划里设好，再在新组里运行这个任务。如果需要改动：在任务里写清要改什么，再在新组里运行。",
+  "no-change-twice": "Orca 带着目标评判的结论重跑了这个任务，它又一次没有改动任何文件。可以按无改动接受，或者写一句说明要改什么，撤销并重跑。",
+  "no-change-judge-failed": "Orca 的目标评判调用失败了（{{detail}}），没有人判断未改动的代码是否已满足目标。可以按无改动接受，或者写一句说明后撤销并重跑。",
+  "no-change-judge-unfunded": "这个组的额度付不起目标评判（{{detail}}），没有人判断未改动的代码是否已满足目标。可以按无改动接受，或者写一句说明后撤销并重跑。",
+  "no-change-judge-usage-unknown": "这次目标评判调用的用量未知；按它的额度记账即可结算。",
+  "no-change-judge-base-missing": "这次运行的基线提交不见了，无法询问目标评判。",
+  "no-change-not-met": "目标评判认为目标还没满足，但重跑没能开始（{{detail}}）。写一句说明后撤销并重跑，或者按无改动接受。",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

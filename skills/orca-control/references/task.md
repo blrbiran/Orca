@@ -88,6 +88,16 @@ revoke a task's no-change completion and run it again in this group with a note 
 - `<task>`: a task id or a unique prefix
 - `--note <note>` (required): what the agent should know; delivered as the new run's operator note (at most 2048 bytes)
 
+## `orca task accept-no-change <group> <task> --note <note>`
+
+accept a task that stopped with no change on its current run as done, with why
+
+- What it does: sends control verb `accept-no-change`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<task>`: a task id or a unique prefix
+- `--note <note>` (required): why no change is the right result; recorded with the acceptance (at most 2048 bytes)
+
 ## `orca task settle-usage <group> <task> --acknowledge <acknowledge>`
 
 settle a run's unknown usage (cannot be undone)

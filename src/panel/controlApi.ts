@@ -945,6 +945,7 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/accept-attempt", verb: "accept-attempt", target: fromParams },
     // Tester follow-up G spec §1.4: the task and run are named in the payload; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/reopen-task", verb: "reopen-task", target: fromParams },
+    { path: "/api/control/groups/:groupId/accept-no-change", verb: "accept-no-change", target: fromParams },
   ];
 }
 
@@ -990,6 +991,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "close-run": service.closeRun(command); break;
           case "accept-attempt": await service.acceptAttempt(command); break;
           case "reopen-task": service.reopenTask(command); break;
+          case "accept-no-change": await service.acceptNoChange(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;
           case "set-integration-scheme": await service.setIntegrationScheme(command); break;
           case "set-check-settings": service.setCheckSettings(command); break;

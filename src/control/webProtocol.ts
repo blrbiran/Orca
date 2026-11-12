@@ -373,7 +373,7 @@ export const dispatchEnvelopeSchema = z
     schema: z.literal("orca-dispatch-envelope-v1"),
     phase: z.enum(["estimate", "work", "handoff", "single-call"]),
     /** N1 DR1: what a `single-call` phase claim is for; an estimate's stored envelope has none. Flow engine §6.2: a flow run's. */
-    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage", "quota-probe"]).optional(),
+    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage", "quota-probe", "no-change-judge"]).optional(),
     groupId: idSchema,
     workItemId: idSchema,
     runId: idSchema,
@@ -634,6 +634,8 @@ export const commandVerbSchema = z.enum([
   "accept-attempt",
   // Tester follow-up G spec §1.4: revoke a task's no-change completion and run it again in the same group with a note.
   "reopen-task",
+  // Tester follow-up G spec §10.1: a person or an orchestrating agent accepts a stopped no-change task as done.
+  "accept-no-change",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -833,6 +835,7 @@ export const acceptAttemptPayloadSchema = z.object({ taskId: idSchema, runId: id
 /** Tester follow-up G spec §1.4: a note is required, non-blank and at most 2048 UTF-8 bytes (not characters). */
 export const noChangeNoteSchema = z.string().refine((note) => note.trim().length > 0, "note-empty").refine((note) => Buffer.byteLength(note, "utf8") <= 2048, "note-over-2048-bytes");
 export const reopenTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: noChangeNoteSchema }).strict();
+export const acceptNoChangePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: noChangeNoteSchema }).strict();
 /** Tester follow-up E §5 (#241): why the person accepts a group whose acceptance failed on its tip. */
 export const waiveAcceptancePayloadSchema = z.object({ note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
 
@@ -1249,6 +1252,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reopen-task"), target: groupCommandTargetSchema, payload: reopenTaskPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("accept-no-change"), target: groupCommandTargetSchema, payload: acceptNoChangePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1355,6 +1359,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reopen-task"), target: groupCommandTargetSchema, payload: reopenTaskPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("accept-no-change"), target: groupCommandTargetSchema, payload: acceptNoChangePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1841,6 +1846,8 @@ export const activityKindSchema = z.enum([
   "no-change-completed",
   // Tester follow-up G spec §1.4: a no-change completion revoked (or a no-change block reopened) with a note.
   "no-change-revoked",
+  // Tester follow-up G spec §10.1: the goal judge's verdict when it was not `met`.
+  "no-change-judged",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -1875,7 +1882,8 @@ export const runViewSchema = z
     phase: z.enum(["estimate", "work", "handoff", "single-call"]),
     // N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase.
     // Quota rest probe spec 2026-11-06: a group's probe call (quotaProbeCall.ts) shows among its runs.
-    purpose: z.enum(["clarify", "split", "quota-probe"]).optional(),
+    // Tester follow-up G spec §10.1: a group's goal judge call (noChangeJudge.ts).
+    purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge"]).optional(),
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,
@@ -2344,6 +2352,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema, nextRun: z.object({ attempts: safeInteger, activeMs: safeInteger }).strict().optional() }).strict(),
   // Tester follow-up G spec §1.4: a no-change task reopened; its next run carries the note.
   z.object({ kind: z.literal("task-reopened"), taskId: idSchema, fromRunId: idSchema }).strict(),
+  // Tester follow-up G spec §10.1: a stopped no-change task accepted as done.
+  z.object({ kind: z.literal("no-change-accepted"), taskId: idSchema, runId: idSchema }).strict(),
   z
     .object({
       kind: z.literal("recovery-observed"),

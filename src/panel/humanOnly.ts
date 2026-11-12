@@ -29,6 +29,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "accept-attempt": "human-only",
   // Tester follow-up G spec §1.4, §7: a person and an orchestrating agent alike revoke a no-change completion with a note.
   "reopen-task": "any",
+  // Tester follow-up G spec §10.1: accepting a stopped no-change task as done is open to a person and an orchestrating agent.
+  "accept-no-change": "any",
   // Spec 2026-11-06 soft-mode loop run settlement (d): Orca's own booking of an approximate floor (orca-auto); no route sends it.
   "settle-approximate-usage": "panel",
   "shutdown": "panel",

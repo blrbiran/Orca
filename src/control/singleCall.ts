@@ -11,7 +11,9 @@ import { ControlError } from "./errors.js";
 // Flow engine spec §6.2: a flow run's calls on its parent group (a flow `clarify` step's call is `clarify`, told apart by its run row).
 export const SINGLE_CALL_PURPOSES = ["estimate", "clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage",
   // Quota rest probe spec 2026-11-06 §4 step 4: one small call on an installation whose rest ended (quotaProbeCall.ts).
-  "quota-probe"] as const;
+  "quota-probe",
+  // Tester follow-up G spec §10.1: the goal judge of a command-verified run that changed nothing (noChangeJudge.ts).
+  "no-change-judge"] as const;
 export type SingleCallPurpose = (typeof SINGLE_CALL_PURPOSES)[number];
 
 export function isSingleCallPurpose(value: unknown): value is SingleCallPurpose {

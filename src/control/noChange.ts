@@ -1,5 +1,6 @@
 import { readArtifact } from "./archive.js";
 import { recordActivity } from "./activity.js";
+import { ControlError } from "./errors.js";
 import { readWork, saveWork } from "./queries.js";
 import { readSystemDebugMark } from "./systemDebug.js";
 import { readTaskResultState } from "./taskResultStore.js";
@@ -76,7 +77,7 @@ type NoChangeWork = { workItemId: string; noChangeCompletion?: NoChangeCompletio
  */
 export function recordNoChangeCompletionInTransaction(store: ControlStore, input: {
   groupId: string; taskId: string; runId: string; decidedBy: NoChangeCompletion["decidedBy"]; explanation: string | null;
-  judge?: { runId: string; finding: string };
+  judge?: { runId: string; finding: string }; note?: string;
 }): NoChangeCompletion {
   const work = readWork(store, input.groupId, input.taskId) as unknown as NoChangeWork;
   const ordinal = (work.noChangeCount ?? 0) + 1;
@@ -85,6 +86,29 @@ export function recordNoChangeCompletionInTransaction(store: ControlStore, input
   work.noChangeCount = ordinal;
   saveWork(store, input.groupId, work as never);
   recordActivity(store, { groupId: input.groupId, taskId: input.taskId, runId: input.runId, kind: "no-change-completed",
-    body: { runId: input.runId, decidedBy: input.decidedBy, ordinal, explanation: input.explanation, ...(input.judge === undefined ? {} : { judge: input.judge }) } });
+    body: { runId: input.runId, decidedBy: input.decidedBy, ordinal, explanation: input.explanation, ...(input.judge === undefined ? {} : { judge: input.judge }), ...(input.note === undefined ? {} : { note: input.note }) } });
   return completion;
+}
+
+/**
+ * Spec §10.1, in the caller's transaction, once the no-change acceptance row for `runId` is written: the task blocked on
+ * its settled no-change run becomes done (the goal judge said `met`, or a person or an orchestrating agent accepted it as
+ * no change). The invariants are repairAcceptedWork's -- the run is settled and continuable, it is the task's current
+ * run, and the task's target and the group's graph versions are the run's -- else nothing is written
+ * (`recovery-blocked:no-change-invariant`).
+ */
+export function completeNoChangeInTransaction(store: ControlStore, input: {
+  groupId: string; taskId: string; runId: string; decidedBy: NoChangeCompletion["decidedBy"]; explanation: string | null;
+  judge?: { runId: string; finding: string }; note?: string;
+}): NoChangeCompletion {
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=? AND group_id=?").get(input.runId, input.groupId);
+  const run = row === undefined ? null : JSON.parse(String(row.body)) as { state: string; recoverable: boolean; targetVersion: number; graphVersion: number; drive?: Record<string, unknown> };
+  const work = readWork(store, input.groupId, input.taskId) as unknown as { status: string; currentRunId?: string | null; targetVersion: number };
+  const group = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(input.groupId)!.body)) as { graphVersion: number };
+  if (run === null || run.state !== "settled" || run.recoverable !== true || run.drive === undefined || work.currentRunId !== input.runId
+    || work.targetVersion !== run.targetVersion || group.graphVersion !== run.graphVersion) throw new ControlError("recovery-blocked", "no-change-invariant");
+  run.drive = { ...run.drive, blockedReason: null };
+  store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(run), input.runId);
+  saveWork(store, input.groupId, { ...readWork(store, input.groupId, input.taskId), status: "done" } as never);
+  return recordNoChangeCompletionInTransaction(store, input);
 }
