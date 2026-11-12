@@ -107,7 +107,8 @@ describe("T1: a person's top-up funds the retried run without moving the earlier
 
 describe("T14: an optional-policy run is dispatched with its funded grant, not the frozen authored ceiling", { timeout: 120_000 }, () => {
   it("a person's token top-up reaches ccloop's contract instead of being swallowed by the confirmed one", async () => {
-    const { t, driver, first } = await exhausted(); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a task's authored ceiling and its top-up exist only in a pre-release group (spec G §2.6).
+    const { t, driver, first } = await exhausted({ modelVersion: null }); try {
       const authored = work(t, "a").grant.work.tokens as number;
       // Without a top-up the dispatched ceiling is the contract's own declared number, exactly as before.
       const firstInput = readStartEnvelope(t.h.store, t.body(first)) as { work: { contract: { executionPolicy: { tokenBudget: number } } } };
@@ -214,7 +215,8 @@ describe("T3, T9, T10: who may top up", { timeout: 120_000 }, () => {
 
 describe("T4: the agent cap is summed per group", { timeout: 120_000 }, () => {
   it("a second 60000-token top-up in one group passes a 100000 cap; a row of another group does not count", async () => {
-    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { tokenPolicy: "optional-v1", behaviour: () => "failed" }); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- token top-ups of authored task work exist only in a pre-release group (spec G §2.6).
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { tokenPolicy: "optional-v1", modelVersion: null, behaviour: () => "failed" }); try {
       finiteLimit(t);
       const driver = t.driver();
       const runA = await t.claim(); await failed(t, driver, runA);
