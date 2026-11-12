@@ -1003,7 +1003,11 @@ function workViews(
     }
     if (body.pendingRunId && persistedRunIds.includes(body.pendingRunId)) return blocked(`work-item-pending-run:${task.taskId}`);
     const lineage = body.lineageRunIds ?? [];
-    const status: WorkItemViewV1["status"] = body.status === "running" ? "active" : body.status === "done" ? "completed" : body.status;
+    const category = categoryOf(readSnapshot, body);
+    // Tester #230: the driver blocks the run alone and leaves the stored work item `running` (scheduling, close-run and
+    // recovery read that), so a person reads the task as blocked when its current run is -- the brief's count and the
+    // Board's word (web runFacts `shownWorkStatus`, #117) already say so. Only the view's word moves; the store does not.
+    const status: WorkItemViewV1["status"] = body.status === "running" ? (category === "blocked" ? "blocked" : "active") : body.status === "done" ? "completed" : body.status;
     // Spec §2.5: the one computation of a task's labels (labels.ts), from the work item's layer and the archived plan.
     const labelState = readTaskLabelState(body);
     const effective = effectiveTaskLabels(labelState, task.labels);
@@ -1017,7 +1021,7 @@ function workViews(
       lineageRunIds: sortedUnique(lineage),
       labels: effective.labels, labelsProvenance: effective.provenance, labelsVersion: labelState.version,
       progress: currentProgress(readSnapshot, body.currentRunId ?? null),
-      category: categoryOf(readSnapshot, body),
+      category,
       ...taskPlanView(task, body, imported.tasks.find(entry => entry.taskId === task.taskId)?.originalContractHash, snapshot?.skills?.find(entry => entry.taskId === task.taskId)?.names),
       ...topUpsView(topUps, task.taskId),
     };
