@@ -14,6 +14,26 @@ import { SYSTEM_LABELS } from "../../control/labels.js";
 import { text } from "./format.js";
 
 /**
+ * Tester #206: a stale saved-result source leaves a person one way to land the attempt: `task accept-attempt`. Named only
+ * when the view says that verb could take this run (acceptAttempt.ts preconditions: a work run, not a recovery, failed or
+ * exhausted, no acceptance pending or landed, not a dir or multi group, not stopped or archived); a run still `blocked`
+ * needs its accounting closed first (`group close-run`, which wants the same kind of run), a `settled-failed` one does not.
+ */
+export function acceptAttemptWayOut(view: unknown, groupId: string, taskId: string, runId: string): string | null {
+  const v = view as { summary?: { stopState?: unknown; archived?: unknown; placement?: unknown; multiDir?: unknown };
+    runs?: Array<{ runId: string; state?: string; phase?: string; outcome?: string | null; recoveryOf?: unknown; operatorAcceptance?: { state: string } }> };
+  const s = v.summary ?? {};
+  if ((s.stopState ?? null) !== null || s.archived === true || s.placement !== undefined || s.multiDir !== undefined) return null;
+  const run = (v.runs ?? []).find((entry) => entry.runId === runId);
+  if (run === undefined || run.phase !== "work" || run.recoveryOf !== undefined || run.outcome == null || run.outcome === "succeeded") return null;
+  if (run.operatorAcceptance !== undefined && run.operatorAcceptance.state !== "refused") return null;
+  const accept = `orca task accept-attempt ${groupId} ${taskId} --run ${runId} --note <why>`;
+  if (run.state === "settled-failed") return `a person may land its last attempt instead: ${accept}`;
+  if (run.state === "blocked") return `a person may land its last attempt instead: close its accounting first (orca group close-run ${groupId} --run ${runId}), then ${accept}`;
+  return null;
+}
+
+/**
  * #226 (ii): a note for a continued task's run -- delivered at its plan and execute boundary as the start envelope's
  * `work.operatorNote` (live transcript spec §10.5.2; ccloop's operatorNoteGate). Never injected into a running turn.
  */
@@ -501,8 +521,12 @@ export const WORK_ROWS: CommandDef[] = [
     payload: async (c) => {
       const work = json(c, "work");
       if (work !== undefined && (work === null || typeof work !== "object" || Array.isArray(work))) throw invalid("--work wants a JSON object {tokens?,activeMs?,attempts?,sessions?}");
-      const answer = await c.read(`runs/${await currentRun(c)}/saved-result-eligibility`) as { status: string; reason?: string; recoveryOf?: { sourceRunId: string; sourceAttempt: number; capsuleHash: string } };
-      if (answer.status !== "eligible" || answer.recoveryOf === undefined) throw new EntryRejection("saved-result-unavailable", `the saved result is not eligible: ${answer.reason ?? answer.status}`);
+      const runId = await currentRun(c);
+      const answer = await c.read(`runs/${runId}/saved-result-eligibility`) as { status: string; reason?: string; recoveryOf?: { sourceRunId: string; sourceAttempt: number; capsuleHash: string } };
+      if (answer.status !== "eligible" || answer.recoveryOf === undefined) {
+        const wayOut = answer.reason === "saved-result-source-stale" ? acceptAttemptWayOut(await groupView(c), group(c), task(c), runId) : null;
+        throw new EntryRejection("saved-result-unavailable", `the saved result is not eligible: ${answer.reason ?? answer.status}${wayOut === null ? "" : `; ${wayOut}`}`);
+      }
       const { sourceRunId, sourceAttempt, capsuleHash } = answer.recoveryOf;
       return { sourceRunId, sourceAttempt, capsuleHash, ...(work === undefined ? {} : { work }) };
     } }),
