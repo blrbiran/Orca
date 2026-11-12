@@ -324,16 +324,22 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
   // It is covered by T7's unit criterion in tests/panel/shutdownDriverGroup.test.ts
   // ("H7: freezes a driver-owned group as before while a non-driver run (an estimate) is active in it").
 
+  // Ruling (2026-11-12, tester follow-up H): G killed ccloop's worker to make "nothing arrive"; with #273 a dead worker is
+  // settled as worker-lost (and its open request closes from that terminal, "H-lost" below), so G now freezes the worker
+  // instead (SIGSTOP): it is alive -- ccloop reports no lost worker -- and yields nothing. G's point, the grace timing, is
+  // unchanged; the worker is killed after the assertions.
   it("G: a delivered stop that yields nothing turns outcome-unknown only past deadline + the adapter's killGraceMs + 60 s", async () => {
     const w = await world([{ taskId: "a", targetPaths: ["a1.txt"] }], { a: { files: { "a1.txt": "A1\n" }, delayMs: { execute: 8_000 } } });
+    let frozen: number | null = null;
     const runtime = await w.boot(); try {
       await startGroup(runtime, w.repoId);
       runtime.startPump(50);
       await inExecute(w, runtime, ["a"]);
       const [a] = runsOf(runtime, "a");
-      // ccloop's worker is killed, so no candidate can ever be written: nothing arrives, by construction.
+      // ccloop's worker is frozen, so no candidate can be written while it stays alive: nothing arrives, by construction.
       const accepted = JSON.parse(readFileSync(join(a!.body.drive.sourceDir, "control", "accepted.json"), "utf8")) as { worker: { pid: number } };
-      process.kill(accepted.worker.pid, "SIGKILL");
+      frozen = accepted.worker.pid;
+      process.kill(frozen, "SIGSTOP");
       const deadlineAt = new Date(Date.now() + 2_000).toISOString();
       const [requestId] = await handoffStop(runtime, { handoffDeadlineAt: deadlineAt });
       await until(() => requestState(runtime, requestId!) === "outcome-unknown", 180_000, "the request to turn outcome-unknown");
@@ -346,8 +352,9 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
       expect(readDriverRun(runtime.store, a!.runId).state).toBe("accepted");
       expect(w.landings()).toBe(0);
       expect(await runtime.shutdown()).toBe(true);
-    } finally { await w.teardown(); }
+    } finally { if (frozen !== null) { try { process.kill(frozen, "SIGKILL"); } catch { /* already gone */ } } await w.teardown(); }
   });
+
   // Worker-lost recovery spec, as-built Orca half item 9 (#273): a delivered stop whose run then loses its worker cannot be
   // answered by that worker. ccloop settles the run as worker-lost, the run blocks on that failed terminal, and the request
   // closes from it at once -- not outcome-unknown at the grace, which here (a deadline 10 min away) is far off. The group
