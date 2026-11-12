@@ -180,7 +180,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
           way out is said plainly -- file mode, and a projects.json that keeps these projects and this panel's store. */}
       {mayChange && props.answer.source === "command-line" && <details data-testid="project-file-mode-howto">
         <summary>{t("project.fileModeHowTo")}</summary>
-        <p>{t("project.fileModeSteps", { repoId: projects.find((p) => p.controlRepoId !== null)?.controlRepoId ?? "<repo id>" })}</p>
+        <p>{t("project.fileModeSteps", { repoId: projects.find((p) => p.controlRepoId !== null)?.controlRepoId ?? t("project.fileModeRepoId") })}</p>
         <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ version: 1, controlStateDir: t("project.fileModeStore"),
           projects: singles.map((p) => ({ id: p.projectKey, name: p.projectKey, path: p.path })) }, null, 2)}</pre>
       </details>}

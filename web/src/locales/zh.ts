@@ -195,6 +195,7 @@ export const zh: Translation<typeof en> = {
     fileModeHowTo: "怎样换成能在这里新增项目的面板",
     fileModeSteps: "1. 按下面的内容写 ~/.orca/projects.json（或 ORCA_PROJECTS_FILE 指的文件），这样本面板的项目和组都能沿用。controlStateDir 填本面板控制库的绝对路径：默认是 ~/.orca/control/{{repoId}}，用了 --control-state-dir 的就填它指的目录。项目 id 只能用小写字母、数字和 . _ -。2. 去掉 --repo 或 --root 重启面板；装成服务的，去掉 --repo 再运行一次 orca panel install。之后在这里新增的项目立即生效，不用重启。",
     fileModeStore: "<本面板控制库的绝对路径>",
+    fileModeRepoId: "<仓库 id>",
     fileError: "项目配置文件无效：{{message}}",
     pendingRestart: "需要重启才生效的改动：{{items}}。",
     restartWarning: "重启后，被删除或移动的项目下的组将无法继续。",
