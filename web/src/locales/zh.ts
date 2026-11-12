@@ -1049,7 +1049,7 @@ export const zh: Translation<typeof en> = {
       region: "agent 设置",
       refreshVersions: "刷新版本",
       operatorLine: "操作者 {{operatorId}} · 偏好版本 {{revision}}。修改只影响之后确认的组；已确认的组保留它冻结的选择。",
-      noInstallations: "安装表里没有任何 agent。运行 orca agent init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。",
+      noInstallations: "安装表里还没有任何 agent。owner 可以在本页（安装更新）添加；在终端里运行 orca agent init 效果相同。",
       th: { installation: "安装", kind: "类型", version: "版本", defaultModel: "默认模型", defaultContext: "默认上下文窗口" },
       defaultAgent: "默认 agent",
       primary: "主 Agent",

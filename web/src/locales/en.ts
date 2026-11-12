@@ -1193,7 +1193,7 @@ export const en = {
       region: "Agents settings",
       refreshVersions: "Refresh versions",
       operatorLine: "Operator {{operatorId}} · preferences revision {{revision}}. A change reaches groups confirmed after it; a confirmed group keeps the selection it froze.",
-      noInstallations: "The installation table lists no agent. Run orca agent init, point ORCA_AGENTS_TABLE at the table it wrote (by default ~/.orca/agents.json) and restart the panel.",
+      noInstallations: "The installation table lists no agent yet. An owner adds one on this page (Installation updates); from a terminal, orca agent init does the same.",
       th: { installation: "installation", kind: "kind", version: "version", defaultModel: "default model", defaultContext: "default context" },
       defaultAgent: "Default agent",
       primary: "Primary Agent",

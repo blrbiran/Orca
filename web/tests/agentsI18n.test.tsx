@@ -92,7 +92,9 @@ describe("the agents area in Chinese", () => {
     expect(texts(container, "button:not([role=combobox])")).toEqual(["保存 agent 偏好"]);
     cleanup();
     const empty = render(<AgentSettings agents={{ ...agents, installations: [] }} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />).container;
-    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里没有任何 agent。运行 orca agent init，把 ORCA_AGENTS_TABLE 指向它写出的表（默认 ~/.orca/agents.json），然后重启面板。", "必须选择 Agent（无法继承）"]);
+    // Ruling (2026-11-12, tester follow-up G): an owner now installs the first agent on this page (handoff §4.0 item 5),
+    // with no panel restart, so the empty-table note points there instead of only at `orca agent init` and a restart.
+    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里还没有任何 agent。owner 可以在本页（安装更新）添加；在终端里运行 orca agent init 效果相同。", "必须选择 Agent（无法继承）"]);
   });
 
   it("shows the proposal's agent editor, the confirmed view, the read failure and the retry notice in Chinese", async () => {
