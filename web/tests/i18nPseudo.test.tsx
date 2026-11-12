@@ -387,7 +387,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKind `allowance` (spec §6.3, #189) adds one: 215 + 1.
     // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKinds `handoff-invalid`, `live-note-delivered` and `live-note-undelivered` (spec Parts 4–5) add three: 216 + 3.
     // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 — the activityKind `worker-lost` (worker-lost recovery spec §5.2, #273) adds one: 219 + 1.
-    expect(ENUM_VALUES.length).toBe(220);
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKinds `group-cap-reached`, `usage-paused`, `usage-pause-decided` and `usage-over-expectation` (spec §2.1, §2.4, §2.5; Part B budget) add four: 220 + 4.
+    expect(ENUM_VALUES.length).toBe(224);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
