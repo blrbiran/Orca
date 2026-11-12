@@ -10,7 +10,7 @@ import {
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   resolveFolderChangePayloadSchema, multiDirLandingPayloadSchema,
-  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, allowRequestPayloadSchema, revokeAllowancePayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
   scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
@@ -69,6 +69,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "approve-pending-decision": approvePendingDecisionPayloadSchema,
   "reject-pending-decision": rejectPendingDecisionPayloadSchema,
   "ratify-flagged-decision": ratifyFlaggedDecisionPayloadSchema,
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — tester follow-up G §6.3 (#189): the two allowance routes.
+  "allow-request": allowRequestPayloadSchema, "revoke-allowance": revokeAllowancePayloadSchema,
   "set-orchestration-settings": setOrchestrationSettingsPayloadSchema,
   "add-group-dependency": groupDependencyPayloadSchema, "remove-group-dependency": groupDependencyPayloadSchema,
   "correction-debug-open": correctionDebugOpenPayloadSchema,
