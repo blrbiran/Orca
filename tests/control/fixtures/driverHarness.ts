@@ -143,7 +143,9 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   // a test that never stopped its driver removed the state directory under that check (ENOTEMPTY). stop() is idempotent.
   const drivers: ExecutionDriver[] = [];
   const dispose = h.dispose.bind(h);
-  h.dispose = async () => { for (const driver of drivers) await driver.stop(); await dispose(); };
+  // Tester follow-up G §6.2 (#269): a landing watch started by a driver the criterion created itself (and never stopped) is
+  // waited for too, so its scratch worktree is gone before the state directory is removed.
+  h.dispose = async () => { for (const driver of drivers) await driver.stop(); await (await import("../../../src/control/landingWatch.js")).landingWatchesSettled(); await dispose(); };
   const driver = (): ExecutionDriver => { const created = createExecutionDriver(deps); drivers.push(created); return created; };
   return { h, repo, repositories, service, fake, deps, dispatch, claim, body, until, driver };
 }
