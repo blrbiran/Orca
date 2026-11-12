@@ -68,7 +68,8 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
       const reconciledId = reconciled[0]!.runId;
       expect(readdirSync(`${runtime.store.stateDir}.workspaces`).sort()).toEqual([`conflict-${reconciledId}`, `reconcile-${reconciledId}`]);
       expect(w.worktrees()).toEqual([`worktree ${w.repo}`]);
-      expect(g(w.repo, "log", "-1", "--format=%s", reconciled[0]!.body.drive.landedCommit)).toMatch(/^orca: land run-.* \(reconciled with [ab]\)$/);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("write <paths>" here).
+      expect(g(w.repo, "log", "-1", "--format=%s", reconciled[0]!.body.drive.landedCommit)).toMatch(/^write .* \(reconciled with [ab]\)$/);
       const a = runs.find((run) => run.task === "a")!, c = runs.find((run) => run.task === "c")!;
       expect(() => g(w.repo, "merge-base", "--is-ancestor", a.body.drive.landedCommit, c.body.drive.base)).not.toThrow();
       // Four ccloop runs (three tasks, one reconciliation), each planning and executing once. Only a and b
