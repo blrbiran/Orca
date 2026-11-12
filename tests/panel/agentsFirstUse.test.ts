@@ -61,9 +61,12 @@ describe("first-use agent installation from the Web", () => {
     const table = join(root, "orca", "agents.json");
     const owned = `{"schema":"ccloop-agents-table-v1","installations":{"mine":{}}}\n`;
     await writeFile(table, owned, { mode: 0o640 });
+    const before = (await lstat(join(root, "orca"))).mtimeMs;
     expect(await seedEmptyAgentsTable(table)).toBe(false);
     expect(await readFile(table, "utf8")).toBe(owned);
     expect((await lstat(table)).mode & 0o777).toBe(0o640);
+    // Not even a temporary file comes and goes beside a person's existing table: its directory is left as it was.
+    expect((await lstat(join(root, "orca"))).mtimeMs).toBe(before);
     expect((await readdir(join(root, "orca"))).sort()).toEqual(["agents.json"]);
   });
 
