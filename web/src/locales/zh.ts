@@ -1968,7 +1968,7 @@ export const zh: Translation<typeof en> = {
     empty: "没有匹配的记忆。",
     noProjectHint: "没有项目记忆。项目键由 ccmem 按仓库目录计算；没有 remote 的仓库可能与会话记下的键对不上。",
     range: "第 {{from}}–{{to}} 条，共 {{total}} 条",
-    loadMore: "加载更多",
+    previous: "上一页", next: "下一页", pageOf: "第 {{page}} / {{pages}} 页", perPage: "每页条数",
     scopeGlobal: "全局",
     scopeProject: "项目",
     pinned: "置顶",

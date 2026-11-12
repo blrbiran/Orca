@@ -8,7 +8,7 @@ import type { FormEvent, JSX } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type PanelRefusal, failureFrom } from "./api.js";
-import { fetchMemoryItem, fetchMemoryList, fetchMemorySearch, fetchMemoryStatus } from "./memoryApi.js";
+import { fetchMemoryItem, fetchMemoryList, fetchMemorySearch, fetchMemoryStatus, MEMORY_PAGE_DEFAULT } from "./memoryApi.js";
 import type { MemoryPageResponse, MemoryRecord, MemoryStatusResponse } from "./memoryTypes.js";
 import { Refusal } from "./Refusal.js";
 import { useProjectName } from "./projectNames.js";
@@ -16,6 +16,8 @@ import { Select } from "./ui/Select.js";
 
 const EXCERPT_CODE_POINTS = 200;
 const SCOPE_KEY = { global: "memory.scopeGlobal", project: "memory.scopeProject" } as const;
+/** Tester #281 (2): the page sizes offered; the server's own default (50) is the first page's. */
+const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 function excerpt(content: string): string {
   const points = [...content];
@@ -41,18 +43,19 @@ export function MemoryView({ active, project, onProject }: {
   const [record, setRecord] = useState<MemoryRecord | null>(null);
   const [refusal, setRefusal] = useState<PanelRefusal | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  // Tester #281 (2): records per page; each page replaces the list (no append).
+  const [pageSize, setPageSize] = useState(MEMORY_PAGE_DEFAULT);
   const detailPane = useRef<HTMLDivElement>(null);
 
-  const load = async (projectKey: string, query: string): Promise<void> => {
+  /** One page of the list or a search, from `offset`, `limit` records; the newest request wins over any still on its way. */
+  const load = async (projectKey: string, query: string, offset = 0, limit = pageSize): Promise<void> => {
     const mine = ++latest.current;
     latestItem.current++;
     setRefusal(null);
     setRecord(null);
     setLoading(true);
-    setLoadingMore(false);
     try {
-      const answer = query === "" ? await fetchMemoryList(projectKey) : await fetchMemorySearch(projectKey, query);
+      const answer = query === "" ? await fetchMemoryList(projectKey, offset, limit) : await fetchMemorySearch(projectKey, query, offset, limit);
       if (mine === latest.current) setPage(answer);
     } catch (err) {
       if (mine === latest.current) {
@@ -63,28 +66,9 @@ export function MemoryView({ active, project, onProject }: {
       if (mine === latest.current) setLoading(false);
     }
   };
-
-  /**
-   * Tester #258: the next page of the shown list or search, from where it ends, appended. It counts as the newest list
-   * request, so a list or search started meanwhile wins and this answer is dropped.
-   */
-  const loadMore = async (): Promise<void> => {
-    if (page === null) return;
-    const mine = ++latest.current;
-    const shown = page;
-    setLoadingMore(true);
-    try {
-      const offset = shown.page.offset + shown.page.records.length;
-      const answer = shown.query === "" ? await fetchMemoryList(shown.projectKey, offset) : await fetchMemorySearch(shown.projectKey, shown.query, offset);
-      if (mine !== latest.current) return;
-      const known = new Set(shown.page.records.map((r) => r.ref));
-      const records = [...shown.page.records, ...answer.page.records.filter((r) => !known.has(r.ref))];
-      setPage({ ...shown, page: { records, total: answer.page.total, truncated: answer.page.total > records.length, offset: shown.page.offset, hasMore: answer.page.hasMore } });
-    } catch (err) {
-      if (mine === latest.current) setRefusal(failureFrom(err));
-    } finally {
-      if (mine === latest.current) setLoadingMore(false);
-    }
+  /** Another page of what is shown (the same list or query). */
+  const turn = (offset: number, limit = pageSize): void => {
+    if (page !== null) void load(page.projectKey, page.query, Math.max(0, offset), limit);
   };
 
   useEffect(() => {
@@ -191,9 +175,18 @@ export function MemoryView({ active, project, onProject }: {
               </li>
             ))}
           </ul>
-          {/* Tester #258: which matches are shown, and the next page while the server says more follow. */}
+          {/* Tester #258: which matches are shown. #281: a page size, previous / next and "page X of Y"; each page replaces the list. */}
           {page.page.records.length > 0 && page.page.records.length < page.page.total && <p className="caveat num">{t("memory.range", { from: page.page.offset + 1, to: page.page.offset + page.page.records.length, total: page.page.total })}</p>}
-          {page.page.hasMore && <button type="button" aria-busy={loadingMore || undefined} disabled={loadingMore} onClick={() => { void loadMore(); }}>{t("memory.loadMore")}</button>}
+          {page.page.total > 0 && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="memory-pager">
+              <button type="button" disabled={loading || page.page.offset === 0} onClick={() => turn(page.page.offset - pageSize)}>{t("memory.previous")}</button>
+              <span className="num">{t("memory.pageOf", { page: Math.floor(page.page.offset / pageSize) + 1, pages: Math.max(1, Math.ceil(page.page.total / pageSize)) })}</span>
+              <button type="button" disabled={loading || !page.page.hasMore} onClick={() => turn(page.page.offset + pageSize)}>{t("memory.next")}</button>
+              <span>{t("memory.perPage")}</span>
+              <Select aria-label={t("memory.perPage")} value={String(pageSize)} onValueChange={(next) => { const size = Number(next); setPageSize(size); turn(0, size); }}
+                options={PAGE_SIZES.map((size) => ({ value: String(size), label: String(size) }))} />
+            </div>
+          )}
         </nav>
         </div>
         <div className="split-detail" ref={detailPane}>

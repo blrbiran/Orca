@@ -2137,7 +2137,7 @@ export const en = {
     empty: "No memory matches.",
     noProjectHint: "No project memory. ccmem computes the project key from the repository directory; a repository without a remote may not match the key its sessions recorded.",
     range: "{{from}}–{{to}} of {{total}}",
-    loadMore: "Load more",
+    previous: "Previous", next: "Next", pageOf: "Page {{page}} of {{pages}}", perPage: "Per page",
     scopeGlobal: "global",
     scopeProject: "project",
     pinned: "pinned",
