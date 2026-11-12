@@ -13,8 +13,10 @@ import { driverHarness } from "./fixtures/driverHarness.js";
  * next claim would fund 795,594 against 1,602,203 per attempt. The ample case uses the same authored budget with far less spent.
  */
 async function failedOnce(workTokens: number) {
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- #234's retry funded with only the authored remainder is what spec G §2.6 retires
+  // for new groups; it holds in a group created before the release, which this fixture names.
   const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], tokenBudget: 4_000_000 }], {
-    tokenPolicy: "optional-v1", behaviour: () => "failed", stopReason: () => "Error: check failed: node check.js",
+    tokenPolicy: "optional-v1", modelVersion: null, behaviour: () => "failed", stopReason: () => "Error: check failed: node check.js",
     workTokens: () => workTokens, workAttempts: () => 2,
   });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
