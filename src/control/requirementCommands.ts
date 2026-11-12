@@ -538,10 +538,20 @@ export async function applyRequirementDraftAccept(
         const withCriteria = multi === null ? null : reexpand(criteria);
         const expanded = withCriteria === null ? null
           : withCriteria.plan.tasks.every((task) => storedSuccess.get(task.taskId) === task.loop.successCondition) ? withCriteria : reexpand([]);
-        const tasks = expanded === null ? source.tasks : source.tasks.map((task) => {
+        const reexpanded = expanded === null ? source.tasks : source.tasks.map((task) => {
           const contract = expanded.contracts.get(task.taskId);
           if (contract === undefined) throw new ControlError("recovery-blocked", `multi-dir-contract:${task.taskId}`);
           return { ...task, originalContract: contract, originalContractCanonicalJson: canonicalBytes(contract).toString("utf8"), originalContractHash: sha256Canonical(contract) };
+        });
+        // Tester #268 (ruling §5.2.5: write sets that intersect run serially): the split's implicit edges -- each pair of tasks
+        // whose write sets intersect, oriented as the CLI scheduler orients them (scheduler/graph.ts buildGraph, whose layers
+        // order such a pair) -- become dependencies of the imported tasks, so the dispatcher, which reads only dependsOn, never
+        // runs the two at once. A pair the model already ordered keeps its one edge.
+        const implied = new Map<string, string[]>();
+        for (const edge of draft.implicitEdges ?? []) implied.set(edge.to, [...(implied.get(edge.to) ?? []), edge.from]);
+        const tasks = reexpanded.map((task) => {
+          const extra = (implied.get(task.taskId) ?? []).filter((from, index, all) => !task.dependencyTaskIds.includes(from) && all.indexOf(from) === index);
+          return extra.length === 0 ? task : { ...task, dependencyTaskIds: [...task.dependencyTaskIds, ...extra] };
         });
         // Multi-directory projects spec §6.4: delivery is the multi landing, so the group gets no integration record.
         const plan = normalizeControlPlan({ ...source, tasks, repoId: group.requirement.repoId, planId });
