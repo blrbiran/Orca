@@ -244,7 +244,6 @@ describe.each(PINNED)("theme %s stays readable (WCAG AA)", (theme) => {
  * page's bar too.
  */
 describe("the page image and the lilac theme (#200)", () => {
-  const stops = (value: string): string[] => [...value.matchAll(/#[0-9a-f]{6}/gi)].map((m) => m[0]);
   const hue = ([r, g, b]: Rgb): number => {
     const [R, G, B] = [r, g, b].map((x) => x / 255) as Rgb; const max = Math.max(R, G, B), min = Math.min(R, G, B), d = max - min;
     const h = max === R ? ((G - B) / d) % 6 : max === G ? (B - R) / d + 2 : (R - G) / d + 4;
@@ -259,20 +258,18 @@ describe("the page image and the lilac theme (#200)", () => {
     for (const theme of PINNED.filter((p) => p !== "dark" && p !== "lilac")) expect(tokens(theme).has("--page-image"), theme).toBe(false);
   });
 
-  it("gives lilac a gradient page whose every stop keeps the page's bar", () => {
-    const { c, raw } = palette("lilac");
-    const image = raw("page-image");
-    expect(image).toMatch(/^linear-gradient\(/);
-    const colours = stops(image);
-    expect(colours.length).toBeGreaterThanOrEqual(2);
-    for (const stop of colours) {
-      const under = hex(stop);
-      // mutation: a deeper first stop (#d9d0ff) -> muted on it under 4.5, red here
-      expect(ratio(c("text"), under), `text on ${stop}`).toBeGreaterThanOrEqual(7);
-      expect(ratio(c("text-strong"), under), `text-strong on ${stop}`).toBeGreaterThanOrEqual(7);
-      expect(ratio(c("muted"), under), `muted on ${stop}`).toBeGreaterThanOrEqual(4.5);
-      expect(ratio(c("accent"), under), `accent on ${stop}`).toBeGreaterThanOrEqual(4.5);
-    }
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #281 (human 「可以」): lilac's lilac page and
+  // its gradient glared under white cards, so the page is near-neutral (the faintest violet tint) and paints no image;
+  // purple stays on the small accents. This replaces "gives lilac a gradient page whose every stop keeps the page's bar".
+  it("gives lilac a near-neutral page with no page image; the large surfaces carry at most a faint tint", () => {
+    const { t } = palette("lilac");
+    // mutation: put the gradient back -> lilac sets --page-image, red here
+    expect(t.has("--page-image")).toBe(false);
+    // A surface's channel spread (max - min of r, g, b) says how coloured it is: the old #f3f0fc spread 12.
+    const spread = (token: string): number => { const [r, g, b] = hex(t.get(token)!); return Math.max(r, g, b) - Math.min(r, g, b); };
+    // mutation: the old page #f3f0fc -> spread 12, red here
+    for (const token of ["--bg", "--well", "--bg-hover"]) expect(spread(token), token).toBeLessThanOrEqual(6);
+    expect([t.get("--card"), t.get("--bg-elevated")]).toEqual(["#ffffff", "#ffffff"]);
   });
 
   it("sets lilac's look: white cards, a 16px card radius, a light scheme, and #847aff's hue darkened to the bar", () => {
