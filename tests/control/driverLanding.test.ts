@@ -25,9 +25,10 @@ describe("D: landing on orca/<group> (spec §5.1-§5.2)", () => {
       expect(drive.landedCommit).toBe(tip);
       expect(git(t.repo, "rev-parse", `${tip}^1`)).toBe(old);
       expect(git(t.repo, "rev-parse", `${tip}^2`)).toBe(drive.attemptSha);
-      expect(git(t.repo, "log", "-1", "--format=%s", tip)).toBe(`orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("ship" here), its run id an Orca-Run trailer.
+      expect(git(t.repo, "log", "-1", "--format=%s", tip)).toBe("ship");
       // Tester D10: the landing's body names the group and task it lands, so `git log` alone says whose work it is.
-      expect(git(t.repo, "log", "-1", "--format=%b", tip)).toBe("Orca-Group: g\nOrca-Task: a");
+      expect(git(t.repo, "log", "-1", "--format=%b", tip)).toBe(`Orca-Group: g\nOrca-Task: a\nOrca-Run: ${runId}`);
       expect(git(t.repo, "show", `${tip}:a`)).toBe("a");
       expect(git(t.repo, "symbolic-ref", "HEAD")).toBe("refs/heads/orca/g");
       expect(sha256(join(t.repo, ".git", "index"))).toBe(index);
