@@ -310,3 +310,27 @@ task's expectation into the editable proposal), so the marker is stamped when th
 (`planImport.ts`, the only place a budget proposal is inserted), and Parts 1–3 read the same marker: one field
 `modelVersion: "followup-g"` on the group body. Groups created before the release keep today's rules for Parts 2 and 3.
 The Part 1 plan's `confirmedUnder` and the Part 2 plan's `budgetModel` are both replaced by it.
+
+## Part C builder notes (plan 2026-11-12 part C, Orca session d1cbbd58, implementation seat; code at commit 5279d557)
+
+Appended by the Part C seat; earlier sections untouched (Rule 13).
+
+**Writers outside the repository (Rule 17).** All paths derive from `store.stateDir` or a run's `sourceDir`, so a test
+that redirects the state directory touches no real one. Directories are created 0700 (`privateDirectory`), files 0600
+(`writePrivateFile`, temp + rename); no existing file's mode is changed.
+
+| Path | Written by | Residue on failure |
+|---|---|---|
+| `<stateDir>/groups/<g>/handoffs/runs/<run>/in/**` | the driver at A2 (`prepareRunHandoff`; rewritten whole, idempotent) | a stale `in/` of a run that never dispatched |
+| `<stateDir>/groups/<g>/handoffs/runs/<run>/out/` | created at A2; the agent writes `handoff.md` / `summary.md` into it | the agent's files (kept after ingest; no removal yet -- a known gap) |
+| `<stateDir>/groups/<g>/handoffs/{handoff,summary}-<task>-<run>.md`, `record-<task>-<run>.json` | the driver at stepC (`ingestRunHandoff`; record written last) and the driver-round live-note pass (`mergeUndeliveredNotes`) | the validated files without a record; the next ingest of that run redoes it whole |
+| `<sourceDir>/live-notes.json` | the add-live-note command after its commit, A2 for the next run, and the driver-round pass (stale file repair) | a file one note behind the queue until the next pass |
+
+**Decisions taken (each reversible).** As the part C plan's "Decisions" list, plus:
+- The Live note box sits under each task Live shows (running work, or the most recent run); a task Live does not show
+  (paused, waiting) takes a note through `orca task note`, and its queue reaches the next run's first phase.
+- `add-live-note` moves the group revision like every group-targeted command (default `authorityChanged`).
+- A run's handoff ingest happens in stepC before a token-allowance pause too; such a run is not `succeeded`, so a missing
+  handoff writes no row.
+- Orca sends `work.handoff` unconditionally (§10.5); the branch therefore lands only after ccloop C1-C4 are pushed and
+  Orca is repinned (plan O7 step 4), as a pinned ccloop without C1 refuses the key.

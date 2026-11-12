@@ -71,7 +71,9 @@ export interface Task {
  * One fake codex script entry: the files execute writes; ccloop C5 adds how long each phase sleeps first,
  * and ccloop C-3 whether the phase reports its usage before that sleep.
  */
-export interface ScriptEntry { files: Record<string, string>; reportedChangedFiles?: string[]; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean }
+export interface ScriptEntry { files: Record<string, string>; reportedChangedFiles?: string[]; delayMs?: { plan?: number; execute?: number; verify?: number }; usageBeforeDelay?: boolean;
+  /** Tester follow-up G §10.2 (ccloop C4): what execute writes into the prompt's "Handoff output directory". */
+  handoff?: { "handoff.md"?: string; "summary.md"?: string } }
 /**
  * Agent selection (plan T16): a world may also carry ccloop's CLI-level fake claude (tests/fixtures/fake-claude-cli.mjs) as a
  * `claude` installation beside the fake codex, with its own marker and script.
@@ -248,6 +250,8 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const calls = (): string[] => lines(`${marker}.calls`);
     /** One `<phase> <script key>` line per provider call (ccloop C5): which entry answered it. */
     const scripted = (): string[] => lines(`${marker}.tasks`);
+    /** Tester follow-up G (ccloop C4): every script-mode call's phase and full prompt, in call order. */
+    const prompts = (): Array<{ phase: string; prompt: string }> => lines(`${marker}.prompts`).map((line) => JSON.parse(line) as { phase: string; prompt: string });
     // Agent selection (plan T16): the same logs per CLI. `.argv` is one JSON array per invocation (ccloop T3); neither
     // fake writes it for a `--version` probe, so nothing is filtered here.
     const markerOf = (kind: "claude" | "codex"): string => (kind === "claude" ? claudeMarker : marker);
@@ -260,7 +264,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     const show = (path: string): string => g(repo, "show", `refs/heads/orca/g:${path}`);
     const tip = (): string => g(repo, "rev-parse", "refs/heads/orca/g");
     return { root, repo, repoId, multiRepo, multiRepoId: worldOptions.multiRepo === undefined ? null : controlRepoKey(worldOptions.multiRepo.projectKey),
-      table, agentsTable, boot, die, teardown, calls, scripted, argv, scriptedOf, human, worktrees, landings, show, tip, claudeScriptPath: join(root, "claude-script.json"), claudeMarker };
+      table, agentsTable, boot, die, teardown, calls, scripted, prompts, argv, scriptedOf, human, worktrees, landings, show, tip, claudeScriptPath: join(root, "claude-script.json"), claudeMarker };
   }
 
   const removeRoots = async (): Promise<void> => {
