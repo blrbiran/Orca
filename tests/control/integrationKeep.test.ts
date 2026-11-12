@@ -18,6 +18,10 @@ describe("a keep group (integration spec §3.1, ruling R5)", () => {
       expect(Object.hasOwn(body, "integration")).toBe(false);
       expect(t.body(runId).drive.landedCommit).toMatch(/^[a-f0-9]{40}$/);
       // Nothing is left to move: the pass adds no progress of its own for a keep group.
+      // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the settle now runs on the lane off the pass
+      // (§6.1, #192), so the group's own follow-ups (acceptance record, done) come one round after the settle; that round is
+      // let pass before the quiet one. (Was: the round straight after the settle is quiet.)
+      await driver.round();
       expect(await driver.round()).toBe(false);
       expect(calls).toEqual([]);
     } finally { await t.h.dispose(); }
