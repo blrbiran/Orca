@@ -3,6 +3,7 @@ import { withCommandContext } from "../../src/control/commandClient.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { readObservedPathChain } from "../../src/control/observedPathAmendment.js";
+import { pathsCovered } from "../../src/control/groupAllowances.js";
 import { createWebWakeHandlers } from "../../src/control/webDispatch.js";
 import { routedCommandContext } from "../../src/panel/controlApi.js";
 import type { Principal } from "../../src/panel/permissions.js";
@@ -57,6 +58,16 @@ const actors = (t: Harness, task: string) => {
   const work = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(task)!.body));
   return readObservedPathChain(t.h.store, "g", task, work).map((record) => record.actor);
 };
+
+describe("#189: what a path allowance covers (§10.4)", () => {
+  const granted = (paths: PathPolicyMissV1[]) => ({ allowanceId: "allow-1", request: { type: "path" as const, paths }, from: { runId: "run-a" }, by: "ana", via: "web", principal: null, commandId: "c", at: 1 });
+  it("covers a run only when every miss is named exactly", () => {
+    expect(pathsCovered([granted([NOTES])], [NOTES])).toHaveLength(1);
+    expect(pathsCovered([granted([NOTES])], [NOTES, OTHER])).toBeNull();
+    expect(pathsCovered([granted([{ repoKey: null, path: "docs" }])], [NOTES])).toBeNull();
+    expect(pathsCovered([granted([{ repoKey: "other", path: "docs/notes.md" }])], [NOTES])).toBeNull();
+  });
+});
 
 describe("#189: path allowances", { timeout: 180_000 }, () => {
   it("allowing a path for the group retries this task now and another task later, but not one with an uncovered miss", async () => {

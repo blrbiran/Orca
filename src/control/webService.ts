@@ -2012,7 +2012,7 @@ export class WebControlService {
    * Tester follow-up G §6.3 (#189, plan A7): what the group allowances cover is let through without a person. (1) Decision
    * allowances settle flags raised outside a landing (integration conflicts, model review). (2) A task blocked at C on an
    * allowlist miss whose every missed path an active path allowance names is retried as orca-auto with exactly those paths
-   * (the observed-path retry); one retry per blocked run. One candidate's failure never stops the pass.
+   * (the observed-path retry); a retried run is settled, so it is no candidate again. One candidate's failure never stops the pass.
    */
   async allowancePass(): Promise<{ retried: string[]; settled: number }> {
     const out = { retried: [] as string[], settled: 0 };
@@ -2036,7 +2036,6 @@ export class WebControlService {
         if (typeof run.taskId !== "string" || !Array.isArray(drive.pathPolicyMisses)) continue;
         const workRow = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, String(run.workItemId));
         if (workRow === undefined || (JSON.parse(String(workRow.body)) as { currentRunId?: unknown }).currentRunId !== runId) continue;
-        if (this.store.db.prepare("SELECT 1 FROM activity WHERE group_id=? AND run_id=? AND kind='allowance' AND json_extract(body,'$.action')='applied'").get(groupId, runId) !== undefined) continue;
         const covering = pathsCovered(paths, drive.pathPolicyMisses as PathPolicyMissV1[]);
         if (covering === null) continue;
         const allowanceId = covering[0]!.allowanceId;
