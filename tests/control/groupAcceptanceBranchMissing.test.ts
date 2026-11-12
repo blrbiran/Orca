@@ -113,10 +113,14 @@ describe("a missing work branch is a recorded state, not an error retried every 
       const before = group(t).acceptance;
       // Not a repository: git exits 128, as an unreadable repository would; never read as "branch missing".
       const notRepo = mkdtempSync(join(tmpdir(), "orca-notrepo-"));
-      const { git: calls, logged } = await rounds(t, new Map(), 10, notRepo);
+      const checks = new Map<string, GroupAcceptanceCheck>();
+      const { git: calls, logged } = await rounds(t, checks, 10, notRepo);
       expect(calls).toHaveLength(10);
       expect(logged).toHaveLength(1);
       expect(group(t).acceptance).toEqual(before);
+      // A round without the failure clears it: the same failure coming back later is news again, and logged once more.
+      expect((await rounds(t, checks, 1)).logged).toEqual([]);
+      expect((await rounds(t, checks, 3, notRepo)).logged).toHaveLength(1);
     } finally { await t.h.dispose(); }
   });
 
