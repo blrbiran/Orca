@@ -146,6 +146,8 @@ export function AgentSettings(props: AgentSettingsProps): JSX.Element {
       {!installation && props.updateNotice && <p role="alert">{props.updateNotice}</p>}
       {installation && <section aria-label={t("agents.updates.title")}>
         <h4>{t("agents.updates.title")}</h4>
+        {/* Handoff §4.0 item 5 (seat G1): the owner installs the first agent here, not with orca agent init. */}
+        {agents.installations.length === 0 && <p role="status" data-testid="agents-first-use">{t("agents.updates.firstUse")}</p>}
         {installation.failureCode && <p role="status">{t("agents.updates.unavailable", { code: installation.failureCode })}{explainBesideCode(installation.failureCode) !== null ? ` ${explainBesideCode(installation.failureCode)}` : ""}</p>}
         {pendingUpdate && <div role="status"><p>{t("agents.updates.pending")}</p>
           {pendingId && <><code>{pendingId}</code> <button type="button" disabled={props.updateBusy} onClick={props.onRetryPendingUpdate}>{t("agents.updates.checkPending")}</button></>}

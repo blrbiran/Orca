@@ -104,6 +104,25 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Handoff §4.0 item 5 (first-use dead end, seat G1 2026-11-12): the Web's owner-only detection (ccloop's protected
+ * preview/apply) needs a table to preview against, and a first-use machine has none. This writes the empty table
+ * `{schema, installations: {}}` the way `init` writes a table -- 0700 directories, a 0600 temporary file, `link` so a
+ * table that exists (or appears meanwhile) is never replaced -- and answers whether it wrote one. The installations
+ * themselves then come only through the owner's preview and apply.
+ */
+export async function seedEmptyAgentsTable(table: string): Promise<boolean> {
+  if (await exists(table)) return false;
+  await ensureDirectory(dirname(table));
+  await removeStaleTemps(table);
+  const temp = await writeTemp(table, `${JSON.stringify({ schema: "ccloop-agents-table-v1", installations: {} }, null, 2)}\n`);
+  try { await link(temp, table); return true; }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    return false;
+  } finally { await unlink(temp); }
+}
+
 async function init(env: NodeJS.ProcessEnv, io: AgentsIo): Promise<number> {
   const { table, binary } = settings(env);
   const bytes = `${JSON.stringify(await detectedTable(binary, env), null, 2)}\n`;

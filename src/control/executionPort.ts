@@ -49,6 +49,8 @@ export interface ExecutionPort {
   /** Agent version auto-refresh spec 2026-10-20 §3.1: record the installed versions ccloop observes (one, or all). */
   refreshAgentVersions?(only?:string):Promise<VersionRefresh>;
   previewAgentInstallations?():Promise<AgentPreview>;
+  /** Handoff §4.0 item 5 (seat G1): nothing is at the installation table's path yet (a first-use machine). */
+  agentsTableAbsent?():boolean;
   applyAgentInstallations?(request:AgentApplyRequest):Promise<AgentReceipt>;
   savedResultSourceEligibility?(input:{source:StartEnvelope;sourceAttempt:number;packagePath:string;packageHash:string}):Promise<SavedResultSourceEligibility>;
   savedResultEligibility?(input:StartEnvelope):Promise<{status:"eligible";authorityKind:Exclude<SavedResultSourcePackage["authorityKind"],"execution-without-final-v1">;normalizedExecutionHash:string}|{status:"eligible";authorityKind:"execution-without-final-v1";verificationOnly:true}|{status:"unavailable";reason:string}>;

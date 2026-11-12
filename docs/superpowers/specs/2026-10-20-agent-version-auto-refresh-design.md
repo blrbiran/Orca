@@ -69,3 +69,23 @@ Criteria point `ORCA_AGENTS_TABLE` (and `HOME`) at temporary directories; none t
 - No ccloop change (Rule 16); ccloop's detection preview/apply flow stays as it is for path changes and additions.
 - No version history and no UI notice of a change.
 - No change to `command`, to the configHash, or to which fields the hash covers.
+
+## 6. Addendum: a first-use seed of the table (seat G1, tester follow-up G, Orca session `d1cbbd58`, 2026-11-12; §1–§5 unchanged)
+
+Handoff §4.0 item 5: with no agent installed the only way out was `orca agent init`, against the operating principle
+that every action can be done in the Web UI. ccloop's protected preview/apply (the Agents page's owner-only "Detect
+again" and "Apply selected changes") already offers each detected CLI as an `addition`, but it refuses a missing table.
+So, with no ccloop change (Rule 16):
+
+- `GET /api/control/agents` answers `installations: []` while nothing is at the table's path (`agentsTableAbsent()` on
+  the ccloop port), so the Agents page renders and says how to install the first agent there.
+- The port's `previewAgentInstallations` (reached only through the owner-only `POST /api/control/operator/agent-update-preview`)
+  first writes an empty table when none exists, then asks ccloop for the preview; the owner applies the additions through
+  the existing ledgered apply. A member is refused before the port is reached, as before.
+
+| Path | Written by | Triggered by | Mode | A failure leaves |
+|---|---|---|---|---|
+| the agents table: `$ORCA_AGENTS_TABLE`, else `$HOME/.orca/agents.json`, only when nothing is there | `src/agents/command.ts` `seedEmptyAgentsTable` (called by `src/control/ccloopPort.ts`) | an owner's detection on the Agents page | missing directories 0700, file 0600 (explicit); `link`, so an existing or concurrently written table is never replaced | no table, or the empty table; at most one `.<name>.orca-agents-*.tmp` beside it after a crash (removed by the next seed or `orca agent init`) |
+
+Consequence, accepted: a detection that finds nothing, or that the owner does not apply, leaves the empty table; a later
+`orca agent init` then writes its detection to the draft beside it, as for any existing table.

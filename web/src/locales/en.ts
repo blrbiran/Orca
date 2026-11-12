@@ -1207,6 +1207,7 @@ export const en = {
     },
     updates: {
       title: "Installation updates", detect: "Detect again", observedAt: "Observed {{time}}",
+      firstUse: "No agent is installed yet. Detect again finds the agents on this machine; select one new installation per agent and apply. No restart is needed.",
       unavailable: "Detection unavailable · {{code}}", pending: "An installation update is being reconciled. Review its result before trying another.", checkPending: "Check retained result",
       noObservation: "unavailable", notDetected: "not detected", current: "current", changed: "changed", noChanges: "No changes were offered.",
       review: "Review each offered change and select only the ones to apply.",

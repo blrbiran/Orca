@@ -1063,6 +1063,7 @@ export const zh: Translation<typeof en> = {
     },
     updates: {
       title: "安装更新", detect: "重新检测", observedAt: "检测时间 {{time}}",
+      firstUse: "还没有安装任何 agent。点「重新检测」找出本机上的 agent，每个 agent 勾选一个新安装后应用即可，无需重启。",
       unavailable: "检测不可用 · {{code}}", pending: "安装更新正在核对结果。请先查看结果，再尝试下一次更新。", checkPending: "核对已保留的结果",
       noObservation: "不可用", notDetected: "未检测到", current: "当前版本", changed: "版本有变化", noChanges: "没有可选的更新。",
       review: "逐项检查候选变化，只选择要应用的项目。",

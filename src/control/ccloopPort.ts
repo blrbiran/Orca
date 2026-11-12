@@ -255,7 +255,10 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   readFeatures,
   async observeAgentInstallations(){return observe();},
   refreshAgentVersions:refreshVersions,
-  async previewAgentInstallations(){await requireAgentUpdates();return parse(agentPreviewSchema,await raw("agent-installation-preview",{}));},
+  // Handoff §4.0 item 5 (seat G1): a first-use machine has no table to preview against, so the owner's detection seeds an
+  // empty one (src/agents/command.ts seedEmptyAgentsTable, never over an existing table); the additions come from ccloop.
+  async previewAgentInstallations(){await requireAgentUpdates();await (await import("../agents/command.js")).seedEmptyAgentsTable(table);return parse(agentPreviewSchema,await raw("agent-installation-preview",{}));},
+  agentsTableAbsent(){try{lstatSync(table);return false;}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return true;throw error;}},
   async applyAgentInstallations(request){await requireAgentUpdates();try{return parse(agentReceiptSchema,await raw("agent-installation-apply",request));}catch(error){
     const code=peerErrorCode(error);
     if(code==="agent-installation-update-stale"||code==="agent-installation-update-conflict"||code==="agent-installation-update-invalid")throw new ControlError(code);

@@ -57,7 +57,7 @@ export interface ControlReadApiDeps {
   /** Gaps plan Task 10-B fix round 2: the registered dir projects (default: the service's `flowProjects`). */
   flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
-  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions" | "readFeatures">;
+  port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions" | "readFeatures" | "agentsTableAbsent">;
 }
 
 /** Agent version auto-refresh spec 2026-10-20 §3.3: the agents view probes the installed CLIs at most this often. */
@@ -565,6 +565,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       };
       app.get("/api/control/agents", asyncRoute(async (_req, res) => {
         try {
+          // Handoff §4.0 item 5 (seat G1): no table yet is "no agent installed", so the Agents page renders and an owner
+          // can detect and add agents there (the preview seeds the table); ccloop would refuse it as agents-table-invalid.
+          if (port.agentsTableAbsent?.() === true) { res.json(agentsViewSchema.parse({ schema: "orca-agents-view-v1", installations: [] })); return; }
           await refreshVersions();
           const listed = await port.listAgents();
           const installations = [...listed.installations].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
