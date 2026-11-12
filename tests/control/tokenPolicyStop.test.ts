@@ -4,8 +4,10 @@ import { driverHarness } from "./fixtures/driverHarness.js";
 import { readWork } from "../../src/control/queries.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored (null) task ceiling kept through a stop, and the continued run's
+// funded work grant, are a pre-release group's rules (spec G §2.2; an expectation-model run holds a live ceiling instead).
 it("stops an unbounded task with its authored ceiling intact, then admits a finite group ceiling",async()=>{
- const x=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",killGraceMs:0,behaviour:()=>"stoppable"});
+ const x=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",modelVersion:null,killGraceMs:0,behaviour:()=>"stoppable"});
  const driver=x.driver();try {
   const id=await x.claim();await x.until(driver,()=>x.body(id).state==="accepted");
   const before=readControlGroup(x.h.store,"epoch","g").ledger.groupLimit;
