@@ -147,6 +147,10 @@ export function createHarness(): Harness {
         // resolution, and every real-panel import here degrades to blocked-capability under O2's gate.
         resolveAgent: options.resolveAgent ?? (async (partial: PartialSelection) => ({ selection: { ...FIXTURE_AGENT, ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 5_000, capabilities: capabilities(), singleCallExecution: "v1" }) as never),
         listAgents: async () => options.agents ?? ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
+        // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a new group is an expectation-model group
+        // (null task tokens), which confirm admits only on a ccloop that speaks the optional token policy -- as the one
+        // Orca pins does, and as the control fixture's port (fixtures/web.ts) already says. This synthetic ccloop says it too.
+        readFeatures: async () => ({ protocol: 1 as const, tokenPolicy: "optional-v1" as const }),
         readEvidence: async () => Buffer.alloc(0), accept: async () => ({ kind: "unknown" }), inspect: async () => ({ kind: "unknown" }),
         requestHandoff: async (_input: unknown, request: { requestId: string }) => ({ kind: "unknown", requestId: request.requestId }),
         collect: async () => ({ events: [], candidate: null, terminal: null }),
