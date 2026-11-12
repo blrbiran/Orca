@@ -1385,7 +1385,9 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     // agent verifier approved the goal, or the contract declares its command checks decide it); `judge` and `none` keep
     // D14 here (the judge's call is claimed below once the run is settled, Task 5).
     const taskContract = proved === null ? null : readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
-    const route = proved === null ? "none" : noChangeRouteOf(taskContract!, readGroup(store, run.groupId));
+    // A flow run's hidden child keeps D14: its flow port reads the blocked empty result itself (flow spec §9.6, an
+    // effect step that changes no file); it is never auto-completed or judged.
+    const route = proved === null || isFlowChildGroup(store, run.groupId) ? "none" : noChangeRouteOf(taskContract!, readGroup(store, run.groupId));
     const noChange = route === "complete" ? proved : null;
     const noChangeDecidedBy = taskContract?.verification.verifierType === "agent" ? "agent-verifier" as const : "command-checks" as const;
     if (!landed && drive.ledgerCommit === null) {
