@@ -27,8 +27,10 @@ const view = (runs: RunViewV1[]): GroupViewV1 => ({
   ledger: { groupLimit: amount(9_000_000), used: amount(10), committedRemaining: amount(3_000_000), explicitUnallocatedReserve: amount(5_999_990), budgetDeficit: amount(0), usageUnknown: false, unmeteredRuns: 0 },
   allocations: [], workItems: [], estimates: [], runs, checkpoints: [], handoffRequests: [], stop: null, recoveryBlockers: [], recentCommandIds: [],
 });
+// Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so the
+// run's state cell is read with the Runs region open (the focus an Overview link gives).
 const renderGroup = (runs: RunViewV1[]) => renderToStaticMarkup(
-  <ControlGroupView view={view(runs)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />,
+  <ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view(runs)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />,
 );
 
 describe("workspace mode selector (execution driver §3.2)", () => {
