@@ -746,6 +746,8 @@ export const en = {
       releaseWarning: "This run has no work token limit, so nothing can be charged for its unknown work tokens. Releasing records no work token number; the group's token totals become a lower bound. Every other limit is charged from the remaining grant. It cannot be undone and does not restart the task.",
       releaseApprove: "I understand and approve this release",
       releaseConfirm: "Confirm irreversible release",
+      // #215: a proved-zero failure settles at zero and its run closes in one press (settle-unknown-usage, then close-run).
+      zeroAndClose: "Settle at zero and close the run",
       // Spec 2026-11-06 §3.5: Orca's booking of a loop run's observed floor, and its refused attempt.
       approximateReceipt: "Booked by Orca at {{at}}: at least {{tokens}} work tokens (usage not reported)",
       approximateReceiptNone: "Booked by Orca at {{at}}: unknown, at least 0 work tokens (usage not reported)",

@@ -445,6 +445,8 @@ export type ControlAction =
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
   | { verb: "settle-unknown-usage"; groupId: string; expectedRevision: number; payload: SettleUnknownUsagePayloadV1 }
+  // #169/#215: end a proved terminal failure's accounting (server route /api/control/groups/:groupId/close-run).
+  | { verb: "close-run"; groupId: string; expectedRevision: number; payload: { runId: string } }
   | { verb:"verify-saved-result";groupId:string;taskId:string;expectedRevision:number;payload:{sourceRunId:string;sourceAttempt:number;capsuleHash:string} }
   | { verb: "retry-task"; groupId: string; expectedRevision: number; payload: RetryTaskPayloadV1 }
   // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a settled, failed run's last attempt after its checks.
@@ -533,6 +535,8 @@ export function controlCommandPath(action: ControlAction): string {
       return "/api/control/recovery/retry";
     case "settle-unknown-usage":
       return `${group}/settle-unknown-usage`;
+    case "close-run":
+      return `${group}/close-run`;
     case "verify-saved-result":return `${group}/tasks/${segment(action.taskId)}/verify-saved-result`;
     case "retry-task":
       return `${group}/retry-task`;

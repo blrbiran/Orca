@@ -533,7 +533,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     return <div key={`remedies-${run.runId}`}>
       <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} active={active} />
       {/* Re-review m-c: an estimate settled by its charge (RunRetry) does not also show the task settlement's refusal. */}
-      {!estimateUsageUnknown(run) && <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />}
+      {!estimateUsageUnknown(run) && <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} onCommands={props.onCommands} />}
       {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} active={active} />}
     </div>;
   };
@@ -894,7 +894,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 <div><RunReason run={run} /></div>
                 <DebugRepro run={run} />
                 <RunOutputBound run={run} />
-                {!estimateUsageUnknown(run) && <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />}
+                {!estimateUsageUnknown(run) && <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} onCommands={props.onCommands} />}
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}{runNumberOf(view, run, orderedRuns.slice(0, index + 1)) > 0 ? t("control.group.taskRun", { n: runNumberOf(view, run, orderedRuns.slice(0, index + 1)) }) : ""}</div>
                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />

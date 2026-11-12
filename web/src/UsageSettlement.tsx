@@ -22,7 +22,7 @@ function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlT
  * where it offers no button it keeps one line saying why (the server's refusal, else contact an owner), shown only while
  * the row is `active` (its pane is the one shown, fix round 1).
  */
-export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, compact = false, active = true }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; compact?: boolean; active?: boolean }): JSX.Element | null {
+export function UsageSettlement({ run, roles, archived, groupId, revision, onCommand, onCommands, compact = false, active = true }: { run: RunViewV1; roles?: readonly Role[]; archived: boolean; groupId: string; revision: number; onCommand: (action: ControlAction) => void; onCommands?: (actions: ControlAction[]) => void; compact?: boolean; active?: boolean }): JSX.Element | null {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -49,6 +49,8 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.
   const release = preview.acknowledge !== "charge-remaining-grant";
   const offered = !archived && owner && preview.allowed && run.taskId !== null;
+  const settle: ControlAction = { verb: "settle-unknown-usage", groupId, expectedRevision: revision, payload: { taskId: run.taskId!, runId: run.runId, generation: preview.generation, acknowledge: preview.acknowledge } };
+  const zeroClose = preview.acknowledge === "release-known-zero" && onCommands !== undefined;
   const refusal = preview.refusalReason ? <p role="status" data-tone="warn">{refusalText({ code: preview.refusalReason.split(":")[0]!, message: preview.refusalReason, status: null })}</p> : null;
   const automatic = preview.approximateRefusal ? <p role="status" data-tone="warn" data-testid="approximate-refused">{t("control.settlement.approximateRefused", { code: preview.approximateRefusal })}</p> : null;
   // Tester follow-up F §2 (#116): the observed-floor form beside it, with the server's own admission answer and floor.
@@ -73,7 +75,10 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
       <ChargeTable amounts={preview.remaining} settled={false} />
       <p>{t(release ? "control.settlement.releaseWarning" : "control.settlement.warning")}</p>
       <label><input type="checkbox" checked={approved} onChange={event => setApproved(event.currentTarget.checked)} />{t(release ? "control.settlement.releaseApprove" : "control.settlement.approve")}</label>
-      <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommand({ verb: "settle-unknown-usage", groupId, expectedRevision: revision, payload: { taskId: run.taskId!, runId: run.runId, generation: preview.generation, acknowledge: preview.acknowledge } }); }}>{t(release ? "control.settlement.releaseConfirm" : "control.settlement.confirm")}</button>
+      <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommand(settle); }}>{t(release ? "control.settlement.releaseConfirm" : "control.settlement.confirm")}</button>
+      {/* #215: a remainder the server settles at known zero (it picks release-known-zero) can also close its run in the same
+          press: the two existing calls in order, the second only after the first succeeded (App's sendControlSequence). */}
+      {zeroClose && <button type="button" disabled={!approved} onClick={() => { if (!approved) return; setOpen(false); setApproved(false); onCommands!([settle, { verb: "close-run", groupId, expectedRevision: revision, payload: { runId: run.runId } }]); }}>{t("control.settlement.zeroAndClose")}</button>}
       <button type="button" onClick={() => { setOpen(false); setApproved(false); }}>{t("control.settlement.cancel")}</button>
     </div>)}
     {floorChoice}
