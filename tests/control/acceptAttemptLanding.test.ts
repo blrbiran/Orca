@@ -121,6 +121,9 @@ describe("accept-attempt lands an owner's accepted attempt after its checks (cri
       expect(git(t.repo, "rev-list", "--count", "--first-parent", `${old}..${tip}`)).toBe("1");
       expect(git(t.repo, "rev-parse", `${tip}^1`)).toBe(old);
       expect(git(t.repo, "rev-parse", `${tip}^2`)).toBe(intent.attemptSha);
+      // #277: the merge's subject is the task's goal ("ship"), its run id in an Orca-Run trailer beside the group and task.
+      // mutation: keep `orca: accept <runId>` with no trailers -> red
+      expect(git(t.repo, "log", "-1", "--format=%s%n%b", tip)).toBe(`ship\nOrca-Group: g\nOrca-Task: a\nOrca-Run: ${runId}`);
       expect(intent.landedCommit).toBe(tip);
       expect(lines(heads)).toEqual([tip]);
       expect(git(t.repo, "ls-tree", "-r", "--name-only", tip).split("\n").sort()).toEqual([`.decisions/${runId}.jsonl`, "a"]);
