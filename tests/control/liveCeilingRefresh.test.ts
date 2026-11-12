@@ -132,8 +132,14 @@ describe("raising running ceilings from free headroom (spec §2.1, plan O3)", { 
 
   it("three parallel runs never hold more ceiling than the group's remainder", async () => {
     for (const seed of [1, 7, 42, 99, 1234, 2024]) {
-      let state = seed;
-      const random = (n: number): number => { state = (state * 1103515245 + 12345) % 2147483648; return state % n; };
+      // mulberry32: an LCG's low bits cycle with a short period, which would replay one fixed order of operations.
+      let state = seed >>> 0;
+      const random = (n: number): number => {
+        state = (state + 0x6d2b79f5) >>> 0;
+        let x = Math.imul(state ^ (state >>> 15), 1 | state);
+        x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+        return ((x ^ (x >>> 14)) >>> 0) % n;
+      };
       const t = await harness(["a", "b", "c"], 12 * M);
       try {
         const runs = [await t.claim(), await t.claim(), await t.claim()];
@@ -146,7 +152,7 @@ describe("raising running ceilings from free headroom (spec §2.1, plan O3)", { 
           expect(g.used.tokens + outstanding, `seed ${seed} ${step}`).toBeLessThanOrEqual(g.limit.tokens!);
         };
         check("claimed");
-        for (let step = 0; step < 14; step++) {
+        for (let step = 0; step < 24; step++) {
           const op = random(4), id = runs[random(3)]!;
           const active = t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(id)!.active === 1;
           if (op === 0 && active) {
