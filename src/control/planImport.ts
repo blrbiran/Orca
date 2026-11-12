@@ -276,10 +276,11 @@ export interface ImportedPlanWrite {
    */
   tokenLimit?: number | null; integration?: IntegrationScheme | null; origin?: ImportOrigin;
   /**
-   * Tester follow-up G spec §11: the model the group is created under. Absent adds no byte. A group created under it gets
-   * no task token ceiling (spec §2.2: a task's tokens are an expectation; the group limit is the one hard line).
+   * Tester follow-up G spec §11: the model the group is created under -- follow-up G unless said otherwise. A group created
+   * under it gets no task token ceiling (spec §2.2: a task's tokens are an expectation; the group limit is the one hard
+   * line). `null` (in-process only, never a payload field) writes no marker: a group as one created before the release.
    */
-  modelVersion?: typeof MODEL_VERSION_G;
+  modelVersion?: typeof MODEL_VERSION_G | null;
 }
 /** Spec §9.1, §15: what started a group a schedule fired; passed in-process by the fire, never a payload field. */
 export interface ImportOrigin { kind: "schedule"; scheduleId: string; slot: number }
@@ -334,7 +335,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const estimateId = deferred ? null : `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
   const queued = preflight?.state === "queued";
   const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
-  const expectationGroup=input.modelVersion===MODEL_VERSION_G&&stripped===null&&!legacyCarry;
+  const modelVersion=input.modelVersion===undefined?MODEL_VERSION_G:input.modelVersion;
+  const expectationGroup=modelVersion===MODEL_VERSION_G&&stripped===null&&!legacyCarry;
   const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>stripped!==null?stripped.workTokens:legacyCarry?TASK_WORK.tokens:expectationGroup?null:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
   const taskAllocations = plan.tasks.flatMap(task => [
     { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: {...TASK_WORK,tokens:authoredTokens(task)}, fieldProvenance: defaultProvenance() },
@@ -396,7 +398,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     // never a run Orca dispatched, never Orca's own command.
     createdByPerson: createdByPerson(input.commandId),
     // Tester follow-up G spec §11: the model this group was created under, stamped once here (modelVersion.ts).
-    modelVersion: MODEL_VERSION_G,
+    ...(modelVersion === null ? {} : { modelVersion }),
   };
   // Integration spec §3.1: the group gets its copy of the repository's default where it gets its plan -- here, for
   // import-plan and a requirement's split acceptance alike. Keep is no field, so a keep group's body is unchanged.
@@ -481,7 +483,7 @@ function librarySource(deps: ImportDeps, repoId: string, ref: { entryId: string;
  * for a group imported with no token limit -- for a caller that turns the group into a limited one before anything reads
  * it (the historical finite-budget test fixture), which a limited import would have given one. No route passes it.
  */
-export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight"; modelVersion?: typeof MODEL_VERSION_G } = {}): ImportResult {
+export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight"; modelVersion?: typeof MODEL_VERSION_G | null } = {}): ImportResult {
   const outcome = applyWebCommand<CommandSuccessV1>(deps.store, {
     rawCommand: command,
     expand: () => {

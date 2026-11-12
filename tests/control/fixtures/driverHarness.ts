@@ -85,7 +85,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, ...(options.modelVersion ? { modelVersion: options.modelVersion } : {}), killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
+  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, ...(options.modelVersion !== undefined ? { modelVersion: options.modelVersion } : {}), killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");

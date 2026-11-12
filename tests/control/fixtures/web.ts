@@ -67,7 +67,7 @@ export interface WebFixtureOptions {
   /** Tester round 2 §7.2 condition 11: the routed context the import runs under (who created the group); absent, none. */
   importContext?: { client: string; principal: string; personAuthority?: boolean };
   /** Tester follow-up G spec §11: the model the group is created under (absent: the import's default). */
-  modelVersion?: "followup-g";
+  modelVersion?: "followup-g" | null;
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */

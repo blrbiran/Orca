@@ -15,7 +15,7 @@ type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
 
 async function group(expectation: boolean): Promise<{ t: Harness; runId: string }> {
-  const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", ...(expectation ? { modelVersion: "followup-g" as const } : {}), behaviour: () => "stoppable" });
+  const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: expectation ? "followup-g" as const : null, behaviour: () => "stoppable" });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 40 * M } }));
   if (expectation) {

@@ -15,7 +15,7 @@ type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
 
 async function finiteGroup(options: { expectation: boolean; limit?: number; tokenBudget?: number | null }): Promise<Harness> {
-  const t = await driverHarness([{ taskId: "a", ...(options.tokenBudget === undefined ? {} : { tokenBudget: options.tokenBudget }) }], { tokenPolicy: "optional-v1", ...(options.expectation ? { modelVersion: "followup-g" as const } : {}) });
+  const t = await driverHarness([{ taskId: "a", ...(options.tokenBudget === undefined ? {} : { tokenBudget: options.tokenBudget }) }], { tokenPolicy: "optional-v1", modelVersion: options.expectation ? "followup-g" as const : null });
   if (options.limit !== undefined) {
     const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
     const set = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: options.limit } }));

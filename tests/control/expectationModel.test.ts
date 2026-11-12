@@ -16,7 +16,7 @@ const HANDOFF = { tokens: 1, activeMs: 1, attempts: 0, sessions: 0 };
 const TOKENS = { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" } as const;
 
 async function group(options: { expectation: boolean }): Promise<{ h: Fixture; service: WebControlService }> {
-  const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1", ...(options.expectation ? { modelVersion: "followup-g" as const } : {}) });
+  const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: options.expectation ? "followup-g" as const : null });
   const service = new WebControlService(h.deps);
   // A finite group: what a person who set a 20M limit has.
   const limit = readBudgetProposal(h.store, "g").groupLimit;
