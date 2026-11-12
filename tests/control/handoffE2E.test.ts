@@ -177,10 +177,14 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
       expect(work(runtime, "a").status).toBe("held");
       expect(runsOf(runtime, "c")).toEqual([]);
       await resumeAsThePanelWould(runtime);
-      // spec §4.1: `held`, then continuing, is not `done` -- every poll until c appears proves a is done by then.
+      // spec §4.1: `held`, then continuing, is not `done` -- every poll until c appears proves a's whole work landed by then.
+      // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — §6.1 (#192) claims a dependent once its
+      // dependency's run landed, before that run settles, so "landed" replaces "done" here; parked or continuing still
+      // holds c back (neither has a landed commit). Was: c claimed only once a is `done`.
+      const aLanded = () => work(runtime, "a").status === "done" || runsOf(runtime, "a").some((run) => run.body.continuationIntentId && typeof run.body.drive?.landedCommit === "string");
       await until(() => {
         noBlocked(runtime);
-        if (runsOf(runtime, "c").length > 0 && work(runtime, "a").status !== "done") throw new Error(`c was claimed while a is ${work(runtime, "a").status}`);
+        if (runsOf(runtime, "c").length > 0 && !aLanded()) throw new Error(`c was claimed while a is ${work(runtime, "a").status}`);
         return work(runtime, "c").status === "done" && workRuns(runtime).every((run) => run.body.drive?.cleanedUp === true);
       }, 300_000, "the continuation and then c to settle", 20);
       const continuation = runsOf(runtime, "a").find((run) => run.body.continuationIntentId)!;
