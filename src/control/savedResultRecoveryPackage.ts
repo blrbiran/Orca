@@ -55,7 +55,9 @@ function publishPackage(path:string,manifest:Omit<SavedResultSourcePackage,'arti
  const bytes=canonicalBytes({...manifest,artifacts});durable(join(path,'package.json'),bytes);return {packagePath:path,packageHash:digest(bytes)};
 }
 export function prepareRecoverySource(store:ControlStore,source:ArtifactRef,authorityKind:SavedResultSourcePackage['authorityKind']):{packageHash:string;packagePath:string;dispose():void} {
- const path=join(tmpdir(),`orca-source-${randomUUID()}`);const result=publishPackage(path,{schema:'ccloop-saved-result-source-package-v1',authorityKind,source},recoveryClosure(store,[source]));return {...result,dispose:()=>rmSync(path,{recursive:true,force:true})};
+ // Issue #261: built under the canonical temp root, since both ends refuse a non-canonical package path and macOS's
+ // default TMPDIR (/var/folders/...) resolves to /private/var/...
+ const path=join(realpathSync(tmpdir()),`orca-source-${randomUUID()}`);const result=publishPackage(path,{schema:'ccloop-saved-result-source-package-v1',authorityKind,source},recoveryClosure(store,[source]));return {...result,dispose:()=>rmSync(path,{recursive:true,force:true})};
 }
 /** Only controller-created private authority directories; candidate permissions are handled by the consumer. */
 export function materializeRecoveryPackage(store:ControlStore,sourceDir:string,record:{source:{authorityKind:SavedResultPackage['authorityKind'];source:ArtifactRef};admission:ArtifactRef;artifacts:ArtifactRef[]}):{packagePath:string;packageHash:string;admissionHash:string} {
