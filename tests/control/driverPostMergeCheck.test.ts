@@ -84,7 +84,10 @@ describe("R2: a clean merge onto an untested tip re-runs the task's checks (#241
       const [first, second] = [...ids].sort((x, y) => (isAncestor(t.repo, t.body(x).drive.landedCommit, t.body(y).drive.landedCommit) ? -1 : 1));
       expect(git(t.repo, "rev-parse", `${t.body(second!).drive.landedCommit}^1`)).toBe(t.body(first!).drive.landedCommit);
       // One invocation: the second landing's, in its post-merge worktree; the first landed by a fast-forward-equivalent merge.
-      const calls = readFileSync(log, "utf8").trim().split("\n");
+      // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the landing watch (§6.2, #269) now runs the
+      // group's checks on the first landing's tip in its own `landing-watch-` worktree; this pin counts the post-merge
+      // invocations only. (Was: every invocation in the log.)
+      const calls = readFileSync(log, "utf8").trim().split("\n").filter((path) => !basename(path).startsWith("landing-watch-"));
       expect(calls.map((path) => basename(path))).toEqual([basename(postMergeCheckPathOf(t.deps.roots, second!))]);
       expect(git(t.repo, "show", "refs/heads/orca/g:a")).toBe("a");
       expect(git(t.repo, "show", "refs/heads/orca/g:b")).toBe("b");
