@@ -248,8 +248,10 @@ describe("empty-result in words (tester follow-up F §4)", () => {
       const lines = out.stdout.split("\n");
       // mutation: drop emptyResultLines from that formatter -> red for that command
       expect(lines, argv.join(" ")).toContain(HEAD);
-      expect(lines).toContain("  this attempt cannot be retried or accepted in this group: task retry refuses a finished run, and task accept-attempt an empty one");
-      expect(out.stdout).toContain("commandChecksDecideGoal");
+      // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — §1: the empty-result advice no longer points at
+      // commandChecksDecideGoal; a provable no change completes or is judged, so empty-result is what is not one.
+      expect(lines).toContain("  this attempt is not a provable no change (its tree differs from its base, or it is a criteria-review verdict), so it cannot complete in this group and orca task reopen does not apply");
+      expect(out.stdout).not.toContain("commandChecksDecideGoal");
     }
   });
 
