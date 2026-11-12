@@ -379,7 +379,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the theme family gains `lilac` (#200): 207 + 1.
     // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the activityKind `post-merge-check` (spec §4, #245) adds one: 208 + 1.
     // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — the activityKind `group-acceptance` (spec §5, #241) adds one: 209 + 1.
-    expect(ENUM_VALUES.length).toBe(210);
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKind `no-change-completed` (spec §1) adds one: 210 + 1.
+    expect(ENUM_VALUES.length).toBe(211);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
