@@ -1,4 +1,9 @@
-/** All owner panels remain mounted: navigation never throws away unfinished input. */
+/**
+ * Ruling R1 (#219, 2026-11-10; extended to the group regions in tester follow-up G): only the selected region is rendered.
+ * Every other tab panel is an empty, hidden marker (its id stays, so each tab's aria-controls names a real element).
+ * A region's unsent input lives in the group view's region draft store (regionDraft.ts), so a switch keeps it; a region
+ * with side effects (Live, Results, a run transcript) asks nothing while it is not rendered.
+ */
 import type { JSX, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DETAIL_REGIONS, type DetailRegion } from "./detailRegion.js";
@@ -36,6 +41,6 @@ export function GroupDetailRegions(props: { groupId: string; selected: DetailReg
     </button>;
    })}
   </div>
-  {DETAIL_REGIONS.map(region => <div key={region} role="tabpanel" aria-labelledby={`${overviewRegionId("group", props.groupId, region)}-tab-label`} id={overviewRegionId("group", props.groupId, region)} tabIndex={-1} data-overview-region={region} hidden={props.selected !== region}>{props.regions[region]}</div>)}
+  {DETAIL_REGIONS.map(region => <div key={region} role="tabpanel" aria-labelledby={`${overviewRegionId("group", props.groupId, region)}-tab-label`} id={overviewRegionId("group", props.groupId, region)} tabIndex={-1} data-overview-region={region} hidden={props.selected !== region}>{props.selected === region ? props.regions[region] : null}</div>)}
  </>;
 }

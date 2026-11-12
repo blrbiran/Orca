@@ -6,7 +6,8 @@
  * `local` and `push-target` have a method. A repository with no scheme yet starts from remote `origin` and the
  * repository's suggested target (the server's read of origin's HEAD branch, else the current branch).
  */
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef } from "react";
+import { useRegionDraft } from "./regionDraft.js";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -71,13 +72,16 @@ function schemeOf(fields: Fields): IntegrationSchemeV1 {
 }
 
 /** The owner's form: delivery, trigger, method (local / push-target), target, remote (not local), Save. */
-function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: string | null; onSave: (scheme: IntegrationSchemeV1) => void }): JSX.Element {
+function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: string | null; onSave: (scheme: IntegrationSchemeV1) => void; draftKey?: string }): JSX.Element {
   const { t } = useTranslation();
-  const [fields, setFields] = useState<Fields>(() => fieldsOf(props.scheme, props.suggestedTarget));
+  // Ruling R1 (#219): inside a group the form's unsent fields outlive a region switch (regionDraft.ts).
+  const draftKey = props.draftKey ?? "scheme-form";
+  const [fields, setFields] = useRegionDraft<Fields>(draftKey, () => fieldsOf(props.scheme, props.suggestedTarget));
+  const [touched, setTouched] = useRegionDraft(`${draftKey}:touched`, () => false);
   const set = (change: Partial<Fields>): void => setFields((current) => ({ ...current, ...change }));
   // Fix round 1 F2: a suggestion read after the form opened fills the target only while it is empty and the person has
   // not typed in it; what they typed (even an emptied field) is theirs.
-  const targetTouched = useRef(false);
+  const targetTouched = useRef(touched);
   useEffect(() => {
     if (props.suggestedTarget === null || targetTouched.current) return;
     setFields((current) => (current.target === "" ? { ...current, target: props.suggestedTarget! } : current));
@@ -107,7 +111,7 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
           )}
           <label>
             {t("control.integration.target")}
-            <input value={fields.target} onChange={(event) => { targetTouched.current = true; set({ target: event.currentTarget.value }); }} />
+            <input value={fields.target} onChange={(event) => { targetTouched.current = true; setTouched(true); set({ target: event.currentTarget.value }); }} />
           </label>
           {delivery !== "local" && (
             <label>
@@ -163,7 +167,7 @@ export function GroupIntegrationConfirm(props: { view: GroupViewV1; suggestedTar
         ? null
         : mayChange
         ? (
-          <SchemeForm key={`${groupId}:${view.integration?.schemeHash ?? "keep"}`} scheme={scheme} suggestedTarget={props.suggestedTarget}
+          <SchemeForm key={`${groupId}:${view.integration?.schemeHash ?? "keep"}`} draftKey={`integration:${groupId}:${view.integration?.schemeHash ?? "keep"}`} scheme={scheme} suggestedTarget={props.suggestedTarget}
             onSave={(integration) => props.onCommand({ verb: "set-group-integration", groupId, expectedRevision: view.summary.commandRevision, payload: { integration } })} />
         )
         // Fix round 1 F1: after confirm a member reads the scheme; before it, a non-keep group is not theirs to confirm.

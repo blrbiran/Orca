@@ -32,7 +32,7 @@
  * The 2026-09-27 erratum's "every pane stays mounted" no longer holds: SectionPane renders only the
  * current section, and the CSS that hid the others is gone. App-level criteria navigate to a section
  * before reading it. Unsent input that must outlive leaving a section lives here, in App's draft stores.
- * A group's detail regions are still all mounted, hidden by `hidden` (GroupDetailRegions.tsx).
+ * A group renders only its selected detail region too (tester follow-up G; GroupDetailRegions.tsx, regionDraft.ts).
  */
 import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { JSX } from "react";

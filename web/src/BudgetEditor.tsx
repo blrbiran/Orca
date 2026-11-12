@@ -8,7 +8,8 @@
  * from the model or a complex-1m default says so next to the box, because the
  * person is about to type over it.
  */
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect } from "react";
+import { useRegionDraft } from "./regionDraft.js";
 import type { JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
@@ -219,8 +220,9 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     (profile.allowedWorkKinds.includes("task") || profile.allowedWorkKinds.includes("handoff"))
     && (profile.observed.handoffControl !== "durable" || profile.observed.handoffExecution === null));
   const defaults = config.defaults;
-  const [manualMode, setManualMode] = useState<"" | "strict" | "soft">("");
-  const [manualProfiles, setManualProfiles] = useState<Record<"worker" | "handoff" | "goalReview", string>>({ worker: "", handoff: "", goalReview: "" });
+  // Ruling R1 (#219): the manual confirm choices outlive a region switch (regionDraft.ts).
+  const [manualMode, setManualMode] = useRegionDraft<"" | "strict" | "soft">(`budget-manual-mode:${view.summary.groupId}`, () => "");
+  const [manualProfiles, setManualProfiles] = useRegionDraft<Record<"worker" | "handoff" | "goalReview", string>>(`budget-manual-profiles:${view.summary.groupId}`, () => ({ worker: "", handoff: "", goalReview: "" }));
   const manual: ManualConfirmChoice = { mode: manualMode, profiles: manualProfiles };
   const mode = confirmModeOf(view, config, manual);
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => confirmProfileOf(view, config, manual, kind);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRegionDraft } from "./regionDraft.js";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { Role } from "./auth.js";
@@ -15,8 +15,9 @@ const NOTE_MAX = 2048;
  */
 export function GroupAcceptanceProblem(props: { groupId: string; acceptance: GroupAcceptanceV1 | undefined; roles?: readonly Role[]; archived: boolean; revision: number; onCommand: (action: ControlAction) => void }): JSX.Element | null {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState("");
+  // Ruling R1 (#219): an unsent waiver note outlives a region switch (regionDraft.ts).
+  const [open, setOpen] = useRegionDraft(`waive-open:${props.groupId}`, () => false);
+  const [note, setNote] = useRegionDraft(`waive-note:${props.groupId}`, () => "");
   const acceptance = props.acceptance;
   if (acceptance === undefined || acceptance.result !== "failed") return null;
   const last = acceptance.commands.at(-1);

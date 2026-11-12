@@ -217,6 +217,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
 import { overviewRegionId } from "./overviewNavigation.js";
 import { GroupResults } from "./GroupResults.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
+import { RegionDrafts } from "./regionDraft.js";
 import { ReviewDetail } from "./ReviewDetail.js";
 import type { GroupDecisionsViewV1 } from "./controlTypes.js";
 import { defaultDetailRegion, focusedDetailRegion, runRegionId, type DetailRegion } from "./detailRegion.js";
@@ -469,6 +470,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   useLayoutEffect(() => { if (props.focus?.runId != null) setOpenRunId(props.focus.runId); }, [props.focusRequest]);
   const [openTask, setOpenTask] = useState<string | null>(props.route != null ? props.route.taskId : props.focus?.groupId === groupId ? props.focus.taskId : null);
   useLayoutEffect(() => { if (props.focus?.groupId === groupId && props.focus.taskId !== null) setOpenTask(props.focus.taskId); }, [props.focus, props.focusRequest]);
+  const regionDrafts = useRef(new Map<string, unknown>());
   const [region, setRegion] = useState<DetailRegion>(() => props.route?.region != null ? props.route.region : props.focus?.groupId === groupId ? focusedDetailRegion(view, props.focus.region) : defaultDetailRegion(view));
   // Tester round 2 §9.3: a route that names this group (Back, a typed hash) sets the region and the open task.
   useLayoutEffect(() => {
@@ -641,6 +643,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   </>);
 
   return (
+    // Ruling R1 (#219): only the selected region is rendered; unsent input in a region lives in this store meanwhile.
+    <RegionDrafts.Provider value={regionDrafts.current}>
     <section ref={sectionRef} aria-label={t("control.group.region", { groupId })}>
       <h2>
         {/* #81/#228: the revision and projection counters are in the Technical region, not the first screen. */}
@@ -979,5 +983,6 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       }} />
       {openItem !== undefined && <TaskDetail key={openItem.taskId} active={props.active !== false} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
     </section>
+    </RegionDrafts.Provider>
   );
 }
