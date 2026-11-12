@@ -11,13 +11,19 @@ every group (with --project, that project's): id, repository, state, revision, g
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 
-## `orca group show <group>`
+## `orca group show <group> [--runs <runs>]`
 
 one group's full view
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
+- `--runs <runs>`: full or summary: full (default) prints each run's whole entry; summary prints one compact entry per run (runId, taskId, phase, state, outcome, blockedReason, used)
+
+```
+orca group show g1
+orca group show g1 --runs summary --json
+```
 
 ## `orca group brief <group>`
 

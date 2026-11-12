@@ -68,6 +68,21 @@ async function commandScope(context: WriteContext): Promise<string> {
   }
 }
 
+/**
+ * Tester #272 (2): a run's whole entry is ~5-10 KB, so `group show --json` on a group with a few dozen runs costs an
+ * agent hundreds of KB. `--runs summary` keeps, per run, only what says where it stands (absent fields stay absent).
+ */
+const RUNS_MODES = ["full", "summary"] as const;
+const RUN_SUMMARY_FIELDS = ["runId", "taskId", "phase", "state", "outcome", "blockedReason", "used"] as const;
+function runsMode(c: WriteContext): typeof RUNS_MODES[number] {
+  const value = c.args.flags.runs;
+  if (value === undefined) return "full";
+  if (!(RUNS_MODES as readonly unknown[]).includes(value)) throw new EntryRejection("control-cli-argument-invalid", `--runs wants ${RUNS_MODES.join(" or ")}, not ${JSON.stringify(value)}`);
+  return value as typeof RUNS_MODES[number];
+}
+const runSummary = (run: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(RUN_SUMMARY_FIELDS.filter((key) => run[key] !== undefined).map((key) => [key, run[key]]));
+
 const groupList = (body: unknown): string => {
   const groups = (body as Summary).groups ?? [];
   return groups.length === 0 ? "no groups" : groups.map((g) => {
@@ -298,7 +313,12 @@ export const READ_ROWS: CommandDef[] = [
       return { ...(summary as Summary), groups: (summary as Summary).groups.filter((g) => g.repoId === repoId) };
     },
     format: groupList }),
-  read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}`], format: formatWithUnestimated }),
+  read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP],
+    flags: [{ name: "runs", type: "string", summary: `${RUNS_MODES.join(" or ")}: full (default) prints each run's whole entry; summary prints one compact entry per run (${RUN_SUMMARY_FIELDS.join(", ")})` }],
+    examples: ["orca group show g1", "orca group show g1 --runs summary --json"],
+    paths: (c) => { runsMode(c); return [`groups/${ids(c, "group")}`]; },
+    compose: ([view], c) => runsMode(c) === "full" ? view : { ...(view as object), runs: (view as { runs: Array<Record<string, unknown>> }).runs.map(runSummary) },
+    format: formatWithUnestimated }),
   // Issue #199: the summary route answers the compact body itself, so a poll ships neither the full view's plan and
   // runs nor a clarifying group's refusal (its full view is refused; its summary is not).
   read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],

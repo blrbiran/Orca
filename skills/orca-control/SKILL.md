@@ -35,7 +35,9 @@ any command; `orca version` should equal this skill's version.
    Read the group (or the flow run) again and act on what it shows.
 3. **Long work is polled with `group brief`.** After `group start`, `task continue`, `flow start` or `flow rerun`, poll
    `orca group brief <g>` / `orca flow show <r>` every 30–60 s: state, completion, counts and blockers, not the full
-   view. A confirmed group starts on its own when a slot is free; `group start` is for `confirm --hold`.
+   view. A confirmed group starts on its own when a slot is free; `group start` is for `confirm --hold`. When you need
+   which task runs and where it stands, `orca group show <g> --runs summary` prints one compact entry per run instead of
+   each run's whole entry.
 4. **Pins are filled for you.** Each write reads the current revision, hashes and versions itself, in the same
    invocation, and sends them. When your action rests on something you read *earlier* (not just now), pass
    `--if-revision <n>` with the revision from that read: a stale one answers `revision-conflict`, and then you read
