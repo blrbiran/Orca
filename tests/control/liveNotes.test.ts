@@ -2,7 +2,7 @@ import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
-import { write } from "../../src/control/executionDriver.js";
+import { stepA1, stepA2, write } from "../../src/control/executionDriver.js";
 import { liveNotesOf, noteLiveNoteDeliveries, settleLiveNotes } from "../../src/control/liveNotes.js";
 import { groupHandoffsDir, readHandoffRecords, UNDELIVERED_NOTES_HEADING } from "../../src/control/taskHandoffs.js";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
@@ -59,6 +59,7 @@ describe("live notes (Part 5)", { timeout: 60_000 }, () => {
     expect(send(t, "too late")).toMatchObject({ error: { code: "live-note-task-finished" } });
   });
 
+  // mutation M-O4f: A2 does not write the run file -> the file is absent after A2, red
   // mutation M-O4b: settle ends a queued note whose task is `ready` or `blocked` too -> the waiting note is undelivered, red
   it("a note for a task that is not running waits and is written into the next run's live-notes.json at its A2", async () => {
     const t = await harness();
@@ -67,7 +68,9 @@ describe("live notes (Part 5)", { timeout: 60_000 }, () => {
     expect(settle(t)).toEqual([]);
     expect(notes(t)[0]!.state).toBe("queued");
     const runId = await t.claim();
-    await t.until(t.driver(), () => t.body(runId).drive?.prepared === true);
+    // A2 itself writes it (not the driver round's repair pass, which only rewrites an existing run file's queue).
+    expect(stepA1(t.deps, runId)).toBe(true);
+    expect(await stepA2(t.deps, runId)).toBe(true);
     expect(JSON.parse(readFileSync(fileOf(t, runId), "utf8")).notes.map((note: { id: string }) => note.id)).toEqual([sent.commandId]);
   });
 

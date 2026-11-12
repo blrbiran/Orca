@@ -33,7 +33,10 @@ describe("handoffs and live notes in the group view (Parts 4.7, 5)", () => {
   // mutation M-O5a: always emit `handoffs: []` -> the key is present (and the schema's min(1) refuses the view), red
   it("a group with no handoffs and no notes has neither key (the view is byte-identical to today's)", async () => {
     const panel = await importedPanel("epoch-handoffs-none");
-    const body = await json(await get(panel, `/api/control/groups/${GROUP}`));
+    const response = await get(panel, `/api/control/groups/${GROUP}`);
+    expect(response.status).toBe(200);
+    const body = await json(response);
+    expect(body.schema).toBe("orca-control-group-v1");
     expect(Object.hasOwn(body, "handoffs")).toBe(false);
     expect(Object.hasOwn(body, "liveNotes")).toBe(false);
     await panel.close();
