@@ -168,8 +168,10 @@ describe("A2 for a multi group's run (§7.1)", () => {
     expect(drive.dirs).toHaveLength(1);
     expect(drive.dirs[0].workspacePath).toBe(workspacePathOf(controlWorkspaceRoots(t.h.store.stateDir), runId));
     // The same envelope toStartEnvelope builds from this run without an additionalRepos entry: the same bytes and hash.
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — every run now carries its handoff directories
+    // (spec Part 4, §10.5), so the rebuild names the same `handoff` the run was sent; still no additionalRepos.
     const rebuilt = toStartEnvelope(readWorkClaimEnvelope(t.h.store, "g", runId), { ...t.body(runId) },
-      { sourceDir: drive.sourceDir, targetRepo: drive.targetRepo, base: drive.base }, (envelope.work as LoopWork).contract);
+      { sourceDir: drive.sourceDir, targetRepo: drive.targetRepo, base: drive.base, handoff: (envelope.work as LoopWork).handoff }, (envelope.work as LoopWork).contract);
     expect(sha256Canonical(rebuilt)).toBe(drive.envelopeHash);
   });
 
