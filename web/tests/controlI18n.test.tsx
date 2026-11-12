@@ -68,7 +68,10 @@ describe("the task control and recovery areas in Chinese", () => {
         <WorkspaceModeSelector workspace={workspace} onChange={vi.fn()} />
       </>
     );
-    const text = container.textContent ?? "";
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so the
+    // page's words are read with each region open in turn (the same words, the same assertions).
+    let text = "";
+    for (const tab of screen.getAllByRole("tab")) { fireEvent.click(tab); text += container.textContent ?? ""; }
     // Rewritten for feedback #61 (human-named 2026-10-15): this now encodes that the Runs table names providerAttemptOrdinal as the attempt within this run, with the task's run number beside it.
     for (const expected of [
       "服务会话 epoch-a · 状态序号 4 · 调度已阻断", "未配置执行端口 · ", "服务端要求重置 · ", "需要重新拉取状态序号 · ", "调度已阻断 · 必须先观察到恢复",
@@ -151,9 +154,6 @@ describe("the rest of the control area's branches in Chinese", () => {
     const props = { config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand: vi.fn() };
     const { container } = render(<ControlGroupView view={readyView} {...props} />);
     expect(firstRow(container, "任务|状态|标签|进度|运行|待定|依赖")).toEqual(["a", "就绪", "bug", "没有运行", "无", "无", "无"]);
-    // Rewritten for feedback #61 (human-named 2026-10-15): this now encodes that the Runs table names providerAttemptOrdinal as the attempt within this run, with the task's run number beside it.
-    // Ruling: the table has six columns; the disclosure precedes the run name, with evidence in its detail.
-    expect(firstRow(container, "运行|阶段|状态|配置|已用|剩余").slice(0, 3)).toEqual(["▸ a", "工作", "运行中 · 本次运行内第 2 次尝试（认领序号 不适用） · 这个任务的第 1 次运行"]);
     const filter = screen.getByRole("group", { name: "按标签筛选工作项" });
     expect(filter.querySelector("legend")!.textContent).toBe("标签（任一）");
     fireEvent.click(screen.getByRole("tab", { name: "技术详情" }));
@@ -163,6 +163,11 @@ describe("the rest of the control area's branches in Chinese", () => {
     expect(screen.getByRole("heading", { level: 3, name: "执行控制" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
     expect(screen.getByRole("heading", { level: 3, name: "运行" })).toBeTruthy();
+    // Rewritten for feedback #61 (human-named 2026-10-15): this now encodes that the Runs table names providerAttemptOrdinal as the attempt within this run, with the task's run number beside it.
+    // Ruling: the table has six columns; the disclosure precedes the run name, with evidence in its detail.
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so
+    // the Runs table is read here, with its region open (moved from before the Progress reads, unchanged).
+    expect(firstRow(container, "运行|阶段|状态|配置|已用|剩余").slice(0, 3)).toEqual(["▸ a", "工作", "运行中 · 本次运行内第 2 次尝试（认领序号 不适用） · 这个任务的第 1 次运行"]);
     cleanup();
 
     render(<ControlGroupView view={view} {...props} />);
