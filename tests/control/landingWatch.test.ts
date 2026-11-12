@@ -127,6 +127,17 @@ describe("#269: the landing watch", () => {
     } finally { await t.h.dispose(); }
   }, 120000);
 
+  it("a tip after which no task is left to land is not watched (acceptance checks it)", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      for (let i = 0; i < 3; i += 1) await driver.round();
+      expect(landingWatchOf(groupBody(t))).toBeNull();
+      expect(watchRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  }, 120000);
+
   it("a group whose tasks are all done is left to acceptance", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b", dependsOn: ["a"] }]); try {
       const driver = t.driver();
