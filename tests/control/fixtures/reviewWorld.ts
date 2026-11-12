@@ -1,5 +1,7 @@
 import { newRound, writeRound } from "../../../src/control/requirementRecords.js";
 import { FIXTURE_SLOT } from "./requirement.js";
+import { replenishStartWakes } from "../../../src/control/executionDriver.js";
+import { deliverScheduledStart } from "../../../src/control/webDispatch.js";
 import { reviewOf } from "../../../src/control/requirementReviewRecord.js";
 import { readWebGroup } from "../../../src/control/webService.js";
 import { driverHarness, type HarnessOptions } from "./driverHarness.js";
@@ -43,7 +45,10 @@ export async function reviewWorld(options: { tasks?: WebFixtureTask[]; requireme
     for (let i = 0; i < 8; i += 1) {
       const ready = t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND json_extract(body,'$.status')='ready'").get();
       if (ready === undefined) return;
-      const runId = await t.claim();
+      // The first claim starts the group; a later one (a fix task appended to a running group) is armed as the driver arms it.
+      replenishStartWakes({ store: t.h.store, admissionGate: t.h.deps.admissionGate });
+      const delivered = await deliverScheduledStart(t.dispatch, "g");
+      const runId = delivered.kind === "claimed" ? delivered.runId : await t.claim();
       await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
     }
   };

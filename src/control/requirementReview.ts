@@ -8,12 +8,16 @@ import { chainRounds } from "./clarifyChain.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedReconcileSlot } from "./executionSnapshot.js";
-import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
+import { acceptanceCommands } from "./groupAcceptance.js";
+import { acceptanceOf, acceptanceSatisfied } from "./groupAcceptanceRecord.js";
+import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
+import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, readGroupCallContract } from "./groupSingleCall.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { cutUtf8 } from "./noChange.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readWork } from "./queries.js";
+import { taskContractSchema } from "../scheduler/planFile.js";
 import { readRounds } from "./requirementRecords.js";
 import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
 import type { SingleCallHandler, SingleCallRunRow } from "./singleCallPurposes.js";
@@ -190,6 +194,9 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       }
       if (!roundDue(store, groupId, review)) continue;
       const tip = await revParse(deps.resolveRepository(groupRepoId(store, groupId)), workBranchRef(groupId));
+      // A fix task moved the tip: wait for the acceptance pass to check the new tip before reviewing it.
+      const accepted = acceptanceOf(body);
+      if (accepted !== null && accepted.tip !== null && accepted.tip !== tip) continue;
       deps.write(() => {
         const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body))) ?? { state: "pending" as const, rounds: [], autoFixRounds: 0 };
         const roundNo = current.rounds.length + 1, at = store.now();
@@ -292,8 +299,78 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
   usageUnknownReason: REQUIREMENT_REVIEW_USAGE_UNKNOWN,
 };
 
-/** §3.5: a round that did not pass stops the group in Problems with why (Task 9 turns a not-met round into a fix round). */
-function settleNotPassed(_store: ControlStore, _groupId: string, review: RequirementReview, round: ReviewRound): RequirementReview {
-  const why: ReviewWhy = round.result === "not-met" ? "rounds-exhausted" : round.result === "cannot-judge" ? "cannot-judge" : round.result === "invalid" ? "invalid" : round.result === "unfunded" ? "unfunded" : "failed";
+/**
+ * §3.4-§3.5: a not-met round opens one fix task in the same group covering every unmet criterion (at most two automatic
+ * rounds; a third not-met stops the group, `rounds-exhausted`); a fix the group cannot fund stops it `unfunded`. Any other
+ * round that did not pass stops the group in Problems with why.
+ */
+function settleNotPassed(store: ControlStore, groupId: string, review: RequirementReview, round: ReviewRound): RequirementReview {
+  if (round.result === "not-met") {
+    if (review.autoFixRounds >= MAX_AUTO_FIX_ROUNDS) return { ...review, state: "not-passed", why: "rounds-exhausted" };
+    const opened = openFixTask(store, groupId, round, "auto");
+    if ("refused" in opened) return { ...review, state: "not-passed", why: opened.refused };
+    round.fixTaskId = opened.taskId; round.fixBy = "auto";
+    return { ...review, state: "fixing", autoFixRounds: review.autoFixRounds + 1 };
+  }
+  const why: ReviewWhy = round.result === "cannot-judge" ? "cannot-judge" : round.result === "invalid" ? "invalid" : round.result === "unfunded" ? "unfunded" : "failed";
   return { ...review, state: "not-passed", why };
+}
+
+/** The fix task's id: `review-fix-<round>`, or `-<n>` after it when a hand fix of the same round took that id. */
+export function fixTaskIdOf(store: ControlStore, groupId: string, roundNo: number): string {
+  let id = `review-fix-${roundNo}`;
+  for (let n = 2; store.db.prepare("SELECT 1 FROM work_items WHERE group_id=? AND id=?").get(groupId, id) !== undefined; n += 1) id = `review-fix-${roundNo}-${n}`;
+  return id;
+}
+
+/**
+ * Task 9: the fix task's contract -- the round's unmet findings as its goal (or the person's `goal`), the files they name
+ * as its write set (the tasks' write sets when they name none), the tasks' allow/deny lists, the group's union of setup and
+ * required checks; policies and verifier from the group's first task in plan order.
+ */
+export function fixTaskContract(store: ControlStore, groupId: string, round: ReviewRound, criteria: ReadonlyArray<{ id: string; text: string }>, taskId: string, goal?: string) {
+  const plan = readArchivedPlan(store, groupId);
+  const appended = new Set(plan.appendedTaskIds ?? []);
+  const tasks = plan.plan.tasks.filter((task) => !appended.has(task.taskId)).map((task) => readArchivedContract(store, groupId, task.taskId).contract);
+  const first = tasks[0];
+  if (first === undefined) throw new ControlError("recovery-blocked", "requirement-review-no-task");
+  const unmet = round.criteria.filter((c) => c.verdict === "not-met");
+  const textOf = (id: string) => criteria.find((c) => c.id === id)?.text ?? id;
+  const findings = unmet.map((c) => `- ${c.id} (${textOf(c.id)}): missing ${c.missing ?? "?"}${c.evidence.length === 0 ? "" : `; looked at ${c.evidence.map((e) => e.line === null ? e.path : `${e.path}:${e.line}`).join(", ")}`}`);
+  const named = [...new Set(unmet.flatMap((c) => c.evidence.map((e) => e.path)))];
+  const union = (lists: string[][]) => [...new Set(lists.flat())];
+  const targetPaths = named.length > 0 ? named : union(tasks.map((t) => t.context.targetPaths));
+  const commands = acceptanceCommands(store, groupId);
+  const { setupCommands: _setup, ...context } = first.context;
+  return taskContractSchema.parse({
+    ...first,
+    objective: { taskId, goal: goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"),
+      successCondition: `the requirement review finds criteria ${(unmet.length > 0 ? unmet.map((c) => c.id) : criteria.map((c) => c.id)).join(", ")} met`, nonGoals: [] },
+    context: { ...context, targetPaths, ...(commands.setup.length === 0 ? {} : { setupCommands: commands.setup }) },
+    safetyPolicy: { ...first.safetyPolicy, allowlistPaths: union(tasks.map((t) => t.safetyPolicy.allowlistPaths)), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
+      maxFilesTouched: Math.max(first.safetyPolicy.maxFilesTouched, targetPaths.length) },
+    verification: { ...first.verification, requiredChecks: commands.checks.length > 0 ? commands.checks : first.verification.requiredChecks },
+  });
+}
+
+/** Appends the fix task in the caller's transaction (a savepoint: a refusal leaves nothing); `refused` says why it could not. */
+export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string): { taskId: string } | { refused: ReviewWhy } {
+  const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
+  const criteria = reviewInputsOf(store, groupId, body).criteria;
+  const plan = readArchivedPlan(store, groupId);
+  const appended = new Set(plan.appendedTaskIds ?? []);
+  const first = plan.plan.tasks.find((task) => !appended.has(task.taskId))!.taskId;
+  const taskId = fixTaskIdOf(store, groupId, round.roundNo);
+  const grant = (readWork(store, groupId, first) as unknown as { grant: { work: Amount; handoff: Amount } }).grant;
+  store.db.exec("SAVEPOINT review_fix");
+  try {
+    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, goal), agentFrom: first,
+      work: { ...grant.work, tokens: grant.work.tokens ?? 0 } as Amount, handoff: grant.handoff, dependsOn: [] });
+    store.db.exec("RELEASE review_fix");
+    return { taskId };
+  } catch (error) {
+    store.db.exec("ROLLBACK TO review_fix"); store.db.exec("RELEASE review_fix");
+    if (!(error instanceof ControlError)) throw error;
+    return { refused: error.code === "group-budget-unavailable" ? "unfunded" : "failed" };
+  }
 }
