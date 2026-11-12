@@ -467,3 +467,19 @@ payload field, route or flag). The real-ccloop world fixture takes a test-only `
 `modelVersion: null`; `allowanceHeldSettlement` and `tokenPolicyRuntime`'s saved-allowance renewal use it, since parking
 at a token grant exists only in a pre-release group. (Setting the marker off after import would not do: the import has
 already written the task's work tokens as null.)
+
+## 15. Follow-up H, third pass (2026-11-13, same seat; branch rebased onto `2fa541c8`): the stuck handoff is a ccloop race
+
+`agentSelectionE2E` C3 failed intermittently once new groups used the expectation model: a handoff request stayed
+`collecting` while its run stayed `accepted`. Cause, on the ccloop side (read only; identical at ccloop `9c2fbe47` and
+`d5a4bd2`): `createLiveCeilingWatch` (`src/control/liveCeilingFile.ts` L86-112) sleeps between reads on an **unref'd**
+50 ms timer (L105) and `stop()` (L110) wakes only the timer of the iteration that is sleeping. When `stop()` lands while a
+read is in flight, the loop then arms a fresh unref'd timer that nothing wakes; the worker
+(`src/control/worker.ts` L356-359, `onRunSettledBeforeLeaseRelease`: handoff watcher stopped, then
+`await liveCeilingWatch?.stop()`) has nothing else keeping Node's event loop alive, so the process exits silently before the
+candidate is persisted or the worker sealed -- no `candidate.json`, no `worker-error.json`, pid gone. Only a run whose
+envelope carries `liveCeiling` starts the watch, which is why the flip exposed it. Smallest ccloop fix: `if (stopped)
+break;` right before arming the sleep timer (or not unref'ing it). Evidence: a standalone repro exits 5/5 before `stop()`
+resolves and resolves with the one-line fix; C3 against a ccloop copy whose watch read is slowed by 45 ms fails 2/2 on this
+branch, passes 2/2 with the fix added, passes 2/2 on `main` (no ceiling). No Orca change: the branch waits for that ccloop
+fix and a repin.
