@@ -10,7 +10,7 @@ import {
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   resolveFolderChangePayloadSchema, multiDirLandingPayloadSchema,
-  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
   scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
@@ -64,6 +64,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "reopen-task": reopenTaskPayloadSchema, "accept-no-change": acceptNoChangePayloadSchema,
   // Tester follow-up E §5 (#241): a failed group acceptance's recheck (any) and waiver (human-only, socket tier token).
   "recheck-acceptance": emptyPayloadSchema, "waive-acceptance": waiveAcceptancePayloadSchema,
+  // Tester follow-up G spec §3.5: the requirement review's exits (any).
+  "review-accept": reviewNotePayloadSchema, "review-rerun": reviewNotePayloadSchema, "review-fix": reviewFixPayloadSchema,
   "approve-pending-decision": approvePendingDecisionPayloadSchema,
   "reject-pending-decision": rejectPendingDecisionPayloadSchema,
   "ratify-flagged-decision": ratifyFlaggedDecisionPayloadSchema,

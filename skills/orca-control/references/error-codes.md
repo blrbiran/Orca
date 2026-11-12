@@ -262,6 +262,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `requirement-export-pending` | 422 |
 | `requirement-limit-too-low` | 422 |
 | `requirement-not-split` | 422 |
+| `requirement-review-not-open` | 409 |
 | `resume-artifact-conflict` | 409 |
 | `resume-bundle-exists` | 409 |
 | `resume-handoff-invalid` | 422 |

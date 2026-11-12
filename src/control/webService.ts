@@ -54,6 +54,7 @@ import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyRecheckAcceptance, applyWaiveAcceptance, type RecheckAcceptanceCommand, type WaiveAcceptanceCommand } from "./groupAcceptanceCommands.js";
 import { applyReopenTask, type ReopenTaskCommand } from "./reopenTask.js";
+import { applyReviewAccept, applyReviewFix, applyReviewRerun, type ReviewAcceptCommand, type ReviewFixCommand, type ReviewRerunCommand } from "./requirementReviewCommands.js";
 import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
@@ -1786,6 +1787,16 @@ export class WebControlService {
   /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
   recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {
     return this.mutate(() => applyRecheckAcceptance({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Tester follow-up G spec §3.5: a requirement review that did not pass -- accept it as is, run it again, or fix by hand. */
+  reviewAccept(command: ReviewAcceptCommand): WebCommandResult {
+    return this.mutate(() => applyReviewAccept({ store: this.store }, command)) as WebCommandResult;
+  }
+  reviewRerun(command: ReviewRerunCommand): WebCommandResult {
+    return this.mutate(() => applyReviewRerun({ store: this.store }, command)) as WebCommandResult;
+  }
+  reviewFix(command: ReviewFixCommand): WebCommandResult {
+    return this.mutate(() => applyReviewFix({ store: this.store }, command)) as WebCommandResult;
   }
   /** Tester follow-up G spec §1.4: revoke a task's no-change completion and run it again in the group with a note. */
   reopenTask(command: ReopenTaskCommand): WebCommandResult {

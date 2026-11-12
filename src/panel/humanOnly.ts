@@ -72,6 +72,10 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // accepting a group whose final tree failed its checks is a person's act, named with why.
   "recheck-acceptance": "any",
   "waive-acceptance": "human-only",
+  // Tester follow-up G spec §3.5, §7: a requirement review's exits are a person's and an orchestrating agent's alike.
+  "review-accept": "any",
+  "review-rerun": "any",
+  "review-fix": "any",
   // Issue-fixes spec §6.3: archiving hides and freezes a group but deletes nothing; any principal may do it and undo it.
   "archive-group": "any",
   "unarchive-group": "any",

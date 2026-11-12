@@ -461,6 +461,9 @@ export type ControlAction =
   // Tester follow-up E §5 (#241): a failed group acceptance, checked again (any), or accepted by an owner with why.
   | { verb: "recheck-acceptance"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   | { verb: "waive-acceptance"; groupId: string; expectedRevision: number; payload: { note: string } }
+  | { verb: "review-accept"; groupId: string; expectedRevision: number; payload: { note: string } }
+  | { verb: "review-rerun"; groupId: string; expectedRevision: number; payload: { note: string } }
+  | { verb: "review-fix"; groupId: string; expectedRevision: number; payload: { goal: string; paths?: string[] } }
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
   | { verb: "resolve-folder-change"; groupId: string; expectedRevision: number; payload: { action: "take-folder" | "recheck" | "withhold"; dir?: string } }
   // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
@@ -556,6 +559,12 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/integration/resolve`;
     case "recheck-acceptance":
       return `${group}/acceptance/recheck`;
+    case "review-accept":
+      return `${group}/review/accept`;
+    case "review-rerun":
+      return `${group}/review/rerun`;
+    case "review-fix":
+      return `${group}/review/fix`;
     case "waive-acceptance":
       return `${group}/acceptance/waive`;
     case "resolve-folder-change":

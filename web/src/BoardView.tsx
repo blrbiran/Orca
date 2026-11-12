@@ -147,6 +147,9 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
         </p>
       ))}
       {/* Tester follow-up E §5 (#241): the group's final tree failed its tasks' checks, so it is not done. */}
+      {(group.requirementReview?.state === "reviewing" || group.requirementReview?.state === "not-passed") && (
+        <p className="detail-note" data-tone={group.requirementReview.state === "not-passed" ? "danger" : "info"} data-testid="board-card-review">{t("control.review.board", { state: t(`control.review.state.${group.requirementReview.state}`) })}</p>
+      )}
       {group.acceptance?.result === "failed" && (
         <p className="detail-note" data-tone="danger" data-testid="board-card-acceptance">{t("control.groupAcceptance.boardFailed", { command: group.acceptance.commands.at(-1)?.command ?? "?" })}</p>
       )}

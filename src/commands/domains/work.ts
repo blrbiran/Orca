@@ -424,6 +424,17 @@ export const WORK_ROWS: CommandDef[] = [
   empty("group", "resolve-integration", "approve an agent resolving the group's integration conflict", "resolve-integration-conflict", "integration/resolve"),
   // Tester follow-up E §5 (#241): the ways out of a failed group acceptance besides a moved tip.
   empty("group", "recheck", "run a failed group acceptance again on the same tip (a flaky check)", "recheck-acceptance", "acceptance/recheck"),
+  // Tester follow-up G spec §3.5: the exits of a requirement review that did not pass (a person or an orchestrating agent).
+  verb({ domain: "group", action: "review-accept", summary: "accept a group whose requirement review did not pass as it is, with why", verb: "review-accept", positionals: [GROUP], access: "open",
+    flags: [{ name: "note", type: "string", required: true, summary: "why the group is accepted as it is (at most 2048 bytes)" }],
+    route: (c) => `groups/${group(c)}/review/accept`, payload: (c) => ({ note: str(c, "note") }) }),
+  verb({ domain: "group", action: "review-rerun", summary: "run a group's requirement review again, telling the reviewer what to look at", verb: "review-rerun", positionals: [GROUP], access: "open",
+    flags: [{ name: "note", type: "string", required: true, summary: "what the reviewer should look at (at most 2048 bytes)" }],
+    route: (c) => `groups/${group(c)}/review/rerun`, payload: (c) => ({ note: str(c, "note") }) }),
+  verb({ domain: "group", action: "review-fix", summary: "open a fix task in the group for what its requirement review found (does not use up an automatic round)", verb: "review-fix", positionals: [GROUP], access: "open",
+    flags: [{ name: "goal", type: "string", required: true, summary: "what the fix task should do (at most 4096 bytes)" },
+      { name: "path", type: "string", repeatable: true, summary: "a file the fix task may write (default: the files the review named)" }],
+    route: (c) => `groups/${group(c)}/review/fix`, payload: (c) => ({ goal: str(c, "goal"), ...(list(c, "path").length === 0 ? {} : { paths: list(c, "path") }) }) }),
   verb({ domain: "group", action: "waive-acceptance", summary: "accept a group whose acceptance failed on its tip anyway (a person's act)",
     verb: "waive-acceptance", positionals: [GROUP], access: "token",
     flags: [{ name: "note", type: "string", required: true, summary: "why you accept the failed tip; recorded with the waiver and in the group's activity" }],

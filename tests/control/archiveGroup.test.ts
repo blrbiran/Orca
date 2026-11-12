@@ -209,6 +209,10 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "resolve-integration-conflict": { call: (s, c) => s.resolveIntegrationConflict(c), target: "group", payload: {} },
   // Tester follow-up E §5 (#241): the group acceptance's recheck (any) and waiver (a person) are group-targeted too.
   "recheck-acceptance": { call: (s, c) => s.recheckAcceptance(c), target: "group", payload: {} },
+  // Tester follow-up G spec §3.5: the requirement review's exits are group-targeted, so an archived group refuses them too.
+  "review-accept": { call: (s, c) => s.reviewAccept(c), target: "group", payload: { note: "n" } },
+  "review-rerun": { call: (s, c) => s.reviewRerun(c), target: "group", payload: { note: "n" } },
+  "review-fix": { call: (s, c) => s.reviewFix(c), target: "group", payload: { goal: "g" } },
   "waive-acceptance": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.waiveAcceptance(c)), target: "group", payload: { note: "the red test is a known flake" } },
   "resolve-folder-change": { call: (s, c) => s.resolveFolderChange(c), target: "group", payload: { action: "recheck" } },
   "multi-dir-landing": { call: (s, c) => s.multiDirLanding(c), target: "group", payload: { action: "retry-rest" } },

@@ -782,6 +782,22 @@ export const en = {
       boardFailed: "Group acceptance failed: {{command}}",
     },
     // Tester follow-up G spec §1.2, §1.4, §10.1: a task completed (or stopped) with no change, and its two actions.
+    // Tester follow-up G spec §3.3, §3.5: a requirement group's review and its exits.
+    review: {
+      heading: "Requirement review",
+      state: { pending: "review requested", reviewing: "reviewing", passed: "review passed", fixing: "a fix task is open for the review", "not-passed": "review not passed", accepted: "accepted as it is", "not-run": "review not run (no single tree)" },
+      verdict: { met: "met", "not-met": "not met", "cannot-judge": "cannot judge" },
+      criteria: "Acceptance criteria",
+      acceptedBy: "Accepted by {{by}}: {{note}}",
+      fix: "Fix in this group",
+      rerun: "Review again",
+      accept: "Accept as it is",
+      goal: "What the fix task should do (at most 4096 bytes)",
+      note: "Note (at most 2048 bytes)",
+      send: "Send",
+      cancel: "Cancel",
+      board: "Requirement review: {{state}}",
+    },
     noChange: {
       chip: "no change",
       chipNth: "no change · time {{n}}",
@@ -2612,6 +2628,7 @@ export const enErrors: Record<string, string> = {
   "task-has-no-loop-plan": "This task has no loop plan.",
   "task-loop-version-conflict": "The loop plan changed after you started your draft. Read it again, then submit.",
   "task-run-moved": "This task has run again since you looked ({{detail}} is no longer its current run). Read the group again, then decide.",
+  "requirement-review-not-open": "The requirement review has no exit open now ({{detail}}): accept, re-run and fix answer a review that did not pass.",
   "no-change-not-acceptable": "This task cannot be accepted as no change now ({{detail}}). Accept as no change is for a task stopped with no change on its current run.",
   "task-not-reopenable": "This task cannot be reopened now ({{detail}}). Reopen is for a task that completed (or stopped) with no change on its current run.",
   "task-not-retryable": "This task cannot be retried now ({{detail}}). Retry task is for a task whose run ended in a ccloop failure; a run blocked for another reason has Retry run.",

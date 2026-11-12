@@ -71,6 +71,9 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle
 - `orca group resolve-integration <group>` — approve an agent resolving the group's integration conflict
 - `orca group recheck <group>` — run a failed group acceptance again on the same tip (a flaky check)
+- `orca group review-accept <group> --note <note>` — accept a group whose requirement review did not pass as it is, with why
+- `orca group review-rerun <group> --note <note>` — run a group's requirement review again, telling the reviewer what to look at
+- `orca group review-fix <group> --goal <goal> [--path <path>]` — open a fix task in the group for what its requirement review found (does not use up an automatic round)
 - `orca group waive-acceptance <group> --note <note>` — accept a group whose acceptance failed on its tip anyway (a person's act) (person token)
 - `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
 - `orca group multi-land <group> [--retry-rest] [--mark-resolved]` — answer a stopped multi-directory landing: --retry-rest or --mark-resolved (person token)

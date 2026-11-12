@@ -30,6 +30,7 @@ import { RunReason } from "./RunReason.js";
 import { RunOutputBound } from "./RunOutputBound.js";
 import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
 import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
+import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf, shownWorkStatus } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -842,6 +843,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {/* Tester follow-up E §5 (#241): a failed group acceptance, with Recheck, and Waive for an owner. */}
       <GroupAcceptanceProblem groupId={groupId} acceptance={view.summary.acceptance} roles={props.roles} archived={archived} revision={revision} onCommand={onCommand} />
+      {/* Tester follow-up G spec §3.3, §3.5: the requirement review and its exits. */}
+      <RequirementReviewPanel groupId={groupId} review={view.summary.requirementReview} archived={archived} revision={revision} onCommand={onCommand} />
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />

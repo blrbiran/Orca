@@ -262,6 +262,8 @@ export const durableCommandErrorStatuses = {
   "task-not-reopenable": 409,
   // Tester follow-up G spec §10.1: accept-no-change on a task that is not stopped as a provable no change (the detail says why).
   "no-change-not-acceptable": 409,
+  // Tester follow-up G spec §3.5: a review exit on a review that is not `not-passed` (the detail names its state).
+  "requirement-review-not-open": 409,
   // CLI v2 spec §14 R2: retry-task named a run that is no longer the task's current run (the detail names the run sent).
   "task-run-moved": 409,
   "saved-result-unavailable":409,

@@ -870,6 +870,10 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     // Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip, or accepted by a person.
     { path: "/api/control/groups/:groupId/acceptance/recheck", verb: "recheck-acceptance", target: fromParams },
     { path: "/api/control/groups/:groupId/acceptance/waive", verb: "waive-acceptance", target: fromParams },
+    // Tester follow-up G spec §3.5: under review/, not requirement/ (the requirement rows are the clarification's).
+    { path: "/api/control/groups/:groupId/review/accept", verb: "review-accept", target: fromParams },
+    { path: "/api/control/groups/:groupId/review/rerun", verb: "review-rerun", target: fromParams },
+    { path: "/api/control/groups/:groupId/review/fix", verb: "review-fix", target: fromParams },
     // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
     { path: "/api/control/groups/:groupId/folder-change", verb: "resolve-folder-change", target: fromParams },
     // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
@@ -1011,6 +1015,9 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;
           case "recheck-acceptance": service.recheckAcceptance(command); break;
           case "waive-acceptance": service.waiveAcceptance(command); break;
+          case "review-accept": service.reviewAccept(command); break;
+          case "review-rerun": service.reviewRerun(command); break;
+          case "review-fix": service.reviewFix(command); break;
           case "resolve-folder-change": service.resolveFolderChange(command); break;
           case "multi-dir-landing": service.multiDirLanding(command); break;
           case "archive-group": service.archiveGroup(command); break;

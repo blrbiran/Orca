@@ -245,6 +245,9 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
 | `POST groups/<groupId>/acceptance/recheck` | recheck-acceptance | `{}` |
+| `POST groups/<groupId>/review/accept` | review-accept | `{"note":"AC2 is out of scope after all"}` |
+| `POST groups/<groupId>/review/rerun` | review-rerun | `{"note":"look at docs/usage.md too"}` |
+| `POST groups/<groupId>/review/fix` | review-fix | `{"goal":"add the usage section the review asked for","paths":["README.md"]}` |
 | `POST groups/<groupId>/acceptance/waive` | waive-acceptance | `{"note":"the red test is the known flaky one; tracked in #12"}` |
 | `POST groups/<groupId>/folder-change` | resolve-folder-change | `{"action":"take-folder"}` |
 | `POST groups/<groupId>/multi-dir-landing` | multi-dir-landing | `{"action":"retry-rest"}` |

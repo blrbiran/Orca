@@ -328,7 +328,7 @@ export function fixTaskIdOf(store: ControlStore, groupId: string, roundNo: numbe
  * as its write set (the tasks' write sets when they name none), the tasks' allow/deny lists, the group's union of setup and
  * required checks; policies and verifier from the group's first task in plan order.
  */
-export function fixTaskContract(store: ControlStore, groupId: string, round: ReviewRound, criteria: ReadonlyArray<{ id: string; text: string }>, taskId: string, goal?: string) {
+export function fixTaskContract(store: ControlStore, groupId: string, round: ReviewRound, criteria: ReadonlyArray<{ id: string; text: string }>, taskId: string, goal?: string, paths?: readonly string[]) {
   const plan = readArchivedPlan(store, groupId);
   const appended = new Set(plan.appendedTaskIds ?? []);
   const tasks = plan.plan.tasks.filter((task) => !appended.has(task.taskId)).map((task) => readArchivedContract(store, groupId, task.taskId).contract);
@@ -339,7 +339,7 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
   const findings = unmet.map((c) => `- ${c.id} (${textOf(c.id)}): missing ${c.missing ?? "?"}${c.evidence.length === 0 ? "" : `; looked at ${c.evidence.map((e) => e.line === null ? e.path : `${e.path}:${e.line}`).join(", ")}`}`);
   const named = [...new Set(unmet.flatMap((c) => c.evidence.map((e) => e.path)))];
   const union = (lists: string[][]) => [...new Set(lists.flat())];
-  const targetPaths = named.length > 0 ? named : union(tasks.map((t) => t.context.targetPaths));
+  const targetPaths = paths !== undefined && paths.length > 0 ? [...new Set(paths)] : named.length > 0 ? named : union(tasks.map((t) => t.context.targetPaths));
   const commands = acceptanceCommands(store, groupId);
   const { setupCommands: _setup, ...context } = first.context;
   return taskContractSchema.parse({
@@ -354,7 +354,7 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
 }
 
 /** Appends the fix task in the caller's transaction (a savepoint: a refusal leaves nothing); `refused` says why it could not. */
-export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string): { taskId: string } | { refused: ReviewWhy } {
+export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string, paths?: readonly string[]): { taskId: string } | { refused: ReviewWhy } {
   const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
   const criteria = reviewInputsOf(store, groupId, body).criteria;
   const plan = readArchivedPlan(store, groupId);
@@ -364,7 +364,7 @@ export function openFixTask(store: ControlStore, groupId: string, round: ReviewR
   const grant = (readWork(store, groupId, first) as unknown as { grant: { work: Amount; handoff: Amount } }).grant;
   store.db.exec("SAVEPOINT review_fix");
   try {
-    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, goal), agentFrom: first,
+    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, goal, paths), agentFrom: first,
       work: { ...grant.work, tokens: grant.work.tokens ?? 0 } as Amount, handoff: grant.handoff, dependsOn: [] });
     store.db.exec("RELEASE review_fix");
     return { taskId };

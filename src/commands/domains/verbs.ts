@@ -221,6 +221,33 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   ];
 }
 
+/** Tester follow-up G spec §3.3: the requirement review as the group summary sends it. */
+export interface ReviewView {
+  state: string; why?: string; problem?: string; autoFixRounds?: number;
+  rounds: Array<{ roundNo: number; tip: string; result: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>; fixTaskId?: string }>;
+  accepted?: { by: string; note: string };
+}
+
+/**
+ * Tester follow-up G spec §3.3, §3.5: one line for a review that passed (or stands), and for one that did not pass its
+ * problem code, each criterion of its last round, and the three commands that answer it.
+ */
+export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
+  if (review === undefined) return [];
+  const last = review.rounds.at(-1);
+  if (review.state === "passed") return [`review: passed on ${(last?.tip ?? "?").slice(0, 12)} (round ${last?.roundNo ?? "?"})`];
+  if (review.state === "accepted") return [`review: accepted as it is by ${review.accepted?.by ?? "?"}: ${review.accepted?.note ?? ""}`];
+  if (review.state === "fixing") return [`review: fixing (task ${last?.fixTaskId ?? "?"}, round ${last?.roundNo ?? "?"})`];
+  if (review.state !== "not-passed") return [`review: ${review.state}${review.why === undefined ? "" : ` (${review.why})`}`];
+  return [
+    `problem: ${review.problem ?? `requirement-review-not-passed:${review.why ?? "?"}`}`,
+    ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
+    `next: orca group review-fix ${groupId} --goal '<what to fix>'`,
+    `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
+    `  or: orca group review-accept ${groupId} --note '<why accept as is>'`,
+  ];
+}
+
 /** A run as the group view lists it, for the empty-result lines. */
 export interface EmptyResultRun { runId?: unknown; taskId?: unknown; blockedReason?: unknown }
 
@@ -278,7 +305,8 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? noChangeLines(groupId, (b as { workItems?: NoChangeItem[] } | null)?.workItems ?? [], runs.filter((run) => current.has(run.runId))) : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
-    ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : [])]);
+    ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
+    ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : [])]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

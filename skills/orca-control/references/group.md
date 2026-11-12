@@ -209,6 +209,34 @@ run a failed group acceptance again on the same tip (a flaky check)
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca group review-accept <group> --note <note>`
+
+accept a group whose requirement review did not pass as it is, with why
+
+- What it does: sends control verb `review-accept`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--note <note>` (required): why the group is accepted as it is (at most 2048 bytes)
+
+## `orca group review-rerun <group> --note <note>`
+
+run a group's requirement review again, telling the reviewer what to look at
+
+- What it does: sends control verb `review-rerun`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--note <note>` (required): what the reviewer should look at (at most 2048 bytes)
+
+## `orca group review-fix <group> --goal <goal> [--path <path>]`
+
+open a fix task in the group for what its requirement review found (does not use up an automatic round)
+
+- What it does: sends control verb `review-fix`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--goal <goal>` (required): what the fix task should do (at most 4096 bytes)
+- `--path <path>` (repeatable): a file the fix task may write (default: the files the review named)
+
 ## `orca group waive-acceptance <group> --note <note>`
 
 accept a group whose acceptance failed on its tip anyway (a person's act)
