@@ -217,6 +217,7 @@ export const zh: Translation<typeof en> = {
   },
   // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
   transcript: {
+    producing: "正在产出，最近一次在 {{time}}",
     disclosure: "转录", region: "{{runId}} 的转录", refused: "转录读取被拒绝 · {{code}}",
     unsupported: "安装的 ccloop 版本过旧，不能记录转录。请在 Orca 目录运行 npm ci 并重启面板。", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
     callLine: "{{phase}} · 第 {{seq}} 次调用 · {{runtime}} · {{size}}", callLineOne: "{{phase}} · {{runtime}} · {{size}}", notRecorded: "未记录", live: "进行中", final: "已结束",
@@ -486,6 +487,10 @@ export const zh: Translation<typeof en> = {
       liveAgent: "{{installation}} · {{model}}",
       liveAgentDefault: "{{installation}} · 默认模型",
       liveTokens: "{{tokens}} token",
+      usagePhaseEnd: "截至 {{time}} 上一阶段结束时；该 agent 只在阶段结束时上报用量",
+      usagePhaseEndNone: "还没有阶段结束；该 agent 只在阶段结束时上报用量",
+      usageByKind: "按类别：输入 {{input}} / 输出 {{output}} / 缓存读取 {{cacheRead}}",
+      usageByKindWrite: "按类别：输入 {{input}} / 输出 {{output}} / 缓存读取 {{cacheRead}} / 缓存写入 {{cacheWrite}}",
       liveElapsed: "{{minutes}} 分钟",
       start: "开始",
       startQueued: "已排队，前面有 {{ahead}} 个；有空位就自动开跑。",
@@ -996,6 +1001,8 @@ export const zh: Translation<typeof en> = {
     handoffAt: "上下文达到多少 token 时交接（可选；留空则不设）",
     handoffUnset: "未设置",
     ledger: "已用 {{used}} · 已承诺 {{committed}} · 余量 {{reserve}}",
+    phaseEnd: " · 已用截至 {{time}} 上一阶段结束时：进行中的 run 只在阶段结束时上报用量",
+    phaseEndNone: " · 已用还不含进行中的 run：它们只在阶段结束时上报用量",
     deficit: " · 缺口 {{deficit}}",
     usageUnknown: " · 用量未知",
     usageIncomplete: " · 用量不完整：{{count}} 个运行被不计量放行",

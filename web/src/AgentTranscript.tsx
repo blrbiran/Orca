@@ -19,6 +19,7 @@ import type { JSX } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { currentLanguage } from "./i18n.js";
+import { clockText } from "./usageNotes.js";
 import { controlFailureFrom, fetchRunTranscripts, fetchTranscriptPage, fetchTranscriptWindow, type TranscriptWindowAsk } from "./controlApi.js";
 import type { RunTranscriptsV1, TranscriptCallV1, TranscriptEventV1, TranscriptWindowV1 } from "./controlTypes.js";
 
@@ -468,6 +469,9 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
           {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
           {listing !== null && !listing.available && <p className="detail-note">{t("transcript.unsupported")}</p>}
           {listing !== null && listing.available && listing.calls.length === 0 && <p>{t("transcript.none")}</p>}
+          {/* Tester #285: a live call's transcript still being written is the sign the run is working, whatever its activity row says. */}
+          {listing?.available === true && listing.lastTranscriptAt !== undefined && listing.calls.some((call) => !call.final) &&
+            <p className="detail-note" data-testid="transcript-producing">{t("transcript.producing", { time: clockText(listing.lastTranscriptAt, true) })}</p>}
           {listing !== null && listing.available && attempts.map((attempt) => (
             <div key={attempt}>
               <h6>{t("transcript.attempt", { attempt })}</h6>

@@ -114,3 +114,15 @@ export function runNumberOf(view: GroupViewV1, run: RunViewV1, createdUpTo: read
   const lineage = view.workItems.find((item) => item.taskId === run.taskId)?.lineageRunIds ?? [];
   return lineageRunNumber(lineage, [run]) === 1 ? lineageRunNumber(lineage, createdUpTo) : 0;
 }
+
+/** Tester #285: a run not yet ended (issue-fixes spec §5.2) and not settled; its usage may still grow. */
+const SETTLED = new Set(["settled", "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"]);
+export const runUnderWay = (run: RunViewV1): boolean => run.endedAt == null && !SETTLED.has(run.state);
+/** Tester #285: a run under way whose agent reports usage only when a phase ends, so its `used` lags. */
+export const usesPhaseEndUsage = (run: RunViewV1): boolean => runUnderWay(run) && run.usageObservation === "phase-end";
+/** The group's runs under way that report at phase end, and the newest time any of them booked usage. */
+export function phaseEndRuns(view: GroupViewV1): { count: number; asOf: number | null } {
+  const runs = view.runs.filter(usesPhaseEndUsage);
+  const times = runs.flatMap((run) => (run.usageAt === undefined ? [] : [run.usageAt]));
+  return { count: runs.length, asOf: times.length === 0 ? null : Math.max(...times) };
+}

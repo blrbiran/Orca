@@ -476,6 +476,10 @@ export type RunViewV1 = {
   startedAt?: number | null;
   endedAt?: number | null;
   lastActivityAt?: number | null;
+  /** Tester #285: phase-end -- \`used\` is the last phase end's figure, booked at \`usageAt\`; the split by kind once known. */
+  usageObservation?: "realtime" | "phase-end" | "unavailable";
+  usageAt?: number;
+  usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
   createdOrdinal?: number;
   /** Debug task plan Task 13: a debug run's reproduce-first check, in progress or skipped with the agent's reason. */
@@ -1392,7 +1396,9 @@ export type FlowJournalV1 = { schema: "orca-flow-journal-v1"; flowRunId: string;
 /** Live transcript spec §12.3: one call of a run's transcripts listing (src/agentTranscript/listing.ts). No path, ever. */
 export interface TranscriptCallV1 { attempt: number; phase: string; seq: number; runtime: "claude" | "codex" | "omp" | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string }
 /** GET /api/control/runs/:runId/transcripts. `available: false` -- the ccloop records no transcripts (`reason`). */
-export interface RunTranscriptsV1 { schema: "orca-run-transcripts-v1"; runId: string; available: boolean; reason?: string; calls: TranscriptCallV1[] }
+export interface RunTranscriptsV1 { schema: "orca-run-transcripts-v1"; runId: string; available: boolean; reason?: string; calls: TranscriptCallV1[];
+  /** Tester #285: the newest write to the run's transcripts in its run directory (epoch ms); absent with none there. */
+  lastTranscriptAt?: number }
 /** A served field: its redacted head, its full length in code units, and whether expanding shows more. */
 export interface TranscriptFieldV1 { text: string; length: number; more: boolean }
 /** One normalized event (spec §5.1, §10.3); `at`/`i` address it for expanding. */

@@ -47,6 +47,7 @@ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, expectedText, progressText } from "./TaskDetail.js";
 import { NoChangeChip } from "./NoChange.js";
 import { RunTranscript } from "./AgentTranscript.js";
+import { phaseEndNote, usageByKind } from "./usageNotes.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
@@ -145,7 +146,7 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; a
     ...(run.agent === undefined ? [] : [run.agent.model === null
       ? t("control.group.liveAgentDefault", { installation: run.agent.installation })
       : t("control.group.liveAgent", { installation: run.agent.installation, model: run.agent.model })]),
-    t("control.group.liveTokens", { tokens: shortTokens(run.used.tokens) }),
+    t("control.group.liveTokens", { tokens: shortTokens(run.used.tokens) }) + ((note) => (note === null ? "" : ` (${note})`))(phaseEndNote(run)),
     ...(run.startedAt != null ? [t("control.group.liveElapsed", { minutes: Math.max(0, Math.floor(((run.endedAt ?? now) - run.startedAt) / 60_000)) })] : []),
   ].join(" · ");
   return <>
@@ -926,7 +927,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               </td>
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
               {/* Spec 2026-11-03 soft-mode approximate usage: a booked floor is said to be one, never shown as a reported figure. */}
-              <td><Tokens n={run.used.tokens} />{run.usageApproximate !== undefined && <span className="badge" data-tone="warn" data-testid="usage-approximate">{run.usageApproximate.floorTokens === null ? t("control.group.usageApproximateNone") : t("control.group.usageApproximate")}</span>}</td>
+              <td><Tokens n={run.used.tokens} />{run.usageApproximate !== undefined && <span className="badge" data-tone="warn" data-testid="usage-approximate">{run.usageApproximate.floorTokens === null ? t("control.group.usageApproximateNone") : t("control.group.usageApproximate")}</span>}
+                {phaseEndNote(run) !== null && <div className="detail-note" data-testid="usage-phase-end">{phaseEndNote(run)}</div>}</td>
               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
             </tr>
             </Fragment>
@@ -938,6 +940,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <div key={run.runId} id={`run-detail-${run.runId}`} data-run-detail={run.runId} className="min-w-0 rounded-card border border-line bg-well p-3">
           <h4 className="mt-0">{t("control.group.runDetail", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}</h4>
           <RunPostMergeCheck check={run.postMergeCheck} />
+          {usageByKind(run) !== null && <p className="num" data-testid="usage-by-kind">{usageByKind(run)}</p>}
           <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen />
           <EvidenceLink runId={run.runId} />
           {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}

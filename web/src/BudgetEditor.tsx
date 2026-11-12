@@ -17,6 +17,8 @@ import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import i18n, { enumText, refusalText } from "./i18n.js";
 import { TokenInput, parseTokens, shortTokens } from "./TokenInput.js";
+import { phaseEndRuns } from "./runFacts.js";
+import { clockText } from "./usageNotes.js";
 import {
   DIMENSIONS, MIN_APPLIED_WORK_ATTEMPTS, adviceOf as sharedAdviceOf, appliedWorkAttempts, budgetFieldKey, estimateIsAdvisory, loopOwned, suggestedLoopActions as sharedSuggestedLoopActions,
   suggestedOperations as sharedSuggestedOperations, suggestionActions as sharedSuggestionActions, targetOf,
@@ -504,6 +506,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {view.ledger.budgetDeficit.tokens > 0 ? t("budget.deficit", { deficit: shortTokens(view.ledger.budgetDeficit.tokens) }) : ""}
         {view.ledger.usageUnknown ? t("budget.usageUnknown") : ""}
         {view.ledger.unmeteredRuns > 0 ? t("budget.usageIncomplete", { count: view.ledger.unmeteredRuns }) : ""}
+        {/* Tester #285: while a run whose agent reports at phase end is under way, `used` lags; said so. */}
+        {((lag) => lag.count === 0 ? "" : lag.asOf === null ? t("budget.phaseEndNone") : t("budget.phaseEnd", { time: clockText(lag.asOf) }))(phaseEndRuns(view))}
       </p>
       {!archived && <button type="button" disabled={!editable || hasBadDraft(drafts) || editedOperations(view, drafts).length === 0} onClick={submitEdit}>{t("budget.save")}</button>}
       {estimator !== null && !archived && <button type="button" disabled={estimator.profile === null} onClick={submitEstimate}>{t("budget.reestimate")}</button>}

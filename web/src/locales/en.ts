@@ -361,6 +361,7 @@ export const en = {
   },
   // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
   transcript: {
+    producing: "producing output, last at {{time}}",
     disclosure: "Transcript", region: "Transcript of {{runId}}", refused: "transcript refused · {{code}}",
     unsupported: "The installed ccloop is too old to record transcripts. Run npm ci in the Orca checkout and restart the panel.", none: "no agent call listed yet", attempt: "attempt {{attempt}}",
     callLine: "{{phase}} · call {{seq}} · {{runtime}} · {{size}}", callLineOne: "{{phase}} · {{runtime}} · {{size}}", notRecorded: "not recorded", live: "live", final: "finished",
@@ -619,6 +620,10 @@ export const en = {
       liveAgent: "{{installation}} · {{model}}",
       liveAgentDefault: "{{installation}} · default model",
       liveTokens: "{{tokens}} tokens",
+      usagePhaseEnd: "as of the last phase end at {{time}}; this agent reports usage only when a phase ends",
+      usagePhaseEndNone: "no phase has ended yet; this agent reports usage only when a phase ends",
+      usageByKind: "usage by kind: input {{input}} / output {{output}} / cache read {{cacheRead}}",
+      usageByKindWrite: "usage by kind: input {{input}} / output {{output}} / cache read {{cacheRead}} / cache write {{cacheWrite}}",
       liveElapsed: "{{minutes}} min",
       start: "Start",
       startQueued: "Queued: {{ahead}} ahead; it starts when a slot frees.",
@@ -1148,6 +1153,8 @@ export const en = {
     handoffAt: "Hand off at context tokens (optional; blank keeps it unset)",
     handoffUnset: "not set",
     ledger: "used {{used}} · committed {{committed}} · reserve {{reserve}}",
+    phaseEnd: " · used is as of the last phase end at {{time}}: a run under way reports usage only when a phase ends",
+    phaseEndNone: " · used does not count the runs under way yet: they report usage only when a phase ends",
     deficit: " · deficit {{deficit}}",
     usageUnknown: " · usage unknown",
     usageIncomplete: " · usage incomplete: {{count}} run(s) released unmetered",
