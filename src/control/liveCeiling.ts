@@ -110,11 +110,21 @@ export function groupHeadroom(group: GroupRecord): number | null {
  * Every group that has held a ceiling: re-derive its reserve from its active runs (a run that ended since gives its
  * outstanding part back here). Answers the groups whose reserve moved. Call inside a transaction.
  */
+export function ceilingGroupIds(store: ControlStore): string[] {
+  // Backlog #3: a group row that does not read is skipped here; it is named by the step that owns it, never by this sweep.
+  const ids: string[] = [];
+  for (const row of store.db.prepare("SELECT id,body FROM groups WHERE body LIKE '%\"liveCeilingReserved\"%' ORDER BY id").all()) {
+    try { if ((JSON.parse(String(row.body)) as { liveCeilingReserved?: unknown }).liveCeilingReserved !== undefined) ids.push(String(row.id)); } catch { continue; }
+  }
+  return ids;
+}
+
 export function refreshCeilingReserves(store: ControlStore): string[] {
   const moved: string[] = [];
-  for (const row of store.db.prepare("SELECT id FROM groups WHERE json_extract(body,'$.liveCeilingReserved') IS NOT NULL ORDER BY id").all()) {
-    const group = readGroup(store, String(row.id));
-    if (!syncCeilingReserve(store, group)) continue;
+  for (const groupId of ceilingGroupIds(store)) {
+    // Reads only, before any write: a row that does not read skips its group, never the round (backlog #3).
+    let group: GroupRecord;
+    try { group = readGroup(store, groupId); if (!syncCeilingReserve(store, group)) continue; } catch { continue; }
     syncWebBudget(store, group, null);
     saveGroup(store, group);
     moved.push(group.groupId);

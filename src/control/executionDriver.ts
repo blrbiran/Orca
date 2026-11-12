@@ -1679,10 +1679,21 @@ export function stepOf(run: DriverRun): DriveStep {
  * written; only ccloop's answer (or its stale refusal: it already holds that revision or a newer one) marks it delivered.
  * Any other failure leaves it for the next pass, the reservation held.
  */
+function undeliveredCeilings(store: ControlStore): boolean {
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE active=1 AND body LIKE '%\"liveCeiling\"%'").all()) {
+    try {
+      const ceiling = liveCeilingOf(JSON.parse(String(row.body)));
+      if (ceiling !== null && ceiling.deliveredRevision < ceiling.revision) return true;
+    } catch { continue; } // a run row that does not read is its own step's failure, never the round's
+  }
+  return false;
+}
+
 export async function deliverLiveCeilings(deps: ExecutionDriverDeps): Promise<boolean> {
   let delivered = false;
-  for (const row of deps.store.db.prepare("SELECT id FROM runs WHERE active=1 AND json_extract(body,'$.liveCeiling') IS NOT NULL ORDER BY id").all()) {
-    const run = readDriverRun(deps.store, String(row.id));
+  for (const row of deps.store.db.prepare("SELECT id FROM runs WHERE active=1 AND body LIKE '%\"liveCeiling\"%' ORDER BY id").all()) {
+    let run: DriverRun;
+    try { run = readDriverRun(deps.store, String(row.id)); } catch { continue; }
     const ceiling = liveCeilingOf(run);
     if (ceiling === null || ceiling.deliveredRevision >= ceiling.revision || run.state !== "accepted" || run.drive?.envelopeHash == null) continue;
     const port = portFor(deps, run);
@@ -1881,7 +1892,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       if (write(deps, () => raiseCeilings(deps.store, (deps.now?.() ?? new Date()).getTime())).length > 0) progressed = true;
     }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return false; throw error; }
-    if (await deliverLiveCeilings(deps)) progressed = true;
+    // Only awaited when a ceiling waits to be told: an idle pass reaches its runs in the same tick, as before.
+    if (undeliveredCeilings(deps.store) && await deliverLiveCeilings(deps)) progressed = true;
     for (const runId of visitOrder(deps.store)) {
       if (context.stopped) break;
       // #192: a run settling on the lane is the lane's until its step E answered.

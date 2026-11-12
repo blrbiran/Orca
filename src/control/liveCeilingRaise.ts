@@ -1,6 +1,6 @@
 import { syncWebBudget } from "./budget.js";
 import { expectationModelApplies, hardCapOf } from "./expectationModel.js";
-import { groupHeadroom, liveCeilingOf, pauseLineOf, runCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
+import { ceilingGroupIds, groupHeadroom, liveCeilingOf, pauseLineOf, runCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
 import { readGroup, readWork, saveGroup } from "./queries.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { capStatuses } from "./spendCaps.js";
@@ -79,9 +79,10 @@ export function applyCeilingRaises(store: ControlStore, groupId: string, raises:
 /** Every expectation-model group that holds a ceiling: plan and write its raises. Answers the runs raised. */
 export function raiseCeilings(store: ControlStore, at: number): string[] {
   const raised: string[] = [];
-  for (const row of store.db.prepare("SELECT id FROM groups WHERE json_extract(body,'$.liveCeilingReserved') IS NOT NULL ORDER BY id").all()) {
-    const groupId = String(row.id);
-    const raises = planCeilingRaises(store, groupId, at);
+  for (const groupId of ceilingGroupIds(store)) {
+    // Planning only reads: a row that does not read skips its group, never the round (backlog #3).
+    let raises: CeilingRaise[];
+    try { raises = planCeilingRaises(store, groupId, at); } catch { continue; }
     applyCeilingRaises(store, groupId, raises);
     raised.push(...raises.map(raise => raise.runId));
   }
