@@ -126,7 +126,12 @@ function readGroupAuthority(store: ControlStore, groupId: string): z.infer<typeo
   return parsed.data;
 }
 
-export interface ArchivedPlanAuthority { groupId: string; graphVersion: number; planHash: string; canonicalJson: string; plan: ControlPlanV1 }
+/**
+ * `plan.tasks` holds the archived plan's tasks and, after them in taskId order, any task appended to the confirmed group
+ * (tester follow-up G spec §3.4, groupTaskAppend.ts); `canonicalJson` and `planHash` stay the archived plan's own, so
+ * every estimate and hash made from it still reads. `appendedTaskIds` names the appended ones (absent: none).
+ */
+export interface ArchivedPlanAuthority { groupId: string; graphVersion: number; planHash: string; canonicalJson: string; plan: ControlPlanV1; appendedTaskIds?: string[] }
 
 export function readArchivedPlan(store: ControlStore, groupId: string, canonicalRecords?: ReadonlyMap<string, string>): ArchivedPlanAuthority {
   // A supplied request-local batch is complete authority: absence refuses, never falls back to per-task SQL.
@@ -146,11 +151,36 @@ export function readArchivedPlan(store: ControlStore, groupId: string, canonical
         || sha256Canonical(contract) !== task.originalContractHash) return recoveryBlocked();
       if (record(task.originalContractHash) !== task.originalContractCanonicalJson) return recoveryBlocked();
     }
-    return { groupId, graphVersion: group.graphVersion, planHash, canonicalJson, plan };
+    // Tester follow-up G spec §3.4: tasks appended to the confirmed group, each checked as an archived task is.
+    const appended = appendedTasksOf(group);
+    if (appended.length === 0) return { groupId, graphVersion: group.graphVersion, planHash, canonicalJson, plan };
+    const known = new Set(plan.tasks.map((task) => task.taskId));
+    for (const task of appended) {
+      const contract = taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson));
+      if (known.has(task.taskId) || contract.objective.taskId !== task.taskId
+        || canonicalBytes(contract).toString("utf8") !== task.originalContractCanonicalJson
+        || sha256Canonical(contract) !== task.originalContractHash
+        || record(task.originalContractHash) !== task.originalContractCanonicalJson) return recoveryBlocked();
+      known.add(task.taskId);
+    }
+    const tasks = [...plan.tasks, ...appended].sort((left, right) => (left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0));
+    return { groupId, graphVersion: group.graphVersion, planHash, canonicalJson, plan: { ...plan, tasks }, appendedTaskIds: appended.map((task) => task.taskId) };
   } catch (error) {
     if (error instanceof ControlError && error.code === "recovery-blocked") throw error;
     return recoveryBlocked();
   }
+}
+
+const appendedTaskSchema = z.object({
+  taskId: idSchema, dependencyTaskIds: z.array(idSchema), targetVersion: safeInteger.positive(),
+  originalContractHash: hashSchema, originalContractCanonicalJson: z.string().min(1),
+}).strict();
+/** The group body's appended tasks (groupTaskAppend.ts); a list that does not parse blocks by name. */
+function appendedTasksOf(group: unknown): Array<z.infer<typeof appendedTaskSchema>> {
+  const value = (group as { appendedTasks?: unknown }).appendedTasks;
+  if (value === undefined) return [];
+  const parsed = z.array(appendedTaskSchema).safeParse(value);
+  return parsed.success ? parsed.data : recoveryBlocked();
 }
 
 export function readArchivedContract(store: ControlStore, groupId: string, taskId: string): {
@@ -340,7 +370,9 @@ export function decodeEstimateRecord(estimateId: string, row: Readonly<Record<st
     || (estimate.state === "blocked-capability" && !["estimate-blocked-capability", "estimate-capability-degraded"].includes(estimate.reasonCode ?? "")
       && !rejectedEstimatorSelection(estimate))) return recoveryBlocked();
   if (estimate.output) {
-    const expectedTaskIds = archivedPlan.plan.tasks.map(task => task.taskId);
+    // Tester follow-up G spec §3.4: an estimate was made for the archived plan, never for a task appended after confirm.
+    const appended = new Set(archivedPlan.appendedTaskIds ?? []);
+    const expectedTaskIds = archivedPlan.plan.tasks.map(task => task.taskId).filter(taskId => !appended.has(taskId));
     if (estimate.output.tasks.map(task => task.taskId).join("\0") !== expectedTaskIds.join("\0")) return recoveryBlocked();
   }
   return estimate;
