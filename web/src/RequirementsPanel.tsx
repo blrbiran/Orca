@@ -67,18 +67,37 @@ type ModelLists = { models?: (installationId: string) => ModelListState | undefi
  * chosen. What "your default" and an empty box resolve to is the server's rule (web/src/requirementAgent.ts); without the
  * preferences it falls back to the installation's default, as before.
  */
+function selectionOf(agents: AgentsViewV1 | null, agent: string, lists: ModelLists, defaultOption: boolean) {
+  const prefs = lists.preferences ?? null;
+  // #246: "your default" with no agent named anywhere is the one installed agent, as requirement-open picks it.
+  const installed = defaultOption ? agents?.installations.map((row) => row.id) : undefined;
+  const resolved = prefs === null ? (agent === "" ? null : { agent, model: null }) : requirementSelection(prefs, agent === "" ? undefined : agent, installed);
+  // The installation the call will run on: the picked one, or "your default" resolved.
+  const runs = resolved === null ? undefined : agents?.installations.find((row) => row.id === resolved.agent);
+  const runsModel = runs === undefined ? null : resolved?.model ?? runs.defaults.model;
+  const listed = runs === undefined ? undefined : lists.models?.(runs.id);
+  return { prefs, resolved, runs, runsModel, listed };
+}
+
+/**
+ * Issue #220: the model requirement-open and requirement-set-agent would refuse as `agent-selection-invalid` -- the server's
+ * test is `selectorMissOf` (src/control/estimatorCompatibility.ts): a codex catalog that was read (cache or probe) and lists
+ * models, but not this one. Null when the server would not refuse it on that ground, including a catalog not read yet.
+ */
+export function refusedModel(agents: AgentsViewV1 | null, agent: string, model: string, lists: ModelLists, defaultOption = false): string | null {
+  const { runsModel, listed } = selectionOf(agents, agent, lists, defaultOption);
+  const sent = model.trim() === "" ? runsModel : model.trim();
+  if (sent === null || listed?.state !== "ready") return null;
+  const view = listed.view;
+  if (view.kind !== "codex" || view.source === "none" || view.models.length === 0) return null;
+  return view.models.some((row) => row.model === sent) ? null : sent;
+}
+
 function AgentModelFields(props: { agents: AgentsViewV1 | null; agent: string; model: string; name: string; defaultOption?: boolean;
   onAgent: (agent: string) => void; onModel: (model: string) => void } & ModelLists): JSX.Element {
   const { t } = useTranslation();
   const { agent } = props, model = props.model.trim();
-  const prefs = props.preferences ?? null;
-  // #246: "your default" with no agent named anywhere is the one installed agent, as requirement-open picks it.
-  const installed = props.defaultOption === true ? props.agents?.installations.map((row) => row.id) : undefined;
-  const resolved = prefs === null ? (agent === "" ? null : { agent, model: null }) : requirementSelection(prefs, agent === "" ? undefined : agent, installed);
-  // The installation the call will run on: the picked one, or "your default" resolved.
-  const runs = resolved === null ? undefined : props.agents?.installations.find((row) => row.id === resolved.agent);
-  const runsModel = runs === undefined ? null : resolved?.model ?? runs.defaults.model;
-  const listed = runs === undefined ? undefined : props.models?.(runs.id);
+  const { prefs, resolved, runs, runsModel, listed } = selectionOf(props.agents, agent, props, props.defaultOption === true);
   const onDefault = agent === "" && props.defaultOption === true;
   // "Your default" reads its agent's catalog as a pick does, so its warning can show without a pick.
   useEffect(() => { if (onDefault && runs !== undefined && props.models?.(runs.id) === undefined) props.onModels?.(runs.id); }, [onDefault, runs?.id]);
@@ -127,10 +146,12 @@ function SetAgent(props: { view: View; agents: AgentsViewV1 | null; onCommand: O
   const { t } = useTranslation();
   const [agent, setAgent] = useState(""), [model, setModel] = useState("");
   const chosenModel = model.trim();
+  const refused = agent === "" ? null : refusedModel(props.agents, agent, model, props);
+  const refusedId = `set-agent-refused-${props.view.summary.groupId}`;
   return (
     <form aria-label={t("requirements.setAgent.title")} onSubmit={(event) => {
       event.preventDefault();
-      if (agent === "") return;
+      if (agent === "" || refused !== null) return;
       props.onCommand({ verb: "requirement-set-agent", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view),
         payload: { agent: { agent, ...(chosenModel === "" ? {} : { model: chosenModel }) } } });
     }}>
@@ -139,7 +160,8 @@ function SetAgent(props: { view: View; agents: AgentsViewV1 | null; onCommand: O
       <AgentModelFields agents={props.agents} agent={agent} model={model} name={`set-agent-model-${props.view.summary.groupId}`}
         onAgent={(value) => { setAgent(value); setModel(""); }} onModel={setModel} preferences={props.preferences ?? null}
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
-      <button type="submit" disabled={agent === ""}>{t("requirements.setAgent.submit")}</button>
+      {refused !== null && <p role="note" data-tone="warn" id={refusedId}>{t("requirements.modelRefused", { model: refused })}</p>}
+      <button type="submit" disabled={agent === "" || refused !== null} aria-describedby={refused === null ? undefined : refusedId}>{t("requirements.setAgent.submit")}</button>
     </form>
   );
 }
@@ -199,10 +221,12 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
   }
   const { idea, tokens, language, agent } = draft;
   const model = (draft.model ?? "").trim();
+  // Issue #220: a model the server would refuse (agent-selection-invalid) blocks the submit here, with the reason beside it.
+  const refused = refusedModel(props.agents, agent, model, props, true);
   return (
     <form aria-label={t("requirements.newTitle")} onSubmit={(event) => {
       event.preventDefault();
-      if (repoId === "" || limitBad) return;
+      if (repoId === "" || limitBad || refused !== null) return;
       const groupId = `requirement-${nextCommandId()}`;
       // Issue #220: the model is sent only with the agent it was chosen for; empty keeps that agent's default.
       props.onCommand({ verb: "requirement-open", groupId, expectedRevision: 0, payload: {
@@ -232,7 +256,9 @@ function NewRequirement(props: { config: ControlConfigV1; agents: AgentsViewV1 |
         {...(props.models === undefined ? {} : { models: props.models })} {...(props.onModels === undefined ? {} : { onModels: props.onModels })} />
       {/* #81: the capability note folds away; the agent line above already says what the call will use. */}
       <details><summary>{t("requirements.capabilityHint")}</summary><p role="note">{t("requirements.capabilityNote")}</p></details>
-      <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad}>{t("requirements.open")}</button>
+      {refused !== null && <p role="note" data-tone="warn" id="new-requirement-refused" data-testid="requirement-model-refused">{t("requirements.modelRefused", { model: refused })}</p>}
+      <button type="submit" className="btn-primary" disabled={idea.trim() === "" || repoId === "" || limitBad || refused !== null}
+        aria-describedby={refused === null ? undefined : "new-requirement-refused"}>{t("requirements.open")}</button>
     </form>
   );
 }

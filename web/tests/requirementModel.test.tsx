@@ -103,3 +103,53 @@ describe("what 'Your default' and an empty model box will actually use (#220)", 
     expect(form.textContent).not.toContain("is not in its model list");
   });
 });
+
+/**
+ * Issue #220 residual: the form warned that the model was not listed, yet let the person submit into the server's certain
+ * refusal (agent-selection-invalid). The submit now follows the server's test (`selectorMissOf`,
+ * src/control/estimatorCompatibility.ts): a codex catalog that was read (cache or probe) and lists models but not the one
+ * that will be sent. Anything else -- another kind, no catalog source, an empty or unread list -- is not refused there, so
+ * the submit stays open.
+ */
+describe("a model the server would refuse is not submitted (#220)", () => {
+  const list = (models: string[], change: Partial<{ kind: string; source: string }> = {}): ModelListState =>
+    ({ state: "ready", view: { ...(ready(models) as { view: object }).view, ...change } } as never);
+  const submit = (form: HTMLElement) => within(form).getByRole("button", { name: "Start clarifying" }) as HTMLButtonElement;
+
+  // mutation: the submit's disabled ignores the refusal -> enabled -> red
+  // mutation: onSubmit does not check the refusal -> fireEvent.submit sends -> red
+  it("disables the submit with the reason while the picked agent's default is unlisted, and opens once a listed model is typed", async () => {
+    const { form, onCommand } = mount({ "my-coder": list(["mode-a"]) });
+    await pickOption(within(form).getByRole("combobox", { name: "Agent" }), "my-coder");
+    expect(submit(form).disabled).toBe(true);
+    expect(document.getElementById(submit(form).getAttribute("aria-describedby")!)!.textContent).toContain("Orca refuses gpt-6-sol here");
+    fireEvent.submit(form);
+    expect(onCommand).not.toHaveBeenCalled();
+    fireEvent.change(within(form).getByLabelText(/^Model/), { target: { value: "mode-a" } });
+    expect(submit(form).disabled).toBe(false);
+    expect(within(form).queryByTestId("requirement-model-refused")).toBeNull();
+    fireEvent.submit(form);
+    expect(onCommand).toHaveBeenCalledTimes(1);
+  });
+
+  // mutation: refusedModel checks only the typed box, not what an empty box resolves to -> "Your default" stays open -> red
+  it("refuses what 'Your default' resolves to, without a pick", () => {
+    const { form } = mount({ "my-coder": list(["mode-a"]) }, { defaultAgent: "my-coder", perAgent: { "my-coder": { model: "mode-b" } } });
+    expect(submit(form).disabled).toBe(true);
+    expect(within(form).getByTestId("requirement-model-refused").textContent).toContain("mode-b");
+  });
+
+  // mutation: the kind test is dropped -> the claude list refuses -> red
+  // mutation: the source test is dropped -> the source-none list refuses -> red
+  it.each([
+    ["another kind's list", list(["mode-a"], { kind: "claude" })],
+    ["a list with no source", list(["mode-a"], { source: "none" })],
+    ["an empty list", list([])],
+    ["a list still loading", { state: "loading" } as ModelListState],
+  ])("leaves the submit open for %s, as the server does", async (_name, state) => {
+    const { form } = mount({ "my-coder": state });
+    await pickOption(within(form).getByRole("combobox", { name: "Agent" }), "my-coder");
+    expect(submit(form).disabled).toBe(false);
+    expect(within(form).queryByTestId("requirement-model-refused")).toBeNull();
+  });
+});

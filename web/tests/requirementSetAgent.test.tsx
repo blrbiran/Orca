@@ -74,3 +74,23 @@ describe("re-selecting a requirement's agent where its round is blocked on it (#
     }
   });
 });
+
+/**
+ * Issue #220 residual: the server refuses a selector a read codex catalog does not list (`selectorMissOf`), so choosing
+ * one here cannot be sent; the button says why instead of earning the same block again.
+ */
+describe("a model the catalog does not list is not sent to requirement-set-agent (#220)", () => {
+  // mutation: SetAgent's submit ignores the refusal -> enabled, the submit sends -> red
+  it("disables Use this agent with the reason until a listed model is chosen", async () => {
+    const { onCommand, control } = mount(STALE, { "my-coder": ready(["tokenswitch/mode-a"]) });
+    const form = control()!;
+    await pickOption(within(form).getByRole("combobox", { name: "Agent" }), "my-coder");
+    const button = within(form).getByRole("button", { name: "Use this agent" });
+    expect(button).toHaveProperty("disabled", true);
+    expect(document.getElementById(button.getAttribute("aria-describedby")!)!.textContent).toContain("Orca refuses gpt-6-sol here");
+    fireEvent.submit(form);
+    expect(onCommand).not.toHaveBeenCalled();
+    fireEvent.change(within(form).getByLabelText(/^Model/), { target: { value: "tokenswitch/mode-a" } });
+    expect(button).toHaveProperty("disabled", false);
+  });
+});

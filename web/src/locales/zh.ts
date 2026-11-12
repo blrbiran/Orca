@@ -1120,6 +1120,7 @@ export const zh: Translation<typeof en> = {
     model: "模型",
     modelUnlisted: "这个模型不在该 agent 的模型列表里；provider 可能会拒绝。",
     defaultUnlisted: "该 agent 的默认模型 {{model}} 不在它的模型列表里；请从列表里选一个。",
+    modelRefused: "Orca 会拒绝 {{model}}：该 agent 的模型列表里没有它。请选一个列表里的模型再继续。",
     chooseAgent: "选择一个 agent",
     setAgent: {
       title: "换一个 agent",

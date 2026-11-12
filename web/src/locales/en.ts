@@ -1268,6 +1268,7 @@ export const en = {
     model: "Model",
     modelUnlisted: "This model is not in the agent's model list; the provider may refuse it.",
     defaultUnlisted: "This agent's default model {{model}} is not in its model list; choose one from the list.",
+    modelRefused: "Orca refuses {{model}} here: the agent's model list does not include it. Choose a listed model to continue.",
     chooseAgent: "Choose an agent",
     setAgent: {
       title: "Choose another agent",
