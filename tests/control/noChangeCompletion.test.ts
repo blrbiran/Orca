@@ -29,13 +29,19 @@ describe("a checked no-change task completes only by its authored declaration", 
     } finally { await t.h.dispose(); }
   }, 30000);
 
-  it("keeps the same empty result blocked without the declaration", async () => {
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — §10.1: a command-verified empty run asks the goal
+  // judge; D14's block remains only for criteria-review verdicts and partial multi runs. Without the declaration the
+  // same empty result is still not done and has no acceptance -- it waits for the judge instead of `empty-result`.
+  it("asks the goal judge without the declaration, and the task is not done until it answers", async () => {
     const t = await driverHarness([{ taskId: "a" }], { files: () => ({}) }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).drive?.cleanedUp === true);
       expect(t.h.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(`acceptance:${runId}`)).toBeUndefined();
       expect(workOf(t, runId)).toBe("blocked");
-      expect(t.body(runId).drive.blockedReason).toBe("empty-result");
+      expect(t.body(runId).drive.blockedReason).toBeNull();
+      expect(t.body(runId).drive.noChangeJudge).toMatchObject({ state: "pending" });
+      const judges = t.h.store.db.prepare("SELECT id FROM runs WHERE group_id='g' AND json_extract(body,'$.purpose')='no-change-judge'").all();
+      expect(judges.map((row) => String(row.id))).toEqual([t.body(runId).drive.noChangeJudge.runId]);
     } finally { await t.h.dispose(); }
   }, 30000);
 
