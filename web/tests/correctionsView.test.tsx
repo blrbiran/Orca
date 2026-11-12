@@ -234,6 +234,9 @@ describe("a debug group in its group view (Task 13)", () => {
     expect(screen.getByTestId("debug-fallback").textContent).toBe("没有使用原来的 agent：gone is not installed");
     expect(screen.getByTestId("debug-checks").textContent).toBe("检查：原合同的，加上人指定的。");
     expect(screen.getByTestId("debug-closing").textContent).toBe("调试运行落地时没能关闭它：ledger-conflict。");
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so
+    // the Runs table is read with its region (运行与证据) opened.
+    fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
     const repro = [...document.querySelectorAll('tr[data-run-id] [data-testid="debug-repro"]')].map((node) => node.textContent);
     // mutation: drop the run's debugRepro from the Runs table -> red here
     expect(repro).toEqual(["未复现：a naming taste is not testable", "正在进行先复现检查。"]);
