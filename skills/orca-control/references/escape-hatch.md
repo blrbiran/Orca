@@ -225,6 +225,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/resume-from-handoff` | resume-from-handoff | `{"selections":[{"taskId":"t1","predecessorRunId":"run1","checkpointId":"cp1"}]}` |
 | `POST groups/<groupId>/tasks/<taskId>/continue` | continue-task | `{"predecessorRunId":"run1","checkpointId":"cp1"}` |
 | `POST groups/<groupId>/tasks/<taskId>/live-notes` | add-live-note | `{"text":"the fixture lives in test/data"}` |
+| `POST groups/<groupId>/tasks/<taskId>/usage-pause` | usage-pause-decide | `{"decision":"continue","note":{"text":"finish the parser","scope":"next-attempt"}}` |
 | `POST groups/<groupId>/tasks/<taskId>/labels` | set-task-labels | `{"labels":["area:cli"],"baseLabelsVersion":0}` |
 | `POST groups/<groupId>/tasks/<taskId>/loop` | set-task-loop | `{"baseLoopVersion":0,"plan":"standard","inputs":{"goal":"g","successCondition":"s","targetPaths":["src"],"checks":["npm test"],"nonGoals":[],"relevantDocs":[],"protectedPaths":[],"maxFilesTouched":null},"work":{"tokens":500000,"activeMs":600000,"attempts":3}}` |
 | `POST groups/<groupId>/retry-task` | retry-task | `{"taskId":"t1"}` |

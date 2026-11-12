@@ -303,6 +303,9 @@ export const durableCommandErrorStatuses = {
   "hard-cap-legacy-group": 422,
   // Spec §2.2: in a follow-up G group an estimate's task work is an expectation too, whatever the group limit.
   "estimate-advisory-in-expectation-group": 422,
+  // Spec §2.5: a decision on a task that is not waiting at its pause line; a continue that would leave it no token to use.
+  "usage-pause-not-waiting": 409,
+  "usage-pause-no-headroom": 422,
   "hard-cap-needs-tokens": 422,
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,

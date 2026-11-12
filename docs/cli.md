@@ -110,6 +110,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca task retry <group> <task> [--agent <agent>] [--allow-observed-paths] [--work <work>]` — start again a task whose current run failed (the run read now is the one retried), optionally on another installation
 - `orca task continue <group> <task> [--note <note>] [--note-scope <note-scope>]` — continue a task's current run from its newest complete checkpoint; --note tells its agent something
 - `orca task note <group> <task> --text <text>` — add a note to a task's agent, delivered at its next step (plan, execute, verify, next attempt or continuation)
+- `orca task decide-usage <group> <task> --decision <decision> [--note <note>] [--note-scope <note-scope>]` — decide on a task waiting at its pause line: --decision continue (to the next line; --note tells its agent something) or stop
 - `orca task set-loop <group> <task> --file <file>` — set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}
 - `orca task set-labels <group> <task> [--label <label>] [--clear]` — set a task's labels (--label repeatable), or --clear back to the plan's
 - `orca task verify-saved-result <group> <task> [--work <work>]` — verify the current run's saved result instead of re-running (after run eligibility says eligible)

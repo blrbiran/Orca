@@ -21,6 +21,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "continue-task": "any",
   // Tester follow-up G Part 5: a person or an orchestrating agent (agent:<client>) may add a note to a task.
   "add-live-note": "any",
+  // Tester follow-up G spec §2.5: a person or an orchestrating agent decides, like continue-task.
+  "usage-pause-decide": "any",
   "recovery-retry": "any",
   "retry-task": "any",
   "verify-saved-result": "any",

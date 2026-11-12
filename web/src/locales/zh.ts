@@ -2338,6 +2338,8 @@ export const zhErrors: Record<string, string> = {
   "estimate-advisory-in-unlimited-group": "这个任务组没有 token 上限，估算的任务工作量只是预期，不作为上限。要给任务设上限，请自己填写它的 token 数。",
   "hard-cap-legacy-group": "只有预算改动之后创建的任务组才有任务硬上限；这个任务组里任务的 token 数本身就是上限。",
   "hard-cap-needs-tokens": "硬上限需要给任务工作填一个 token 数。",
+  "usage-pause-not-waiting": "这个任务没有在暂停线等待决定。",
+  "usage-pause-no-headroom": "继续的话这个任务没有 token 可用：任务组剩余太少。请先给任务组追加额度。",
   "estimate-advisory-in-expectation-group": "这个任务组里，估算的任务工作量只是预期，不作为上限。要给任务设上限，请自己填写 token 数并打开「硬上限」。",
   "estimate-in-flight": "有一份估算正在进行。",
   "estimate-stale": "这份估算早于一次做法修改，它的建议不能再用。",

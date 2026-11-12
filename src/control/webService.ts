@@ -10,7 +10,7 @@ import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResul
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
 import { expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
-import { continueGroupCapStops } from "./usagePause.js";
+import { applyUsagePauseDecide, continueGroupCapStops, type UsagePauseDecideCommand } from "./usagePause.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
 import { budgetAmountSchema, safeInteger } from "./schema.js";
@@ -2253,6 +2253,10 @@ export class WebControlService {
   }
   async continueTask(command: ContinueTaskCommand): Promise<WebCommandResult> {
     return applyContinueTask(this.stopDeps(), command) as WebCommandResult;
+  }
+  /** Tester follow-up G spec §2.5: continue or stop a task waiting at its pause line (usagePause.ts). */
+  usagePauseDecide(command: UsagePauseDecideCommand): WebCommandResult {
+    return applyUsagePauseDecide({ store: this.store, ...(this.deps.admissionGate === undefined ? {} : { admissionGate: this.deps.admissionGate }) }, command) as WebCommandResult;
   }
   /** Issue fixes spec §4.2(2): a task whose run ccloop ended failed back to ready (retryTask.ts). */
   async settleUnknownUsage(command: SettleUnknownUsageCommand): Promise<WebCommandResult> {

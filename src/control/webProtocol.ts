@@ -624,6 +624,8 @@ export const commandVerbSchema = z.enum([
   "continue-task",
   // Tester follow-up G Part 5: a note for a task's agent, delivered at its next step (any principal).
   "add-live-note",
+  // Tester follow-up G spec §2.5: continue or stop a task waiting at its pause line.
+  "usage-pause-decide",
   "recovery-retry",
   "retry-task",
   "verify-saved-result",
@@ -822,6 +824,8 @@ export const resumeFromHandoffPayloadSchema = z
 export const continueTaskPayloadSchema = z.object({ predecessorRunId: idSchema, checkpointId: idSchema, operatorNote: operatorNoteSchema.optional() }).strict();
 // Tester follow-up G Part 5 (ccloop C3 bounds a note at 1..2048 UTF-8 bytes): the note itself, nothing else.
 export const addLiveNotePayloadSchema = z.object({ text: z.string().min(1).refine((text) => Buffer.byteLength(text, "utf8") <= 2048, { message: "over-2048-utf8-bytes" }) }).strict();
+/** Tester follow-up G spec §2.5: a person's or an orchestrating agent's decision on a task waiting at its pause line. */
+export const usagePauseDecidePayloadSchema = z.object({ decision: z.enum(["continue", "stop"]), note: operatorNoteSchema.optional() }).strict();
 export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   // Spec 2026-10-27 single-call unknown usage §9 R1: a single call blocked on unknown usage is retried only with its grant's charge acknowledged.
   // Tester follow-up F §2 (#116, ledger C3): or with the call's observed floor charged instead (singleCallSettlement.ts).
@@ -1292,6 +1296,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-limit"), target: groupCommandTargetSchema, payload: setLimitPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("add-live-note"), target: taskCommandTargetSchema, payload: addLiveNotePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("usage-pause-decide"), target: taskCommandTargetSchema, payload: usagePauseDecidePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
@@ -1403,6 +1408,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .object({ ...effectiveCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema })
     .strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("add-live-note"), target: taskCommandTargetSchema, payload: addLiveNotePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("usage-pause-decide"), target: taskCommandTargetSchema, payload: usagePauseDecidePayloadSchema }).strict(),
   z
     .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
     .strict(),
@@ -2492,6 +2498,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("task-labels-set"), taskId: idSchema, labelsVersion: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("live-note-queued"), noteId: idSchema, taskId: idSchema }).strict(),
   z.object({ kind: z.literal("task-loop-set"), taskId: idSchema, loopVersion: positiveSafeInteger, proposalVersion: positiveSafeInteger }).strict(),
+  // Tester follow-up G spec §2.5: the decision taken and, for continue, the task's next pause line (whole-task tokens).
+  z.object({ kind: z.literal("usage-pause-decided"), taskId: idSchema, decision: z.enum(["continue", "stop"]), nextLine: safeInteger.nullable() }).strict(),
   z
     .object({
       kind: z.literal("task-continuing"),

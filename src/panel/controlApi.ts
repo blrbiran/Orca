@@ -807,6 +807,15 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
       },
     },
     {
+      // Tester follow-up G spec §2.5: continue or stop a task waiting at its pause line.
+      path: "/api/control/groups/:groupId/tasks/:taskId/usage-pause",
+      verb: "usage-pause-decide",
+      target: (params) => {
+        const groupId = idSchema.parse(params.groupId);
+        return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
+      },
+    },
+    {
       path: "/api/control/recovery/retry",
       verb: "recovery-retry",
       target: (_params, payload, store) => {
@@ -1021,6 +1030,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "resume-dispatch": await service.resumeDispatch(command); break;
           case "resume-from-handoff": await service.resumeFromHandoff(command); break;
           case "continue-task": await service.continueTask(command); break;
+          case "usage-pause-decide": service.usagePauseDecide(command); break;
           case "recovery-retry": await service.recoveryRetry(command); break;
           case "settle-unknown-usage": await service.settleUnknownUsage(command); break;
           case "verify-saved-result":await service.verifySavedResult(command);break;

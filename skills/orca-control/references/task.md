@@ -56,6 +56,23 @@ add a note to a task's agent, delivered at its next step (plan, execute, verify,
 - `<task>`: a task id or a unique prefix
 - `--text <text>` (required): the note, at most 2048 UTF-8 bytes
 
+## `orca task decide-usage <group> <task> --decision <decision> [--note <note>] [--note-scope <note-scope>]`
+
+decide on a task waiting at its pause line: --decision continue (to the next line; --note tells its agent something) or stop
+
+- What it does: sends control verb `usage-pause-decide`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<task>`: a task id or a unique prefix
+- `--decision <decision>` (required): continue|stop
+- `--note <note>`: a note the continued run's agent reads at its next plan/execute (at most 4096 bytes)
+- `--note-scope <note-scope>`: next-attempt (default) or remaining-attempts
+
+```
+orca task decide-usage g1 t1 --decision continue --note "finish the parser, skip the docs"
+orca task decide-usage g1 t1 --decision stop
+```
+
 ## `orca task set-loop <group> <task> --file <file>`
 
 set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}

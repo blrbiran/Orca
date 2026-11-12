@@ -516,6 +516,17 @@ export const WORK_ROWS: CommandDef[] = [
     flags: [{ name: "text", type: "string", required: true, summary: "the note, at most 2048 UTF-8 bytes" }],
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/live-notes`,
     payload: (c) => ({ text: String(c.args.flags.text) }) }),
+  // Tester follow-up G spec §2.5: a task waiting at its pause line (used ~10x its expectation) continues to the next line or stops.
+  verb({ domain: "task", action: "decide-usage", summary: "decide on a task waiting at its pause line: --decision continue (to the next line; --note tells its agent something) or stop", verb: "usage-pause-decide", positionals: [GROUP, TASK],
+    flags: [{ name: "decision", type: "string", required: true, summary: "continue|stop" }, ...NOTE_FLAGS],
+    route: (c) => `groups/${group(c)}/tasks/${task(c)}/usage-pause`,
+    payload: (c) => {
+      const decision = str(c, "decision");
+      if (decision !== "continue" && decision !== "stop") throw invalid("--decision wants continue|stop");
+      const note = operatorNote(c);
+      return { decision, ...(note === undefined ? {} : { note }) };
+    },
+    examples: ["orca task decide-usage g1 t1 --decision continue --note \"finish the parser, skip the docs\"", "orca task decide-usage g1 t1 --decision stop"] }),
   verb({ domain: "task", action: "set-loop", summary: "set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}", verb: "set-task-loop", positionals: [GROUP, TASK],
     flags: [{ name: "file", type: "string", required: true, summary: "the loop JSON" }],
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/loop`,

@@ -436,6 +436,8 @@ export function createStartingRun(
     grant.work.tokens = null;
     allowance = { ...allowance, grant: { ...allowance.grant, work: { ...allowance.grant.work, tokens: null } } };
   }
+  // Tester follow-up G spec §2.5: the note a pause decision left for the task's next run (usagePause.ts).
+  const pendingNote = (work as { pendingOperatorNote?: OperatorNote }).pendingOperatorNote;
   const runId = continuation ? continuation.pendingRunId : `run-${randomUUID()}`;
   const ownerToken = randomUUID();
   const binding = (slot: ProfileBindingV1): { profileId: string; profileHash: string } => ({ profileId: slot.profileId, profileHash: slot.profileHash });
@@ -464,7 +466,8 @@ export function createStartingRun(
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
     ...(continuation?.operatorNote !== undefined ? { operatorNote: continuation.operatorNote }
       // Tester follow-up G spec §1.4: a reopened task's note reaches its next run as the operator note (reopenTask.ts).
-      : (work as { reopenNote?: OperatorNote }).reopenNote !== undefined ? { operatorNote: (work as { reopenNote?: OperatorNote }).reopenNote } : {}),
+      : (work as { reopenNote?: OperatorNote }).reopenNote !== undefined ? { operatorNote: (work as { reopenNote?: OperatorNote }).reopenNote }
+      : pendingNote !== undefined ? { operatorNote: pendingNote } : {}),
     continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
     ...(ceiling === null ? {} : { liveCeiling: { revision: 1, tokens: ceiling.tokens, cause: ceiling.cause, deliveredRevision: 0 } }),
@@ -483,6 +486,7 @@ export function createStartingRun(
   const record = readWork(store, groupId, target.workItemId) as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; claimOrdinal: number; lineageRunIds?: string[] };
   delete (record as {fundingReleased?:boolean}).fundingReleased;
   delete (record as {reopenNote?:OperatorNote}).reopenNote;
+  delete (record as {pendingOperatorNote?:unknown}).pendingOperatorNote;
   record.status = "running"; record.currentRunId = runId; record.pendingRunId = null; record.claimOrdinal = claimOrdinal;
   record.lineageRunIds = [...new Set([...(record.lineageRunIds ?? []), runId])].sort();
   saveWork(store, groupId, record as never);

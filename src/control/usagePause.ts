@@ -1,9 +1,17 @@
 import { recordActivity } from "./activity.js";
 import { syncWebBudget } from "./budget.js";
 import type { ExecutionReport } from "./executionPort.js";
-import { groupHeadroom, pauseLineOf, syncCeilingReserve } from "./liveCeiling.js";
+import { groupHeadroom, pauseLineOf, pauseStateOf, syncCeilingReserve } from "./liveCeiling.js";
 import { readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import type { ControlStore } from "./store.js";
+import type { AdmissionGate } from "./admissionGate.js";
+import { applyWebCommand } from "./commandLedger.js";
+import { commandPrincipalFor } from "./commandClient.js";
+import { ControlError } from "./errors.js";
+import { pauseLineFor, taskExpectation } from "./expectationModel.js";
+import { refuseClarifying } from "./requirementRecords.js";
+import { commandSuccess, readStopIntent } from "./stopIntent.js";
+import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
 /**
  * Tester follow-up G spec §2.1 / §2.5 (plan Part B, O4, D3): what a run ccloop stopped at its live ceiling becomes. The run
@@ -66,6 +74,58 @@ export function classifyCeilingStop(store: ControlStore, run: { runId: string; g
   const after = readGroup(store, run.groupId);
   if (!after.stopped && (after as { status?: string }).status !== "blocked") { (after as { status?: string }).status = "running"; saveGroup(store, after); }
   return outcome;
+}
+
+export type UsagePauseDecideCommand = Extract<RawAuthorityCommandV1, { verb: "usage-pause-decide" }>;
+
+/**
+ * Spec §2.5 (plan O5): a person or an orchestrating agent decides on a task waiting at its pause line.
+ * - continue: the next line is pauseLineFor's next multiple (expectationModel.ts states the formula), refused
+ *   usage-pause-no-headroom when it would not let the task use one more token; the task is ready again and continues
+ *   from its stopped run, the optional note delivered to that run as its operator note.
+ * - stop: the task ends stopped (`usageStopped`, still blocked); the group and its other tasks go on.
+ */
+export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate?: AdmissionGate }, command: UsagePauseDecideCommand): CommandSuccessV1 | CommandErrorBodyV1 {
+  const { store } = deps;
+  const release = deps.admissionGate?.enter();
+  try {
+    return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(store, {
+      rawCommand: command,
+      expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: context => {
+        if (command.target.kind !== "task") throw new ControlError("control-target-not-allowed");
+        const { groupId, taskId } = command.target;
+        refuseClarifying(store, groupId);
+        const group = readGroup(store, groupId);
+        if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("group-stopped");
+        const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown> & { status: string; usagePause?: { expectationTokens: number | null } };
+        if (work.usagePause === undefined || work.status !== "blocked") throw new ControlError("usage-pause-not-waiting", taskId);
+        const principal = commandPrincipalFor(command.commandId) ?? command.actorId;
+        const at = store.now();
+        const { decision, note } = command.payload;
+        let nextLine: number | null = null;
+        if (decision === "continue") {
+          const expectation = work.usagePause.expectationTokens ?? taskExpectation(store, groupId, work as never)?.tokens ?? null;
+          if (expectation === null) throw new ControlError("usage-pause-no-headroom", "no-expectation");
+          const state = pauseStateOf(work);
+          const used = taskWorkTokens(store, groupId, taskId);
+          const groupUsed = group.used.tokens;
+          nextLine = pauseLineFor({ expectationTokens: expectation, multiple: state.multiple + 1, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
+          if (nextLine <= used) throw new ControlError("usage-pause-no-headroom", `${nextLine}<=${used}`);
+          work.pauseLine = { multiple: state.multiple + 1, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed };
+          delete work.usagePause;
+          work.status = "ready";
+          if (note !== undefined) work.pendingOperatorNote = note; else delete work.pendingOperatorNote;
+        } else {
+          delete work.usagePause;
+          work.usageStopped = { at, principal, ...(note === undefined ? {} : { note: note.text }) };
+        }
+        saveWork(store, groupId, work as never);
+        recordActivity(store, { groupId, taskId, kind: "usage-pause-decided", body: { decision, nextLine, principal } });
+        return commandSuccess(context, { kind: "usage-pause-decided", taskId, decision, nextLine });
+      },
+    }).body;
+  } finally { release?.(); }
 }
 
 /**
