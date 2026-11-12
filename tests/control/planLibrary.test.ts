@@ -16,12 +16,14 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { applyPlanLibraryCommand, libraryEntryId, type PlanLibraryCommand } from "../../src/control/planLibrary/commands.js";
+import { groupSelectionPartials } from "../../src/control/agentFreeze.js";
 import { importControlPlanAsync, type ImportCommand } from "../../src/control/planImport.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { idSchema } from "../../src/control/schema.js";
 import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
 import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
+import { FIXTURE_AGENT_ID } from "./fixtures/agents.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -323,6 +325,36 @@ describe("plan-library-save from a requirement split (§5.3 (a), C8)", () => {
       const body = JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as Record<string, unknown>;
       x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...body, agentOverrides: { estimator: { agent: "codex", model: "gpt-x", contextWindow: null } } }));
       expect(savedAgent("save-seeded")).toEqual({ agent: "codex", model: "gpt-x" });
+    } finally { await x.dispose(); }
+  });
+
+  // Tester #164 (follow-up H): the ledger read "plan save records the selection; import still does not carry it". It
+  // does: the saved selection is the document's plan layer, which import writes into the new group's archived plan, so the
+  // group resolves it with no panel layer of its own and confirm validates it as any plan agent. This holds the whole
+  // chain for a requirement draft (the #250 seed), which until now was held only up to the saved document.
+  it("a group imported from a saved requirement draft resolves the requirement's agent with no set-agent of its own (#164)", async () => {
+    const { x, run } = await reviewed();
+    try {
+      const body = JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as Record<string, unknown>;
+      x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...body, agentOverrides: { estimator: { agent: FIXTURE_AGENT_ID, model: "saved-model", contextWindow: null } } }));
+      const draftHash = readDraft(x.store, "r", 1).draftHash!;
+      const saved = run(lib("save-seeded", "plan-library-save", { source: { kind: "requirement-draft", groupId: "r", draftNo: 1, draftHash }, name: "seeded" }));
+      expect(saved.error, JSON.stringify(saved)).toBeUndefined();
+      const imported = await importControlPlanAsync({
+        store: x.store, trustedConfig: { resolveTarget: () => { throw new ControlError("control-plan-rejected", "no-plan-files"); } },
+        resolveRepository: () => x.repo, profileRouter: x.deps.router,
+        defaults: () => ({ estimatorProfileId: "all", estimatorProfileHash: x.profile.profileHash, estimateMode: "soft" as const }),
+      }, {
+        schema: "orca-raw-command-v1", commandId: "import-r2", actorId: "human", expectedRevision: 0, verb: "import-plan",
+        target: { kind: "group", groupId: "r2" }, payload: { groupId: "r2", repoId: "repo", libraryEntry: { entryId: saved.result!.entryId!, sha256: saved.result!.sha256! } },
+      } as ImportCommand) as Answer;
+      expect(imported.error, JSON.stringify(imported)).toBeUndefined();
+      const fresh = JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r2'").get()!.body)) as { agentOverrides: object };
+      expect(fresh.agentOverrides).toEqual({});
+      // The operator's default names the same agent but no model, so only the carried selection gives "saved-model".
+      const slots = groupSelectionPartials(x.store, "r2", "human").slots.filter((slot) => slot.key.startsWith("task:"));
+      expect(slots.length).toBeGreaterThan(0);
+      for (const slot of slots) expect("resolved" in slot ? slot.resolved.partial : slot.code).toEqual({ agent: FIXTURE_AGENT_ID, model: "saved-model" });
     } finally { await x.dispose(); }
   });
 
