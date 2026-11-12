@@ -122,7 +122,8 @@ describe("a debug run's landing commit closes its correction (plan Task 9)", () 
       // M-9.1: the agent's suffix dropped -> red.
       expect(rows[0]!.chose).toBe(`a file lease${AGENT_WRITTEN}`);
       expect(git(t.repo, "rev-parse", `${drive.landedCommit}^2`)).toBe(drive.attemptSha);
-      expect(git(t.repo, "log", "-1", "--format=%s", drive.landedCommit)).toBe(`orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("ship" here), its run id an Orca-Run trailer.
+      expect(git(t.repo, "log", "-1", "--format=%s", drive.landedCommit)).toBe("ship");
       // Cross-plan resolution 3: copied into the mark by the landing's write, cleared from the run.
       expect(closingOf(t)).toEqual({ state: "written", relPath: `.decisions/${fixRunId}.jsonl`, fixRunId });
       expect(drive.stagedDebugClosing).toBe(null);
