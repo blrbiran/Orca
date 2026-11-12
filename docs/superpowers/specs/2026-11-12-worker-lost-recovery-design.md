@@ -112,3 +112,43 @@ waiting forever and is visible.
 Keeping the interrupted attempt's plan or worktree edits (ccloop does not keep them either); claude adapter writing a
 usage floor for a killed call (it has no source for it); single-call runs (separate path, already settled by
 `settleDeadSavedRecovery`-style handling where applicable — unchanged).
+
+
+## As built — ccloop half (§4), ccloop seat of Orca session `7e164691`, 2026-11-12
+
+Branch `h/ccloop-diagnostics-commits` in ccloop (worktree `.claude/worktrees/h-ccloop`), on top of ccloop `9c2fbe47`.
+Criteria: `tests/control/workerLost.test.ts` (built CLI over fake codex's new `hang-in-<phase>` mode). Where the build
+differs from §4 as written, the reversible choice and why:
+
+1. **`workObserved` is not carried.** The run-level failure cause (`RunFailureCauseV1`: cause, phase, retries, detail,
+   optional `usageKnownZero`) has no `workObserved` field, and collect's `failureCause` is parsed strictly on both sides; a
+   new field would be a second schema change for one fact Orca can already read from the run's events. The settled
+   state carries `failureCause: {cause:"worker-lost", phase:<plan|execute|verify|null from the loop status>, retries:0,
+   detail:<the liveness reason>}` and `stopReason: "worker-lost: <reason>"`. `worker-lost` is added to `FAILURE_CAUSES`
+   (terminal, not retryable inside a phase) — Orca's collect parser must accept the new enum value in the repin.
+2. **Where `worker` appears — never for an alive worker.** `worker` is `{state:"lost"|"undetermined", reason}`; an
+   alive worker is the ordinary in-flight run, whose collect answer stays byte for byte as before (existing ccloop
+   criteria pin it exactly, e.g. `agentsControl.test.ts` "keeps inspect and collect working after the table is deleted…",
+   and ccloop's Rule 15 forbids rewriting them without the human naming each). Orca reads "no `worker`" as alive-or-n/a.
+   Further, only for a loop run without `mode` (not a saved-result recovery, which has
+   `settle-saved-result`; not a single call, §7), with launch `claimed`, no candidate and no terminal. `reason` is ccloop's
+   liveness text (e.g. `owner pid 123 does not exist`). Liveness = `classifyOwnerProcess` on `accepted.worker`
+   (pid + start time, `lastAffirmedAt` = the worker's start); `dead` is reported as `lost`.
+3. **`settle-lost-worker` answer and refusals.** Answer `{candidate}` in collect's candidate shape, with the stop proof.
+   Refusals: `control-worker-not-lost` (alive, undetermined, the owner record's process not confirmed dead, or a launch that
+   is not `claimed` and has no candidate), `control-envelope-conflict`, `control-worker-lost-state-unavailable` (no loop
+   state: the worker died before its loop started — not seen in practice; Orca should treat it like `undetermined`),
+   `control-worker-processes-not-reaped: <reason>`, `control-worker-not-stopped`.
+4. **A loop state that is already terminal is kept**, not rewritten to `worker-lost` (the worker died after deciding but
+   before its candidate); the candidate's result follows the worker's own mapping. A claimed run whose worker died after
+   writing its candidate is sealed and its lease released by the same method (collect does not report `worker` there, but
+   Orca may call it to obtain the stop proof).
+5. **Usage.** One `work` observation `worker-lost` with an unknown total (`threadTotalTokens: null`) is appended whenever
+   the state is moved to failed, also when the worker died between calls; the observed floor (`usageLowerBound`) is
+   unchanged. Then the mechanical `handoff` observation `worker-lost-settlement`, as the worker's own end does.
+6. **Attempt worktrees** of the dead worker are published under their refs and removed (the cleanup a failed attempt
+   gets), extra-repository worktrees too, before the result repository is materialized.
+7. **`features` is unchanged.** It advertises capabilities, not methods (`live-ceiling` is not listed either), and both
+   sides parse it strictly; Orca detects the method by the pin.
+
+ccloop main carries this as the subjects `feat(control): collect reports a lost worker; settle-lost-worker ends its run as worker-lost (Orca #273)` and `test(control): settle-lost-worker's two liveness guards, each alone (Orca #273)`.
