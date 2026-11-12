@@ -4,7 +4,7 @@
  * the group, never a stop; a group a work run blocked says which run and why, and its preparation editors turn read-only
  * (the server refuses every prestart command there); a token deficit an estimate left names the one way out.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import type { AgentSelectionPreviewV1, AgentsViewV1, GroupViewV1, RunViewV1 } from "../src/controlTypes.js";
@@ -51,15 +51,18 @@ describe("a blocked group (C4)", () => {
       estimateRun({ overGrant: ["tokens"], grant: amount(100) }),
       run({ runId: "run-w", used: amount(150), grant: amount(100), overGrant: ["tokens"] }),
     ]);
-    // A blocked group opens on Progress, so the Preparation panel is hidden: the queries below include hidden nodes.
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: a blocked group opens on Progress and the
+    // other regions are not rendered (they were hidden), so the editors are read with Preparation opened; the read-only
+    // assertions below would otherwise pass on an absent panel.
     show({ ...v, summary: { ...v.summary, state: "blocked" } });
     const alert = screen.getByTestId("blocked-banner");
     expect(alert.getAttribute("role")).toBe("alert");
     expect(alert.textContent).toBe("This group is blocked: run run-w went over its tokens grant (150 of 100). No new step starts in it, and preparation changes are refused.");
-    expect(screen.queryByRole("button", { name: "Confirm task plan", hidden: true })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Set group worker agent", hidden: true })).toBeNull();
-    // Review minor 11: reading the preview again is not an edit, so it stays offered.
-    expect(screen.getByRole("button", { name: "Re-read agent selections", hidden: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Preparation" }));
+    // Review minor 11: reading the preview again is not an edit, so it stays offered (and proves Preparation is rendered).
+    expect(screen.getByRole("button", { name: "Re-read agent selections" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Confirm task plan" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set group worker agent" })).toBeNull();
   });
 
   it("keeps both editors open for the same group while it is a draft", () => {
