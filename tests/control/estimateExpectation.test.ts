@@ -70,7 +70,7 @@ describe("a finite group after apply + confirm is unchanged (§7 Q4, criterion 3
   const GOLDEN_HAND = '{"derived":{"autonomyLevel":"L2","maxAttempts":2,"partialOutcomeRecoveryWindowMs":1,"perAttemptTimeoutMs":60000,"tokenBudget":1500000,"totalRuntimeBudgetMs":7000000,"worktreeRequired":true},"dispatched":{"autonomyLevel":"L2","maxAttempts":2,"partialOutcomeRecoveryWindowMs":1,"perAttemptTimeoutMs":60000,"tokenBudget":1500000,"totalRuntimeBudgetMs":7000000,"worktreeRequired":true},"grant":{"activeMs":7000000,"attempts":2,"sessions":1,"tokens":1500000},"taskId":"c","tokenPolicy":null}';
   for (const [task, verb, golden] of [[LOOP, "set-task-loop", GOLDEN_LOOP], [HAND, "proposal-edit", GOLDEN_HAND]] as const) {
     it(`${verb} (task ${task.taskId}): the frozen contract policy and the dispatched policy equal the golden`, async () => {
-      const h = await webFixture(undefined, [task]);
+      const h = await webFixture(undefined, [task], { modelVersion: null }); // Ruling (2026-11-12, tester follow-up H): a pre-release group (PRE_RELEASE below).
       try {
         const service = new WebControlService(h.deps);
         await readyEstimate(h, service, h.estimateId, task.taskId);
@@ -85,6 +85,12 @@ describe("a finite group after apply + confirm is unchanged (§7 Q4, criterion 3
 /** A group with no token limit (the default for a group a person creates today); a hand-written task authors no ceiling. */
 const UNLIMITED = { tokenPolicy: "optional-v1" } as const;
 const unlimitedFixture = (task: WebFixtureTask) => webFixture(undefined, [task.loop === undefined ? { ...task, tokenBudget: null } : task], UNLIMITED);
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- the budget-defaults rules these criteria pin (an estimate
+// applied as a finite task ceiling, the unlimited group's refusal name and spend-cap grant, a person's frozen tokenBudget)
+// hold for a group created before the follow-up G release (spec G §2.2, §10.5); new groups default to the expectation
+// model, so the criteria that pin them name that model (`modelVersion: null`).
+const PRE_RELEASE = { modelVersion: null } as const;
+const preReleaseUnlimited = (task: WebFixtureTask) => webFixture(undefined, [task.loop === undefined ? { ...task, tokenBudget: null } : task], { ...UNLIMITED, ...PRE_RELEASE });
 const errorOf = (answer: unknown) => (answer as { error?: { code: string } }).error;
 const model = (estimateId: string) => ({ provenance: "model" as const, estimateId });
 const workTarget = (taskId: string, dimension: "tokens" | "activeMs" | "attempts") => ({ scope: "task" as const, taskId, allocation: "work" as const, dimension });
@@ -119,7 +125,7 @@ describe("an unlimited group after apply + confirm: no per-task ceiling (§7 ite
 describe("a claim in an unlimited group: spend caps are the bound (§7 item 6; criterion 5, existing behaviour pinned)", () => {
   it("with no cap the work grant's tokens are null; with a cap the binder is spend-cap and the tokens are the cap's share", async () => {
     for (const cap of [null, 10_000_000] as const) {
-      const h = await unlimitedFixture(HAND);
+      const h = await preReleaseUnlimited(HAND);
       try {
         const service = new WebControlService(h.deps);
         await readyEstimate(h, service, await h.requestEstimate(service), "c");
@@ -146,7 +152,7 @@ describe("a claim in an unlimited group: spend caps are the bound (§7 item 6; c
 
 describe("the server refuses an estimate's task work as a ceiling in an unlimited group (§7 item 3; criterion 8)", () => {
   it("proposal-edit: model tokens, attempts or activeMs on a task's work are refused by name, and nothing is written", async () => {
-    const h = await unlimitedFixture(HAND);
+    const h = await preReleaseUnlimited(HAND);
     try {
       const service = new WebControlService(h.deps);
       const estimateId = await readyEstimate(h, service, await h.requestEstimate(service), "c");
@@ -179,7 +185,7 @@ describe("the server refuses an estimate's task work as a ceiling in an unlimite
 
   for (const task of [LOOP, HAND]) it(`a finite group accepts the same model values, as before (${task === LOOP ? "set-task-loop" : "proposal-edit"})`, async () => {
     {
-      const h = await webFixture(undefined, [task]);
+      const h = await webFixture(undefined, [task], PRE_RELEASE);
       try {
         const service = new WebControlService(h.deps);
         await readyEstimate(h, service, h.estimateId, task.taskId);
@@ -197,7 +203,7 @@ describe("the server refuses an estimate's task work as a ceiling in an unlimite
 describe("a person's own finite tokens in an unlimited group keep the ceiling (§7 item 3; criterion 10)", () => {
   for (const task of [LOOP, HAND]) it(`human tokens freeze as tokenBudget: N (${task === LOOP ? "set-task-loop" : "proposal-edit"})`, async () => {
     {
-      const h = await unlimitedFixture(task);
+      const h = await preReleaseUnlimited(task);
       try {
         const service = new WebControlService(h.deps);
         const answer = task === LOOP
@@ -269,7 +275,7 @@ describe("the group view derives each task's expectation (§7 items 2, 4; criter
   });
 
   it("is absent in a finite group, where the applied estimate is the ceiling", async () => {
-    const h = await webFixture(undefined, [HAND]);
+    const h = await webFixture(undefined, [HAND], PRE_RELEASE);
     try {
       const service = new WebControlService(h.deps);
       await readyEstimate(h, service, h.estimateId, "c");
@@ -335,7 +341,7 @@ describe("the board card carries the group's expectation (§7 item 4)", () => {
   });
 
   it("is absent in a finite group's card", async () => {
-    const h = await webFixture(undefined, [HAND]);
+    const h = await webFixture(undefined, [HAND], PRE_RELEASE);
     try {
       await readyEstimate(h, new WebControlService(h.deps), h.estimateId, "c");
       // mutation: compute it in every group -> present, red
