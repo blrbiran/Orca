@@ -21,7 +21,10 @@ describe("layoutDependencies (spec D1)", () => {
     expect(layout.nodes).toEqual([
       { taskId: "a", layer: 0, index: 0 }, { taskId: "b", layer: 1, index: 0 }, { taskId: "c", layer: 2, index: 0 }, { taskId: "d", layer: 0, index: 1 },
     ]);
-    expect(layout.edges).toEqual([{ from: "a", to: "b" }, { from: "a", to: "c" }, { from: "b", to: "c" }]);
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #271: a->c is implied by a->b->c, so it is not
+    // drawn but counted; the drawn edges are the reduction (this pinned all three).
+    expect(layout.edges).toEqual([{ from: "a", to: "b" }, { from: "b", to: "c" }]);
+    expect(layout.implied).toBe(1);
     expect(layout.layers).toBe(3);
     expect([layout.missing, layout.cycleEdges]).toEqual([0, 0]);
   });
@@ -166,11 +169,16 @@ describe("category fill, legend and live node text (issue-fixes spec §6.5)", ()
 // #232 (plan 2026-11-10-tester-followup-b T7): an edge that skips a layer was one curve straight across it, so it ran
 // through the tasks drawn there and read as a dependency on them. Each edge is sampled from the geometry the graph draws.
 describe("edge routing (#232)", () => {
-  const sixTasks = [deps("T1"), deps("T2", "T1"), deps("T3", "T1"), deps("T4", "T1"), deps("T5", "T2", "T3", "T4"), deps("T6", "T1", "T2", "T3", "T4", "T5")];
-  const throughB = [deps("c", "a", "b"), deps("b", "a"), deps("a"), deps("d")];
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #271 no longer draws an implied edge, and every
+  // layer-skipping edge of the old fixtures was implied (T1->T6, a->c), so they drew none and this criterion went vacuous.
+  // Each fixture gains a root whose edge skips layers without being implied (T0->T6, x->c); the first case checks it is drawn.
+  const sixTasks = [deps("T0"), deps("T1"), deps("T2", "T1"), deps("T3", "T1"), deps("T4", "T1"), deps("T5", "T2", "T3", "T4"), deps("T6", "T0", "T1", "T2", "T3", "T4", "T5")];
+  const throughB = [deps("c", "x", "a", "b"), deps("b", "a"), deps("a"), deps("x"), deps("d")];
 
-  it.each([["T1..T6", sixTasks], ["a->c past b", throughB]] as const)("%s: no edge passes through a task it does not join, and every edge is inside the drawing", (_name, items) => {
+  it.each([["T0..T6", sixTasks], ["x->c past b", throughB]] as const)("%s: no edge passes through a task it does not join, and every edge is inside the drawing", (_name, items) => {
     const geometry = graphGeometry(layoutDependencies(items));
+    // At least one drawn edge runs along a lane (skips a layer), or this criterion has nothing to judge.
+    expect(geometry.edges.some((edge) => edge.segments.some((segment) => segment.kind === "line"))).toBe(true);
     const crossings = new Set<string>();
     const outside = new Set<string>();
     for (const edge of geometry.edges) {
