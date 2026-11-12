@@ -16,7 +16,7 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
   const live = props.groups.filter((group) => group.archived !== true);
   const [dependent, setDependent] = useState("");
   const [prerequisite, setPrerequisite] = useState("");
-  const layout = layoutDependencies(live.map((group) => ({ taskId: group.groupId, dependencyTaskIds: group.dependsOn ?? [] })));
+  const layout = layoutDependencies(live.map((group) => ({ taskId: group.groupId, dependencyTaskIds: group.dependsOn ?? [] })), { reduce: false });
   const byId = new Map(live.map((group) => [group.groupId, group]));
   const layers = Array.from({ length: layout.layers }, (_, layer) => layout.nodes.filter((node) => node.layer === layer).map((node) => node.taskId));
   const send = (verb: "add-group-dependency" | "remove-group-dependency", groupId: string, dependsOn: string): void => {

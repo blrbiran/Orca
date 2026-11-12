@@ -6,6 +6,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
+import { GroupGraph } from "../src/GroupGraph.js";
 import { layoutDependencies } from "../src/dependencyLayout.js";
 import { edgePath, graphGeometry, nodeLines, runNumber, sampleEdge } from "../src/DependencyGraph.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
@@ -193,5 +194,52 @@ describe("edge routing (#232)", () => {
     const drawn = Object.fromEntries([...graph.querySelectorAll("path[data-edge]")].map((path) => [path.getAttribute("data-edge"), path.getAttribute("d")]));
     expect(drawn).toEqual(Object.fromEntries(geometry.edges.map((edge) => [`${edge.from}->${edge.to}`, edgePath(edge.segments)])));
     expect(graph.querySelector("svg")!.getAttribute("height")).toBe(String(geometry.height));
+  });
+});
+
+// #271: the graph drew every declared edge, so A->C beside A->B->C doubled what the drawing says. The drawing is the
+// transitive reduction: an edge whose source already reaches its target through another drawn path is not drawn, and the
+// page says how many such implied dependencies it hid. The data is untouched, and the board's group graph, whose edges
+// are each removable, keeps them all (reduce: false).
+describe("implied dependencies are not drawn (#271)", () => {
+  // mutation: the reduction is skipped (every edge drawn) -> a->d drawn, implied 0 -> red
+  it("hides an edge another path implies, through one step or several, and counts it", () => {
+    const diamond = layoutDependencies([deps("a"), deps("b", "a"), deps("c", "a"), deps("d", "a", "b", "c")]);
+    expect(diamond.edges).toEqual([{ from: "a", to: "b" }, { from: "a", to: "c" }, { from: "b", to: "d" }, { from: "c", to: "d" }]);
+    expect(diamond.implied).toBe(1);
+    // mutation: only a direct successor is looked through (no deeper walk) -> a->d stays drawn here -> red
+    const chain = layoutDependencies([deps("a"), deps("b", "a"), deps("c", "b"), deps("d", "c", "a")]);
+    expect(chain.edges).toEqual([{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "d" }]);
+    expect(chain.implied).toBe(1);
+  });
+
+  it("keeps an edge that skips a layer when no other path implies it", () => {
+    const layout = layoutDependencies([deps("x"), deps("a"), deps("b", "a"), deps("c", "x", "b")]);
+    expect(layout.edges).toContainEqual({ from: "x", to: "c" });
+    expect(layout.implied).toBe(0);
+  });
+
+  it("keeps every edge when asked not to reduce", () => {
+    const layout = layoutDependencies([deps("a"), deps("b", "a"), deps("c", "a", "b")], { reduce: false });
+    expect(layout.edges).toEqual([{ from: "a", to: "b" }, { from: "a", to: "c" }, { from: "b", to: "c" }]);
+    expect(layout.implied).toBe(0);
+  });
+
+  // mutation: the note is not rendered -> red
+  it("draws no path for the implied edge and says one implied dependency is hidden", () => {
+    const items = [workItem({ taskId: "a" }), workItem({ taskId: "b", dependencyTaskIds: ["a"] }), workItem({ taskId: "c", dependencyTaskIds: ["a", "b"] })];
+    render(<ControlGroupView view={view(items)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    const graph = screen.getByRole("figure", { name: "Dependency graph" });
+    expect([...graph.querySelectorAll("path[data-edge]")].map((path) => path.getAttribute("data-edge"))).toEqual(["a->b", "b->c"]);
+    expect(within(graph).getByTestId("dep-implied").textContent).toBe("1 implied dependency hidden: another drawn path already orders these tasks");
+  });
+
+  // mutation: GroupGraph reduces too -> the board lists two edges, and a->c cannot be removed -> red
+  it("lists every edge on the board's group graph, each removable", () => {
+    const summary = view([]).summary;
+    const groups = [{ ...summary, groupId: "a" }, { ...summary, groupId: "b", dependsOn: ["a"] }, { ...summary, groupId: "c", dependsOn: ["a", "b"] }];
+    render(<GroupGraph groups={groups as never} onCommand={vi.fn()} />);
+    expect(within(screen.getByRole("list", { name: "Dependencies" })).getAllByRole("listitem").map((li) => li.firstChild?.textContent))
+      .toEqual(["b waits for a", "c waits for a", "c waits for b"]);
   });
 });

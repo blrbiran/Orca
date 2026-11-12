@@ -210,6 +210,8 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
       </div>
       {layout.missing > 0 && <p role="note">{t("control.graph.missing", { count: layout.missing })}</p>}
       {layout.cycleEdges > 0 && <p role="alert">{t("control.graph.cycle", { count: layout.cycleEdges })}</p>}
+      {/* #271: implied dependencies are not drawn; the count says so, so a reader never takes the drawing for all the data. */}
+      {layout.implied > 0 && <p role="note" data-testid="dep-implied">{t("control.graph.implied", { count: layout.implied })}</p>}
     </figure>
   );
 }

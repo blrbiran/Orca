@@ -5,6 +5,10 @@
  * layers cross less. Pure and deterministic: the same items give the same layout whatever their order. A dependency on
  * a task the view does not carry is not drawn but counted, and an edge that would close a cycle (the server refuses
  * one; the page must still not hang) is dropped and counted, so the graph never hides either silently.
+ * #271: by default the drawing is the transitive reduction -- an edge A->C is not drawn when A reaches C through another
+ * drawn path (A->B->C); such implied edges are counted (`implied`) so the page can say so. The data is unchanged, and a
+ * caller whose edges are themselves the subject (the board's group graph, where each edge can be removed) passes
+ * `reduce: false` to keep them all.
  */
 export interface LayoutNode { taskId: string; layer: number; index: number }
 export interface DependencyLayout {
@@ -14,12 +18,14 @@ export interface DependencyLayout {
   layers: number;
   missing: number;
   cycleEdges: number;
+  /** #271: declared edges not drawn because another drawn path already implies them. */
+  implied: number;
 }
 
 /** UTF-16 code unit order, as the server's `compareText` (src/control/webProtocol.ts): never `localeCompare`. */
 const compareText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
-export function layoutDependencies(items: ReadonlyArray<{ taskId: string; dependencyTaskIds: readonly string[] }>): DependencyLayout {
+export function layoutDependencies(items: ReadonlyArray<{ taskId: string; dependencyTaskIds: readonly string[] }>, options: { reduce?: boolean } = {}): DependencyLayout {
   const known = new Map(items.map((item) => [item.taskId, item]));
   const layer = new Map<string, number>();
   const visiting = new Set<string>();
@@ -48,6 +54,24 @@ export function layoutDependencies(items: ReadonlyArray<{ taskId: string; depend
   };
   const ids = [...known.keys()].sort();
   for (const taskId of ids) visit(taskId);
+  // #271: an edge is implied when its source reaches its target through another of its successors. The kept edges are
+  // acyclic (a closing edge was dropped above), so the walk ends.
+  const successors = new Map<string, string[]>();
+  for (const edge of edges) successors.set(edge.from, [...(successors.get(edge.from) ?? []), edge.to]);
+  const reaches = (from: string, target: string): boolean => {
+    const seen = new Set<string>(), stack = [from];
+    while (stack.length > 0) {
+      const at = stack.pop()!;
+      if (at === target) return true;
+      if (seen.has(at)) continue;
+      seen.add(at);
+      stack.push(...(successors.get(at) ?? []));
+    }
+    return false;
+  };
+  const drawn = options.reduce === false ? edges
+    : edges.filter((edge) => !(successors.get(edge.from) ?? []).some((next) => next !== edge.to && reaches(next, edge.to)));
+  const implied = edges.length - drawn.length;
   const byLayer = new Map<number, string[]>();
   for (const taskId of ids) {
     const at = layer.get(taskId)!;
@@ -57,7 +81,7 @@ export function layoutDependencies(items: ReadonlyArray<{ taskId: string; depend
   // dependencies (all in earlier layers, so already placed), ties by id.
   const row = new Map<string, number>();
   const dependenciesOf = new Map<string, string[]>();
-  for (const edge of edges) dependenciesOf.set(edge.to, [...(dependenciesOf.get(edge.to) ?? []), edge.from]);
+  for (const edge of drawn) dependenciesOf.set(edge.to, [...(dependenciesOf.get(edge.to) ?? []), edge.from]);
   const nodes: LayoutNode[] = [];
   for (const at of [...byLayer.keys()].sort((left, right) => left - right)) {
     const barycenter = (taskId: string): number => {
@@ -70,6 +94,6 @@ export function layoutDependencies(items: ReadonlyArray<{ taskId: string; depend
   }
   nodes.sort((left, right) => compareText(left.taskId, right.taskId));
   const key = (edge: { from: string; to: string }): string => `${edge.from}\0${edge.to}`;
-  edges.sort((left, right) => (key(left) < key(right) ? -1 : 1));
-  return { nodes, edges, layers: byLayer.size, missing, cycleEdges };
+  drawn.sort((left, right) => (key(left) < key(right) ? -1 : 1));
+  return { nodes, edges: drawn, layers: byLayer.size, missing, cycleEdges, implied };
 }

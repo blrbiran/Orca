@@ -981,6 +981,8 @@ export const en = {
       missing_other: "{{count}} dependencies name a task this group does not have; they are not drawn",
       cycle_one: "{{count}} dependency would close a cycle; it is not drawn",
       cycle_other: "{{count}} dependencies would close a cycle; they are not drawn",
+      implied_one: "{{count}} implied dependency hidden: another drawn path already orders these tasks",
+      implied_other: "{{count}} implied dependencies hidden: another drawn path already orders these tasks",
       legend: "Legend",
       category: { idle: "idle", running: "running", waiting: "waiting", blocked: "blocked", done: "done" },
       stepAttempt: "{{step}} · attempt {{attempt}}",
