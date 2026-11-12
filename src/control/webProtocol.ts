@@ -667,6 +667,9 @@ export const commandVerbSchema = z.enum([
   "review-accept",
   "review-rerun",
   "review-fix",
+  // Tester follow-up G §6.3 (#189): let one request, or every request of its kind in the group, through; revoke one.
+  "allow-request",
+  "revoke-allowance",
   "archive-group",
   "unarchive-group",
   "approve-pending-decision",
@@ -847,6 +850,32 @@ export const reviewFixPayloadSchema = z.object({
   goal: z.string().refine((goal) => goal.trim().length > 0, "goal-empty").refine((goal) => Buffer.byteLength(goal, "utf8") <= 4096, "goal-over-4096-bytes"),
   paths: z.array(z.string().min(1).max(1024)).max(64).optional(),
 }).strict();
+const allowanceRequestSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("path"), paths: z.array(z.object({ repoKey: z.string().min(1).nullable(), path: nonemptyString }).strict()).min(1) }).strict(),
+  z.object({ type: z.literal("pending-decision"), kind: z.string().nullable(), scope: z.string().nullable() }).strict(),
+  z.object({ type: z.literal("flagged-decision"), source: nonemptyString, kind: z.string().nullable(), scope: z.string().nullable() }).strict(),
+]);
+const allowanceAttributionSchema = { by: nonemptyString, via: nonemptyString, commandId: nonemptyString, at: safeInteger };
+/** Tester follow-up G §6.3 (#189): one entry of a group's allowance list (groupAllowances.ts GroupAllowance). */
+export const groupAllowanceSchema = z.object({
+  allowanceId: idSchema, request: allowanceRequestSchema,
+  from: z.union([z.object({ runId: idSchema }).strict(), z.object({ pendingId: nonemptyString }).strict(), z.object({ decisionId: nonemptyString }).strict()]),
+  ...allowanceAttributionSchema, principal: z.string().nullable(),
+  revoked: z.object(allowanceAttributionSchema).strict().optional(),
+}).strict();
+/**
+ * Tester follow-up G §6.3 (#189): the request to let through -- a run's allowlist block (its exact paths), a refused pending
+ * decision, or a flagged decision -- and whether for this one request or every request of its kind in this group.
+ */
+export const allowRequestPayloadSchema = z.object({
+  request: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("path"), runId: idSchema }).strict(),
+    z.object({ kind: z.literal("pending-decision"), pendingId: nonemptyString }).strict(),
+    z.object({ kind: z.literal("flagged-decision"), decisionId: nonemptyString }).strict(),
+  ]),
+  scope: z.enum(["one", "group"]),
+}).strict();
+export const revokeAllowancePayloadSchema = z.object({ allowanceId: idSchema }).strict();
 export const waiveAcceptancePayloadSchema = z.object({ note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
@@ -1298,6 +1327,8 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("review-accept"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-rerun"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-fix"), target: groupCommandTargetSchema, payload: reviewFixPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("allow-request"), target: groupCommandTargetSchema, payload: allowRequestPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("revoke-allowance"), target: groupCommandTargetSchema, payload: revokeAllowancePayloadSchema }).strict(),
   // Dir-requirements spec §9.2: the person's answer to a stopped folder change.
   z.object({ ...rawCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
@@ -1408,6 +1439,8 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("review-accept"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-rerun"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-fix"), target: groupCommandTargetSchema, payload: reviewFixPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("allow-request"), target: groupCommandTargetSchema, payload: allowRequestPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("revoke-allowance"), target: groupCommandTargetSchema, payload: revokeAllowancePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("multi-dir-landing"), target: groupCommandTargetSchema, payload: multiDirLandingPayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
@@ -1655,6 +1688,8 @@ export const groupSummarySchema = z
         tail: z.string().max(2048).optional(), since: safeInteger, problem: nonemptyString,
       }).strict()),
     }).strict().optional(),
+    // Tester follow-up G §6.3 (#189): what this group lets through (groupAllowances.ts), revoked ones included. Omitted when none.
+    allowances: z.array(groupAllowanceSchema).min(1).optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),
@@ -1897,6 +1932,8 @@ export const activityKindSchema = z.enum([
   "requirement-review",
   // Tester follow-up G §6.2 (#269): a check turned red after a landing, or green again.
   "landing-watch",
+  // Tester follow-up G §6.3 (#189): an allowance granted, revoked, or applied to a request.
+  "allowance",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2359,6 +2396,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("review-accepted"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("review-rerun-requested"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("review-fix-opened"), groupId: idSchema, taskId: idSchema }).strict(),
+  // Tester follow-up G §6.3 (#189): the allowance recorded (null for "this one"), what it settled, and a path request's retry.
+  z.object({ kind: z.literal("request-allowed"), allowanceId: idSchema.nullable(), settled: z.array(nonemptyString), retry: z.unknown().optional() }).strict(),
+  z.object({ kind: z.literal("allowance-revoked"), allowanceId: idSchema }).strict(),
   // Dir-requirements spec §9.2: the answer was recorded; the next placement round does its work.
   z.object({ kind: z.literal("folder-change-resolved"), groupId: idSchema, action: folderChangeActionSchema }).strict(),
   // Multi-directory projects spec §9.7: the answer was recorded; the next round does the git and folder work.
@@ -2618,7 +2658,9 @@ export const groupDecisionsViewSchema = z
         }).strict()),
         pending: z.array(z.object({
           pendingId: z.string(), reason: z.string(), question: z.string().nullable(), chose: z.string().nullable(), undoHow: z.string().nullable(),
-          state: z.enum(["pending", "approved", "rejected"]), importance: decisionImportanceSchema,
+          state: z.enum(["pending", "approved", "rejected", "allowed"]), importance: decisionImportanceSchema,
+          // Tester follow-up G §6.3 (#189): who let it through, and by which allowance (null for "this one").
+          allowed: z.object({ by: nonemptyString, via: nonemptyString, at: safeInteger, allowanceId: idSchema.nullable() }).strict().optional(),
         }).strict()),
         unlanded: z.array(z.object({ entryIndex: safeInteger, question: z.string().nullable(), chose: z.string().nullable(), importance: decisionImportanceSchema }).strict()),
       }).strict()),

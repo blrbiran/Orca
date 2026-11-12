@@ -2151,6 +2151,7 @@ export const zh: Translation<typeof en> = {
       "attempt-accepted": "尝试已接受", "attempt-accept-refused": "尝试未被接受",
       "post-merge-check": "合并后检查", "group-acceptance": "组验收",
       "no-change-completed": "无改动完成", "no-change-revoked": "无改动已撤销", "no-change-judged": "目标已评判", "requirement-review": "需求复核",
+      "allowance": "放行",
       "landing-watch": "落地后检查",
     },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
@@ -2327,6 +2328,8 @@ export const zhErrors: Record<string, string> = {
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "这个组没有这条待确认的决定。",
   "flagged-decision-not-found": "这个组没有这条标红的决定。",
+  "allowance-not-found": "这个组没有这条放行记录。",
+  "allowance-request-invalid": "这条请示不能放行：{{detail}}",
   "group-edge-prerequisite-not-found": "没有要等的组 {{detail}}。",
   "group-edge-cycle": "这条依赖会让两个组互相等待。",
   "group-edge-dependent-started": "这个组已经开跑，加依赖不会有任何作用。",

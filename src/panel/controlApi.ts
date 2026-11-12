@@ -884,6 +884,9 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     // Control run decisions plan Task 9: an owner approves a refused decision with an executable undo.how.
     { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
     { path: "/api/control/groups/:groupId/decisions/ratify", verb: "ratify-flagged-decision", target: fromParams },
+    // Tester follow-up G §6.3 (#189).
+    { path: "/api/control/groups/:groupId/allowances/allow", verb: "allow-request", target: fromParams },
+    { path: "/api/control/groups/:groupId/allowances/revoke", verb: "revoke-allowance", target: fromParams },
     // Kanban spec §3.3, §9a.5: a person's edge; the group in the path is the dependent.
     { path: "/api/control/groups/:groupId/dependencies/add", verb: "add-group-dependency", target: fromParams },
     { path: "/api/control/groups/:groupId/dependencies/remove", verb: "remove-group-dependency", target: fromParams },
@@ -1024,6 +1027,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "unarchive-group": service.unarchiveGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
           case "ratify-flagged-decision": service.ratifyFlaggedDecision(command); break;
+          case "allow-request": await service.allowRequest(command); break;
+          case "revoke-allowance": service.revokeAllowance(command); break;
           case "add-group-dependency": service.addGroupDependency(command); break;
           case "remove-group-dependency": service.removeGroupDependency(command); break;
           case "reject-pending-decision": await service.rejectPendingDecision(command); break;

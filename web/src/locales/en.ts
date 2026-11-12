@@ -108,6 +108,7 @@ const activityKind = {
   "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
   "post-merge-check": "post-merge check", "group-acceptance": "group acceptance",
   "no-change-completed": "no change completed", "no-change-revoked": "no change revoked", "no-change-judged": "goal judged", "requirement-review": "requirement review",
+  "allowance": "allowance",
   "landing-watch": "landing watch",
 } as const satisfies Record<ActivityKindV1, string>;
 
@@ -2431,6 +2432,8 @@ export const enErrors: Record<string, string> = {
   // Control run decisions plan Task 9: approving a decision that did not land.
   "pending-decision-not-found": "This group has no such decision waiting for confirmation.",
   "flagged-decision-not-found": "This group has no such flagged decision.",
+  "allowance-not-found": "This group has no such allowance.",
+  "allowance-request-invalid": "This request cannot be allowed: {{detail}}",
   "group-edge-prerequisite-not-found": "There is no group {{detail}} to wait for.",
   "group-edge-cycle": "That dependency would make the groups wait for each other.",
   "group-edge-dependent-started": "This group has already started; a dependency would change nothing.",

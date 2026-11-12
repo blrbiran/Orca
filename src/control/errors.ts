@@ -46,6 +46,9 @@ export const durableCommandErrorStatuses = {
   "pending-decision-not-found": 404,
   // Kanban spec §9a: no flagged decision of this group has the id.
   "flagged-decision-not-found": 404,
+  // Tester follow-up G §6.3 (#189).
+  "allowance-not-found": 404,
+  "allowance-request-invalid": 422,
   // Scheduled flows and groups spec §5.6: no plan library entry (or no version of it) has the id; the detail names it.
   "plan-library-entry-not-found": 404,
   // Kanban spec §3.3: add-group-dependency names a prerequisite group that does not exist (detail: its id).

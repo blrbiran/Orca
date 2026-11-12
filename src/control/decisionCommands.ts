@@ -39,7 +39,7 @@ const refused = (code: KnownControlErrorCode, detail?: string): ApprovePrepared 
 function rowRefusal(row: PendingDecisionRow | null, groupId: string): ApprovePrepared | null {
   if (row === null || row.groupId !== groupId) return refused("pending-decision-not-found");
   if (row.state === "approved") return refused("no-op-command");
-  if (row.state === "rejected") return refused("pending-decision-settled");
+  if (row.state === "rejected" || row.state === "allowed") return refused("pending-decision-settled");
   return null;
 }
 
@@ -152,7 +152,7 @@ export type RejectPrepared =
 /** Why a pending row cannot be rejected (null: it can); read again inside the transaction. A rejected row answers its correction. */
 function rejectRefusal(row: PendingDecisionRow | null, groupId: string): RejectPrepared | null {
   if (row === null || row.groupId !== groupId) return { kind: "refused", code: "pending-decision-not-found" };
-  if (row.state === "approved") return { kind: "refused", code: "pending-decision-settled" };
+  if (row.state === "approved" || row.state === "allowed") return { kind: "refused", code: "pending-decision-settled" };
   if (row.state === "rejected") return { kind: "recorded", correctionId: row.correctionId! };
   return null;
 }

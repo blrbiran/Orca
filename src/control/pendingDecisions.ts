@@ -6,24 +6,30 @@ export interface PendingDecisionRow {
   pendingId: string;
   groupId: string;
   runId: string;
-  state: "pending" | "approved" | "rejected";
+  /** `allowed`: settled by an allowance (tester follow-up G §6.3, #189), stored `approved` with body `allowed`, no ledger line. */
+  state: "pending" | "approved" | "rejected" | "allowed";
   entry: PendingEntry;
   approvedId: string | null;
   correctionId: string | null;
+  allowed: PendingAllowed | null;
 }
 
+export interface PendingAllowed { by: string; via: string; at: number; commandId: string; allowanceId: string | null }
+
 type Outcome = { state: "approved"; approvedId: string } | { state: "rejected"; correctionId: string };
-type Stored = { id: string; group_id: string; run_id: string; state: PendingDecisionRow["state"]; body: string };
+type Stored = { id: string; group_id: string; run_id: string; state: "pending" | "approved" | "rejected"; body: string };
 const COLUMNS = "id,group_id,run_id,state,body";
 
 function toRow(row: Stored): PendingDecisionRow {
   const body = JSON.parse(row.body) as Record<string, unknown>;
-  const { approvedId, correctionId, ...entry } = body;
+  const { approvedId, correctionId, allowed, ...entry } = body;
+  const allowedBy = allowed !== undefined && allowed !== null && typeof allowed === "object" ? allowed as PendingAllowed : null;
   return {
-    pendingId: row.id, groupId: row.group_id, runId: row.run_id, state: row.state,
+    pendingId: row.id, groupId: row.group_id, runId: row.run_id, state: row.state === "approved" && allowedBy !== null ? "allowed" : row.state,
     entry: pendingEntrySchema.parse(entry) as PendingEntry,
     approvedId: typeof approvedId === "string" ? approvedId : null,
     correctionId: typeof correctionId === "string" ? correctionId : null,
+    allowed: allowedBy,
   };
 }
 
@@ -49,4 +55,16 @@ export function settlePendingDecision(store: ControlStore, pendingId: string, ou
   if (!current) throw new ControlError("recovery-blocked", `pending-decision-unknown:${pendingId}`);
   const body = { ...current.entry, ...(outcome.state === "approved" ? { approvedId: outcome.approvedId } : { correctionId: outcome.correctionId }) };
   store.db.prepare("UPDATE pending_decisions SET state=?,body=? WHERE id=?").run(outcome.state, JSON.stringify(body), pendingId);
+}
+
+/**
+ * Tester follow-up G §6.3 (#189, plan A6): a pending decision let through by an allowance. The column's CHECK is not widened:
+ * the row is stored `approved` with body `allowed` and no `approvedId` (no ledger line was written), and read back `allowed`.
+ * Called inside the caller's transaction, on a row still pending.
+ */
+export function allowPendingDecision(store: ControlStore, pendingId: string, allowed: PendingAllowed): void {
+  const current = readPendingDecision(store, pendingId);
+  if (!current) throw new ControlError("pending-decision-not-found");
+  if (current.state !== "pending") throw new ControlError("pending-decision-settled", current.state);
+  store.db.prepare("UPDATE pending_decisions SET state='approved',body=? WHERE id=?").run(JSON.stringify({ ...current.entry, allowed }), pendingId);
 }

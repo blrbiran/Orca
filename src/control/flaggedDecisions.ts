@@ -27,6 +27,9 @@ const flagBodySchema = z.object({
   severity: z.enum(["major", "minor"]).optional(),
   note: z.string().min(1).max(2048).optional(),
   involvedGroupIds: z.array(z.string().min(1)).min(2).max(8).optional(),
+  // Tester follow-up G §6.3 (#189): the flagged decision's kind and scope, so "allow this kind" can match it; absent on older rows.
+  kind: z.string().min(1).max(64).optional(),
+  scope: z.string().min(1).max(64).optional(),
 }).strict();
 
 export interface FlaggedDecisionRow {
@@ -45,6 +48,8 @@ export interface FlaggedDecisionRow {
   severity: "major" | "minor";
   note: string | null;
   involvedGroupIds: string[];
+  kind: string | null;
+  scope: string | null;
 }
 
 export interface FlagInput {
@@ -59,6 +64,8 @@ export interface FlagInput {
   at: string;
   severity?: "major" | "minor";
   involvedGroupIds?: readonly string[];
+  kind?: string;
+  scope?: string;
 }
 
 type Stored = { decision_id: string; group_id: string; run_id: string | null; source: string; state: FlaggedDecisionRow["state"]; body: string };
@@ -71,6 +78,7 @@ function toRow(row: Stored): FlaggedDecisionRow {
     reason: body.reason, evidence: body.evidence, flaggedBy: body.flaggedBy, flaggedAt: body.flaggedAt,
     ratifiedBy: body.ratifiedBy ?? null, ratifiedVia: body.ratifiedVia ?? null, ratifiedAt: body.ratifiedAt ?? null,
     severity: body.severity ?? "major", note: body.note ?? null, involvedGroupIds: body.involvedGroupIds ?? [],
+    kind: body.kind ?? null, scope: body.scope ?? null,
   };
 }
 
@@ -83,6 +91,7 @@ export function flagDecision(store: ControlStore, input: FlagInput): boolean {
   const body = flagBodySchema.parse({
     reason: input.reason, evidence: [...input.evidence], flaggedBy: input.by, flaggedAt: input.at,
     ...(input.severity === undefined ? {} : { severity: input.severity }), ...(input.involvedGroupIds === undefined ? {} : { involvedGroupIds: [...input.involvedGroupIds] }),
+    ...(input.kind === undefined ? {} : { kind: input.kind }), ...(input.scope === undefined ? {} : { scope: input.scope }),
   });
   const result = store.db.prepare(
     `INSERT INTO flagged_decisions(${COLUMNS}) VALUES (?,?,?,?,'flagged',?) ON CONFLICT(decision_id) DO NOTHING`,

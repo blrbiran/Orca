@@ -26,6 +26,7 @@ import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import { acceptanceOf, acceptanceProblem } from "../control/groupAcceptanceRecord.js";
 import { landingWatchOf } from "../control/landingWatchRecord.js";
+import { allowancesOf } from "../control/groupAllowances.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
@@ -652,6 +653,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(acceptance === null ? {} : { acceptance: { ...acceptance, ...(acceptanceProblemCode === null ? {} : { problem: acceptanceProblemCode }) } }),
     // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
     ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
+    // Tester follow-up G §6.3 (#189): what this group lets through, with who, how, when and from which request.
+    ...(allowancesOf(body).length === 0 ? {} : { allowances: allowancesOf(body) }),
     ...(landingWatch === null ? {} : { landingWatch: {
       tip: landingWatch.tip, at: landingWatch.at, commands: landingWatch.commands,
       regressions: landingWatch.regressions.map((regression) => ({ ...regression, problem: `landing-regression:${regression.command}` })),

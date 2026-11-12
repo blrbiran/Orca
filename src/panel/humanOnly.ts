@@ -82,6 +82,9 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Control run decisions plan Task 9: approving a refused decision writes a ledger line in an owner's name.
   "approve-pending-decision": "human-only",
   "ratify-flagged-decision": "human-only",
+  // Tester follow-up G §6.3 (#189): a person, or an orchestrating agent on the socket; never a run Orca dispatched.
+  "allow-request": "human-only",
+  "revoke-allowance": "human-only",
   "set-orchestration-settings": "human-only",
   // Kanban spec §9a.5: v1 edges between groups come from the person only.
   "add-group-dependency": "human-only",
@@ -184,6 +187,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "approve-pending-decision": "open",
   "reject-pending-decision": "open",
   "ratify-flagged-decision": "open",
+  "allow-request": "open",
+  "revoke-allowance": "open",
   "add-group-dependency": "open",
   "remove-group-dependency": "open",
   "set-criteria-review": "open",

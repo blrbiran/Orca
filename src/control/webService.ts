@@ -56,6 +56,7 @@ import { applyRecheckAcceptance, applyWaiveAcceptance, type RecheckAcceptanceCom
 import { applyReopenTask, type ReopenTaskCommand } from "./reopenTask.js";
 import { applyReviewAccept, applyReviewFix, applyReviewRerun, type ReviewAcceptCommand, type ReviewFixCommand, type ReviewRerunCommand } from "./requirementReviewCommands.js";
 import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
+import { applyAllowRequest, applyRevokeAllowance, type AllowRequestCommand, type RevokeAllowanceCommand } from "./allowanceCommands.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
@@ -1984,6 +1985,13 @@ export class WebControlService {
   /** Kanban spec §9a: a person ratifies a flagged decision (decisionCommands.ts). */
   ratifyFlaggedDecision(command: RatifyFlaggedDecisionCommand): WebCommandResult {
     return this.mutate(() => applyRatifyFlaggedDecision({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Tester follow-up G §6.3 (#189): let one request, or every request of its kind in this group, through (allowanceCommands.ts). */
+  async allowRequest(command: AllowRequestCommand): Promise<WebCommandResult> {
+    return this.mutate(() => applyAllowRequest({ store: this.store }, command)) as WebCommandResult;
+  }
+  revokeAllowance(command: RevokeAllowanceCommand): WebCommandResult {
+    return this.mutate(() => applyRevokeAllowance({ store: this.store }, command)) as WebCommandResult;
   }
   async correctionList(): Promise<CorrectionListItemV1[]> {
     const dir = this.deps.correctionsDir;

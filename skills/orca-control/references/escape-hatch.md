@@ -179,6 +179,7 @@ The socket refuses these before anything runs (nothing is ledgered, the commandI
 - `approve-pending-decision` (giving a decision a landing refused an executable `undo.how` and writing it into the ledger) is owner-only → 403 `control-verb-human-only`.
 - `reject-pending-decision` (rejecting a decision a landing refused, which records a correction in the owner's name) is owner-only → 403 `control-verb-human-only`.
 - `ratify-flagged-decision` (accepting a landed decision Orca flagged for a person) is owner-only → 403 `control-verb-human-only`.
+- `allow-request` and `revoke-allowance` (letting one request, or every request of its kind in this group, through -- a refused or flagged decision, or a task's allowlist-blocked paths -- and revoking that for later requests) are a person's or an orchestrating agent's: open on the socket, refused to a run Orca dispatched and to a Web member → 403 `control-verb-human-only`.
 - `add-group-dependency` and `remove-group-dependency` (making a group wait until another has landed) are owner-only → 403 `control-verb-human-only`.
 - `set-check-settings`, `set-scheduled-check`, `set-check-locks`, `run-check-now` and `resume-check` (the integration check and the model review: each kind's event trigger, fields such as the integration check's command or the review's token budget, scheduled checks, the global locks, a run now, re-arming a check paused after three errored runs; `orca check …` sends them) are owner-only → 403 `control-verb-human-only`. A project value looser than a global lock is refused 409 `check-setting-locked`; a 9th scheduled check in one layer 409 `check-schedule-limit`; a cron firing more often than hourly 400 `check-schedule-too-frequent`.
 - `set-criteria-review` (whether Orca's automatic reviewer judges a flagged test change in this repository before a person sees it; unset follows the global default in `operator/set-orchestration-settings`, on unless switched off) is owner-only → 403 `control-verb-human-only`.
@@ -256,6 +257,8 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/decisions/approve` | approve-pending-decision | `{"pendingId":"pending-run-x-0","undoHow":"git revert --no-edit <sha>"}` |
 | `POST groups/<groupId>/decisions/reject` | reject-pending-decision | `{"pendingId":"pending-run-x-0","because":"the premise was false"}` |
 | `POST groups/<groupId>/decisions/ratify` | ratify-flagged-decision | `{"decisionId":"run-x/agent-0"}` |
+| `POST groups/<groupId>/allowances/allow` | allow-request | `{"request":{"kind":"pending-decision","pendingId":"pending-run-x-0"},"scope":"group"}` |
+| `POST groups/<groupId>/allowances/revoke` | revoke-allowance | `{"allowanceId":"allow-1"}` |
 | `POST groups/<groupId>/dependencies/add` | add-group-dependency | `{"dependsOn":"g0"}` |
 | `POST groups/<groupId>/dependencies/remove` | remove-group-dependency | `{"dependsOn":"g0"}` |
 | `POST corrections/<correctionId>/debug-group` | correction-debug-open | `{"correctionId":"c_0123456789abcdef"}` |

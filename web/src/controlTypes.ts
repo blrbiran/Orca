@@ -134,6 +134,8 @@ export type GroupSummaryV1 = {
   requirementReview?: RequirementReviewV1;
   /** Tester follow-up G §6.2 (#269): the landing watch's last record; each regression is a problem. */
   landingWatch?: LandingWatchV1;
+  /** Tester follow-up G §6.3 (#189): what this group lets through, revoked ones included; absent when none. */
+  allowances?: GroupAllowanceV1[];
   /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
   scheduleStart?: { scheduleId: string; name: string; slot: number; waitingReason: string | null };
 };
@@ -622,6 +624,18 @@ export type GroupAcceptanceV1 = {
   tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir";
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
 };
+/** Tester follow-up G §6.3 (#189): the request an allowance was granted from or covers (src/control/groupAllowances.ts). */
+export type AllowanceRequestKindV1 =
+  | { type: "path"; paths: Array<{ repoKey: string | null; path: string }> }
+  | { type: "pending-decision"; kind: string | null; scope: string | null }
+  | { type: "flagged-decision"; source: string; kind: string | null; scope: string | null };
+export type GroupAllowanceV1 = {
+  allowanceId: string; request: AllowanceRequestKindV1; from: { runId: string } | { pendingId: string } | { decisionId: string };
+  by: string; via: string; principal: string | null; commandId: string; at: number;
+  revoked?: { by: string; via: string; commandId: string; at: number };
+};
+/** The request an allow button names (webProtocol.ts allowRequestPayloadSchema `request`). */
+export type AllowRequestV1 = { kind: "path"; runId: string } | { kind: "pending-decision"; pendingId: string } | { kind: "flagged-decision"; decisionId: string };
 /** Tester follow-up G §6.2 (#269): the landing watch's last record (src/control/landingWatchRecord.ts). */
 export type LandingWatchV1 = {
   tip: string; at: number; commands: Array<CheckRunCommandV1 & { tail?: string }>;
@@ -644,6 +658,7 @@ export const WEB_ACTIVITY_KINDS = [
   "post-merge-check", "group-acceptance",
   "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",
   "landing-watch",
+  "allowance",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
@@ -765,6 +780,7 @@ export type CommandSuccessV1 = {
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
@@ -835,6 +851,8 @@ export type CommandSuccessV1 = {
     | { kind: "review-accepted"; groupId: string }
     | { kind: "review-rerun-requested"; groupId: string }
     | { kind: "review-fix-opened"; groupId: string; taskId: string }
+    | { kind: "request-allowed"; allowanceId: string | null; settled: string[]; retry?: unknown }
+    | { kind: "allowance-revoked"; allowanceId: string }
     | { kind: "folder-change-resolved"; groupId: string; action: "take-folder" | "recheck" | "withhold" }
     | { kind: "multi-dir-landing-set"; groupId: string; action: "retry-rest" | "mark-resolved" }
     | { kind: "archived"; groupId: string; at: number }
@@ -972,7 +990,7 @@ export type GroupDecisionsViewV1 = {
     runs: Array<{
       runId: string; settled: boolean; reported: "absent" | "array" | "malformed" | "unreadable";
       decisions: Array<{ id: string; where: DecisionWhereV1; question: string; chose: string; kind: string; scope: string; importance?: DecisionImportanceV1; flag?: DecisionFlagV1 | null }>;
-      pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected"; importance?: DecisionImportanceV1 }>;
+      pending: Array<{ pendingId: string; reason: string; question: string | null; chose: string | null; undoHow: string | null; state: "pending" | "approved" | "rejected" | "allowed"; importance?: DecisionImportanceV1; allowed?: { by: string; via: string; at: number; allowanceId: string | null } }>;
       unlanded: Array<{ entryIndex: number; question: string | null; chose: string | null; importance?: DecisionImportanceV1 }>;
     }>;
   }>;

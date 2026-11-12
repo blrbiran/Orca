@@ -1,4 +1,5 @@
 import { claimCapBlocking } from "./spendCaps.js";
+import { applyDecisionAllowances } from "./groupAllowances.js";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -94,7 +95,9 @@ function landedWithPending(store: ControlStore, run: DriverRun): void {
   insertPendingDecisions(store, run.groupId, run.runId, (run.drive!.stagedPending ?? []) as PendingEntry[]);
   // Protect-acceptance-criteria spec §4.3: the flag lands with the decision it is on, in the same write.
   const criteria = run.drive!.stagedCriteriaFlag ?? null;
-  if (criteria !== null) flagDecision(store, { ...criteria, groupId: run.groupId, runId: run.runId, source: "test-change", by: ORCHESTRATION_ACTOR, at: new Date(store.now()).toISOString() });
+  if (criteria !== null) flagDecision(store, { ...criteria, groupId: run.groupId, runId: run.runId, source: "test-change", by: ORCHESTRATION_ACTOR, at: new Date(store.now()).toISOString(), kind: "criteria", scope: "task" });
+  // Tester follow-up G §6.3 (#189): what this landing just raised and an active allowance of the group covers is let through here.
+  applyDecisionAllowances(store, run.groupId);
   const closing = run.drive!.stagedDebugClosing ?? null;
   if (closing !== null) {
     const group = readGroup(store, run.groupId) as GroupWithMark;

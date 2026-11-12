@@ -111,6 +111,8 @@ export async function readGroupDecisionsView(store: ControlStore, repo: string, 
       pendingId: p.pendingId, reason: p.entry.reason, state: p.state,
       question: textOrNull(field(p.entry.entry, "question")), chose: textOrNull(field(p.entry.entry, "chose")),
       undoHow: textOrNull(field(field(p.entry.entry, "undo"), "how")), importance: importanceOf(p.entry.entry),
+      // Tester follow-up G §6.3 (#189): who let an allowed one through, and by which allowance.
+      ...(p.allowed === null ? {} : { allowed: { by: p.allowed.by, via: p.allowed.via, at: p.allowed.at, allowanceId: p.allowed.allowanceId } }),
     }));
 
     const unlanded: RunView["unlanded"] = [];
