@@ -121,6 +121,18 @@ export function autoRetryFundingRefusal(store: ControlStore, groupId: string, ta
 }
 
 /**
+ * Tester #264: the `authored-budget-exhausted` refusal names each dimension with no work left, with the task's authored
+ * amount (+ top-ups and credit), the lineage's usage and what is left, and the `--work` top-up that would let it run: one
+ * attempt or session, or one attempt's worth of tokens or active time as the lineage spent them (1 when it spent none).
+ */
+export function authoredBudgetExhausted(groupId: string, taskId: string, authored: BudgetAmount, inherited: Amount, left: BudgetAmount): string {
+  const spent = dimensions.filter((d) => left[d] === 0);
+  const want = (d: typeof dimensions[number]): number => d === "attempts" || d === "sessions" || inherited.attempts === 0 ? 1 : Math.max(1, Math.ceil(inherited[d] / inherited.attempts));
+  const named = spent.map((d) => `${d}(authored=${authored[d]},inherited=${inherited[d]},fresh=${left[d]})`).join(",");
+  return `authored-budget-exhausted:${named}; add work to the retry: orca task retry ${groupId} ${taskId} --work '${JSON.stringify(Object.fromEntries(spent.map((d) => [d, want(d)])))}'`;
+}
+
+/**
  * Tester follow-up E §8 (overrides budget spec 2026-11-11 §7 item 7's first consequence): the attempts and active time an
  * explicit retry in a group whose `limit.tokens` is null credits back -- what the lineage used beyond every earlier top-up
  * and credit, so authored + top-ups + credit - lineage is the task's own amount again (plus this retry's top-up). Null
@@ -288,7 +300,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           const want=freshStartWant(store,groupId,command,inherited,prior);
           const authored=withTopUp(work.grant.work,add(add(prior,incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}),want??{tokens:0,activeMs:0,attempts:0,sessions:0}));
           let left=remainingBudget(authored,inherited);
-          if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable","authored-budget-exhausted");
+          if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,authored,inherited,left));
           const personAuthority=incoming===null?false:authorizeWorkTopUp(store,groupId,command.commandId,incoming,'retry-top-up');
           if(!released && !closed){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
           let freshStart:Amount|null=null;
@@ -298,7 +310,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
             const live=readGroup(store,groupId),handoff=work.grant.handoff,credit={...want};
             for(const d of ["activeMs","attempts"] as const)credit[d]=Math.min(want[d],Math.max(0,live.limit[d]-live.used[d]-live.reserved[d]-handoff[d]-(left[d]-want[d])));
             left={...left,activeMs:left.activeMs-(want.activeMs-credit.activeMs),attempts:left.attempts-(want.attempts-credit.attempts)};
-            if(left.attempts===0||left.activeMs===0)throw new ControlError("task-not-retryable","authored-budget-exhausted");
+            if(left.attempts===0||left.activeMs===0)throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,{...authored,attempts:authored.attempts-(want.attempts-credit.attempts),activeMs:authored.activeMs-(want.activeMs-credit.activeMs)},inherited,left));
             if(credit.attempts>0||credit.activeMs>0){
               appendTopUp(store,groupId,taskId,runId,{amount:credit,commandId:command.commandId,by:commandPrincipalFor(command.commandId)??command.actorId,personAuthority:false,at:store.now(),kind:"fresh-start"});
               freshStart=credit;

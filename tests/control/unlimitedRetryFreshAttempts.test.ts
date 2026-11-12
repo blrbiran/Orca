@@ -131,6 +131,14 @@ describe("an explicit retry in an unlimited group starts with fresh attempts and
     } finally { await t.h.dispose(); }
   });
 
+  it("names the spent dimension when the group's limits leave no attempt (#264)", async () => {
+    const { t } = await failedOnce(2, 4);
+    try {
+      // The credit the group could not fund is not counted as authored.
+      expect(retry(t, OWNER).error!.message).toBe("task-not-retryable:authored-budget-exhausted:attempts(authored=2,inherited=2,fresh=0); add work to the retry: orca task retry g a --work '{\"attempts\":1}'");
+    } finally { await t.h.dispose(); }
+  });
+
   it("a retry with a top-up starts with the task's own attempts plus the top-up; the board shows only the top-up", async () => {
     const { t, driver } = await failedOnce(2);
     try {
