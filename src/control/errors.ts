@@ -249,6 +249,9 @@ export const durableCommandErrorStatuses = {
   // Tester follow-up E §5 (#241): recheck and waive answer a failed group acceptance only; a waiver names a person.
   "group-acceptance-not-failed": 409,
   "group-acceptance-person-required": 409,
+  // Tester follow-up G Part 5: a note for a done task (the box is disabled), or a 17th queued note for one task.
+  "live-note-task-finished": 409,
+  "live-note-queue-full": 409,
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,

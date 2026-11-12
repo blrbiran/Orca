@@ -208,6 +208,8 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `landing-needs-review` | 422 |
 | `landing-not-confirmed` | 422 |
 | `ledger-commit-refused` | 409 |
+| `live-note-queue-full` | 409 |
+| `live-note-task-finished` | 409 |
 | `login-failed` | 401 |
 | `login-required` | 401 |
 | `login-throttled` | 429 |

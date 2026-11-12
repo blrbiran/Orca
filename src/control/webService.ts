@@ -45,6 +45,7 @@ import { singleCallHandler } from "./singleCallPurposes.js";
 import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurposes.js";
 import { applyHandoffStop, applyPauseDispatch, applyRecoveryRetry, applyResumeDispatch, readStopIntent, type HandoffStopCommand, type PauseCommand, type RecoveryRetryCommand, type ResumeDispatchCommand, type StopDeps } from "./stopIntent.js";
 import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, type ResumeFromHandoffCommand } from "./continuation.js";
+import { applyAddLiveNote, writeRunLiveNotes, type AddLiveNoteCommand } from "./liveNotes.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyAcceptAttempt, prepareAcceptAttempt, type AcceptAttemptCommand } from "./acceptAttempt.js";
 import { applyRetryTask, autoRetryFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
@@ -2407,6 +2408,18 @@ export class WebControlService {
    * order -- the work item, the labels version, the labels themselves, then no-op -- and the vocabulary here, not in the
    * payload schema, so a refusal is ledgered and names the label (R8).
    */
+  /**
+   * Tester follow-up G Part 5: queue a note for a task's agent, then (after the commit) mirror the queue into its running
+   * run's live-notes.json. A crash between the two is repaired by the driver's settleLiveNotes pass.
+   */
+  addLiveNote(command: AddLiveNoteCommand): WebCommandResult {
+    const result = this.mutate(() => applyWebCommand(this.store, {
+      rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+      apply: (context) => applyAddLiveNote(this.store, command, context),
+    }).body);
+    if ("schema" in result) writeRunLiveNotes(this.store, command.target.groupId, command.target.taskId);
+    return result;
+  }
   setTaskLabels(command: SetTaskLabelsCommand): WebCommandResult {
     return this.mutate(() => applyWebCommand(this.store, {
       rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),

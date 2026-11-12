@@ -70,6 +70,7 @@ import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
 import { ingestRunHandoff, prepareRunHandoff } from "./taskHandoffs.js";
+import { noteLiveNoteDeliveries, settleLiveNotes, writeRunLiveNotes } from "./liveNotes.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { bookRejectedZeroInTransaction } from "./quotaProbeCall.js";
 import { FAILURE_DETAIL_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
@@ -491,6 +492,9 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // Tester follow-up G Part 4 / §10.2: every run's handoff directories (§10.5: every group), filled from the dependency
   // edges; a saved-result recovery builds no prompt, so it carries none (ccloop refuses them beside `mode`).
   const handoff = recovery === null && run.mode === undefined && run.recoveryOf === undefined ? prepareRunHandoff(store, run.groupId, run.taskId, runId) : undefined;
+  // Tester follow-up G Part 5.2 / 5.4: the task's queued live notes reach this run's first phase (a continuation's or a
+  // retry's included); a recovery takes none.
+  if (handoff !== undefined) writeRunLiveNotes(store, run.groupId, run.taskId, drive.sourceDir);
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
     sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...skillEnvelopeKey(prepared.kind, skills),
@@ -583,6 +587,7 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
   const additionalRepos = preparedDirs.slice(1).map(({ key, targetRepo, base }) => ({ key, targetRepo, base }));
   // Tester follow-up G Part 4: as stepA2 (a multi run is never a recovery).
   const handoff = prepareRunHandoff(store, run.groupId, taskId, runId);
+  writeRunLiveNotes(store, run.groupId, taskId, drive.sourceDir);
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), run, {
     sourceDir: drive.sourceDir, targetRepo: primary.targetRepo, base: primary.base,
     ...(additionalRepos.length === 0 ? {} : { additionalRepos }),
@@ -894,6 +899,9 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   }
   // Live transcript spec §10.4.1 / §12.3: keep the last transcripts listing of every run collected (agentTranscript/listing.ts).
   if (report.transcripts !== undefined) write(deps, () => noteTranscriptListing(store, runId, readStartEnvelope(store, run).work.sourceDir, report.transcripts));
+  // Tester follow-up G Part 5.2: the notes ccloop acknowledged at a phase start are delivered (one row each, once).
+  const liveNotes = report.liveNotes;
+  if (liveNotes !== undefined && run.taskId !== null) write(deps, () => noteLiveNoteDeliveries(store, { groupId: run.groupId, taskId: run.taskId!, runId }, liveNotes.delivered));
   // Tester round 3 spec §3: kept beside the run for the settlement view.
   const floor = report.usageLowerBound;
   if (floor !== undefined) write(deps, () => { const current = readDriverRun(store, runId); current.usageLowerBound = floor; saveDriverRun(store, current); });
@@ -1890,6 +1898,10 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     // is done -- every round, so it covers every settle path and a group left in review before this existed.
     // Loaded on first use, not imported: groupDone pulls in groupEdges, whose static import into this module's cycle reorders
     // the control modules' evaluation (session 3cfc2e73, d69ec6c5).
+    // Tester follow-up G Part 5.5: a queued note whose task ended (or whose group was archived) is undelivered and merged
+    // into the task's handoff; a run file a crash left stale is rewritten.
+    try { if (settleLiveNotes(deps.store, (action) => write(deps, action)).length > 0) progressed = true; }
+    catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     try { const { markGroupsDone } = await import("./groupDone.js"); if (write(deps, () => markGroupsDone(deps.store)).length > 0) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     return progressed;

@@ -36,6 +36,16 @@ continue a task's current run from its newest complete checkpoint; --note tells 
 - `--note <note>`: a note the continued run's agent reads at its next plan/execute (at most 4096 bytes)
 - `--note-scope <note-scope>`: next-attempt (default) or remaining-attempts
 
+## `orca task note <group> <task> --text <text>`
+
+add a note to a task's agent, delivered at its next step (plan, execute, verify, next attempt or continuation)
+
+- What it does: sends control verb `add-live-note`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<task>`: a task id or a unique prefix
+- `--text <text>` (required): the note, at most 2048 UTF-8 bytes
+
 ## `orca task set-loop <group> <task> --file <file>`
 
 set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}

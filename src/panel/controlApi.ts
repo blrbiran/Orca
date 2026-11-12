@@ -933,6 +933,15 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
         return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
       },
     },
+    // Tester follow-up G Part 5: the ledger key is the group's, as for set-task-labels.
+    {
+      path: "/api/control/groups/:groupId/tasks/:taskId/live-notes",
+      verb: "add-live-note",
+      target: (params) => {
+        const groupId = idSchema.parse(params.groupId);
+        return { groupId, target: { kind: "task", groupId, taskId: idSchema.parse(params.taskId) } };
+      },
+    },
     // Loop plans spec §5.2: the ledger key is the group's, as for set-task-labels.
     {
       path: "/api/control/groups/:groupId/tasks/:taskId/loop",
@@ -1040,6 +1049,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "apply-agent-update": await service.applyAgentUpdate(command, { client, principal: principalLabel(principal) }); break;
           case "proposal-set-agent": await service.proposalSetAgent(command); break;
           case "set-task-labels": service.setTaskLabels(command); break;
+          case "add-live-note": service.addLiveNote(command); break;
           case "set-task-loop": await service.setTaskLoop(command); break;
           case "requirement-open": await service.openRequirement(command); break;
           case "requirement-answer": service.answerRequirement(command); break;

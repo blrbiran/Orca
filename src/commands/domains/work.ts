@@ -511,6 +511,11 @@ export const WORK_ROWS: CommandDef[] = [
       const runId = await currentRun(c);
       return { predecessorRunId: runId, checkpointId: await checkpointOf(c, runId), ...(note === undefined ? {} : { operatorNote: note }) };
     } }),
+  // Tester follow-up G Part 5: a note for the task's agent; it reaches the agent at its next phase start, never mid-call.
+  verb({ domain: "task", action: "note", summary: "add a note to a task's agent, delivered at its next step (plan, execute, verify, next attempt or continuation)", verb: "add-live-note", positionals: [GROUP, TASK],
+    flags: [{ name: "text", type: "string", required: true, summary: "the note, at most 2048 UTF-8 bytes" }],
+    route: (c) => `groups/${group(c)}/tasks/${task(c)}/live-notes`,
+    payload: (c) => ({ text: String(c.args.flags.text) }) }),
   verb({ domain: "task", action: "set-loop", summary: "set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}", verb: "set-task-loop", positionals: [GROUP, TASK],
     flags: [{ name: "file", type: "string", required: true, summary: "the loop JSON" }],
     route: (c) => `groups/${group(c)}/tasks/${task(c)}/loop`,

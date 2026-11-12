@@ -778,7 +778,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
@@ -877,6 +877,7 @@ export type CommandSuccessV1 = {
     | { kind: "group-dependency-added"; groupId: string; dependsOn: string }
     | { kind: "group-dependency-removed"; groupId: string; dependsOn: string }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
+    | { kind: "live-note-queued"; noteId: string; taskId: string }
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "task-retried"; taskId: string; fromRunId: string; nextRun?: { attempts: number; activeMs: number } }

@@ -622,6 +622,8 @@ export const commandVerbSchema = z.enum([
   "resume-from-handoff",
   "set-limit",
   "continue-task",
+  // Tester follow-up G Part 5: a note for a task's agent, delivered at its next step (any principal).
+  "add-live-note",
   "recovery-retry",
   "retry-task",
   "verify-saved-result",
@@ -818,6 +820,8 @@ export const resumeFromHandoffPayloadSchema = z
   .superRefine((value, ctx) => requireUnique(value.selections, (selection) => selection.taskId, ctx, ["selections"]));
 // #226 (ii): the operator's note for the continuation run, delivered as the start envelope's work.operatorNote.
 export const continueTaskPayloadSchema = z.object({ predecessorRunId: idSchema, checkpointId: idSchema, operatorNote: operatorNoteSchema.optional() }).strict();
+// Tester follow-up G Part 5 (ccloop C3 bounds a note at 1..2048 UTF-8 bytes): the note itself, nothing else.
+export const addLiveNotePayloadSchema = z.object({ text: z.string().min(1).refine((text) => Buffer.byteLength(text, "utf8") <= 2048, { message: "over-2048-utf8-bytes" }) }).strict();
 export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
   // Spec 2026-10-27 single-call unknown usage §9 R1: a single call blocked on unknown usage is retried only with its grant's charge acknowledged.
   // Tester follow-up F §2 (#116, ledger C3): or with the call's observed floor charged instead (singleCallSettlement.ts).
@@ -1284,6 +1288,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
     .strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-limit"), target: groupCommandTargetSchema, payload: setLimitPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("add-live-note"), target: taskCommandTargetSchema, payload: addLiveNotePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-task"), target: groupCommandTargetSchema, payload: retryTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb:z.literal("verify-saved-result"), target:taskCommandTargetSchema, payload:verifySavedResultPayloadSchema }).strict(),
@@ -1394,6 +1399,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z
     .object({ ...effectiveCommandFields, verb: z.literal("continue-task"), target: taskCommandTargetSchema, payload: continueTaskPayloadSchema })
     .strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("add-live-note"), target: taskCommandTargetSchema, payload: addLiveNotePayloadSchema }).strict(),
   z
     .object({ ...effectiveCommandFields, verb: z.literal("recovery-retry"), target: commandTargetSchema, payload: recoveryRetryPayloadSchema })
     .strict(),
@@ -2433,6 +2439,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("spend-cap-cleared"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("usage-calendar-set"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("task-labels-set"), taskId: idSchema, labelsVersion: positiveSafeInteger }).strict(),
+  z.object({ kind: z.literal("live-note-queued"), noteId: idSchema, taskId: idSchema }).strict(),
   z.object({ kind: z.literal("task-loop-set"), taskId: idSchema, loopVersion: positiveSafeInteger, proposalVersion: positiveSafeInteger }).strict(),
   z
     .object({
@@ -2591,6 +2598,7 @@ export type ImportPlanPayload = z.infer<typeof importPlanPayloadSchema>;
 export type HandoffStopPayload = z.infer<typeof handoffStopPayloadSchema>;
 export type ResumeFromHandoffPayload = z.infer<typeof resumeFromHandoffPayloadSchema>;
 export type ContinueTaskPayload = z.infer<typeof continueTaskPayloadSchema>;
+export type AddLiveNotePayload = z.infer<typeof addLiveNotePayloadSchema>;
 export type RecoveryRetryPayload = z.infer<typeof recoveryRetryPayloadSchema>;
 export type SettleUnknownUsagePayload = z.infer<typeof settleUnknownUsagePayloadSchema>;
 export type RetryTaskPayload = z.infer<typeof retryTaskPayloadSchema>;
