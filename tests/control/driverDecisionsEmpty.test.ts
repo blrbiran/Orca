@@ -5,6 +5,10 @@ import { hasPath } from "../../src/control/driverLanding.js";
 import { DriverCrash, createExecutionDriver } from "../../src/control/executionDriver.js";
 import { listPendingDecisions } from "../../src/control/pendingDecisions.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
+import { replenishStartWakes } from "../../src/control/executionDriver.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { readWebGroup } from "../../src/control/webService.js";
+import { answerSingleCalls } from "./fixtures/singleCallAnswers.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Control run decisions plan Task 7: an empty result is not landed (deviation D14), yet the decisions its run reported
@@ -142,15 +146,28 @@ describe("E: an empty result's decisions land in a ledger-only commit (control r
   }, 30000);
 
   // Issues #153/#127: D14 is kept (the task is blocked), and the run now says why, so the board card names a cause.
-  it("records empty-result on a settled empty run, and the board card names it; a landed run records none", async () => {
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — §10.1: a command-verified empty run asks the goal
+  // judge; D14's block remains only for criteria-review verdicts and partial multi runs. The empty half now runs the
+  // judge (not-met), the re-run with its finding, and a second empty result: that run says `no-change-twice`.
+  it("records no-change-twice on the judge's empty re-run, and the board card names it; a landed run records none", async () => {
     const empty = await driverHarness([{ taskId: "a" }], { files: () => ({}), decisions: () => [good()] }); try {
-      const runId = await empty.claim();
-      await empty.until(empty.driver(), () => empty.body(runId).drive?.cleanedUp === true);
-      const work = JSON.parse(String(empty.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
-      // mutation: drop the empty-result write in stepE -> blockedReason null and firstFailure null, red
-      expect({ state: empty.body(runId).state, reason: empty.body(runId).drive.blockedReason, work: work.status })
-        .toEqual({ state: "settled", reason: "empty-result", work: "blocked" });
-      expect(readGroupSummary(empty.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "empty-result" });
+      const limit = readWebGroup(empty.h.store, "g").ledger.groupLimit;
+      expect("error" in empty.service.setLimit(empty.h.command("set-limit", { limit: { ...limit, activeMs: limit.activeMs * 4, attempts: limit.attempts + 20, sessions: limit.sessions + 20 } }))).toBe(false);
+      answerSingleCalls(empty, () => ({ outcome: "complete", output: { verdict: "not-met", finding: "add the missing file" } }));
+      const first = await empty.claim();
+      const driver = empty.driver();
+      const workStatus = () => String(JSON.parse(String(empty.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status);
+      await empty.until(driver, () => workStatus() === "ready");
+      replenishStartWakes({ store: empty.h.store, admissionGate: empty.h.deps.admissionGate });
+      const delivered = await deliverScheduledStart(empty.dispatch, "g");
+      if (delivered.kind !== "claimed") throw new Error(`no re-run: ${JSON.stringify(delivered)}`);
+      const runId = delivered.runId;
+      expect(runId).not.toBe(first);
+      await empty.until(driver, () => empty.body(runId).drive?.cleanedUp === true);
+      // mutation: drop the no-change-twice write -> a second judge (blockedReason null) and firstFailure null, red
+      expect({ state: empty.body(runId).state, reason: empty.body(runId).drive.blockedReason, work: workStatus() })
+        .toEqual({ state: "settled", reason: "no-change-twice", work: "blocked" });
+      expect(readGroupSummary(empty.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "no-change-twice" });
     } finally { await empty.h.dispose(); }
     const landed = await driverHarness([{ taskId: "a" }]); try {
       const runId = await landed.claim();
