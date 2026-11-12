@@ -302,3 +302,11 @@ A fresh reviewer read §1–§9 as a builder and asked five questions only the h
    after the release that ships them; groups confirmed earlier keep today's rules and do not start a review. Parts 1, 4,
    5 and 6 apply to every group from the upgrade on (Part 1 only to runs that finish after it). A per-group marker
    records which model a group was confirmed under.
+
+## 11. Correction (2026-11-12, same session, controller): one model marker, stamped at group creation
+
+§10.5 said "groups confirmed after the release". The Part 2 plan needs the marker before confirm (an estimate writes a
+task's expectation into the editable proposal), so the marker is stamped when the group is created
+(`planImport.ts`, the only place a budget proposal is inserted), and Parts 1–3 read the same marker: one field
+`modelVersion: "followup-g"` on the group body. Groups created before the release keep today's rules for Parts 2 and 3.
+The Part 1 plan's `confirmedUnder` and the Part 2 plan's `budgetModel` are both replaced by it.
