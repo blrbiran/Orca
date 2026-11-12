@@ -1,4 +1,6 @@
 import { dependencyReady } from "./dependencyReady.js";
+import { expectationModelApplies } from "./expectationModel.js";
+import { reconcileWaitTokens } from "./liveCeiling.js";
 import {readCanonicalRecord} from "./snapshot.js";
 import {savedRecoverySchema,savedResultAdmissionSchema,recoveryPolicyAuthoritySchema} from "./savedResultProtocol.js";
 import {lineageWorkUsage,settlementArtifact,settlementSame} from "./usageSettlement.js";
@@ -78,7 +80,9 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
   if(!previewing&&"proposal" in group&&(group.proposal as {state?:string})?.state!=="confirmed")continue;
   if(store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(id)||store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=?").get(id)||groupUsageUnknown(store,id))continue;
   const limit=budgetAmountSchema.parse(group.limit),applicable:Binder[]=[];
-  if(limit.tokens!==null)applicable.push(binder(`group:${id}`,"group",limit.tokens-group.used.tokens-group.reserved.tokens-(previewing?options.extraReserved?.tokens??0:0)));
+  // Tester follow-up H: a reconciliation waiting for the tokens running ceilings hold is funded before any new claim.
+  const waiting=expectationModelApplies(group)?reconcileWaitTokens(store,id):0;
+  if(limit.tokens!==null)applicable.push(binder(`group:${id}`,"group",limit.tokens-group.used.tokens-group.reserved.tokens-waiting-(previewing?options.extraReserved?.tokens??0:0)));
   const repo=groupRepoIdOf(group as unknown as Record<string,unknown>);
   for(const cap of capStatuses(store,repo,at))applicable.push(binder(`cap:${cap.scope}:${cap.period}`,"spend-cap",cap.headroom,cap));
   const works=allWork(store,id).sort((a,b)=>a.workItemId<b.workItemId?-1:a.workItemId>b.workItemId?1:0);

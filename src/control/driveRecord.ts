@@ -92,6 +92,9 @@ export const reconcileRecordSchema = z.object({
   // Control run decisions plan Task 6: where the conflict's blocks are, for the reconcile decision's text. Optional: a
   // record from before this field still parses, and its reconciliation lands without that decision (stderr says so).
   conflictBlocks: z.array(z.object({ path: z.string().min(1), startLine: safeInteger, endLine: safeInteger }).strict()).optional(),
+  // Tester follow-up H: the token budget this reconciliation waits to be funded with while running ceilings hold the
+  // group's remainder (driverLanding.ts reconcileFunding); claims leave it aside. Absent when it is not waiting.
+  fundingWait: safeInteger.positive().optional(),
 }).strict();
 export type ReconcileRecord = z.infer<typeof reconcileRecordSchema>;
 

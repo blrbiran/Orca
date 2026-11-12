@@ -3,6 +3,7 @@ import { add, subtract, syncWebBudget } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { freshCeilingReserve } from "./liveCeiling.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { singleCallClaimRowOf } from "./singleCall.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
@@ -33,6 +34,9 @@ type GroupLedger = { used: Amount; reserved: Amount; limit: Record<string, numbe
  * tokens fall below `floorTokens`, or `"spend-cap"` when a spend cap blocks the claim.
  */
 export function boundedGroupGrant(store: ControlStore, groupId: string, grant: Amount, floorTokens: number, at: number): { grant: Amount } | { unfunded: string } {
+  // Tester follow-up H: in an expectation-model group, the share a run gave back when its execution ended (the work run
+  // this judge is for, or every run before a review) counts now, not only after the driver's next pass.
+  freshCeilingReserve(store, groupId);
   const group = readGroup(store, groupId) as unknown as GroupLedger;
   const tokenLimit = group.limit.tokens ?? null;
   const tokens = tokenLimit === null ? grant.tokens : Math.min(grant.tokens, tokenLimit - group.used.tokens - group.reserved.tokens);

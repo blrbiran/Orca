@@ -47,10 +47,69 @@ export function liveCeilingOf(run: unknown): LiveCeilingRecord | null {
   return parsed.data;
 }
 
-/** The part of an active run's ceiling it has not used yet; 0 for a run without one. */
-export function ceilingOutstanding(run: { liveCeiling?: unknown; cumulative: { work: { tokens: number } } }): number {
+/**
+ * Tester follow-up H (Part B gap): the states of a run whose execution has ended -- collected from ccloop's terminal report,
+ * so its work usage is booked in full -- and that may still need a run Orca dispatches for the group (a reconciliation
+ * of its landing, the goal judge of its empty result).
+ */
+const EXECUTION_ENDED = new Set(["collected", "reconciling", "landed", "settled"]);
+export function executionEnded(run: { state?: unknown }): boolean {
+  return typeof run.state === "string" && EXECUTION_ENDED.has(run.state);
+}
+
+/**
+ * The part of an active run's ceiling it has not used yet; 0 for a run without one, and 0 once its execution ended
+ * (follow-up H): nothing is left for the ceiling to bound, so its unused share returns to the group for the runs Orca
+ * dispatches for that landing.
+ */
+export function ceilingOutstanding(run: { state?: unknown; liveCeiling?: unknown; cumulative: { work: { tokens: number } } }): number {
   const ceiling = liveCeilingOf(run);
-  return ceiling === null ? 0 : Math.max(0, ceiling.tokens - run.cumulative.work.tokens);
+  return ceiling === null || executionEnded(run) ? 0 : Math.max(0, ceiling.tokens - run.cumulative.work.tokens);
+}
+
+/** The reconcile record fields the funding reads (driveRecord.ts ReconcileRecord). */
+type ReconcileFunding = { tokenBudget?: unknown; spawning?: unknown; spawnSeq?: unknown; fundingWait?: unknown };
+const reconcileOf = (run: unknown): ReconcileFunding | null =>
+  (run as { state?: unknown }).state === "reconciling" ? ((run as { drive?: { reconcile?: ReconcileFunding | null } }).drive?.reconcile ?? null) : null;
+
+/**
+ * Tester follow-up H: a reconciliation spawned and not yet booked is held in the group's reserve at its whole token budget,
+ * so no claim or raise hands that share to a task run while it spends (the group cap stays hard). Its booking
+ * (driverLanding.ts recordReconcileUsage) writes the `reconcile-usage:<run>:spawn-<n>` row; the next re-derivation drops
+ * the hold (until then the spend is held twice -- the safe direction).
+ */
+export function reconcileInFlight(store: ControlStore, runId: string, run: unknown): number {
+  const record = reconcileOf(run);
+  if (record === null || record.spawning !== true || typeof record.tokenBudget !== "number") return 0;
+  const booked = store.db.prepare("SELECT 1 FROM outbox WHERE id=?").get(`reconcile-usage:${runId}:spawn-${typeof record.spawnSeq === "number" ? record.spawnSeq : 0}`);
+  return booked === undefined ? record.tokenBudget : 0;
+}
+
+/**
+ * Tester follow-up H: the token budgets of the group's reconciliations that wait for funds the running ceilings hold
+ * (driverLanding.ts reconcileFunding "wait"). A claim leaves them aside, so the tokens those runs give back on ending go
+ * to the reconciliation first; the hold ends with the wait (spawned, blocked, or reset).
+ */
+export function reconcileWaitTokens(store: ControlStore, groupId: string): number {
+  let tokens = 0;
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(groupId)) {
+    const record = reconcileOf(JSON.parse(String(row.body)));
+    if (record !== null && record.spawning !== true && typeof record.fundingWait === "number") tokens += record.fundingWait;
+  }
+  return tokens;
+}
+
+/** Tester follow-up H: the unused ceilings of the group's runs still executing -- what their ending can give back. */
+export function workingCeilingOutstanding(store: ControlStore, groupId: string): number {
+  let tokens = 0;
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(groupId)) tokens += ceilingOutstanding(JSON.parse(String(row.body)));
+  return tokens;
+}
+
+/** Tester follow-up H: true while an active run of the group has ended its execution and not yet left (see executionEnded). */
+export function endedRunActive(store: ControlStore, groupId: string): boolean {
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? AND active=1").all(groupId)) if (executionEnded(JSON.parse(String(row.body)))) return true;
+  return false;
 }
 
 /** The task's pause line as a whole-lineage token total (spec §2.5), or null when it has none. */
@@ -82,14 +141,15 @@ export function claimCeiling(store: ControlStore, groupId: string, work: { taskI
 
 /**
  * Re-derive the group's reserve for live ceilings from its active runs: `group.reserved.tokens` moves by the difference and
- * `liveCeilingReserved` is set to the new total. `current` is a run whose newest body is not stored yet (a usage booking).
+ * `liveCeilingReserved` is set to the new total -- the unused ceilings of the runs still executing plus, follow-up H, the
+ * budgets of the reconciliations in flight (reconcileInFlight). `current` is a run whose newest body is not stored yet (a usage booking).
  * Mutates `group`; the caller saves it (and its Web ledger mirror).
  */
 export function syncCeilingReserve(store: ControlStore, group: GroupRecord, current?: { runId: string; liveCeiling?: unknown; cumulative: { work: { tokens: number } } }): boolean {
   let target = 0;
   for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1").all(group.groupId)) {
     const run = current !== undefined && String(row.id) === current.runId ? current : JSON.parse(String(row.body));
-    target += ceilingOutstanding(run);
+    target += ceilingOutstanding(run) + reconcileInFlight(store, String(row.id), run);
   }
   const held = (group as { liveCeilingReserved?: number }).liveCeilingReserved ?? 0;
   if (target === held) return false;
@@ -98,6 +158,18 @@ export function syncCeilingReserve(store: ControlStore, group: GroupRecord, curr
   group.reserved = { ...group.reserved, tokens };
   (group as { liveCeilingReserved?: number }).liveCeilingReserved = target;
   return true;
+}
+
+/**
+ * Tester follow-up H: re-derive an expectation-model group's ceiling reserve now and store it when it moved -- before a
+ * funding check of a run Orca dispatches for the group, so a share an ended run gave back is seen without waiting for the
+ * driver's next pass. Call inside a transaction.
+ */
+export function freshCeilingReserve(store: ControlStore, groupId: string): void {
+  const group = readGroup(store, groupId);
+  if (!expectationModelApplies(group) || !syncCeilingReserve(store, group)) return;
+  syncWebBudget(store, group, null);
+  saveGroup(store, group);
 }
 
 /** Free headroom of a finite group: what neither its booked usage nor any reservation (ceilings included) holds. */

@@ -1,4 +1,6 @@
 import { claimCapBlocking } from "./spendCaps.js";
+import { expectationModelApplies } from "./expectationModel.js";
+import { freshCeilingReserve, workingCeilingOutstanding } from "./liveCeiling.js";
 import { applyDecisionAllowances } from "./groupAllowances.js";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -703,6 +705,23 @@ export function reconcileAffordable(store: ControlStore, groupId: string, tokenB
 }
 
 /**
+ * Tester follow-up H (Part B gap): whether a reconciliation can be funded now (`funded`), once the group's running task
+ * runs end and give back their unused ceilings (`wait`), or not at all (`short`: blocked `reconcile-budget`, as before).
+ * In an expectation-model group the running ceilings may hold the whole remainder; waiting -- with no raise and no new
+ * claim taking what they give back -- funds the reconciliation without lending it tokens the cap does not have. A group
+ * created before the release answers as reconcileAffordable did. Call inside a transaction (it re-derives the reserve).
+ */
+export function reconcileFunding(store: ControlStore, groupId: string, tokenBudget: number): "funded" | "wait" | "short" {
+  if (!expectationModelApplies(readGroup(store, groupId))) return reconcileAffordable(store, groupId, tokenBudget) ? "funded" : "short";
+  freshCeilingReserve(store, groupId);
+  if (reconcileAffordable(store, groupId, tokenBudget)) return "funded";
+  if (claimCapBlocking(store, groupId, tokenBudget, store.now()) !== null) return "short";
+  const group = readGroup(store, groupId);
+  const available = budgetBalance(group.limit, group.used, group.reserved).reserve.tokens ?? 0;
+  return available + workingCeilingOutstanding(store, groupId) >= tokenBudget ? "wait" : "short";
+}
+
+/**
  * spec §5.3(1)-(5): re-create the conflict in a clone of the target (its `origin` is the target, which
  * `materialiseConflict` fetches from), name the other side, synthesize a contract carrying both sides,
  * and check the group can afford it -- all before anything is spent.
@@ -729,7 +748,8 @@ async function beginReconcile(deps: ExecutionDriverDeps, runId: string, targetRe
   const synthesized = await synthesizeReconcileContractOf(side(run.taskId!), others.map(side), contracts, runsDir, conflict);
   if ("escalate" in synthesized) { blockRun(deps, runId, "D", `reconcile-contract:${synthesized.escalate}`); return true; }
   const tokenBudget = (JSON.parse(await readFile(synthesized.path, "utf8")) as { executionPolicy: { tokenBudget: number } }).executionPolicy.tokenBudget;
-  if (!reconcileAffordable(store, run.groupId, tokenBudget)) { blockRun(deps, runId, "D", "reconcile-budget"); return true; }
+  // Follow-up H: a reconciliation that can be funded once running ceilings come back is begun, and waits in R to spawn.
+  if (write(deps, () => reconcileFunding(store, run.groupId, tokenBudget)) === "short") { blockRun(deps, runId, "D", "reconcile-budget"); return true; }
   const record: ReconcileRecord = {
     copyPath: copy, old, conflictCommit: conflict.conflictCommit, conflictedPaths: conflict.conflictedPaths, otherTaskId: others[0]!, otherTaskIds: others,
     reconcileRunId: `reconcile-${runId}`, runsDir, contractPath: synthesized.path, tokenBudget, spawning: false, pid: null, outcome: null, attemptSha: null,
@@ -835,7 +855,6 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
   if (action === "orphan") { blockRun(deps, runId, "R", "reconcile-orphan-unknown"); return true; }
   if (action === "collect") return finishReconcile(deps, runId, record, loop, await latestAttemptSha(cloneDirOf(workdir), record.reconcileRunId));
   if (context.stopped || deps.admissionGate?.draining) return false;
-  if (!reconcileAffordable(store, run.groupId, record.tokenBudget)) { blockRun(deps, runId, "R", "reconcile-budget"); return true; }
   // Agent selection spec §6.1, §4.9 (plan T12, P9): a reconciliation runs with the GROUP's reconcile slot, frozen at
   // confirm (plan T11) -- never the conflicted run's own worker selection. Spec §6.4 step 4 (P14, wave 3 ruling I-2):
   // it is read through the confirmed snapshot's authority, which also proves the group record still agrees; a group
@@ -849,12 +868,32 @@ export async function stepR(deps: ExecutionDriverDeps, runId: string, context: D
     return true;
   }
   await rm(workdir, { recursive: true, force: true });
+  // Follow-up H: funded in the write that marks the spawn, so nothing claimed or raised in between is counted twice; in an
+  // expectation-model group the marked spawn is held in the group's reserve until its spend is booked. A reconciliation
+  // the running ceilings hold the funds for waits, marked so claims leave its budget aside (reconcileWaitTokens).
+  const funding = write(deps, () => {
+    const answer = reconcileFunding(store, run.groupId, record.tokenBudget);
+    const current = readDriverRun(store, runId);
+    const { fundingWait, ...rest } = current.drive!.reconcile!;
+    if (answer === "wait") {
+      if (fundingWait !== undefined) return { answer, moved: false };
+      current.drive = { ...current.drive!, reconcile: { ...rest, fundingWait: record.tokenBudget } };
+      saveDriverRun(store, current);
+      return { answer, moved: true };
+    }
+    if (answer === "short") return { answer, moved: false };
+    current.drive = { ...current.drive!, reconcile: { ...rest, spawning: true, pid: null, outcome: null, attemptSha: null, spawnSeq: (record.spawnSeq ?? 0) + 1 } };
+    saveDriverRun(store, current);
+    freshCeilingReserve(store, run.groupId);
+    return { answer, moved: true };
+  });
+  if (funding.answer === "short") { blockRun(deps, runId, "R", "reconcile-budget"); return true; }
+  if (funding.answer === "wait") return funding.moved;
   const setRecord = (patch: Partial<ReconcileRecord>): void => write(deps, () => {
     const current = readDriverRun(store, runId);
     current.drive = { ...current.drive!, reconcile: { ...current.drive!.reconcile!, ...patch } };
     saveDriverRun(store, current);
   });
-  setRecord({ spawning: true, pid: null, outcome: null, attemptSha: null, spawnSeq: (record.spawnSeq ?? 0) + 1 });
   const plan: PlanFile = { targetRepo: record.copyPath, ccloopBin: deps.ccloopBin, runsDir: record.runsDir, workBranch: `orca/${run.groupId}`, policy: "local-merge", ledgerMode: "out-of-repo", tasks: [] };
   const task: PlanTask = { taskId: record.reconcileRunId, contract: record.contractPath, dependsOn: [] };
   const running = runTask(plan, task, record.conflictCommit, record.reconcileRunId, {

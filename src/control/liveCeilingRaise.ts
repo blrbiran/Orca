@@ -1,6 +1,6 @@
 import { syncWebBudget } from "./budget.js";
 import { expectationModelApplies, hardCapOf } from "./expectationModel.js";
-import { ceilingGroupIds, groupHeadroom, liveCeilingOf, pauseLineOf, runCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
+import { ceilingGroupIds, endedRunActive, groupHeadroom, liveCeilingOf, pauseLineOf, runCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
 import { readGroup, readWork, saveGroup } from "./queries.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { capStatuses } from "./spendCaps.js";
@@ -12,7 +12,8 @@ import { nextClaimableTask } from "./webDispatch.js";
  * Tester follow-up G spec §2.1 (plan Part B, O3, D2): while a finite expectation-model group has free headroom and no task
  * waiting to be claimed, its running group-bound runs share that headroom equally -- each ceiling grows by
  * floor(H / runs), capped again by the run's pause line or hard cap. While a claimable task exists the headroom is left
- * for its claim, so later tasks are never starved. A group under a spend cap gets no raises (plan D7, gap). The raise is
+ * for its claim, so later tasks are never starved; while a run whose execution ended is still active (follow-up H) it is
+ * left for the reconciliation or judge that run may need. A group under a spend cap gets no raises (plan D7, gap). The raise is
  * written -- and so reserved -- before ccloop is told (the driver's deliverLiveCeilings), so a crash in between holds the
  * reservation and the next pass delivers it.
  */
@@ -25,6 +26,9 @@ export function planCeilingRaises(store: ControlStore, groupId: string, at: numb
   if (headroom === null || headroom <= 0) return [];
   if (capStatuses(store, groupRepoIdOf(group as unknown as Record<string, unknown>), at).length > 0) return [];
   if (nextClaimableTask(store, groupId) !== null) return [];
+  // Tester follow-up H: while a run whose execution ended is still active, its landing may need a reconciliation (or its
+  // empty result the goal judge); the share it gave back stays free for that run Orca dispatches.
+  if (endedRunActive(store, groupId)) return [];
   const running: Array<{ runId: string; workItemId: string; revision: number; tokens: number }> = [];
   for (const row of store.db.prepare("SELECT id,work_item_id,body FROM runs WHERE group_id=? AND active=1 ORDER BY id").all(groupId)) {
     const ceiling = liveCeilingOf(JSON.parse(String(row.body)));
