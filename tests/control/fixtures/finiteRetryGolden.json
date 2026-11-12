@@ -107,7 +107,7 @@
     "again": {
       "error": {
         "code": "task-not-retryable",
-        "message": "task-not-retryable:authored-budget-exhausted"
+        "message": "task-not-retryable:authored-budget-exhausted:attempts(authored=2,inherited=2,fresh=0); add work to the retry: orca task retry g a --work '{\"attempts\":1}'"
       }
     }
   },

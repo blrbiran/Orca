@@ -13,6 +13,9 @@ import { driverHarness, type HarnessOptions } from "./fixtures/driverHarness.js"
  * a finite-legacy group, what a person's retry of a failed run answers and what the retried run is funded and dispatched
  * with -- the run's grant, its funded allowance and ccloop's execution policy -- and the next retry's answer once the
  * lineage's attempts are spent. Regenerate only on purpose: ORCA_WRITE_GOLDEN=1.
+ *
+ * Ruling (2026-11-12, tester follow-up G): regenerated for #264 -- the last retry's refusal now names the spent dimension,
+ * its numbers and the --work top-up (`again.error.message` of the finite optional-v1 group); nothing else in it moved.
  */
 const GOLDEN = new URL("./fixtures/finiteRetryGolden.json", import.meta.url);
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
