@@ -37,7 +37,8 @@ describe("D: a landing merge carries the run's decisions (control run decisions 
       expect((lines[0]!.evidence as string[]).slice(0, 2)).toEqual([`run ${runId}`, `attempt ${drive.attemptSha}`]);
       expect(git(t.repo, "rev-parse", `${landed}^2`)).toBe(drive.attemptSha);
       expect(git(t.repo, "rev-parse", "refs/heads/orca/g")).toBe(landed);
-      expect(git(t.repo, "log", "-1", "--format=%s", landed)).toBe(`orca: land ${runId}`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("ship" here), its run id an Orca-Run trailer.
+      expect(git(t.repo, "log", "-1", "--format=%s", landed)).toBe("ship");
       expect(git(t.repo, "show", `${landed}:a`)).toBe("a");
       expect(listPendingDecisions(t.h.store, "g")).toEqual([]);
     } finally { await t.h.dispose(); }
