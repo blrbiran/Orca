@@ -23,6 +23,8 @@ export interface SuggestionView {
   plan: { planHash: string };
   // Budget defaults spec 2026-11-11 §7 item 3: the group's token limit decides whether an estimate's task work is a ceiling.
   ledger: { groupLimit: { tokens: number | null } };
+  // Tester follow-up G spec §2.2: present (true) for a group created under the expectation model, whatever its limit.
+  expectationModel?: true;
   proposal: { state: string; proposalVersion: number };
   allocations: ReadonlyArray<Allocation>;
   workItems: ReadonlyArray<{ taskId: string; loopPlan?: LoopPlan | null }>;
@@ -82,7 +84,7 @@ export function adviceOf<V extends SuggestionView>(view: V): { estimateId: strin
  * an estimate's task work (tokens, attempts, active time) is an expectation, not a ceiling, so it is never offered as one;
  * the server refuses it too (estimate-advisory-in-unlimited-group). Handoff and goal-review reserves are unaffected.
  */
-export const estimateIsAdvisory = (view: { ledger: { groupLimit: { tokens: number | null } } }): boolean => view.ledger.groupLimit.tokens === null;
+export const estimateIsAdvisory = (view: { ledger: { groupLimit: { tokens: number | null } }; expectationModel?: true }): boolean => view.ledger.groupLimit.tokens === null || view.expectationModel === true;
 const ADVISORY_DIMENSIONS: ReadonlyArray<SuggestionDimension> = ["tokens", "activeMs", "attempts"];
 const advisoryTaskWork = (view: SuggestionView, allocation: Allocation, dimension: SuggestionDimension): boolean =>
   estimateIsAdvisory(view) && allocation.ownerKind === "task" && allocation.bucket === "work" && ADVISORY_DIMENSIONS.includes(dimension);

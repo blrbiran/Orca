@@ -298,6 +298,12 @@ export const durableCommandErrorStatuses = {
   // Budget defaults spec 2026-11-11 §7 item 3: in a group with no token limit an estimate's task work is an expectation,
   // never applied as a ceiling (a person's own finite value still is).
   "estimate-advisory-in-unlimited-group": 422,
+  // Tester follow-up G spec §10.3: the hard switch exists only in a group created under the follow-up G model, and only for
+  // a task's work tokens with a value.
+  "hard-cap-legacy-group": 422,
+  // Spec §2.2: in a follow-up G group an estimate's task work is an expectation too, whatever the group limit.
+  "estimate-advisory-in-expectation-group": 422,
+  "hard-cap-needs-tokens": 422,
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,
   "control-capability-unsupported": 422,

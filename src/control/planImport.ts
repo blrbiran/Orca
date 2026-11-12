@@ -275,6 +275,11 @@ export interface ImportedPlanWrite {
    * written on the group body. Absent, each adds no byte (tests/control/fixtures/importPlanStoredBytes.golden.json).
    */
   tokenLimit?: number | null; integration?: IntegrationScheme | null; origin?: ImportOrigin;
+  /**
+   * Tester follow-up G spec §11: the model the group is created under. Absent adds no byte. A group created under it gets
+   * no task token ceiling (spec §2.2: a task's tokens are an expectation; the group limit is the one hard line).
+   */
+  modelVersion?: typeof MODEL_VERSION_G;
 }
 /** Spec §9.1, §15: what started a group a schedule fired; passed in-process by the fire, never a payload field. */
 export interface ImportOrigin { kind: "schedule"; scheduleId: string; slot: number }
@@ -329,7 +334,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const estimateId = deferred ? null : `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
   const queued = preflight?.state === "queued";
   const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
-  const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>stripped!==null?stripped.workTokens:legacyCarry?TASK_WORK.tokens:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
+  const expectationGroup=input.modelVersion===MODEL_VERSION_G&&stripped===null&&!legacyCarry;
+  const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>stripped!==null?stripped.workTokens:legacyCarry?TASK_WORK.tokens:expectationGroup?null:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
   const taskAllocations = plan.tasks.flatMap(task => [
     { ownerKind: "task", ownerId: task.taskId, bucket: "work", state: "draft-encumbered", amount: {...TASK_WORK,tokens:authoredTokens(task)}, fieldProvenance: defaultProvenance() },
     { ownerKind: "task", ownerId: task.taskId, bucket: "handoff", state: "draft-encumbered", amount: cloneAmount(handoffAmount), fieldProvenance: defaultProvenance() },
@@ -475,7 +481,7 @@ function librarySource(deps: ImportDeps, repoId: string, ref: { entryId: string;
  * for a group imported with no token limit -- for a caller that turns the group into a limited one before anything reads
  * it (the historical finite-budget test fixture), which a limited import would have given one. No route passes it.
  */
-export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight" } = {}): ImportResult {
+export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight"; modelVersion?: typeof MODEL_VERSION_G } = {}): ImportResult {
   const outcome = applyWebCommand<CommandSuccessV1>(deps.store, {
     rawCommand: command,
     expand: () => {
@@ -502,7 +508,7 @@ export function importControlPlan(deps: ImportDeps, command: ImportCommand, opts
       const { estimateId, preflight } = writeImportedPlan(deps, { groupId: payload.groupId, repoId: payload.repoId, planId, plan, actorId: context.rawCommand.actorId, commandId: context.rawCommand.commandId,
         estimatorProfileId: payload.estimatorProfileId, estimatorProfileHash: payload.estimatorProfileHash, estimateMode: payload.estimateMode,
         ...(payload.tokenLimit === undefined ? {} : { tokenLimit: payload.tokenLimit }), ...(payload.integration === undefined ? {} : { integration: payload.integration }),
-        ...(opts.origin === undefined ? {} : { origin: opts.origin }) }, null, { estimate: unlimited ? "deferred" : "preflight" });
+        ...(opts.origin === undefined ? {} : { origin: opts.origin }), ...(opts.modelVersion === undefined ? {} : { modelVersion: opts.modelVersion }) }, null, { estimate: unlimited ? "deferred" : "preflight" });
       deps.beforeCommit?.();
       return success(context, payload.groupId, estimateId, preflight?.state ?? "none", preflight?.reasonCode ?? null);
     },

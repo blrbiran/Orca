@@ -98,7 +98,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca proposal`
 
 - `orca proposal show <group>` — the group's budget proposal: version, allocations, group limit, revision
-- `orca proposal set-budget <group> [--task <task>] [--allocation <allocation>] [--goal-review] --dimension <dimension> --value <value> [--proposed-group-limit <proposed-group-limit>]` — set one budget value: --task <t> --allocation work|handoff, or --goal-review; --dimension; --value <n>|none
+- `orca proposal set-budget <group> [--task <task>] [--allocation <allocation>] [--goal-review] --dimension <dimension> --value <value> [--proposed-group-limit <proposed-group-limit>] [--hard]` — set one budget value: --task <t> --allocation work|handoff, or --goal-review; --dimension; --value <n>|none
 - `orca proposal set-agent <group> [--slot <slot>] [--task <task>] [--agent <agent>] [--model <model>] [--clear]` — set one agent selection layer (--slot worker|estimator|reconcile, or --task <t>); --clear removes it
 - `orca proposal replace <group> --file <file>` — send a whole operation list {operations, proposedGroupLimit?} from a file; refused without --if-revision
 - `orca proposal edit <group>` — TTY only: edit the proposal in $EDITOR; the changed values are sent as replace --if-revision <the revision read>

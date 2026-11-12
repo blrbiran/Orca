@@ -896,6 +896,8 @@ const proposalOperationSchema = z
     value: safeInteger.nullable(),
     provenance: z.enum(["complex-1m-default", "model", "human"]),
     estimateId: idSchema.optional(),
+    // Tester follow-up G spec §10.3: the separate hard-cap switch for a task's work tokens; absent adds no byte.
+    hard: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -964,6 +966,7 @@ const effectiveProposalOperationSchema = z
     value: safeInteger.nullable(),
     provenance: z.enum(["complex-1m-default", "model", "human"]),
     estimateId: idSchema.nullable(),
+    hard: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -2273,6 +2276,9 @@ export const groupViewSchema = z
     // order); each present only when non-empty, so a group with neither has the view it had.
     handoffs: z.array(taskHandoffViewSchema).min(1).optional(),
     liveNotes: z.array(liveNoteViewSchema).min(1).optional(),
+    // Tester follow-up G spec §2.2: present only for a group created under the expectation model (a task's tokens are an
+    // expectation; the group limit is the one hard line), so every other group's view is what it was.
+    expectationModel: z.literal(true).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

@@ -9,6 +9,7 @@ import {retainSavedInterruption,readDriverRun,describeError,groupStopped} from "
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
+import { expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
 import { budgetAmountSchema, safeInteger } from "./schema.js";
@@ -626,7 +627,11 @@ export class WebControlService {
         // Loop plans spec §4.3 (C6, Rule 7): a loop task's work allocation has one owner, set-task-loop.
         const loopTasks = new Set(readArchivedPlan(this.store, id).plan.tasks.filter(task => task.loop !== undefined).map(task => task.taskId));
         const seen = new Set<string>();
-        const before = canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit });
+        // Tester follow-up G spec §2.2 / §10.3: in an expectation-model group a task's work tokens are its expectation (or,
+        // with the hard switch, its cap), kept on the work item; the allocation's tokens stay null (bounded by the group).
+        const expectationGroup = expectationModelApplies(group);
+        const intents = (): Buffer => canonicalBytes(this.store.db.prepare("SELECT id,body FROM work_items WHERE group_id=? ORDER BY id").all(id).map(row => [String(row.id), JSON.parse(String(row.body)).tokenIntent ?? null]));
+        const before = canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit, intents: expectationGroup ? intents().toString("utf8") : null });
         if(payload.operations.some(op=>op.target.scope==="task"&&op.target.allocation==="work"&&op.target.dimension==="tokens"&&op.value===null))enableOptionalTokenPolicy(this.store,id);
         for (const op of payload.operations) {
           const key = canonicalBytes(op.target).toString("utf8");
@@ -634,7 +639,13 @@ export class WebControlService {
           if (op.target.scope === "task" && op.target.allocation === "work" && loopTasks.has(op.target.taskId)) throw new ControlError("budget-owned-by-loop-plan");
           const row = allocationFor(proposal, op.target);
           if (row.bucket === "work" && op.value !== null && op.value <= 0 && op.target.dimension!=="tokens") throw new ControlError("execution-policy-unrepresentable");
+          const taskWorkTokens = op.target.scope === "task" && op.target.allocation === "work" && op.target.dimension === "tokens";
+          if (op.hard !== undefined) {
+            if (!expectationGroup) throw new ControlError("hard-cap-legacy-group");
+            if (!taskWorkTokens || (op.hard && op.value === null)) throw new ControlError("hard-cap-needs-tokens");
+          }
           if (op.provenance === "model") {
+            if (expectationGroup && op.target.scope === "task" && op.target.allocation === "work" && ["tokens", "activeMs", "attempts"].includes(op.target.dimension)) throw new ControlError("estimate-advisory-in-expectation-group", op.target.dimension);
             if (op.target.scope === "task" && op.target.allocation === "work") refuseAdvisoryTaskWork(payload.proposedGroupLimit ?? proposal.groupLimit, [op.target.dimension]);
             verifyModelField(this.store, id, proposal, op.target, op.value, op.estimateId!);
             refuseStaleEstimate(this.store, id, op.estimateId!);
@@ -643,12 +654,21 @@ export class WebControlService {
             const defaults = op.target.scope === "goal-review" ? GOAL_REVIEW : op.target.allocation === "work" ? TASK_WORK : TASK_HANDOFF;
             if (op.value !== (op.target.scope==="task"&&op.target.allocation==="work"&&op.target.dimension==="tokens"&&hasTokenPolicy(this.store,id)?null:defaults[op.target.dimension])) throw new ControlError("proposal-version-conflict");
           }
+          if (expectationGroup && taskWorkTokens && op.target.scope === "task") {
+            const intent = writeTokenIntent(op.value, op.hard === true, { provenance: op.provenance, estimateId: op.estimateId });
+            const workRow = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(id, op.target.taskId);
+            if (!workRow) throw new ControlError("work-not-found");
+            const work = JSON.parse(String(workRow.body)) as Record<string, unknown>;
+            if (intent === null) delete work.tokenIntent; else work.tokenIntent = intent;
+            this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, op.target.taskId);
+            continue;
+          }
           if(op.target.dimension==="tokens")row.amount.tokens=op.value;else row.amount[op.target.dimension]=safeInteger.parse(op.value);
           row.fieldProvenance[op.target.dimension] = { provenance: op.provenance, estimateId: op.estimateId };
         }
         proposal.groupLimit = payload.proposedGroupLimit ?? proposal.groupLimit;
         const commitments = resetDraftReserve(this.store, id, group, proposal);
-        if (before.equals(canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit }))) throw new ControlError("no-op-command");
+        if (before.equals(canonicalBytes({ allocations: proposal.allocations, limit: proposal.groupLimit, intents: expectationGroup ? intents().toString("utf8") : null }))) throw new ControlError("no-op-command");
         reopenProposal(this.store, id, group, proposal, commitments);
         return success(context, { kind: "proposal-edited", proposalVersion: proposal.proposalVersion });
       },

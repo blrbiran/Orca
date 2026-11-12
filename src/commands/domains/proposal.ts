@@ -81,6 +81,9 @@ export const PROPOSAL_ROWS: CommandDef[] = [
       { name: "dimension", type: "string", required: true, summary: "tokens|activeMs|attempts|sessions" },
       { name: "value", type: "string", required: true, summary: "a non-negative integer, or none (a task's work tokens only: no ceiling)" },
       { name: "proposed-group-limit", type: "string", humanOnly: true, summary: "also propose the group limit (JSON)" },
+      // Tester follow-up G spec §10.3: in a group created after the budget change a task's work tokens are an expectation;
+      // --hard makes them a cap. The server refuses it by name in an older group (hard-cap-legacy-group).
+      { name: "hard", type: "boolean", summary: "a task's work tokens become a hard cap, not an expectation (groups created after the budget change)" },
     ],
     route: (c) => `groups/${group(c)}/proposal/edit`,
     payload: async (c) => {
@@ -98,11 +101,11 @@ export const PROPOSAL_ROWS: CommandDef[] = [
       } else target = { scope: "goal-review", dimension };
       const limit = json(c, "proposed-group-limit");
       return {
-        baseProposalVersion: await baseVersion(c), operations: [{ target, value: raw === "none" ? null : Number(raw), provenance: "human" }],
+        baseProposalVersion: await baseVersion(c), operations: [{ target, value: raw === "none" ? null : Number(raw), provenance: "human", ...(c.args.flags.hard === true ? { hard: true } : {}) }],
         ...(limit === undefined ? {} : { proposedGroupLimit: limit }),
       };
     },
-    examples: ["orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 800000"] }),
+    examples: ["orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 800000", "orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 400000 --hard"] }),
   verb({ domain: "proposal", action: "set-agent", summary: "set one agent selection layer (--slot worker|estimator|reconcile, or --task <t>); --clear removes it",
     verb: "proposal-set-agent", positionals: [GROUP],
     flags: [

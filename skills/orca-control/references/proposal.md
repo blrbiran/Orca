@@ -12,7 +12,7 @@ the group's budget proposal: version, allocations, group limit, revision
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
-## `orca proposal set-budget <group> [--task <task>] [--allocation <allocation>] [--goal-review] --dimension <dimension> --value <value> [--proposed-group-limit <proposed-group-limit>]`
+## `orca proposal set-budget <group> [--task <task>] [--allocation <allocation>] [--goal-review] --dimension <dimension> --value <value> [--proposed-group-limit <proposed-group-limit>] [--hard]`
 
 set one budget value: --task <t> --allocation work|handoff, or --goal-review; --dimension; --value <n>|none
 
@@ -25,9 +25,11 @@ set one budget value: --task <t> --allocation work|handoff, or --goal-review; --
 - `--dimension <dimension>` (required): tokens|activeMs|attempts|sessions
 - `--value <value>` (required): a non-negative integer, or none (a task's work tokens only: no ceiling)
 - `--proposed-group-limit <proposed-group-limit>`: also propose the group limit (JSON) — human-only: needs a person token
+- `--hard`: a task's work tokens become a hard cap, not an expectation (groups created after the budget change)
 
 ```
 orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 800000
+orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 400000 --hard
 ```
 
 ## `orca proposal set-agent <group> [--slot <slot>] [--task <task>] [--agent <agent>] [--model <model>] [--clear]`

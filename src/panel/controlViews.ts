@@ -72,6 +72,7 @@ import { orchestrationSummary } from "../control/orchestration.js";
 import { liveNotesOf } from "../control/liveNotes.js";
 import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
+import { expectationModelApplies } from "../control/expectationModel.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
@@ -1422,6 +1423,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Tester follow-up G Parts 4.7, 5: each key only when non-empty, so every other group's view is unchanged.
     ...handoffsView(store, groupId),
     ...liveNotesView(body),
+    // Tester follow-up G spec §2.2: only for an expectation-model group, so every other view is what it was.
+    ...(expectationModelApplies(body) ? { expectationModel: true as const } : {}),
   };
   view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
   deriveExpectations(view, readSnapshot);

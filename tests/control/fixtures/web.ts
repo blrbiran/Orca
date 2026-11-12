@@ -66,6 +66,8 @@ export interface WebFixtureOptions {
   storeNow?: () => number;
   /** Tester round 2 §7.2 condition 11: the routed context the import runs under (who created the group); absent, none. */
   importContext?: { client: string; principal: string; personAuthority?: boolean };
+  /** Tester follow-up G spec §11: the model the group is created under (absent: the import's default). */
+  modelVersion?: "followup-g";
 }
 
 /** Agent selection spec §3: the complete selection this fixture's task work items are frozen with. */
@@ -129,7 +131,7 @@ export async function webFixture(snapshot = profileSnapshot(), tasks: readonly W
   // the import (seedHistoricalFiniteBudget), so it asks for the import-time estimate a limited group gets; an optional-v1
   // (unlimited) fixture gets none, and its `estimateId` is null.
   const runImport = () => importControlPlan({ ...deps, estimatorObservation: () => ({ profile: frozen, observed, probeFailureCode: null, resolution: prepared.observation.resolution }) }, importCommand,
-    options.tokenPolicy === "optional-v1" ? {} : { estimate: "preflight" });
+    { ...(options.tokenPolicy === "optional-v1" ? {} : { estimate: "preflight" as const }), ...(options.modelVersion === undefined ? {} : { modelVersion: options.modelVersion }) });
   const imported = options.importContext === undefined ? runImport() : withCommandContext(importCommand.commandId, options.importContext, runImport);
   if ("error" in imported || imported.result.kind !== "imported") throw new Error(JSON.stringify(imported));
   if(options.tokenPolicy!=="optional-v1")seedHistoricalFiniteBudget(h.store,"g");

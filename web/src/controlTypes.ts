@@ -574,6 +574,8 @@ export type GroupViewV1 = {
   handoffs?: TaskHandoffViewV1[];
   /** Tester follow-up G Part 5: the group's Live notes in send order; absent when none was sent. */
   liveNotes?: LiveNoteViewV1[];
+  /** Tester follow-up G spec §2.2: true only for a group created under the expectation model. */
+  expectationModel?: true;
 };
 
 /** Tester follow-up G Part 4: a stored file's state (src/control/taskHandoffs.ts). */

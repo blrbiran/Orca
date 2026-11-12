@@ -127,6 +127,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `duplicate-correction-id` | 409 |
 | `duplicate-proposal-target` | 422 |
 | `duplicate-task-id` | 422 |
+| `estimate-advisory-in-expectation-group` | 422 |
 | `estimate-advisory-in-unlimited-group` | 422 |
 | `estimate-in-flight` | 422 |
 | `estimate-stale` | 409 |
@@ -196,6 +197,8 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `handoff-parent-invalid` | 422 |
 | `handoff-request-conflict` | 409 |
 | `handoff-work-not-found` | 404 |
+| `hard-cap-legacy-group` | 422 |
+| `hard-cap-needs-tokens` | 422 |
 | `identity-space-exhausted` | 422 |
 | `integration-busy` | 409 |
 | `integration-invalid` | 400 |

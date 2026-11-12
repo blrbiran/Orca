@@ -25,6 +25,8 @@ export const git = (cwd: string, ...args: string[]): string =>
 export interface HarnessOptions {
   budgetMode?: "soft" | "strict";
   tokenPolicy?:WebFixtureOptions["tokenPolicy"];
+  /** Tester follow-up G spec §11 (web.ts). */
+  modelVersion?: WebFixtureOptions["modelVersion"];
   behaviour?: (workItemId: string) => FakeBehaviour;
   files?: (workItemId: string) => Record<string, string | null>;
   delayAccept?: () => Promise<void>;
@@ -79,7 +81,7 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
+  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, ...(options.modelVersion ? { modelVersion: options.modelVersion } : {}), killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");
