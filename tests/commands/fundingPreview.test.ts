@@ -1,5 +1,7 @@
 // Issue #212: an authored work allocation is a request; the group limit funds less. `proposal show` and `group confirm`
-// print what a claim would actually grant now. Their JSON is unchanged.
+// print what a claim would actually grant now.
+// Ruling (2026-11-12, tester follow-up G): #212 asks for the funded grant in --json too (agents read JSON), so "JSON is
+// unchanged" is replaced: the document's own fields stay as they were and `funding` (the preview's rows) follows them.
 import { describe, expect, it } from "vitest";
 import { cli, useFakePanels } from "./fixtures/fakePanel.js";
 import { world } from "./fixtures/world.js";
@@ -13,14 +15,16 @@ const preview = { status: 200, body: { schema: "orca-funding-preview-v1", groupI
 const routes = { "GET groups/g-alpha/funding-preview": preview };
 
 describe("the grant a claim would fund is shown (#212)", () => {
-  it("proposal show prints it, and JSON is unchanged", async () => {
+  it("proposal show prints it, and JSON carries the same rows after the document's own fields", async () => {
     const w = await world({}, routes);
     const shown = await cli(["proposal", "show", "g-alpha"], w.dir);
     expect(shown.code).toBe(0);
     expect(shown.stdout).toContain(LINE);
     const json = await cli(["proposal", "show", "g-alpha", "--json"], w.dir);
+    const body = JSON.parse(json.stdout).body as Record<string, unknown>;
     expect(JSON.parse(json.stdout)).toMatchObject({ status: 200, body: { schema: "orca-proposal-view-v1" } });
-    expect(json.stdout).not.toContain("fundableTokens");
+    expect(Object.keys(body)).toEqual(["schema", "groupId", "revision", "proposal", "allocations", "groupLimit", "funding"]);
+    expect(body.funding).toEqual(preview.body.rows);
   });
 
   it("group confirm prints it before the command's own answer", async () => {
