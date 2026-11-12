@@ -934,6 +934,8 @@ export const en = {
     // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the run was not switched; its installation rests.
     quotaRest: { vendor: "{{installation}} is out of quota until {{time}}.", default: "{{installation}} is resting, retry around {{time}}." },
     // Issue #209: a 0-usage rate limit on a model the agent's catalog does not list.
+    // Tester #274: the field ccloop's strict execute shape refused in the agent's answer (diagnosis.formatField).
+    formatField: "The agent's answer did not fit the execute format; refused: {{field}}.",
     catalogMiss: "This run used no tokens and its model is not in the agent's catalog ({{warning}}); the provider may have refused the model rather than limited the rate. Choose a listed model in Settings → Agent and retry the task.",
     // Session 3cfc2e73 D7 (#158): an omp execute format failure's attempt refs (the same facts orca run show prints).
     formatFailureWork: {

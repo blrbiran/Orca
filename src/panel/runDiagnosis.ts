@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { ArtifactRef } from "../control/types.js";
 import { join } from "node:path";
 import { readFormatFailureWork, type FormatFailureWork } from "./formatFailureWork.js";
+import { refusedFormatField } from "../control/formatRefusal.js";
 
 export interface RunDiagnosis {
   phase: "estimate" | "work" | "handoff" | "single-call";
@@ -19,6 +20,11 @@ export interface RunDiagnosis {
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null };
   /** Session 3cfc2e73 D7 (#158): where an omp execute format failure's work is kept (formatFailureWork.ts); omitted when none. */
   formatFailureWork?: FormatFailureWork;
+  /**
+   * Tester #274: the field ccloop's strict execute shape refused (`commandOutputs: expected array, received string`), from
+   * the failure cause's detail (formatRefusal.ts); omitted when the detail names none. `cause` above is unchanged by it.
+   */
+  formatField?: string;
 }
 
 type DiagnosticRun = {
@@ -64,7 +70,8 @@ export function readRunDiagnosis(store: ControlStore, run: DiagnosticRun): RunDi
   const failure = run.drive?.failureCause ?? null;
   // ccloop's run directory is `<sourceDir>/run` (ccloop src/control/worker.ts); its attempt refs live in the target repository.
   const formatFailureWork = run.drive?.sourceDir === undefined ? null : readFormatFailureWork(join(run.drive.sourceDir, "run"), run.drive.targetRepo ?? null);
+  const formatField = refusedFormatField(failure?.detail);
   return { phase: run.phase, step, cause, attempt: run.providerAttemptOrdinal,
     ...(failure === null ? {} : { failureCause: { cause: failure.cause, phase: failure.phase, detail: failure.detail } }),
-    ...(formatFailureWork === null ? {} : { formatFailureWork }) };
+    ...(formatFailureWork === null ? {} : { formatFailureWork }), ...(formatField === null ? {} : { formatField }) };
 }

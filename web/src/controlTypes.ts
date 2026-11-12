@@ -439,7 +439,9 @@ export type RunViewV1 = {
   failureCode: string | null;
   diagnosis?: { phase: "estimate" | "work" | "handoff" | "single-call"; step: "planning" | "executing" | "verifying" | null; cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "path-policy" | "unknown"; attempt: number; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null };
     /** Session 3cfc2e73 D7 (#158): an omp execute format failure's attempt refs, what each changed, and the refused issues. */
-    formatFailureWork?: { attempt: number; attemptBase: string | null; refs: Array<{ ref: string; commit: string | null; files: string[]; filesMore: boolean; stat: string[] }>; issues: Array<{ path: string; message: string }> } };
+    formatFailureWork?: { attempt: number; attemptBase: string | null; refs: Array<{ ref: string; commit: string | null; files: string[]; filesMore: boolean; stat: string[] }>; issues: Array<{ path: string; message: string }> };
+    /** Tester #274: the field ccloop's strict execute shape refused (`commandOutputs: expected array, received string`). */
+    formatField?: string };
   blockedReason?: string | null;
   /** Terminal run closure #169: the failed run's accounting is closed and a fresh retry is admissible. */
   terminalClosed?: boolean;

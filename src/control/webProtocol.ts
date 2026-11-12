@@ -2013,7 +2013,9 @@ export const runViewSchema = z
       // Session 3cfc2e73 D7 (#158): an omp execute format failure's attempt refs and what each changed (src/panel/formatFailureWork.ts).
       formatFailureWork: z.object({ attempt: positiveSafeInteger, attemptBase: commitShaSchema.nullable(),
         refs: z.array(z.object({ ref: nonemptyString, commit: commitShaSchema.nullable(), files: z.array(z.string()), filesMore: z.boolean(), stat: z.array(z.string()) }).strict()),
-        issues: z.array(z.object({ path: z.string(), message: z.string() }).strict()) }).strict().optional() }).strict().optional(),
+        issues: z.array(z.object({ path: z.string(), message: z.string() }).strict()) }).strict().optional(),
+      // Tester #274: the field ccloop's strict execute shape refused, from the failure cause's detail (src/control/formatRefusal.ts).
+      formatField: nonemptyString.optional() }).strict().optional(),
     // Issue fixes spec §4.2(1), (5): ccloop's own reason for the terminal it reported, and the drive record's outcome (the
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),

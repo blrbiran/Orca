@@ -57,11 +57,15 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   // Issue #209: a 0-usage rate limit on a model the catalog does not list may be the provider refusing the model.
   const catalogLine = props.run.catalogMiss === undefined ? null
     : <span data-testid="run-catalog-miss">{t("control.catalogMiss", { warning: props.run.catalogMiss })} </span>;
+  // Tester #274: the field ccloop's strict execute shape refused in the agent's answer, in words.
+  const formatField = props.run.diagnosis?.formatField;
+  const formatLine = formatField === undefined ? null
+    : <span data-testid="run-format-field">{t("control.formatField", { field: formatField })} </span>;
   // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode on that installation.
   const installation = props.run.agent?.installation;
   const schemaLine = !rejectsOutputSchema([failure?.detail, props.run.diagnosis?.failureCause?.detail, props.run.stopReason]) ? null
     : <span data-testid="run-structured-output-hint">{installation === undefined ? t("control.structuredOutput.hintAny") : t("control.structuredOutput.hint", { installation })} </span>;
-  return <>{lineage} — {causeLine}{catalogLine}{schemaLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}<FormatFailureWorkLines work={props.run.diagnosis?.formatFailureWork} /></>;
+  return <>{lineage} — {causeLine}{formatLine}{catalogLine}{schemaLine}{restLine}<span>{t("control.diagnosis.phaseLabel", { phase })}{diagnosis.step && ` · ${t("control.diagnosis.stepLabel", { step: t(`control.diagnosis.step.${diagnosis.step}`) })}`} · {t("control.diagnosis.attempt", { attempt: diagnosis.attempt })} · {cause}. {next}</span> {t("control.diagnosis.identity", { runId: props.run.runId })}{raw !== null && <> · {text !== null && `${text} `}<code>{raw}</code></>}{props.run.failureCode !== null && <>{" · "}<code>{props.run.failureCode}</code></>}<FormatFailureWorkLines work={props.run.diagnosis?.formatFailureWork} /></>;
 }
 
 type FormatFailureWork = NonNullable<NonNullable<RunViewV1["diagnosis"]>["formatFailureWork"]>;

@@ -218,6 +218,11 @@ export function postMergeCheckLines(check: PostMergeCheckView | undefined): stri
  * Name them, what each changed against the attempt's base, and the read-only git to look at it, so a person can take
  * the work by hand.
  */
+/** Tester #274: the field ccloop's strict execute shape refused (runDiagnosis.ts formatField), as run show and run results print it. */
+function formatFieldLine(field: string): string {
+  return `the agent's answer did not fit the execute format; refused: ${field}`;
+}
+
 function formatFailureLines(work: FormatFailureWork | undefined): string[] {
   if (work === undefined) return [];
   const base = work.attemptBase;
@@ -236,6 +241,8 @@ interface RunResultsBody {
   runId?: string; groupId?: string; taskId?: string | null; availability?: string; source?: { status: string; reason: string | null };
   attempts?: Array<{ attempt: number; current: boolean; execution: string; verification: string; outputs: Array<{ status: string }> }>;
   recoverability?: Recoverability;
+  /** Tester #274: added by compose from the group view's run (runDiagnosis.ts formatField); absent when it names none. */
+  formatField?: string;
 }
 type Eligibility = { status: string; reason?: string } | { unreadable: string };
 /**
@@ -268,6 +275,7 @@ function runResultsText(body: unknown): string {
   const b = body as RunResultsBody;
   const source = b.source === undefined || b.source.status === "available" ? "" : ` (source ${b.source.status}${b.source.reason === null ? "" : `: ${b.source.reason}`})`;
   const lines = [`run ${b.runId ?? "?"}  group ${b.groupId ?? "?"}  task ${b.taskId ?? "-"}`, `task explanation and outputs: ${b.availability ?? "?"}${source}`];
+  if (b.formatField !== undefined) lines.push(formatFieldLine(b.formatField));
   for (const a of b.attempts ?? []) {
     const counts = new Map<string, number>();
     for (const output of a.outputs) counts.set(output.status, (counts.get(output.status) ?? 0) + 1);
@@ -427,7 +435,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; phase?: string; outcome?: string | null; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null } }; postMergeCheck?: PostMergeCheckView; catalogMiss?: string } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; phase?: string; outcome?: string | null; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null }; formatField?: string }; postMergeCheck?: PostMergeCheckView; catalogMiss?: string } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -446,6 +454,8 @@ export const READ_ROWS: CommandDef[] = [
         ...(rejectsOutputSchema([cause?.detail, b.run?.diagnosis?.failureCause?.detail, b.run?.stopReason])
           ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),
         ...(b.run?.pathPolicyMisses?.length ? ["observed path misses:", ...b.run.pathPolicyMisses.map((miss) => `  ${miss.repoKey === null ? "" : `${miss.repoKey}:`}${miss.path}`), ...(b.run.taskId ? [`To allow only these paths: orca task retry ${b.groupId} ${b.run.taskId} --allow-observed-paths`] : [])] : []),
+        // Tester #274: the field ccloop's strict execute shape refused in the agent's answer.
+        ...(b.run?.diagnosis?.formatField === undefined ? [] : [formatFieldLine(b.run.diagnosis.formatField)]),
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
         ...emptyResultLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
         ...postMergeCheckLines(b.run?.postMergeCheck),
@@ -490,7 +500,15 @@ export const READ_ROWS: CommandDef[] = [
       let eligibility: Eligibility;
       try { eligibility = await c.read(`runs/${ids(c, "run")}/saved-result-eligibility`) as Eligibility; }
       catch (error) { eligibility = { unreadable: readFailureCode(error) }; }
-      return { ...results, recoverability: recoverabilityOf(eligibility, results as RunResultsBody) };
+      // Tester #274: the refused field of a format failure, from the run's entry in its group view, for the human text only
+      // (--json keeps its two reads and its bytes; `run show --json` carries diagnosis.formatField).
+      let formatField: string | undefined;
+      const groupId = (results as RunResultsBody).groupId;
+      if (groupId !== undefined && !c.args.global.json) {
+        try { formatField = (await c.read(`groups/${groupId}`) as { runs: Array<{ runId: string; diagnosis?: { formatField?: string } }> }).runs.find((r) => r.runId === ids(c, "run"))?.diagnosis?.formatField; }
+        catch { formatField = undefined; }
+      }
+      return { ...results, recoverability: recoverabilityOf(eligibility, results as RunResultsBody), ...(formatField === undefined ? {} : { formatField }) };
     },
     format: runResultsText }),
   read({ domain: "run", action: "eligibility", summary: "whether a run's saved result can be verified instead of re-run", positionals: [RUN], paths: (c) => [`runs/${ids(c, "run")}/saved-result-eligibility`] }),
