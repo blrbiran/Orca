@@ -212,3 +212,21 @@ the same funded attempts, group finishes; fourth loss in a row blocks `worker-lo
 finite group waits for the explicit settlement, then restarts; an undetermined worker is never settled, blocks past the
 grace, is listed by recovery list, and `recovery retry --run` re-checks), `tests/control/sleepBlockedResumeE2E.test.ts`
 (#267), plus CLI and Web wording criteria. Mutations: `/private/tmp/orca-h1112/orca-273/mutations.log`.
+
+### Orca half, item 9 — a handoff request open on a run whose worker is lost (seat `orca-273`, 2026-11-13, controller follow-up)
+
+Measured on the combined branch (controller, handoffE2E G intermittent at load ~20): a run with an open handoff request
+is step H's (`driverHandoff.ts deliverAndCollect`), which ignored `worker`, while stepC -- when it ran before the stop
+arrived -- settled the same run as worker-lost. Which won depended on timing. Now, deterministically:
+
+- Step H, collecting for an open request, settles a `lost` worker the same way (`settleLostWorker`, `underStop`): ccloop
+  writes the `worker-lost` failed terminal with its stop proof; the next round takes the run through C (blocked,
+  `terminal:failed`, cause `worker-lost`), and step H closes the request from that terminal (`closeBlocked` →
+  `settleHandoffCheckpoint`): **`settled-unrecoverable`** (no checkpoint to continue), at once, not at the grace.
+- Under a request, a settle refusal (`control-worker-not-lost`, `-state-unavailable`) and an `undetermined` worker start
+  no worker grace: the request's own grace (outcome-unknown past deadline + killGraceMs + 60 s) owns them.
+- The task's restart follows item 5: the group is stopped by the handoff-stop, so `workerLostPass` does not restart it
+  until the stop is cleared.
+
+Criteria: `handoffE2E.test.ts` "H-lost" (new); "G" rewritten (Ruling, tester follow-up H) to freeze the worker with
+SIGSTOP -- alive, yielding nothing -- since its subject is the grace timing, not the worker's death.
