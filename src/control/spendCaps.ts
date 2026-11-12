@@ -1,3 +1,4 @@
+import { ceilingOutstanding } from "./liveCeiling.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
@@ -29,8 +30,12 @@ export function committedTokens(store: ControlStore, scope: UsageScope, excludeG
   for (const row of store.db.prepare("SELECT r.group_id AS group_id, r.body AS body, g.body AS gbody FROM runs r JOIN groups g ON g.id=r.group_id WHERE r.active=1 OR (EXISTS(SELECT 1 FROM funded_allowances f WHERE f.run_id=r.id) AND (json_extract(r.body,'$.unknown.work')=1 OR json_extract(r.body,'$.unknown.handoff')=1))").all()) {
     if (excludeGroupId !== null && row.group_id === excludeGroupId) continue;
     if (repo !== null && groupRepoIdOf(JSON.parse(String(row.gbody)) as Record<string, unknown>) !== repo) continue;
-    const remaining = (JSON.parse(String(row.body)) as { remaining?: { work?: { tokens?: unknown }; handoff?: { tokens?: unknown } } }).remaining;
-    const work = remaining?.work?.tokens, handoff = remaining?.handoff?.tokens;
+    const run = JSON.parse(String(row.body)) as { remaining?: { work?: { tokens?: unknown }; handoff?: { tokens?: unknown } }; liveCeiling?: unknown; cumulative?: { work: { tokens: number } } };
+    const remaining = run.remaining;
+    // Tester follow-up H: an expectation-model run has no work grant; what it is promised is its live ceiling's unused part.
+    const work = remaining?.work?.tokens === null && run.liveCeiling !== undefined && run.cumulative !== undefined
+      ? ceilingOutstanding(run as Parameters<typeof ceilingOutstanding>[0]) : remaining?.work?.tokens;
+    const handoff = remaining?.handoff?.tokens;
     // A NaN here would open every gate it reaches, so an unreadable run stops the reading instead.
     if (!Number.isSafeInteger(work) || !Number.isSafeInteger(handoff)) throw new ControlError("recovery-blocked", "run-remaining-invalid");
     total += (work as number) + (handoff as number);

@@ -10,6 +10,7 @@ import type { ExecutionDriver } from "../../src/control/executionDriver.js";
 import { decideFundedAllowance } from "../../src/control/fundedAllowance.js";
 import { planCeilingRaises } from "../../src/control/liveCeilingRaise.js";
 import { readGroup } from "../../src/control/queries.js";
+import { committedTokens } from "../../src/control/spendCaps.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 import { answerSingleCalls } from "./fixtures/singleCallAnswers.js";
@@ -182,6 +183,19 @@ describe("a reconciliation in an expectation-model group is funded under the har
       expect(t.ids.map((id) => t.body(id).drive?.blockedReason ?? null).sort()).toEqual([null, "reconcile-budget"].sort());
       expect(t.spawns()).toHaveLength(0);
       await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("H8: a spend cap counts an expectation-model run's unused live ceiling as committed (no grant to read)", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", behaviour: () => "stoppable" });
+    try {
+      const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
+      const set = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 10 * M } }));
+      if ("error" in set) throw new Error(`set-limit refused: ${JSON.stringify(set)}`);
+      const runId = await t.claim();
+      const run = t.body(runId);
+      expect(run.remaining.work.tokens).toBeNull();
+      expect(committedTokens(t.h.store, "all", null)).toBe(run.liveCeiling.tokens - run.cumulative.work.tokens + run.remaining.handoff.tokens);
     } finally { await t.h.dispose(); }
   });
 });
