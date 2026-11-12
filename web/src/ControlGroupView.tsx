@@ -54,6 +54,8 @@ import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
 import { isRetryKey } from "./reviewKeys.js";
 import { useClock } from "./clock.js";
+import { LiveNoteBox, LiveNoteList } from "./LiveNotes.js";
+import { GroupHandoffs } from "./GroupHandoffs.js";
 import { NOTE_MAX_BYTES, utf8Bytes, type NoteScope } from "./operatorNote.js";
 import { Select } from "./ui/Select.js";
 
@@ -128,7 +130,7 @@ const isProblemRun = (run: RunViewV1): boolean => hasFailureOutcome(run) || run.
  * and its transcript, opened by itself on the latest call; with nothing running, the most recent run. `active` is the
  * region being shown: the pane stays mounted when hidden, and a hidden transcript must ask nothing.
  */
-function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number }): JSX.Element {
+function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element {
   const { t } = useTranslation();
   const ticking = useClock(30_000);
   const now = props.now ?? ticking;
@@ -153,6 +155,11 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number })
         <h4>{name}</h4>
         <p className="num" title={formatTokens(run.used.tokens, currentLanguage())}>{enumText("runState", run.state)} · {facts(run)}</p>
         <RunTranscript runId={run.runId} active={props.active} follow />
+        {/* Tester follow-up G Part 5: the task's notes and the box to add one, at the bottom of its Live entry. */}
+        {run.taskId !== null && <>
+          <LiveNoteList notes={(view.liveNotes ?? []).filter((note) => note.taskId === run.taskId)} running={latest === undefined} />
+          <LiveNoteBox view={view} taskId={run.taskId} archived={props.archived} onCommand={props.onCommand} />
+        </>}
       </section>;
     })}
   </>;
@@ -808,7 +815,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </table>
 
         </>,
-        live: <LiveRegion view={view} active={props.active !== false && region === "live"} now={props.now} />,
+        live: <LiveRegion view={view} active={props.active !== false && region === "live"} now={props.now} archived={archived} onCommand={onCommand} />,
         preparation: <>
       <section aria-label={t("control.preparation.reviewTitle")}>
         <h3>{t("control.preparation.reviewTitle")}</h3>
@@ -860,6 +867,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 </>,
         results: <>
       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+      <GroupHandoffs view={view} />
       <p>{t("detail.resultsEvidence")}</p>
       {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">

@@ -38,6 +38,7 @@ import type {
   GroupDecisionsViewV1,
   GroupViewV1,
   HandoffStopPayloadV1,
+  TaskHandoffContentV1,
   ImportPlanPayloadV1,
   IntegrationSchemeV1,
   PlanLibraryEntryViewV1,
@@ -153,6 +154,9 @@ export const fetchRequirement = (groupId: string): Promise<RequirementViewV1> =>
 /** GET /api/control/groups/:groupId/decisions -- control run decisions plan Task 8: the group's decisions, read from refs. */
 export const fetchGroupDecisions = (groupId: string): Promise<GroupDecisionsViewV1> =>
   controlGet<GroupDecisionsViewV1>(`/api/control/groups/${segment(groupId)}/decisions`);
+/** GET /api/control/groups/:groupId/handoffs/:taskId/:runId -- tester follow-up G Part 4.7: one run's stored handoff. */
+export const fetchTaskHandoff = (groupId: string, taskId: string, runId: string): Promise<TaskHandoffContentV1> =>
+  controlGet<TaskHandoffContentV1>(`/api/control/groups/${segment(groupId)}/handoffs/${segment(taskId)}/${segment(runId)}`);
 /** GET /api/control/corrections -- debug task plan Task 10: every correction, its debug groups and its closed state. */
 export const readCorrections = (): Promise<CorrectionListV1> => controlGet<CorrectionListV1>("/api/control/corrections");
 /** GET /api/control/recovery -- every blocker the panel can see, across groups. */
@@ -443,6 +447,8 @@ export type ControlAction =
   | { verb: "handoff-stop"; groupId: string; expectedRevision: number; payload: HandoffStopPayloadV1 }
   | { verb: "resume-from-handoff"; groupId: string; expectedRevision: number; payload: ResumeFromHandoffPayloadV1 }
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
+  // Tester follow-up G Part 5: a note for a task's agent.
+  | { verb: "add-live-note"; groupId: string; taskId: string; expectedRevision: number; payload: { text: string } }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
   | { verb: "settle-unknown-usage"; groupId: string; expectedRevision: number; payload: SettleUnknownUsagePayloadV1 }
@@ -536,6 +542,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/resume-from-handoff`;
     case "continue-task":
       return `${group}/tasks/${segment(action.taskId)}/continue`;
+    case "add-live-note":
+      return `${group}/tasks/${segment(action.taskId)}/live-notes`;
     case "set-task-labels":
       return `${group}/tasks/${segment(action.taskId)}/labels`;
     case "set-task-loop":
