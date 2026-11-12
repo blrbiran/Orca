@@ -16,8 +16,10 @@ import { driverHarness } from "../control/fixtures/driverHarness.js";
  */
 describe("the funding preview of a retry with a top-up (#202)", { timeout: 120_000 }, () => {
   it("answers the fresh grant the next claim funds and the lineage's cost per attempt", async () => {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task ceiling and its top-up exist only in a group created
+    // before the follow-up G release (spec G §2.6, §10.5); new groups default to the expectation model, so this one names that model.
     const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], tokenBudget: 300_000 }], {
-      tokenPolicy: "optional-v1", behaviour: () => "failed", stopReason: () => "Error: check failed: node check.js", workTokens: () => 540_097,
+      tokenPolicy: "optional-v1", modelVersion: null, behaviour: () => "failed", stopReason: () => "Error: check failed: node check.js", workTokens: () => 540_097,
     });
     const app = express(); app.use(express.json());
     registerControlReadRoutes(app, { store: t.h.store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web");
