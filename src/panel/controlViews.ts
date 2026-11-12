@@ -58,6 +58,7 @@ import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
 import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
+import { attemptReviewOf, type AttemptReview } from "./attemptReview.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
 import { readSchedule } from "../control/schedules/store.js";
 import { archivedMarkOf } from "../control/archivedMark.js";
@@ -1151,6 +1152,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
 
     let profile: RunViewV1["profile"];
     let quotaRest: RunViewV1["quotaRest"];
+    let attemptReview: AttemptReview | undefined;
     if (run.phase === "single-call" && run.purpose === "quota-probe") {
       // Quota rest probe spec 2026-11-06 §2: a probe runs on the failed task's own agent and profile, on its own work item.
       if (run.taskId !== null || run.estimateId !== null || run.claimOrdinal !== null || run.handoffProfile !== null
@@ -1187,6 +1189,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // current run's claim grant -- or, while that run is the parked predecessor, its remaining -- and an older
       // run of the task's lineage keeps the grant it was claimed with.
       const current = work.currentRunId === runId;
+      // #227 residual: the checks Orca will run and the attempt's diff, for a run the server could accept.
+      attemptReview = attemptReviewOf(store, run as never, work);
       // Poll bench bound: the work body and earlier runs this view already holds, not per-run reads (fundedAllowance.ts preRead).
       const position = createdOrdinal.get(runId)! - 1;
       const earlierRuns = snapshot.runsByRowid.slice(0, position).filter(entry => String(entry.work_item_id) === run.workItemId).map(entry => decodedValue(snapshot.decodeRun(String(entry.id))));
@@ -1243,6 +1247,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(quotaRest === undefined ? {} : { quotaRest }),
       // Issue #209: the catalog miss the driver kept with a rate-limited failure, named only while the run used no tokens.
       ...(run.drive?.catalogMiss === undefined || run.cumulative[bucket].tokens !== 0 ? {} : { catalogMiss: run.drive.catalogMiss }),
+      ...(attemptReview === undefined ? {} : { attemptReview }),
       // Reviewed acceptance (#227): what the Web needs to say where an owner's acceptance stands; omitted when none.
       ...(run.operatorAcceptance === undefined ? {} : { operatorAcceptance: { state: run.operatorAcceptance.state, note: run.operatorAcceptance.note,
         principal: run.operatorAcceptance.principal, at: run.operatorAcceptance.at, reason: run.operatorAcceptance.reason, landedCommit: run.operatorAcceptance.landedCommit } }),

@@ -113,3 +113,40 @@ describe("accept a failed attempt after checks (#227)", () => {
     } finally { await i18n.changeLanguage("en"); }
   });
 });
+
+/**
+ * #227 residual: the form listed only a loop task's checks and showed nothing of what the attempt changed. The server's
+ * `attemptReview` (src/panel/attemptReview.ts) names the setup and required checks the driver will run for any task, and
+ * the attempt's diff stat once read; a task with none is told the driver refuses it (no-required-checks).
+ */
+describe("what the accept form shows from the server's review (#227 residual)", () => {
+  const STAT = [" a        | 1 +", " base.txt | 1 -", " 2 files changed, 1 insertion(+), 1 deletion(-)"];
+  const open = (review: RunViewV1["attemptReview"], item = blockedOn()) => {
+    const { task } = show(["owner"], settledFailed({ attemptReview: review }), item);
+    fireEvent.click(within(task).getByRole("button", { name: OPEN }));
+    return within(task).getByRole("group", { name: OPEN });
+  };
+
+  // mutation: the form reads item.loopPlan's checks only -> a non-loop task lists none -> red
+  // mutation: the setup list is not rendered -> red
+  it("lists a non-loop task's setup and required checks, and the attempt's diff stat", () => {
+    const form = open({ requiredChecks: ["npm test"], setupCommands: ["npm ci"], diff: { shortstat: "2 files changed, 1 insertion(+), 1 deletion(-)", stat: STAT } });
+    expect(within(within(form).getByRole("list", { name: "The task's checks" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["npm test"]);
+    expect(within(within(form).getByRole("list", { name: "The task's setup commands" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["npm ci"]);
+    const diff = within(form).getByTestId("accept-attempt-diff");
+    expect(diff.textContent).toContain("2 files changed, 1 insertion(+), 1 deletion(-)");
+    expect(diff.querySelector("pre")!.textContent).toBe(STAT.join("\n"));
+  });
+
+  // mutation: a null diff renders an empty stat instead of saying it is being read -> red
+  it("says the diff is being read until the server has it", () => {
+    const form = open({ requiredChecks: ["npm test"], setupCommands: [], diff: null });
+    expect(within(form).getByTestId("accept-attempt-diff").textContent).toContain("Reading what the attempt changed");
+  });
+
+  // mutation: the no-checks note is dropped -> red
+  it("tells a task with no required checks that Orca will refuse to land it", () => {
+    const form = open({ requiredChecks: [], setupCommands: [], diff: null });
+    expect(within(form).getByRole("note").textContent).toContain("no-required-checks");
+  });
+});

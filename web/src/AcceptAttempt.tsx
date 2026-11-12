@@ -33,7 +33,10 @@ export function AcceptAttempt(props: { run: RunViewV1; item: WorkItemViewV1; rol
     && (recorded === undefined || recorded.state === "refused");
   if (!offered) return state;
   const sendable = note.trim() !== "" && note.length <= NOTE_MAX;
-  const checks = item.loopPlan?.inputs.checks ?? [];
+  // #227 residual: the server names the checks the driver will run (any task kind) and the attempt's diff; a view without
+  // the field (an older server) falls back to the loop plan's checks, as before.
+  const review = run.attemptReview;
+  const checks = review?.requiredChecks ?? item.loopPlan?.inputs.checks ?? [];
   const send = (): void => {
     if (!sendable) return;
     props.onCommand({ verb: "accept-attempt", groupId: props.groupId, expectedRevision: props.revision, payload: { taskId: item.taskId, runId: run.runId, note } });
@@ -45,12 +48,28 @@ export function AcceptAttempt(props: { run: RunViewV1; item: WorkItemViewV1; rol
       {!open ? <button type="button" onClick={() => setOpen(true)}>{t("control.acceptAttempt.open")}</button> : (
         <div role="group" aria-label={t("control.acceptAttempt.open")}>
           <p>{t("control.acceptAttempt.explain")}</p>
+          {review !== undefined && (
+            <div data-testid="accept-attempt-diff">
+              <p>{t("control.acceptAttempt.diffHeading")}</p>
+              {review.diff === null ? <p>{t("control.acceptAttempt.diffReading")}</p> : <>
+                <p className="num">{review.diff.shortstat}</p>
+                <pre className="num">{review.diff.stat.join("\n")}</pre>
+              </>}
+            </div>
+          )}
+          {(review?.setupCommands.length ?? 0) > 0 && (
+            <>
+              <p>{t("control.acceptAttempt.setupHeading")}</p>
+              <ul aria-label={t("control.acceptAttempt.setupHeading")}>{review!.setupCommands.map((command) => <li key={command}><code>{command}</code></li>)}</ul>
+            </>
+          )}
           {checks.length > 0 && (
             <>
               <p>{t("control.acceptAttempt.checksHeading")}</p>
               <ul aria-label={t("control.acceptAttempt.checksHeading")}>{checks.map((check) => <li key={check}><code>{check}</code></li>)}</ul>
             </>
           )}
+          {review !== undefined && checks.length === 0 && <p role="note" data-tone="warn">{t("control.acceptAttempt.noChecks")}</p>}
           <label>
             {t("control.acceptAttempt.note")}
             <textarea value={note} maxLength={NOTE_MAX} aria-invalid={note.length > NOTE_MAX} onChange={(event) => setNote(event.target.value)} />

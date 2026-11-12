@@ -1911,6 +1911,10 @@ export const runViewSchema = z
     // Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; omitted when none was sent.
     operatorAcceptance: z.object({ state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: nonemptyString, at: safeInteger,
       reason: z.string().nullable(), landedCommit: z.string().nullable() }).strict().optional(),
+    // #227 residual: for a run the server could accept, the setup and required checks Orca will run on the merged tree, and
+    // the attempt's diff against the run's base (null until read, or when it cannot be); omitted for any other run.
+    attemptReview: z.object({ requiredChecks: z.array(z.string()), setupCommands: z.array(z.string()),
+      diff: z.object({ shortstat: z.string(), stat: z.array(z.string()) }).strict().nullable() }).strict().optional(),
     // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check did (driveRecord.ts postMergeCheckRecordSchema);
     // omitted for a run that did not land through it and for a record written before the field.
     postMergeCheck: z.object({

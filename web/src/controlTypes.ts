@@ -450,6 +450,8 @@ export type RunViewV1 = {
   catalogMiss?: string;
   /** Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; absent when none was sent. */
   operatorAcceptance?: { state: "pending" | "landed" | "refused"; note: string; principal: string; at: number; reason: string | null; landedCommit: string | null };
+  /** #227 residual: for a run the server could accept, the checks Orca will run and the attempt's diff (null until read). */
+  attemptReview?: { requiredChecks: string[]; setupCommands: string[]; diff: { shortstat: string; stat: string[] } | null };
   /** Tester follow-up E §4 (#245): what the landing's post-merge check did; absent when the run did not land through it. */
   postMergeCheck?: PostMergeCheckV1;
   continuable?: boolean;
