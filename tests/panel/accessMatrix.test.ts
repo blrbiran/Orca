@@ -36,6 +36,9 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "approve-pending-decision", payload: {}, tier: "open", member: V },
   { entry: "reject-pending-decision", payload: {}, tier: "open", member: V },
   { entry: "ratify-flagged-decision", payload: {}, tier: "open", member: V },
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — tester follow-up G §6.3 (#189): a person or an orchestrating agent (open), never a dispatched run or a Web member.
+  { entry: "allow-request", payload: {}, tier: "open", member: V },
+  { entry: "revoke-allowance", payload: {}, tier: "open", member: V },
   { entry: "add-group-dependency", payload: {}, tier: "open", member: V },
   { entry: "remove-group-dependency", payload: {}, tier: "open", member: V },
   { entry: "set-criteria-review", payload: { enabled: false }, tier: "open", member: V },
