@@ -156,15 +156,19 @@ describe("the group detail's order (spec §6.5)", () => {
     const banner = screen.getByRole("status", { name: "Archived" });
     const graph = screen.getByRole("figure", { name: "Dependency graph" });
     const items = screen.getByRole("heading", { name: "Work items" });
-    selectRegion("Runs and evidence");
-    const runs = screen.getByRole("heading", { name: "Runs" });
-    selectRegion("Preparation");
-    const budget = screen.getByRole("region", { name: "Budget proposal" });
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so a
+    // region's content leaves the page on a switch. The order is read while each is shown: the Progress content against the
+    // banner, then the Runs and Preparation content inside their own panels, which keep their place in the page.
     const follows = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const runsPanel = document.querySelector('[role="tabpanel"][data-overview-region="runs"]')!;
     expect(follows(banner, graph)).toBe(true);
     expect(follows(graph, items)).toBe(true);
-    expect(follows(items, runs)).toBe(true);
-    expect(runs.closest('[role="tabpanel"]')?.getAttribute("data-overview-region")).toBe("runs");
+    expect(follows(items, runsPanel)).toBe(true);
+    selectRegion("Runs and evidence");
+    const runs = screen.getByRole("heading", { name: "Runs" });
+    expect(runs.closest('[role="tabpanel"]')).toBe(runsPanel);
+    selectRegion("Preparation");
+    const budget = screen.getByRole("region", { name: "Budget proposal" });
     expect(budget.closest('[role="tabpanel"]')?.getAttribute("data-overview-region")).toBe("preparation");
   });
 });
