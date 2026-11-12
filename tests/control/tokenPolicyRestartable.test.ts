@@ -8,8 +8,11 @@ import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { committedTokens } from "../../src/control/spendCaps.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- the commitment these modes count is the run's funded work grant, which only a
+// pre-release group has (an expectation-model run holds a live ceiling instead: liveCeilingLedger.test.ts, H8); the
+// criterion names the pre-release model for every mode.
 it.each(["uncapped", "cap", "group", "legacy", "mixed"] as const)("conserves all commitments across repeated pre-provider stops (%s)", async mode => {
- const t=await driverHarness([{taskId:"a",tokenBudget:null}],{...(mode==="legacy"?{}:{tokenPolicy:"optional-v1" as const}),killGraceMs:0,behaviour:()=>"stoppable"});const driver=t.driver();
+ const t=await driverHarness([{taskId:"a",tokenBudget:null}],{...(mode==="legacy"?{}:{tokenPolicy:"optional-v1" as const}),modelVersion:null,killGraceMs:0,behaviour:()=>"stoppable"});const driver=t.driver();
  try {
   let other=0;
   if(mode==="mixed"){
