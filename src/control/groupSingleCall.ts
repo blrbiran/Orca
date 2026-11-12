@@ -64,7 +64,9 @@ export function claimGroupSingleCallInTransaction(store: ControlStore, input: {
   const group = readGroup(store, groupId);
   const runId = `run-${randomUUID()}`;
   const { envelopeHash } = insertSingleCallRun(store, {
-    groupId, workItemId, runId, ownerToken: randomUUID(), purpose: input.purpose, identity: input.identity,
+    // Tester #282: every run names its estimate (null for a group call), as the run read schema requires; without it the
+    // group view answered 423 run-invalid for good once a requirement review or a goal judge had run.
+    groupId, workItemId, runId, ownerToken: randomUUID(), purpose: input.purpose, identity: { estimateId: null, ...input.identity },
     graphVersion: group.graphVersion, targetVersion: attempt, commandId: workItemId, slot: input.slot, agentCapabilities: input.slot.capabilities,
     workGrant: { ...input.grant }, profile: input.profile, claimIdentity: `single-call:${groupId}:${workItemId}:${attempt}`, derivedContractHash: contractHash,
   });

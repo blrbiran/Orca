@@ -193,7 +193,8 @@ const persistedRunSchema = z.object({
   groupId: idSchema,
   workItemId: idSchema,
   taskId: idSchema.nullable(),
-  estimateId: idSchema.nullable(),
+  // Tester #282: a group single call (requirement review, goal judge) stored before the fix has no estimateId; read it as null.
+  estimateId: idSchema.nullable().default(null),
   runId: idSchema,
   generation: safeInteger.positive(),
   graphVersion: safeInteger.positive(),
@@ -233,6 +234,11 @@ const persistedRunSchema = z.object({
   // N1 DR1: a `single-call` run names its purpose, and the overview its prompt was built from once A2 stored it.
   purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge", "requirement-review"]).optional(),
   overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
+  // Tester #282: the identities of the two follow-up G group calls (requirementReview.ts, noChangeJudge.ts), as written.
+  requirementReview: z.object({ roundNo: safeInteger.positive(), tip: z.string().min(1) }).strict().optional(),
+  noChangeJudge: z.object({ taskId: idSchema, workRunId: idSchema }).strict().optional(),
+  // ...and the verdict the goal judge's completion writes on its own run (noChangeJudge.ts completeInTransaction).
+  judgeVerdict: z.object({ verdict: z.string().min(1), finding: z.string().nullable(), failure: z.string().nullable() }).strict().optional(),
   claimOrdinal: safeInteger.positive().nullable(),
   // Quota failover spec 2026-11-03 §8: the task's switch count at this claim (agentSwitch.ts).
   agentEpoch: safeInteger.positive().optional(),
