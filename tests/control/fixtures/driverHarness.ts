@@ -75,6 +75,8 @@ export interface HarnessOptions {
   listModels?: ExecutionPort["listModels"];
   /** Tester follow-up G spec §2.1: ccloop's `live-ceiling` method as the driver's port answers it (set before the router copies the port). */
   setLiveCeiling?: ExecutionPort["setLiveCeiling"];
+  /** Tester follow-up G spec §2.1: the live-ceiling stop the synthetic ccloop reports with a terminal (driverPort.ts). */
+  liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => import("../../../src/control/executionPort.js").ExecutionReport["liveCeilingStop"];
 }
 
 /**
@@ -105,6 +107,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.debug ? { debug: options.debug } : {}),
     ...(options.budgetSnapshot ? { budgetSnapshot: options.budgetSnapshot } : {}),
     ...(options.toolRules ? { toolRules: options.toolRules } : {}),
+    ...(options.liveCeilingStop ? { liveCeilingStop: options.liveCeilingStop } : {}),
     ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;

@@ -32,7 +32,10 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   | "handoff-invalid" | "live-note-delivered" | "live-note-undelivered"
   // Worker-lost recovery spec 2026-11-12 §5.2: ccloop confirmed the run's worker dead and settled the run (the machine
   // restarted or the process was killed).
-  | "worker-lost";
+  | "worker-lost"
+  // Tester follow-up G spec §2.1/§2.4/§2.5: a run stopped at the group cap, a task paused at its pause line, the decision on
+  // it, and a task's first booking over its expectation.
+  | "group-cap-reached" | "usage-paused" | "usage-pause-decided" | "usage-over-expectation";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
@@ -42,6 +45,7 @@ export const ACTIVITY_KINDS = [
   "allowance",
   "handoff-invalid", "live-note-delivered", "live-note-undelivered",
   "worker-lost",
+  "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
 ] as const satisfies readonly ActivityKind[];
 export type ActivityRow = { groupId: string; taskId?: string | null; runId?: string | null; kind: ActivityKind; body: Record<string, unknown> };
 export type ActivityEntry = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKind; body: Record<string, unknown> };

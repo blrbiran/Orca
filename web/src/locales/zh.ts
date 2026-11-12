@@ -2213,6 +2213,7 @@ export const zh: Translation<typeof en> = {
       "landing-watch": "落地后检查",
       "handoff-invalid": "交接无效", "live-note-delivered": "备注已送达", "live-note-undelivered": "备注未送达",
       "worker-lost": "执行进程丢失",
+      "group-cap-reached": "已到组上限", "usage-paused": "超出预期，已暂停", "usage-pause-decided": "暂停已决定", "usage-over-expectation": "已超出预期",
     },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
     proposalState: { editable: "可编辑", confirmed: "已确认" },

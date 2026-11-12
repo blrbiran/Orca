@@ -112,6 +112,7 @@ const activityKind = {
   "landing-watch": "landing watch",
   "handoff-invalid": "handoff invalid", "live-note-delivered": "note delivered", "live-note-undelivered": "note not delivered",
   "worker-lost": "worker lost",
+  "group-cap-reached": "group cap reached", "usage-paused": "paused over its expectation", "usage-pause-decided": "pause decided", "usage-over-expectation": "over its expectation",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;

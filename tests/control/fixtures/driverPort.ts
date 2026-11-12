@@ -71,6 +71,8 @@ export function fakeCcloopPort(input: {
   budgetSnapshot?: (workItemId: string) => { attemptsRemaining: number; timeRemainingMs: number; tokenBudgetRemaining: number | null } | undefined;
   /** ccloop per-contract tool rules spec §5: the run's tool-rule report collect answers at the top level; undefined = absent. */
   toolRules?: (workItemId: string) => ToolRulesReport | undefined;
+  /** Tester follow-up G spec §2.1: the stop ccloop reports when it stopped the run at its live ceiling; undefined = absent. */
+  liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => ExecutionReport["liveCeilingStop"];
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -138,7 +140,8 @@ export function fakeCcloopPort(input: {
     const budgetSnapshot = stop.terminal ? input.budgetSnapshot?.(claim.workItemId) : undefined;
     const toolRules = input.toolRules?.(claim.workItemId);
     const pathPolicyMisses = stop.terminal ? input.pathPolicyMisses?.(claim.workItemId) : undefined;
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }) };
+    const liveCeilingStop = stop.terminal ? input.liveCeilingStop?.(claim.workItemId, envelope) : undefined;
+    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
   };
 
   const port: ExecutionPort = {

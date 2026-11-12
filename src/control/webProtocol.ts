@@ -1953,6 +1953,8 @@ export const activityKindSchema = z.enum([
   "handoff-invalid", "live-note-delivered", "live-note-undelivered",
   // Worker-lost recovery spec 2026-11-12 §5.2: the run's worker died and ccloop settled the run.
   "worker-lost",
+  // Tester follow-up G spec §2.1/§2.4/§2.5.
+  "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
 ]);
 export const activityEntrySchema = z
   .object({

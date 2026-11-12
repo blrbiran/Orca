@@ -10,6 +10,7 @@ import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResul
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
 import { expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
+import { continueGroupCapStops } from "./usagePause.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
 import { budgetAmountSchema, safeInteger } from "./schema.js";
@@ -2477,15 +2478,21 @@ export class WebControlService {
         if (!["ready", "running", "review"].includes(group.status) && !overGrantBlocked) throw new ControlError("group-state-invalid");
         const limit = command.payload.limit;
         if (same(limit, group.limit)) throw new ControlError("no-op-command");
+        const toppedUp = limit.tokens !== null && group.limit.tokens !== null && limit.tokens > group.limit.tokens;
         // Unknown usage cannot authorize a decrease or a new allocation.
         if(limit.tokens!==null)assertNoActiveUnbounded(this.store,"all",id);
         const decreasing = dimensions.some(d => limit[d]!==null&&(group.limit[d]===null||limit[d]! < group.limit[d]!));
-        if (decreasing || !group.ledger.usageUnknown) assertKnownConservation(this.store, group, proposal);
+        // Tester follow-up G spec §2.1: in an expectation-model group a run may pass the cap by what it had in flight, so a
+        // top-up is checked against the limit it installs (its deficit must close), not against the one it replaces.
+        if (decreasing || !group.ledger.usageUnknown) assertKnownConservation(this.store, group, proposal, toppedUp && expectationModelApplies(group) ? limit : undefined);
         proposal.groupLimit = limit;
         setReserve(proposal, residual(limit, group.used, group.reserved));
         // §3.2: the status the block is lifted to is set by rule (overGrantBlock.ts), not restored from memory.
         if (overGrantBlocked) group.status = unblockedStatus(this.store, id, prerequisiteDone);
         saveWebAuthority(this.store, group, proposal);
+        // Tester follow-up G spec §2.1: a top-up continues every task that waits at the group cap (with its stopped run's
+        // work); a running one's ceiling is raised by the driver's next pass (liveCeilingRaise.ts).
+        if (toppedUp && expectationModelApplies(group)) continueGroupCapStops(this.store, id);
         return success(context, { kind: "limit-set", limit });
       },
     }).body);

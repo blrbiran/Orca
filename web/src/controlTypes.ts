@@ -684,6 +684,7 @@ export const WEB_ACTIVITY_KINDS = [
   "allowance",
   "handoff-invalid", "live-note-delivered", "live-note-undelivered",
   "worker-lost",
+  "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };

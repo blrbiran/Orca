@@ -15,6 +15,7 @@ import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
 import { raiseCeilings } from "./liveCeilingRaise.js";
+import { classifyCeilingStop } from "./usagePause.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
 import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
@@ -973,6 +974,9 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   deps.crash?.("C-after-handoff");
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&report.terminal.waitingCause==="token-allowance")throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if(report.terminal.waitingCause==="token-allowance")return settleTokenAllowance(deps,runId,report);
+  // Tester follow-up G spec §2.1/§2.5 (plan O4): a stop at the group cap or the pause line keeps its work and continues or waits;
+  // a person's hard cap (task-cap) ends exhausted below, as today.
+  if(report.liveCeilingStop!==undefined&&report.liveCeilingStop.cause!=="task-cap"&&outcome==="exhausted"&&candidate.result==="partial"&&run.mode===undefined&&run.recoveryOf===undefined&&liveCeilingOf(run)!==null)return settleCeilingStop(deps,runId,report);
   if (outcome !== "succeeded") {
     if(run.mode===undefined&&run.recoveryOf===undefined)try{await archiveRun(store,{runId,sourceDir:drive.sourceDir,repoDir:join(drive.sourceDir,"repo"),stopProof:candidate.stopProof},archiveAdmission(deps));}catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
     // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
@@ -2106,6 +2110,29 @@ function workerUndetermined(deps: ExecutionDriverDeps, run: DriverRun, reason: s
       .run(`${WORKER_UNDETERMINED}:${run.runId}`, run.groupId, run.runId, WORKER_UNDETERMINED, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
     return true;
   });
+ * Tester follow-up G spec §2.1/§2.5 (plan O4, D3): a run stopped at its live ceiling (cause group or pause-line) is settled
+ * recoverable with its partial candidate committed as a checkpoint -- the allowance path's settle without its ccloop
+ * allowance packet -- and classifyCeilingStop decides whether its task continues now, waits for a top-up, or waits for a
+ * decision. An incomplete snapshot blocks the run by name instead (it could not be continued with its work).
+ */
+async function settleCeilingStop(deps:ExecutionDriverDeps,runId:string,report:ExecutionReport):Promise<boolean> {
+ const {store}=deps,run=readDriverRun(store,runId),raw=report.candidate!,stop=report.liveCeilingStop!;
+ if(openRequestOf(store,run)!==null)return false;
+ const current=readRun(store,runId);
+ if(current.unknown.work||current.unknown.handoff){blockRun(deps,runId,"C","usage-unknown");return true;}
+ const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
+ if(archive.missing.length||archive.snapshot===null){blockRun(deps,runId,"C","live-ceiling-snapshot-incomplete",{outcome:"exhausted",...(report.terminal?.stopReason?{stopReason:report.terminal.stopReason}:{})});return true;}
+ await verifySnapshot(store,archive.snapshot);
+ const candidate:Candidate={...raw,checkpointId:`ceiling-${runId}`,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
+ await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled:()=>{
+  const settled=readDriverRun(store,runId);
+  if(openRequestOf(store,settled)!==null||settled.state!=="settled")throw new ControlError("handoff-request-conflict","ceiling-yields-to-handoff");
+  const work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{currentRunId?:string|null};
+  if(work.currentRunId!==undefined&&work.currentRunId!==runId)throw new ControlError("work-already-active");
+  settled.state="settled-recoverable";settled.drive={...settled.drive!,outcome:report.terminal!.outcome,...(report.terminal!.stopReason?{stopReason:report.terminal!.stopReason}:{})};(settled as {liveCeilingStop?:unknown}).liveCeilingStop=stop;saveDriverRun(store,settled);
+  classifyCeilingStop(store,{runId,groupId:run.groupId,workItemId:run.workItemId,taskId:run.taskId},stop,(deps.now?.()??new Date()).getTime());
+ }});
+ return true;
 }
 
 /** Dead-owner mechanical RPC cannot execute checks/providers or reclaim the old worker. */
