@@ -539,7 +539,7 @@ function persistAsyncPreparationFailure(store: ControlStore, command: ImportComm
  * identity/CAS preflight happens before dynamic defaults or I/O; applyWebCommand
  * repeats both checks after the await to close concurrent commit races.
  */
-export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf; multiDirRepoId?: (repoId: string) => boolean }, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight" } = {}): Promise<ImportResult> {
+export async function importControlPlanAsync(deps: AsyncImportDeps & { dirProjectOf?: DirProjectOf; multiDirRepoId?: (repoId: string) => boolean }, command: ImportCommand, opts: { origin?: ImportOrigin; estimate?: "preflight"; modelVersion?: typeof MODEL_VERSION_G | null } = {}): Promise<ImportResult> {
   const preflight = preflightWebCommand(deps.store, command);
   if (preflight) return preflight.body;
 
