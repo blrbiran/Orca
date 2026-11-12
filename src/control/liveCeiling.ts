@@ -161,9 +161,9 @@ export function syncCeilingReserve(store: ControlStore, group: GroupRecord, curr
 }
 
 /**
- * Tester follow-up H: re-derive an expectation-model group's ceiling reserve now and store it when it moved -- before a
- * funding check of a run Orca dispatches for the group, so a share an ended run gave back is seen without waiting for the
- * driver's next pass. Call inside a transaction.
+ * Tester follow-up H: re-derive an expectation-model group's ceiling reserve now and store it when it moved -- in the
+ * write that marks a reconciliation's spawn, so its budget is held before any claim or raise can see the headroom.
+ * Call inside a transaction.
  */
 export function freshCeilingReserve(store: ControlStore, groupId: string): void {
   const group = readGroup(store, groupId);

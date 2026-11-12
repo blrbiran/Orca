@@ -170,4 +170,18 @@ describe("a reconciliation in an expectation-model group is funded under the har
       expect(t.body(first).drive.noChangeJudge).toMatchObject({ state: "met" });
     } finally { await t.h.dispose(); }
   });
+
+  it("H7: a reconciliation nothing running can fund any more blocks reconcile-budget instead of waiting", async () => {
+    // Both runs use all but 1000 of their ceilings and nothing else runs: the 3M reconciliation cannot be funded.
+    const usage = new Map<string, number>();
+    const t = await twoConflicting(20 * M, {}, (id) => usage.get(id) ?? 10);
+    try {
+      for (const id of t.ids) usage.set(t.body(id).taskId, t.body(id).liveCeiling.tokens - 1000);
+      const driver = t.driver();
+      await untilDeadline(driver, () => t.ids.every((id) => [...LANDED, "blocked"].includes(t.body(id).state)));
+      expect(t.ids.map((id) => t.body(id).drive?.blockedReason ?? null).sort()).toEqual([null, "reconcile-budget"].sort());
+      expect(t.spawns()).toHaveLength(0);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
 });

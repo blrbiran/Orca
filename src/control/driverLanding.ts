@@ -709,11 +709,11 @@ export function reconcileAffordable(store: ControlStore, groupId: string, tokenB
  * runs end and give back their unused ceilings (`wait`), or not at all (`short`: blocked `reconcile-budget`, as before).
  * In an expectation-model group the running ceilings may hold the whole remainder; waiting -- with no raise and no new
  * claim taking what they give back -- funds the reconciliation without lending it tokens the cap does not have. A group
- * created before the release answers as reconcileAffordable did. Call inside a transaction (it re-derives the reserve).
+ * created before the release answers as reconcileAffordable did. The reserve it reads is the one the driver's pass
+ * re-derived (refreshCeilingReserves) or a booking synced.
  */
 export function reconcileFunding(store: ControlStore, groupId: string, tokenBudget: number): "funded" | "wait" | "short" {
   if (!expectationModelApplies(readGroup(store, groupId))) return reconcileAffordable(store, groupId, tokenBudget) ? "funded" : "short";
-  freshCeilingReserve(store, groupId);
   if (reconcileAffordable(store, groupId, tokenBudget)) return "funded";
   if (claimCapBlocking(store, groupId, tokenBudget, store.now()) !== null) return "short";
   const group = readGroup(store, groupId);
