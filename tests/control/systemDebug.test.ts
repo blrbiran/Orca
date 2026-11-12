@@ -71,8 +71,9 @@ async function ladderWorld(options: { debugFails?: boolean; humanBlock?: boolean
 
 describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", { timeout: 180_000 }, () => {
   it("skips an optional-budget ladder when no authored work remains for its required retry", async () => {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- authored task work that a run exhausts exists only in a pre-release group (spec G §2.6).
     const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], tokenBudget: 150_000 }], {
-      tokenPolicy: "optional-v1", behaviour: () => "exhausted", workTokens: () => 10_000_000,
+      tokenPolicy: "optional-v1", modelVersion: null, behaviour: () => "exhausted", workTokens: () => 10_000_000,
     });
     const service = new WebControlService({ ...t.h.deps, knownRepository: (id) => id === "repo", resolveRepository: () => t.repo });
     try {
@@ -87,8 +88,9 @@ describe("escalation ladder level 2: a system debug group fixes a failed task, w
   });
 
   it("leaves a pre-existing debug fix off the parent branch when its automatic retry cannot be funded", async () => {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a retry left unfunded by exhausted authored task work is a pre-release group's case (spec G §2.6).
     const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], tokenBudget: 150_000 }], {
-      tokenPolicy: "optional-v1", behaviour: (id) => id === "a" ? "exhausted" : "succeed",
+      tokenPolicy: "optional-v1", modelVersion: null, behaviour: (id) => id === "a" ? "exhausted" : "succeed",
       workTokens: (id) => id === "a" ? 10_000_000 : 10,
     });
     const service = new WebControlService({ ...t.h.deps, knownRepository: (id) => id === "repo", resolveRepository: () => t.repo });
