@@ -42,6 +42,35 @@ accept a landed decision Orca flagged (dismiss a review finding, with --note say
 - `<id>`: the decision id
 - `--note <note>`: why (kept beside the ratification; at most 2048 characters)
 
+## `orca decision allow <group> <id> [--one]`
+
+let a decision request through: every request of its kind in this group (default), or only this one with --one
+
+- What it does: sends control verb `allow-request`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<id>`: a pending decision id (pending-...) or a flagged decision id
+- `--one`: only this request; record no allowance for the group
+
+## `orca decision allow-paths <group> --run <run> [--one]`
+
+let a task's allowlist-blocked paths through and retry it: for every task of this group (default), or only this task with --one
+
+- What it does: sends control verb `allow-request`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--run <run>` (required): the blocked run whose missed paths to allow
+- `--one`: only this task's retry; record no allowance for the group
+
+## `orca decision revoke-allowance <group> <id>`
+
+stop an allowance of this group for later requests (what it let through stays)
+
+- What it does: sends control verb `revoke-allowance`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<id>`: the allowance id (allow-<n>)
+
 ## `orca decision validate <path>...`
 
 validate ledger file(s) or a directory (its top-level *.jsonl only)

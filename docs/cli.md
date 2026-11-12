@@ -131,6 +131,9 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca decision approve <group> <id> --undo-how <undo-how>` — approve a decision a landing refused, with an executable undo.how
 - `orca decision reject <group> <id> [--because <because>]` — reject a decision a landing refused (records a correction)
 - `orca decision ratify <group> <id> [--note <note>]` — accept a landed decision Orca flagged (dismiss a review finding, with --note saying why)
+- `orca decision allow <group> <id> [--one]` — let a decision request through: every request of its kind in this group (default), or only this one with --one
+- `orca decision allow-paths <group> --run <run> [--one]` — let a task's allowlist-blocked paths through and retry it: for every task of this group (default), or only this task with --one
+- `orca decision revoke-allowance <group> <id>` — stop an allowance of this group for later requests (what it let through stays)
 - `orca decision validate <path>...` — validate ledger file(s) or a directory (its top-level *.jsonl only)
 - `orca decision metrics [--root <root>] [--repo <repo>] [--as-of <as-of>]` — read-only: the correction rate, the repair rate and the backlog (--json: the report as JSON)
 - `orca decision compact-reviews [--apply] [--root <root>] [--repo <repo>]` — compact the reviews store: a dry-run report, or --apply

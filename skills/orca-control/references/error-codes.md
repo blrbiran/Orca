@@ -32,6 +32,8 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `agent-unselected` | 422 |
 | `agent-version-drift` | 422 |
 | `agents-table-invalid` | 422 |
+| `allowance-not-found` | 404 |
+| `allowance-request-invalid` | 422 |
 | `archive-call-in-flight` | 409 |
 | `archive-integration-resolving` | 409 |
 | `archive-run-active` | 409 |

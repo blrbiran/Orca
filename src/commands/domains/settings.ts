@@ -118,6 +118,19 @@ export const SETTINGS_ROWS: CommandDef[] = [
     positionals: [GROUP, { name: "id", summary: "the decision id", required: true }],
     flags: [{ name: "note", type: "string", summary: "why (kept beside the ratification; at most 2048 characters)" }],
     route: (c) => `groups/${group(c)}/decisions/ratify`, payload: (c) => ({ decisionId: c.ids.id, ...(str(c, "note") === undefined ? {} : { note: str(c, "note") }) }) }),
+  // Tester follow-up G §6.3 (#189): let a request through -- every one of its kind in this group by default, or only it.
+  verb({ domain: "decision", action: "allow", summary: "let a decision request through: every request of its kind in this group (default), or only this one with --one", verb: "allow-request",
+    positionals: [GROUP, { name: "id", summary: "a pending decision id (pending-...) or a flagged decision id", required: true }],
+    flags: [{ name: "one", type: "boolean", summary: "only this request; record no allowance for the group" }],
+    route: (c) => `groups/${group(c)}/allowances/allow`,
+    payload: (c) => ({ request: c.ids.id!.startsWith("pending-") ? { kind: "pending-decision", pendingId: c.ids.id } : { kind: "flagged-decision", decisionId: c.ids.id }, scope: c.args.flags.one === true ? "one" : "group" }) }),
+  verb({ domain: "decision", action: "allow-paths", summary: "let a task's allowlist-blocked paths through and retry it: for every task of this group (default), or only this task with --one", verb: "allow-request",
+    positionals: [GROUP],
+    flags: [{ name: "run", type: "string", required: true, summary: "the blocked run whose missed paths to allow" }, { name: "one", type: "boolean", summary: "only this task's retry; record no allowance for the group" }],
+    route: (c) => `groups/${group(c)}/allowances/allow`, payload: (c) => ({ request: { kind: "path", runId: str(c, "run") }, scope: c.args.flags.one === true ? "one" : "group" }) }),
+  verb({ domain: "decision", action: "revoke-allowance", summary: "stop an allowance of this group for later requests (what it let through stays)", verb: "revoke-allowance",
+    positionals: [GROUP, { name: "id", summary: "the allowance id (allow-<n>)", required: true }],
+    route: (c) => `groups/${group(c)}/allowances/revoke`, payload: (c) => ({ allowanceId: c.ids.id }) }),
 
   // --- correction (corrections scope: revision 0; debug opens a group)
   // Flow engine spec §13.2–§13.3 (W-COR): --decision names a decision, --run alone a finished run, neither the repository.

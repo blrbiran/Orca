@@ -32,6 +32,7 @@ import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
 import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
 import { LandingWatchProblem } from "./LandingWatchProblem.js";
+import { GroupAllowances } from "./GroupAllowances.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf, shownWorkStatus } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -848,6 +849,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <RequirementReviewPanel groupId={groupId} review={view.summary.requirementReview} archived={archived} revision={revision} onCommand={onCommand} />
       {/* Tester follow-up G §6.2 (#269): a check that turned red on the group branch after a landing. */}
       <LandingWatchProblem groupId={groupId} landingWatch={view.summary.landingWatch} />
+      {/* Tester follow-up G §6.3 (#189): what this group lets through; listed here, not counted as a problem. */}
+      <GroupAllowances groupId={groupId} revision={revision} allowances={view.summary.allowances} roles={props.roles} archived={archived} onCommand={onCommand} />
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />

@@ -1,4 +1,5 @@
 import type {PanelPartialSelectionV1, SavedResultEligibilityV1} from "./controlTypes.js";
+import type { AllowRequestV1 } from "./controlTypes.js";
 import { WEB_ACTIVITY_KINDS } from "./controlTypes.js";
 /**
  * Task 9: the browser's only door to the control plane.
@@ -491,6 +492,9 @@ export type ControlAction =
   // Checks spec 2026-10-22 §6.5: a dismissed model-review finding carries the person's note; `groupId` is the flag's owner
   // (the review group), whatever card it was dismissed from.
   | { verb: "ratify-flagged-decision"; groupId: string; expectedRevision: number; payload: { decisionId: string; note?: string } }
+  // Tester follow-up G §6.3 (#189): let a request (or every request of its kind in the group) through; revoke an allowance.
+  | { verb: "allow-request"; groupId: string; expectedRevision: number; payload: { request: AllowRequestV1; scope: "one" | "group" } }
+  | { verb: "revoke-allowance"; groupId: string; expectedRevision: number; payload: { allowanceId: string } }
   // Kanban spec §3.3, §9a.5: a person's edge; `groupId` is the dependent, `dependsOn` lands first.
   | { verb: "add-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
   | { verb: "remove-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
@@ -599,6 +603,10 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/decisions/reject`;
     case "ratify-flagged-decision":
       return `${group}/decisions/ratify`;
+    case "allow-request":
+      return `${group}/allowances/allow`;
+    case "revoke-allowance":
+      return `${group}/allowances/revoke`;
     case "add-group-dependency":
       return `${group}/dependencies/add`;
     case "remove-group-dependency":

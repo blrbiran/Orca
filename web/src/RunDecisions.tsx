@@ -8,6 +8,7 @@
  * with a note saying why. A settled run that reported nothing says so in so many words (§3.1); an unsettled run may
  * still report, so it says only that its decisions are not final.
  */
+import { AllowRequestButtons } from "./AllowRequestButtons.js";
 import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
@@ -54,11 +55,13 @@ function PendingRow(props: { item: PendingItem; groupId: string; revision: numbe
   return (
     <li aria-label={item.pendingId}>
       <MinorTag entry={item} copy="control.decisions" />
-      {open ? <NeedsHumanBadge /> : <span>{t(item.state === "approved" ? "control.decisions.approved" : "control.decisions.rejected")}</span>}{" "}
+      {open ? <NeedsHumanBadge /> : <span>{t(item.state === "approved" ? "control.decisions.approved" : item.state === "allowed" ? "control.decisions.allowed" : "control.decisions.rejected")}</span>}{" "}
       {pair(item.question, item.chose)}
       <p className="detail-note">{t("control.decisions.reason", { reason: item.reason })}</p>
       {open && (
         <>
+          {/* Tester follow-up G §6.3 (#189): let it through, before the approve and reject that stay as they are. */}
+          <AllowRequestButtons groupId={groupId} revision={revision} request={{ kind: "pending-decision", pendingId: item.pendingId }} archived={archived} onCommand={onCommand} />
           <label>
             {t("control.decisions.undoHowLabel")}
             <input value={undoHow} onChange={(event) => setUndoHow(event.target.value)} />
@@ -133,6 +136,9 @@ export function RunDecisions(props: RunDecisionsProps): JSX.Element {
                 <MinorTag entry={decision} copy="control.decisions" /><code>{decision.id}</code> {pair(decision.question, decision.chose)}
                 {decision.where === "group-branch" && <> · {t("control.decisions.notIntegrated")}</>}{" "}
                 {decision.flag != null && <FlagLine flag={decision.flag} />}
+                {decision.flag?.state === "flagged" && (
+                  <AllowRequestButtons groupId={props.groupId} revision={props.revision} request={{ kind: "flagged-decision", decisionId: decision.id }} archived={props.archived} onCommand={props.onCommand} />
+                )}
                 {decision.flag?.state === "flagged" && (
                   <button type="button" disabled={props.archived}
                     onClick={() => props.onCommand({ verb: "ratify-flagged-decision", groupId: props.groupId, expectedRevision: props.revision, payload: { decisionId: decision.id } })}>

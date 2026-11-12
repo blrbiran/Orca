@@ -262,6 +262,23 @@ export function landingWatchLines(groupId: string, w: LandingWatchView | undefin
   ]);
 }
 
+interface AllowanceView {
+  allowanceId: string; by: string; via: string; at: number;
+  request: { type: "path"; paths: Array<{ repoKey: string | null; path: string }> } | { type: "pending-decision"; kind: string | null; scope: string | null } | { type: "flagged-decision"; source: string; kind: string | null; scope: string | null };
+  from: { runId?: string; pendingId?: string; decisionId?: string };
+  revoked?: { by: string; at: number };
+}
+
+/** Tester follow-up G §6.3 (#189): what this group lets through, each with who, how, when and from which request. */
+export function allowanceLines(allowances: readonly AllowanceView[] | undefined): string[] {
+  if (allowances === undefined || allowances.length === 0) return [];
+  const iso = (at: number): string => new Date(at).toISOString();
+  const what = (r: AllowanceView["request"]): string => r.type === "path" ? `paths ${r.paths.map((p) => p.repoKey === null ? p.path : `${p.repoKey}:${p.path}`).join(", ")}`
+    : r.type === "pending-decision" ? `pending decisions of kind ${r.kind ?? "?"} scope ${r.scope ?? "?"}`
+    : `${r.source} flags of kind ${r.kind ?? "?"} scope ${r.scope ?? "?"}`;
+  return ["allowed in this group:", ...allowances.map((a) => `  ${a.allowanceId}: ${what(a.request)} by ${a.by} via ${a.via} at ${iso(a.at)} from ${a.from.runId ?? a.from.pendingId ?? a.from.decisionId ?? "?"}${a.revoked === undefined ? "" : ` (revoked by ${a.revoked.by} at ${iso(a.revoked.at)})`}`)];
+}
+
 /** A run as the group view lists it, for the empty-result lines. */
 export interface EmptyResultRun { runId?: unknown; taskId?: unknown; blockedReason?: unknown }
 
@@ -307,7 +324,7 @@ export function noChangeLines(groupId: string, items: readonly NoChangeItem[], r
 }
 
 export function formatWithUnestimated(body: unknown): string {
-  const b = body as (UnestimatedSource & { summary?: { groupId?: string; acceptance?: AcceptanceView; landingWatch?: LandingWatchView }; groupId?: string }) | null;
+  const b = body as (UnestimatedSource & { summary?: { groupId?: string; acceptance?: AcceptanceView; landingWatch?: LandingWatchView; allowances?: AllowanceView[] }; groupId?: string }) | null;
   const groupId = b?.summary?.groupId ?? b?.groupId;
   const live = new Set(["starting", "unknown", "attempt-unknown", "running", "collected", "landed", "reconciling"]);
   const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown } & EmptyResultRun> }).runs ?? [];
@@ -321,7 +338,9 @@ export function formatWithUnestimated(body: unknown): string {
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
-    ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : [])]);
+    ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
+    ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
+    ...allowanceLines(b?.summary?.allowances)]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

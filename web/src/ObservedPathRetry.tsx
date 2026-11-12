@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
+import { AllowRequestButtons } from "./AllowRequestButtons.js";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupViewV1, RunViewV1 } from "./controlTypes.js";
 
@@ -12,6 +13,8 @@ export function ObservedPathRetry({ view, run, onCommand }: { view: GroupViewV1;
   return <div>
     <p>{t("control.group.observedPathIntro")}</p>
     <ul>{misses.map((miss) => <li key={`${miss.repoKey ?? ""}:${miss.path}`}><code>{miss.repoKey === null ? miss.path : `${miss.repoKey}:${miss.path}`}</code></li>)}</ul>
+    {/* Tester follow-up G §6.3 (#189): allow these exact paths for every task of the group (default), or only this retry. */}
+    <AllowRequestButtons groupId={view.summary.groupId} revision={view.summary.commandRevision} request={{ kind: "path", runId: run.runId }} archived={view.summary.archived === true} onCommand={onCommand} />
     <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision,
       payload: { taskId: String(run.taskId), runId: run.runId, allowObservedPaths: true } })}>{t("control.group.retryObservedPaths")}</button>
   </div>;
