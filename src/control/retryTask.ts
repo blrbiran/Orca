@@ -238,7 +238,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (drive === undefined || (live && drive.blockedAt !== "C")) throw new ControlError("task-not-retryable",
           drive?.blockedAt == null ? `blocked-at:${drive?.blockedAt ?? "none"}` : `blocked-at:${drive.blockedAt}:${recoveryRetryCommand(runId)}`);
         // A codex-skills-* failure sets an outcome too (review C3), so it is retryable like any other ccloop failure.
-        if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}`);
+        // Tester #267: blocked at C before ccloop stated any outcome (its collect failed), recovery-retry collects it again.
+        if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}${live && drive.outcome === null ? `:${recoveryRetryCommand(runId)}` : ""}`);
         const observed = command.payload.allowObservedPaths === true ? drive.pathPolicyMisses : null;
         if (command.payload.allowObservedPaths === true) {
           if (command.payload.runId === undefined) throw new ControlError("observed-paths-invalid", "run-id-required");
