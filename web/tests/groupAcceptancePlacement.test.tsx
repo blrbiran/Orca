@@ -6,7 +6,7 @@
  * every task is done but whose final tree failed still says on its tab that something needs looking at. An acceptance
  * that did not fail shows nothing and counts nothing.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import type { GroupAcceptanceV1, GroupViewV1 } from "../src/controlTypes.js";
@@ -58,6 +58,13 @@ describe("the failed group acceptance in the group view (tester follow-up F §5;
   // mutation: rendered after the problem runs -> order -> red
   it("lives in the Problems region only, once, after the recovery blockers and before the problem runs", () => {
     mount(troubled(FAILED));
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so
+    // "Problems only, once" is read region by region: every other region shows no row, Problems shows one.
+    for (const tab of screen.getAllByRole("tab").filter((tab) => tab.textContent?.startsWith("Problems") !== true)) {
+      fireEvent.click(tab);
+      expect(rows(), tab.textContent ?? "").toHaveLength(0);
+    }
+    fireEvent.click(screen.getAllByRole("tab").find((tab) => tab.textContent?.startsWith("Problems") === true)!);
     expect(rows()).toHaveLength(1);
     const row = rows()[0]!;
     const panel = row.closest("[role=tabpanel]");
