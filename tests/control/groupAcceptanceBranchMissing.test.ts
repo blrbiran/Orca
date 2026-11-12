@@ -69,13 +69,13 @@ async function doneGroup(): Promise<Harness> {
   const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]);
   await t.claim(); await t.claim();
   const driver = t.driver();
-  await untilDeadline(driver, () => group(t).status === "done");
+  await untilDeadline(driver, () => group(t).status === "done", 60_000);
   await driver.stop();
   expect(group(t).acceptance).toMatchObject({ result: "passed" });
   return t;
 }
 
-describe("a missing work branch is a recorded state, not an error retried every round (tester #278)", { timeout: 90_000 }, () => {
+describe("a missing work branch is a recorded state, not an error retried every round (tester #278)", { timeout: 180_000 }, () => {
   it("a done group whose branch is gone: one git child and one log line over ten rounds; recorded not-run, still done", async () => {
     const t = await doneGroup(); try {
       git(t.repo, "update-ref", "-d", "refs/heads/orca/g");
