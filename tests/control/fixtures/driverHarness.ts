@@ -11,7 +11,7 @@ import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import { createExecutionDriver, replenishStartWakes, type ExecutionDriver, type ExecutionDriverDeps } from "../../../src/control/executionDriver.js";
 import { groupExecutionPendingInStore } from "../../../src/control/executionPending.js";
 import { fakeCcloopPort, type FakeBehaviour } from "./driverPort.js";
-import type { AgentsView, StartEnvelope } from "../../../src/control/executionPort.js";
+import type { AgentsView, ExecutionPort, StartEnvelope } from "../../../src/control/executionPort.js";
 import type { SyncskillOptions } from "../../../src/skills/syncskill.js";
 import { profileSnapshot, webFixture, type WebFixtureOptions, type WebFixtureTask } from "./web.js";
 import type { MultiDirProjectOf } from "../../../src/control/multiGroup.js";
@@ -69,6 +69,8 @@ export interface HarnessOptions {
   repositories?: (root: string) => Promise<Record<string, string>> | Record<string, string>;
   /** Multi-directory projects spec §4.3: the live registry, when a criterion needs it to disagree with the frozen list. */
   multiDirProjectOf?: MultiDirProjectOf;
+  /** Issue #209: the agent catalog the driver's port answers (the router copies the port, so it is set before). */
+  listModels?: ExecutionPort["listModels"];
 }
 
 /**
@@ -102,6 +104,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
+  if (options.listModels !== undefined) fake.port.listModels = options.listModels;
   const deps: ExecutionDriverDeps = {
     store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
     roots: controlWorkspaceRoots(h.store.stateDir),

@@ -446,6 +446,8 @@ export type RunViewV1 = {
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; retries: number; detail: string | null } | null;
   /** Quota failover spec §3 (session 3cfc2e73): the current run failed with quota, was not switched, and its installation rests. */
   quotaRest?: { installation: string; until: number; source: "vendor" | "default" };
+  /** Issue #209: a 0-usage rate-limited run whose model the agent's catalog does not list (`model-not-in-catalog: ...`). */
+  catalogMiss?: string;
   /** Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; absent when none was sent. */
   operatorAcceptance?: { state: "pending" | "landed" | "refused"; note: string; principal: string; at: number; reason: string | null; landedCommit: string | null };
   /** Tester follow-up E §4 (#245): what the landing's post-merge check did; absent when the run did not land through it. */

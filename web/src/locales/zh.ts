@@ -694,6 +694,7 @@ export const zh: Translation<typeof en> = {
       },
     },
     quotaRest: { vendor: "{{installation}} 的额度已用尽，{{time}} 恢复。", default: "{{installation}} 正在休息，约 {{time}} 后可重试。" },
+    catalogMiss: "这次运行没有用掉 token，且它的模型不在 agent 的模型目录里（{{warning}}）；可能是 provider 拒绝了这个模型，而不是限流。请在 设置 → Agent 里选一个目录列出的模型，再重试这个任务。",
     formatFailureWork: {
       heading_one: "执行格式失败（第 {{attempt}} 次尝试）：这次尝试的成果保存在项目仓库的下列 ref 下",
       heading_other: "执行格式失败（第 {{attempt}} 次尝试）：这次尝试的成果保存在项目仓库的下列 ref 下",

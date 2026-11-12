@@ -175,6 +175,10 @@ export const driveRecordSchema = z.object({
   // when ccloop stated none (an older ccloop, or a run with no rejection) and in every drive record written before them.
   failureCause: runFailureCauseSchema.optional(),
   lastFailure: lastFailureSchema.optional(),
+  // Issue #209: a run that failed as rate-limited whose frozen model the agent's read catalog does not list, in the words
+  // the selection preview warned with (estimatorCompatibility.ts catalogMissReason). Optional: absent for every other run
+  // and in every older drive record.
+  catalogMiss: z.string().min(1).optional(),
   // Checks spec 2026-10-22 §6.1: ccloop's terminal budgetSnapshot, stored with them, so a review that ran out of tokens,
   // attempts or time is told from one that failed (the outcome `exhausted` alone does not say which).
   budgetSnapshot: z.object({ attemptsRemaining: safeInteger, timeRemainingMs: safeInteger, tokenBudgetRemaining: safeInteger.nullable() }).strict().optional(),

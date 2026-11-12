@@ -1239,6 +1239,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
       failureCause: run.drive?.failureCause ?? null,
       ...(quotaRest === undefined ? {} : { quotaRest }),
+      // Issue #209: the catalog miss the driver kept with a rate-limited failure, named only while the run used no tokens.
+      ...(run.drive?.catalogMiss === undefined || run.cumulative[bucket].tokens !== 0 ? {} : { catalogMiss: run.drive.catalogMiss }),
       // Reviewed acceptance (#227): what the Web needs to say where an owner's acceptance stands; omitted when none.
       ...(run.operatorAcceptance === undefined ? {} : { operatorAcceptance: { state: run.operatorAcceptance.state, note: run.operatorAcceptance.note,
         principal: run.operatorAcceptance.principal, at: run.operatorAcceptance.at, reason: run.operatorAcceptance.reason, landedCommit: run.operatorAcceptance.landedCommit } }),

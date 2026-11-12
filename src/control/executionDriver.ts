@@ -69,6 +69,7 @@ import { taskWrites } from "./requirementRecords.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { bookRejectedZeroInTransaction } from "./quotaProbeCall.js";
 import { FAILURE_DETAIL_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
+import { catalogMissReason, selectorMissOf } from "./estimatorCompatibility.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ExecutionReport } from "./executionPort.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
@@ -874,6 +875,21 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   return report;
 }
 
+/**
+ * Issue #209: a provider may answer a model it does not serve with a 429, which ccloop reports as `rate-limited`. When the
+ * run's frozen model is missing from the agent's read catalog -- what the selection preview warned about (agentFreeze.ts)
+ * -- the miss is kept beside the cause, in the same words, so the failure explanation can name it. A catalog that was not
+ * or could not be read names nothing (#124).
+ */
+async function rateLimitedCatalogMiss(deps: ExecutionDriverDeps, run: DriverRun): Promise<{ catalogMiss?: string }> {
+  const agent = (run as { agent?: { agent?: unknown; model?: unknown } | null }).agent;
+  if (agent == null || typeof agent.agent !== "string" || typeof agent.model !== "string" || agent.model === "") return {};
+  try {
+    const miss = await selectorMissOf(portFor(deps, run), { agent: agent.agent, model: agent.model });
+    return miss === null ? {} : { catalogMiss: catalogMissReason(miss) };
+  } catch { return {}; }
+}
+
 export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: DriverContext): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
@@ -911,7 +927,8 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // the reason, for the panel's next-step line and a later re-dispatch; absent when ccloop stated none.
     // ccloop per-contract tool rules spec §5: the run's tool-rule report goes with them, so a violation can be read back.
     const failure = { ...(report.terminal.failureCause !== undefined ? { failureCause: report.terminal.failureCause } : {}), ...(report.terminal.lastFailure !== undefined ? { lastFailure: report.terminal.lastFailure } : {}), ...(report.terminal.budgetSnapshot !== undefined ? { budgetSnapshot: report.terminal.budgetSnapshot } : {}), ...(report.toolRules !== undefined ? { toolRules: report.toolRules } : {}), ...(report.pathPolicyMisses !== undefined ? { pathPolicyMisses: report.pathPolicyMisses } : {}) };
-    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure });
+    const catalogMiss = report.terminal.failureCause?.cause === "rate-limited" ? await rateLimitedCatalogMiss(deps, run) : {};
+    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure, ...catalogMiss });
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
   }
