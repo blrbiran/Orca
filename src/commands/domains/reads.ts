@@ -9,6 +9,7 @@ import { compact, field, text } from "./format.js";
 import { contextHandoffLines, emptyResultLines, formatWithUnestimated, fundingLines, proposalDocument, unestimatedLines, type EmptyResultRun } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
+import { recoveryRetryCommand } from "../../control/driveRecord.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
@@ -381,7 +382,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null } }; postMergeCheck?: PostMergeCheckView } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; phase?: string; outcome?: string | null; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null } }; postMergeCheck?: PostMergeCheckView } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -389,6 +390,8 @@ export const READ_ROWS: CommandDef[] = [
         // Tester D19: the agent and model this run was frozen with, not the installation's default.
         ...(b.run?.agent === undefined ? [] : [`agent: ${b.run.agent.installation}, model ${b.run.agent.model ?? "(the agent's default)"}`]),
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
+        // Tester #267: a work run blocked before ccloop stated an outcome is resumed where it stopped, not retried as a task.
+        ...(b.run?.state === "blocked" && b.run.phase === "work" && b.run.outcome === null && b.run.runId !== undefined ? [`To resume it where it stopped: ${recoveryRetryCommand(b.run.runId)}`] : []),
         ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
         ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
         // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode.

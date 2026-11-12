@@ -288,6 +288,15 @@ export function recoveryRetryCommand(runId: string): string {
 }
 
 /**
+ * Tester #267: a driver run that recovery retry --run puts back at the step it was blocked at -- blocked anywhere but at C
+ * by a ccloop failure (isTerminallyFailedRun). Blocked at C with no outcome is one of these: its collect failed before
+ * ccloop stated a terminal (a machine that slept through it), so collecting again is the way on.
+ */
+export function resumableBlockedRun(run: { state?: unknown; drive?: { blockedAt?: unknown; outcome?: unknown } | null }): boolean {
+  return run.state === "blocked" && typeof run.drive?.blockedAt === "string" && (run.drive.blockedAt !== "C" || run.drive.outcome === null);
+}
+
+/**
  * Plan 2026-11-10 follow-up B, T10: the command that re-selects a requirement's agent, named on a requirement call blocked
  * on it (estimatorCompatibility.ts blockedOnRequirementAgent); the agent and model are the person's to choose.
  */

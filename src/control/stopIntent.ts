@@ -19,7 +19,7 @@ import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } fro
 import { writeCanonicalRecord } from "./snapshot.js";
 import { continuationWakeBody, rearmFailedContinuation } from "./continuation.js";
 import { nextClaimableTask } from "./webDispatch.js";
-import { isTerminallyFailedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, resumableBlockedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
@@ -692,7 +692,16 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   const requirement = row !== undefined && hasRequirementBlock(JSON.parse(String(row.body)) as { requirement?: unknown })
     ? retryRequirementInTransaction(store, groupId, context.nextCommandRevision, outputBound, context.rawCommand.commandId, now) : { resolved: false, wakeIds: [] };
-  return { resolved: blockers.resolved || requirement.resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds,
+  // Tester #267: the group's work runs a run-scoped retry would resume (blocked, but not by a ccloop failure) are resumed
+  // here too, so a group retry is not a silent no-op while one of them holds the group.
+  let resumedRuns = false;
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)) {
+    const run = JSON.parse(String(row.body)) as { taskId: string | null; phase?: string; state: string; drive?: DriveRecord };
+    if (run.phase !== "work" || !resumableBlockedRun(run) || !resumeBlockedDriverRun(store, String(row.id))) continue;
+    recordActivity(store, { groupId, taskId: run.taskId, runId: String(row.id), kind: "run-resumed", body: {} });
+    resumedRuns = true;
+  }
+  return { resolved: blockers.resolved || requirement.resolved || resumedRuns, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds,
     ...(requirement.waitingOn === undefined ? {} : { waitingOn: requirement.waitingOn }) };
 }
 

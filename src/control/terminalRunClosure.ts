@@ -1,7 +1,7 @@
 import { recordActivity } from "./activity.js";
 import { add, hasObservedUsage } from "./budget.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { isTerminallyFailedRun, terminalClosureSchema, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, recoveryRetryCommand, resumableBlockedRun, terminalClosureSchema, type DriveRecord } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
 import { readWork, saveWork } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readRunBody, releaseCommitment, saveRunBody, setAllocationStates, type RunBody } from "./stopIntent.js";
@@ -66,6 +66,8 @@ export function applyCloseRun(deps: CloseRunDeps, command: CloseRunCommand): Com
           return commandSuccess(context, { kind: "run-closed", runId, taskId: String(run.taskId), alreadyClosed: true });
         }
         if (Number(deps.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active) !== 1) throw new ControlError("run-closure-not-terminal");
+        // Tester #267: a run blocked before ccloop stated an outcome is not closed; recovery-retry resumes it, so the refusal names it.
+        if (run.phase === "work" && run.mode === undefined && run.recoveryOf === undefined && resumableBlockedRun(run)) throw new ControlError("run-closure-not-terminal", recoveryRetryCommand(runId));
         if (run.phase !== "work" || run.mode !== undefined || run.recoveryOf !== undefined || !isTerminallyFailedRun(run)) throw new ControlError("run-closure-not-terminal");
         const work = readWork(deps.store, groupId, run.workItemId) as unknown as WorkBody;
         if (work.kind !== "task" || work.currentRunId !== runId || work.status !== "running" || work.pendingRunId != null
