@@ -382,7 +382,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKind `no-change-completed` (spec §1) adds one: 210 + 1.
     // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKind `no-change-revoked` (spec §1.4) adds one: 211 + 1.
     // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKind `no-change-judged` (spec §10.1) adds one: 212 + 1.
-    expect(ENUM_VALUES.length).toBe(213);
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the activityKind `requirement-review` (spec §3) adds one: 213 + 1.
+    expect(ENUM_VALUES.length).toBe(214);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {
