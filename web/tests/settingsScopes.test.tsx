@@ -306,8 +306,13 @@ describe("settings scopes", () => {
     await open(left);
     const after = await screen.findByRole("region", { name: "Control group frozen" });
     expect(after.textContent).toBe(before);
-    expect(after.textContent).toContain("frozen-model");
     expect(after.textContent).toContain("frozen-skill");
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so
+    // the frozen agent (Preparation) and the frozen integration target (Results) are read with their regions opened.
+    fireEvent.click(within(after).getByRole("tab", { name: "Preparation" }));
+    expect(after.textContent).toContain("frozen-model");
+    expect(after.textContent).not.toContain("new-default-model");
+    fireEvent.click(within(after).getByRole("tab", { name: "Results" }));
     expect(after.textContent).toContain("frozen-target");
     expect(after.textContent).not.toContain("new-default-model");
     expect(panel.posts.every(p => p.url === "/api/control/operator/agent-preferences")).toBe(true);
