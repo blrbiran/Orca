@@ -221,7 +221,7 @@ describe("a reconciliation in an expectation-model group is funded under the har
       const held = readGroup(t.h.store, "g") as unknown as { liveCeilingReserved: number; used: { tokens: number }; reserved: { tokens: number }; limit: { tokens: number } };
       expect(held.liveCeilingReserved).toBe(outstanding);
       const settle = (acknowledge: string) => {
-        const c = t.h.command("settle-unknown-usage" as never, { taskId: "a", runId: id, generation: 1, acknowledge } as never);
+        const c = t.h.command("settle-unknown-usage" as never, { taskId: "a", runId: id, generation: 1, acknowledge } as never) as unknown as { commandId: string };
         return withCommandContext(c.commandId, { client: "web", principal: "user:owner" }, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<{ error?: { message: string } }> }).settleUnknownUsage(c));
       };
       expect((await settle("release-unmetered")).error?.message).toBe("run-usage-not-settleable:finite-remainder");
