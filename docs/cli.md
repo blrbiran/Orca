@@ -159,7 +159,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca orchestration`
 
 - `orca orchestration show` — how many groups run at once, and how many hold a slot now
-- `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>] [--failover-order <failover-order>] [--failover-off] [--agent-top-up-cap <agent-top-up-cap>] [--agent-top-up-cap-off]` — how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap
+- `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>] [--failover-order <failover-order>] [--failover-off] [--agent-top-up-cap <agent-top-up-cap>] [--agent-top-up-cap-off] [--criteria-review-tokens <criteria-review-tokens>]` — how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap; the criteria-review judge's grant
 
 ### `orca recovery`
 

@@ -179,7 +179,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "add-group-dependency": "open",
   "remove-group-dependency": "open",
   "set-criteria-review": "open",
-  "set-orchestration-settings": "open",
+  // Tester #174: the criteria-review judge's grant is a spend amount, a person's (as set-check-settings' budgetTokens).
+  "set-orchestration-settings": (p) => (Object.hasOwn(p, "criteriaReviewTokens") ? "token" : "open"),
   // Moved to open by the human: Orca already dispatches conflict resolution itself (kanban S5).
   "retry-integration": "open",
   "resolve-integration-conflict": "open",

@@ -53,7 +53,10 @@ const settingsSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(
   flows: globalFlowsLayerSchema.optional(),
   // Retry work top-up spec 2026-11-06 §2 "The cap": the most an agent may add to one group's tasks (summed per group);
   // absent or null: agents may not top up. workTopUp.ts readAgentTopUpCap reads it inside retry-task's transaction.
-  agentTopUpCap: amountSchema.nullable().optional() }).strict();
+  agentTopUpCap: amountSchema.nullable().optional(),
+  // Tester #174: a criteria-review judge's work-token grant over a contract with no token ceiling; absent is the built-in
+  // CRITERIA_REVIEW_TOKEN_BUDGET (systemDebug.ts).
+  criteriaReviewTokens: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional() }).strict();
 export type OrchestrationSettings = z.infer<typeof settingsSchema>;
 
 export function readGroupOrchestration(store: ControlStore, groupId: string): GroupOrchestration | null {

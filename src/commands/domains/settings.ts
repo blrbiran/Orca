@@ -202,7 +202,7 @@ export const SETTINGS_ROWS: CommandDef[] = [
     route: () => "operator/set-usage-calendar", payload: (c) => ({ timeZone: str(c, "time-zone"), weekStart: c.args.flags["week-start"] }) }),
 
   // --- orchestration
-  verb({ domain: "orchestration", action: "set", summary: "how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap", verb: "set-orchestration-settings", scope: "orchestration",
+  verb({ domain: "orchestration", action: "set", summary: "how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap; the criteria-review judge's grant", verb: "set-orchestration-settings", scope: "orchestration",
     flags: [
       { name: "max-running-groups", type: "integer", required: true, summary: "1..64" }, { name: "criteria-review", type: "string", summary: "on|off: the reviewer's global default" },
       { name: "quota-wait", type: "string", repeatable: true, summary: "an installation whose quota failures are retried after 30 min (repeatable)" },
@@ -211,6 +211,8 @@ export const SETTINGS_ROWS: CommandDef[] = [
       // The operator's agent can set this global cap (session 86352010 follow-up); the sum is per group.
       { name: "agent-top-up-cap", type: "string", summary: "the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions}" },
       { name: "agent-top-up-cap-off", type: "boolean", summary: "agents may not add work to a retry (the default)" },
+      // Tester #174: a spend amount, so a person token on the socket.
+      { name: "criteria-review-tokens", type: "integer", summary: "the work tokens a criteria-review judge gets when the flagged task's contract has no token ceiling (default 200000; a person's setting)" },
     ],
     route: () => "operator/set-orchestration-settings",
     payload: (c) => {
@@ -225,6 +227,7 @@ export const SETTINGS_ROWS: CommandDef[] = [
         ...(list(c, "quota-wait").length === 0 ? {} : { quotaWait: list(c, "quota-wait") }),
         ...(c.args.flags["failover-off"] === true ? { failoverOrder: [] } : list(c, "failover-order").length === 0 ? {} : { failoverOrder: list(c, "failover-order") }),
         ...(c.args.flags["agent-top-up-cap-off"] === true ? { agentTopUpCap: null } : cap === undefined ? {} : { agentTopUpCap: parsedCap }),
+        ...(c.args.flags["criteria-review-tokens"] === undefined ? {} : { criteriaReviewTokens: c.args.flags["criteria-review-tokens"] }),
       };
     } }),
 

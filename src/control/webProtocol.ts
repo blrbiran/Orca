@@ -1161,7 +1161,10 @@ export const ratifyFlaggedDecisionPayloadSchema = z.object({ decisionId: nonempt
 export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups: z.number().int().min(1).max(64), criteriaReview: z.boolean().optional(), quotaWait: z.array(z.string().min(1).max(200)).max(64).optional(), failoverOrder: z.array(z.string().min(1).max(200)).max(64).optional(),
   // Retry work top-up spec 2026-11-06 §2 "The cap": what an agent may add to one group's tasks by retry-task `work`, summed
   // per group; null = agents may not top up (the default); omitted keeps the stored value.
-  agentTopUpCap: amountSchema.nullable().optional() }).strict();
+  agentTopUpCap: amountSchema.nullable().optional(),
+  // Tester #174: a criteria-review judge's work-token grant over a contract with no token ceiling (default 200000, never
+  // set); omitted keeps the stored value. A spend amount: a person token on the socket (humanOnly.ts SOCKET_TIER).
+  criteriaReviewTokens: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional() }).strict();
 // Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
 export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next

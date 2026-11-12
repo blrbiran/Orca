@@ -11,6 +11,7 @@ import { validTerminalClosure } from "./terminalRunClosure.js";
 import { groupStopped } from "./executionDriver.js";
 import { ControlError } from "./errors.js";
 import { buildModelReviewPlanSource } from "./modelReview/plan.js";
+import { readOrchestrationSettings } from "./orchestration.js";
 import { normalizeControlPlan, writeImportedPlan } from "./planImport.js";
 import { readArchivedPlan } from "./queries.js";
 import { writeCanonicalRecord } from "./snapshot.js";
@@ -37,9 +38,12 @@ export const SYSTEM_DEBUG_TARGET_PATH = "**";
  * finite work grant (and group limit) instead. A contract that states a budget keeps it unchanged.
  */
 export const CRITERIA_REVIEW_TOKEN_BUDGET = 200_000;
-/** The judge's explicit grant when the source contract has no token ceiling; null when its own budget stands. */
-export function criteriaReviewWorkTokens(contract: { executionPolicy: { tokenBudget: number | null } } | null): number | null {
-  return contract === null || contract.executionPolicy.tokenBudget === null ? CRITERIA_REVIEW_TOKEN_BUDGET : null;
+/**
+ * The judge's explicit grant when the source contract has no token ceiling; null when its own budget stands. `budget`: the
+ * orchestration setting `criteriaReviewTokens` (#174), the built-in default when it was never set.
+ */
+export function criteriaReviewWorkTokens(contract: { executionPolicy: { tokenBudget: number | null } } | null, budget: number = CRITERIA_REVIEW_TOKEN_BUDGET): number | null {
+  return contract === null || contract.executionPolicy.tokenBudget === null ? budget : null;
 }
 const settledSchema = z.object({ state: z.string().min(1), at: z.number().int(), detail: z.string().nullable() }).strict();
 const systemDebugMarkSchema = z.object({
@@ -227,7 +231,8 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
         : buildSystemDebugPlanSource(input, contract, repoPath!, source.kind === "model-review-finding" ? reviewAgent : sourceAgent(deps.store, source));
       const plan = normalizeControlPlan({ ...planSource, repoId, planId });
       // Tester #174: a judge over a contract with no token ceiling is capped; every other group keeps its grant.
-      const criteriaTokens = source.kind === "criteria-review" ? criteriaReviewWorkTokens(contract) : null;
+      const criteriaTokens = source.kind === "criteria-review"
+        ? criteriaReviewWorkTokens(contract, readOrchestrationSettings(deps.store).criteriaReviewTokens ?? CRITERIA_REVIEW_TOKEN_BUDGET) : null;
       const defaults = deps.defaults();
       writeImportedPlan({
         ...deps, estimatorSlot: { kind: "rejected", partial: null, code: "control-estimator-unconfigured" },

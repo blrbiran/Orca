@@ -11,9 +11,9 @@ how many groups run at once, and how many hold a slot now
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 
-## `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>] [--failover-order <failover-order>] [--failover-off] [--agent-top-up-cap <agent-top-up-cap>] [--agent-top-up-cap-off]`
+## `orca orchestration set --max-running-groups <max-running-groups> [--criteria-review <criteria-review>] [--quota-wait <quota-wait>] [--failover-order <failover-order>] [--failover-off] [--agent-top-up-cap <agent-top-up-cap>] [--agent-top-up-cap-off] [--criteria-review-tokens <criteria-review-tokens>]`
 
-how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap
+how many groups run at once; the reviewer default; quota-wait installations; the quota failover order; the agent top-up cap; the criteria-review judge's grant
 
 - What it does: sends control verb `set-orchestration-settings`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
@@ -24,3 +24,4 @@ how many groups run at once; the reviewer default; quota-wait installations; the
 - `--failover-off`: never switch a task's installation after a quota failure (an empty failover order)
 - `--agent-top-up-cap <agent-top-up-cap>`: the most agents may add to one group's tasks by `task retry --work`, summed per group, as JSON {tokens,activeMs,attempts,sessions}
 - `--agent-top-up-cap-off`: agents may not add work to a retry (the default)
+- `--criteria-review-tokens <n>`: the work tokens a criteria-review judge gets when the flagged task's contract has no token ceiling (default 200000; a person's setting)
