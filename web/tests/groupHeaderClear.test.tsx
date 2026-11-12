@@ -6,7 +6,7 @@
  * the Technical region (Tasks has none: its line folds behind a closed "Technical details"), the generic line goes, and the
  * note folds away. Nothing is dropped: each value is still on the page.
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { ControlPanel } from "../src/ControlPanel.js";
@@ -36,10 +36,14 @@ describe("the group header carries no internal counters (#81/#228)", () => {
   // mutation: the plan line keeps hash and graph version on the first screen -> red
   it("shows revision, projection, plan hash and graph version in Technical, and the goal on the first screen", () => {
     const { container } = render(<ControlGroupView view={view([])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so
+    // the first screen is read first (no region's text can leak into it), then Technical is opened and read.
+    const first = firstScreen(container);
+    fireEvent.click(screen.getByRole("tab", { name: "Technical details" }));
     expect(technical()).toContain("revision 6 · projection 4");
     expect(technical()).toContain("plan aaaaaaaaaaaa · graph v1");
-    const first = firstScreen(container);
     expect(first).toContain("Ship");
+    expect(firstScreen(container)).toBe(first);
     for (const counter of ["projection 4", "revision 6", "aaaaaaaaaaaa", "graph v1"]) expect(first, counter).not.toContain(counter);
   });
 
