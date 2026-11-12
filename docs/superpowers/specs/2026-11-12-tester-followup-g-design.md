@@ -334,3 +334,64 @@ that redirects the state directory touches no real one. Directories are created 
   handoff writes no row.
 - Orca sends `work.handoff` unconditionally (§10.5); the branch therefore lands only after ccloop C1-C4 are pushed and
   Orca is repinned (plan O7 step 4), as a pinned ccloop without C1 refuses the key.
+
+## 12. Part 2 as built (2026-11-12, Part B implementation seat of session `d1cbbd58`; branch `worktree-agent-a0a0614c8181cf24a`, commits `7f608ad7..` on `e88588ce`)
+
+What the budget part does on its branch, where it differs from the plan (`2026-11-12-tester-followup-g-part-b-budget.md`),
+and what it does not do. Each choice marked **builder's call** is reversible and open to review.
+
+### 12.1 Model and representation
+- The marker is §11's `modelVersion: "followup-g"`; `expectationModelApplies` (`expectationModel.ts`) is the marker minus
+  a flow run's hidden child (a stripped import keeps its task grant). Which model an import uses when its caller names none
+  is `DEFAULT_MODEL_VERSION` (`planImport.ts`), **held at "no marker" on this branch**: flipping it turned 77 existing
+  criteria in 30 files red (they pin what a group created before the release does, several through ports that predate
+  the optional token policy). That flip -- and the rewrites it needs -- is left to the controller; Part A's unconditional
+  stamp makes the same flip when the branches are stacked. `modelVersion: null` (in-process only) names a pre-release group.
+- **Builder's call (differs from plan D4):** a task's amount is not copied into the proposal or the execution snapshot.
+  An expectation-model import writes task work tokens `null` (allocations, token policies, work items); a person's amount
+  lives on the work item as `tokenIntent: {tokens, hard, provenance, estimateId}` (set by `proposal-edit`, floored at
+  1M unless `hard`), and an estimate is never applied to task work there: the expectation is the newest ready,
+  non-stale estimate's task tokens, floored at 1M, read when needed -- as unlimited groups already derive theirs.
+  Snapshot and envelope bytes of a group created before the release are therefore untouched.
+- Refusals: `hard-cap-legacy-group`, `hard-cap-needs-tokens`, `estimate-advisory-in-expectation-group` (a new code, not
+  the unlimited one: that one's words say "this group has no token limit").
+
+### 12.2 Live ceiling (spec §2.1; D1-D3)
+- A claim sends a null work token grant and `liveCeiling {protocol:1, revision, tokens, cause}` on the protocol-4
+  envelope: min(group slice, pause line - inherited, hard cap - inherited); ties task-cap, pause-line, group.
+- **Builder's call (differs from plan O2's ledger):** no table. The run body holds `liveCeiling {revision, tokens, cause,
+  deliveredRevision}`; the group body holds `liveCeilingReserved`, the part of `group.reserved` that is the active runs'
+  unused ceilings, re-derived from the active runs (`syncCeilingReserve`) at the claim, at every usage booking and on
+  every driver pass. A run that ends is released on the next derivation without each settle path knowing about
+  ceilings; between the end and that pass the reservation is over-held (the safe direction). Conservation counts it.
+- Raises (`liveCeilingRaise.ts`): per pass, a finite expectation-model group with free headroom, no claimable task and no
+  spend cap gives each running group-bound run `floor(H / runs)`, capped by its pause line or hard cap; written (so
+  reserved) before `deliverLiveCeilings` calls ccloop's `live-ceiling`; delivered only on ccloop's answer or its
+  `control-live-ceiling-stale`. The profile router now keeps `setLiveCeiling` on the port it hands out.
+- set-limit and spend caps treat a ceiling-bounded run of a finite group as bounded. A top-up in an expectation-model
+  group checks conservation against the new limit, so a stop that passed the cap by its in-flight request can be topped up.
+
+### 12.3 Stops, pause and decision (spec §2.1, §2.5, §10.3)
+- A `liveCeilingStop` with cause group or pause-line (exhausted, partial candidate) is settled recoverable with its
+  candidate committed as checkpoint `ceiling-<run>`; the task continues from it on its next claim through the allowance
+  path's `allowancePredecessorRunId`. Group cause: headroom >= 1M ⇒ ready at once; else `groupCapStop` until a top-up
+  (set-limit continues it). Pause-line cause: `usagePause` until `usage-pause-decide`. Task-cap: exhausted as today.
+- The pause line formula (`pauseLineFor`): k = 1: L null ? 10E : min(10E, floor(L/2)); k > 1, decided when the task had
+  used u and the group G: L null ? 10kE : min(10kE, u + floor(max(0, L - G)/2)).
+- `usage-pause-decide` (task target, access any; CLI `orca task decide-usage <g> <t> --decision continue|stop [--note]`):
+  continue sets the next line (refused `usage-pause-no-headroom` when it leaves the task nothing) and delivers the note
+  as the continued run's operator note; stop records `usageStopped`, the group goes on. `usage-pause-not-waiting`.
+- Activity kinds: `group-cap-reached`, `usage-paused`, `usage-pause-decided`, `usage-over-expectation`.
+
+### 12.4 Gaps (not built; plan D7 plus what this branch found)
+- (a) Runs under a spend cap get no live raises (initial slice only). (b) Reconcile and goal-review runs keep reserved
+  grants and ccloop's 1.2 threshold. (c) Single calls keep reserved grants. (d) claude's observation is a lower bound.
+- (e) The overshoot bound is per running run: one in-flight request (claude/omp) or one codex turn each.
+- (f) A ceiling stop whose archived snapshot is incomplete blocks the run by name (`live-ceiling-snapshot-incomplete`);
+  no `groupCapStop` marker is written for it.
+- (g) `set-task-loop` has no hard switch (loop tasks' work stays owned by their loop plan's work tokens).
+- (h) A stopped task (`usageStopped`) stays blocked; the group does not reach done until a person retries or archives.
+- (i) The board card names a pause or a cap wait per group (counts), not per task card.
+- (j) Not run against a real agent: every criterion uses the synthetic ccloop or the control stub. The Orca pin is not
+  moved: this branch runs against ccloop's local main build (`ORCA_CCLOOP_BIN`), and waits for the human's ccloop push
+  and Orca's repin (plan O8) before it can merge.

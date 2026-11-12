@@ -222,3 +222,13 @@ second consequence (b) is unchanged.
 5. **Finite groups** are unchanged byte for byte: `tests/control/finiteRetryGolden.test.ts` pins a finite `optional-v1`
    group and a finite-legacy group (grant, funded allowance, dispatched policy, and the next retry's refusal) against a
    golden captured before the change.
+
+## 10. Correction: task grants in groups created after tester follow-up G (2026-11-12, Orca session `d1cbbd58`, Part B)
+
+Spec `2026-11-12-tester-followup-g-design.md` §2, §10.3 and §11 override §7 of this document **for groups created under
+the follow-up G model** (`modelVersion: "followup-g"`, stamped at creation): an estimate's task work (tokens, attempts,
+active time) is an expectation in such a group whatever its token limit, as §7 item 3 already made it in an unlimited
+group; a task's tokens are never a ceiling unless a person turns on the separate hard switch; the group's token limit is
+the one hard line, enforced through ccloop's live ceiling. The finite-group behaviour §7 describes -- and the criteria
+that pin it -- now describe groups created before that release. The text above is unchanged (Rule 13); the as-built
+record is §12 of the follow-up G design.
