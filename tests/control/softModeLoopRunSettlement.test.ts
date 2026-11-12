@@ -76,7 +76,8 @@ describe("soft mode: a loop run's unknown usage is booked at its floor by Orca",
   });
 
   it("O3b: an authored task budget in an unlimited group keeps the person's path", async () => {
-    const { t, runId, driver } = await loopUnknown({ tokenPolicy: "optional-v1", floor: 500, tasks: [{ taskId: "a", tokenBudget: 99_000 }, { taskId: "b", tokenBudget: null }] }); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task budget is a pre-release group's rule (spec G §2.2); this names that model.
+    const { t, runId, driver } = await loopUnknown({ tokenPolicy: "optional-v1", modelVersion: null, floor: 500, tasks: [{ taskId: "a", tokenBudget: 99_000 }, { taskId: "b", tokenBudget: null }] }); try {
       since(t);
       expect(groupBody(t).limit.tokens).toBeNull();
       expect(readBudgetProposal(t.h.store, "g").allocations.find(a => a.ownerId === "a" && a.bucket === "work")!.fieldProvenance.tokens.provenance).toBe("complex-1m-default");

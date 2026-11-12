@@ -79,7 +79,8 @@ describe("approximate-floor marker", { timeout: 60_000 }, () => {
 
   it("O15: a finite limit set afterwards leaves the marker valid and the view readable", async () => {
     // An estimator-sized finite task grant, so a finite group limit is admissible while the run is active.
-    const x = await loopUnknown({ tokenPolicy: "optional-v1", floor: 500, tasks: [{ taskId: "a", tokenBudget: 99_000 }, { taskId: "b", tokenBudget: 99_000 }] });
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a finite task grant is a pre-release group's rule (spec G §2.2); this names that model.
+    const x = await loopUnknown({ tokenPolicy: "optional-v1", modelVersion: null, floor: 500, tasks: [{ taskId: "a", tokenBudget: 99_000 }, { taskId: "b", tokenBudget: 99_000 }] });
     const { t, runId, driver } = x; try {
       const restore = estimatorSized(t, "a"); since(t);
       expect(pass(t)).toBe(true);

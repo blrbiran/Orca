@@ -15,9 +15,10 @@ export const ds = ["tokens", "activeMs", "attempts", "sessions"] as const;
  * A failed work run whose usage the tool did not report: one reported event (baseline B = 10 work tokens) and then a
  * null one, as unknownFailure.ts builds it; `floor` is ccloop's usageLowerBound on the collect (an omp run's shape).
  */
-export async function loopUnknown(options: { tasks?: Array<{ taskId: string; tokenBudget?: number | null }>; tokenPolicy?: "optional-v1"; floor?: number; behaviour?: string } = {}) {
+/** `modelVersion` (follow-up H): absent, the import's default; null names a group created before the follow-up G release. */
+export async function loopUnknown(options: { tasks?: Array<{ taskId: string; tokenBudget?: number | null }>; tokenPolicy?: "optional-v1"; floor?: number; behaviour?: string; modelVersion?: null } = {}) {
   const tasks = options.tasks ?? [{ taskId: "a", tokenBudget: null }, { taskId: "b", tokenBudget: null }];
-  const t = await driverHarness(tasks as never, { ...(options.tokenPolicy ? { tokenPolicy: options.tokenPolicy } : {}), behaviour: () => (options.behaviour ?? "failed") as never, stopReason: () => "provider crashed" });
+  const t = await driverHarness(tasks as never, { ...(options.tokenPolicy ? { tokenPolicy: options.tokenPolicy } : {}), ...(options.modelVersion === null ? { modelVersion: null } : {}), behaviour: () => (options.behaviour ?? "failed") as never, stopReason: () => "provider crashed" });
   const collect = t.fake.port.collect;
   t.fake.port.collect = async (envelope, after) => {
     const report = await collect(envelope, after);
