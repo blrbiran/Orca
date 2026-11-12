@@ -264,6 +264,14 @@ function success(context: WebCommandContext, groupId: string, estimateId: string
   };
 }
 
+/**
+ * Tester follow-up G Part B, O7 (2026-11-12): the model a group is created under when the caller names none. Held at null
+ * (no marker: today's rules) on this branch: flipping it to MODEL_VERSION_G turned 77 existing criteria in 30 files red
+ * (measured; the seat's report lists them), which pin what a group created before the release does and need the
+ * controller's decision. Part A's unconditional stamp makes the same flip when the branches are stacked.
+ */
+export const DEFAULT_MODEL_VERSION: typeof MODEL_VERSION_G | null = null;
+
 export interface ImportedPlanWrite {
   groupId: string; repoId: string; planId: string; plan: ControlPlanV1; actorId: string;
   estimatorProfileId: string | null; estimatorProfileHash: string | null; estimateMode: "strict" | "soft";
@@ -276,7 +284,7 @@ export interface ImportedPlanWrite {
    */
   tokenLimit?: number | null; integration?: IntegrationScheme | null; origin?: ImportOrigin;
   /**
-   * Tester follow-up G spec §11: the model the group is created under -- follow-up G unless said otherwise. A group created
+   * Tester follow-up G spec §11: the model the group is created under (absent: DEFAULT_MODEL_VERSION). A group created
    * under it gets no task token ceiling (spec §2.2: a task's tokens are an expectation; the group limit is the one hard
    * line). `null` (in-process only, never a payload field) writes no marker: a group as one created before the release.
    */
@@ -335,7 +343,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const estimateId = deferred ? null : `estimate-${sha256Canonical({ groupId: input.groupId, planHash, version: 1 }).slice(0, 24)}`;
   const queued = preflight?.state === "queued";
   const legacyCarry=carry!==null&&!hasTokenPolicy(deps.store,input.groupId);
-  const modelVersion=input.modelVersion===undefined?MODEL_VERSION_G:input.modelVersion;
+  const modelVersion=input.modelVersion===undefined?DEFAULT_MODEL_VERSION:input.modelVersion;
   const expectationGroup=modelVersion===MODEL_VERSION_G&&stripped===null&&!legacyCarry;
   const authoredTokens=(task:ControlPlanV1["tasks"][number]):number|null=>stripped!==null?stripped.workTokens:legacyCarry?TASK_WORK.tokens:expectationGroup?null:JSON.parse(task.originalContractCanonicalJson).executionPolicy.tokenBudget;
   const taskAllocations = plan.tasks.flatMap(task => [

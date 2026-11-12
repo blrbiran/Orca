@@ -1,15 +1,17 @@
-// Tester follow-up G spec §10.5 / §11 (plan Part B, O7): every group created from now on carries the follow-up G marker, so
-// its tasks' token amounts are expectations and the group limit is its one hard line; a flow run's hidden child keeps the
-// rules it had (plan D5), and a group created before the release (no marker) keeps today's rules.
+// Tester follow-up G spec §10.5 / §11 (plan Part B, O7): a group created under the follow-up G marker is an
+// expectation-model group with no task token ceiling; a flow run's hidden child keeps the rules it had (plan D5), and a
+// group with no marker (created before the release) keeps today's rules. Which model an import uses when its caller names
+// none is DEFAULT_MODEL_VERSION, held at "no marker" on this branch until the controller decides (see planImport.ts).
 import { describe, expect, it } from "vitest";
 import { expectationModelApplies } from "../../src/control/expectationModel.js";
 import { isFollowupG } from "../../src/control/modelVersion.js";
+import { DEFAULT_MODEL_VERSION } from "../../src/control/planImport.js";
 import { readBudgetProposal, readGroup } from "../../src/control/queries.js";
 import { webFixture } from "./fixtures/web.js";
 
-describe("the expectation model is the default for new groups (spec §10.5, §11)", { timeout: 60_000 }, () => {
-  it("a group imported after this release is an expectation-model group with no task token ceiling", async () => {
-    const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1" });
+describe("the follow-up G marker at import (spec §10.5, §11)", { timeout: 60_000 }, () => {
+  it("a group imported under the marker is an expectation-model group with no task token ceiling", async () => {
+    const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g" });
     try {
       const group = readGroup(h.store, "g");
       expect(isFollowupG(group)).toBe(true);
@@ -24,6 +26,13 @@ describe("the expectation model is the default for new groups (spec §10.5, §11
     try {
       expect(isFollowupG(readGroup(h.store, "g"))).toBe(false);
       expect(readBudgetProposal(h.store, "g").allocations.find(a => a.ownerKind === "task" && a.bucket === "work")!.amount.tokens).toBe(99_000);
+    } finally { await h.dispose(); }
+  });
+
+  it("an import that names no model follows DEFAULT_MODEL_VERSION", async () => {
+    const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1" });
+    try {
+      expect(isFollowupG(readGroup(h.store, "g"))).toBe(DEFAULT_MODEL_VERSION !== null);
     } finally { await h.dispose(); }
   });
 });
