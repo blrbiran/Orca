@@ -35,7 +35,9 @@ describe.skipIf(!realBinary)("paired source nullable token lifecycle",()=>{
   }finally{await world.teardown();}
  },75_000);
  it.each([null,5_000_000])("renews a saved funded allowance after a cap change without replaying paid planning (authored %s)",async(authored)=>{
-  const world=await worlds.world([{taskId:"a",targetPaths:["answer.txt"],loop:{goal:"write answer",successCondition:"answer is 42",targetPaths:["answer.txt"],checks:["test -f answer.txt"],tokenBudget:authored}}],{a:{files:{"answer.txt":"42\n"}}},{tokenPolicy:"optional-v1"});
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a saved funded allowance parked at its token grant is a pre-release group's rule (spec G §2.2,
+  // §2.6); this world is created as one (ccloopWorld preRelease).
+  const world=await worlds.world([{taskId:"a",targetPaths:["answer.txt"],loop:{goal:"write answer",successCondition:"answer is 42",targetPaths:["answer.txt"],checks:["test -f answer.txt"],tokenBudget:authored}}],{a:{files:{"answer.txt":"42\n"}}},{tokenPolicy:"optional-v1",preRelease:true});
   (world.agentsTable.installations.codex.command as string[]).splice(1,0,resolve("tests/control/fixtures/fake-token-codex.mjs"));
   await writeFile(world.table,JSON.stringify(world.agentsTable));
   const runtime=await world.boot();try {

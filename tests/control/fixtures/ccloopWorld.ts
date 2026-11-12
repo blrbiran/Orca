@@ -1,4 +1,5 @@
 import { complex1mDefaults } from "../../../src/control/estimator.js";
+import { importControlPlanAsync } from "../../../src/control/planImport.js";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -81,7 +82,14 @@ export interface ScriptEntry { files: Record<string, string>; reportedChangedFil
 /** Single-call estimate (F15, ccloop's fake claude): the answer to one single call, optionally after a delay, optionally streaming one closed message first. */
 export interface SingleCallScriptEntry { output: unknown; delayMs?: { "single-call": number }; usageBeforeDelay?: boolean }
 const optionalPolicyWorlds=new WeakSet<ControlRuntime>();
-export interface WorldOptions { tokenPolicy?:"optional-v1"; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
+const preReleaseWorlds=new WeakSet<ControlRuntime>();
+export interface WorldOptions { tokenPolicy?:"optional-v1";
+  /**
+   * Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a world whose group is created as one before the follow-up G release (no model marker:
+   * finite task grants, token-allowance parking), imported in process with `modelVersion: null` -- the payload has no such
+   * field, so no production path changes.
+   */
+  preRelease?: true; claudeScript?: Record<string, ScriptEntry | SingleCallScriptEntry>; /** Single-call estimate: the profile's declared context window (null otherwise, so the estimate stays blocked-capability). */ declaredContextWindowTokens?: number;
   /** Syncskill integration plan Task 6: more variables for the assembled runtime's env (ORCA_SYNCSKILL_BIN and what the fake syncskill reads). */
   env?: NodeJS.ProcessEnv;
   /** Spec 2026-10-15 criterion 4: the panel's estimate mode (soft when absent). */ estimateMode?: "strict" | "soft";
@@ -234,6 +242,7 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
       if (runtime === null) throw new Error("the control plane did not assemble");
       live.add(runtime);
       if(worldOptions.tokenPolicy==="optional-v1")optionalPolicyWorlds.add(runtime);
+      if(worldOptions.preRelease===true)preReleaseWorlds.add(runtime);
       await runtime.recover();
       return runtime;
     };
@@ -307,7 +316,10 @@ export const raw = (runtime: ControlRuntime, commandId: string, verb: string, pa
  * the assembled service.
  */
 export async function startGroup(runtime: ControlRuntime, repoId: string, raiseTokens = 0, beforeStart?: () => Promise<void>): Promise<void> {
-  const imported = await runtime.service.importPlan(raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" }));
+  const command = raw(runtime, "import", "import-plan", { groupId: "g", repoId, planId: "plan" });
+  const imported = preReleaseWorlds.has(runtime)
+    ? await (async () => { const release = runtime.service.deps.admissionGate?.enter(); try { return await importControlPlanAsync(runtime.service.deps, command, { modelVersion: null }); } finally { release?.(); } })()
+    : await runtime.service.importPlan(command);
   // Ruling (session 3cfc2e73 R3): 「这次批准改写所有必要的判据。」 A planId import has no token limit, so it queues no
   // estimate at all (spec 2026-11-05 §3.3); these worlds never used the import-time estimate (it was blocked-capability).
   expect(imported).toMatchObject({ result: { kind: "imported", estimateId: null, estimateState: "none" } });

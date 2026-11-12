@@ -17,7 +17,9 @@ describe.skipIf(!realBinary)("parked allowance settlement in a held group (#213)
     const world = await worlds.world(
       [{ taskId: "a", targetPaths: ["answer.txt"], loop: { goal: "write answer", successCondition: "answer is 42", targetPaths: ["answer.txt"], checks: ["test -f answer.txt"], tokenBudget: 5_000_000 } }],
       { a: { files: { "answer.txt": "42\n" } } },
-      { tokenPolicy: "optional-v1" },
+      // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- token-allowance parking happens only in a group created before the follow-up G
+      // release (spec G §2.2, §2.6: an expectation-model run has no grant to park at); this world is created as one.
+      { tokenPolicy: "optional-v1", preRelease: true },
     );
     (world.agentsTable.installations.codex.command as string[]).splice(1, 0, resolve("tests/control/fixtures/fake-token-codex.mjs"));
     await writeFile(world.table, JSON.stringify(world.agentsTable));
@@ -54,7 +56,9 @@ describe.skipIf(!realBinary)("parked allowance settlement in a held group (#213)
     const world = await worlds.world(
       [{ taskId: "a", targetPaths: ["answer.txt"], loop: { goal: "write answer", successCondition: "answer is 42", targetPaths: ["answer.txt"], checks: ["test -f answer.txt"], tokenBudget: 5_000_000 } }],
       { a: { files: { "answer.txt": "42\n" } } },
-      { tokenPolicy: "optional-v1" },
+      // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- token-allowance parking happens only in a group created before the follow-up G
+      // release (spec G §2.2, §2.6: an expectation-model run has no grant to park at); this world is created as one.
+      { tokenPolicy: "optional-v1", preRelease: true },
     );
     (world.agentsTable.installations.codex.command as string[]).splice(1, 0, resolve("tests/control/fixtures/fake-token-codex.mjs"));
     await writeFile(world.table, JSON.stringify(world.agentsTable));
