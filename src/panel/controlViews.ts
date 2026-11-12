@@ -25,6 +25,7 @@ import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import { acceptanceOf, acceptanceProblem } from "../control/groupAcceptanceRecord.js";
+import { landingWatchOf } from "../control/landingWatchRecord.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
@@ -586,6 +587,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   // Tester follow-up E §5 (#241): the group's acceptance on its tip; a failed one is a problem named by its command.
   const acceptance = acceptanceOf(body);
   const acceptanceProblemCode = acceptanceProblem(acceptance);
+  // Tester follow-up G §6.2 (#269): the landing watch's last record; each regression is a problem named by its command.
+  const landingWatch = landingWatchOf(body);
   // Dir-requirements spec §9.4: a dir group's placement record, without the journal's `from/to` (not the panel's business).
   const placement = dirWorkspaceOf(body) === null ? null : readPlacement((body as { placement?: unknown }).placement);
   // Multi-directory projects spec §12: a multi group's directories and landing, as its integration region shows them. The
@@ -649,6 +652,10 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(acceptance === null ? {} : { acceptance: { ...acceptance, ...(acceptanceProblemCode === null ? {} : { problem: acceptanceProblemCode }) } }),
     // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
     ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
+    ...(landingWatch === null ? {} : { landingWatch: {
+      tip: landingWatch.tip, at: landingWatch.at, commands: landingWatch.commands,
+      regressions: landingWatch.regressions.map((regression) => ({ ...regression, problem: `landing-regression:${regression.command}` })),
+    } }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(multiSummary === null ? {} : { multiDir: multiSummary }),
     ...(debugMark === null ? {} : { debug: {

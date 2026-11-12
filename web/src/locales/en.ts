@@ -813,6 +813,11 @@ export const en = {
       send: "Send",
       cancel: "Cancel",
     },
+    landingWatch: {
+      title: "Regressions on the group branch",
+      turnedRed: "after {{tasks}} landed, {{command}} turned red",
+      exited: "exited {{exit}} at {{tip}}",
+    },
     acceptAttempt: {
       open: "Accept this attempt after checks",
       explain: "Orca will merge this attempt onto the group branch, run the task's setup and required checks on the merged tree, and land it only if they all pass. Nothing is charged again.",

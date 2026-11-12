@@ -248,6 +248,20 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
   ];
 }
 
+interface LandingWatchView { regressions: Array<{ command: string; landedTaskIds: string[]; tip: string; exit: string; tail?: string; problem: string }> }
+
+/**
+ * Tester follow-up G §6.2 (#269): a check that turned red on the group branch after a landing, one problem per regression,
+ * with the tasks that landed, its output tail and what answers it. No lines without a regression.
+ */
+export function landingWatchLines(groupId: string, w: LandingWatchView | undefined): string[] {
+  return (w?.regressions ?? []).flatMap((r) => [
+    `problem: ${r.problem} (after ${r.landedTaskIds.join(", ")} landed; exited ${r.exit} on orca/${groupId} at ${r.tip.slice(0, 12)})`,
+    ...(r.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`),
+    "next: add a task that fixes it, or wait for the task that owns it; the watch runs again on the next landing",
+  ]);
+}
+
 /** A run as the group view lists it, for the empty-result lines. */
 export interface EmptyResultRun { runId?: unknown; taskId?: unknown; blockedReason?: unknown }
 
@@ -293,7 +307,7 @@ export function noChangeLines(groupId: string, items: readonly NoChangeItem[], r
 }
 
 export function formatWithUnestimated(body: unknown): string {
-  const b = body as (UnestimatedSource & { summary?: { groupId?: string; acceptance?: AcceptanceView }; groupId?: string }) | null;
+  const b = body as (UnestimatedSource & { summary?: { groupId?: string; acceptance?: AcceptanceView; landingWatch?: LandingWatchView }; groupId?: string }) | null;
   const groupId = b?.summary?.groupId ?? b?.groupId;
   const live = new Set(["starting", "unknown", "attempt-unknown", "running", "collected", "landed", "reconciling"]);
   const runs = b === null ? [] : (b as { runs?: Array<{ taskId?: unknown; state?: unknown } & EmptyResultRun> }).runs ?? [];
@@ -306,7 +320,8 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
-    ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : [])]);
+    ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
+    ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : [])]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */

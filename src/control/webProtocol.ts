@@ -1645,6 +1645,16 @@ export const groupSummarySchema = z
       rerun: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       problem: nonemptyString.optional(),
     }).strict().optional(),
+    // Tester follow-up G §6.2 (#269): the landing watch's last record (landingWatchRecord.ts); each regression's `problem`
+    // is `landing-regression:<command>`. Optional so a group without a record parses unchanged.
+    landingWatch: z.object({
+      tip: commitShaSchema, at: safeInteger,
+      commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger, tail: z.string().max(2048).optional() }).strict()),
+      regressions: z.array(z.object({
+        command: nonemptyString, landedTaskIds: z.array(idSchema), tip: commitShaSchema, exit: nonemptyString,
+        tail: z.string().max(2048).optional(), since: safeInteger, problem: nonemptyString,
+      }).strict()),
+    }).strict().optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),

@@ -31,6 +31,7 @@ import { RunOutputBound } from "./RunOutputBound.js";
 import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
 import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
+import { LandingWatchProblem } from "./LandingWatchProblem.js";
 import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf, shownWorkStatus } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -746,7 +747,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {dispatchControls}
       {/* What Problems and Live hold, said on their tabs: the region's own lists, plus the group's refusal shown above. */}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion}
-        hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0), live: runningNow(view).length }} regions={{
+        hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0), live: runningNow(view).length }} regions={{
         progress: <>
       {allLabels.length > 0 && (
         <div className="mb-2 flex flex-wrap items-start gap-2" role="toolbar" aria-label={t("control.group.filterRegion")}>
@@ -845,6 +846,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <GroupAcceptanceProblem groupId={groupId} acceptance={view.summary.acceptance} roles={props.roles} archived={archived} revision={revision} onCommand={onCommand} />
       {/* Tester follow-up G spec §3.3, §3.5: the requirement review and its exits. */}
       <RequirementReviewPanel groupId={groupId} review={view.summary.requirementReview} archived={archived} revision={revision} onCommand={onCommand} />
+      {/* Tester follow-up G §6.2 (#269): a check that turned red on the group branch after a landing. */}
+      <LandingWatchProblem groupId={groupId} landingWatch={view.summary.landingWatch} />
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />

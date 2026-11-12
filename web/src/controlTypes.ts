@@ -132,6 +132,8 @@ export type GroupSummaryV1 = {
   acceptance?: GroupAcceptanceV1;
   /** Tester follow-up G spec §3.3: the requirement review record; `problem` is set when it did not pass. */
   requirementReview?: RequirementReviewV1;
+  /** Tester follow-up G §6.2 (#269): the landing watch's last record; each regression is a problem. */
+  landingWatch?: LandingWatchV1;
   /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
   scheduleStart?: { scheduleId: string; name: string; slot: number; waitingReason: string | null };
 };
@@ -619,6 +621,11 @@ export type RequirementReviewV1 = {
 export type GroupAcceptanceV1 = {
   tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir";
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
+};
+/** Tester follow-up G §6.2 (#269): the landing watch's last record (src/control/landingWatchRecord.ts). */
+export type LandingWatchV1 = {
+  tip: string; at: number; commands: Array<CheckRunCommandV1 & { tail?: string }>;
+  regressions: Array<{ command: string; landedTaskIds: string[]; tip: string; exit: string; tail?: string; since: number; problem: string }>;
 };
 /** Tester follow-up E §4 (#245): one command a check Orca ran itself, with its exit ("0" on a pass) and wall-clock time. */
 export type CheckRunCommandV1 = { command: string; exit: string; ms: number };

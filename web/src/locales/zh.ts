@@ -673,6 +673,11 @@ export const zh: Translation<typeof en> = {
       send: "发送",
       cancel: "取消",
     },
+    landingWatch: {
+      title: "组分支上的回归",
+      turnedRed: "{{tasks}} 落地后，{{command}} 变红了",
+      exited: "在 {{tip}} 退出码 {{exit}}",
+    },
     acceptAttempt: {
       open: "检查通过后接受这次尝试",
       explain: "Orca 会把这次尝试合并到组分支上，在合并后的代码上运行任务的准备命令和必需检查，全部通过才落地。不会再次计费。",
