@@ -368,7 +368,19 @@ function startedTime(startedAt: string): JSX.Element {
  */
 function eventTime(at: number): JSX.Element {
   const date = new Date(at);
-  return <time data-testid="transcript-event-time" className="num text-xs text-muted" dateTime={date.toISOString()} title={date.toLocaleString(currentLanguage())}>{date.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>;
+  const { clock, full } = formatters(currentLanguage());
+  return <time data-testid="transcript-event-time" className="num text-xs text-muted" dateTime={date.toISOString()} title={full.format(date)}>{clock.format(date)}</time>;
+}
+/** Up to 200 rows re-render on every poll; building a locale formatter per row and call is what made that slow. */
+const FORMATTERS = new Map<string, { clock: Intl.DateTimeFormat; full: Intl.DateTimeFormat }>();
+function formatters(language: string): { clock: Intl.DateTimeFormat; full: Intl.DateTimeFormat } {
+  let found = FORMATTERS.get(language);
+  if (found === undefined) {
+    // `full` is what toLocaleString gives: the date and the time.
+    found = { clock: new Intl.DateTimeFormat(language, STARTED_CLOCK), full: new Intl.DateTimeFormat(language, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" }) };
+    FORMATTERS.set(language, found);
+  }
+  return found;
 }
 
 function sizeText(bytes: number): string {
