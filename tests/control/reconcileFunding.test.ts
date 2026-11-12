@@ -12,6 +12,7 @@ import { planCeilingRaises } from "../../src/control/liveCeilingRaise.js";
 import { readGroup } from "../../src/control/queries.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
+import { answerSingleCalls } from "./fixtures/singleCallAnswers.js";
 
 const M = 1_000_000;
 const conflicting = [{ taskId: "a", targetPaths: ["shared.txt"] }, { taskId: "b", targetPaths: ["shared.txt"] }];
@@ -148,6 +149,25 @@ describe("a reconciliation in an expectation-model group is funded under the har
       const body = t.body(second!);
       t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...body, state: "collected" }), second!);
       expect(planCeilingRaises(t.h.store, "g", Date.now())).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("H6: the goal judge of a no-change run is funded from the share that run gave back when its execution ended", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { files: () => ({}), tokenPolicy: "optional-v1", modelVersion: "followup-g" });
+    try {
+      const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
+      const set = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 10 * M, activeMs: limit.activeMs * 4, attempts: limit.attempts + 20, sessions: limit.sessions + 20 } }));
+      if ("error" in set) throw new Error(`set-limit refused: ${JSON.stringify(set)}`);
+      const seen = answerSingleCalls(t, () => ({ outcome: "complete", output: { verdict: "met", finding: "already there" } }));
+      const first = await t.claim();
+      const group = readGroup(t.h.store, "g");
+      // The lone run's ceiling holds the whole remainder.
+      expect(group.limit.tokens! - group.used.tokens - group.reserved.tokens).toBe(0);
+      const driver = t.driver();
+      await t.until(driver, () => t.body(first).drive?.noChangeJudge !== undefined && t.body(first).drive.noChangeJudge.state !== "pending");
+      expect(String(t.body(first).drive.blockedReason)).not.toMatch(/unfunded/);
+      expect(seen.calls.map((c) => c.purpose)).toEqual(["no-change-judge"]);
+      expect(t.body(first).drive.noChangeJudge).toMatchObject({ state: "met" });
     } finally { await t.h.dispose(); }
   });
 });
