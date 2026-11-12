@@ -2014,14 +2014,16 @@ export const WORKER_UNDETERMINED = "worker-undetermined";
  * takes the failed-run path (blocked at C, then retried by Orca, webService.ts workerLostPass). The `worker-lost` activity
  * says why. A refusal that the worker is not lost after all, or that its loop state is unavailable (ccloop as-built item 3),
  * is read as undetermined. A port without the method (an older pin) leaves the run waiting, as before.
+ * `underStop`: called by step H for a run with an open handoff request (driverHandoff.ts deliverAndCollect). A refusal then
+ * starts no undetermined grace: the request's own grace (outcome-unknown) owns a worker that cannot be settled.
  */
-async function settleLostWorker(deps: ExecutionDriverDeps, run: DriverRun, reason: string): Promise<boolean> {
+export async function settleLostWorker(deps: ExecutionDriverDeps, run: DriverRun, reason: string, underStop = false): Promise<boolean> {
   const port = portFor(deps, run);
   if (port.settleLostWorker === undefined) return false;
   try { await port.settleLostWorker(readStartEnvelope(deps.store, run)); }
   catch (error) {
     const code = peerErrorCode(error);
-    if (code === "control-worker-not-lost" || code === "control-worker-lost-state-unavailable") return workerUndetermined(deps, run, `${code}: ${reason}`);
+    if (code === "control-worker-not-lost" || code === "control-worker-lost-state-unavailable") return underStop ? false : workerUndetermined(deps, run, `${code}: ${reason}`);
     throw error;
   }
   write(deps, () => {
@@ -2035,8 +2037,8 @@ async function settleLostWorker(deps: ExecutionDriverDeps, run: DriverRun, reaso
 /**
  * Worker-lost recovery spec §5.2: a worker ccloop cannot tell alive or dead is never settled. From the first such answer the
  * run waits WORKER_UNDETERMINED_GRACE_MS (its start kept on the run), then is blocked at C as `worker-undetermined` with a
- * run recovery blocker, so recovery list and Problems show it; `orca recovery retry --run` checks again (a fresh grace),
- * `orca group close-run` ends it once the person made sure no process is left.
+ * run recovery blocker, so recovery list and Problems show it; `orca recovery retry --run` checks again (a fresh grace) once
+ * the person made sure no worker process is left (spec as-built Orca half item 3: close-run refuses a run with no terminal).
  */
 function workerUndetermined(deps: ExecutionDriverDeps, run: DriverRun, reason: string): boolean {
   const now = (deps.now?.() ?? new Date()).getTime();

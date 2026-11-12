@@ -348,6 +348,31 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2)"
       expect(await runtime.shutdown()).toBe(true);
     } finally { await w.teardown(); }
   });
+  // Worker-lost recovery spec, as-built Orca half item 9 (#273): a delivered stop whose run then loses its worker cannot be
+  // answered by that worker. ccloop settles the run as worker-lost, the run blocks on that failed terminal, and the request
+  // closes from it at once -- not outcome-unknown at the grace, which here (a deadline 10 min away) is far off. The group
+  // is stopped, so Orca does not start the task again.
+  it("H-lost: a stop open on a run whose worker dies closes from the worker-lost terminal, long before the grace", async () => {
+    const w = await world([{ taskId: "a", targetPaths: ["a1.txt"] }], { a: { files: { "a1.txt": "A1\n" }, delayMs: { execute: 120_000 } } });
+    const runtime = await w.boot(); try {
+      await startGroup(runtime, w.repoId);
+      runtime.startPump(50);
+      await inExecute(w, runtime, ["a"]);
+      const [a] = runsOf(runtime, "a");
+      const [requestId] = await handoffStop(runtime, { handoffDeadlineAt: new Date(Date.now() + 600_000).toISOString() });
+      await until(() => requestState(runtime, requestId!) === "collecting", 60_000, "the stop to be delivered");
+      const accepted = JSON.parse(readFileSync(join(a!.body.drive.sourceDir, "control", "accepted.json"), "utf8")) as { worker: { pid: number } };
+      process.kill(accepted.worker.pid, "SIGKILL");
+      // mutation: deliverAndCollect ignores `worker: lost` -> the request stays collecting until the grace (timeout), red
+      await until(() => !["request-pending", "collecting"].includes(requestState(runtime, requestId!)), 120_000, "the request to close");
+      expect(requestState(runtime, requestId!)).toBe("settled-unrecoverable");
+      const run = readDriverRun(runtime.store, a!.runId);
+      expect({ outcome: run.drive?.outcome, cause: run.drive?.failureCause?.cause }).toEqual({ outcome: "failed", cause: "worker-lost" });
+      expect(runsOf(runtime, "a")).toHaveLength(1);
+      expect(w.landings()).toBe(0);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { await w.teardown(); }
+  });
 
   // Handoff delivery spec §12 (criteria additions) and §13.1 C-3, under the controller's rulings D-C3 (ccloop T2:
   // an aborted phase reports the usage it was observed spending) and D-C7' (a phase the handoff deadline

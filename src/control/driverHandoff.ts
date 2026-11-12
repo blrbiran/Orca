@@ -21,7 +21,7 @@ import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
   INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
-  readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
+  readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { PartialSelection } from "./agentSelection.js";
@@ -236,6 +236,11 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
     deps.crash?.("H-after-candidate");
     return settleHandoffCheckpoint(deps, run.runId, request.requestId, report);
   }
+  // Worker-lost recovery spec, as-built Orca half item 9: a stop whose run lost its worker cannot be answered by that worker.
+  // ccloop settles the run as worker-lost (a failed terminal with a stop proof); the next round takes it through C, and
+  // the blocked run's request closes from that terminal (closeBlocked). An undetermined worker stays on the grace below.
+  if (report.terminal === null && report.candidate === null && report.worker?.state === "lost" && run.mode === undefined && run.recoveryOf === undefined
+    && await settleLostWorker(deps, run, report.worker.reason, true)) return true;
   return (await settleIfPastGrace(deps, run, request)) || report.events.length > 0;
 }
 
