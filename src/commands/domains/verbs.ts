@@ -161,13 +161,38 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
  * Budget defaults spec 2026-11-11 §7 item 4: per task that has an expectation (the view derives one only in a group with no
  * token limit) and has run, what it used against what was expected -- "×3.2" -- or "unknown" when its usage is unknown.
  */
-export function expectationLines(source: { workItems?: Array<{ taskId: string; lineageRunIds?: string[]; expected?: { tokens: number; estimateId: string; stale: boolean; usedTokens: number | null } }> }): string[] {
+export function expectationLines(source: { workItems?: Array<{ taskId: string; lineageRunIds?: string[]; expected?: { tokens: number; estimateId: string | null; stale: boolean; usedTokens: number | null } }> }): string[] {
   return (source.workItems ?? []).flatMap((item) => {
     const e = item.expected;
     if (e === undefined || (item.lineageRunIds?.length ?? 0) === 0) return [];
     const ratio = usedRatio(e);
     const used = e.usedTokens === null ? "unknown" : `${e.usedTokens} tokens${ratio === null ? "" : ` (×${ratio} its estimate)`}`;
-    return [`task ${item.taskId}: used ${used}; expected ${e.tokens} tokens from estimate ${e.estimateId}${e.stale ? " (stale)" : ""}`];
+    // Tester follow-up G spec §2.2: a person's amount in an expectation-model group has no estimate.
+    return [`task ${item.taskId}: used ${used}; expected ${e.tokens} tokens from ${e.estimateId === null ? "the amount a person set" : `estimate ${e.estimateId}`}${e.stale ? " (stale)" : ""}`];
+  });
+}
+
+type BudgetState = { hardCapTokens: number | null; usagePause: { usedTokens: number; expectationTokens: number | null; line: number } | null; usageStopped: { principal: string } | null; groupCapStop: { observedTokens: number } | null };
+/**
+ * Tester follow-up G spec §2.3-§2.5 (plan O6): what waits on a person or an orchestrating agent in an expectation-model
+ * group, with the command that answers it; a hard cap is named so the operator knows the task has no pause line.
+ */
+export function budgetStateLines(groupId: string, source: { workItems?: Array<{ taskId: string; budgetState?: BudgetState }> }): string[] {
+  return (source.workItems ?? []).flatMap((item) => {
+    const s = item.budgetState;
+    if (s === undefined) return [];
+    const lines: string[] = [];
+    if (s.hardCapTokens !== null) lines.push(`task ${item.taskId}: hard cap ${s.hardCapTokens} tokens (a person's; no pause line)`);
+    if (s.usagePause !== null) {
+      const e = s.usagePause.expectationTokens;
+      const ratio = e === null || e === 0 ? "" : `, ×${Math.round((s.usagePause.usedTokens / e) * 10) / 10} of the expectation`;
+      lines.push(`task ${item.taskId}: waiting for a decision: used ${s.usagePause.usedTokens}${ratio} (pause line ${s.usagePause.line})`,
+        `  next: orca task decide-usage ${groupId} ${item.taskId} --decision continue [--note '<what to do next>']  or  --decision stop`);
+    }
+    if (s.groupCapStop !== null) lines.push(`task ${item.taskId}: group cap reached (the group has used its token limit; this run used ${s.groupCapStop.observedTokens})`,
+      `  next: orca group set-limit ${groupId} --limit '{"tokens":<higher>,...}'  (the task continues with its work; a codex task stops between turns, so it may pass the cap by one turn)`);
+    if (s.usageStopped !== null) lines.push(`task ${item.taskId}: stopped over its expectation by ${s.usageStopped.principal}`);
+    return lines;
   });
 }
 const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
@@ -358,6 +383,7 @@ export function formatWithUnestimated(body: unknown): string {
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     // Tester #285: the group's used figure lags while a run whose agent reports at phase end is under way.
     ...((note) => phaseEndBudgetLines(note.runIds, note.asOf))(phaseEndOfRuns(runs as UsageRun[])),
+    ...(typeof groupId === "string" && b !== null ? budgetStateLines(groupId, b as Parameters<typeof budgetStateLines>[1]) : []),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),

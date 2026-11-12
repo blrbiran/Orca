@@ -180,6 +180,10 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
       {(facts?.reviewFindings?.minor ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-testid="board-card-findings-minor">{t("board.card.findingsMinor", { count: facts!.reviewFindings!.minor })}</span>}
       {/* Session 3cfc2e73 D2: a run went over its grant in a group that was not blocked (no token limit). */}
       {group.overGrant === true && <span className={`badge ${cardBadge}`} data-tone="warn" data-testid="board-card-over-grant">{t("board.card.overGrant")}</span>}
+      {/* Tester follow-up G spec §2.4/§2.5: amber, never a stop -- over an expectation; a pause or a cap waits on a person. */}
+      {(facts?.budgetAlerts?.overExpectation ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-tone="warn" data-testid="board-card-over-expectation">{t("board.card.overExpectation", { count: facts!.budgetAlerts!.overExpectation })}</span>}
+      {(facts?.budgetAlerts?.waitingDecision ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-tone="warn" data-testid="board-card-waiting-decision">{t("board.card.waitingDecision", { count: facts!.budgetAlerts!.waitingDecision })}</span>}
+      {(facts?.budgetAlerts?.groupCapReached ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-tone="warn" data-testid="board-card-group-cap">{t("board.card.groupCapReached", { count: facts!.budgetAlerts!.groupCapReached })}</span>}
     </li>
   );
 }

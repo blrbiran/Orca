@@ -67,6 +67,9 @@ function tokenValueFor(drafts: Record<string, string>, key: string, serverValue:
   return parseTokens(valueFor(drafts, key, serverValue));
 }
 
+/** Tester follow-up G spec §10.3: the draft key of a task's "Hard cap" switch ("1" when on). */
+export const hardCapKey = (groupId: string, taskId: string): string => `budget-hard:${groupId}:${taskId}`;
+
 /** The edits actually typed: a draft that reads as a different safe integer from the server's value. */
 export function editedOperations(view: GroupViewV1, drafts: Record<string, string>): ProposalOperationV1[] {
   const groupId = view.summary.groupId;
@@ -81,7 +84,9 @@ export function editedOperations(view: GroupViewV1, drafts: Record<string, strin
       if (draft === undefined || draft.trim() === "") continue;
       const value = Number(draft);
       if (!Number.isSafeInteger(value) || value < 0 || value === allocation.amount[dimension]) continue;
-      operations.push({ target, value, provenance: "human" });
+      // Tester follow-up G spec §10.3: in an expectation-model group a task's work tokens are an expectation unless its Hard cap is on.
+      const hard = view.expectationModel === true && target.scope === "task" && target.allocation === "work" && dimension === "tokens" && drafts[hardCapKey(groupId, target.taskId)] === "1";
+      operations.push({ target, value, provenance: "human", ...(hard ? { hard: true } : {}) });
     }
   }
   return operations;
@@ -241,10 +246,18 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   // Budget defaults spec 2026-11-11 §7 items 1, 4: in an unlimited group an estimate's task-work tokens are offered as no
   // ceiling (the shared transform sends none); the task's work tokens cell names the expectation instead.
   const expectedCell = (allocation: { ownerKind: string; ownerId: string; bucket: string }, dimension: string): JSX.Element | null => {
-    if (!unlimitedGroup || dimension !== "tokens" || allocation.ownerKind !== "task" || allocation.bucket !== "work") return null;
-    const expected = view.workItems.find((item) => item.taskId === allocation.ownerId)?.expected;
-    return expected === undefined ? null
-      : <small className="block num" data-testid={`budget-expected-${allocation.ownerId}`}>{t("budget.expected", { value: shortTokens(expected.tokens) })}</small>;
+    const model = view.expectationModel === true;
+    if ((!unlimitedGroup && !model) || dimension !== "tokens" || allocation.ownerKind !== "task" || allocation.bucket !== "work") return null;
+    const item = view.workItems.find((entry) => entry.taskId === allocation.ownerId);
+    const expected = item?.expected;
+    const hardCap = item?.budgetState?.hardCapTokens ?? null;
+    const key = hardCapKey(groupId, allocation.ownerId);
+    return <>
+      {expected !== undefined && <small className="block num" data-testid={`budget-expected-${allocation.ownerId}`}>{t(model ? "budget.expectedModel" : "budget.expected", { value: shortTokens(expected.tokens) })}</small>}
+      {model && hardCap !== null && <small className="block num" data-testid={`budget-hard-cap-${allocation.ownerId}`}>{t("budget.hardCapValue", { value: shortTokens(hardCap) })}</small>}
+      {/* Tester follow-up G spec §10.3: the separate switch that makes the typed amount a cap (default off). */}
+      {model && editable && <label className="block"><input type="checkbox" data-testid={`budget-hard-${allocation.ownerId}`} checked={drafts[key] === "1"} onChange={(event) => onDraft(key, event.target.checked ? "1" : "")} /> {t("budget.hardCap")}</label>}
+    </>;
   };
   const toLimit = (): void => { document.getElementById(`group-limit-${groupId}`)?.querySelector<HTMLInputElement>("input")?.focus(); };
   // The checklist's lines; the list is rendered only when it has one (an empty <ul> names nothing).

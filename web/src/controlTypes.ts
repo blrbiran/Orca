@@ -113,6 +113,8 @@ export type GroupSummaryV1 = {
     reviewFindings?: { major: number; minor: number };
     /** Budget defaults spec 2026-11-11 §7 item 4: a group with no token limit -- its tasks' summed expectation and use (null: unknown). */
     expectation?: { expectedTokens: number; usedTokens: number | null };
+    /** Tester follow-up G spec §2.4/§2.5: tasks over their expectation, waiting for a decision, waiting at the group cap. */
+    budgetAlerts?: { overExpectation: number; waitingDecision: number; groupCapReached: number };
   };
   /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
   dependsOn?: string[];
@@ -399,7 +401,15 @@ export type WorkItemViewV1 = {
   /** Retry work top-up spec 2026-11-06 §2 "The board": every top-up of the task, oldest first; absent when none. */
   topUps?: Array<{ amount: Amount; by: string; at: number; fromRunId: string }>;
   /** Budget defaults spec 2026-11-11 §7 items 2, 4: a group with no token limit -- the estimate's work tokens as an expectation; absent otherwise. */
-  expected?: { tokens: number; estimateId: string; stale: boolean; usedTokens: number | null };
+  expected?: { tokens: number; estimateId: string | null; stale: boolean; usedTokens: number | null };
+  /** Tester follow-up G spec §2.3-§2.5: the task's budget state in an expectation-model group; absent when it has none. */
+  budgetState?: {
+    hardCapTokens: number | null;
+    overExpectation: { at: number; usedTokens: number; expectationTokens: number } | null;
+    usagePause: { line: number; multiple: number; usedTokens: number; expectationTokens: number | null; runId: string; at: number } | null;
+    usageStopped: { at: number; principal: string; note?: string } | null;
+    groupCapStop: { runId: string; at: number; observedTokens: number } | null;
+  };
 };
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
@@ -718,6 +728,8 @@ export type ProposalOperationV1 = {
   value: number|null;
   provenance: "complex-1m-default" | "model" | "human";
   estimateId?: string;
+  /** Tester follow-up G spec §10.3: a task's work tokens as a hard cap, in an expectation-model group only. */
+  hard?: boolean;
 };
 export type ProposalEditPayloadV1 = { baseProposalVersion: number; operations: ProposalOperationV1[]; proposedGroupLimit?: BudgetAmount };
 export type EstimatePayloadV1 = { proposalVersion: number; estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" };

@@ -1650,6 +1650,8 @@ export const groupSummarySchema = z
       // Budget defaults spec 2026-11-11 §7 item 4: in a group with no token limit and a ready estimate for its plan, the
       // tasks' summed expectation and summed use (null when any task's usage is unknown); absent otherwise.
       expectation: z.object({ expectedTokens: safeInteger.nonnegative(), usedTokens: safeInteger.nonnegative().nullable() }).strict().optional(),
+      // Tester follow-up G spec §2.4/§2.5: absent unless a task is over its expectation or waits on a person.
+      budgetAlerts: z.object({ overExpectation: safeInteger.nonnegative(), waitingDecision: safeInteger.nonnegative(), groupCapReached: safeInteger.nonnegative() }).strict().optional(),
     }).strict().optional(),
     // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
     dependsOn: z.array(idSchema).min(1).optional(),
@@ -1930,7 +1932,19 @@ export const workItemViewSchema = z
     // Budget defaults spec 2026-11-11 §7 items 2 and 4: in a group with no token limit, the task's work tokens from the newest
     // ready estimate for the current plan -- its expectation, never a ceiling -- and the work tokens its runs used so far
     // (null when any run's usage is unknown). Derived when the view is read, never stored; absent otherwise.
-    expected: z.object({ tokens: safeInteger.nonnegative(), estimateId: idSchema, stale: z.boolean(), usedTokens: safeInteger.nonnegative().nullable() }).strict().optional(),
+    // Tester follow-up G spec §2.2: in an expectation-model group too (finite or not), where a person's amount is the
+    // expectation (estimateId null) and an estimate's is floored at 1M.
+    expected: z.object({ tokens: safeInteger.nonnegative(), estimateId: idSchema.nullable(), stale: z.boolean(), usedTokens: safeInteger.nonnegative().nullable() }).strict().optional(),
+    // Tester follow-up G spec §2.3-§2.5: the task's budget state in an expectation-model group -- a person's hard cap, its
+    // first booking over the expectation, a pause waiting for a decision, a stop decided on it, a wait at the group cap.
+    // Absent when the task has none of them.
+    budgetState: z.object({
+      hardCapTokens: safeInteger.positive().nullable(),
+      overExpectation: z.object({ at: safeInteger, usedTokens: safeInteger, expectationTokens: safeInteger }).strict().nullable(),
+      usagePause: z.object({ line: safeInteger, multiple: positiveSafeInteger, usedTokens: safeInteger, expectationTokens: safeInteger.nullable(), runId: idSchema, at: safeInteger }).strict().nullable(),
+      usageStopped: z.object({ at: safeInteger, principal: nonemptyString, note: z.string().optional() }).strict().nullable(),
+      groupCapStop: z.object({ runId: idSchema, at: safeInteger, observedTokens: safeInteger }).strict().nullable(),
+    }).strict().optional(),
   })
   .strict();
 

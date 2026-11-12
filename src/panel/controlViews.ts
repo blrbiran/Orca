@@ -72,7 +72,7 @@ import { orchestrationSummary } from "../control/orchestration.js";
 import { liveNotesOf } from "../control/liveNotes.js";
 import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
-import { expectationModelApplies } from "../control/expectationModel.js";
+import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenIntentOf } from "../control/expectationModel.js";
 import { liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
@@ -533,6 +533,10 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     // Failure-cause spec 2026-10-21 §5: ccloop's typed cause first, when it stated one.
     const runCause = run === undefined || run === null ? null : typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
     // Issue #153: a blocked task whose run names no cause still shows (the overview's own `task-blocked`), not nothing.
+    // Tester follow-up G spec §2.1/§2.5: a task waiting at its pause line or at the group cap says so, with what answers it.
+    const waiting = (work as { usagePause?: unknown; groupCapStop?: unknown } | undefined);
+    if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop` }; break; }
+    if (work?.status === "blocked" && waiting?.groupCapStop !== undefined) { firstFailure = { taskId, cause: "group-cap-reached", next: `orca group set-limit ${groupId} --limit <a higher limit>` }; break; }
     const cause = runCause ?? (work?.status === "blocked" ? "task-blocked" : null);
     // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at a step other than C is not a ccloop failure (task
     // retry refuses it); recovery-retry resumes it in place, so the failure names that command.
@@ -545,12 +549,28 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
   const major = findings.filter((row) => row.severity === "major").length;
   // Budget defaults spec 2026-11-11 §7 item 4: absent in a finite group, so its card keeps its bytes.
-  const expectation = tokens(body.limit) === null ? cardExpectation(store, groupId, planHash, taskIds, snapshot) : null;
+  const expectation = tokens(body.limit) === null || expectationModelApplies(body) ? cardExpectation(store, groupId, planHash, taskIds, snapshot) : null;
+  // Tester follow-up G spec §2.4/§2.5: how many tasks are over their expectation, wait for a decision, or wait at the cap.
+  const alerts = expectationModelApplies(body) ? budgetAlerts(snapshot, taskIds) : null;
   return {
     budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure,
     ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
     ...(expectation === null ? {} : { expectation }),
+    ...(alerts === null ? {} : { budgetAlerts: alerts }),
   };
+}
+
+/** Absent when no task of the group has any of the three, so a quiet card keeps its bytes. */
+function budgetAlerts(snapshot: GroupReadSnapshot, taskIds: readonly string[]): { overExpectation: number; waitingDecision: number; groupCapReached: number } | null {
+  const alerts = { overExpectation: 0, waitingDecision: 0, groupCapReached: 0 };
+  for (const taskId of taskIds) {
+    let work: { status?: unknown; overExpectation?: unknown; usagePause?: unknown; groupCapStop?: unknown } | undefined;
+    try { work = decodedValue(snapshot.decodeWork(taskId)) as typeof work; } catch { continue; }
+    if (work?.overExpectation !== undefined) alerts.overExpectation++;
+    if (work?.status === "blocked" && work.usagePause !== undefined) alerts.waitingDecision++;
+    if (work?.status === "blocked" && work.groupCapStop !== undefined) alerts.groupCapReached++;
+  }
+  return alerts.overExpectation + alerts.waitingDecision + alerts.groupCapReached === 0 ? null : alerts;
 }
 
 /** Scheduled flows and groups spec 2026-10-24 §13.3: a group's schedule origin plus its fire's waiting reason. */
@@ -1056,6 +1076,7 @@ function workViews(
       ...topUpsView(topUps, task.taskId),
       // Tester follow-up G spec §1.2: the task's no-change record (who decided, the ordinal); omitted when it has none.
       ...noChangeView((body as { noChangeCompletion?: unknown }).noChangeCompletion),
+      ...budgetStateView(body),
     };
     // Tester #230: the driver blocks the run alone and leaves the stored work item `running` (scheduling, close-run and
     // recovery read that), so a person reads the task as blocked when its current run is -- the brief's count and the
@@ -1071,6 +1092,17 @@ function noChangeView(value: unknown): { noChangeCompletion?: z.infer<typeof noC
   if (value === undefined) return {};
   const parsed = noChangeCompletionSchema.safeParse(value);
   return parsed.success ? { noChangeCompletion: parsed.data } : blocked("work-item-no-change-invalid");
+}
+
+/** Tester follow-up G spec §2.3-§2.5: the task's budget state; absent when the work item has none of it. */
+function budgetStateView(body: Record<string, unknown>): { budgetState?: NonNullable<WorkItemViewV1["budgetState"]> } {
+  const keys = ["tokenIntent", "overExpectation", "usagePause", "usageStopped", "groupCapStop"];
+  if (!keys.some(key => body[key] !== undefined)) return {};
+  return { budgetState: {
+    hardCapTokens: hardCapOf(body),
+    overExpectation: (body.overExpectation ?? null) as never, usagePause: (body.usagePause ?? null) as never,
+    usageStopped: (body.usageStopped ?? null) as never, groupCapStop: (body.groupCapStop ?? null) as never,
+  } };
 }
 
 /** The task's top-up lines (spec §2 "The board"); absent when it has none, so a view without one is as it was. */
@@ -1444,14 +1476,24 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
  * already read: estimates are immutable and none is created after confirm, so nothing is stored. A finite group, or one
  * with no such estimate, gets none (its applied estimate is the ceiling the budget editor shows).
  */
-function deriveExpectations(view: Pick<GroupViewV1, "ledger" | "plan" | "estimates" | "workItems">, snapshot: GroupReadSnapshot): void {
-  if (view.ledger.groupLimit.tokens !== null) return;
+function deriveExpectations(view: Pick<GroupViewV1, "ledger" | "plan" | "estimates" | "workItems" | "expectationModel">, snapshot: GroupReadSnapshot): void {
+  // Tester follow-up G spec §2.2: an expectation-model group has expectations whatever its limit -- a person's amount
+  // first (none for a hard cap), else the newest estimate's, floored at 1M.
+  const model = view.expectationModel === true;
+  if (view.ledger.groupLimit.tokens !== null && !model) return;
   const newest = newestReadyEstimate(view.estimates, view.plan.planHash);
-  if (newest === null) return;
   for (const item of view.workItems) {
+    if (model) {
+      const intent = tokenIntentOf(decodedValue(snapshot.decodeWork(item.taskId)));
+      if (intent !== null) {
+        if (!intent.hard) item.expected = { tokens: intent.tokens, estimateId: null, stale: false, usedTokens: taskWorkUsed(snapshot, item.taskId) };
+        continue;
+      }
+    }
+    if (newest === null) continue;
     const suggested = newest.output!.tasks.find(task => task.taskId === item.taskId);
     if (suggested === undefined) continue;
-    item.expected = { tokens: suggested.work.tokens, estimateId: newest.estimateId, stale: newest.stale === true, usedTokens: taskWorkUsed(snapshot, item.taskId) };
+    item.expected = { tokens: model ? Math.max(EXPECTATION_FLOOR_TOKENS, suggested.work.tokens) : suggested.work.tokens, estimateId: newest.estimateId, stale: newest.stale === true, usedTokens: taskWorkUsed(snapshot, item.taskId) };
   }
 }
 

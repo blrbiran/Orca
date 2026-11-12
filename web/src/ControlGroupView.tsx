@@ -34,6 +34,11 @@ import { GroupFullSuiteWarning } from "./GroupFullSuiteWarning.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
 import { LandingWatchProblem } from "./LandingWatchProblem.js";
 import { GroupAllowances } from "./GroupAllowances.js";
+import { UsagePause } from "./UsagePause.js";
+
+/** Tester follow-up G spec §2.1/§2.5: the tasks that wait on a person -- at their pause line or at the group cap. */
+export const budgetWaiting = (view: { workItems: readonly WorkItemViewV1[] }): WorkItemViewV1[] =>
+  view.workItems.filter(item => item.budgetState !== undefined && (item.budgetState.usagePause !== null || item.budgetState.groupCapStop !== null));
 import { explainEstimateReason } from "./ccloopCodes.js";
 import { archiveOpen, hasFailureOutcome, retryRunOpen, runNumberOf, shownWorkStatus } from "./runFacts.js";
 import { UsageSettlement } from "./UsageSettlement.js";
@@ -757,7 +762,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {dispatchControls}
       {/* What Problems and Live hold, said on their tabs: the region's own lists, plus the group's refusal shown above. */}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion}
-        hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0), live: runningNow(view).length }} regions={{
+        hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length, live: runningNow(view).length }} regions={{
         progress: <>
       {allLabels.length > 0 && (
         <div className="mb-2 flex flex-wrap items-start gap-2" role="toolbar" aria-label={t("control.group.filterRegion")}>
@@ -862,6 +867,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <LandingWatchProblem groupId={groupId} landingWatch={view.summary.landingWatch} />
       {/* Tester follow-up G §6.3 (#189): what this group lets through; listed here, not counted as a problem. */}
       <GroupAllowances groupId={groupId} revision={revision} allowances={view.summary.allowances} roles={props.roles} archived={archived} onCommand={onCommand} />
+      {/* Tester follow-up G spec §2.1/§2.5: a task waiting at its pause line (Continue / Stop) or at the group cap (top up). */}
+      {budgetWaiting(view).map(item => <div key={item.taskId} data-problem-task-id={item.taskId}>
+        <p>{item.taskId}</p>
+        <UsagePause groupId={groupId} revision={revision} item={item} onCommand={onCommand} archived={archived} />
+      </div>)}
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />

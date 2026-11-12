@@ -449,6 +449,8 @@ export type ControlAction =
   | { verb: "continue-task"; groupId: string; taskId: string; expectedRevision: number; payload: ContinueTaskPayloadV1 }
   // Tester follow-up G Part 5: a note for a task's agent.
   | { verb: "add-live-note"; groupId: string; taskId: string; expectedRevision: number; payload: { text: string } }
+  // Tester follow-up G spec §2.5: continue or stop a task waiting at its pause line.
+  | { verb: "usage-pause-decide"; groupId: string; taskId: string; expectedRevision: number; payload: { decision: "continue" | "stop"; note?: { text: string; scope: "next-attempt" | "remaining-attempts" } } }
   | { verb: "recovery-retry"; groupId: string; expectedRevision: number; payload: RecoveryRetryPayloadV1 }
   // Issue fixes spec §4.2(2): retry a task whose run ccloop ended failed, as a new run.
   | { verb: "settle-unknown-usage"; groupId: string; expectedRevision: number; payload: SettleUnknownUsagePayloadV1 }
@@ -544,6 +546,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/tasks/${segment(action.taskId)}/continue`;
     case "add-live-note":
       return `${group}/tasks/${segment(action.taskId)}/live-notes`;
+    case "usage-pause-decide":
+      return `${group}/tasks/${segment(action.taskId)}/usage-pause`;
     case "set-task-labels":
       return `${group}/tasks/${segment(action.taskId)}/labels`;
     case "set-task-loop":

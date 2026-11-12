@@ -27,6 +27,7 @@ import { usedRatio } from "../../src/control/budgetSuggestions.js";
 import { UsageSettlement } from "./UsageSettlement.js";
 import { AcceptAttempt } from "./AcceptAttempt.js";
 import { NoChangeRecord } from "./NoChange.js";
+import { UsagePause } from "./UsagePause.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import type { Role } from "./auth.js";
@@ -278,6 +279,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
       </p>
       <TaskResults view={view} item={item} active={props.resultsActive === true} scope={props.resultsScope ?? ""} />
+      <UsagePause groupId={groupId} revision={view.summary.commandRevision} item={item} onCommand={onCommand} archived={archived} />
       {props.decisionsFailed != null && <p data-testid="decisions-read-failed">{t("control.decisions.readFailed", { code: props.decisionsFailed })}</p>}
       {props.decisions?.tasks.find((task) => task.taskId === item.taskId)?.runs.map((run) => (
         <RunDecisions key={run.runId} groupId={groupId} revision={view.summary.commandRevision} run={run} projectKey={props.decisions?.projectKey ?? null}
