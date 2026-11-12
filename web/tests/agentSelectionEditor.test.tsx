@@ -90,6 +90,9 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
       compatibilityReasonCodes: ["single-call-unavailable"],
     };
     const { container } = renderView({ view: view({ estimates: [estimate] }) });
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered; the
+    // estimate lines are in Technical, so it is opened before they are read.
+    fireEvent.click(screen.getByRole("tab", { name: "Technical details" }));
     expect(container.textContent).toContain("single-call-unavailable");
   });
   it("names the concrete inherited value and source beside task fields", () => {
@@ -242,6 +245,10 @@ describe("agent selection in the proposal view (agent selection spec §6.8)", ()
         agents: { reconcile: frozen({ agent: "claude", model: "claude-fable-5", contextWindow: 1_000_000 }, { agent: "operator-reconcile", model: "operator-reconcile", contextWindow: "group-reconcile" }) },
       }),
     });
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: a ready group opens on Progress and the
+    // other regions are not rendered, so Preparation, where the selection is, is opened first (and "no editing" below is
+    // then read on a rendered editor, not an absent one).
+    fireEvent.click(screen.getByRole("tab", { name: "Preparation" }));
     // Review P23 m2: the budget editor says "frozen at confirmation" too, so the text is looked for in this section only.
     expect(container.querySelector('section[aria-label="Agent selection"]')!.textContent).toContain("frozen at confirmation");
     expect(row(container, "task:a").textContent).toContain("gpt-6-luna from task");
@@ -335,6 +342,9 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
       mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
     const { container } = renderView({ preview, view: view({ estimates: [estimate] }) });
     expect(row(container, "task:b").querySelector('[role="alert"]')!.textContent).toContain("omp-model-catalog-unavailable · omp could not list its model catalog. Check that omp is installed and starts, then retry.");
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: the estimate line is in Technical, which is
+    // rendered only once it is opened.
+    fireEvent.click(screen.getByRole("tab", { name: "Technical details" }));
     expect(container.textContent).toContain("estimate-call-failed:omp-new-thing");
   });
 
@@ -343,6 +353,8 @@ describe("the plan's layer under the panel's at each level (ruling review R7)", 
     const estimate: GroupViewV1["estimates"][number] = { estimateId: "estimate-1", estimateVersion: 1, state: "failed", profile: { profileId: "all", profileHash: "b".repeat(64) },
       mode: "soft", requestHash: null, outputHash: null, output: null, reasonCode: "estimate-call-failed:omp-new-thing" };
     const { container } = renderView({ view: view({ estimates: [estimate] }) });
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: the estimate line is in Technical.
+    fireEvent.click(screen.getByRole("tab", { name: "Technical details" }));
     const line = [...container.querySelectorAll("li")].find((li) => li.textContent!.includes("estimate-call-failed"))!;
     expect(line.textContent).toMatch(/ · estimate-call-failed:omp-new-thing$/);
   });
