@@ -37,8 +37,13 @@ const view = (runs: RunViewV1[]): GroupViewV1 => ({
 });
 const rows = (container: HTMLElement): Array<[string | null, string]> =>
   [...container.querySelectorAll("tr[data-run-id]")].map((row) => [row.getAttribute("data-run-id"), row.querySelector("td summary")?.textContent ?? ""]);
-const renderRuns = (runs: RunViewV1[]) =>
-  render(<ControlGroupView view={view(runs)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
+// Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: a group's regions other than the selected
+// one are no longer rendered, so the Runs table exists only once its tab is opened; the criterion opens it as a person does.
+const renderRuns = (runs: RunViewV1[]) => {
+  const { container } = render(<ControlGroupView view={view(runs)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  fireEvent.click(screen.getByRole("tab", { name: "Runs and evidence" }));
+  return container;
+};
 
 beforeEach(async () => { await i18n.changeLanguage("en"); });
 afterEach(cleanup);
