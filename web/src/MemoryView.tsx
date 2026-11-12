@@ -177,7 +177,8 @@ export function MemoryView({ active, project, onProject }: {
           </ul>
           {/* Tester #258: which matches are shown. #281: a page size, previous / next and "page X of Y"; each page replaces the list. */}
           {page.page.records.length > 0 && page.page.records.length < page.page.total && <p className="caveat num">{t("memory.range", { from: page.page.offset + 1, to: page.page.offset + page.page.records.length, total: page.page.total })}</p>}
-          {page.page.total > 0 && (
+          {/* Only when paging can matter: a list that fits the smallest page needs no controls. */}
+          {page.page.total > PAGE_SIZES[0] && (
             <div className="flex flex-wrap items-center gap-2" data-testid="memory-pager">
               <button type="button" disabled={loading || page.page.offset === 0} onClick={() => turn(page.page.offset - pageSize)}>{t("memory.previous")}</button>
               <span className="num">{t("memory.pageOf", { page: Math.floor(page.page.offset / pageSize) + 1, pages: Math.max(1, Math.ceil(page.page.total / pageSize)) })}</span>
