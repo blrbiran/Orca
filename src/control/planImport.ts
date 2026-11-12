@@ -27,6 +27,7 @@ import { commandPrincipalFor, routedPersonAuthorityFor } from "./commandClient.j
 import { AgentCeilingRefusal, capStatuses, spendCapBlocking } from "./spendCaps.js";
 import { readSchedulerControlPlanSource, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { TrustedControlConfig } from "../panel/controlConfig.js";
+import { MODEL_VERSION_G } from "./modelVersion.js";
 import { buildBudgetEstimateRequest, estimateGrantFor, persistEstimateArtifacts, withEstimateGrant, TASK_WORK, TASK_HANDOFF, GOAL_REVIEW, ESTIMATE_GRANT, type FrozenEstimateRequest } from "./estimator.js";
 
 /** Tester round 2 spec §7.2 condition 11: the routed principal of the creating command is a person's. */
@@ -388,6 +389,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
     // a routed `web` / `user:<id>` principal, or a routed person authority (an owner's person token on the socket);
     // never a run Orca dispatched, never Orca's own command.
     createdByPerson: createdByPerson(input.commandId),
+    // Tester follow-up G spec §11: the model this group was created under, stamped once here (modelVersion.ts).
+    modelVersion: MODEL_VERSION_G,
   };
   // Integration spec §3.1: the group gets its copy of the repository's default where it gets its plan -- here, for
   // import-plan and a requirement's split acceptance alike. Keep is no field, so a keep group's body is unchanged.
