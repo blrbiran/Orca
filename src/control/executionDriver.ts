@@ -53,7 +53,7 @@ import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js
 import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
-import { recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
+import { abortPostMergeChecks, recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
 import { acceptPending, stepAcceptAttempt, type AcceptCheck } from "./acceptAttemptDriver.js";
 import type { GroupAcceptanceCheck } from "./groupAcceptance.js";
 import { readDebugMark } from "./debugChecks.js";
@@ -1789,15 +1789,16 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       // Debug task plan Task 8 (fix round 1, R1): a reproduce-first check is not awaited. Its process group is killed and its
       // persisted marker stays, so the next driver restores the workspace and checks again.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
-      // Ruling R2: a post-merge check likewise; nothing moved, so the next driver merges and checks again.
-      for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
+      // Ruling R2: a post-merge check likewise; nothing moved, so the next driver merges and checks again. One still
+      // running is recorded as skipped (stopped) first (#245).
+      abortPostMergeChecks(deps, context);
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       // Belt and braces for the guard in startDebugCheck: anything started while the last round finished is aborted too.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
-      for (const check of context.postMergeChecks?.values() ?? []) check.controller.abort();
+      abortPostMergeChecks(deps, context);
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       // Tester follow-up E §5: an aborted group acceptance check is waited for until its scratch worktree is gone, so a

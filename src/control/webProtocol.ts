@@ -1911,7 +1911,8 @@ export const runViewSchema = z
     // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check did (driveRecord.ts postMergeCheckRecordSchema);
     // omitted for a run that did not land through it and for a record written before the field.
     postMergeCheck: z.object({
-      result: z.enum(["passed", "failed", "not-needed"]), why: z.enum(["fast-forward", "tree-equal", "no-required-checks", "no-task"]).optional(),
+      // `skipped`/`stopped` (#245): the driver stopped while the check ran; the run is still `collected`.
+      result: z.enum(["passed", "failed", "not-needed", "skipped"]), why: z.enum(["fast-forward", "tree-equal", "no-required-checks", "no-task", "stopped"]).optional(),
       attemptSha: commitShaSchema, mergedSha: commitShaSchema, oldTip: commitShaSchema,
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()), tail: z.string().max(2048).optional(),
     }).strict().optional(),

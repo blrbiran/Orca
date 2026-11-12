@@ -10,6 +10,8 @@ export function RunPostMergeCheck({ check }: { check: PostMergeCheckV1 | undefin
   const { t } = useTranslation();
   if (check === undefined) return null;
   if (check.result === "not-needed") return <p>{t("control.group.postMergeNotNeeded", { why: t(`control.group.postMergeWhy.${check.why ?? "fast-forward"}`) })}</p>;
+  // #245: the driver stopped while the check ran; the run did not land and the next driver checks again.
+  if (check.result === "skipped") return <p>{t("control.group.postMergeSkipped")}</p>;
   const seconds = Math.round(check.commands.reduce((sum, command) => sum + command.ms, 0) / 1000);
   if (check.result === "passed") return <p>{t("control.group.postMergePassed", { count: check.commands.length, seconds })}</p>;
   const last = check.commands.at(-1);

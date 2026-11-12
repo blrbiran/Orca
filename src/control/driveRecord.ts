@@ -114,8 +114,10 @@ export const checkRunCommandSchema = z.object({ command: z.string().min(1), exit
 export type CheckRunCommand = z.infer<typeof checkRunCommandSchema>;
 export const POST_MERGE_NOT_NEEDED = ["fast-forward", "tree-equal", "no-required-checks", "no-task"] as const;
 export const postMergeCheckRecordSchema = z.object({
-  result: z.enum(["passed", "failed", "not-needed"]),
-  why: z.enum(POST_MERGE_NOT_NEEDED).optional(),
+  // `skipped` (why `stopped`): the driver stopped while the check ran; the run stays `collected` and the next driver merges
+  // and checks again, whose record replaces this one (#245).
+  result: z.enum(["passed", "failed", "not-needed", "skipped"]),
+  why: z.enum([...POST_MERGE_NOT_NEEDED, "stopped"]).optional(),
   attemptSha: commitSchema, mergedSha: commitSchema, oldTip: commitSchema,
   commands: z.array(checkRunCommandSchema),
   // The failing command's output tail, bounded as the block reason bounds it; on a failure only.

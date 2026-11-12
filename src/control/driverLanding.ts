@@ -471,6 +471,30 @@ function startPostMergeCheck(deps: ExecutionDriverDeps, context: DriverContext |
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
 }
 
+/**
+ * Tester follow-up E §4 (#245): a stopping driver aborts every post-merge check it started. One still running is recorded
+ * as `skipped` (why `stopped`), on the run and in its activity, in the stop's own turn -- before the drain, so the write is
+ * admitted. Nothing moved: the run stays `collected`, the next driver merges and checks again, and that landing's record
+ * replaces this one. A check that already answered is the round's to record; an unadmitted write records nothing, as before.
+ */
+export function abortPostMergeChecks(deps: ExecutionDriverDeps, context: DriverContext): void {
+  for (const [runId, check] of context.postMergeChecks ?? []) {
+    if (check.controller.signal.aborted) continue;
+    check.controller.abort();
+    if (check.settled !== null) continue;
+    try {
+      write(deps, () => {
+        const run = readDriverRun(deps.store, runId);
+        if (run.state !== "collected" || run.drive?.attemptSha == null) return;
+        const record: PostMergeCheckRecord = { result: "skipped", why: "stopped", attemptSha: run.drive.attemptSha, mergedSha: check.next, oldTip: check.old, commands: [] };
+        run.drive = { ...run.drive, postMergeCheck: record };
+        saveDriverRun(deps.store, run);
+        recordActivity(deps.store, { groupId: run.groupId, taskId: run.taskId, runId, kind: "post-merge-check", body: record });
+      });
+    } catch { /* not admitted (draining) or unreadable: nothing recorded, the next driver checks again */ }
+  }
+}
+
 async function runPostMergeCheck(deps: ExecutionDriverDeps, targetRepo: string, runId: string, next: string, contract: TaskContract, signal: AbortSignal): Promise<PostMergeOutcome> {
   const path = postMergeCheckPathOf(deps.roots, runId);
   await removeOwnPath(targetRepo, deps.roots, path);

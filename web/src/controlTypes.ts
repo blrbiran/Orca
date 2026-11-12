@@ -603,7 +603,7 @@ export type GroupAcceptanceV1 = {
 /** Tester follow-up E §4 (#245): one command a check Orca ran itself, with its exit ("0" on a pass) and wall-clock time. */
 export type CheckRunCommandV1 = { command: string; exit: string; ms: number };
 export type PostMergeCheckV1 = {
-  result: "passed" | "failed" | "not-needed"; why?: "fast-forward" | "tree-equal" | "no-required-checks" | "no-task";
+  result: "passed" | "failed" | "not-needed" | "skipped"; why?: "fast-forward" | "tree-equal" | "no-required-checks" | "no-task" | "stopped";
   attemptSha: string; mergedSha: string; oldTip: string; commands: CheckRunCommandV1[]; tail?: string;
 };
 /** Issue-fixes spec §5.2: one row of Orca's activity record. */

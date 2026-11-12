@@ -190,6 +190,8 @@ interface PostMergeCheckView { result: string; why?: string; commands: Array<{ c
 export function postMergeCheckLines(check: PostMergeCheckView | undefined): string[] {
   if (check === undefined) return [];
   if (check.result === "not-needed") return [`post-merge check: not needed (${check.why ?? "?"})`];
+  // #245: the driver stopped while the check ran; nothing moved, and the next driver merges and checks again.
+  if (check.result === "skipped") return [`post-merge check: skipped (${check.why ?? "?"}); the run did not land, and the next driver merges and checks again`];
   const n = check.commands.length;
   const ran = `(${n} command${n === 1 ? "" : "s"}, ${Math.round(check.commands.reduce((sum, c) => sum + c.ms, 0) / 1000)} s)`;
   if (check.result === "passed") return [`post-merge check: passed ${ran}`];
