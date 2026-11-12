@@ -41,7 +41,9 @@ async function claimAgain(t: Harness, driver: ReturnType<Harness["driver"]>): Pr
 }
 
 async function scenario(options: HarnessOptions, finiteOptional: boolean): Promise<unknown> {
-  const t = await driverHarness([{ taskId: "a" }], { ...options, behaviour: () => "failed" });
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- the golden pins a pre-release group's retry byte for byte (spec G §2.6, §10.5);
+  // new groups default to the expectation model, so this scenario names the pre-release model.
+  const t = await driverHarness([{ taskId: "a" }], { ...options, modelVersion: null, behaviour: () => "failed" });
   try {
     if (finiteOptional) {
       // An optional-v1 group with a finite token limit: what a group made finite by a person is.
