@@ -1,3 +1,4 @@
+import { dependencyReady } from "./dependencyReady.js";
 import {readCanonicalRecord} from "./snapshot.js";
 import {savedRecoverySchema,savedResultAdmissionSchema,recoveryPolicyAuthoritySchema} from "./savedResultProtocol.js";
 import {lineageWorkUsage,settlementArtifact,settlementSame} from "./usageSettlement.js";
@@ -84,7 +85,8 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
   const eligible=previewing?["pending","ready","continuing"]:["ready","continuing"];
   for(const work of works) {
    if(work.kind!=="task"||!eligible.includes(work.status)||store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(id,work.workItemId))continue;
-   if(work.dependsOn.some(dep=>works.find(w=>w.workItemId===dep)?.status!=="done"))continue;
+   // Tester follow-up G §6.1 (#192): a dependency that landed releases its dependent before its own settle.
+   if(work.dependsOn.some(dep=>!dependencyReady(store,id,dep)))continue;
    const fixed=!hasOptionalTaskPolicy(store,id,work.workItemId);
    const observed=inheritedWorkUsage(store,id,work.workItemId);if(observed===null)continue;
    const inheritedUsage=fixed?zero():observed;

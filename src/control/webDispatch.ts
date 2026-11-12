@@ -1,3 +1,4 @@
+import { dependencyReady } from "./dependencyReady.js";
 import {hasSavedOrdinaryRetryAuthorization} from "./savedResultNoDispatch.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { releaseCommitment } from "./stopIntent.js";
@@ -398,10 +399,8 @@ export function nextClaimableTask(store: ControlStore, groupId: string, groupBod
     const currentId=(work as {currentRunId?:string}).currentRunId;
     if(currentId){const current=readDispatchRun(store,currentId);if((current.mode==="verify-saved-result"||current.recoveryOf!==undefined)&&!hasSavedOrdinaryRetryAuthorization(store,current))continue;}
     if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, work.workItemId)) continue;
-    const ready = (work.dependsOn ?? []).every((id) => {
-      const dependency = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, id);
-      return dependency !== undefined && JSON.parse(String(dependency.body)).status === "done";
-    });
+    // Tester follow-up G §6.1 (#192): a dependency that landed releases its dependent before its own settle.
+    const ready = (work.dependsOn ?? []).every((id) => dependencyReady(store, groupId, id));
     if (!ready) continue;
     return { workItemId: work.workItemId };
   }
