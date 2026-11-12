@@ -134,3 +134,31 @@ describe("requirement answer --finish, and saying that a plain answer drafts the
     expect((await cli(["requirement", "consensus", "g-alpha"], inFlight.dir)).stderr).not.toContain("--finish");
   });
 });
+
+// Tester #272 (3): after `answer --finish` an agent ran `requirement consensus` by habit and got a bare
+// `group-state-invalid:consensus-reached`. The finishing answer names the next command (text and --json, only-add), and
+// that refusal names it too.
+describe("what follows requirement answer --finish (#272)", () => {
+  const answered = (result: Record<string, unknown>) => ({ "POST groups/g-alpha/requirement/answer": { status: 200, body: { commandId: "c", commandRevision: 6, result: { kind: "requirement-answered", roundNo: 2, ...result } } } });
+
+  it("a finishing answer names requirement accept; a plain one does not, and its --json body is unchanged", async () => {
+    const done = await world({}, { ...view(ROUND), ...answered({ nextRoundNo: null, wakeId: "w", finished: true }) });
+    const text = await cli(["requirement", "answer", "g-alpha", "--finish"], done.dir);
+    expect(text.stdout).toContain("\nnext: no consensus is needed; when draft 1 is awaiting review (orca requirement show g-alpha), orca requirement accept g-alpha\n");
+    const json = await cli(["requirement", "answer", "g-alpha", "--finish", "--json"], done.dir);
+    expect(json.json().body).toEqual({ commandId: "c", commandRevision: 6, result: { kind: "requirement-answered", roundNo: 2, nextRoundNo: null, wakeId: "w", finished: true }, next: "orca requirement accept g-alpha" });
+    const next = await world({}, { ...view(ROUND), ...answered({ nextRoundNo: 3, wakeId: "w" }) });
+    expect((await cli(["requirement", "answer", "g-alpha"], next.dir)).stdout).not.toContain("requirement accept");
+    expect((await cli(["requirement", "answer", "g-alpha", "--json"], next.dir)).json().body).toEqual({ commandId: "c", commandRevision: 6, result: { kind: "requirement-answered", roundNo: 2, nextRoundNo: 3, wakeId: "w" } });
+  });
+
+  it("a consensus refused because clarification is already closed names requirement accept", async () => {
+    const refused = (message: string) => ({ "POST groups/g-alpha/requirement/consensus": { status: 409, body: { error: { code: "group-state-invalid", message, commandRevision: 6, evidenceIds: [], retryable: false } } } });
+    const w = await world({}, { ...view({ ...ROUND, state: "answered" }), ...refused("group-state-invalid:consensus-reached") });
+    const out = await cli(["requirement", "consensus", "g-alpha"], w.dir);
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("orca: clarification is already closed (answer --finish or an earlier consensus closed it), so no consensus is needed: when the split draft is awaiting review (orca requirement show g-alpha), orca requirement accept g-alpha");
+    const other = await world({}, { ...view({ ...ROUND, state: "answered" }), ...refused("group-state-invalid:not-clarifying") });
+    expect((await cli(["requirement", "consensus", "g-alpha"], other.dir)).stderr).not.toContain("requirement accept");
+  });
+});

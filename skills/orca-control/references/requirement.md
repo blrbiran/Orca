@@ -39,7 +39,7 @@ answer the current round: --answer <qid> takes the recommendation, --answer <qid
 - `--answer <answer>` (repeatable): <questionId> or <questionId>=<text>
 - `--glossary <glossary>` (repeatable): <id>=accept|reject
 - `--adr <adr>` (repeatable): <id>=accept|reject
-- `--finish`: close clarification with these answers: no next round is drafted, and the split is drafted from this round
+- `--finish`: close clarification with these answers: no next round is drafted, and the split is drafted from this round (no requirement consensus follows; the answer names the next command, under --json as `next`)
 
 ## `orca requirement consensus <group> [--unanswered]`
 

@@ -124,15 +124,29 @@ const answeredFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body
   const result = (body as { result?: { kind?: unknown; roundNo?: unknown; nextRoundNo?: unknown; finished?: unknown } } | null)?.result;
   const printed = row.format(body);
   if (result?.kind !== "requirement-answered") return printed;
-  if (result.finished === true) return `${printed}\nclarification closed at round ${String(result.roundNo)} with these answers; draft 1 is drafting`;
+  if (result.finished === true) {
+    // Tester #272 (3): after --finish an agent ran `requirement consensus` by habit and was refused; say what is next.
+    const next = answeredGroup === null ? [] : [`next: no consensus is needed; when draft 1 is awaiting review (orca requirement show ${answeredGroup}), orca requirement accept ${answeredGroup}`];
+    return [`${printed}\nclarification closed at round ${String(result.roundNo)} with these answers; draft 1 is drafting`, ...next].join("\n");
+  }
   return typeof result.nextRoundNo === "number" ? `${printed}\nround ${result.nextRoundNo} is now drafting; use --finish to stop after a round` : printed;
+}, jsonBody: (body) => {
+  // Tester #272 (3), only-add: a finished answer's --json body names the next command.
+  const result = (body as { result?: { kind?: unknown; finished?: unknown } } | null)?.result;
+  return result?.kind === "requirement-answered" && result.finished === true && answeredGroup !== null ? { ...(body as object), next: `orca requirement accept ${answeredGroup}` } : body;
 } });
+/** The group `requirement answer` answered, for its output's next step (one command per CLI process). */
+let answeredGroup: string | null = null;
 
 /**
  * #251: the panel refuses consensus (`group-state-invalid:round-state`) while the latest round is drafting -- the round
  * a plain answer queued. Name it and --finish, read from the requirement view; any other refusal gets no hint.
  */
 async function consensusHint(error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> {
+  // Tester #272 (3): consensus after `answer --finish` (or a second consensus) is refused by design; name what is next.
+  if (error.code === "group-state-invalid" && /(^|:)consensus-reached$/.test(error.message) && c !== undefined) {
+    return `clarification is already closed (answer --finish or an earlier consensus closed it), so no consensus is needed: when the split draft is awaiting review (orca requirement show ${group(c)}), orca requirement accept ${group(c)}, or ask for changes with orca requirement feedback ${group(c)} --text '<what to change>'`;
+  }
   if (error.code !== "group-state-invalid" || !/(^|:)round-state$/.test(error.message) || c === undefined) return undefined;
   const view = await requirement(c);
   const roundNo = view.summary.requirement?.roundNo ?? null;
@@ -209,11 +223,12 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "answer", type: "string", repeatable: true, summary: "<questionId> or <questionId>=<text>" },
       { name: "glossary", type: "string", repeatable: true, summary: "<id>=accept|reject" }, { name: "adr", type: "string", repeatable: true, summary: "<id>=accept|reject" },
       // Tester follow-up E §7 (#251).
-      { name: "finish", type: "boolean", summary: "close clarification with these answers: no next round is drafted, and the split is drafted from this round" },
+      { name: "finish", type: "boolean", summary: "close clarification with these answers: no next round is drafted, and the split is drafted from this round (no requirement consensus follows; the answer names the next command, under --json as `next`)" },
     ],
     route: (c) => `groups/${group(c)}/requirement/answer`,
     payload: async (c) => {
       const round = await currentRound(c);
+      answeredGroup = group(c);
       return { roundNo: round.roundNo, ...filledAnswer(c, round.row), ...(c.args.flags.finish === true ? { finish: true } : {}) };
     },
     hint: answerSetHint })),
