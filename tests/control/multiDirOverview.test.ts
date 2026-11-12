@@ -40,7 +40,8 @@ const PINNED = {
   // Ruling: 「这个session允许改写必要的判据」 (human, session 3cfc2e73, 2026-11-05): issues #130 and #135 add the no-lockfile setup rule and the check-source rule to the single instruction; version stays 3.
   // Ruling: 「D1-D8其余都同意。」 (human, session 3cfc2e73, 2026-11-05, on the controller's proposals): issue #136 adds the no-verify-only rule to the single instruction; version stays 3.
   // Ruling: 2026-11-08, human 「这次批准改写所有必要的判据」: #168 changes the instruction to version 5 so document-only tasks cannot inherit unfixable repository checks; only this split-prompt hash changes.
-  splitPrompt: "fbdf10e8e5ce9f18f776daa69024a69994e0b06ae4463896cd2522afcc5b8066",
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #280 adds REGRESSION_CRITERIA_RULE (repository-wide regression criteria are group acceptance's); version stays 5; only this split-prompt hash changes.
+  splitPrompt: "b3712f5d237cd6e2e9c5fbbaed5fb1bc7f8cd86aa8be17c6fc2dffd9dd34ce65",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
