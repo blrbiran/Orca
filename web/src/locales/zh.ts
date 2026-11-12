@@ -771,7 +771,7 @@ export const zh: Translation<typeof en> = {
         auth: "agent 的凭据被拒绝", quota: "agent 的额度或余额已用尽", "rate-limited": "provider 持续限流",
         "provider-5xx": "provider 端持续出错", network: "到 provider 的网络持续失败", "context-overflow": "任务超出了模型的上下文窗口",
         stalled: "agent 长时间没有动静，已被停止", "executable-missing": "找不到 agent 的程序", "required-check-failed": "必需检查没有通过",
-        "verifier-rejected": "verifier 驳回了这次工作", "budget-exhausted": "时间、token 或尝试次数预算用完了", "tool-rule-violated": "agent 违反了这一步的工具规则", "setup-failed": "准备步骤失败", unknown: "原因未知",
+        "verifier-rejected": "verifier 驳回了这次工作", "budget-exhausted": "时间、token 或尝试次数预算用完了", "tool-rule-violated": "agent 违反了这一步的工具规则", "setup-failed": "准备步骤失败", "worker-lost": "执行进程丢失（机器重启或进程被杀）", unknown: "原因未知",
       },
       next: {
         auth: "重新登录 agent（或修好它的 key），再重试这个任务。", quota: "等额度恢复或充值后，再重试这个任务。",
@@ -780,7 +780,7 @@ export const zh: Translation<typeof en> = {
         stalled: "重试这个任务；如果再次卡住，去证据里看它当时在做什么。", "executable-missing": "安装 agent 或在 agents 表里改对路径后重试。",
         "required-check-failed": "看下方失败检查的输出；组在自动编排下时，Orca 会自动升级处理。",
         "verifier-rejected": "看下方 verifier 给出的原因；组在自动编排下时，Orca 会自动升级处理。",
-        "budget-exhausted": "调高任务预算或拆分任务后重试。", "tool-rule-violated": "看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。", "setup-failed": "有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。", unknown: "先看下方证据，再重试这个任务。",
+        "budget-exhausted": "调高任务预算或拆分任务后重试。", "tool-rule-violated": "看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。", "setup-failed": "有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。", "worker-lost": "Orca 会自动重新开始这个任务，不占用它的尝试次数（连续最多三次）。", unknown: "先看下方证据，再重试这个任务。",
       },
     },
     quotaRest: { vendor: "{{installation}} 的额度已用尽，{{time}} 恢复。", default: "{{installation}} 正在休息，约 {{time}} 后可重试。" },
@@ -2212,6 +2212,7 @@ export const zh: Translation<typeof en> = {
       "allowance": "放行",
       "landing-watch": "落地后检查",
       "handoff-invalid": "交接无效", "live-note-delivered": "备注已送达", "live-note-undelivered": "备注未送达",
+      "worker-lost": "执行进程丢失",
     },
     progressStep: { queued: "排队中", plan: "计划", execute: "执行", verify: "验证", succeeded: "已成功", blocked_waiting_human: "等人处理", exhausted: "已耗尽", cancelled: "已取消", failed: "失败" },
     proposalState: { editable: "可编辑", confirmed: "已确认" },
@@ -2756,6 +2757,10 @@ export const zhErrors: Record<string, string> = {
   "no-change-judge-usage-unknown": "这次目标评判调用的用量未知；按它的额度记账即可结算。",
   "no-change-judge-base-missing": "这次运行的基线提交不见了，无法询问目标评判。",
   "no-change-not-met": "目标评判认为目标还没满足，但重跑没能开始（{{detail}}）。写一句说明后撤销并重跑，或者按无改动接受。",
+  // Worker-lost recovery spec 2026-11-12 §5.2-§5.5：见 en.ts。
+  "worker-undetermined": "ccloop 无法判断这次运行的执行进程是否还活着（{{detail}}）。先确认这次运行没有遗留的执行进程（卡住就停掉它），再重新检查：orca recovery retry --run <run>。",
+  "worker-lost-repeated": "这个任务连续四次丢失执行进程（机器重启或进程被杀），Orca 不再自动重新开始。请先检查机器，再重试任务：orca task retry <group> <task>。",
+  "worker-lost-usage-unknown": "这次运行丢失了执行进程，被杀掉的那次调用用量未知。结清它之后 Orca 会自动重新开始这个任务：orca task settle-usage <group> <task> --acknowledge charge-observed-floor（没有观测到下限时用 charge-remaining-grant）。",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

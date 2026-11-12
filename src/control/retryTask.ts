@@ -7,7 +7,7 @@ import { readGroup, saveGroup } from "./queries.js";
 import { createHash } from "node:crypto";
 import { readWorkClaimEnvelope } from "./webDispatch.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { recoveryRetryCommand, type DriveRecord } from "./driveRecord.js";
+import { recoveryRetryCommand, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import type { Amount } from "./types.js";
@@ -122,6 +122,19 @@ export function autoRetryFundingRefusal(store: ControlStore, groupId: string, ta
 }
 
 /**
+ * Worker-lost recovery spec §5.4: whether Orca's restart of a worker-lost run would be refused for funding -- as
+ * autoRetryFundingRefusal, with the lost run's attempts and sessions credited as the retry credits them (workerLostWant).
+ * Asked before the restart is sent, so a refusal is noted for the person instead of booked as the restart's final record.
+ */
+export function workerLostFundingRefusal(store: ControlStore, groupId: string, taskId: string, runId: string): "authored-budget-exhausted" | "retry-funding-missing" | null {
+  if (!hasOptionalTaskPolicy(store, groupId, taskId)) return null;
+  const lost = lineageWorkUsage(readRunBody(store, runId) as never);
+  const funding = retryFundingOf(store, groupId, taskId, runId, { tokens: 0, activeMs: 0, attempts: lost.attempts, sessions: lost.sessions });
+  if (funding === null) return "retry-funding-missing";
+  return dimensions.some((dimension) => funding.fresh[dimension] === 0) ? "authored-budget-exhausted" : null;
+}
+
+/**
  * Tester #264: the `authored-budget-exhausted` refusal names each dimension with no work left, with the task's authored
  * amount (+ top-ups and credit), the lineage's usage and what is left, and the `--work` top-up that would let it run: one
  * attempt or session, or one attempt's worth of tokens or active time as the lineage spent them (1 when it spent none).
@@ -144,6 +157,19 @@ function freshStartWant(store: ControlStore, groupId: string, command: RetryTask
   if (readGroup(store, groupId).limit.tokens !== null) return null;
   if (command.actorId === "orca-auto" || commandPrincipalFor(command.commandId) === "orca-auto") return null;
   return { tokens: 0, sessions: 0, attempts: Math.max(0, inherited.attempts - prior.attempts), activeMs: Math.max(0, inherited.activeMs - prior.activeMs) };
+}
+
+/**
+ * Worker-lost recovery spec 2026-11-12 §5.4: a run that lost its worker did not use up the task's attempts -- the machine lost
+ * the work, the task did not fail -- so its own attempts and sessions (each run opens one) are credited back as a fresh-start
+ * credit (capped like one), whoever retries it. Tokens and active time were really spent and stay counted. Where the
+ * fresh-start rule applies it already credits the lineage's attempts; this run's session is added to it.
+ */
+function workerLostWant(want: Amount | null, drive: DriveRecord, run: { cumulative: { work: Amount }; usageSettlement?: unknown }): Amount | null {
+  if (drive.failureCause?.cause !== WORKER_LOST_CAUSE) return want;
+  const lost = lineageWorkUsage(run);
+  const credit = { tokens: 0, activeMs: want?.activeMs ?? 0, attempts: Math.max(want?.attempts ?? 0, lost.attempts), sessions: lost.sessions };
+  return credit.attempts > 0 || credit.sessions > 0 || credit.activeMs > 0 ? credit : want;
 }
 
 /** Normal failed-recovery retry keeps its real failure; no-dispatch consumption has separate proof and authority. */
@@ -303,7 +329,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           // own -- the ladder and the quota retries keep counting the lineage) credits back the attempts and active time the
           // lineage used beyond earlier top-ups, so the new run starts with the task's own.
           const prior=topUpSum(store,groupId,taskId,null);
-          const want=freshStartWant(store,groupId,command,inherited,prior);
+          const want=workerLostWant(freshStartWant(store,groupId,command,inherited,prior),drive,run);
           const authored=withTopUp(work.grant.work,add(add(prior,incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}),want??{tokens:0,activeMs:0,attempts:0,sessions:0}));
           let left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,authored,inherited,left));
@@ -314,10 +340,12 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
             // Never more than the group's own non-token limits leave the claim (decideFundedAllowance, fundingReleased), read
             // after the release above as the claim will see it: a credit the claim could not fund would strand the task ready.
             const live=readGroup(store,groupId),handoff=work.grant.handoff,credit={...want};
-            for(const d of ["activeMs","attempts"] as const)credit[d]=Math.min(want[d],Math.max(0,live.limit[d]-live.used[d]-live.reserved[d]-handoff[d]-(left[d]-want[d])));
-            left={...left,activeMs:left.activeMs-(want.activeMs-credit.activeMs),attempts:left.attempts-(want.attempts-credit.attempts)};
-            if(left.attempts===0||left.activeMs===0)throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,{...authored,attempts:authored.attempts-(want.attempts-credit.attempts),activeMs:authored.activeMs-(want.activeMs-credit.activeMs)},inherited,left));
-            if(credit.attempts>0||credit.activeMs>0){
+            // Worker-lost recovery spec §5.4: a lost run's sessions are credited too (workerLostWant), capped the same way; the
+            // fresh-start rule credits none, so its arithmetic is unchanged.
+            for(const d of ["activeMs","attempts","sessions"] as const)credit[d]=Math.min(want[d],Math.max(0,live.limit[d]-live.used[d]-live.reserved[d]-handoff[d]-(left[d]-want[d])));
+            left={...left,activeMs:left.activeMs-(want.activeMs-credit.activeMs),attempts:left.attempts-(want.attempts-credit.attempts),sessions:left.sessions-(want.sessions-credit.sessions)};
+            if(left.attempts===0||left.activeMs===0||left.sessions===0)throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,{...authored,attempts:authored.attempts-(want.attempts-credit.attempts),activeMs:authored.activeMs-(want.activeMs-credit.activeMs),sessions:authored.sessions-(want.sessions-credit.sessions)},inherited,left));
+            if(credit.attempts>0||credit.activeMs>0||credit.sessions>0){
               appendTopUp(store,groupId,taskId,runId,{amount:credit,commandId:command.commandId,by:commandPrincipalFor(command.commandId)??command.actorId,personAuthority:false,at:store.now(),kind:"fresh-start"});
               freshStart=credit;
             }

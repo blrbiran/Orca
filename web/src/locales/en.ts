@@ -111,6 +111,7 @@ const activityKind = {
   "allowance": "allowance",
   "landing-watch": "landing watch",
   "handoff-invalid": "handoff invalid", "live-note-delivered": "note delivered", "live-note-undelivered": "note not delivered",
+  "worker-lost": "worker lost",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -919,7 +920,7 @@ export const en = {
         auth: "the agent's credentials were refused", quota: "the agent's quota or credits are used up", "rate-limited": "the provider kept rate-limiting",
         "provider-5xx": "the provider kept failing on its side", network: "the network to the provider kept failing", "context-overflow": "the task did not fit the model's context window",
         stalled: "the agent went silent and was stopped", "executable-missing": "the agent's program was not found", "required-check-failed": "a required check failed",
-        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", "tool-rule-violated": "the agent broke the step's tool rules", "setup-failed": "a setup command failed", unknown: "the cause is unknown",
+        "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", "tool-rule-violated": "the agent broke the step's tool rules", "setup-failed": "a setup command failed", "worker-lost": "worker lost (the machine restarted or the process was killed)", unknown: "the cause is unknown",
       },
       next: {
         auth: "Log the agent in again (or fix its key), then retry the task.", quota: "Wait for the quota to reset or add credits, then retry the task.",
@@ -928,7 +929,7 @@ export const en = {
         stalled: "Retry the task; if it stalls again, look at what it was doing in the evidence.", "executable-missing": "Install the agent or fix its path in the agents table, then retry.",
         "required-check-failed": "Read the failing check's output below; Orca escalates it automatically when the group is orchestrated.",
         "verifier-rejected": "Read the verifier's reason below; Orca escalates it automatically when the group is orchestrated.",
-        "budget-exhausted": "Raise the task's budget, or split it, then retry.", "tool-rule-violated": "Read the tool-rule report and the evidence below, then fix the step's tools or the task, and retry.", "setup-failed": "A setup command could not finish; see its output, fix the command or the repository, then retry.", unknown: "Review the evidence below, then retry the task.",
+        "budget-exhausted": "Raise the task's budget, or split it, then retry.", "tool-rule-violated": "Read the tool-rule report and the evidence below, then fix the step's tools or the task, and retry.", "setup-failed": "A setup command could not finish; see its output, fix the command or the repository, then retry.", "worker-lost": "Orca starts the task again by itself, without using up its attempts (at most three times in a row).", unknown: "Review the evidence below, then retry the task.",
       },
     },
     // Quota failover spec 2026-11-03 §3 (session 3cfc2e73, batch FB): the run was not switched; its installation rests.
@@ -2868,6 +2869,10 @@ export const enErrors: Record<string, string> = {
   "no-change-judge-usage-unknown": "The goal judge call's usage is unknown; charge the call's grant to settle it.",
   "no-change-judge-base-missing": "The run's base commit is missing, so the goal judge could not be asked.",
   "no-change-not-met": "The goal judge said the goal is not met, but the re-run could not start ({{detail}}). Reopen it with a note, or accept it as no change.",
+  // Worker-lost recovery spec 2026-11-12 §5.2-§5.5: a run whose ccloop worker is gone or cannot be checked.
+  "worker-undetermined": "ccloop could not tell whether this run's worker process is still alive ({{detail}}). Make sure no worker process of the run is left (stop it if it hangs), then check again: orca recovery retry --run <run>.",
+  "worker-lost-repeated": "This task lost its worker four times in a row (the machine restarted or the process was killed), so Orca stopped starting it again. Check the machine, then retry the task: orca task retry <group> <task>.",
+  "worker-lost-usage-unknown": "This run lost its worker, and the usage of the call that was killed is unknown. Settle it, and Orca starts the task again by itself: orca task settle-usage <group> <task> --acknowledge charge-observed-floor (or charge-remaining-grant when no floor was observed).",
 };
 
 /** ccloop error codes spec (2026-10-15) §4.7: ccloop's own codes an operator can act on; each may interpolate only {{detail}}. */

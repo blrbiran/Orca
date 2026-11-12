@@ -1948,6 +1948,8 @@ export const activityKindSchema = z.enum([
   "allowance",
   // Tester follow-up G Parts 4–5: an invalid or missing handoff; a Live note delivered, or never delivered.
   "handoff-invalid", "live-note-delivered", "live-note-undelivered",
+  // Worker-lost recovery spec 2026-11-12 §5.2: the run's worker died and ccloop settled the run.
+  "worker-lost",
 ]);
 export const activityEntrySchema = z
   .object({

@@ -48,7 +48,7 @@ import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, ty
 import { applyAddLiveNote, writeRunLiveNotes, type AddLiveNoteCommand } from "./liveNotes.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyAcceptAttempt, prepareAcceptAttempt, type AcceptAttemptCommand } from "./acceptAttempt.js";
-import { applyRetryTask, autoRetryFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
+import { applyRetryTask, autoRetryFundingRefusal, workerLostFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
 import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
@@ -70,7 +70,7 @@ import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor,
 import { readSystemDebugMark, writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
 import { claimQuotaProbeInTransaction, probeStateOf, quotaProbeWorkItemId } from "./quotaProbeCall.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource, workerLostCandidates, workerLostCommandId, WORKER_LOST_RESTARTS } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -577,6 +577,11 @@ function confirmedLadderFor(store: ControlStore, groupId: string, taskId: string
   return readBudgetProposal(store, debugGroupId).state === "confirmed" ? debugGroupId : null;
 }
 
+/** Worker-lost recovery spec §5.4: a task's fourth run in a row that lost its worker is not restarted (a run recovery blocker). */
+export const WORKER_LOST_REPEATED = "worker-lost-repeated";
+/** Worker-lost recovery spec §5.5: a worker-lost run whose unknown usage a person or agent has to settle before Orca restarts it. */
+export const WORKER_LOST_USAGE_UNKNOWN = "worker-lost-usage-unknown";
+
 export class WebControlService {
   private installationObservation: AgentObservation | null = null;
   private installationPreview: AgentPreview | null = null;
@@ -1038,6 +1043,66 @@ export class WebControlService {
     });
     if (!("error" in answer)) out.redispatched.push(`${candidate.groupId}:${candidate.taskId}`);
   }
+  /**
+   * Worker-lost recovery spec 2026-11-12 §5.4-§5.5 (human: 「不考虑历史决策和改动大小的情况下，你看怎么样是整体最优的方案。」): a task
+   * whose run lost its worker is started again as orca-auto, once per failed run, through the same retry-task the ladder's
+   * level 1 sends -- outside the ladder, and without using up the task's attempts (retryTask.ts credits the lost run's back).
+   * The fourth loss in a row is not restarted: the run carries a `worker-lost-repeated` recovery blocker. A run whose usage is
+   * unknown (the killed call's) waits for its settlement: in a group with no token limit Orca's approximate floor books it
+   * (softLoopSettlement.ts); otherwise the run carries a `worker-lost-usage-unknown` blocker until a person or agent settles
+   * it explicitly (#116 ruling), and the next pass restarts it. A blocker whose run is no longer such a candidate is removed.
+   */
+  private async workerLostPass(out: { redispatched: string[] }): Promise<void> {
+    const { approximateLoopScope } = await import("./softLoopSettlement.js");
+    const keep = new Set<string>();
+    for (const candidate of workerLostCandidates(this.store)) {
+      const { groupId, taskId, run } = candidate;
+      try {
+        if (candidate.consecutive > WORKER_LOST_RESTARTS) { keep.add(this.noteWorkerLost(groupId, run.runId, WORKER_LOST_REPEATED)); continue; }
+        const body = this.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run.runId);
+        const record = JSON.parse(String(body?.body)) as { unknown?: { work?: boolean; handoff?: boolean }; highWater?: number };
+        if (this.store.db.prepare("SELECT 1 FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, Number(record.highWater ?? 0)) !== undefined) continue;
+        if (record.unknown?.work === true || record.unknown?.handoff === true) {
+          if (!approximateLoopScope(this.store, record as never)) keep.add(this.noteWorkerLost(groupId, run.runId, WORKER_LOST_USAGE_UNKNOWN));
+          continue;
+        }
+        const commandId = workerLostCommandId(taskId, run.runId);
+        if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, commandId) !== undefined) continue;
+        // A restart the task's own budget cannot fund (e.g. after its usage was settled by charging the remaining grant) is
+        // not sent: the run stays with the person, noted as the ladder notes its funding skips (a retry with --work).
+        if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(run.runId) !== undefined) continue;
+        const funding = workerLostFundingRefusal(this.store, groupId, taskId, run.runId);
+        if (funding !== null) { this.noteLadderSkipped(candidate, funding); continue; }
+        const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
+        const answer = this.retryTask({
+          schema: "orca-raw-command-v1", commandId, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision,
+          verb: "retry-task", target: { kind: "group", groupId }, payload: { taskId, runId: run.runId },
+        });
+        if (!("error" in answer)) out.redispatched.push(`${groupId}:${taskId}`);
+      } catch (error) {
+        process.stderr.write(`orca: worker-lost restart ${groupId}/${taskId}: ${error instanceof Error ? error.message : String(error)}\n`);
+      }
+    }
+    try {
+      this.mutate(() => this.store.transaction(() => {
+        for (const row of this.store.db.prepare("SELECT id,group_id FROM recovery_blockers WHERE code IN (?,?)").all(WORKER_LOST_REPEATED, WORKER_LOST_USAGE_UNKNOWN)) {
+          if (keep.has(String(row.id))) continue;
+          this.store.db.prepare("DELETE FROM recovery_blockers WHERE id=?").run(String(row.id));
+          recordProjectionChange(this.store, [String(row.group_id)]);
+        }
+      }));
+    } catch (error) { process.stderr.write(`orca-control: worker-lost blockers: ${String(error)}\n`); }
+  }
+  /** A worker-lost run's recovery blocker (run scope), written once; answers its id. */
+  private noteWorkerLost(groupId: string, runId: string, code: string): string {
+    const id = `${code}:${runId}`;
+    this.mutate(() => this.store.transaction(() => {
+      const added = this.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,'run',?,?) ON CONFLICT(id) DO NOTHING")
+        .run(id, groupId, runId, code, canonicalBytes({ evidenceIds: [] }).toString("utf8")).changes;
+      if (added > 0) recordProjectionChange(this.store, [groupId]);
+    }));
+    return id;
+  }
   /** Why a task stays with the person, once per failed run and reason, for the task page (as ladder-skipped). Never throws. */
   private noteQuotaProbe(candidate: { groupId: string; taskId: string; runId: string }, reason: string, detail: Record<string, unknown>): void {
     try {
@@ -1106,6 +1171,7 @@ export class WebControlService {
         expectedRevision: revision, verb: "retry-task", target: { kind: "group", groupId: candidate.groupId }, payload: { taskId: candidate.taskId },
       });
     }
+    await this.workerLostPass(out);
     for (const candidate of ladderCandidates(this.store)) {
       // Task setup and check retry spec 2026-11-04 §4.7: a run another try cannot fix is left out of both levels (this
       // includes a run that was itself the level-1 retry), and why is recorded once on the run for the task page.

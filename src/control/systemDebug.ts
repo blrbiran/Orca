@@ -6,7 +6,7 @@ import { isGroupArchived } from "./archivedMark.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
-import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
 import { validTerminalClosure } from "./terminalRunClosure.js";
 import { groupStopped } from "./executionDriver.js";
 import { ControlError } from "./errors.js";
@@ -343,10 +343,44 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
       // Task setup and check retry spec 2026-11-04 §4.7: `setup-failed` is exempt too, but handed on marked `exempt` so
       // systemDebugPass records why (ladderSkip.ts); the other exempt causes stay the person's without a note.
       const cause = run.drive?.failureCause?.cause ?? "";
+      // Worker-lost recovery spec 2026-11-12 §5.4: the machine lost the work, the task did not fail; its restart is
+      // workerLostPass's (webService.ts), never a ladder level.
+      if (cause === WORKER_LOST_CAUSE) continue;
       const exempt = LADDER_EXEMPT_CAUSES.has(cause);
       if (exempt && cause !== "setup-failed") continue;
       if (groupBody(store, systemDebugGroupId({ kind: "ladder", groupId, taskId, runId: null })) !== null) continue;
       out.push({ groupId, taskId, run, repoId, exempt });
+    }
+  }
+  return out;
+}
+
+/** §5.4: at most this many automatic restarts of a task whose runs keep losing their worker; the next loss blocks. */
+export const WORKER_LOST_RESTARTS = 3;
+/** §5.4: the command id of orca-auto's restart of a worker-lost run; its row (applied or refused) is the record. */
+export function workerLostCommandId(taskId: string, runId: string): string { return `orca-auto-worker-lost-${taskId}-${runId}`; }
+
+/**
+ * Worker-lost recovery spec §5.4: an orchestrated group's task (the groups the quota wait reads: mode `run`, not a flow
+ * child, not archived, not paused or stopped) whose current run ended terminally failed with cause `worker-lost`, and how
+ * many of the task's runs in a row, ending with that one, lost their worker.
+ */
+export function workerLostCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; consecutive: number }> {
+  const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>>; consecutive: number }> = [];
+  for (const row of store.db.prepare(`SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
+    const groupId = String(row.id);
+    try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue; } catch { continue; }
+    if (isGroupArchived(store, groupId) || groupStopped(store, groupId)) continue;
+    for (const { id: taskId, work } of tasksOf(store, groupId)) {
+      const run = terminallyFailedRun(store, groupId, taskId);
+      if (run === null || run.drive?.failureCause?.cause !== WORKER_LOST_CAUSE) continue;
+      const lineage = (work as { lineageRunIds?: unknown }).lineageRunIds;
+      let consecutive = 0;
+      for (const id of [...(Array.isArray(lineage) ? lineage : [])].reverse()) {
+        if (runBody(store, id)?.drive?.failureCause?.cause !== WORKER_LOST_CAUSE) break;
+        consecutive += 1;
+      }
+      out.push({ groupId, taskId, run, consecutive: Math.max(consecutive, 1) });
     }
   }
   return out;

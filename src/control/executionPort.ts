@@ -41,6 +41,11 @@ export interface ExecutionReport {
  handoffFiles?:{handoff:{present:boolean;bytes:number|null};summary:{present:boolean;bytes:number|null}};
  /** Tester follow-up G Part 5 (ccloop C4): the live notes ccloop acknowledged, present iff its ack file exists. */
  liveNotes?:{delivered:Array<{id:string;phase:"plan"|"execute"|"verify";attempt:number;at:string}>};
+ /**
+  * Worker-lost recovery spec 2026-11-12 §5 (as built, ccloop half item 2): present only for a claimed loop run with no
+  * candidate and no terminal whose worker is not alive -- `lost` (confirmed dead) or `undetermined`. Absent = alive or n/a.
+  */
+ worker?:{state:"lost"|"undetermined";reason:string};
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
@@ -61,6 +66,8 @@ export interface ExecutionPort {
   collectSavedResultEvidence?(input:StartEnvelope):Promise<{schema:"ccloop-saved-result-evidence-v1";identity:unknown;attempt:number;capsule:ArtifactRef|null;reason:string|null}>;
   readSavedResultEvidence?(input:StartEnvelope,capsule:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
   settleSavedResult?(input:StartEnvelope):Promise<{ref:ArtifactRef;settlement:SavedResultSettlement}>;
+  /** Worker-lost recovery spec §5: ccloop ends a run whose worker is confirmed dead as a failed terminal (`worker-lost`) with a stop proof. */
+  settleLostWorker?(input:StartEnvelope):Promise<{candidate:Candidate}>;
   readSavedResultSettlement?(input:StartEnvelope,settlementRef:ArtifactRef,ref:ArtifactRef):Promise<Buffer>;
   /**
    * Agent selection spec §4.6 (capabilities protocol 3 with a selection). ccloop fills the descriptor's

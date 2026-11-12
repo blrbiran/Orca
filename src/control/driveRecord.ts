@@ -291,6 +291,9 @@ export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord;
   return live || closed;
 }
 
+/** Worker-lost recovery spec 2026-11-12 §4.2/§5.4: ccloop's failure cause for a run whose worker died (settle-lost-worker). */
+export const WORKER_LOST_CAUSE = "worker-lost";
+
 /**
  * Tester #229 (plan 2026-11-10 follow-up B, T1): the command that resumes a run blocked at a step other than C in place
  * (`resumeBlockedDriverRun` below), named where task retry refuses it and in the group brief's failure.

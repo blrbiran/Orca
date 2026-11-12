@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { contextHandoffLines, emptyResultLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
+import { contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -458,6 +458,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(b.run?.diagnosis?.formatField === undefined ? [] : [formatFieldLine(b.run.diagnosis.formatField)]),
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
         ...emptyResultLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
+        ...workerLostLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
         ...postMergeCheckLines(b.run?.postMergeCheck),
       ];
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");

@@ -302,6 +302,22 @@ export function emptyResultLines(runs: readonly EmptyResultRun[]): string[] {
   ]);
 }
 
+/**
+ * Worker-lost recovery spec 2026-11-12 §5.6: a run whose ccloop worker died (the machine restarted or the process was
+ * killed), and one whose worker ccloop cannot check, in words with what happens next -- `group show` (each task's current
+ * run) and `run show` print the same lines.
+ */
+export function workerLostLines(runs: ReadonlyArray<EmptyResultRun & { failureCause?: { cause?: unknown } | null }>): string[] {
+  return runs.flatMap((run) => {
+    const id = String(run.runId ?? "?"), task = String(run.taskId ?? "?");
+    if (run.failureCause?.cause === "worker-lost") return [`task ${task}: worker lost (the machine restarted or the process was killed): run ${id}`,
+      "  Orca starts the task again by itself, without using up its attempts (at most 3 times in a row); orca recovery list names what holds it"];
+    if (typeof run.blockedReason === "string" && run.blockedReason.startsWith("worker-undetermined")) return [`task ${task}: ccloop cannot tell whether run ${id}'s worker is alive`,
+      `  make sure no worker process of the run is left, then check again: orca recovery retry --run ${id}`];
+    return [];
+  });
+}
+
 /** Tester follow-up G spec §1.2: a task's no-change record as the group view lists it. */
 export interface NoChangeItem { taskId?: unknown; currentRunId?: unknown; noChangeCompletion?: { runId?: unknown; ordinal?: unknown; decidedBy?: unknown } }
 const NO_CHANGE_BLOCK_PREFIXES = ["no-change-twice", "no-change-judge-failed", "no-change-judge-unfunded", "no-change-not-met"];
@@ -336,6 +352,7 @@ export function formatWithUnestimated(body: unknown): string {
   const current = new Set(((b as { workItems?: Array<{ currentRunId?: unknown }> } | null)?.workItems ?? []).map((item) => item.currentRunId));
   return withLines(text(body), [...(count > 0 ? [`execution: ${count} task run${count === 1 ? "" : "s"} in progress`] : []),
     ...emptyResultLines(runs.filter((run) => current.has(run.runId))),
+    ...workerLostLines(runs.filter((run) => current.has(run.runId))),
     ...(typeof groupId === "string" ? noChangeLines(groupId, (b as { workItems?: NoChangeItem[] } | null)?.workItems ?? [], runs.filter((run) => current.has(run.runId))) : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),

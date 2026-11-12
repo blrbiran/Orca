@@ -23,7 +23,7 @@ import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
-import { peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
+import { peerErrorCode, peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { allDirsUnchanged, noChangeExplanationOf, noChangeRouteOf, recordNoChangeCompletionInTransaction } from "./noChange.js";
@@ -73,7 +73,7 @@ import { ingestRunHandoff, prepareRunHandoff } from "./taskHandoffs.js";
 import { noteLiveNoteDeliveries, settleLiveNotes, writeRunLiveNotes } from "./liveNotes.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { bookRejectedZeroInTransaction } from "./quotaProbeCall.js";
-import { FAILURE_DETAIL_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
+import { FAILURE_DETAIL_MAX, STOP_REASON_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
 import { catalogMissReason, selectorMissOf } from "./estimatorCompatibility.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ExecutionReport } from "./executionPort.js";
@@ -938,6 +938,12 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     if(status.kind==="unknown"&&await settleDeadSavedRecovery(deps,run))report=await collectInto(deps,readDriverRun(store,runId));
   }
   const candidate = report.candidate;
+  // Worker-lost recovery spec 2026-11-12 §5.2: ccloop reports a worker that is not alive only for a claimed loop run with
+  // neither a candidate nor a terminal (a saved-result recovery has its own settlement above).
+  if (!report.terminal && candidate === null && report.worker !== undefined && run.mode === undefined && run.recoveryOf === undefined) {
+    return report.worker.state === "lost" ? settleLostWorker(deps, run, report.worker.reason) : workerUndetermined(deps, run, report.worker.reason);
+  }
+  if (typeof run.workerUndeterminedSince === "number") write(deps, () => { const current = readDriverRun(store, runId); delete current.workerUndeterminedSince; saveDriverRun(store, current); });
   // Handoff delivery spec §3 (X1): a proved stop with no terminal and no request of this run's is not
   // something to wait for forever; it is blocked by name. With a request, step H owns the run.
   if (!report.terminal && candidate?.stopProof && openRequestOf(store, run) === null) {
@@ -1992,6 +1998,62 @@ async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report
   const group=allowanceGroup(store,run.groupId);if(!group.stopped&&group.status!=="blocked")group.status="running";saveAllowanceGroup(store,group);
  }});
  return true;
+}
+
+/**
+ * Worker-lost recovery spec 2026-11-12 §5.2: how long a worker ccloop cannot tell alive or dead is waited for before its run
+ * is blocked by name (`worker-undetermined`, with a run recovery blocker).
+ */
+export const WORKER_UNDETERMINED_GRACE_MS = 10 * 60_000;
+/** A run recovery blocker's code for a worker that stayed undetermined past the grace (recovery list, Problems). */
+export const WORKER_UNDETERMINED = "worker-undetermined";
+
+/**
+ * Worker-lost recovery spec §5.2: ccloop confirmed the run's worker dead (the machine restarted or it was killed). ccloop
+ * ends the run as an ordinary failed terminal with cause `worker-lost` and a stop proof; the next round collects it and
+ * takes the failed-run path (blocked at C, then retried by Orca, webService.ts workerLostPass). The `worker-lost` activity
+ * says why. A refusal that the worker is not lost after all, or that its loop state is unavailable (ccloop as-built item 3),
+ * is read as undetermined. A port without the method (an older pin) leaves the run waiting, as before.
+ */
+async function settleLostWorker(deps: ExecutionDriverDeps, run: DriverRun, reason: string): Promise<boolean> {
+  const port = portFor(deps, run);
+  if (port.settleLostWorker === undefined) return false;
+  try { await port.settleLostWorker(readStartEnvelope(deps.store, run)); }
+  catch (error) {
+    const code = peerErrorCode(error);
+    if (code === "control-worker-not-lost" || code === "control-worker-lost-state-unavailable") return workerUndetermined(deps, run, `${code}: ${reason}`);
+    throw error;
+  }
+  write(deps, () => {
+    const current = readDriverRun(deps.store, run.runId);
+    if (typeof current.workerUndeterminedSince === "number") { delete current.workerUndeterminedSince; saveDriverRun(deps.store, current); }
+    recordActivity(deps.store, { groupId: run.groupId, taskId: run.taskId, runId: run.runId, kind: "worker-lost", body: { reason } });
+  });
+  return true;
+}
+
+/**
+ * Worker-lost recovery spec §5.2: a worker ccloop cannot tell alive or dead is never settled. From the first such answer the
+ * run waits WORKER_UNDETERMINED_GRACE_MS (its start kept on the run), then is blocked at C as `worker-undetermined` with a
+ * run recovery blocker, so recovery list and Problems show it; `orca recovery retry --run` checks again (a fresh grace),
+ * `orca group close-run` ends it once the person made sure no process is left.
+ */
+function workerUndetermined(deps: ExecutionDriverDeps, run: DriverRun, reason: string): boolean {
+  const now = (deps.now?.() ?? new Date()).getTime();
+  return write(deps, () => {
+    const current = readDriverRun(deps.store, run.runId);
+    if (current.state !== "accepted" || current.drive === undefined) return false;
+    const since = current.workerUndeterminedSince;
+    if (typeof since !== "number") { current.workerUndeterminedSince = now; saveDriverRun(deps.store, current); return true; }
+    if (now - since < WORKER_UNDETERMINED_GRACE_MS) return false;
+    delete current.workerUndeterminedSince;
+    current.state = "blocked";
+    current.drive = { ...current.drive, blockedAt: "C", blockedReason: `${WORKER_UNDETERMINED}:${reason}`.slice(0, STOP_REASON_MAX) };
+    saveDriverRun(deps.store, current);
+    deps.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES (?,?,?,'run',?,?) ON CONFLICT(id) DO NOTHING")
+      .run(`${WORKER_UNDETERMINED}:${run.runId}`, run.groupId, run.runId, WORKER_UNDETERMINED, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
+    return true;
+  });
 }
 
 /** Dead-owner mechanical RPC cannot execute checks/providers or reclaim the old worker. */

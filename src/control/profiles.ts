@@ -92,7 +92,7 @@ function ownPort(port: ExecutionPort): ExecutionPort {
   // Issue #124 (session 3cfc2e73): the estimator check reads the installation's catalog through the profile's port.
   const listModels=port.listModels?.bind(port);
   const owned: ExecutionPort = {
-    ...Object.fromEntries(["savedResultSourceEligibility","savedResultEligibility","collectSavedResultEvidence","readSavedResultEvidence","settleSavedResult","readSavedResultSettlement"].flatMap(key=>{const method=port[key as keyof ExecutionPort];return typeof method==="function"?[[key,method.bind(port)]]:[]})),
+    ...Object.fromEntries(["savedResultSourceEligibility","savedResultEligibility","collectSavedResultEvidence","readSavedResultEvidence","settleSavedResult","readSavedResultSettlement","settleLostWorker"].flatMap(key=>{const method=port[key as keyof ExecutionPort];return typeof method==="function"?[[key,method.bind(port)]]:[]})),
     ...(readFeatures?{readFeatures:()=>readFeatures()}:{}),
     resolveAgent: (partial) => resolveAgent(partial),
     listAgents: () => listAgents(),
