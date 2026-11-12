@@ -94,7 +94,7 @@ describe("the agents area in Chinese", () => {
     const empty = render(<AgentSettings agents={{ ...agents, installations: [] }} preferences={preferences} drafts={{}} onDraft={vi.fn()} onSave={vi.fn()} />).container;
     // Ruling (2026-11-12, tester follow-up G): an owner now installs the first agent on this page (handoff §4.0 item 5),
     // with no panel restart, so the empty-table note points there instead of only at `orca agent init` and a restart.
-    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里还没有任何 agent。owner 可以在本页（安装更新）添加；在终端里运行 orca agent init 效果相同。", "必须选择 Agent（无法继承）"]);
+    expect(texts(empty, `p[role="note"]`)).toEqual(["安装表里还没有任何 agent。所有者可以在本页（安装更新）添加；在终端里运行 orca agent init 效果相同。", "必须选择 Agent（无法继承）"]);
   });
 
   it("shows the proposal's agent editor, the confirmed view, the read failure and the retry notice in Chinese", async () => {
