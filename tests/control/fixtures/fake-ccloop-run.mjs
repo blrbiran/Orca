@@ -12,7 +12,7 @@
 // refusal on stderr (an agent error's code first), and 2 for a run that completed without succeeding; a `refuse` knob
 // in the table makes it refuse after recording the spawn, writing no loop state.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const argv = process.argv.slice(2);
@@ -53,4 +53,7 @@ function finish() {
   process.exitCode = config.status === "succeeded" ? 0 : 2;
 }
 
-if (config.holdMs > 0) setTimeout(finish, config.holdMs); else finish();
+// Tester follow-up G (#192): `holdUntil` keeps the reconciliation running until that file exists, so a criterion that
+// inspects the live process does not race a clock (a driver round may now also wait for another run's settle).
+if (typeof config.holdUntil === "string") { const poll = () => existsSync(config.holdUntil) ? finish() : setTimeout(poll, 20); poll(); }
+else if (config.holdMs > 0) setTimeout(finish, config.holdMs); else finish();

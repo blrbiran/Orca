@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
@@ -32,7 +33,7 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
 
 // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): adapted to the agent selection wire -- the ExecutionPort surface is resolveAgent/listAgents, claims and work items carry a frozen `agent`, envelopes are protocol 2, the reconcile table is `agentsTablePath`; what the criterion encodes is unchanged.
 async function twoConflicting(
-  reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; refuse?: string; fail?: string },
+  reconcile: { files: Record<string, string>; status?: string; spent?: number; holdMs?: number; holdUntil?: string; refuse?: string; fail?: string },
   affordable = true,
   planAgents?: HarnessOptions["planAgents"],
   /** Add-only (session 9ec98639): commits made on main before the first claim. */
@@ -324,12 +325,19 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
     } finally { await t.h.dispose(); }
   });
 
+  // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the settle lane (§6.1, #192) starts the
+  // reconciliation before the other run's settle ends, and the round that spawned it waits for that settle (measured: a 2.5 s
+  // settle under load against an 800 ms hold; at main the settle ran before the spawn, in the same round). The reconciliation
+  // is now held until the criterion releases it, not by a clock; what it pins is unchanged: a running reconciliation is
+  // waited for, then collected, with one spawn. (Was: holdMs 800.)
   it("waits for a reconciliation still running, and collects it once it ends, with one spawn", async () => {
-    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdMs: 800 }); try {
+    const release = join(mkdtempSync(join(tmpdir(), "orca-rc-")), "release");
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdUntil: release }); try {
       const driver = t.driver();
       await untilDeadline(driver, () => t.ids.some((id) => t.body(id).drive?.reconcile?.pid != null));
       await driver.round();
       expect(t.ids.some((id) => t.body(id).state === "reconciling")).toBe(true);
+      writeFileSync(release, "");
       for (let i = 0; i < 100 && !t.ids.every((id) => LANDED.includes(t.body(id).state)); i += 1) {
         await new Promise((resolve) => setTimeout(resolve, 50));
         await driver.round();
@@ -357,7 +365,10 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
   // group, so a terminal's Ctrl-C to the panel's group does not reach it) with its output in files, not pipes
   // that close with the panel; a stopped driver's successor waits on it and never spawns a second one.
   it("spawns the reconciliation as its own process group with its output in files, and a new driver after stop() finishes it with one spawn", async () => {
-    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdMs: 1500 }); try {
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — held until released, not for 1500 ms (as the
+    // criterion above, for the same measured reason); released after stop(), so the successor collects it. (Was: holdMs 1500.)
+    const release = join(mkdtempSync(join(tmpdir(), "orca-rc-")), "release");
+    const t = await twoConflicting({ files: { "shared.txt": "A\nB\n" }, holdUntil: release }); try {
       const first = t.driver();
       await untilDeadline(first, () => t.ids.some((id) => t.body(id).drive?.reconcile?.pid != null));
       const runId = t.ids.find((id) => t.body(id).drive?.reconcile?.pid != null)!;
@@ -367,6 +378,7 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
         expect(statSync(join(runsDir, reconcileRunId, name)).mode & 0o777).toBe(0o600);
       }
       await first.stop();
+      writeFileSync(release, "");
       const second = createExecutionDriver(t.deps);
       await untilDeadline(second, () => t.ids.every((id) => LANDED.includes(t.body(id).state)));
       expect(t.body(runId).drive.reconcile).toMatchObject({ pid, outcome: "succeeded" });
