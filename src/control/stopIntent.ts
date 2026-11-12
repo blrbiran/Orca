@@ -24,6 +24,7 @@ import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKN
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
 import { interruptQuotaProbe } from "./quotaProbeCall.js";
+import { interruptGroupSingleCall, isGroupCallPurpose } from "./groupSingleCall.js";
 import type { SettleSingleCallUsage } from "./singleCallSettlement.js";
 import { dispatchEnvelopeSchema, RECOVERY_WAITING_ON, type CapabilityViewV1, type CommandErrorBodyV1, type CommandSuccessV1, type RawAuthorityCommandV1 } from "./webProtocol.js";
 import { idSchema, safeInteger, canonicalTimestampSchema } from "./schema.js";
@@ -983,6 +984,8 @@ function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outc
   if (purpose !== null && purpose !== "estimate" && isFlowCallRun(run)) { interruptFlowCall(store, settled as never); return; }
   // Quota rest probe spec 2026-11-06 §2: a stopped probe gives its grant back to its group; aborted is not an outcome.
   if (purpose === "quota-probe") { interruptQuotaProbe(store, settled as never); return; }
+  // Tester follow-up G: a stopped goal judge or requirement review gives its unused grant back to its group (groupSingleCall.ts).
+  if (isGroupCallPurpose(purpose)) { interruptGroupSingleCall(store, settled as never); return; }
   if (purpose !== null && purpose !== "estimate") { interruptRequirementCall(store, groupId, settled as never); return; }
   const work = readWork(store, groupId, run.workItemId) as unknown as { status: string; grant: { work: Amount; handoff: Amount } };
   if(hasTokenPolicy(store,groupId)&&purpose===null&&outcome!=="settled-restartable") {
