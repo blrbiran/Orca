@@ -70,9 +70,10 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       expect(git(t.repo, "show", "refs/heads/orca/g:shared.txt")).toBe("A\nB");
       expect(git(t.repo, "rev-parse", `${reconciled.landedCommit}^1`)).toBe(t.body(first).drive.landedCommit);
       expect(git(t.repo, "rev-parse", `${reconciled.landedCommit}^2`)).toBe(reconciled.attemptSha);
-      expect(git(t.repo, "log", "-1", "--format=%s", reconciled.landedCommit)).toBe(`orca: land ${second} (reconciled with ${t.body(first).taskId})`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("ship" here), its run id an Orca-Run trailer.
+      expect(git(t.repo, "log", "-1", "--format=%s", reconciled.landedCommit)).toBe(`ship (reconciled with ${t.body(first).taskId})`);
       // Tester D10: a reconciled landing names its own group and task too.
-      expect(git(t.repo, "log", "-1", "--format=%b", reconciled.landedCommit)).toBe(`Orca-Group: g\nOrca-Task: ${t.body(second).taskId}`);
+      expect(git(t.repo, "log", "-1", "--format=%b", reconciled.landedCommit)).toBe(`Orca-Group: g\nOrca-Task: ${t.body(second).taskId}\nOrca-Run: ${second}`);
       expect(t.spawns()).toHaveLength(1);
       expect(git(reconciled.reconcile.copyPath, "rev-parse", `refs/orca/conflict/${second}`)).toBe(reconciled.reconcile.conflictCommit);
       expect(git(t.repo, "for-each-ref", "--format=%(refname)", "refs/orca/conflict/")).toBe("");
