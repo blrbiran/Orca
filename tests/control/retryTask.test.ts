@@ -179,7 +179,9 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
       const { runId } = await failedRun(t);
       // A collect that failed transiently blocks at C with no outcome (blockedStaysPut.test.ts).
       poke(t, runId, (run) => { run.drive.outcome = null; run.drive.blockedReason = "control-peer-timeout"; });
-      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:outcome:none" });
+      // Ruling (2026-11-12, tester follow-up G): #267 -- that run is resumed by recovery-retry (it collects it again), so the
+      // refusal names the command after the unchanged code and prefix. (Was: "task-not-retryable:outcome:none".)
+      expect(refusal(retry(t))).toEqual({ code: "task-not-retryable", message: `task-not-retryable:outcome:none:orca recovery retry --run ${runId}` });
       poke(t, runId, (run) => { run.drive.outcome = "failed"; run.drive.blockedAt = "E"; });
       // Ruling: plan 2026-11-10 tester follow-up B, T1 (#229) -- the refusal for a run blocked at a step other than C names
       // the command that resumes it in place (recovery-retry), since task retry never will; the code and prefix are unchanged. Human, 2026-11-10: "Allow all three (Recommended)".
