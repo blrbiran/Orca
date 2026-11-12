@@ -32,8 +32,17 @@ function resolve(layers: readonly Layer[], perAgent: OperatorPreferencesV1["perA
   return { agent, model: own?.model ?? null };
 }
 
-/** `chosen` is the agent picked on the form (undefined: "your default"); null when no layer names an agent. */
-export function requirementSelection(prefs: OperatorPreferencesV1, chosen: string | undefined): RequirementSelection | null {
+/**
+ * `chosen` is the agent picked on the form (undefined: "your default"); null when no layer names an agent. `installed`: the
+ * installation ids, when read -- #246: with no pick and no layer naming an agent, exactly one installed agent is the one
+ * requirement-open picks (src/control/agentSelection.ts soleInstalledAgent); none or several, or not read, picks nothing.
+ */
+export function requirementSelection(prefs: OperatorPreferencesV1, chosen: string | undefined, installed?: readonly string[]): RequirementSelection | null {
+  const resolved = layeredSelection(prefs, chosen);
+  return resolved === null && chosen === undefined && installed?.length === 1 ? layeredSelection(prefs, installed[0]) : resolved;
+}
+
+function layeredSelection(prefs: OperatorPreferencesV1, chosen: string | undefined): RequirementSelection | null {
   const operator: Layer = prefs.defaultAgent === undefined ? {} : { agent: prefs.defaultAgent };
   const role = prefs.estimator ?? {};
   const roleConcrete = Object.values(role).some((value) => value !== undefined);

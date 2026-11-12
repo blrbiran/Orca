@@ -72,7 +72,9 @@ function AgentModelFields(props: { agents: AgentsViewV1 | null; agent: string; m
   const { t } = useTranslation();
   const { agent } = props, model = props.model.trim();
   const prefs = props.preferences ?? null;
-  const resolved = prefs === null ? (agent === "" ? null : { agent, model: null }) : requirementSelection(prefs, agent === "" ? undefined : agent);
+  // #246: "your default" with no agent named anywhere is the one installed agent, as requirement-open picks it.
+  const installed = props.defaultOption === true ? props.agents?.installations.map((row) => row.id) : undefined;
+  const resolved = prefs === null ? (agent === "" ? null : { agent, model: null }) : requirementSelection(prefs, agent === "" ? undefined : agent, installed);
   // The installation the call will run on: the picked one, or "your default" resolved.
   const runs = resolved === null ? undefined : props.agents?.installations.find((row) => row.id === resolved.agent);
   const runsModel = runs === undefined ? null : resolved?.model ?? runs.defaults.model;

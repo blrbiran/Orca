@@ -22,7 +22,7 @@ open a requirement from an idea; the group id is generated unless --group names 
 - `--group <group>`: the new group's id
 - `--language <language>`: en|zh: the requirement's content language
 - `--limit <limit>`: the requirement's budget as JSON {tokens,activeMs,attempts,sessions} — human-only: needs a person token
-- `--agent <agent>`: the installation that runs this requirement's agent calls (orca agent list); default: your agent preferences
+- `--agent <agent>`: the installation that runs this requirement's agent calls (orca agent list); default: your agent preferences, else the one installed agent when exactly one is
 
 ```
 orca requirement open --idea "add a dark mode"

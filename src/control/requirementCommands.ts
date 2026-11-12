@@ -3,6 +3,8 @@ import { hasTokenPolicy } from "./fundedAllowance.js";
 import { requirementHost } from "./clarifyHost.js";
 import { createHash } from "node:crypto";
 import { readGroupAgentOverrides } from "./agentFreeze.js";
+import { readAgentPreferences } from "./agentPreferences.js";
+import { estimatorAgentUnselected, soleInstalledAgent } from "./agentSelection.js";
 import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
@@ -96,6 +98,7 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
     let profile: FrozenProfile, slot: PreparedEstimatorSlot, estimateMode: "strict" | "soft";
     let dirWorkspace: FrozenDirWorkspace | undefined;
     let multiDir: FrozenMultiDir | undefined;
+    let picked = command.payload.agent;
     try {
       // Multi-directory projects spec §5.2: a multi-dir project's list is frozen now, from realpaths (a read, no vault yet).
       // A multi group carries no single-folder `dirWorkspace`.
@@ -113,7 +116,17 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
       if (!defaults?.estimatorProfileId || !defaults.estimatorProfileHash) throw new ControlError("control-estimator-unconfigured");
       estimateMode = defaults.estimateMode;
       profile = deps.profileRouter.resolve("budget-estimate", defaults.estimatorProfileId, defaults.estimatorProfileHash);
-      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, command.payload.agent === undefined ? {} : { estimator: command.payload.agent }, profile);
+      // #246 (human: 「#246 => 同意」): no agent named and no layer naming one, with exactly one installation, is that one,
+      // recorded as if named so the requirement's later calls resolve it alike.
+      const prefs = readAgentPreferences(deps.store, command.actorId).preferences;
+      if (command.payload.agent === undefined && estimatorAgentUnselected(prefs)) {
+        let installed: string[] = [];
+        try { installed = (await profile.port.listAgents()).installations.map((installation) => installation.id); }
+        catch { /* the table cannot be read: nothing is picked, and agent-unselected stands as before */ }
+        const sole = soleInstalledAgent(prefs, installed);
+        if (sole !== undefined) picked = { agent: sole };
+      }
+      slot = await estimatorSlotFor({ store: deps.store, profileRouter: deps.profileRouter }, command.actorId, picked === undefined ? {} : { estimator: picked }, profile);
     } catch (error) {
       return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
@@ -124,7 +137,7 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
       rawCommand: command,
       expand: () => ({ ...command, schema: "orca-authority-command-v1", payload: {
         groupId: command.payload.groupId, repoId: command.payload.repoId, idea: command.payload.idea,
-        limit: command.payload.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT }, agent: command.payload.agent ?? null, contentLanguage: command.payload.contentLanguage ?? "en",
+        limit: command.payload.limit ?? { ...REQUIREMENT_LIMIT_DEFAULT }, agent: picked ?? null, contentLanguage: command.payload.contentLanguage ?? "en",
       } }),
       apply: (context) => {
         const payload = context.effectiveCommand.payload as EffectiveOpenPayload;

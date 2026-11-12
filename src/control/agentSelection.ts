@@ -114,6 +114,21 @@ export function estimatorLayerAuthority(prefs: OperatorPreferences, group: Group
   return sha256Canonical({ primaryLayers, estimatorLayers, selected });
 }
 
+/** #246: whether a requirement's estimator slot, with no agent picked, has no layer naming an agent (agent-unselected). */
+export function estimatorAgentUnselected(prefs: OperatorPreferences): boolean {
+  try { resolveSelection(slotLayers("estimator", prefs, {}), prefs.perAgent); return false; }
+  catch (error) { if (error instanceof ControlError && error.code === "agent-unselected") return true; throw error; }
+}
+
+/**
+ * #246 (human: 「#246 => 同意」): `requirement open` with no agent named, when no layer names one, picks the one installed
+ * agent; with none or several installed it picks nothing and agent-unselected stands. web/src/requirementAgent.ts mirrors
+ * it (tests/panel/requirementAgentParity.test.ts).
+ */
+export function soleInstalledAgent(prefs: OperatorPreferences, installed: readonly string[]): string | undefined {
+  return installed.length === 1 && estimatorAgentUnselected(prefs) ? installed[0] : undefined;
+}
+
 /**
  * eff(l_i) = l_i.agent ?? eff(l_{i-1}); A = eff(l_n) (undefined ⇒ agent-unselected); for model and
  * contextWindow, the highest-priority layer whose effective agent is A and that gives the field, else

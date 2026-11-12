@@ -216,7 +216,7 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "language", type: "string", summary: "en|zh: the requirement's content language" },
       { name: "limit", type: "string", humanOnly: true, summary: "the requirement's budget as JSON {tokens,activeMs,attempts,sessions}" },
       // Issue #143: the Web's agent picker (RequirementsPanel.tsx) sends payload.agent; the CLI could not.
-      { name: "agent", type: "string", summary: "the installation that runs this requirement's agent calls (orca agent list); default: your agent preferences" },
+      { name: "agent", type: "string", summary: "the installation that runs this requirement's agent calls (orca agent list); default: your agent preferences, else the one installed agent when exactly one is" },
     ],
     scopeId: (c) => newGroupIdOnce(c), route: () => "requirements",
     payload: async (c) => ({
