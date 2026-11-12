@@ -83,7 +83,10 @@ describe("E: a transient failure is retried before the run stays blocked (#229, 
     } finally { await t.h.dispose(); }
   }, 60000);
 
-  it("blocks a transient I/O failure at another step (C) at once: only E is retried", async () => {
+  // Ruling (2026-11-12, tester follow-up G): #267 retries a transient failure at B, B' and C in place too (a collect a
+  // sleeping machine timed out), so this criterion, which pinned "only E is retried", now pins C's bounded retry: three
+  // retries named on stderr, then the block, exactly as E's persistent conflict above.
+  it("retries a persistent transient I/O failure at C three times, then blocks it at C (#267)", async () => {
     let failing = false;
     const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "succeed", duringCollect: async () => { if (failing) throw Object.assign(new Error("EBUSY: collect raced"), { code: "EBUSY" }); } }); try {
       const runId = await t.claim();
@@ -94,7 +97,7 @@ describe("E: a transient failure is retried before the run stays blocked (#229, 
         for (let i = 0; i < 10 && t.body(runId).state !== "blocked"; i += 1) await driver.round();
         expect({ state: t.body(runId).state, blockedAt: t.body(runId).drive.blockedAt }).toEqual({ state: "blocked", blockedAt: "C" });
         expect(lines.filter((line) => line.startsWith(`orca-driver: ${runId}: `)))
-          .toEqual([`orca-driver: ${runId}: blocked at C: EBUSY: collect raced\n`]);
+          .toEqual([...[1, 2, 3].map((n) => `orca-driver: ${runId}: C: EBUSY: collect raced; transient, retry ${n} of 3\n`), `orca-driver: ${runId}: blocked at C: EBUSY: collect raced\n`]);
       });
     } finally { await t.h.dispose(); }
   }, 60000);
