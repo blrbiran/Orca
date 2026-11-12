@@ -64,7 +64,7 @@ export function claimGroupSingleCallInTransaction(store: ControlStore, input: {
   const group = readGroup(store, groupId);
   const runId = `run-${randomUUID()}`;
   const { envelopeHash } = insertSingleCallRun(store, {
-    groupId, workItemId, runId, ownerToken: randomUUID(), purpose: input.purpose as never, identity: input.identity,
+    groupId, workItemId, runId, ownerToken: randomUUID(), purpose: input.purpose, identity: input.identity,
     graphVersion: group.graphVersion, targetVersion: attempt, commandId: workItemId, slot: input.slot, agentCapabilities: input.slot.capabilities,
     workGrant: { ...input.grant }, profile: input.profile, claimIdentity: `single-call:${groupId}:${workItemId}:${attempt}`, derivedContractHash: contractHash,
   });

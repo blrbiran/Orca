@@ -1769,6 +1769,12 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
         write: (action) => write(deps, action), stopped: () => context.stopped,
       }, context.acceptanceChecks ?? (context.acceptanceChecks = new Map()))) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Tester follow-up G spec §3: a requirement group accepted on its tip is reviewed against its acceptance criteria before
+    // it can be done. Loaded on first use, not imported (the import-cycle rule, as the acceptance pass).
+    try {
+      const { reviewRequirements } = await import("./requirementReview.js");
+      if (await reviewRequirements({ store: deps.store, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate, write: (action) => write(deps, action) })) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }

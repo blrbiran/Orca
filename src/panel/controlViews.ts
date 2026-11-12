@@ -47,6 +47,7 @@ import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS } from "../control/quotaProbeCall.js";
 import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
+import { reviewOf, reviewProblem } from "../control/requirementReviewRecord.js";
 import { CLARIFY_CAPS } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { activeChain, chainRounds } from "../control/clarifyChain.js";
@@ -225,7 +226,7 @@ const persistedRunSchema = z.object({
   predecessorRunId: idSchema.optional(),
   phase: z.enum(["estimate", "work", "handoff", "single-call"]),
   // N1 DR1: a `single-call` run names its purpose, and the overview its prompt was built from once A2 stored it.
-  purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge"]).optional(),
+  purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge", "requirement-review"]).optional(),
   overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
   claimOrdinal: safeInteger.positive().nullable(),
   // Quota failover spec 2026-11-03 §8: the task's switch count at this claim (agentSwitch.ts).
@@ -646,6 +647,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(escalation.length === 0 ? {} : { escalation }),
     ...(criteriaReviews.length === 0 ? {} : { criteriaReviews }),
     ...(acceptance === null ? {} : { acceptance: { ...acceptance, ...(acceptanceProblemCode === null ? {} : { problem: acceptanceProblemCode }) } }),
+    // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
+    ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(multiSummary === null ? {} : { multiDir: multiSummary }),
     ...(debugMark === null ? {} : { debug: {

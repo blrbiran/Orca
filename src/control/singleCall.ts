@@ -13,7 +13,9 @@ export const SINGLE_CALL_PURPOSES = ["estimate", "clarify", "split", "flow-draft
   // Quota rest probe spec 2026-11-06 §4 step 4: one small call on an installation whose rest ended (quotaProbeCall.ts).
   "quota-probe",
   // Tester follow-up G spec §10.1: the goal judge of a command-verified run that changed nothing (noChangeJudge.ts).
-  "no-change-judge"] as const;
+  "no-change-judge",
+  // Tester follow-up G spec §3: the requirement review of a requirement group after its acceptance (requirementReview.ts).
+  "requirement-review"] as const;
 export type SingleCallPurpose = (typeof SINGLE_CALL_PURPOSES)[number];
 
 export function isSingleCallPurpose(value: unknown): value is SingleCallPurpose {

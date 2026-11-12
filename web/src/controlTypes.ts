@@ -130,6 +130,8 @@ export type GroupSummaryV1 = {
   criteriaReviews?: GroupCriteriaReviewV1[];
   /** Tester follow-up E §5 (#241): the group's acceptance on its final tip; `problem` is set when it failed. */
   acceptance?: GroupAcceptanceV1;
+  /** Tester follow-up G spec §3.3: the requirement review record; `problem` is set when it did not pass. */
+  requirementReview?: RequirementReviewV1;
   /** Scheduled flows and groups spec 2026-10-24 §13.3: the schedule that started this group, and why its fire waits. */
   scheduleStart?: { scheduleId: string; name: string; slot: number; waitingReason: string | null };
 };
@@ -415,7 +417,7 @@ export type RunViewV1 = {
   state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "collected" | "landed" | "reconciling" | "blocked";
   phase: "estimate" | "work" | "handoff" | "single-call";
   /** N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase. */
-  purpose?: "clarify" | "split" | "quota-probe" | "no-change-judge";
+  purpose?: "clarify" | "split" | "quota-probe" | "no-change-judge" | "requirement-review";
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
   profile: ProfileBindingV1;
@@ -602,6 +604,18 @@ export type EvidenceManifestV1 = {
   entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
 };
 /** Tester follow-up E §5 (#241): a group's acceptance on its final tip (src/control/groupAcceptanceRecord.ts). */
+/** Tester follow-up G spec §3.3: a requirement group's review against its acceptance criteria. */
+export type RequirementReviewV1 = {
+  state: "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
+  why?: "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed";
+  rounds: Array<{ roundNo: number; tip: string; runId: string | null; at: number; result: "passed" | "not-met" | "cannot-judge" | "invalid" | "failed" | "unfunded";
+    criteria: Array<{ id: string; verdict: "met" | "not-met" | "cannot-judge"; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>;
+    summary: string; note?: string; fixTaskId?: string; fixBy?: string }>;
+  autoFixRounds: number;
+  accepted?: { by: string; note: string; at: number };
+  rerun?: { by: string; note: string; at: number };
+  problem?: string;
+};
 export type GroupAcceptanceV1 = {
   tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir";
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
@@ -621,7 +635,7 @@ export const WEB_ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
-  "no-change-completed", "no-change-revoked", "no-change-judged",
+  "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };

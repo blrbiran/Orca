@@ -373,7 +373,7 @@ export const dispatchEnvelopeSchema = z
     schema: z.literal("orca-dispatch-envelope-v1"),
     phase: z.enum(["estimate", "work", "handoff", "single-call"]),
     /** N1 DR1: what a `single-call` phase claim is for; an estimate's stored envelope has none. Flow engine §6.2: a flow run's. */
-    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage", "quota-probe", "no-change-judge"]).optional(),
+    purpose: z.enum(["clarify", "split", "flow-draft", "flow-review", "flow-ask", "rerun-proposal", "feedback-triage", "quota-probe", "no-change-judge", "requirement-review"]).optional(),
     groupId: idSchema,
     workItemId: idSchema,
     runId: idSchema,
@@ -1612,6 +1612,23 @@ export const groupSummarySchema = z
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       problem: nonemptyString.optional(),
     }).strict().optional(),
+    // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is
+    // `requirement-review-not-passed:<why>` when it did not pass. Optional so a group without one parses unchanged.
+    requirementReview: z.object({
+      state: z.enum(["pending", "reviewing", "passed", "fixing", "not-passed", "accepted", "not-run"]),
+      why: z.enum(["multi-repo", "dir", "unfunded", "invalid", "cannot-judge", "rounds-exhausted", "failed"]).optional(),
+      rounds: z.array(z.object({
+        roundNo: positiveSafeInteger, tip: z.string(), runId: idSchema.nullable(), at: safeInteger,
+        result: z.enum(["passed", "not-met", "cannot-judge", "invalid", "failed", "unfunded"]),
+        criteria: z.array(z.object({ id: nonemptyString, verdict: z.enum(["met", "not-met", "cannot-judge"]),
+          evidence: z.array(z.object({ path: nonemptyString, line: safeInteger.nullable() }).strict()), missing: z.string().nullable() }).strict()),
+        summary: z.string(), note: z.string().optional(), fixTaskId: idSchema.optional(), fixBy: nonemptyString.optional(),
+      }).strict()),
+      autoFixRounds: safeInteger,
+      accepted: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
+      rerun: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
+      problem: nonemptyString.optional(),
+    }).strict().optional(),
     orchestration: z.object({
       mode: z.enum(["run", "hold"]),
       state: z.enum(["held", "started", "stopped", "waiting-prerequisite", "backoff", "waiting-slot", "queued"]),
@@ -1850,6 +1867,8 @@ export const activityKindSchema = z.enum([
   "no-change-revoked",
   // Tester follow-up G spec §10.1: the goal judge's verdict when it was not `met`.
   "no-change-judged",
+  // Tester follow-up G spec §3: a requirement review round, its fix task, or an exit.
+  "requirement-review",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -1885,7 +1904,7 @@ export const runViewSchema = z
     // N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase.
     // Quota rest probe spec 2026-11-06: a group's probe call (quotaProbeCall.ts) shows among its runs.
     // Tester follow-up G spec §10.1: a group's goal judge call (noChangeJudge.ts).
-    purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge"]).optional(),
+    purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge", "requirement-review"]).optional(),
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,

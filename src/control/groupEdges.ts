@@ -7,6 +7,7 @@ import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
+import { reviewSatisfied } from "./requirementReviewRecord.js";
 import { readGroupOrchestration } from "./orchestration.js";
 import type { ControlStore } from "./store.js";
 import { groupRepoIdOf } from "./usageLedger.js";
@@ -80,6 +81,8 @@ export function prerequisiteDone(store: ControlStore, groupId: string): boolean 
   // Tester follow-up E §5 (#241): done also needs the group accepted on its final tip (groupAcceptance.ts), so neither the
   // done pass nor a dependent group moves on a group whose final tree failed its tasks' checks.
   if (!acceptanceSatisfied(store, groupId, group)) return false;
+  // Tester follow-up G spec §3.6: a requirement group is done only once its requirement review passed (or was accepted).
+  if (!reviewSatisfied(store, groupId, group)) return false;
   if (dirWorkspaceOf(group) !== null) return dirPlacementCaughtUp(group);
   if (multiDirOf(group) !== null) return multiLandingDone(group);
   if (!deliversLocally(group)) return true;
