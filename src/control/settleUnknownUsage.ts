@@ -1,4 +1,5 @@
 import { amountSchema } from "./schema.js";
+import { ceilingOutstanding, liveCeilingOf, syncCeilingReserve } from "./liveCeiling.js";
 import { add, budgetBalance, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { dimensions } from "./commands.js";
 import { hasTokenPolicy } from "./fundedAllowance.js";
@@ -22,7 +23,13 @@ export type SettleAcknowledge = SettleUnknownUsageCommand["payload"]["acknowledg
 /** The acknowledgement a run's remainder admits: a proved-zero failure releases its reservation; an unlimited work
  * token remainder can only be released unmetered; otherwise the remainder is charged. */
 export const settlementAcknowledgeFor = (run: SettlementRun): Exclude<SettleAcknowledge, "charge-observed-floor"> =>
-  knownZeroProved(run) ? "release-known-zero" : run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant";
+  knownZeroProved(run) ? "release-known-zero" : run.remaining.work.tokens === null && liveCeilingOf(run) === null ? "release-unmetered" : "charge-remaining-grant";
+/**
+ * Follow-up H (gap k, ruling R4: the group cap is hard): an expectation-model run has no work grant; what its unknown usage
+ * could have spent is its live ceiling, so its "remaining grant" is the ceiling's unused part, charged in full. Null for a
+ * run without a ceiling.
+ */
+const ceilingRemainder = (run: SettlementRun): number | null => liveCeilingOf(run) === null ? null : ceilingOutstanding(run as never);
 /**
  * Tester follow-up F §2 (#116, ledger C3): ccloop's observed floor as the soft path reads it (the loop run's `usageLowerBound`,
  * executionDriver.ts), or null when ccloop observed none. The explicit `charge-observed-floor` is admitted only with one.
@@ -51,7 +58,7 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
     // Tester follow-up F §2 (#116, ledger C3): a finite remainder only (an unlimited one keeps its forms), and only with a floor.
     if (run.remaining.work.tokens === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
     if (observedFloorOf(run) === null) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
-  } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null ? "unlimited-remainder" : "finite-remainder");
+  } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null && liveCeilingOf(run) === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
   if ((group as { status?: string }).status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
@@ -230,7 +237,10 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
         const charged = unmetered ? unmeteredChargeSchema.parse({ work: run.remaining.work, handoff: run.remaining.handoff })
           : knownZero ? { work: { ...zero }, handoff: { ...zero } }
-          : { work: amountSchema.parse(run.remaining.work), handoff: amountSchema.parse(run.remaining.handoff) };
+          : { work: amountSchema.parse(ceilingRemainder(run) === null ? run.remaining.work : { ...run.remaining.work, tokens: ceilingRemainder(run) }), handoff: amountSchema.parse(run.remaining.handoff) };
+        // Follow-up H (gap k): the ceiling's unused part is held through liveCeilingReserved, not run.remaining; the re-derivation
+        // below gives that hold back, so the charge here releases only the rest.
+        const ceilingHeld = !unmetered && !knownZero ? ceilingRemainder(run) ?? 0 : 0;
         const request = latestRequestForRun(store, groupId, run.runId);
         const marker = usageSettlementSchema.parse({ method: knownZero ? "known-zero" : unmetered ? "owner-acknowledged-unmetered" : "remaining-grant", commandId: command.commandId, principal, at,
           groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
@@ -240,7 +250,9 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         // §3.2: an optional-v1 stop kept its reservation (allocations `unknown`); a finite-legacy stop already released it.
         const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId), parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
         chargeRunRemainder(store, run, group, charged, { unmetered, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy),
-          ...(knownZero ? { releaseReservedAmount: add(finiteCommitment(run.remaining.work), run.remaining.handoff) } : {}), at });
+          ...(knownZero ? { releaseReservedAmount: add(finiteCommitment(run.remaining.work), run.remaining.handoff) }
+            : ceilingHeld > 0 ? { releaseReservedAmount: subtract(add(charged.work as Amount, charged.handoff), { tokens: ceilingHeld, activeMs: 0, attempts: 0, sessions: 0 }) } : {}), at });
+        if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
         finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked, activity: { method: marker.method, charged, principal, at } });
         deps.beforeCommit?.();
         const receipt = { kind: "usage-settled" as const, taskId: run.taskId!, runId: run.runId, generation: run.generation, at };

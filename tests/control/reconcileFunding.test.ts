@@ -11,6 +11,7 @@ import { decideFundedAllowance } from "../../src/control/fundedAllowance.js";
 import { planCeilingRaises } from "../../src/control/liveCeilingRaise.js";
 import { readGroup } from "../../src/control/queries.js";
 import { committedTokens } from "../../src/control/spendCaps.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 import { answerSingleCalls } from "./fixtures/singleCallAnswers.js";
@@ -196,6 +197,42 @@ describe("a reconciliation in an expectation-model group is funded under the har
       const run = t.body(runId);
       expect(run.remaining.work.tokens).toBeNull();
       expect(committedTokens(t.h.store, "all", null)).toBe(run.liveCeiling.tokens - run.cumulative.work.tokens + run.remaining.handoff.tokens);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("H9: a handoff-stopped run whose usage is unknown keeps its unused ceiling held, and settling charges it in full", async () => {
+    // Ruling R4 (the group cap is hard): the run may have spent anything up to its live ceiling, so neither its end nor its
+    // settlement may hand that part back as unspent.
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", killGraceMs: 0, behaviour: () => "stoppable-usage-unknown" });
+    try {
+      const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
+      const set = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 10 * M } }));
+      if ("error" in set) throw new Error(`set-limit refused: ${JSON.stringify(set)}`);
+      const driver = t.driver();
+      const id = await t.claim();
+      await t.until(driver, () => t.body(id).state === "accepted");
+      const outstanding = t.body(id).liveCeiling.tokens - t.body(id).cumulative.work.tokens;
+      expect(outstanding).toBeGreaterThan(0);
+      await t.service.handoffStop(t.h.command("handoff-stop", {}));
+      await t.until(driver, () => t.body(id).state === "settled-unrecoverable");
+      await driver.round();
+      expect(t.body(id).unknown.work).toBe(true);
+      const held = readGroup(t.h.store, "g") as unknown as { liveCeilingReserved: number; used: { tokens: number }; reserved: { tokens: number }; limit: { tokens: number } };
+      expect(held.liveCeilingReserved).toBe(outstanding);
+      const settle = (acknowledge: string) => {
+        const c = t.h.command("settle-unknown-usage" as never, { taskId: "a", runId: id, generation: 1, acknowledge } as never);
+        return withCommandContext(c.commandId, { client: "web", principal: "user:owner" }, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<{ error?: { message: string } }> }).settleUnknownUsage(c));
+      };
+      expect((await settle("release-unmetered")).error?.message).toBe("run-usage-not-settleable:finite-remainder");
+      expect((await settle("charge-remaining-grant")).error).toBeUndefined();
+      const after = readGroup(t.h.store, "g") as unknown as typeof held;
+      // The charge books the whole unused ceiling (plus the handoff bucket's remainder, as any charge does).
+      expect(t.body(id).usageSettlement.charged.work.tokens).toBe(outstanding);
+      expect(after.used.tokens - held.used.tokens).toBe(outstanding + t.body(id).usageSettlement.charged.handoff.tokens);
+      expect(after.liveCeilingReserved).toBe(0);
+      expect(after.used.tokens + after.reserved.tokens).toBe(held.used.tokens + held.reserved.tokens);
+      expect(after.used.tokens + after.reserved.tokens).toBeLessThanOrEqual(after.limit.tokens);
+      await driver.stop();
     } finally { await t.h.dispose(); }
   });
 });

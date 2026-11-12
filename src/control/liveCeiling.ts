@@ -62,9 +62,17 @@ export function executionEnded(run: { state?: unknown }): boolean {
  * (follow-up H): nothing is left for the ceiling to bound, so its unused share returns to the group for the runs Orca
  * dispatches for that landing.
  */
-export function ceilingOutstanding(run: { state?: unknown; liveCeiling?: unknown; cumulative: { work: { tokens: number } } }): number {
+export function ceilingOutstanding(run: { state?: unknown; liveCeiling?: unknown; cumulative: { work: { tokens: number } }; unknown?: { work?: unknown } }): number {
   const ceiling = liveCeilingOf(run);
-  return ceiling === null || executionEnded(run) ? 0 : Math.max(0, ceiling.tokens - run.cumulative.work.tokens);
+  // Follow-up H (gap k): a run whose work usage is unknown may have spent up to its ceiling; its unused part stays held,
+  // ended or not, until the unknown usage is settled (settleUnknownUsage.ts charges it).
+  return ceiling === null || (executionEnded(run) && run.unknown?.work !== true) ? 0 : Math.max(0, ceiling.tokens - run.cumulative.work.tokens);
+}
+
+/** Follow-up H (gap k): an expectation-model run whose work usage is unknown and unsettled; its unused ceiling is held. */
+export function ceilingUsageUnknown(run: unknown): boolean {
+  const body = run as { liveCeiling?: unknown; unknown?: { work?: unknown }; usageSettlement?: unknown };
+  return body.liveCeiling !== undefined && body.unknown?.work === true && body.usageSettlement === undefined;
 }
 
 /** The reconcile record fields the funding reads (driveRecord.ts ReconcileRecord). */
@@ -147,8 +155,10 @@ export function claimCeiling(store: ControlStore, groupId: string, work: { taskI
  */
 export function syncCeilingReserve(store: ControlStore, group: GroupRecord, current?: { runId: string; liveCeiling?: unknown; cumulative: { work: { tokens: number } } }): boolean {
   let target = 0;
-  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1").all(group.groupId)) {
+  // Follow-up H (gap k): a run that left with its work usage unknown keeps its unused ceiling held until it is settled.
+  for (const row of store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND (active=1 OR (json_extract(body,'$.unknown.work')=1 AND json_extract(body,'$.liveCeiling') IS NOT NULL))").all(group.groupId)) {
     const run = current !== undefined && String(row.id) === current.runId ? current : JSON.parse(String(row.body));
+    if (Number(row.active) !== 1 && !ceilingUsageUnknown(run)) continue;
     target += ceilingOutstanding(run) + reconcileInFlight(store, String(row.id), run);
   }
   const held = (group as { liveCeilingReserved?: number }).liveCeilingReserved ?? 0;
