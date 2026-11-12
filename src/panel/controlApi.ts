@@ -50,6 +50,7 @@ import { controlErrorCatalog, sendControlError, sendMappedControlError } from ".
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
 import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
+import { phaseEndUsageOf } from "../control/runUsageView.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -287,7 +288,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   // the server's plan/run reads nor the socket transfer, and a clarifying group answers (its full view is refused).
   app.get("/api/control/groups/:groupId/brief", (req, res) => {
     const groupId = String(req.params.groupId);
-    try { res.json({ schema: "orca-group-brief-v1", ...readGroupSummary(deps.store, groupId) }); }
+    // Tester #285: with a run under way whose agent reports usage only at phase end, the brief says so (absent otherwise).
+    try { const summary = readGroupSummary(deps.store, groupId), phaseEndUsage = phaseEndUsageOf(deps.store, groupId);
+      res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");

@@ -10,6 +10,7 @@ import { contextHandoffLines, emptyResultLines, formatWithUnestimated, fundingLi
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { recoveryRetryCommand } from "../../control/driveRecord.js";
+import { phaseEndBudgetLines, runUsageLines, type UsageRun } from "./usageLines.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
@@ -364,7 +365,10 @@ export const READ_ROWS: CommandDef[] = [
   // Issue #199: the summary route answers the compact body itself, so a poll ships neither the full view's plan and
   // runs nor a clarifying group's refusal (its full view is refused; its summary is not).
   read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],
-    paths: (c) => [`groups/${ids(c, "group")}/brief`] }),
+    paths: (c) => [`groups/${ids(c, "group")}/brief`],
+    // Tester #285: the brief names the runs under way whose agent reports usage only at phase end (controlApi.ts).
+    format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
+      return [text(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf))].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
     format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
@@ -409,12 +413,15 @@ export const READ_ROWS: CommandDef[] = [
   read({ domain: "run", action: "show", summary: "one run: its entry in the group view, the newest 10 activity rows, the evidence summary",
     positionals: [RUN], flags: [{ name: "group", type: "string", summary: "the run's group (default: found from the groups the summary lists)" }],
     paths: async (c) => { const groupId = await groupOfRun(c, ids(c, "run")); return [`groups/${groupId}`, `runs/${ids(c, "run")}/activity`, `runs/${ids(c, "run")}/evidence`]; },
-    compose: ([view, activity, evidence], c) => {
+    compose: async ([view, activity, evidence], c) => {
       const v = view as GroupView;
       const entries = (field(activity, "entries") as unknown[] | undefined) ?? [];
       const manifest = (field(evidence, "entries") as Array<{ evidenceId: string; kind: string; byteLength: number }> | undefined) ?? [];
+      // Tester #285: the transcript's last write, when the listing gives one; a refused or older listing adds nothing.
+      const lastTranscriptAt = field(await c.read(`runs/${ids(c, "run")}/transcripts`).catch(() => null), "lastTranscriptAt");
       return {
         schema: "orca-run-show-v1", groupId: v.summary.groupId, run: v.runs.find((r) => r.runId === ids(c, "run")),
+        ...(typeof lastTranscriptAt === "number" ? { lastTranscriptAt } : {}),
         activity: { entries: entries.slice(0, 10), more: entries.length > 10 },
         evidence: { count: manifest.length, entries: manifest.map(({ evidenceId, kind, byteLength }) => ({ evidenceId, kind, byteLength })) },
       };
@@ -427,6 +434,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(b.run?.state === undefined ? [] : [`state: ${b.run.state}`]),
         // Tester D19: the agent and model this run was frozen with, not the installation's default.
         ...(b.run?.agent === undefined ? [] : [`agent: ${b.run.agent.installation}, model ${b.run.agent.model ?? "(the agent's default)"}`]),
+        ...runUsageLines(b.run as UsageRun | undefined, (body as { lastTranscriptAt?: number }).lastTranscriptAt),
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         // Tester #267: a work run blocked before ccloop stated an outcome is resumed where it stopped, not retried as a task.
         ...(b.run?.state === "blocked" && b.run.phase === "work" && b.run.outcome === null && b.run.runId !== undefined ? [`To resume it where it stopped: ${recoveryRetryCommand(b.run.runId)}`] : []),

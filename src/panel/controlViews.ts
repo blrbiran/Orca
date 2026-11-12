@@ -74,6 +74,7 @@ import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from ".
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
+import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -1313,6 +1314,10 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       startedAt: run.startedAt ?? null,
       endedAt: run.endedAt ?? null,
       lastActivityAt: activity.get(runId)?.at ?? null,
+      // Tester #285: how the run's agent observes usage, when its figure was last booked, and its split by kind.
+      usageObservation: run.agentCapabilities.usageObservation,
+      ...((at) => at === null ? {} : { usageAt: at })(usageBookedAt(store, runId)),
+      ...((split) => split === null ? {} : { usageBreakdown: split })(usageBreakdownOf(store, runId, bucket)),
       createdOrdinal: createdOrdinal.get(runId)!,
       ...outputBoundView(store, groupId, run),
       // Debug task plan Task 13: what the panel shows of the reproduce-first check; the restore facts stay in the body.

@@ -127,6 +127,17 @@ export async function liveBytes(listing: StoredListing, entry: TranscriptEntry):
   return stat?.isFile() ? stat.size : entry.bytes;
 }
 
+/**
+ * Tester #285: when a call's transcript in the run directory was last written (its mtime, epoch ms); null when it is not
+ * there (not recorded, cleaned up, or archived). A codex execute books no usage and no activity until it ends, so this is
+ * the one sign that it is still producing output.
+ */
+export async function writtenAt(listing: StoredListing, entry: TranscriptEntry): Promise<number | null> {
+  if (entry.path === null || !LISTING_PATH.test(entry.path)) return null;
+  const stat = await callFile(listing, entry.path, "transcript.jsonl");
+  return stat?.isFile() ? Math.floor(stat.mtimeMs) : null;
+}
+
 /** `final` from the driver's last collect, or the call's outcome.json appearing (§10.4.3), or an archived source. */
 export async function finalNow(listing: StoredListing, entry: TranscriptEntry, source: "run" | "archive"): Promise<boolean> {
   if (entry.final || source === "archive" || entry.path === null) return true;

@@ -6,6 +6,7 @@ import type { CommandVerbV1 } from "../../control/webProtocol.js";
 import { EntryRejection } from "../../entry/envelope.js";
 import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
+import { phaseEndBudgetLines, phaseEndOfRuns, type UsageRun } from "./usageLines.js";
 import { adviceOf, usedRatio, type SuggestionView } from "../../control/budgetSuggestions.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../control/estimateInstructionAge.js";
 
@@ -338,6 +339,8 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? noChangeLines(groupId, (b as { workItems?: NoChangeItem[] } | null)?.workItems ?? [], runs.filter((run) => current.has(run.runId))) : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
+    // Tester #285: the group's used figure lags while a run whose agent reports at phase end is under way.
+    ...((note) => phaseEndBudgetLines(note.runIds, note.asOf))(phaseEndOfRuns(runs as UsageRun[])),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),

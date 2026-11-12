@@ -2077,6 +2077,12 @@ export const runViewSchema = z
     startedAt: safeInteger.nullable().optional(),
     endedAt: safeInteger.nullable().optional(),
     lastActivityAt: safeInteger.nullable().optional(),
+    // Tester #285: the run's agent's usage observation (phase-end: \`used\` is the last phase end's figure), when its usage
+    // was last booked (epoch ms; absent before any), and its split by kind from the newest usage event carrying one.
+    // Optional on the wire so older fixtures still parse; the server always gives usageObservation.
+    usageObservation: z.enum(["realtime", "phase-end", "unavailable"]).optional(),
+    usageAt: safeInteger.optional(),
+    usageBreakdown: z.object({ input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger }).strict().optional(),
     // Spec 2026-10-15 §6.2 (R2): a single call's (estimate or requirement) output bound and, when the observed output (the sum
     // of its usage event's byModel[].output) went over it, by how much. Optional on the wire; read-time only.
     outputBound: positiveSafeInteger.optional(),
