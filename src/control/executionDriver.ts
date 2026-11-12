@@ -130,6 +130,8 @@ export interface ExecutionDriverDeps {
   now?: () => Date;
   /** Issue #192 test seam: the settle wall time at or above which stepE writes its timing line (default 5 s). */
   settleSlowMs?: number;
+  /** Tester follow-up G §6.1 (#192) test seam: awaited on the settle lane right before a landed run's step E. */
+  beforeSettle?: (runId: string) => Promise<void>;
   /**
    * Test seam only: overrides handoffGraceMsOf(run) (agent selection spec §6.6: the run's frozen killGraceMs + 60 s).
    * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** it overrides handoffGraceMsOf(run, window): max(killGraceMs, frozen recovery window + 5 s) + 60 s.
@@ -178,6 +180,13 @@ export interface DriverContext {
    * restart grants at most TRANSIENT_E_RETRIES more, which is still bounded, and needs no drive-record field.
    */
   transientRetries?: Map<string, number>;
+  /**
+   * Tester follow-up G §6.1 (#192): runs whose step E is in flight on the settle lane, by run (a pass skips them), and the
+   * lane itself -- one chain, so two settles never overlap. A death mid-settle leaves the run landed or settled-but-not-
+   * cleaned, which the next driver visits again (D15).
+   */
+  settles?: Map<string, Promise<boolean>>;
+  settleLane?: Promise<unknown>;
 }
 
 /** One reproduce-first check running off the driver round: aborted by stop(), its outcome read by a later round. */
@@ -1644,6 +1653,84 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
   }
 }
 
+/**
+ * What a pass does with a step that threw (moved out of the pass for the settle lane, #192): a draining panel ends the round
+ * ("draining"), a recorded failure that moved the run counts as progress ("progressed"), anything else goes on to the next
+ * run ("next"). A DriverCrash is rethrown.
+ */
+export async function recordStepFailure(deps: ExecutionDriverDeps, context: DriverContext, runId: string, error: unknown): Promise<"next" | "progressed" | "draining"> {
+  if (error instanceof DriverCrash) throw error;
+  // A draining panel refuses every write; the round ends and no run is blamed for it.
+  if (error instanceof ControlError && error.code === "panel-draining") return "draining";
+  // Backlog #3 (Orca handoff §9.0 挂账): recording this run's failure can fail too -- a write the store refuses,
+  // a row that no longer reads. That second failure is this run's alone: it is named on stderr with both errors,
+  // and the round goes on to the next run instead of ending for every group.
+  try {
+    const run = readDriverRun(deps.store, runId);
+    // A settled (or settled-failed) run stays where it is: whatever failed here is the settle step's own cleanup work,
+    // never a reason to reopen it as blocked at an earlier step (controller ruling P7,
+    // 2026-09-25). Record the failure on the run and leave it for the next round to retry --
+    // re-checked inside the write since another write may have landed while this step was
+    // in flight (the deferred note from Task 4's review: never write after an await without
+    // re-reading state first).
+    // Issue fixes spec §4.2(2): a settled-failed run's cleanup failure is recorded the same way.
+    if (run.state === "settled" || run.state === "settled-failed") {
+      write(deps, () => {
+        const current = readDriverRun(deps.store, runId);
+        if ((current.state === "settled" || current.state === "settled-failed") && current.drive !== undefined && !current.drive.cleanedUp) {
+          current.drive = { ...current.drive, cleanupError: describeError(error) };
+          saveDriverRun(deps.store, current);
+        }
+      });
+      process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`);
+      return "next";
+    }
+    if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`); return "next"; }
+    // Final fix wave (FR-C2, controller ruling 2026-09-25): a run that is already blocked stays blocked where it
+    // was. `blockedAt` decides which branch closes it under a stop (spec §13.2 I-3) and where a retry resumes it,
+    // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
+    // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
+    if (run.state === "blocked" && run.drive.blockedAt !== null) {
+      blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
+      process.stderr.write(`orca-driver: ${runId}: blocked at ${run.drive.blockedAt}: ${logError(error)}\n`);
+    } else {
+      // Tester #229/#230: a landed run whose settle failed transiently stays landed, so a later round runs E again,
+      // up to TRANSIENT_E_RETRIES times; the failure after that blocks it as before.
+      if (run.state === "landed" && transientSettleError(error)) {
+        const retries = context.transientRetries ?? (context.transientRetries = new Map());
+        const done = retries.get(runId) ?? 0;
+        if (done < TRANSIENT_E_RETRIES) {
+          retries.set(runId, done + 1);
+          process.stderr.write(`orca-driver: ${runId}: E: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_E_RETRIES}\n`);
+          return "next";
+        }
+        retries.delete(runId);
+      }
+      // Tester #267: likewise a transient failure at B, B' or C (a collect a sleeping machine timed out): the run stays
+      // at its step and the next round asks ccloop again, up to TRANSIENT_START_RETRIES times.
+      if ((run.state === "start-pending" || run.state === "unknown" || run.state === "accepted") && transientDriveError(error)) {
+        const retries = context.transientRetries ?? (context.transientRetries = new Map());
+        const done = retries.get(runId) ?? 0;
+        if (done < TRANSIENT_START_RETRIES) {
+          retries.set(runId, done + 1);
+          process.stderr.write(`orca-driver: ${runId}: ${stepOf(run)}: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_START_RETRIES}\n`);
+          return "next";
+        }
+        retries.delete(runId);
+      }
+      const step = stepOf(run);
+      blockRun(deps, runId, step, describeError(error));
+      process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${logError(error)}\n`);
+    }
+    return "progressed";
+  } catch (recordError) {
+    if (recordError instanceof DriverCrash) throw recordError;
+    if (recordError instanceof ControlError && recordError.code === "panel-draining") return "draining";
+    process.stderr.write(`orca-driver: ${runId}: ${logError(error)}; recording it failed: ${logError(recordError)}\n`);
+    return "next";
+  }
+}
+
 export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDriver {
  const taskResults=options.taskResults??createTaskResultCollector({store:options.store,admissionGate:options.admissionGate,resolve(runId){
   const run=readDriverRun(options.store,runId);if(!run.drive?.envelopeHash||!run.executionId)return null;
@@ -1654,13 +1741,46 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   if(key==='taskResults')return taskResults;
   const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
  }});
-  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), acceptChecks: new Map(), acceptanceChecks: new Map(), transientRetries: new Map() };
+  const context: DriverContext = { reconciling: new Map(), stopped: false, debugChecks: new Map(), multiPrechecks: new Map(), postMergeChecks: new Map(), acceptChecks: new Map(), acceptanceChecks: new Map(), transientRetries: new Map(), settles: new Map() };
   let inFlight: Promise<boolean> | null = null;
   let timer: NodeJS.Timeout | null = null;
   let crashed: CrashPoint | null = null;
   const stopTimer = (): void => { if (timer !== null) { clearInterval(timer); timer = null; } };
+  const settles = context.settles!;
 
-  const pass = async (): Promise<boolean> => {
+  /**
+   * Tester follow-up G §6.1 (#192): a landed run's step E (archive, checkpoint, publish, cleanup) goes on the settle lane
+   * instead of holding the pass, so the next pass claims and advances its dependent meanwhile (the claim reads
+   * dependencyReady). One lane per driver: settles never overlap each other. A failure is recorded as the pass records
+   * one; a DriverCrash ends the driver as it does in a pass.
+   */
+  const startSettle = (runId: string): Promise<boolean> => {
+    const lane = (context.settleLane ?? Promise.resolve()).then(async (): Promise<boolean> => {
+      if (crashed !== null) return false;
+      try {
+        await deps.beforeSettle?.(runId);
+        const moved = await stepE(deps, runId);
+        context.transientRetries?.delete(runId);
+        return moved;
+      } catch (error) {
+        try {
+          return await recordStepFailure(deps, context, runId, error) === "progressed";
+        } catch (fatal) {
+          if (fatal instanceof DriverCrash) { crashed = fatal.point; stopTimer(); return false; }
+          process.stderr.write(`orca-driver: ${runId}: settle failed: ${logError(fatal)}\n`);
+          return false;
+        }
+      }
+    }).finally(() => { settles.delete(runId); });
+    context.settleLane = lane;
+    settles.set(runId, lane);
+    return lane;
+  };
+  /** A work run's settle with no open request and a landed commit goes on the lane; an empty result's ledger commit stays inline. */
+  const settlesOnLane = (run: DriverRun): boolean =>
+    singleCallPurposeOf(run) === null && (run.state === "settled" || (run.state === "landed" && landedAnywhere(run.drive)));
+
+  const pass = async (started: Promise<boolean>[]): Promise<boolean> => {
     let progressed = false;
     try {
       if (replenishStartWakes(deps).length > 0) { progressed = true; deps.kickPump?.(); }
@@ -1670,82 +1790,21 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     }
     for (const runId of visitOrder(deps.store)) {
       if (context.stopped) break;
+      // #192: a run settling on the lane is the lane's until its step E answered.
+      if (settles.has(runId)) continue;
       try {
-        // Handoff delivery spec §3: a run with an open request goes to H; every other run is advanced as before.
-        const moved = openRequestOf(deps.store, readDriverRun(deps.store, runId)) !== null ? await stepH(deps, runId, context) : await advance(deps, runId, context);
+        const run = readDriverRun(deps.store, runId);
+        // Handoff delivery spec §3: a run with an open request goes to H (its settle stays inline); every other run is advanced as before.
+        const open = openRequestOf(deps.store, run) !== null;
+        if (!open && settlesOnLane(run)) { started.push(startSettle(runId)); continue; }
+        const moved = open ? await stepH(deps, runId, context) : await advance(deps, runId, context);
         // Tester #267: a step that answered ends its run of transient failures; only consecutive ones count toward a block.
         context.transientRetries?.delete(runId);
         if (moved) progressed = true;
       } catch (error) {
-        if (error instanceof DriverCrash) throw error;
-        // A draining panel refuses every write; the round ends and no run is blamed for it.
-        if (error instanceof ControlError && error.code === "panel-draining") return progressed;
-        // Backlog #3 (Orca handoff §9.0 挂账): recording this run's failure can fail too -- a write the store refuses,
-        // a row that no longer reads. That second failure is this run's alone: it is named on stderr with both errors,
-        // and the round goes on to the next run instead of ending for every group.
-        try {
-          const run = readDriverRun(deps.store, runId);
-          // A settled (or settled-failed) run stays where it is: whatever failed here is the settle step's own cleanup work,
-          // never a reason to reopen it as blocked at an earlier step (controller ruling P7,
-          // 2026-09-25). Record the failure on the run and leave it for the next round to retry --
-          // re-checked inside the write since another write may have landed while this step was
-          // in flight (the deferred note from Task 4's review: never write after an await without
-          // re-reading state first).
-          // Issue fixes spec §4.2(2): a settled-failed run's cleanup failure is recorded the same way.
-          if (run.state === "settled" || run.state === "settled-failed") {
-            write(deps, () => {
-              const current = readDriverRun(deps.store, runId);
-              if ((current.state === "settled" || current.state === "settled-failed") && current.drive !== undefined && !current.drive.cleanedUp) {
-                current.drive = { ...current.drive, cleanupError: describeError(error) };
-                saveDriverRun(deps.store, current);
-              }
-            });
-            process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`);
-            continue;
-          }
-          if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`); continue; }
-          // Final fix wave (FR-C2, controller ruling 2026-09-25): a run that is already blocked stays blocked where it
-          // was. `blockedAt` decides which branch closes it under a stop (spec §13.2 I-3) and where a retry resumes it,
-          // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
-          // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
-          if (run.state === "blocked" && run.drive.blockedAt !== null) {
-            blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
-            process.stderr.write(`orca-driver: ${runId}: blocked at ${run.drive.blockedAt}: ${logError(error)}\n`);
-          } else {
-            // Tester #229/#230: a landed run whose settle failed transiently stays landed, so a later round runs E again,
-            // up to TRANSIENT_E_RETRIES times; the failure after that blocks it as before.
-            if (run.state === "landed" && transientSettleError(error)) {
-              const retries = context.transientRetries ?? (context.transientRetries = new Map());
-              const done = retries.get(runId) ?? 0;
-              if (done < TRANSIENT_E_RETRIES) {
-                retries.set(runId, done + 1);
-                process.stderr.write(`orca-driver: ${runId}: E: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_E_RETRIES}\n`);
-                continue;
-              }
-              retries.delete(runId);
-            }
-            // Tester #267: likewise a transient failure at B, B' or C (a collect a sleeping machine timed out): the run stays
-            // at its step and the next round asks ccloop again, up to TRANSIENT_START_RETRIES times.
-            if ((run.state === "start-pending" || run.state === "unknown" || run.state === "accepted") && transientDriveError(error)) {
-              const retries = context.transientRetries ?? (context.transientRetries = new Map());
-              const done = retries.get(runId) ?? 0;
-              if (done < TRANSIENT_START_RETRIES) {
-                retries.set(runId, done + 1);
-                process.stderr.write(`orca-driver: ${runId}: ${stepOf(run)}: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_START_RETRIES}\n`);
-                continue;
-              }
-              retries.delete(runId);
-            }
-            const step = stepOf(run);
-            blockRun(deps, runId, step, describeError(error));
-            process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${logError(error)}\n`);
-          }
-          progressed = true;
-        } catch (recordError) {
-          if (recordError instanceof DriverCrash) throw recordError;
-          if (recordError instanceof ControlError && recordError.code === "panel-draining") return progressed;
-          process.stderr.write(`orca-driver: ${runId}: ${logError(error)}; recording it failed: ${logError(recordError)}\n`);
-        }
+        const next = await recordStepFailure(deps, context, runId, error);
+        if (next === "draining") return progressed;
+        if (next === "progressed") progressed = true;
       }
     }
     // Spec 2026-11-06 soft-mode loop run settlement §3.3: after the runs moved (a run just blocked at C is settled in this
@@ -1803,7 +1862,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
   const round = (): Promise<boolean> => {
     if (context.stopped || crashed !== null) return Promise.resolve(false);
     if (inFlight !== null) return inFlight;
-    const current = pass()
+    const started: Promise<boolean>[] = [];
+    const current = pass(started)
       .catch((error: unknown) => {
         if (error instanceof DriverCrash) { crashed = error.point; stopTimer(); return false; }
         if (!context.stopped) process.stderr.write(`orca-driver: round failed: ${logError(error)}\n`);
@@ -1811,7 +1871,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       })
       .finally(() => { inFlight = null; });
     inFlight = current;
-    return current;
+    // #192: the pass is what a re-entrant call joins; the caller of this round also waits for the settles it started.
+    return current.then(async (progressed) => (await Promise.all(started)).some(Boolean) || progressed);
   };
 
   const kick = (): void => {
@@ -1840,6 +1901,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
+      // #192: a settle on the lane is finished, not cut: its run is written to settled before the store can go away.
+      await Promise.all([...settles.values()]);
       // Belt and braces for the guard in startDebugCheck: anything started while the last round finished is aborted too.
       for (const check of context.debugChecks?.values() ?? []) check.controller.abort();
       abortPostMergeChecks(deps, context);
