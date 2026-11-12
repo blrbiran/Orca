@@ -16,7 +16,9 @@ import type { VersionRefresh } from "../agents/versionRefresh.js";
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
 export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote;additionalRepos?:Array<{key:string;targetRepo:string;base:string}>;handoff?:{inputDir:string;outputDir:string} }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
-export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
+/** Tester follow-up G spec §2.1: the live token ceiling ccloop stops the run at (ccloop live-ceiling spec, protocol 4 only). */
+export interface LiveCeilingWire { protocol:1;revision:number;tokens:number;cause:"group"|"pause-line"|"task-cap" }
+export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;liveCeiling?:LiveCeilingWire;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
@@ -46,6 +48,8 @@ export interface ExecutionReport {
   * candidate and no terminal whose worker is not alive -- `lost` (confirmed dead) or `undetermined`. Absent = alive or n/a.
   */
  worker?:{state:"lost"|"undetermined";reason:string};
+ /** Tester follow-up G spec §2.1: present iff ccloop stopped the run at its live ceiling (ccloop live-ceiling spec). */
+ liveCeilingStop?:{revision:number;tokens:number;cause:"group"|"pause-line"|"task-cap";observedTokens:number;phase:"plan"|"execute"|"verify";at:"mid-call"|"boundary"};
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
@@ -86,6 +90,8 @@ export interface ExecutionPort {
   inspect(input:StartEnvelope):Promise<ExecutionStatus>;
   requestHandoff(input:StartEnvelope,request:HandoffRequest):Promise<HandoffAck>;
   collect(input:StartEnvelope,afterSeq:number):Promise<ExecutionReport>;
+  /** Tester follow-up G spec §2.1: raise a running run's live ceiling (ccloop `live-ceiling`); optional, as older ports lack it. */
+  setLiveCeiling?(input:StartEnvelope,ceiling:LiveCeilingWire):Promise<{revision:number;tokens:number}>;
 }
 /** No legacy runner fallback: production is enabled only by explicit immutable options. */
 export function productionExecutionPort(options?:{binary:string;agentsTablePath:string;timeoutMs:number}):ExecutionPort {

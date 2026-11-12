@@ -134,6 +134,7 @@ export function assertNoActiveUnbounded(store:ControlStore,scope:string,groupId:
   if(groupId!==null&&row.group_id!==groupId)continue;
   if(scope!=="all"&&groupRepoIdOf(JSON.parse(String(row.gbody)))!==scope.slice(5))continue;
   const run=JSON.parse(String(row.body));
-  if(run.grant?.work?.tokens===null)throw new ControlError("active-unbounded-budget-conflict",`${run.runId}: stop and reconcile before installing a finite limit`);
+  // Tester follow-up G spec §2.1: a run of a finite group bounded by a live ceiling is bounded, so a new limit or cap may be installed.
+  if(run.grant?.work?.tokens===null&&!(run.liveCeiling!==undefined&&JSON.parse(String(row.gbody)).limit?.tokens!==null))throw new ControlError("active-unbounded-budget-conflict",`${run.runId}: stop and reconcile before installing a finite limit`);
  }
 }

@@ -9,6 +9,7 @@ import { add, componentMin, isTerminalRunState, readRun, saveRun, subtract, sync
 import { readGroup, saveGroup } from "./queries.js";
 import { bookUsageDelta, byModelSchema } from "./usageLedger.js";
 import { growForEstimateOverrun } from "./estimateOverrun.js";
+import { liveCeilingOf, syncCeilingReserve } from "./liveCeiling.js";
 const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),byModel:byModelSchema.nullable().optional()}).strict();
 /** Accounts spec §5.1: `appliedAt` (ms) stamps the usage-ledger rows this call books; callers with a clock pass it. */
 export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number=Date.now()):{applied:boolean;highWater:number} {
@@ -55,6 +56,8 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
       }
       run.highWater=next.eventSeq;
     }
+    // Tester follow-up G spec §2.1 (plan O2): booked work releases the part of the run's live ceiling it used.
+    if(liveCeilingOf(run)!==null)syncCeilingReserve(store,group,run);
     syncWebBudget(store,group,run);
     if(group.budgetVersion===Number.MAX_SAFE_INTEGER)throw new ControlError("numeric-overflow");
     group.budgetVersion=Number(BigInt(group.budgetVersion)+1n);saveGroup(store,group);saveRun(store,run);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${group.groupId}:budget:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId:group.groupId,revision:group.revision,budgetVersion:group.budgetVersion}));

@@ -54,6 +54,8 @@ else if (method === "accept" || method === "inspect") {
 }
 else if (["handoff", "collect", "read-evidence"].includes(method) && !envelopeOk(payload.input)) throw new Error("unreachable");
 else if (method === "handoff") value = { kind:"latched",requestId:payload.request.requestId };
+// Tester follow-up G spec §2.1 (ccloop live-ceiling spec): the method answers the ceiling it stored; `refuse` names a refusal.
+else if (method === "live-ceiling") { envelopeOk(payload.input); value = { revision:payload.ceiling.revision,tokens:payload.ceiling.tokens }; }
 // Labels and progress plan Task 5 (finding F3): an optional `progress` knob; absent, the answer is byte for byte what it was.
 // Reported-decisions spec 2026-10-20 §6: optional `decisions` and `debug` knobs, the same way; `collectExtra` adds
 // arbitrary top-level keys so a test can show the strict parser refuses an unknown one.

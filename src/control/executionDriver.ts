@@ -13,6 +13,7 @@ import { hasOptionalTaskPolicy, validateAllowanceCheckpoint } from "./fundedAllo
 import { topUpSum } from "./workTopUp.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
+import { liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
 import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
@@ -507,6 +508,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     const current = readDriverRun(store, runId);
     if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
     current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills };
+    noteCeilingInEnvelope(current, envelope);
     if(current.mode==="verify-saved-result"||current.recoveryOf!==undefined){const marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted")throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,envelopeHash};}
     saveDriverRun(store, current);
     return true;
@@ -605,6 +607,7 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
       ...current.drive, workspaceMode: primary.mode, targetRepo: primary.targetRepo, base: primary.base, envelopeHash, prepared: true, skills,
       dirs: preparedDirs.map(({ key, targetRepo, base, workspacePath }) => ({ key, targetRepo, base, workspacePath })),
     };
+    noteCeilingInEnvelope(current, envelope);
     saveDriverRun(store, current);
     return true;
   });
@@ -1666,6 +1669,13 @@ export function stepOf(run: DriverRun): DriveStep {
   }
 }
 
+/** Tester follow-up G spec §2.1: the ceiling frozen into the start envelope is the one ccloop holds once it accepts it. */
+function noteCeilingInEnvelope(run: DriverRun, envelope: StartEnvelope): void {
+  const ceiling = liveCeilingOf(run);
+  if (ceiling === null || envelope.liveCeiling === undefined) return;
+  (run as { liveCeiling?: unknown }).liveCeiling = { ...ceiling, deliveredRevision: Math.max(ceiling.deliveredRevision, envelope.liveCeiling.revision) };
+}
+
 /** One step for one run (spec §2.2 table). Later tasks add D, R and E here. */
 export async function advance(deps: ExecutionDriverDeps, runId: string, context: DriverContext): Promise<boolean> {
   const run = readDriverRun(deps.store, runId);
@@ -1828,6 +1838,9 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       if (error instanceof ControlError && error.code === "panel-draining") return false;
       throw error;
     }
+    // Tester follow-up G spec §2.1: a run that ended gives back the unused part of its live ceiling.
+    try { if (write(deps, () => refreshCeilingReserves(deps.store)).length > 0) progressed = true; }
+    catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return false; throw error; }
     for (const runId of visitOrder(deps.store)) {
       if (context.stopped) break;
       // #192: a run settling on the lane is the lane's until its step E answered.

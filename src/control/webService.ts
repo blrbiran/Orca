@@ -481,7 +481,9 @@ export function assertKnownConservation(store: ControlStore, group: Group, propo
     if (!remaining.success || !budgetFits(finiteCommitment(remaining.data),allocation.amount)) throw new ControlError("recovery-blocked");
     return finiteCommitment(remaining.data);
   });
-  const expected = sumAmounts([...commitments, ...estimateCommitments(store, group.groupId).map(a => a.amount)]);
+  // Tester follow-up G spec §2.1 (liveCeiling.ts): the active runs' outstanding live ceilings are a part of the reserve.
+  const ceilings = (group as { liveCeilingReserved?: number }).liveCeilingReserved ?? 0;
+  const expected = sumAmounts([...commitments, ...estimateCommitments(store, group.groupId).map(a => a.amount), { tokens: ceilings, activeMs: 0, attempts: 0, sessions: 0 }]);
   if (!same(expected, group.reserved)) throw new ControlError("recovery-blocked");
 }
 function success(context: WebCommandContext, result: CommandSuccessV1["result"], status = 200) {

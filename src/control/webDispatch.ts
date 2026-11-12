@@ -32,6 +32,8 @@ import { claimCapBlocking, gateClaim, clearSpendCapBlock, recordCapBlock, capSta
 import { noteRunWrite, recordActivity } from "./activity.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import type { OperatorNote } from "./schema.js";
+import { expectationModelApplies } from "./expectationModel.js";
+import { claimCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -425,6 +427,15 @@ export function createStartingRun(
     ? `${continuation.desiredIntentId}:attempt:${claimOrdinal}`
     : `task:${groupId}:${startRevision}:${work.taskId}:attempt:${claimOrdinal}`;
   const grant = structuredClone(recovery?.grant??allowance?.grant??work.grant);
+  // Tester follow-up G spec §2.1 (plan Part B, O2): a task run of an expectation-model group has no token grant -- ccloop
+  // neither parks it nor applies its 1.2 threshold -- and a live ceiling instead: the group slice the allowance computed,
+  // the task's pause line or a person's hard cap, whichever binds. Its outstanding part is reserved below.
+  let ceiling: { tokens: number; cause: LiveCeilingCause } | null = null;
+  if (!recovery && allowance && work.kind === "task" && expectationModelApplies(readGroup(store, groupId))) {
+    ceiling = claimCeiling(store, groupId, work, grant.work.tokens, allowance.inheritedUsage.tokens);
+    grant.work.tokens = null;
+    allowance = { ...allowance, grant: { ...allowance.grant, work: { ...allowance.grant.work, tokens: null } } };
+  }
   const runId = continuation ? continuation.pendingRunId : `run-${randomUUID()}`;
   const ownerToken = randomUUID();
   const binding = (slot: ProfileBindingV1): { profileId: string; profileHash: string } => ({ profileId: slot.profileId, profileHash: slot.profileHash });
@@ -456,6 +467,7 @@ export function createStartingRun(
       : (work as { reopenNote?: OperatorNote }).reopenNote !== undefined ? { operatorNote: (work as { reopenNote?: OperatorNote }).reopenNote } : {}),
     continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
+    ...(ceiling === null ? {} : { liveCeiling: { revision: 1, tokens: ceiling.tokens, cause: ceiling.cause, deliveredRevision: 0 } }),
   };
   recovery?.initialize(run);
   store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,1,1,?)").run(runId, groupId, work.workItemId, JSON.stringify(run));
@@ -463,6 +475,7 @@ export function createStartingRun(
     persistFundedAllowance(store,runId,groupId,work.workItemId,allowance);
     const group=readGroup(store,groupId);const renewed=(work as {fundingReleased?:boolean}).fundingReleased===true;
     group.reserved=add(group.reserved,renewed?add(finiteCommitment(grant.work),grant.handoff):{tokens:(grant.work.tokens??0)+grant.handoff.tokens,activeMs:0,attempts:0,sessions:0});
+    if(ceiling!==null)syncCeilingReserve(store,group);
     syncWebBudget(store,group,null);saveGroup(store,group);
   }
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,'work-claim',?,0)")

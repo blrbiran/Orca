@@ -1,5 +1,6 @@
 import {savedRecoverySchema} from "./savedResultProtocol.js";
 import { tokenPolicySchema } from "./tokenPolicy.js";
+import { liveCeilingOf } from "./liveCeiling.js";
 import { z } from "zod";
 import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
@@ -109,6 +110,7 @@ export function toStartEnvelope(
   // Single-call estimate spec §4.1, N1 spec §5.1: an estimate or other single-call claim is one single call, never a loop.
   if (frozen.phase === "estimate" || frozen.phase === "single-call") throw new ControlError("start-envelope-conflict", `phase:${frozen.phase}`);
   const policy=tokenPolicySchema.optional().parse((run as {tokenPolicy?:unknown}).tokenPolicy);
+  const ceiling=liveCeilingOf(run);
   const record=(run as {savedRecovery?:unknown}).savedRecovery===undefined?null:savedRecoverySchema.parse((run as {savedRecovery:unknown}).savedRecovery);
   const packageRecord=(run as {savedResultRecovery?:StartEnvelope["savedResultRecovery"]}).savedResultRecovery;
   if(record&&(!packageRecord||inputCheckpoint!==null))throw new ControlError("start-envelope-conflict","saved-result-package-required");
@@ -117,6 +119,8 @@ export function toStartEnvelope(
     protocol: record||policy?4:3,
     ...(record?{mode:"verify-saved-result" as const,savedResultRecovery:packageRecord}:{}),
     ...(policy?{tokenPolicy:policy}:{}),
+    // Tester follow-up G spec §2.1: the run's current live ceiling (liveCeiling.ts), so it is bounded from its first token.
+    ...(ceiling===null?{}:{liveCeiling:{protocol:1 as const,revision:ceiling.revision,tokens:ceiling.tokens,cause:ceiling.cause}}),
     claim,
     // The ledger's derived hash, never one recomputed here: recomputing would let a contract that
     // drifted after the freeze pass as the one the claim was made against.

@@ -73,6 +73,7 @@ import { liveNotesOf } from "../control/liveNotes.js";
 import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { expectationModelApplies } from "../control/expectationModel.js";
+import { liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
@@ -267,6 +268,9 @@ const persistedRunSchema = z.object({
   terminalClosure: terminalClosureSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
   transcripts: transcriptListingSchema.optional(),
+  // Tester follow-up G spec §2.1: a task run's live token ceiling (liveCeiling.ts), and the stop ccloop reported at it.
+  liveCeiling: liveCeilingRecordSchema.optional(),
+  liveCeilingStop: z.object({ revision: safeInteger.positive(), tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger, phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),
   // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner's accept-attempt intent and its outcome (acceptAttempt.ts
   // OperatorAcceptance). The fields the view shows are checked; the driver's own bookkeeping passes through untouched.
   operatorAcceptance: z.object({
