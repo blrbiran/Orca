@@ -138,14 +138,14 @@
   --space-1: 5px; --space-2: 10px; --space-3: 15px; --space-4: 20px; --space-5: 30px;
   --control-h: 36px; --control-h-sm: 30px;
 }
-/* lilac (#200, human 「加」): a soft lilac page -- a faint gradient through --page-image -- under white cards with a 1px
-   edge, the roundest card corners, an accent from #847aff darkened until links and labels on it pass the bar; Inter. */
+/* lilac (#200, human 「加」; #281, human 「可以」): a near-neutral page with the faintest violet tint and no page image,
+   white cards with a 1px edge, the roundest card corners; purple only on small accents (links, selection, tags), from
+   #847aff darkened until links and labels on it pass the bar; Inter. */
 :root[data-theme="lilac"] {
   color-scheme: light;
-  --bg: #f3f0fc; --bg-elevated: #ffffff; --bg-hover: #ece8fa; --card: #ffffff;
-  --well: #f8f6fe; --field: #ffffff;
-  --page-image: linear-gradient(160deg, #efeaff 0%, #f3f0fc 45%, #f7f5fd 100%);
-  --border: #e3def5; --border-strong: #b3abd6; --text: #2a2640; --text-strong: #15122a; --muted: #5b5676;
+  --bg: #f7f6f9; --bg-elevated: #ffffff; --bg-hover: #efedf3; --card: #ffffff;
+  --well: #f7f6f9; --field: #ffffff;
+  --border: #e4e2ea; --border-strong: #b5b2c0; --text: #2a2640; --text-strong: #15122a; --muted: #5b5676;
   --accent: #5a4ee0; --accent-subtle: rgba(132, 122, 255, 0.14); --accent-hover: #463bc2; --on-accent: #ffffff;
   --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #2f5bd3;
   --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
