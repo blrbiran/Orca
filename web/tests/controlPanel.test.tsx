@@ -72,15 +72,19 @@ function panelProps(over: Partial<Parameters<typeof ControlPanel>[0]> = {}): Par
 }
 
 const emptyDrafts: ControlClientState["drafts"] = {};
+// Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only a group's selected region is rendered,
+// so a criterion that reads a region's content renders the group with that region open (the route a link or Back gives).
+const at = (region: "preparation" | "runs") => ({ route: { groupId: "g", region, taskId: null } });
 
 describe("ControlPanel", () => {
   it("shows the group list, its state, and the confirmed profiles and limits", () => {
-    const html = renderToStaticMarkup(<ControlPanel {...panelProps()} />);
+    const html = renderToStaticMarkup(<ControlPanel {...panelProps(at("preparation"))} />);
     expect(html).toContain("g");
     expect(html).toContain("running");
     expect(html).toContain("soft");
     expect(html).toContain("9000000");
-    expect(html).toContain("b".repeat(64).slice(0, 12));
+    // The confirmed profile's hash is on its run's row, in the Runs region.
+    expect(renderToStaticMarkup(<ControlPanel {...panelProps(at("runs"))} />)).toContain("b".repeat(64).slice(0, 12));
   });
 
   it("offers pause and handoff stop while dispatch is live, and never an immediate kill", () => {
@@ -116,7 +120,7 @@ describe("ControlPanel", () => {
       workItems: [{ ...view.workItems[0], status: "held", currentRunId: null }],
       checkpoints: [{ checkpointId: "cp-1", taskId: "a", runId: "run-a", state: "partial", snapshotHash: "9".repeat(64), evidenceIds: ["ev-1"] }],
       runs: [{ ...view.runs[0], state: "settled-recoverable", continuable: true }], handoffRequests: [], recoveryBlockers: [] });
-    const settledHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: settled }, summary: { ...summary, groups: [settled.summary] } })} />);
+    const settledHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: settled }, summary: { ...summary, groups: [settled.summary] }, ...at("runs") })} />);
     expect(settledHtml).toContain("Continue selected tasks (1)");
     // Issue-fixes ruling (Part C flag 2): continue-task is refused under any stop intent, so the single-task button
     // appears only once the group has none.
@@ -128,7 +132,7 @@ describe("ControlPanel", () => {
     // The same settled run finished normally: it still displays settled-recoverable, but it is not continuable.
     const completed = groupView({ ...settled, workItems: [{ ...view.workItems[0], status: "completed", currentRunId: "run-a" }],
       checkpoints: [{ ...settled.checkpoints[0], state: "complete" }], runs: [{ ...settled.runs[0], continuable: false }] });
-    const completedHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: completed }, summary: { ...summary, groups: [completed.summary] } })} />);
+    const completedHtml = renderToStaticMarkup(<ControlPanel {...panelProps({ groups: { g: completed }, summary: { ...summary, groups: [completed.summary] }, ...at("runs") })} />);
     expect(completedHtml).toContain("settled-recoverable");
     expect(completedHtml).not.toContain("Continue selected tasks");
     expect(completedHtml).not.toContain("Continue task a");
@@ -154,12 +158,12 @@ describe("ControlPanel", () => {
 
   it("keeps an unsaved draft visible where its field lives", () => {
     const key = budgetFieldKey("g", { scope: "task", taskId: "b", allocation: "work", dimension: "tokens" });
-    const html = renderToStaticMarkup(<ControlPanel {...panelProps({ drafts: { [key]: "2500000" } })} />);
+    const html = renderToStaticMarkup(<ControlPanel {...panelProps({ drafts: { [key]: "2500000" }, ...at("preparation") })} />);
     expect(html).toContain(`value="2,500,000"`);
   });
 
   it("links run evidence and reports a projection refetch is needed", () => {
-    const html = renderToStaticMarkup(<ControlPanel {...panelProps({ refetchRequired: true })} />);
+    const html = renderToStaticMarkup(<ControlPanel {...panelProps({ refetchRequired: true, ...at("runs") })} />);
     // This used to assert the manifest URL inside an `href`, which pinned the dead link:
     // `/api/control/*` then answered only to a header a bare href cannot send, so no href could load it. The
     // evidence control's real behaviour is judged in web/tests/evidenceLink.test.tsx.
