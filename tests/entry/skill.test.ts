@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ZodTypeAny } from "zod";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import {
-  confirmPayloadSchema, continueTaskPayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
+  confirmPayloadSchema, continueTaskPayloadSchema, usagePauseDecidePayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
   requirementDraftAcceptPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, requirementRevisePayloadSchema, requirementSetAgentPayloadSchema, resumeFromHandoffPayloadSchema,
   addLiveNotePayloadSchema, setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
@@ -37,6 +37,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "resume-dispatch": emptyPayloadSchema, "resume-from-handoff": resumeFromHandoffPayloadSchema, "continue-task": continueTaskPayloadSchema,
   // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — the Live note route (spec Part 5) joins the table.
   "add-live-note": addLiveNotePayloadSchema,
+  "usage-pause-decide": usagePauseDecidePayloadSchema,
   "recovery-retry": recoveryRetryPayloadSchema, "retry-task": retryTaskPayloadSchema, "settle-unknown-usage": settleUnknownUsagePayloadSchema, "set-workspace-mode": setWorkspaceModePayloadSchema, "set-agent-preferences": setAgentPreferencesPayloadSchema,
   "proposal-set-agent": proposalSetAgentPayloadSchema, "requirement-open": requirementOpenPayloadSchema, "requirement-answer": requirementAnswerPayloadSchema,
   "requirement-consensus": requirementConsensusPayloadSchema, "requirement-draft-feedback": requirementDraftFeedbackPayloadSchema,
