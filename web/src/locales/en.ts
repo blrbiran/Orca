@@ -1434,6 +1434,7 @@ export const en = {
     columns: { id: "Task", title: "Title", labels: "Labels", loopPlan: "Loop plan", targetPaths: "Target paths", checks: "Checks", dependsOn: "Depends on", traces: "Traces" },
     layer: "Layer {{n}}: {{tasks}}",
     implicitEdge: "{{from}} before {{to}}: {{paths}}",
+    parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and neither writes or checks a file the other writes; send feedback to drop the edge if the later task does not need the earlier one's output.",
     handedBack: "Handed back for:",
     splitReason: {
       expand: {

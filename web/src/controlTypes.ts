@@ -305,6 +305,8 @@ export type DraftViewV1 = {
   reasons: string[];
   layers: string[][] | null;
   implicitEdges: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null;
+  /** Tester #284: declared edges code sees no reason for (a hint; only on a draft with layers). */
+  parallelCandidates?: Array<{ before: string; after: string }>;
   reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised";
   calls: RequirementCallRecordV1[];
 };

@@ -71,6 +71,12 @@ export const NO_VERIFY_ONLY_RULE = "- Do not write verify-only tasks: every task
  */
 export const NO_LOCKFILE_RULE = "When \"manifests\" shows no lockfile, omit \"setup\" if nothing needs installing, else use npm install --no-package-lock (never npm ci, which needs a lockfile).";
 /**
+ * Tester #284 (follow-up H; version stays 5, as #130/#135/#136 did): splits chained independent modules "to be safe", so
+ * a group took the longest wall-clock and re-read each predecessor's output. requirementView's parallelCandidates
+ * (splitParallel.ts) is the code-side hint for the drafts that still do.
+ */
+const PARALLEL_RULE = "- First partition the work into independent branches by deliverable and target paths; then add a `dependsOn` edge only where a task truly needs another's output (it reads or builds on files the other writes). Never chain tasks to be safe: independent tasks run in parallel.";
+/**
  * N1 spec §8.1: the fixed instruction. The two word lists come from the code that reads them. Version 2 (N1 spec §16,
  * Orca session 7753e97d): the requirement document Orca commits before the tasks run (§9.2) and Orca's own files are in
  * the repository, so a check must not assert a directory holds only certain files -- a paid O9 run failed on exactly
@@ -98,6 +104,7 @@ const SPLIT_INSTRUCTION_V5 = [
   "- Each task changes a small, coherent part of the repository and can be checked by commands.",
   `- \`targetPaths\` are paths relative to the repository root, ${PATH_SHAPES}`,
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
+  PARALLEL_RULE,
   TRACE_RULE,
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   ...PLAN_RULES,
@@ -152,6 +159,7 @@ export const SPLIT_INSTRUCTION_MULTI_V5 = [
   "- Before the tasks run, Orca commits the agreed requirement document to the primary directory at `.orca/requirements/<date>-<slug>.md`. Orca's own files (that document, and `.decisions/` when present) are in the primary directory while the tasks and their checks run. A check must not assert that a directory holds only certain files, and must not fail because Orca's files exist; prefer checks that read the delivered files.",
   "- List `writes` in the project's registered order (as `project-overview` lists the directories), one entry per directory, each directory at most once; the first entry is the task's primary directory and its `checks` must not be empty.",
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
+  PARALLEL_RULE,
   TRACE_RULE,
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   "- A task's plan rules below apply to its first `writes` entry (its primary directory).",

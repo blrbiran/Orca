@@ -52,6 +52,19 @@ async function groupOfRun(context: WriteContext, runId: string): Promise<string>
   throw new EntryRejection("run-not-found", `no group lists run ${JSON.stringify(runId)}; pass --group <group>`);
 }
 
+/**
+ * Tester #284: a draft line is compact JSON cut at 160 characters, so a draft's layers and its parallel candidates
+ * (controlViews.ts readRequirementView) are spelled out after the body; --json is the body as served.
+ */
+function requirementShow(body: unknown): string {
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }> }>;
+  const lines = drafts.flatMap((draft) => [
+    ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
+    ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file one writes is written or checked by the other; send feedback to drop the edge): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
+  ]);
+  return [text(body), ...lines].join("\n");
+}
+
 /** Spec §14 R7: the retained-result lookup needs its scope; exactly one scope flag (the global --project included). */
 async function commandScope(context: WriteContext): Promise<string> {
   const { flags, global } = context.args;
@@ -352,7 +365,8 @@ export const READ_ROWS: CommandDef[] = [
   // runs nor a clarifying group's refusal (its full view is refused; its summary is not).
   read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],
     paths: (c) => [`groups/${ids(c, "group")}/brief`] }),
-  read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`] }),
+  read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
+    format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
     paths: (c) => [`groups/${ids(c, "group")}`, `groups/${ids(c, "group")}/funding-preview`],
     // Dogfood run 3 F23: the document carries no estimates, so its lines are read from the view it is composed from (the

@@ -381,6 +381,7 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
       )}
       {draft.layers?.map((layer, index) => <p key={index}>{t("requirements.layer", { n: index + 1, tasks: layer.join(", ") })}</p>)}
       {draft.implicitEdges?.map((edge) => <p key={`${edge.from}>${edge.to}`}>{t("requirements.implicitEdge", { from: edge.from, to: edge.to, paths: [...new Set(edge.conflicts.map((c) => `${c.a} ∩ ${c.b}`))].join(", ") })}</p>)}
+      {(draft.parallelCandidates ?? []).length > 0 && <p role="note" data-parallel-candidates>{t("requirements.parallelCandidates", { pairs: draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ") })}</p>}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>

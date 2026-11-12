@@ -1274,6 +1274,7 @@ export const zh: Translation<typeof en> = {
     columns: { id: "任务", title: "标题", labels: "标签", loopPlan: "做法", targetPaths: "目标路径", checks: "检查", dependsOn: "依赖", traces: "对应标准" },
     layer: "第 {{n}} 层：{{tasks}}",
     implicitEdge: "{{from}} 先于 {{to}}：{{paths}}",
+    parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间只有 dependsOn 一条边在排先后，双方都不写、也不检查对方写的文件；如果后一个任务并不需要前一个的产物，可以发反馈去掉这条边。",
     handedBack: "退回原因：",
     splitReason: {
       expand: {

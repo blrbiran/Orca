@@ -1791,7 +1791,8 @@ export const requirementViewSchema = z.object({
   }).strict(),
   ledger: z.object({ limit: budgetAmountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean(), approximateRuns: safeInteger.nonnegative().optional() }).strict(),
   rounds: z.array(roundBodySchema),
-  drafts: z.array(draftBodySchema.omit({ plan: true })),
+  // Tester #284: optional -- only a draft with layers has it, and older fixtures carry none.
+  drafts: z.array(draftBodySchema.omit({ plan: true }).extend({ parallelCandidates: z.array(z.object({ before: nonemptyString, after: nonemptyString }).strict()).optional() })),
   document: z.string(),
   spendCapBlock: spendCapBlockSchema.nullable().optional(),
   // Clarify caps spec 2026-10-21 §3.6: code's caps for this requirement, and when the current drafting step was asked for

@@ -73,6 +73,7 @@ import { liveNotesOf } from "../control/liveNotes.js";
 import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
+import { parallelCandidates } from "../control/splitParallel.js";
 import {
   agentSelectionPreviewSchema,
   allocationViewSchema,
@@ -1511,7 +1512,9 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
     // Spec 2026-11-03 soft-mode approximate usage: how many of the group's runs count a booked floor, not a reported figure.
     ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown,
       approximateRuns: Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND json_extract(body,'$.usageApproximate') IS NOT NULL").get(groupId)!.n) },
-    rounds, drafts: drafts.map(({ plan: _plan, ...rest }) => rest), document, spendCapBlock: readSpendCapBlock(store, groupId),
+    rounds, document,
+    // Tester #284: a draft code accepted (it has layers) carries the declared edges code sees no reason for -- a hint only.
+    drafts: drafts.map(({ plan: _plan, ...rest }) => rest.output !== null && rest.layers !== null ? { ...rest, parallelCandidates: parallelCandidates(rest.output) } : rest), spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),
       // §3.3: stopped at the cap, not at an empty frontier (requirementCommands.ts applyRequirementAnswer).
