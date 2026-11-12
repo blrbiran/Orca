@@ -66,6 +66,9 @@ const OWN_LEDGER = `${JSON.stringify({ ev: "decision", id: "own-folder-decision-
 /**
  * VALID_SPLIT with both tasks independent, so both start from the document commit and each attempt adds answer.txt (a
  * dependent task would start on the first landing, find answer.txt already "42" and have no change to land).
+ *
+ * Ruling (2026-11-12, tester follow-up G): ruling §5.2.5 (#268) -- both tasks write answer.txt, so the accept orders them
+ * (exporter, then images) and images does start on the first landing; the codex wrapper below gives it its own change.
  */
 const PARALLEL_SPLIT = { ...VALID_SPLIT, tasks: VALID_SPLIT.tasks.map((task) => ({ ...task, dependsOn: [] })), notes: "Two independent tasks." };
 const LOCAL = { delivery: "local", trigger: "task", method: "merge", target: "main" } as const;
@@ -78,10 +81,16 @@ const answerAll = (runtime: ControlRuntime, roundNo: number, commandId: string) 
   return runtime.service.answerRequirement(raw(runtime, commandId, "requirement-answer", { roundNo,
     answers: result.questions.map((q) => ({ id: q.id, kind: "recommended" })), glossaryDecisions: result.glossary.map((e) => ({ id: e.id, accept: true })), adrDecisions: result.adrs.map((a) => ({ id: a.id, accept: true })) }));
 };
-/** As requirementE2E.test.ts: the plan hash the accept will archive, so the estimate's queued answer can echo it. */
+/**
+ * As requirementE2E.test.ts: the plan hash the accept will archive, so the estimate's queued answer can echo it.
+ * Ruling (2026-11-12, tester follow-up G): #268 / ruling §5.2.5 -- the accept makes each of the draft's implicit
+ * (write-set) edges a dependency of its later task, so the archived plan is the draft's plus those edges.
+ */
 const planHashOfDraft = (runtime: ControlRuntime, draftNo: number): string => {
-  const stored = readDraft(runtime.store, "g", draftNo).plan as { targetRepo: string };
-  return sha256Canonical(normalizeControlPlan({ ...schedulerControlPlanSourceOf(stored, stored.targetRepo), repoId: readRequirementGroup(runtime.store, "g").requirement.repoId, planId: `requirement-draft-${draftNo}` }));
+  const draft = readDraft(runtime.store, "g", draftNo), stored = draft.plan as { targetRepo: string };
+  const source = schedulerControlPlanSourceOf(stored, stored.targetRepo);
+  const tasks = source.tasks.map((task) => ({ ...task, dependencyTaskIds: [...task.dependencyTaskIds, ...(draft.implicitEdges ?? []).filter((edge) => edge.to === task.taskId).map((edge) => edge.from)] }));
+  return sha256Canonical(normalizeControlPlan({ ...source, tasks, repoId: readRequirementGroup(runtime.store, "g").requirement.repoId, planId: `requirement-draft-${draftNo}` }));
 };
 const bodyOf = (store: ControlStore): Record<string, unknown> => JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
 
@@ -135,9 +144,22 @@ describe.skipIf(!realBinary)("a requirement on a dir project, end to end against
       extraRepos: [{ projectKey: "notes", path: folder, kind: "dir" }] });
     vi.stubEnv("ORCA_CONTROL_DIR", join(w.root, "control"));
     // Fake codex in mode `reported` (as flowCcloopWorld.ts sets it): its execute writes answer.txt ("42") and reports DECISION.
+    // Ruling (2026-11-12, tester follow-up G): ruling §5.2.5 now runs the two tasks (both write answer.txt) one after the
+    // other, so images starts on exporter's landing, where answer.txt is already "42". A wrapper around the same fake (its
+    // argv, stdin and answer untouched) also writes images' own target src/images.ts on images' execute, so its attempt
+    // has a change to land. (Was: the fake itself, both tasks running at once from the document commit.)
     const codex = w.agentsTable.installations.codex!;
     const command = codex.command as string[];
-    codex.command = [command[0]!, command[1]!, "reported", command[3]!];
+    const wrapper = join(w.root, "images-writes-its-file.mjs");
+    writeFileSync(wrapper, [
+      'import { spawnSync } from "node:child_process";',
+      'import { readFileSync, writeFileSync } from "node:fs";',
+      'const input = process.argv.includes("--version") ? "" : readFileSync(0);',
+      'const result = spawnSync(process.execPath, process.argv.slice(2), { input, stdio: ["pipe", "inherit", "inherit"] });',
+      'if (result.status === 0 && /^Execute one isolated attempt for task images\\.$/m.test(String(input))) writeFileSync("src/images.ts", "export const images = 1;\\n");',
+      'process.exit(result.status ?? 1);',
+    ].join("\n"));
+    codex.command = [command[0]!, wrapper, command[1]!, "reported", command[3]!];
     writeFileSync(w.table, JSON.stringify(w.agentsTable), { mode: 0o600 });
     writeFileSync(`${command[3]!}.reported.json`, JSON.stringify({ decisions: [DECISION] }));
     const queue = [
@@ -184,6 +206,9 @@ describe.skipIf(!realBinary)("a requirement on a dir project, end to end against
         estimatorProfileId: "all", estimatorProfileHash: runtime.router.list()[0]!.profileHash, estimateMode: "soft" }));
       expect(created).toMatchObject({ result: { kind: "estimate-created", estimateState: "queued" } });
       expect(readArchivedPlan(runtime.store, "g").planHash).toBe(planHash);
+      // Ruling (2026-11-12, tester follow-up G): ruling §5.2.5 -- the split declared the two tasks independent, but both
+      // write answer.txt, so the accepted plan orders them (the implicit edge exporter -> images) and they run serially.
+      expect(readArchivedPlan(runtime.store, "g").plan.tasks.map((task) => [task.taskId, task.dependencyTaskIds])).toEqual([["exporter", []], ["images", ["exporter"]]]);
       // §7: no integration record, though the repo id's default is local.
       expect(Object.hasOwn(bodyOf(runtime.store), "integration")).toBe(false);
       const estimateId = (created as { result: { estimateId: string } }).result.estimateId;
@@ -222,6 +247,11 @@ describe.skipIf(!realBinary)("a requirement on a dir project, end to end against
         expect(firstParent).toContain(moved[index]);
       }
       expect(g(vault, "show", "refs/heads/orca/g:answer.txt")).toBe("42");
+      // Ruling (2026-11-12, tester follow-up G): ruling §5.2.5 -- images ran after exporter landed: its run started on the
+      // first landing, and the second landing carries its own file.
+      const exporterRun = runs.find((run) => run.task === "exporter")!, imagesRun = runs.find((run) => run.task === "images")!;
+      expect(imagesRun.body.drive.base).toBe(exporterRun.body.drive.landedCommit ?? exporterRun.body.drive.ledgerCommit);
+      expect(g(vault, "show", "refs/heads/orca/g:src/images.ts")).toBe("export const images = 1;");
       // §6.5: each landing recorded its tip in the write that recorded the move: at the second move's crash point the
       // record holds the first move's tip, and at the end the last one's; the export's document commit came before both.
       expect(moves.map((move) => move.tip).sort()).toEqual([...moved].sort());
