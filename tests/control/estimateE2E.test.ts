@@ -156,7 +156,9 @@ describe.skipIf(!realBinary)("the estimate chain against real ccloop and fake cl
         baseProposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
         operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: SUGGESTED_WORK.tokens, provenance: "model", estimateId }],
       }));
-      expect("error" in refused ? refused.error.code : refused.result.kind).toBe("estimate-advisory-in-unlimited-group");
+      // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a group imported now is an expectation-model
+      // group (spec G §11), whose refusal of model task-work tokens is named estimate-advisory-in-expectation-group (§12.1).
+      expect("error" in refused ? refused.error.code : refused.result.kind).toBe("estimate-advisory-in-expectation-group");
       const applied = runtime.service.editProposal(raw(runtime, "apply", "proposal-edit", {
         baseProposalVersion: readBudgetProposal(runtime.store, "g").proposalVersion,
         operations: [{ target: { scope: "task", taskId: "a", allocation: "handoff", dimension: "tokens" }, value: 10_000, provenance: "model", estimateId }],
