@@ -23,7 +23,8 @@ describe("an authored-budget-exhausted retry names the dimension, its numbers an
   it.each([
     ["attempts", 1, 1, 1], ["sessions", 1, 1, 1], ["tokens", 10, 10, 10], ["activeMs", 5, 5, 5],
   ] as const)("%s authored %i, used %i: named, and a top-up of %i is accepted", async (dimension, authored, used, suggested) => {
-    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", behaviour: () => "failed" }); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task budget that a retry exhausts exists only in a pre-release group (spec G §2.6).
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: null, behaviour: () => "failed" }); try {
       // A finite token limit, so the retry counts the lineage (an unlimited group credits attempts and active time back).
       const limit = readControlGroup(t.h.store, "epoch", "g").ledger.groupLimit;
       expect(code(t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, tokens: 50_000_000 } })))).toBeNull();
