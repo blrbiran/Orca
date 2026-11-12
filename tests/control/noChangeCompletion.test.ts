@@ -69,8 +69,11 @@ describe("a checked no-change task completes only by its authored declaration", 
       expect(rows[0]!.undo.how).toBe("No change made; nothing to revert");
       expect(listPendingDecisions(landed.h.store, "g")).toEqual([]);
     } finally { await landed.h.dispose(); }
-    // The same entry on a run with no declared decisive checks: the agent's claim is not the controller's proof.
-    const blocked = await driverHarness([{ taskId: "a" }], { files: () => ({}), decisions: () => [entry] }); try {
+    // The same entry on a run whose tree changed: the agent's claim is not the controller's proof.
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — spec §1.1/§10.1 measure the proof for every
+    // succeeded empty run, declared or not, so "no declaration" no longer means "no proof"; a run that changed a file
+    // still has none, and its no-change claim is still refused.
+    const blocked = await driverHarness([{ taskId: "a" }], { files: () => ({ a: "a\n" }), decisions: () => [entry] }); try {
       const runId = await blocked.claim();
       await blocked.until(blocked.driver(), () => blocked.body(runId).drive?.cleanedUp === true);
       expect(ledgerLines(blocked, runId)).toEqual([]);
