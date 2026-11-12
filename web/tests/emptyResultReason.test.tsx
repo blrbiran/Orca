@@ -21,8 +21,10 @@ describe("empty-result is explained (tester follow-up F §4)", () => {
   it("the run's reason names it and the way on, in both languages", async () => {
     const en = text(renderToStaticMarkup(<RunReason run={empty()} />));
     // mutation: drop the empty-result branch in RunReason -> no words, red
-    expect(en).toContain("The attempt finished without changing any file, so there was nothing to land and the task stays blocked. It cannot be retried or accepted in this group.");
-    expect(en).toContain("commandChecksDecideGoal");
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — §1: the empty-result advice no longer points at
+    // commandChecksDecideGoal; a provable no change completes or is judged, so empty-result is what is not one.
+    expect(en).toContain("The attempt finished without changing any file, so there was nothing to land and the task stays blocked. It is not a provable no change");
+    expect(en).not.toContain("commandChecksDecideGoal");
     expect(en).toContain("empty-result");
     await i18n.changeLanguage("zh");
     expect(text(renderToStaticMarkup(<RunReason run={empty()} />))).toContain("这次尝试跑完了，但没有改动任何文件");
