@@ -32,7 +32,10 @@ type Harness = Awaited<ReturnType<typeof driverHarness>>;
  * channel: a failed run leaves an execution-format-failure capsule, and a verification run can be interrupted.
  */
 async function world() {
-  const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", behaviour: () => "failed", stopReason: () => "provider crashed" });
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a finite task token budget, its top-up and
+  // its saved-result recovery exist only in a group created before the follow-up G release (spec G §2.6, §10.5); since
+  // new groups default to the expectation model, this world names that model (`modelVersion: null`).
+  const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: null, behaviour: () => "failed", stopReason: () => "provider crashed" });
   const port = t.fake.port as any, evidence = new Map<string, Buffer>();
   const put = (artifactId: string, value: unknown): ArtifactRef => {
     const bytes = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value)), ref = { artifactId, hash: hex(bytes) };
