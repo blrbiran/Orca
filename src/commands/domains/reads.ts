@@ -83,6 +83,25 @@ function runsMode(c: WriteContext): typeof RUNS_MODES[number] {
 const runSummary = (run: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(RUN_SUMMARY_FIELDS.filter((key) => run[key] !== undefined).map((key) => [key, run[key]]));
 
+/**
+ * Tester #272 (2): `group list --json` answered every group's whole summary (173 KB on 90 groups). `--fields` keeps the
+ * named fields of each group; a name the group summary does not define is refused with the ones it does. The schema is
+ * loaded only when --fields is given, so a plain list loads no more than before.
+ */
+async function listFields(c: WriteContext): Promise<string[] | null> {
+  const value = c.args.flags.fields;
+  if (value === undefined) return null;
+  if (!c.args.global.json) throw new EntryRejection("control-cli-argument-invalid", "--fields shapes the --json items: pass --json");
+  const names = String(value).split(",").map((name) => name.trim()).filter((name) => name !== "");
+  const { groupSummarySchema } = await import("../../control/webProtocol.js");
+  const valid = Object.keys(groupSummarySchema.shape);
+  const unknown = names.filter((name) => !valid.includes(name));
+  if (names.length === 0 || unknown.length > 0) {
+    throw new EntryRejection("control-cli-argument-invalid", `${names.length === 0 ? "--fields names no field" : `--fields: unknown field${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}`}; a group has ${valid.join(", ")}`);
+  }
+  return names;
+}
+
 const groupList = (body: unknown): string => {
   const groups = (body as Summary).groups ?? [];
   return groups.length === 0 ? "no groups" : groups.map((g) => {
@@ -306,11 +325,18 @@ export const READ_ROWS: CommandDef[] = [
       };
     } }),
   // Issue 151: every group by default (spec §4); with --project, only that project's groups.
-  read({ domain: "group", action: "list", summary: "every group (with --project, that project's): id, repository, state, revision, goal", paths: () => ["summary"],
+  read({ domain: "group", action: "list", summary: "every group (with --project, that project's): id, repository, state, revision, goal",
+    paths: async (c) => { await listFields(c); return ["summary"]; },
+    flags: [{ name: "fields", type: "string", summary: "with --json: keep only these comma-separated fields of each group (groupId is always kept), e.g. state,completion" }],
+    examples: ["orca group list", "orca group list --json --fields state,completion,counts"],
     compose: async ([summary], context) => {
-      if (context.args.global.project === undefined) return summary;
-      const { repoId } = await context.project();
-      return { ...(summary as Summary), groups: (summary as Summary).groups.filter((g) => g.repoId === repoId) };
+      const keep = await listFields(context);
+      let body = summary as Summary;
+      if (context.args.global.project !== undefined) {
+        const { repoId } = await context.project();
+        body = { ...body, groups: body.groups.filter((g) => g.repoId === repoId) };
+      }
+      return keep === null ? body : { ...body, groups: body.groups.map((g) => Object.fromEntries(Object.entries(g).filter(([key]) => key === "groupId" || keep.includes(key)))) };
     },
     format: groupList }),
   read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP],

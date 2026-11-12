@@ -4,12 +4,18 @@
 
 Every `orca group` command. Ids: a full id, a unique prefix, or (projects) a name or path.
 
-## `orca group list`
+## `orca group list [--fields <fields>]`
 
 every group (with --project, that project's): id, repository, state, revision, goal
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
+- `--fields <fields>`: with --json: keep only these comma-separated fields of each group (groupId is always kept), e.g. state,completion
+
+```
+orca group list
+orca group list --json --fields state,completion,counts
+```
 
 ## `orca group show <group> [--runs <runs>]`
 

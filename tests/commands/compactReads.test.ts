@@ -58,3 +58,42 @@ describe("group show --runs summary (#272)", () => {
     expect(w.requests.slice(before).map((r) => r.path)).not.toContain("groups/g-alpha");
   });
 });
+
+// Tester #272 (2): `group list --json` answered every group's whole summary; --fields keeps the named fields of each.
+describe("group list --fields (#272)", () => {
+  const groups = [
+    { groupId: "g-alpha", repoId: "repo-1", state: "review", commandRevision: 9, goal: "ship", completion: { done: 0, total: 1 }, counts: { running: 0, blocked: 1, done: 0, idle: 0, waiting: 0 } },
+    { groupId: "g-beta", repoId: "repo-2", state: "ready", commandRevision: 2, goal: "other" },
+  ];
+  const summary = { "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 9, resetRequired: false, groups } } };
+
+  it("keeps groupId and the named fields of each group, and the list's own fields", async () => {
+    const w = await world({}, summary);
+    const out = await cli(["group", "list", "--json", "--fields", "state, completion"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(out.json().body).toEqual({ schema: "orca-control-summary-v1", epoch: "e", changeSeq: 9, resetRequired: false,
+      groups: [{ groupId: "g-alpha", state: "review", completion: { done: 0, total: 1 } }, { groupId: "g-beta", state: "ready" }] });
+    // Without --fields the body is the panel's, verbatim.
+    expect((await cli(["group", "list", "--json"], w.dir)).json().body.groups).toEqual(groups);
+  });
+
+  it("applies after --project picks the project's groups", async () => {
+    const w = await world({}, summary);
+    const out = await cli(["group", "list", "--project", "proj", "--json", "--fields", "repoId"], w.dir);
+    expect(out.json().body.groups).toEqual([{ groupId: "g-alpha", repoId: "repo-1" }]);
+  });
+
+  it("an unknown field, an empty list, or no --json is refused before the panel is read; the refusal names the valid fields", async () => {
+    const w = await world({}, summary);
+    const before = w.requests.length;
+    const unknown = await cli(["group", "list", "--json", "--fields", "state,id,colour"], w.dir);
+    expect(unknown.code).toBe(1);
+    expect(unknown.json().body.error.code).toBe("control-cli-argument-invalid");
+    expect(unknown.json().body.error.message).toMatch(/^--fields: unknown fields id, colour; a group has groupId, repoId, state, .*completion/);
+    const empty = await cli(["group", "list", "--json", "--fields", " , "], w.dir);
+    expect(empty.json().body.error.message).toMatch(/^--fields names no field; a group has groupId/);
+    const human = await cli(["group", "list", "--fields", "state"], w.dir);
+    expect([human.code, human.stderr]).toEqual([1, "orca: control-cli-argument-invalid: --fields shapes the --json items: pass --json\n"]);
+    expect(w.requests.slice(before).map((r) => r.path)).not.toContain("summary");
+  });
+});

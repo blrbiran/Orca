@@ -65,7 +65,7 @@ any command; `orca version` should equal this skill's version.
 | I want to … | Run | Reference |
 |---|---|---|
 | see whether Orca is up and healthy | `orca status` (then `orca doctor`) | references/basics.md |
-| see the projects, groups and their state | `orca project list`, `orca project show`, `orca group list`, `orca group show <g>` | references/project.md, group.md |
+| see the projects, groups and their state | `orca project list`, `orca project show`, `orca group list` (`--json --fields state,completion` keeps only those per group), `orca group show <g>` | references/project.md, group.md |
 | turn an idea into a task plan | `orca requirement open --idea "…"`, then `requirement show / answer / consensus / accept` | references/workflow.md, requirement.md |
 | get one more clarification round, revise a round or a draft, or set the class | `orca requirement continue / revise / feedback / classify <g> …` | references/requirement.md |
 | import a plan file as a group | `orca project register-plan <path>`, then `orca group import <plan>` | references/project.md, group.md |
