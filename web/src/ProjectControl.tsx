@@ -176,6 +176,14 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
         </button>
       </div>}
       {mayChange && !editable && <p className="caveat">{t("project.fromCommandLine")}</p>}
+      {/* Handoff §4.0 item 5 (seat G1): command-line mode is fixed at launch by ruling (registry spec §4, P1), so the
+          way out is said plainly -- file mode, and a projects.json that keeps these projects and this panel's store. */}
+      {mayChange && props.answer.source === "command-line" && <details data-testid="project-file-mode-howto">
+        <summary>{t("project.fileModeHowTo")}</summary>
+        <p>{t("project.fileModeSteps", { repoId: projects.find((p) => p.controlRepoId !== null)?.controlRepoId ?? "<repo id>" })}</p>
+        <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ version: 1, controlStateDir: t("project.fileModeStore"),
+          projects: singles.map((p) => ({ id: p.projectKey, name: p.projectKey, path: p.path })) }, null, 2)}</pre>
+      </details>}
       {props.answer.fileError ? <p role="alert">{t("project.fileError", { message: props.answer.fileError })}</p> : null}
       {(props.answer.pendingRestart ?? []).length > 0 && (
         <p role="note">
