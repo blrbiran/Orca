@@ -41,7 +41,8 @@ const PINNED = {
   // Ruling: 「D1-D8其余都同意。」 (human, session 3cfc2e73, 2026-11-05, on the controller's proposals): issue #136 adds the no-verify-only rule to the single instruction; version stays 3.
   // Ruling: 2026-11-08, human 「这次批准改写所有必要的判据」: #168 changes the instruction to version 5 so document-only tasks cannot inherit unfixable repository checks; only this split-prompt hash changes.
   // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #280 adds REGRESSION_CRITERIA_RULE (repository-wide regression criteria are group acceptance's); version stays 5; only this split-prompt hash changes.
-  splitPrompt: "b3712f5d237cd6e2e9c5fbbaed5fb1bc7f8cd86aa8be17c6fc2dffd9dd34ce65",
+  // Ruling (2026-11-12, tester follow-up H): #284 adds the partition-first rule (PARALLEL_RULE) to the split instruction; version stays 5; only this split-prompt hash changes (recomputed over both #280 and #284).
+  splitPrompt: "c7917d261d9f921930838f8140e9592dd4c81604c42b44dc2001f58a73f8d90d",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
