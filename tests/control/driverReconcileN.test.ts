@@ -87,8 +87,9 @@ describe("three runs conflicting on one file (spec §5.2 N1, N2)", { timeout: 60
       expect(once!.record).toMatchObject({ otherTaskIds: [t.taskOf(first)], otherTaskId: t.taskOf(first), spawnSeq: 1, outcome: "succeeded" });
       const both = [t.taskOf(first), t.taskOf(once!.id)].sort();
       expect(twice!.record).toMatchObject({ otherTaskIds: both, otherTaskId: both[0], spawnSeq: 1, outcome: "succeeded" });
-      expect(git(t.repo, "log", "-1", "--format=%s", once!.landed)).toBe(`orca: land ${once!.id} (reconciled with ${t.taskOf(first)})`);
-      expect(git(t.repo, "log", "-1", "--format=%s", twice!.landed)).toBe(`orca: land ${twice!.id} (reconciled with ${both.join(", ")})`);
+      // Ruling (2026-11-12, tester follow-up H): #277 -- a landing's subject is the task's goal ("ship" here), its run id an Orca-Run trailer.
+      expect(git(t.repo, "log", "-1", "--format=%s", once!.landed)).toBe(`ship (reconciled with ${t.taskOf(first)})`);
+      expect(git(t.repo, "log", "-1", "--format=%s", twice!.landed)).toBe(`ship (reconciled with ${both.join(", ")})`);
       // Each task landed exactly once: no moved-tip reset re-landed anything (N2).
       expect(git(t.repo, "rev-list", "--first-parent", "--count", "main..refs/heads/orca/g")).toBe("3");
       expect(git(t.repo, "show", "refs/heads/orca/g:shared.txt")).toBe("a\nb\nd");
