@@ -102,7 +102,9 @@ describe("web control acceptance over a real panel (task 10 step 1)", () => {
       commandId: "accept-edit-work", expectedRevision: await revision(panel),
       payload: { baseProposalVersion: estimated.proposal.proposalVersion, operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: ESTIMATE_WORK.tokens, provenance: "model", estimateId: estimated.estimates[0].estimateId }] },
     });
-    expect([workRefused.status, (workRefused.body as { error?: { code?: string } }).error?.code]).toEqual([422, "estimate-advisory-in-unlimited-group"]);
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a group imported now is an expectation-model group (spec G §11), whose
+    // refusal of model task-work tokens is named estimate-advisory-in-expectation-group (spec G §12.1); the refusal is unchanged.
+    expect([workRefused.status, (workRefused.body as { error?: { code?: string } }).error?.code]).toEqual([422, "estimate-advisory-in-expectation-group"]);
     const edited = await command(panel, `/api/control/groups/${GROUP}/proposal/edit`, {
       commandId: "accept-edit", expectedRevision: await revision(panel),
       payload: { baseProposalVersion: estimated.proposal.proposalVersion, operations: [{ target: { scope: "task", taskId: "a", allocation: "handoff", dimension: "tokens" }, value: ESTIMATE_HANDOFF.tokens, provenance: "model", estimateId: estimated.estimates[0].estimateId }] },
