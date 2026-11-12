@@ -61,10 +61,10 @@ export const META_ROWS: CommandDef[] = [
     examples: ["orca logout"], format: () => "",
   },
   {
-    domain: "help", action: null, summary: "this list, or one domain's or one command's help",
+    domain: "help", action: null, summary: "this list, or one domain's or one command's help (with --json: the same as data)",
     positionals: [{ name: "topic", summary: "a domain, or a domain and an action", required: false, variadic: true }],
     flags: [], access: "panel-local",
     mapsTo: { kind: "local", load: async () => (await import("../help.js")).runHelp },
-    examples: ["orca help", "orca help group", "orca help group start"], format: () => "",
+    examples: ["orca help", "orca help group", "orca help group start", "orca help group show --json"], format: () => "",
   },
 ];

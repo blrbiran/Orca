@@ -30,6 +30,33 @@ describe("orca help (spec §4, §5)", () => {
     expect(stderr).toContain("did you mean orca help dev?");
   });
 
+  // Tester #272 (5)/(6): an agent parsed ~28 KB of help text to find a command's flags; --json gives the same rows as data.
+  it("orca help --json lists the rows the text lists, with their positionals and flags, and the global flags", async () => {
+    const top = await captureStreams(() => main(["help", "--json"]));
+    expect(top.result).toBe(0);
+    const body = (JSON.parse(top.stdout) as { schema: string; status: number; body: { schema: string; commands: Array<Record<string, any>>; globalFlags: Array<{ name: string }> } });
+    expect([body.schema, body.status, body.body.schema]).toEqual(["orca-cli-response-v1", 200, "orca-help-v1"]);
+    const names = body.body.commands.map((c) => c.command);
+    expect(names).toContain("group show");
+    expect(names).not.toContain("dev gate");
+    expect(body.body.globalFlags.map((f) => f.name)).toContain("json");
+    expect(body.body.commands.find((c) => c.command === "group show")).toMatchObject({
+      usage: "orca group show <group> [--runs <runs>]", access: "open",
+      positionals: [{ name: "group", required: true }], flags: [{ name: "runs", type: "string", required: false }],
+    });
+    const one = JSON.parse((await captureStreams(() => main(["help", "dev", "gate", "--json"]))).stdout) as { body: { commands: Array<{ command: string; exitCodes?: unknown }> } };
+    expect(one.body.commands.map((c) => c.command)).toEqual(["dev gate"]);
+    expect(one.body.commands[0]!.exitCodes).toBeDefined();
+    const domain = JSON.parse((await captureStreams(() => main(["help", "dev", "--json"]))).stdout) as { body: { commands: Array<{ command: string }> } };
+    expect(domain.body.commands.length).toBeGreaterThan(1);
+    expect(domain.body.commands.every((c) => c.command.startsWith("dev "))).toBe(true);
+    const unknown = await captureStreams(() => main(["help", "dvv", "--json"]));
+    expect(unknown.result).toBe(1);
+    expect(JSON.parse(unknown.stdout).body.error.message).toContain("did you mean orca help dev?");
+    // Without --json the text is unchanged.
+    expect((await captureStreams(() => main(["help"]))).stdout).toBe(renderHelp([]));
+  });
+
   it("orca help and orca --help print to stdout and exit 0", async () => {
     for (const argv of [["help"], ["--help"], ["dev", "gate", "--help"]]) {
       const { result, stdout } = await captureStreams(() => main(argv));

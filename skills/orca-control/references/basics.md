@@ -69,7 +69,7 @@ orca logout
 
 ## `orca help [<topic>...]`
 
-this list, or one domain's or one command's help
+this list, or one domain's or one command's help (with --json: the same as data)
 
 - What it does: runs locally.
 - Who may: anyone; runs here, needs no panel.
@@ -79,4 +79,5 @@ this list, or one domain's or one command's help
 orca help
 orca help group
 orca help group start
+orca help group show --json
 ```

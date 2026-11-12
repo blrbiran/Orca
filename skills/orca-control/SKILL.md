@@ -12,7 +12,7 @@ with its budget and history; a **task** is one planned unit of work; a **run** i
 (some model calls, some effects outside Orca) run on a folder. A **panel** (a local service) owns all of it; you talk
 to it with `orca <domain> <action> [ids] [--flags]` (in this checkout: `node_modules/.bin/tsx src/cli.ts`), or with the
 MCP tool `orca`, whose `args` are the same words (`dev` is refused there). `orca help [<domain> [<action>]]` prints
-any command; `orca version` should equal this skill's version.
+any command (with `--json`: as data, each command's positionals and flags); `orca version` should equal this skill's version.
 
 ## Projects
 

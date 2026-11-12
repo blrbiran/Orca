@@ -37,7 +37,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca help`
 
-- `orca help [<topic>...]` — this list, or one domain's or one command's help
+- `orca help [<topic>...]` — this list, or one domain's or one command's help (with --json: the same as data)
 
 ### `orca project`
 

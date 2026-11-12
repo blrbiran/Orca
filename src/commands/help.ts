@@ -71,8 +71,30 @@ export function renderHelp(topic: readonly string[], registry: readonly CommandD
   throw new EntryRejection("control-cli-argument-invalid", `no help for ${JSON.stringify(wanted)}${nearest ? `; did you mean orca help ${nearest.name}?` : ""}`);
 }
 
+const flagJson = (f: FlagDef) => ({ name: f.name, type: f.type, required: f.required === true, ...(f.repeatable ? { repeatable: true } : {}), ...(f.humanOnly ? { humanOnly: true } : {}), summary: f.summary });
+const commandJson = (def: CommandDef) => ({
+  command: commandPath(def), usage: usageLine(def), summary: def.summary, access: def.access, ...(def.hidden ? { hidden: true } : {}),
+  positionals: def.positionals.map((p) => ({ name: p.name, required: p.required, ...(p.variadic ? { variadic: true } : {}), summary: p.summary })),
+  flags: def.flags.map(flagJson), ...(def.exitCodes === undefined ? {} : { exitCodes: def.exitCodes }), examples: def.examples,
+});
+
+/**
+ * Tester #272 (5)/(6): the help as data, so an agent need not parse text. The same rows the text shows (the top level
+ * leaves hidden domains out; `help <domain>` and `help <domain> <action>` select as the text does), plus the global flags.
+ */
+export function helpJson(topic: readonly string[], registry: readonly CommandDef[] = REGISTRY): unknown {
+  renderHelp(topic, registry); // the same unknown-topic refusal as the text
+  const action = topic.slice(1).join(" ");
+  const exact = registry.find((def) => def.domain === topic[0] && (def.action ?? "") === action);
+  const rows = topic.length === 0 ? registry.filter((def) => !def.hidden)
+    : exact !== undefined && (topic.length > 1 || exact.action === null) ? [exact]
+    : registry.filter((def) => def.domain === topic[0]);
+  return { schema: "orca-help-v1", commands: rows.map(commandJson), globalFlags: GLOBAL_FLAGS.map(flagJson) };
+}
+
 export async function runHelp(args: ParsedArgs, io: CommandIo): Promise<number> {
-  const topic = args.positionals.topic;
-  io.stdout(renderHelp(Array.isArray(topic) ? topic : typeof topic === "string" ? [topic] : []));
+  const raw = args.positionals.topic;
+  const topic = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  io.stdout(args.global.json ? `${JSON.stringify({ schema: "orca-cli-response-v1", status: 200, body: helpJson(topic) })}\n` : renderHelp(topic));
   return 0;
 }
