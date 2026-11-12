@@ -12,8 +12,7 @@ with its budget and history; a **task** is one planned unit of work; a **run** i
 (some model calls, some effects outside Orca) run on a folder. A **panel** (a local service) owns all of it; you talk
 to it with `orca <domain> <action> [ids] [--flags]` (in this checkout: `node_modules/.bin/tsx src/cli.ts`), or with the
 MCP tool `orca`, whose `args` are the same words (`dev` is refused there). `orca help [<domain> [<action>]]` prints
-any command (with `--json`: as data, each command's positionals and flags; ask for one domain or command, the whole
-list is several times the size of its text); `orca version` should equal this skill's version.
+any command (`--json`: as data; ask for one domain, the whole list is large); `orca version` should equal this skill's version.
 
 ## Projects
 
@@ -36,9 +35,7 @@ list is several times the size of its text); `orca version` should equal this sk
    Read the group (or the flow run) again and act on what it shows.
 3. **Long work is polled with `group brief`.** After `group start`, `task continue`, `flow start` or `flow rerun`, poll
    `orca group brief <g>` / `orca flow show <r>` every 30–60 s: state, completion, counts and blockers, not the full
-   view. A confirmed group starts on its own when a slot is free; `group start` is for `confirm --hold`. When you need
-   which task runs and where it stands, `orca group show <g> --runs summary` prints one compact entry per run instead of
-   each run's whole entry.
+   view. A confirmed group starts on its own when a slot is free; `group start` is for `confirm --hold`.
 4. **Pins are filled for you.** Each write reads the current revision, hashes and versions itself, in the same
    invocation, and sends them. When your action rests on something you read *earlier* (not just now), pass
    `--if-revision <n>` with the revision from that read: a stale one answers `revision-conflict`, and then you read
@@ -66,8 +63,8 @@ list is several times the size of its text); `orca version` should equal this sk
 | I want to … | Run | Reference |
 |---|---|---|
 | see whether Orca is up and healthy | `orca status` (then `orca doctor`) | references/basics.md |
-| see the projects, groups and their state | `orca project list`, `orca project show`, `orca group list` (`--json --fields state,completion` keeps only those per group), `orca group show <g>` | references/project.md, group.md |
-| turn an idea into a task plan | `orca requirement open --idea "…"`, then `requirement show / answer / consensus / accept` | references/workflow.md, requirement.md |
+| see the projects, groups and their state | `orca project list`, `orca project show`, `orca group list` (`--json --fields state,completion` keeps only those per group), `orca group show <g>` (`--runs summary`: one compact entry per run) | references/project.md, group.md |
+| turn an idea into a task plan | `orca requirement open --idea "…"`, then `requirement show / answer / consensus / accept` (`answer --finish` replaces the consensus) | references/workflow.md, requirement.md |
 | get one more clarification round, revise a round or a draft, or set the class | `orca requirement continue / revise / feedback / classify <g> …` | references/requirement.md |
 | import a plan file as a group | `orca project register-plan <path>`, then `orca group import <plan>` | references/project.md, group.md |
 | review or edit the proposal (budgets, agents, tasks) | `orca proposal show <g>`, `proposal set-budget / set-agent / replace` | references/proposal.md |
