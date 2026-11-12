@@ -107,7 +107,9 @@ describe("A2 injects the frozen skill set (C5, C6)", { timeout: 60_000 }, () => 
     expect(stepA1(t.deps, runId)).toBe(true);
     expect(await stepA2(t.deps, runId)).toBe(true);
     expect(t.body(runId).drive).toMatchObject({ prepared: true, skills: null });
-    expect(Object.keys(envelopeOf(t, runId).work).sort()).toEqual(["base", "contract", "kind", "sourceDir", "targetRepo"]);
+    // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — A2 now sends every run's handoff directories
+    // (spec Part 4, §10.2, §10.5), so `handoff` joins the keys; still no skill key without skills.
+    expect(Object.keys(envelopeOf(t, runId).work).sort()).toEqual(["base", "contract", "handoff", "kind", "sourceDir", "targetRepo"]);
     expect(existsSync(skillsDirOf(t, runId))).toBe(false);
     expect(fake.calls()).toEqual([]);
   });
