@@ -265,12 +265,11 @@ function success(context: WebCommandContext, groupId: string, estimateId: string
 }
 
 /**
- * Tester follow-up G Part B, O7 (2026-11-12): the model a group is created under when the caller names none. Held at null
- * (no marker: today's rules) on this branch: flipping it to MODEL_VERSION_G turned 77 existing criteria in 30 files red
- * (measured; the seat's report lists them), which pin what a group created before the release does and need the
- * controller's decision. Part A's unconditional stamp makes the same flip when the branches are stacked.
+ * Tester follow-up G Part B, O7 (2026-11-12; flipped in follow-up H): the model a group is created under when the caller
+ * names none -- follow-up G, as Part A stamps it. `null` (in-process only) remains for a group as one created before the
+ * release.
  */
-export const DEFAULT_MODEL_VERSION: typeof MODEL_VERSION_G | null = null;
+export const DEFAULT_MODEL_VERSION: typeof MODEL_VERSION_G | null = MODEL_VERSION_G;
 
 export interface ImportedPlanWrite {
   groupId: string; repoId: string; planId: string; plan: ControlPlanV1; actorId: string;
