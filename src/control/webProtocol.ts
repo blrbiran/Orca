@@ -2164,6 +2164,30 @@ const groupIntegrationViewSchema = z
   })
   .strict();
 
+// Tester follow-up G Part 4.7: one run's stored handoff as the group detail lists it (taskHandoffs.ts records).
+const handoffFileStateSchema = z.object({
+  state: z.enum(["stored", "missing", "invalid"]),
+  reason: z.enum(["empty", "too-large", "not-utf8", "too-many-lines", "not-a-file", "notes-only"]).nullable(),
+  bytes: safeInteger.nullable(),
+}).strict();
+export const taskHandoffViewSchema = z.object({
+  taskId: idSchema, runId: idSchema, outcome: nonemptyString, handoff: handoffFileStateSchema, summary: handoffFileStateSchema,
+  summaryText: z.string().nullable(), recordedAt: safeInteger, notesMerged: safeInteger,
+}).strict();
+// Tester follow-up G Part 5.1 / 5.2 / 5.5: a Live note and where it is.
+export const liveNoteViewSchema = z.object({
+  noteId: idSchema, taskId: idSchema, text: z.string().min(1), at: safeInteger, by: nonemptyString,
+  state: z.enum(["queued", "delivered", "undelivered"]),
+  delivered: z.object({ runId: idSchema, phase: z.enum(["plan", "execute", "verify"]), attempt: positiveSafeInteger, at: nonemptyString }).strict().nullable(),
+}).strict();
+// GET /api/control/groups/:groupId/handoffs/:taskId/:runId -- one run's stored handoff and summary.
+export const taskHandoffContentSchema = z.object({
+  schema: z.literal("orca-task-handoff-v1"), groupId: idSchema, taskId: idSchema, runId: idSchema,
+  record: taskHandoffViewSchema, handoff: z.string().nullable(), summary: z.string().nullable(),
+}).strict();
+export type TaskHandoffViewV1 = z.infer<typeof taskHandoffViewSchema>;
+export type LiveNoteViewV1 = z.infer<typeof liveNoteViewSchema>;
+export type TaskHandoffContentV1 = z.infer<typeof taskHandoffContentSchema>;
 export const groupViewSchema = z
   .object({
     schema: z.literal("orca-control-group-v1"),
@@ -2230,6 +2254,10 @@ export const groupViewSchema = z
     // error code it was refused with under the current proposal version. Optional on the wire (an absent value is "not
     // eligible": an older server never auto-confirms); the server always gives it.
     autoConfirm: z.object({ eligible: z.boolean(), refusedCode: nonemptyString.nullable() }).strict().optional(),
+    // Tester follow-up G Parts 4.7, 5: every run's handoff (by task, then oldest first) and the group's Live notes (send
+    // order); each present only when non-empty, so a group with neither has the view it had.
+    handoffs: z.array(taskHandoffViewSchema).min(1).optional(),
+    liveNotes: z.array(liveNoteViewSchema).min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

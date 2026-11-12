@@ -69,6 +69,9 @@ import { archivedMarkOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
 import { workBranchRef } from "../control/workspace.js";
 import { orchestrationSummary } from "../control/orchestration.js";
+import { liveNotesOf } from "../control/liveNotes.js";
+import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
+import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import {
   agentSelectionPreviewSchema,
@@ -1401,6 +1404,9 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     ...integrationView(body),
     // Tester round 2 spec §7.3: one indexed read of the current version's automatic-confirm row.
     autoConfirm: autoConfirmView(store, body as unknown as Record<string, unknown>, proposal.proposalVersion),
+    // Tester follow-up G Parts 4.7, 5: each key only when non-empty, so every other group's view is unchanged.
+    ...handoffsView(store, groupId),
+    ...liveNotesView(body),
   };
   view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
   deriveExpectations(view, readSnapshot);
@@ -1706,4 +1712,26 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
   const approximateRefusal: unknown = auto !== undefined && Number(auto.original_status) >= 400 ? JSON.parse(String(auto.body_json))?.error?.code : undefined;
   return { unknownUsageSettlement: { generation: run.generation, highWater: run.highWater, remaining: run.remaining, allowed: refusalReason === null, refusalReason, acknowledge: settlementAcknowledgeFor(run),
     ...(run.usageSettlement === undefined ? {} : { settlement: run.usageSettlement }), ...(typeof approximateRefusal === "string" && approximateRefusal !== "" ? { approximateRefusal } : {}), ...observedFloor } };
+}
+
+/** Tester follow-up G Part 4.7: one stored record as the group view lists it (the summary inline, the handoff on request). */
+export function taskHandoffView(stateDir: string, record: TaskHandoffRecord): TaskHandoffViewV1 {
+  const stored = readStoredHandoff(stateDir, record.groupId, record.taskId, record.runId);
+  return {
+    taskId: record.taskId, runId: record.runId, outcome: record.outcome, handoff: record.handoff, summary: record.summary,
+    summaryText: stored?.summary ?? null, recordedAt: record.recordedAt, notesMerged: record.notesMerged.length,
+  };
+}
+
+function handoffsView(store: ControlStore, groupId: string): { handoffs?: TaskHandoffViewV1[] } {
+  const records = readHandoffRecords(store.stateDir, groupId);
+  if (records.length === 0) return {};
+  const byTask = [...records].sort((left, right) => (left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0));
+  return { handoffs: byTask.map((record) => taskHandoffView(store.stateDir, record)) };
+}
+
+function liveNotesView(body: unknown): { liveNotes?: LiveNoteViewV1[] } {
+  const notes = liveNotesOf(body);
+  if (notes.length === 0) return {};
+  return { liveNotes: notes.map((note) => ({ noteId: note.noteId, taskId: note.taskId, text: note.text, at: note.at, by: note.by, state: note.state, delivered: note.delivered ?? null })) };
 }

@@ -2265,6 +2265,7 @@ export const zhErrors: Record<string, string> = {
   "group-acceptance-person-required": "豁免失败的组验收需要由所有者来做。",
   "live-note-task-finished": "任务 {{detail}} 已结束，备注无法再送达。",
   "live-note-queue-full": "任务 {{detail}} 已有 16 条备注在等待，请等它们送达后再发。",
+  "handoff-not-found": "这次运行没有留下交接记录。",
   "control-capability-unsupported": "所需能力不受支持：{{message}}",
   "control-estimator-unconfigured": "面板没有配置估算 profile。",
   "control-evidence-unavailable": "证据不可用。",

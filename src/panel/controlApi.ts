@@ -31,7 +31,7 @@ import { idSchema } from "../control/schema.js";
 import { debugGroupIdFor, debugGroupIds } from "../control/debugGroup.js";
 import { orchestrationRevision, slotUse } from "../control/orchestration.js";
 import { installationRests } from "../control/quotaRest.js";
-import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
+import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultEligibilityViewSchema, agentModelsViewSchema, agentVersionRefreshSchema, agentPreferencesViewSchema, agentsViewSchema, recoveryRetryPayloadSchema, usageViewSchema, commandEnvelopeSchema, controlConfigSchema, rawAuthorityCommandSchema, repositoryIntegrationSchema, repositoryWorkspaceSchema, taskHandoffContentSchema, type CommandTargetV1, type CommandVerbV1, type RawAuthorityCommandV1 } from "../control/webProtocol.js";
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { groupRepoIdOf } from "../control/usageLedger.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
@@ -47,7 +47,8 @@ import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
-import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview } from "./controlViews.js";
+import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, taskHandoffView } from "./controlViews.js";
+import { readStoredHandoff } from "../control/taskHandoffs.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -305,6 +306,20 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       }
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
     }
+  });
+
+  // Tester follow-up G Part 4.7: one run's stored handoff and summary (the group view lists the records). Here, so the socket
+  // (agents, `orca task handoff --run`) reads it too. Ids are parsed before they name a file.
+  app.get("/api/control/groups/:groupId/handoffs/:taskId/:runId", (req, res) => {
+    const groupId = String(req.params.groupId);
+    try {
+      const ids = [groupId, String(req.params.taskId), String(req.params.runId)].map((id) => idSchema.safeParse(id));
+      if (!ids.every((id) => id.success)) { sendControlError(res, 404, "handoff-not-found", "No such handoff."); return; }
+      const [taskId, runId] = [String(req.params.taskId), String(req.params.runId)];
+      const stored = readStoredHandoff(deps.store.stateDir, groupId, taskId, runId);
+      if (stored === null) { sendControlError(res, 404, "handoff-not-found", "No such handoff."); return; }
+      res.json(taskHandoffContentSchema.parse({ schema: "orca-task-handoff-v1", groupId, taskId, runId, record: taskHandoffView(deps.store.stateDir, stored.record), handoff: stored.handoff, summary: stored.summary }));
+    } catch (error) { sendMappedControlError(res, error, readErrorContext(deps.store, groupId)); }
   });
 
   // Control run decisions plan Task 8: the group's decisions, read from refs. Here, so the socket (agents) reads it too.

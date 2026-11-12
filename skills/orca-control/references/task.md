@@ -13,6 +13,16 @@ one task of a group and its runs
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 
+## `orca task handoff <group> <task> [--run <run>]`
+
+a task's handoffs: every run's version and summary, or one run's handoff and summary with --run
+
+- What it does: reads from the panel (no write).
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<task>`: a task id or a unique prefix
+- `--run <run>`: the run whose handoff to print
+
 ## `orca task retry <group> <task> [--agent <agent>] [--allow-observed-paths] [--work <work>]`
 
 start again a task whose current run failed (the run read now is the one retried), optionally on another installation

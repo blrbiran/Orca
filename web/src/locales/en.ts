@@ -2369,6 +2369,7 @@ export const enErrors: Record<string, string> = {
   "group-acceptance-person-required": "Waiving a failed group acceptance is done by an owner.",
   "live-note-task-finished": "Task {{detail}} has finished; a note can no longer reach it.",
   "live-note-queue-full": "Task {{detail}} already has 16 notes waiting; wait until they are delivered.",
+  "handoff-not-found": "That run left no handoff record.",
   "control-capability-unsupported": "A required capability is not supported: {{detail}}",
   "control-estimator-unconfigured": "The panel has no estimator profile configured. Restart it with an estimator profile to run estimates.",
   "control-evidence-unavailable": "Evidence is not available.",

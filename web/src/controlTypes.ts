@@ -562,7 +562,18 @@ export type GroupViewV1 = {
   activity?: ActivityEntryV1[];
   /** Tester round 2 §7.3: whether Orca confirms this group on its own; absent reads as not eligible (an older server). */
   autoConfirm?: { eligible: boolean; refusedCode: string | null };
+  /** Tester follow-up G Part 4.7: every run's stored handoff, by task then oldest first; absent when there is none. */
+  handoffs?: TaskHandoffViewV1[];
+  /** Tester follow-up G Part 5: the group's Live notes in send order; absent when none was sent. */
+  liveNotes?: LiveNoteViewV1[];
 };
+
+/** Tester follow-up G Part 4: a stored file's state (src/control/taskHandoffs.ts). */
+export type HandoffFileStateV1 = { state: "stored" | "missing" | "invalid"; reason: "empty" | "too-large" | "not-utf8" | "too-many-lines" | "not-a-file" | "notes-only" | null; bytes: number | null };
+export type TaskHandoffViewV1 = { taskId: string; runId: string; outcome: string; handoff: HandoffFileStateV1; summary: HandoffFileStateV1; summaryText: string | null; recordedAt: number; notesMerged: number };
+export type LiveNoteViewV1 = { noteId: string; taskId: string; text: string; at: number; by: string; state: "queued" | "delivered" | "undelivered"; delivered: { runId: string; phase: "plan" | "execute" | "verify"; attempt: number; at: string } | null };
+/** GET /api/control/groups/:groupId/handoffs/:taskId/:runId. */
+export type TaskHandoffContentV1 = { schema: "orca-task-handoff-v1"; groupId: string; taskId: string; runId: string; record: TaskHandoffViewV1; handoff: string | null; summary: string | null };
 
 export type SpendPeriodV1 = "total" | "week" | "month";
 /** Accounts spec §6.3.1: `scope` is `all` or `repo:<repoId>`; projected on a group view, never a command outcome. */

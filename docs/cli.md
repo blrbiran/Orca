@@ -106,6 +106,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca task`
 
 - `orca task show <group> <task>` — one task of a group and its runs
+- `orca task handoff <group> <task> [--run <run>]` — a task's handoffs: every run's version and summary, or one run's handoff and summary with --run
 - `orca task retry <group> <task> [--agent <agent>] [--allow-observed-paths] [--work <work>]` — start again a task whose current run failed (the run read now is the one retried), optionally on another installation
 - `orca task continue <group> <task> [--note <note>] [--note-scope <note-scope>]` — continue a task's current run from its newest complete checkpoint; --note tells its agent something
 - `orca task note <group> <task> --text <text>` — add a note to a task's agent, delivered at its next step (plan, execute, verify, next attempt or continuation)

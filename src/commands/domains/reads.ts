@@ -375,6 +375,23 @@ export const READ_ROWS: CommandDef[] = [
       const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current)];
       return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } }),
+  // Tester follow-up G Part 4.7: a task's handoffs -- every run's version, or one run's summary and handoff with --run.
+  read({ domain: "task", action: "handoff", summary: "a task's handoffs: every run's version and summary, or one run's handoff and summary with --run", positionals: [GROUP, TASK],
+    flags: [{ name: "run", type: "string", summary: "the run whose handoff to print" }],
+    paths: (c) => typeof c.args.flags.run === "string" ? [`groups/${ids(c, "group")}/handoffs/${ids(c, "task")}/${c.args.flags.run}`] : [`groups/${ids(c, "group")}`],
+    compose: ([body], c) => {
+      if (typeof c.args.flags.run === "string") return body;
+      const handoffs = ((body as { handoffs?: Array<{ taskId: string }> }).handoffs ?? []).filter((entry) => entry.taskId === ids(c, "task"));
+      return { schema: "orca-task-handoffs-v1", groupId: ids(c, "group"), taskId: ids(c, "task"), handoffs };
+    },
+    format: (body) => {
+      const b = body as { schema?: string; handoffs?: Array<{ runId: string; outcome: string; handoff: { state: string; reason: string | null }; summary: { state: string; reason: string | null }; summaryText: string | null }>; handoff?: string | null; summary?: string | null };
+      if (b.schema === "orca-task-handoff-v1") return ["summary:", b.summary ?? "(none)", "", "handoff:", b.handoff ?? "(none)"].join("\n");
+      if ((b.handoffs ?? []).length === 0) return "no handoffs";
+      const state = (file: { state: string; reason: string | null }): string => file.reason === null ? file.state : `${file.state} (${file.reason})`;
+      return (b.handoffs ?? []).map((entry) => [`run ${entry.runId} (${entry.outcome}): handoff ${state(entry.handoff)}, summary ${state(entry.summary)}`,
+        ...(entry.summaryText === null ? [] : entry.summaryText.replace(/\n$/, "").split("\n").map((line) => `  ${line}`))].join("\n")).join("\n");
+    } }),
   read({ domain: "run", action: "show", summary: "one run: its entry in the group view, the newest 10 activity rows, the evidence summary",
     positionals: [RUN], flags: [{ name: "group", type: "string", summary: "the run's group (default: found from the groups the summary lists)" }],
     paths: async (c) => { const groupId = await groupOfRun(c, ids(c, "run")); return [`groups/${groupId}`, `runs/${ids(c, "run")}/activity`, `runs/${ids(c, "run")}/evidence`]; },

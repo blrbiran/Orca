@@ -192,6 +192,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `handoff-budget-unavailable` | 422 |
 | `handoff-grant-insufficient` | 422 |
 | `handoff-identity-conflict` | 409 |
+| `handoff-not-found` | 404 |
 | `handoff-parent-invalid` | 422 |
 | `handoff-request-conflict` | 409 |
 | `handoff-work-not-found` | 404 |

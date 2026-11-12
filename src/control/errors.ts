@@ -252,6 +252,8 @@ export const durableCommandErrorStatuses = {
   // Tester follow-up G Part 5: a note for a done task (the box is disabled), or a 17th queued note for one task.
   "live-note-task-finished": 409,
   "live-note-queue-full": 409,
+  // Tester follow-up G Part 4.7: GET .../handoffs/:taskId/:runId names no stored record.
+  "handoff-not-found": 404,
   "start-contract-conflict": 409,
   "start-envelope-conflict": 409,
   "start-state-conflict": 409,
