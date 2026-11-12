@@ -155,6 +155,9 @@ function createFixturePort(snapshot:ExecutionProfileSnapshotV1):ExecutionPort {
  return {
   resolveAgent:async partial=>({selection:{agent:"codex",model:"fixture-model",contextWindow:"agent-default",...partial},configHash:sha256Canonical({}),timeoutMs:120_000,killGraceMs:5000,capabilities:snapshot.profile.capabilities,singleCallExecution:"v1"}),
   listAgents:async()=>({installations:[{id:"codex",kind:"codex",defaults:{model:"fixture-model",contextWindow:"agent-default"},contextOptions:["agent-default"],version:"0.0.0-fixture"}]}),
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a new group is an expectation-model group, which confirm admits only on a ccloop
+  // that speaks the optional token policy (as the pinned one does); this synthetic ccloop says it.
+  readFeatures:async()=>({protocol:1 as const,tokenPolicy:"optional-v1" as const}),
   accept:async()=>({kind:"unknown"}), inspect:async()=>({kind:"unknown"}), collect:async()=>({events:[],candidate:null,terminal:null}),readEvidence:async()=>Buffer.alloc(0),requestHandoff:async(_e,request)=>({kind:"unknown",requestId:request.requestId})
  };
 }
