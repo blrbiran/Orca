@@ -40,6 +40,47 @@ describe("layoutDependencies (spec D1)", () => {
   });
 });
 
+// #232 residual: inside a layer tasks were ordered by id alone, so two edges between the same pair of layers could cross
+// although swapping two tasks would uncross them. A downward barycenter pass (mean row of a task's dependencies, ties by
+// id) orders every layer after the first.
+describe("ordering a layer to cross fewer edges (#232)", () => {
+  /** Pairs of edges between the same two layers that cross, by the rows the layout gives their ends. */
+  const crossings = (layout: ReturnType<typeof layoutDependencies>): string[] => {
+    const at = new Map(layout.nodes.map((node) => [node.taskId, node]));
+    const adjacent = layout.edges.filter((edge) => at.get(edge.to)!.layer === at.get(edge.from)!.layer + 1);
+    const found: string[] = [];
+    adjacent.forEach((left, i) => adjacent.slice(i + 1).forEach((right) => {
+      if (at.get(left.from)!.layer !== at.get(right.from)!.layer) return;
+      const order = (at.get(left.from)!.index - at.get(right.from)!.index) * (at.get(left.to)!.index - at.get(right.to)!.index);
+      if (order < 0) found.push(`${left.from}->${left.to} x ${right.from}->${right.to}`);
+    }));
+    return found;
+  };
+  const rows = (layout: ReturnType<typeof layoutDependencies>, layer: number): string[] =>
+    layout.nodes.filter((node) => node.layer === layer).sort((left, right) => left.index - right.index).map((node) => node.taskId);
+
+  // mutation: the barycenter sort is dropped (id order only) -> x above y, one crossing -> red
+  it("puts a task beside the row of what it depends on, so id order does not cross the two edges", () => {
+    const layout = layoutDependencies([deps("a"), deps("b"), deps("x", "b"), deps("y", "a")]);
+    expect(rows(layout, 1)).toEqual(["y", "x"]);
+    expect(crossings(layout)).toEqual([]);
+  });
+
+  it("orders each later layer from the one before it, through three layers", () => {
+    const layout = layoutDependencies([deps("a"), deps("b"), deps("c"), deps("x", "c"), deps("y", "b"), deps("z", "a"), deps("m", "x"), deps("n", "z")]);
+    expect([rows(layout, 1), rows(layout, 2)]).toEqual([["z", "y", "x"], ["n", "m"]]);
+    expect(crossings(layout)).toEqual([]);
+  });
+
+  // mutation: ties broken by reverse id -> q above p -> red
+  it("breaks a tie by task id, whatever order the view sent the tasks in", () => {
+    const items = [deps("a"), deps("q", "a"), deps("p", "a"), deps("b"), deps("r", "b")];
+    const layout = layoutDependencies(items);
+    expect(rows(layout, 1)).toEqual(["p", "q", "r"]);
+    expect(layoutDependencies([...items].reverse())).toEqual(layout);
+  });
+});
+
 describe("the drawn graph (spec B1, D2)", () => {
   const render2 = (items: Parameters<typeof view>[0]) =>
     render(<ControlGroupView view={view(items)} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);

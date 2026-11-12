@@ -1,6 +1,8 @@
 /**
  * Board spec 2026-10-03 D1: where each task of a group sits in the drawn dependency graph. Pure code (Rule 5): a task's
- * layer is the length of the longest dependency path to it, and inside a layer tasks are ordered by id. A dependency on
+ * layer is the length of the longest dependency path to it, and inside a layer tasks are ordered by id -- then, from the
+ * second layer on, by barycenter (#232): the mean row of the tasks each one depends on, ties by id, so edges between
+ * layers cross less. Pure and deterministic: the same items give the same layout whatever their order. A dependency on
  * a task the view does not carry is not drawn but counted, and an edge that would close a cycle (the server refuses
  * one; the page must still not hang) is dropped and counted, so the graph never hides either silently.
  */
@@ -13,6 +15,9 @@ export interface DependencyLayout {
   missing: number;
   cycleEdges: number;
 }
+
+/** UTF-16 code unit order, as the server's `compareText` (src/control/webProtocol.ts): never `localeCompare`. */
+const compareText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
 export function layoutDependencies(items: ReadonlyArray<{ taskId: string; dependencyTaskIds: readonly string[] }>): DependencyLayout {
   const known = new Map(items.map((item) => [item.taskId, item]));
@@ -43,15 +48,28 @@ export function layoutDependencies(items: ReadonlyArray<{ taskId: string; depend
   };
   const ids = [...known.keys()].sort();
   for (const taskId of ids) visit(taskId);
-  const nodes: LayoutNode[] = [];
-  const filled = new Map<number, number>();
+  const byLayer = new Map<number, string[]>();
   for (const taskId of ids) {
     const at = layer.get(taskId)!;
-    const index = filled.get(at) ?? 0;
-    filled.set(at, index + 1);
-    nodes.push({ taskId, layer: at, index });
+    byLayer.set(at, [...(byLayer.get(at) ?? []), taskId]);
   }
+  // #232: one downward barycenter pass. Layer 0 keeps id order; each later layer is ordered by the mean row of its drawn
+  // dependencies (all in earlier layers, so already placed), ties by id.
+  const row = new Map<string, number>();
+  const dependenciesOf = new Map<string, string[]>();
+  for (const edge of edges) dependenciesOf.set(edge.to, [...(dependenciesOf.get(edge.to) ?? []), edge.from]);
+  const nodes: LayoutNode[] = [];
+  for (const at of [...byLayer.keys()].sort((left, right) => left - right)) {
+    const barycenter = (taskId: string): number => {
+      const rows = (dependenciesOf.get(taskId) ?? []).map((dependency) => row.get(dependency)!);
+      return rows.length === 0 ? 0 : rows.reduce((sum, value) => sum + value, 0) / rows.length;
+    };
+    const ordered = at === 0 ? byLayer.get(at)! : [...byLayer.get(at)!].sort((left, right) => barycenter(left) - barycenter(right) || compareText(left, right));
+    ordered.forEach((taskId, index) => row.set(taskId, index));
+    for (const taskId of ordered) nodes.push({ taskId, layer: at, index: row.get(taskId)! });
+  }
+  nodes.sort((left, right) => compareText(left.taskId, right.taskId));
   const key = (edge: { from: string; to: string }): string => `${edge.from}\0${edge.to}`;
   edges.sort((left, right) => (key(left) < key(right) ? -1 : 1));
-  return { nodes, edges, layers: filled.size, missing, cycleEdges };
+  return { nodes, edges, layers: byLayer.size, missing, cycleEdges };
 }
