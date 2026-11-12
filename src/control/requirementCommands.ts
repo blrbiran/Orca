@@ -546,11 +546,11 @@ export async function applyRequirementDraftAccept(
         // Tester #268 (ruling §5.2.5: write sets that intersect run serially): the split's implicit edges -- each pair of tasks
         // whose write sets intersect, oriented as the CLI scheduler orients them (scheduler/graph.ts buildGraph, whose layers
         // order such a pair) -- become dependencies of the imported tasks, so the dispatcher, which reads only dependsOn, never
-        // runs the two at once. A pair the model already ordered keeps its one edge.
+        // runs the two at once. buildGraph gives each pair at most one implicit edge, and none to a pair dependsOn already orders.
         const implied = new Map<string, string[]>();
         for (const edge of draft.implicitEdges ?? []) implied.set(edge.to, [...(implied.get(edge.to) ?? []), edge.from]);
         const tasks = reexpanded.map((task) => {
-          const extra = (implied.get(task.taskId) ?? []).filter((from, index, all) => !task.dependencyTaskIds.includes(from) && all.indexOf(from) === index);
+          const extra = implied.get(task.taskId) ?? [];
           return extra.length === 0 ? task : { ...task, dependencyTaskIds: [...task.dependencyTaskIds, ...extra] };
         });
         // Multi-directory projects spec §6.4: delivery is the multi landing, so the group gets no integration record.
