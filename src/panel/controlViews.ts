@@ -13,7 +13,7 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { isTerminallyFailedRun, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
+import { allowObservedPathsCommand, isTerminallyFailedRun, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -503,7 +503,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   let firstFailure: { taskId: string; cause: string; next?: string } | null = null;
   for (const taskId of taskIds) {
     // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).
-    let runId: unknown, run: { state?: unknown; phase?: unknown; failureCode?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown; failureCause?: { cause?: unknown } } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
+    let runId: unknown, run: { state?: unknown; phase?: unknown; failureCode?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown; failureCause?: { cause?: unknown }; pathPolicyMisses?: unknown } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
     try {
       work = decodedValue(snapshot.decodeWork(taskId)) as typeof work;
       runId = work?.currentRunId;
@@ -517,7 +517,9 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     // retry refuses it); recovery-retry resumes it in place, so the failure names that command.
     // Tester #267: so is a run blocked at C before ccloop stated an outcome (driveRecord.ts resumableBlockedRun).
     const resumable = typeof runId === "string" && run !== undefined && run !== null && resumableBlockedRun(run);
-    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : {}) }; break; }
+    // Tester #265: a run ccloop stopped on paths outside its allowlist names the retry that allows only those paths.
+    const pathPolicy = run?.state === "blocked" && Array.isArray(run.drive?.pathPolicyMisses) && run.drive.pathPolicyMisses.length > 0;
+    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : pathPolicy ? { next: allowObservedPathsCommand(groupId, taskId) } : {}) }; break; }
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
   const major = findings.filter((row) => row.severity === "major").length;

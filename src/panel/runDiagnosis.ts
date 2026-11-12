@@ -9,7 +9,7 @@ import { readFormatFailureWork, type FormatFailureWork } from "./formatFailureWo
 export interface RunDiagnosis {
   phase: "estimate" | "work" | "handoff" | "single-call";
   step: "planning" | "executing" | "verifying" | null;
-  cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "unknown";
+  cause: "execution-format-invalid" | "execution-format-ambiguous-or-hidden" | "usage-unsettled" | "path-policy" | "unknown";
   attempt: number;
   /**
    * Issue #131 (session 3cfc2e73): ccloop's own run-level cause, when its drive record kept one (failure-cause spec
@@ -23,7 +23,7 @@ export interface RunDiagnosis {
 
 type DiagnosticRun = {
   groupId: string; workItemId: string; taskId: string | null; runId: string; generation: number; graphVersion: number; targetVersion: number; executionId: string | null;
-  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { sourceDir?: string; targetRepo?: string | null; envelopeHash?: string | null; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null } | null } | null; savedSource?: unknown; failureCode: string | null;
+  phase: RunDiagnosis["phase"]; progress?: { status: string } | null; providerAttemptOrdinal: number; drive?: { sourceDir?: string; targetRepo?: string | null; envelopeHash?: string | null; failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; detail: string | null } | null; pathPolicyMisses?: unknown[] } | null; savedSource?: unknown; failureCode: string | null;
 };
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const normalizationSchema = z.object({
@@ -59,6 +59,8 @@ export function readRunDiagnosis(store: ControlStore, run: DiagnosticRun): RunDi
   const step = run.progress?.status === "planning" || run.progress?.status === "executing" || run.progress?.status === "verifying" ? run.progress.status : null;
   let cause: RunDiagnosis["cause"] = run.failureCode === "usage-unsettled" ? "usage-unsettled" : "unknown";
   cause = savedFormatFailureEvidence(store, run)?.cause ?? cause;
+  // Tester #265: a run ccloop stopped on paths outside its allowlist (the misses it reported are kept on the drive record).
+  if (cause === "unknown" && (run.drive?.pathPolicyMisses?.length ?? 0) > 0) cause = "path-policy";
   const failure = run.drive?.failureCause ?? null;
   // ccloop's run directory is `<sourceDir>/run` (ccloop src/control/worker.ts); its attempt refs live in the target repository.
   const formatFailureWork = run.drive?.sourceDir === undefined ? null : readFormatFailureWork(join(run.drive.sourceDir, "run"), run.drive.targetRepo ?? null);

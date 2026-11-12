@@ -287,6 +287,11 @@ export function recoveryRetryCommand(runId: string): string {
   return `orca recovery retry --run ${runId}`;
 }
 
+/** Tester #265: the command that retries a task allowing only the paths its blocked run reported (run show prints the same). */
+export function allowObservedPathsCommand(groupId: string, taskId: string): string {
+  return `orca task retry ${groupId} ${taskId} --allow-observed-paths`;
+}
+
 /**
  * Tester #267: a driver run that recovery retry --run puts back at the step it was blocked at -- blocked anywhere but at C
  * by a ccloop failure (isTerminallyFailedRun). Blocked at C with no outcome is one of these: its collect failed before

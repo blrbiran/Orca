@@ -807,8 +807,8 @@ export const en = {
       phaseLabel: "Phase: {{phase}}", stepLabel: "step: {{step}}", attempt: "attempt {{attempt}}", identity: "run {{runId}}",
       phase: { estimate: "estimate", work: "work", handoff: "handoff", "single-call": "single call" },
       step: { planning: "planning", executing: "executing", verifying: "verifying" },
-      cause: { "execution-format-invalid": "Execution output could not be decoded", "execution-format-ambiguous-or-hidden": "Execution output was ambiguous or hidden", "usage-unsettled": "Usage is unsettled", unknown: "Cause unknown" },
-      next: { "execution-format-invalid": "Check saved-result eligibility below and review evidence", "execution-format-ambiguous-or-hidden": "Check saved-result eligibility below and review evidence", "usage-unsettled": "Ask an owner to review the conservative usage settlement", unknown: "Review activity and evidence, then use an offered recovery action" },
+      cause: { "execution-format-invalid": "Execution output could not be decoded", "execution-format-ambiguous-or-hidden": "Execution output was ambiguous or hidden", "usage-unsettled": "Usage is unsettled", "path-policy": "The run changed files outside the task's allowed paths", unknown: "Cause unknown" },
+      next: { "execution-format-invalid": "Check saved-result eligibility below and review evidence", "execution-format-ambiguous-or-hidden": "Check saved-result eligibility below and review evidence", "usage-unsettled": "Ask an owner to review the conservative usage settlement", "path-policy": "Review the paths it reported, then retry the task allowing only those paths (orca task retry --allow-observed-paths)", unknown: "Review activity and evidence, then use an offered recovery action" },
     },
     // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (ccloop failure-causes spec §3), what it means and what to do
     // next. A cause this panel does not know reads as `unknown`.
