@@ -179,6 +179,14 @@ export function fundingLines(preview: unknown): string[] {
     ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.fundableTokens === null ? `nothing (${row.reason ?? "unavailable"})` : tokens(row.fundableTokens)}`)];
 }
 /**
+ * Issue #212: agents read --json, not the funding lines. A body gains `funding`, the funding preview's rows (each task's
+ * authored tokens and what a claim now funds, or why nothing), after its own fields; absent when the preview has no rows.
+ */
+export function withFunding(body: unknown, preview: unknown): unknown {
+  const rows = (preview as { rows?: unknown[] } | null)?.rows ?? [];
+  return rows.length === 0 || typeof body !== "object" || body === null || "error" in body ? body : { ...body, funding: rows };
+}
+/**
  * Tester follow-up F §1 (#195, human ruling 「要改」): the context hand-off threshold does nothing today -- no installed agent
  * reports context usage, so nothing in production feeds Orca a context observation (contextControl.ts) -- and confirm no
  * longer requires one. `orca group confirm` and `orca proposal show` say so under their human output; their JSON is unchanged.
