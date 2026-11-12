@@ -218,6 +218,22 @@ export function transientSettleError(error: unknown): boolean {
   return typeof code === "string" && TRANSIENT_ERRNO.has(code);
 }
 
+/** Tester #267: how many times a transient failure at B, B' or C is retried in place before it blocks (as E, above). */
+export const TRANSIENT_START_RETRIES = 3;
+const TRANSIENT_PEER_ERRNO = new Set(["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"]);
+
+/**
+ * Tester #267: an error at B, B' or C worth another try -- step E's (an artifact-id-conflict, an I/O race), a ccloop call
+ * that timed out (a machine that slept through it), or a dropped connection. Those steps only ask ccloop again (recovery
+ * retry --run would put the run back at the same step), so asking again in place is safe; anything else blocks at once.
+ */
+export function transientDriveError(error: unknown): boolean {
+  if (transientSettleError(error)) return true;
+  if (error instanceof ControlError) return error.code === "control-peer-timeout";
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && TRANSIENT_PEER_ERRNO.has(code);
+}
+
 /**
  * Final review m2 (2026-10-15): the driver's stderr lines keep a peer exit whole. §4.4 cuts only what is stored; with
  * the stored reason cut, these lines are the one place ccloop's full stderr (a stack trace) is still kept.
@@ -1602,6 +1618,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       try {
         // Handoff delivery spec §3: a run with an open request goes to H; every other run is advanced as before.
         const moved = openRequestOf(deps.store, readDriverRun(deps.store, runId)) !== null ? await stepH(deps, runId, context) : await advance(deps, runId, context);
+        // Tester #267: a step that answered ends its run of transient failures; only consecutive ones count toward a block.
+        context.transientRetries?.delete(runId);
         if (moved) progressed = true;
       } catch (error) {
         if (error instanceof DriverCrash) throw error;
@@ -1647,6 +1665,18 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
               if (done < TRANSIENT_E_RETRIES) {
                 retries.set(runId, done + 1);
                 process.stderr.write(`orca-driver: ${runId}: E: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_E_RETRIES}\n`);
+                continue;
+              }
+              retries.delete(runId);
+            }
+            // Tester #267: likewise a transient failure at B, B' or C (a collect a sleeping machine timed out): the run stays
+            // at its step and the next round asks ccloop again, up to TRANSIENT_START_RETRIES times.
+            if ((run.state === "start-pending" || run.state === "unknown" || run.state === "accepted") && transientDriveError(error)) {
+              const retries = context.transientRetries ?? (context.transientRetries = new Map());
+              const done = retries.get(runId) ?? 0;
+              if (done < TRANSIENT_START_RETRIES) {
+                retries.set(runId, done + 1);
+                process.stderr.write(`orca-driver: ${runId}: ${stepOf(run)}: ${logError(error)}; transient, retry ${done + 1} of ${TRANSIENT_START_RETRIES}\n`);
                 continue;
               }
               retries.delete(runId);
