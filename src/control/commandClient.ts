@@ -56,6 +56,13 @@ export function withCommandClient<T>(commandId: string, client: string, fn: () =
  */
 const forCommand = (commandId: string) => { const c = current.getStore(); return c !== undefined && c.commandId === commandId ? c : null; };
 export function commandClientFor(commandId: string): string | null { return forCommand(commandId)?.client ?? null; }
+/** Tester follow-up G §6.3 (#189): the whole routed context of this command, so a command it issues runs as the same principal. */
+export function commandContextFor(commandId: string): CommandContext | null {
+  const found = forCommand(commandId);
+  if (found === null) return null;
+  const { commandId: _id, ...context } = found;
+  return context;
+}
 export function commandPrincipalFor(commandId: string): string | null { return forCommand(commandId)?.principal ?? null; }
 /**
  * CLI v2 spec §16: who a writer records for this command. The control routes set it (controlApi.ts, from the principal);

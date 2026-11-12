@@ -1,4 +1,5 @@
 import {validSavedNoDispatch} from "./savedResultNoDispatch.js";
+import { activeAllowances, pathsCovered } from "./groupAllowances.js";
 import {claimCapBlocking} from "./spendCaps.js";
 import { readFundedAllowance, hasOptionalTaskPolicy } from "./fundedAllowance.js";
 import { finiteCommitment, remainingBudget, type BudgetAmount } from "./tokenPolicy.js";
@@ -241,9 +242,13 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // Tester #267: blocked at C before ccloop stated any outcome (its collect failed), recovery-retry collects it again.
         if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}${live && drive.outcome === null ? `:${recoveryRetryCommand(runId)}` : ""}`);
         const observed = command.payload.allowObservedPaths === true ? drive.pathPolicyMisses : null;
+        if (command.payload.allowanceId !== undefined && command.payload.allowObservedPaths !== true) throw new ControlError("observed-paths-invalid", "allowance-id-needs-observed-paths");
         if (command.payload.allowObservedPaths === true) {
           if (command.payload.runId === undefined) throw new ControlError("observed-paths-invalid", "run-id-required");
-          if (command.actorId === "orca-auto" || commandPrincipalFor(command.commandId) === "orca-auto" || routedDispatchedRunFor(command.commandId) !== null)
+          // Tester follow-up G §6.3 (#189): Orca retries a covered block only under an active group path allowance that covers
+          // every one of the run's misses; a dispatched run never.
+          const auto = command.actorId === "orca-auto" || commandPrincipalFor(command.commandId) === "orca-auto";
+          if (routedDispatchedRunFor(command.commandId) !== null || (auto && !allowanceCovers(store, groupId, command.payload.allowanceId, drive.pathPolicyMisses)))
             throw new ControlError("observed-paths-not-allowed", "dispatched-or-auto");
           if (drive.outcome !== "blocked_waiting_human" || !drive.stopReason?.startsWith("allowlist miss: "))
             throw new ControlError("observed-paths-not-allowed", "not-an-allowlist-block");
@@ -330,7 +335,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
           recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming}),...(freshStart===null?{}:{freshStart})}});
-          if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, commandPrincipalFor(command.commandId) ?? command.actorId);
+          if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, command.payload.allowanceId !== undefined ? `allowance:${command.payload.allowanceId}` : commandPrincipalFor(command.commandId) ?? command.actorId);
           deps.beforeCommit?.();
           // The receipt says what the new run starts with when the fresh-start rule applied (the CLI prints it).
           return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId,...(want===null?{}:{nextRun:{attempts:left.attempts,activeMs:left.activeMs}})});
@@ -364,10 +369,19 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         if (overGrantBlocked) { const lifted = readGroup(store, groupId); lifted.status = unblockedStatus(store, groupId, deps.prerequisiteDone ?? (() => false)); saveGroup(store, lifted); }
         // Effect 4 (the command revision advances in applyWebCommand).
         recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, ...(switched === null ? {} : { agent: switched }) } });
-        if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, commandPrincipalFor(command.commandId) ?? command.actorId);
+        if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, command.payload.allowanceId !== undefined ? `allowance:${command.payload.allowanceId}` : commandPrincipalFor(command.commandId) ?? command.actorId);
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "task-retried", taskId, fromRunId: runId });
       },
     }).body;
   } finally { release?.(); }
+}
+
+/** Tester follow-up G §6.3 (#189): the named allowance is an active path allowance of this group, and the active path allowances cover every miss. */
+function allowanceCovers(store: ControlStore, groupId: string, allowanceId: string | undefined, misses: readonly PathPolicyMissV1[] | null | undefined): boolean {
+  if (allowanceId === undefined || misses == null || misses.length === 0) return false;
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined) return false;
+  const active = activeAllowances(JSON.parse(String(row.body)), store.now()).filter((allowance) => allowance.request.type === "path");
+  return active.some((allowance) => allowance.allowanceId === allowanceId) && pathsCovered(active, misses) !== null;
 }

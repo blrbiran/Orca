@@ -57,6 +57,7 @@ import { applyReopenTask, type ReopenTaskCommand } from "./reopenTask.js";
 import { applyReviewAccept, applyReviewFix, applyReviewRerun, type ReviewAcceptCommand, type ReviewFixCommand, type ReviewRerunCommand } from "./requirementReviewCommands.js";
 import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
 import { applyAllowRequest, applyRevokeAllowance, type AllowRequestCommand, type RevokeAllowanceCommand } from "./allowanceCommands.js";
+import { activeAllowances, applyDecisionAllowances, pathsCovered, type GroupAllowance } from "./groupAllowances.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
@@ -99,7 +100,7 @@ import { evaluateTrigger } from "./checks/trigger.js";
 import { gitChild } from "./integrationGit.js";
 import { applyCorrectionClose, applyCorrectionRecord, applyCorrectionWithdraw, type CorrectionCloseCommand, type CorrectionRecordCommand, type CorrectionWithdrawCommand, type PanelCorrections } from "./correctionCommands.js";
 import { recordActivity } from "./activity.js";
-import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
+import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandContextFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
 import { autoConfirmBlocker, autoConfirmCommandId } from "./autoConfirm.js";
@@ -1091,6 +1092,8 @@ export class WebControlService {
   async systemDebugPass(): Promise<{ redispatched: string[]; opened: string[]; confirmed: string[]; folded: string[]; settled: string[] }> {
     const out = { redispatched: [] as string[], opened: [] as string[], confirmed: [] as string[], folded: [] as string[], settled: [] as string[] };
     const unmoved = new Set<string>();
+    // Tester follow-up G §6.3 (#189): requests a group allowance covers are let through first.
+    await this.allowancePass();
     await this.failoverPass(out, unmoved);
     this.quotaProbePass(out, unmoved);
     // Failure-cause spec 2026-10-21 §5: a quota failure on an installation set to wait is retried once per failed run, as
@@ -1988,7 +1991,67 @@ export class WebControlService {
   }
   /** Tester follow-up G §6.3 (#189): let one request, or every request of its kind in this group, through (allowanceCommands.ts). */
   async allowRequest(command: AllowRequestCommand): Promise<WebCommandResult> {
-    return this.mutate(() => applyAllowRequest({ store: this.store }, command)) as WebCommandResult;
+    const answer = this.mutate(() => applyAllowRequest({ store: this.store }, command)) as WebCommandResult;
+    const request = command.payload.request;
+    if ("error" in answer || request.kind !== "path") return answer;
+    // A path request's retry (plan A9: "this one" is today's retry --allow-observed-paths), as the same principal.
+    const runRow = this.store.db.prepare("SELECT body FROM runs WHERE id=?").get(request.runId);
+    const taskId = String((JSON.parse(String(runRow!.body)) as { taskId?: unknown }).taskId);
+    const retryCommand: RetryTaskCommand = {
+      schema: "orca-raw-command-v1", commandId: `${command.commandId}.retry`, actorId: command.actorId, expectedRevision: this.groupRevision(command.target.groupId),
+      verb: "retry-task", target: command.target, payload: { taskId, runId: request.runId, allowObservedPaths: true },
+    };
+    const context = commandContextFor(command.commandId);
+    const retry = (context === null ? this.retryTask(retryCommand) : withCommandContext(retryCommand.commandId, context, () => this.retryTask(retryCommand))) as WebCommandResult;
+    return { ...answer, result: { ...answer.result, retry: "error" in retry ? { error: retry.error } : retry.result } } as WebCommandResult;
+  }
+  private groupRevision(groupId: string): number {
+    return Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
+  }
+  /**
+   * Tester follow-up G §6.3 (#189, plan A7): what the group allowances cover is let through without a person. (1) Decision
+   * allowances settle flags raised outside a landing (integration conflicts, model review). (2) A task blocked at C on an
+   * allowlist miss whose every missed path an active path allowance names is retried as orca-auto with exactly those paths
+   * (the observed-path retry); one retry per blocked run. One candidate's failure never stops the pass.
+   */
+  async allowancePass(): Promise<{ retried: string[]; settled: number }> {
+    const out = { retried: [] as string[], settled: 0 };
+    const now = this.store.now();
+    for (const row of this.store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
+      const groupId = String(row.id);
+      let active: GroupAllowance[];
+      try { active = activeAllowances(JSON.parse(String(row.body)), now); } catch { continue; }
+      if (active.length === 0) continue;
+      if (active.some((allowance) => allowance.request.type !== "path")) {
+        try { out.settled += this.mutate(() => this.store.transaction(() => applyDecisionAllowances(this.store, groupId))).length; }
+        catch (error) { process.stderr.write(`orca: allowance: group ${groupId}: ${error instanceof Error ? error.message : String(error)}\n`); }
+      }
+      const paths = active.filter((allowance) => allowance.request.type === "path");
+      if (paths.length === 0) continue;
+      for (const runRow of this.store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
+        const runId = String(runRow.id);
+        const run = JSON.parse(String(runRow.body)) as { state?: unknown; taskId?: unknown; workItemId?: unknown; drive?: { blockedAt?: unknown; outcome?: unknown; stopReason?: unknown; pathPolicyMisses?: unknown } };
+        const drive = run.drive;
+        if (run.state !== "blocked" || drive?.blockedAt !== "C" || drive.outcome !== "blocked_waiting_human" || typeof drive.stopReason !== "string" || !drive.stopReason.startsWith("allowlist miss: ")) continue;
+        if (typeof run.taskId !== "string" || !Array.isArray(drive.pathPolicyMisses)) continue;
+        const workRow = this.store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, String(run.workItemId));
+        if (workRow === undefined || (JSON.parse(String(workRow.body)) as { currentRunId?: unknown }).currentRunId !== runId) continue;
+        if (this.store.db.prepare("SELECT 1 FROM activity WHERE group_id=? AND run_id=? AND kind='allowance' AND json_extract(body,'$.action')='applied'").get(groupId, runId) !== undefined) continue;
+        const covering = pathsCovered(paths, drive.pathPolicyMisses as PathPolicyMissV1[]);
+        if (covering === null) continue;
+        const allowanceId = covering[0]!.allowanceId;
+        try {
+          const answer = this.retryTask({
+            schema: "orca-raw-command-v1", commandId: `allowance-retry-${runId}`, actorId: ORCHESTRATION_ACTOR, expectedRevision: this.groupRevision(groupId),
+            verb: "retry-task", target: { kind: "group", groupId }, payload: { taskId: run.taskId, runId, allowObservedPaths: true, allowanceId },
+          }) as WebCommandResult;
+          if ("error" in answer) { process.stderr.write(`orca: allowance: ${runId}: ${answer.error.code}\n`); continue; }
+          this.mutate(() => this.store.transaction(() => recordActivity(this.store, { groupId, taskId: run.taskId as string, runId, kind: "allowance", body: { action: "applied", allowanceId, runId } })));
+          out.retried.push(runId);
+        } catch (error) { process.stderr.write(`orca: allowance: ${runId}: ${error instanceof Error ? error.message : String(error)}\n`); }
+      }
+    }
+    return out;
   }
   revokeAllowance(command: RevokeAllowanceCommand): WebCommandResult {
     return this.mutate(() => applyRevokeAllowance({ store: this.store }, command)) as WebCommandResult;
