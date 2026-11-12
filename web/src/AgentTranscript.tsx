@@ -146,6 +146,7 @@ function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Elemen
   const opens = expandable(event) || expandable(result);
   return (
     <li className={`transcript-event transcript-${event.kind} min-w-0`} data-testid="transcript-event" data-tone={tone}>
+      {eventTime(event.at)}{" "}
       {opens
         ? <button type="button" className="max-w-full wrap-anywhere" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{line}</button>
         : <span className="transcript-line wrap-anywhere">{line}</span>}
@@ -346,7 +347,7 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
         {tracking && follow && <span role="status" className="text-xs text-muted">{t("transcript.following")}</span>}
         {tracking && !follow && <button type="button" className="ms-0" onClick={() => setFollow(true)}>{t("transcript.follow")}</button>}
       </div>
-      <ol ref={box} className="transcript-events max-h-[24rem] min-w-0 overflow-y-auto overflow-x-hidden" onScroll={(event) => setFollow(atBottom(event.currentTarget))}>
+      <ol ref={box} role="list" className="transcript-events max-h-[24rem] min-w-0 list-none overflow-y-auto overflow-x-hidden ps-0" onScroll={(event) => setFollow(atBottom(event.currentTarget))}>
         {joinTools(rows, events).map((row) => <EventRow key={keyOf(row.event)} runId={props.runId} call={call} row={row} />)}
       </ol>
     </div>
@@ -358,6 +359,16 @@ const STARTED_CLOCK: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-
 function startedTime(startedAt: string): JSX.Element {
   const at = new Date(startedAt);
   return <time data-testid="transcript-call-started" dateTime={startedAt} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>;
+}
+
+/**
+ * Tester #281: each event's own time (`event.at`) as the row's lead, a local clock time with the full date on hover. The
+ * list's numbers were only a position in the 200-row window, so they changed under Earlier/Later; they are hidden now and
+ * the same event shows the same time whatever window holds it.
+ */
+function eventTime(at: number): JSX.Element {
+  const date = new Date(at);
+  return <time data-testid="transcript-event-time" className="num text-xs text-muted" dateTime={date.toISOString()} title={date.toLocaleString(currentLanguage())}>{date.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>;
 }
 
 function sizeText(bytes: number): string {
