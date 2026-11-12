@@ -37,6 +37,9 @@ describe("group show names the group acceptance (tester follow-up E §5)", () =>
       .toContain("acceptance: passed on cccccccccccc (1 command, 2 s)");
     expect(await show({ tip: TIP, result: "not-needed", why: "single-landing", commands: [], at: 1 })).toContain("acceptance: not needed (single-landing)");
     expect(await show({ tip: null, result: "not-run", why: "multi-repo", commands: [], at: 1 })).toContain("acceptance: not run (multi-repo)");
+    // Tester #278: a work branch that no longer exists is named, with what checks it again.
+    expect(await show({ tip: null, result: "not-run", why: "work-branch-missing", landings: 2, commands: [], at: 1 }))
+      .toContain("acceptance: not run (work-branch-missing: orca/g-alpha does not exist; checked again after a new landing)");
     expect(await show({ tip: TIP, result: "waived", commands: [{ command: "npm test", exit: "1", ms: 1 }], at: 1, waived: { by: "user:ana", note: "known flake", at: 2 } }))
       .toContain("acceptance: waived on cccccccccccc by user:ana: known flake");
   });

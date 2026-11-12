@@ -210,6 +210,8 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   const ran = `(${n} command${n === 1 ? "" : "s"}, ${Math.round(a.commands.reduce((sum, c) => sum + c.ms, 0) / 1000)} s)`;
   if (a.result === "passed") return [`acceptance: passed${tip} ${ran}`];
   if (a.result === "not-needed") return [`acceptance: not needed (${a.why ?? "?"})`];
+  // #278: a work branch that no longer exists is recorded, not retried; a new landing checks it again.
+  if (a.result === "not-run" && a.why === "work-branch-missing") return [`acceptance: not run (work-branch-missing: orca/${groupId} does not exist; checked again after a new landing)`];
   if (a.result === "not-run") return [`acceptance: not run (${a.why ?? "?"})`];
   if (a.result === "waived") return [`acceptance: waived${tip} by ${a.waived?.by ?? "?"}: ${a.waived?.note ?? ""}`];
   const last = a.commands.at(-1);

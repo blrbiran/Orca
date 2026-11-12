@@ -19,6 +19,10 @@ export function GroupAcceptanceProblem(props: { groupId: string; acceptance: Gro
   const [open, setOpen] = useRegionDraft(`waive-open:${props.groupId}`, () => false);
   const [note, setNote] = useRegionDraft(`waive-note:${props.groupId}`, () => "");
   const acceptance = props.acceptance;
+  // Tester #278: a work branch that no longer exists is recorded, not retried; a new landing checks it again.
+  if (acceptance?.result === "not-run" && acceptance.why === "work-branch-missing") {
+    return <p role="note" data-acceptance-branch-missing={props.groupId}>{t("control.groupAcceptance.branchMissing", { branch: `orca/${props.groupId}` })}</p>;
+  }
   if (acceptance === undefined || acceptance.result !== "failed") return null;
   const last = acceptance.commands.at(-1);
   const sendable = note.trim() !== "" && note.length <= NOTE_MAX;

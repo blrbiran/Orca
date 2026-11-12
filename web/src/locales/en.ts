@@ -784,6 +784,7 @@ export const en = {
       send: "Accept this tip anyway",
       cancel: "Cancel",
       boardFailed: "Group acceptance failed: {{command}}",
+      branchMissing: "Group acceptance did not run: the work branch {{branch}} no longer exists. A later landing checks it again.",
     },
     // Tester follow-up G spec §1.2, §1.4, §10.1: a task completed (or stopped) with no change, and its two actions.
     // Tester follow-up G spec §3.3, §3.5: a requirement group's review and its exits.

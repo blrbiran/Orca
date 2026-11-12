@@ -10,7 +10,9 @@ export interface GroupAcceptance {
   /** The `orca/<g>` tip the record is for; null for not-run (no single tree). */
   tip: string | null;
   result: GroupAcceptanceResult;
-  why?: "single-landing" | "multi-repo" | "dir";
+  why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing";
+  /** work-branch-missing (#278): how many runs had landed when the branch was found missing; a later landing checks again. */
+  landings?: number;
   /** Every command that ran, setup named `setup: <cmd>`, with its exit and wall-clock ms (driveRecord.ts checkRunCommandSchema). */
   commands: Array<{ command: string; exit: string; ms: number }>;
   /** The failing command's output tail (failed, and waived after it). */
@@ -37,14 +39,25 @@ export function landedTaskCount(store: Pick<ControlStore, "db">, groupId: string
   return tasks.size;
 }
 
+/** How many of the group's runs landed a commit (#278: a later landing changes it); a DB read, no git. */
+export function landedRunCount(store: Pick<ControlStore, "db">, groupId: string): number {
+  let count = 0;
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=?").all(groupId)) {
+    if (typeof (JSON.parse(String(row.body)) as { drive?: { landedCommit?: unknown } }).drive?.landedCommit === "string") count += 1;
+  }
+  return count;
+}
+
 /**
  * The gate the done pass, the integration pass and a dependent's prerequisite read (DB only, no git child). A recorded
  * acceptance answers by its result. With none recorded yet, a group that needs none by definition is accepted -- at most
  * one task landed (its own checks ran on that tree), or a multi-directory or folder group (always `not-run`, a known gap)
- * -- and any other group waits for the acceptance pass.
+ * -- and any other group waits for the acceptance pass. A work branch found missing (#278) satisfies only a group already
+ * `done` (it stays done, and its dependents keep reading it so); any other group has no tree to accept and waits.
  */
 export function acceptanceSatisfied(store: Pick<ControlStore, "db">, groupId: string, body: unknown): boolean {
   const record = acceptanceOf(body);
+  if (record?.why === "work-branch-missing") return (body as { status?: unknown }).status === "done";
   if (record !== null) return SATISFIED.has(record.result);
   const b = (body ?? {}) as { multiDir?: unknown; dirWorkspace?: unknown };
   if (b.multiDir != null || b.dirWorkspace != null) return true;

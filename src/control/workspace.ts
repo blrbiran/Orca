@@ -78,6 +78,20 @@ export async function revParse(repo: string, rev: string): Promise<string> {
 }
 
 /**
+ * Tester #278: the group's work branch tip, or null when the branch does not exist. Told apart from a git failure by the
+ * exit code alone (`--quiet`: 1 for a name that is not a commit, 128 for a repository git cannot read), never by message
+ * text, which follows the person's locale. Any other failure throws, as `revParse`.
+ */
+export async function workBranchTip(repo: string, groupId: string): Promise<string | null> {
+  try {
+    return (await git(repo, [...QUIET_GIT, "rev-parse", "--verify", "--quiet", `${workBranchRef(groupId)}^{commit}`])).trim();
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return null;
+    throw error;
+  }
+}
+
+/**
  * spec §5.1: `orca/<groupId>` is created from the target repository's current HEAD commit and is never
  * checked out. Create-only (`update-ref <ref> <new> ""`), so a concurrent creator wins and this reads
  * whatever it created. Never deleted.

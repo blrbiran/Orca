@@ -7,12 +7,12 @@ import { isMultiGroup } from "./multiGroup.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { QUIET_GIT, groupAcceptancePathOf, isGroupAcceptancePathOf, removeOwnPath, revParse, workBranchRef, type WorkspaceRoots } from "./workspace.js";
+import { QUIET_GIT, groupAcceptancePathOf, isGroupAcceptancePathOf, removeOwnPath, workBranchTip, type WorkspaceRoots } from "./workspace.js";
 import { unionSetup } from "./setupUnion.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { acceptanceOf, landedTaskCount, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, landedRunCount, landedTaskCount, type GroupAcceptance } from "./groupAcceptanceRecord.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -29,6 +29,11 @@ import type { ControlStore } from "./store.js";
  * a person's fix) is checked again. Not needed when at most one task landed (its own checks ran on that tree); a
  * multi-directory or folder group is recorded `not-run` (a known gap: no single tree to check). passed, failed and waived
  * write a `group-acceptance` activity row; not-needed and not-run write the record only (as §4's post-merge record).
+ *
+ * Tester #278: a work branch that does not exist (deleted after delivery, say) is a recorded state, not an error retried
+ * every round: `not-run: work-branch-missing`, keyed by the runs landed so far, so later rounds skip the group without a
+ * git child until a new landing. Any other failure (a lock, a repository that does not resolve) is tried again next round
+ * and logged once per distinct message per group, not every round.
  */
 export * from "./groupAcceptanceRecord.js";
 
@@ -61,6 +66,8 @@ export interface GroupAcceptanceDeps {
  */
 let checkSeq = 0;
 const inUse = new Set<string>();
+/** #278: per driver (keyed by its checks map), the failure last logged for each group; cleared by a round without one. */
+const logged = new WeakMap<Map<string, GroupAcceptanceCheck>, Map<string, string>>();
 
 /** Every task done and no run of any phase active (integrationPass.ts groupComplete, read here to stay off its imports). */
 function tasksComplete(store: ControlStore, groupId: string): boolean {
@@ -92,6 +99,8 @@ export function acceptanceCommands(store: ControlStore, groupId: string, which: 
 export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string, GroupAcceptanceCheck>): Promise<boolean> {
   const { store } = deps;
   let moved = false;
+  const last = logged.get(checks) ?? new Map<string, string>();
+  logged.set(checks, last);
   for (const row of store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
     if (deps.stopped()) break;
     const groupId = String(row.id);
@@ -100,9 +109,14 @@ export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
     try {
       if (await acceptGroup(deps, checks, groupId, body)) moved = true;
+      last.delete(groupId);
     } catch (error) {
-      // This group's alone (a repository that does not resolve, a contract that does not read); tried again next round.
-      process.stderr.write(`orca-driver: group ${groupId}: acceptance: ${error instanceof Error ? error.message : String(error)}\n`);
+      // This group's alone (a repository that does not resolve, a contract that does not read); tried again next round,
+      // and logged once while the same failure repeats (#278).
+      const message = error instanceof Error ? error.message : String(error);
+      if (last.get(groupId) === message) continue;
+      last.set(groupId, message);
+      process.stderr.write(`orca-driver: group ${groupId}: acceptance: ${message}\n`);
     }
   }
   return moved;
@@ -121,9 +135,17 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     deps.write(() => saveAcceptance(store, groupId, { tip: null, result: "not-run", why, commands: [], at: store.now() }));
     return true;
   }
+  // #278: the branch was found missing and nothing landed since: nothing to check, and no git child to find that out again.
+  if (recorded?.why === "work-branch-missing" && recorded.landings === landedRunCount(store, groupId)) return false;
   const repo = deps.resolveRepository(groupRepoId(store, groupId));
-  const tip = await revParse(repo, workBranchRef(groupId));
+  const tip = await workBranchTip(repo, groupId);
   const inFlight = checks.get(groupId);
+  if (tip === null) {
+    if (inFlight !== undefined) { inFlight.controller.abort(); checks.delete(groupId); }
+    deps.write(() => saveAcceptance(store, groupId, { tip: null, result: "not-run", why: "work-branch-missing", landings: landedRunCount(store, groupId), commands: [], at: store.now() }));
+    process.stderr.write(`orca-driver: group ${groupId}: acceptance: not run, orca/${groupId} does not exist (checked again after a new landing)\n`);
+    return true;
+  }
   if (inFlight !== undefined) {
     if (inFlight.settled === null) {
       if (inFlight.tip === tip) return false;

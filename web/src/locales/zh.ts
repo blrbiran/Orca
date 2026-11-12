@@ -644,6 +644,7 @@ export const zh: Translation<typeof en> = {
       send: "仍然接受这个分支顶端",
       cancel: "取消",
       boardFailed: "组验收失败：{{command}}",
+      branchMissing: "组验收没有运行：工作分支 {{branch}} 已不存在。之后有新的落地时会重新检查。",
     },
     review: {
       heading: "需求复核",

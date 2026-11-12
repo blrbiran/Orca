@@ -632,7 +632,7 @@ export type RequirementReviewV1 = {
   problem?: string;
 };
 export type GroupAcceptanceV1 = {
-  tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir";
+  tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
 };
 /** Tester follow-up G §6.3 (#189): the request an allowance was granted from or covers (src/control/groupAllowances.ts). */

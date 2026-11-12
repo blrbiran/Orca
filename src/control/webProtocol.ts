@@ -1662,7 +1662,7 @@ export const groupSummarySchema = z
     // `group-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
     acceptance: z.object({
       tip: commitShaSchema.nullable(), result: z.enum(["passed", "failed", "not-needed", "not-run", "waived"]),
-      why: z.enum(["single-landing", "multi-repo", "dir"]).optional(),
+      why: z.enum(["single-landing", "multi-repo", "dir", "work-branch-missing"]).optional(), landings: safeInteger.optional(),
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
       tail: z.string().max(2048).optional(), at: safeInteger,
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),

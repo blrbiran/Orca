@@ -62,3 +62,26 @@ describe("the Problems row of a failed group acceptance (tester follow-up E §5)
     expect(screen.getByRole("button", { name: "豁免…" })).toBeTruthy();
   });
 });
+
+// Tester #278: a work branch that no longer exists is recorded as `not-run: work-branch-missing`, not retried every round;
+// the group says so (a fact, no tone, no buttons: nothing here answers it but a new landing), in both languages.
+describe("a group acceptance not run because the work branch is gone (tester #278)", () => {
+  const MISSING: GroupAcceptanceV1 = { tip: null, result: "not-run", why: "work-branch-missing", landings: 2, commands: [], at: 1 };
+
+  it("names the missing branch and offers nothing to press", () => {
+    const { view } = show(MISSING, ["owner"]);
+    expect(view.container.textContent).toBe("Group acceptance did not run: the work branch orca/g no longer exists. A later landing checks it again.");
+    expect(screen.queryAllByRole("button")).toEqual([]);
+  });
+
+  it("shows nothing for another not-run reason", () => {
+    const { view } = show({ ...MISSING, why: "multi-repo", landings: undefined });
+    expect(view.container.textContent).toBe("");
+  });
+
+  it("says it in Chinese", async () => {
+    await i18n.changeLanguage("zh");
+    const { view } = show(MISSING);
+    expect(view.container.textContent).toBe("组验收没有运行：工作分支 orca/g 已不存在。之后有新的落地时会重新检查。");
+  });
+});
