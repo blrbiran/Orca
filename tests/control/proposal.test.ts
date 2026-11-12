@@ -19,7 +19,9 @@ describe("proposal commands", () => {
     } finally { await h.dispose(); }
   });
   it("applies atomic field deltas, refunds reserve, and replays the original result", async () => {
-    const h = await webFixture(); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a task's work tokens in the proposal ledger
+    // (moved from the reserve, applied from an estimate) exist only in a group created before the follow-up G release.
+    const h = await webFixture(undefined, undefined, { modelVersion: null }); try {
       const service = new WebControlService(h.deps), before = readBudgetProposal(h.store, "g");
       const operation = { target: { scope: "task" as const, taskId: "a", allocation: "work" as const, dimension: "tokens" as const }, value: 2_000_000, provenance: "human" as const };
       const command = h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation] });
@@ -36,7 +38,9 @@ describe("proposal commands", () => {
     } finally { await h.dispose(); }
   });
   it("checks proposal version before domain state and applies allocation plus limit atomically", async () => {
-    const h = await webFixture(); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a task's work tokens in the proposal ledger
+    // (moved from the reserve, applied from an estimate) exist only in a group created before the follow-up G release.
+    const h = await webFixture(undefined, undefined, { modelVersion: null }); try {
       const service = new WebControlService(h.deps), before = readBudgetProposal(h.store, "g");
       const operation = { target: { scope: "task" as const, taskId: "a", allocation: "work" as const, dimension: "tokens" as const }, value: 9000000, provenance: "human" as const };
       expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: 1, operations: [operation] }))).toMatchObject({ error: { code: "group-budget-unavailable" } });
@@ -52,7 +56,9 @@ describe("proposal commands", () => {
     } finally { await h.dispose(); }
   });
   it("validates explicit model field provenance again at confirmation", async () => {
-    const h = await webFixture(); try {
+    // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a task's work tokens in the proposal ledger
+    // (moved from the reserve, applied from an estimate) exist only in a group created before the follow-up G release.
+    const h = await webFixture(undefined, undefined, { modelVersion: null }); try {
       const service = new WebControlService(h.deps), run = await service.claimEstimate("g", h.estimateId);
       const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body)); row.state = "settled-restartable";
       h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
