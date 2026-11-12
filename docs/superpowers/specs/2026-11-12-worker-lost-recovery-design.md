@@ -152,3 +152,63 @@ differs from §4 as written, the reversible choice and why:
    sides parse it strictly; Orca detects the method by the pin.
 
 ccloop main carries this as the subjects `feat(control): collect reports a lost worker; settle-lost-worker ends its run as worker-lost (Orca #273)` and `test(control): settle-lost-worker's two liveness guards, each alone (Orca #273)`.
+
+
+## As built — Orca half (§5), implementer seat `orca-273` of Orca session `7e164691`, 2026-11-12
+
+Built on Orca main `3f19cf1a`, against ccloop main `d5a4bd2` (built clone, `ORCA_CCLOOP_BIN`); Orca's pin still names
+`9c2fbe47` until the human pushes ccloop and the controller repins. Where the build differs from §5 as written, the
+reversible choice and why:
+
+1. **Parse.** `collect` accepts `worker: {state: "lost"|"undetermined", reason}` (strict, optional); `failureCause.cause`
+   was already a bounded string, so `worker-lost` needed no schema change. The port gains `settleLostWorker` (method
+   `settle-lost-worker`, answer `{candidate}` parsed with collect's candidate schema), forwarded by the profile router.
+   No feature probe: ccloop advertises capabilities, not methods (ccloop as-built item 7); an older ccloop refuses the method.
+2. **stepC.** No terminal, no candidate, `worker` present, not a saved-result run: `lost` ⇒ `settle-lost-worker`, one
+   `worker-lost` activity row (new activity kind, en/zh), progress; the next round collects ccloop's terminal and takes the
+   existing failed path (blocked at C, `terminal:failed`, cause `worker-lost`). A refusal `control-worker-not-lost` or
+   `control-worker-lost-state-unavailable` is read as `undetermined`. `undetermined` starts a grace kept on the run body
+   (`workerUndeterminedSince`); past `WORKER_UNDETERMINED_GRACE_MS` (10 min, executionDriver.ts) the run is blocked at C
+   with reason `worker-undetermined:<ccloop's reason>` and a run recovery blocker `worker-undetermined`. A collect without
+   `worker` clears the grace.
+3. **Next commands differ from §5.2.** `orca group close-run` is not named: it closes a *proved terminal* failure and refuses
+   a run with no terminal, which is what an undetermined run is. The blocker names `orca recovery retry --run <r>` (it clears
+   the blocker, resumes at C, and a fresh grace starts), after the person made sure no worker process is left; ccloop then
+   sees the pid gone and answers `lost`, so the run settles.
+4. **#267.** No code beyond item 2: `recovery retry --run` returns a blocked-at-C-without-outcome run to C, where the dead
+   worker is reported and settled. The G5 measurement is now a criterion (`sleepBlockedResumeE2E.test.ts`, second case).
+5. **Automatic restart** (`webService.ts workerLostPass`, run in `systemDebugPass` before the ladder): an orchestrated
+   group's (mode `run`, as the ladder and the quota retries) task whose current run failed `worker-lost` is retried as
+   `orca-auto`, command id `orca-auto-worker-lost-<task>-<run>` (its row is the record), outside the ladder —
+   `ladderCandidates` skips `worker-lost`, so the ladder's level 1 is not used up. "Per task lineage" is read as
+   *consecutive*: the runs of the task's lineage that lost their worker, counted back from the current one; a fourth in a
+   row is not restarted and carries a `worker-lost-repeated` run blocker naming `orca task retry` (not the §5.2 commands:
+   `recovery retry` refuses a terminal failure). A person's retry after it resets nothing by itself; a run that does not
+   lose its worker ends the streak.
+6. **Attempts — and sessions.** `retryTask.ts workerLostWant`: retrying a `worker-lost` run (whoever retries it) credits
+   the lost run's own attempts *and sessions* back as a `fresh-start` credit, capped by the group's limits like one (the cap
+   now covers sessions; the fresh-start rule credits none, so its arithmetic is unchanged). Sessions too because each run
+   opens one: measured, the third restart of a task authoring 3 sessions was refused `authored-budget-exhausted:sessions`
+   with attempts credited alone. Tokens and active time were really spent and stay counted. The finite-legacy retry
+   already re-grants the failed run's full grant.
+7. **Usage.** A `worker-lost` run's usage is unknown (ccloop's unknown-total observation). In approximate scope (no group
+   token limit, no task budget a person set, after `softLoopSince`) Orca's existing pass books the floor and the restart
+   follows on a later pass. Otherwise the run carries a `worker-lost-usage-unknown` run blocker naming
+   `orca task settle-usage <g> <t> --acknowledge charge-observed-floor` (or `charge-remaining-grant` with no floor); once
+   settled, the next pass restarts it. The pass removes either blocker once its run is no longer such a candidate.
+   Before sending, the pass asks whether the task's own budget can fund the restart (`workerLostFundingRefusal`, the
+   ladder's funding check with the credit of item 6); if not, it sends nothing and writes the ladder's `ladder-skipped`
+   note (its words exist): a refused retry-task row would be final and the restart lost silently. Measured: a settlement
+   by `charge-remaining-grant` charges the whole remaining grant, so the restart is then unfunded and the person retries
+   with `--work`. Any other refusal of the restart is booked as its row and the task stays with the person.
+8. **Display.** Web run reason: cause `worker-lost` is known — "worker lost (the machine restarted or the process was
+   killed)" with the restart sentence, en/zh; the three blocker/blocked codes have en/zh words (Problems, refusalCoverage).
+   CLI `run show` and `group show` (each task's current run) print the same facts and the recheck command.
+   `refusalCoverage`, the `i18nPseudo` enum count (216 → 217), webParity's activity kinds and the skill line follow.
+   No CLI verb was added, so `archiveGroup` CALLS and `accessMatrix` are unchanged.
+
+Criteria (real ccloop): `tests/control/workerLostE2E.test.ts` (lost mid-execute ⇒ worker-lost, restarted by itself with
+the same funded attempts, group finishes; fourth loss in a row blocks `worker-lost-repeated` and nothing else starts; a
+finite group waits for the explicit settlement, then restarts; an undetermined worker is never settled, blocks past the
+grace, is listed by recovery list, and `recovery retry --run` re-checks), `tests/control/sleepBlockedResumeE2E.test.ts`
+(#267), plus CLI and Web wording criteria. Mutations: `/private/tmp/orca-h1112/orca-273/mutations.log`.
