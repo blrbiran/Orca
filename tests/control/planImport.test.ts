@@ -701,6 +701,9 @@ describe("plan task labels through the import (labels and progress spec §2.3, c
   // unless ORCA_WRITE_IMPORT_GOLDEN=1 is set by hand.
   // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — spec §11 stamps `modelVersion: "followup-g"`
   // on every group body at creation; the golden's three groups rows gained exactly that trailing field, nothing else.
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- a group created under that marker is an
+  // expectation-model group (spec G §2.2, §12.1): its task work allocations and work-item grants carry tokens null. The
+  // regenerated golden differs from the previous one in exactly those 12 fields (4 per scenario), 100 -> null, nothing else.
   it("the preflight default is unchanged: stored bytes byte-equal to their pre-change goldens", async () => {
     const goldenPath = join(import.meta.dirname, "fixtures", "importPlanStoredBytes.golden.json");
     const tables = ["groups", "work_items", "budget_proposals", "estimates", "scheduler_wakes", "execution_snapshots", "outbox"] as const;
