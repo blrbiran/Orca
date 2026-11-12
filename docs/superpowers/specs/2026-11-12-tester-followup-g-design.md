@@ -395,3 +395,51 @@ and what it does not do. Each choice marked **builder's call** is reversible and
 - (j) Not run against a real agent: every criterion uses the synthetic ccloop or the control stub. The Orca pin is not
   moved: this branch runs against ccloop's local main build (`ORCA_CCLOOP_BIN`), and waits for the human's ccloop push
   and Orca's repin (plan O8) before it can merge.
+
+## 13. Part 2 as built, follow-up H (2026-11-12, Part B seat of session `7e164691`; branch `worktree-agent-a0a0614c8181cf24a` rebased onto `ae68e2e0`)
+
+Appended; §12 stands as written. What changed on the branch after it was rebased onto `main` (Part A's unconditional
+marker stamp), and why. Each **builder's call** is reversible.
+
+### 13.1 The gap: a run Orca dispatches for the group could not be funded
+Claims split a finite expectation-model group's remainder among ready tasks and raises hand out the rest, so the running
+live ceilings could hold all of it; a conflicting landing then blocked `reconcile-budget` (criterion H1 seen red). Closed
+without lending the reconciliation tokens the cap does not have (**builder's call**: "reserve on demand" -- the controller's
+option (b) applied only while a need exists -- rather than (a) lowering running ceilings, which needs an acknowledged
+ccloop revision before the reserve may shrink and stops work mid-call):
+- A run whose execution ended (`collected`, `reconciling`, `landed`, `settled`; its terminal report is in, so its work
+  usage is final) holds no live-ceiling reserve: its unused share returns to the group for the reconciliation or goal
+  judge its landing may need (`executionEnded`, `ceilingOutstanding`).
+- No running ceiling is raised while such a run is still active (`planCeilingRaises`).
+- `reconcileFunding` answers `funded` / `wait` / `short`. `wait` (fits once the running runs' unused ceilings come back)
+  begins the reconciliation and keeps it in R with `fundingWait` on its record; claims leave that budget aside
+  (`decideFundedAllowance`'s group binder). `short` blocks `reconcile-budget` as before. Groups without the marker answer
+  as `reconcileAffordable` did.
+- The reconciliation is funded in the write that marks its spawn, and a spawned, unbooked reconciliation is held in the
+  group's reserve at its whole budget (`reconcileInFlight`, part of `liveCeilingReserved`) until its spend is booked; the
+  driver's next re-derivation drops the hold (until then the spend is held twice -- the safe direction).
+- The goal judge and the requirement review need nothing new: the driver's pass re-derives the reserve before those
+  steps (a fresh re-derivation inside their funding was tried and removed: no criterion could see it red).
+Criteria `tests/control/reconcileFunding.test.ts` H1-H7; mutations M1-M10b.
+
+### 13.2 A second gap the flip measured: spend caps and an expectation-model run
+`committedTokens` read every active run's remaining work grant; an expectation-model run has none, so any spend-cap check
+threw `recovery-blocked:run-remaining-invalid` while one was active. Its commitment is now its live ceiling less what it
+used (H8, M11).
+
+### 13.3 The default flipped
+`DEFAULT_MODEL_VERSION` is `followup-g` (Part A already stamped it on every group); `null` stays in-process only. The
+criteria the flip turned red were classified one by one: those pinning a pre-release group's rules (finite or authored
+task grants, their top-ups and exhaustion, estimates applied to task work, the unlimited group's refusal name, funded
+grants as commitments) now name `modelVersion: null` or the new refusal name; the panel and benchmark fixtures' synthetic
+ccloop now says `tokenPolicy: "optional-v1"` (as the pinned ccloop does); the import stored-bytes golden was regenerated
+(exactly 12 task-work token fields, 100 -> null). Each rewrite is its own commit carrying the ruling.
+
+### 13.4 Left open (not built)
+- (k) A handoff-stopped expectation-model run whose usage is unknown settles `release-unmetered` (its work grant is null),
+  so the unused ceiling is released rather than charged: the group cap is not hard for that run's unknown spend.
+  `handoffStopUnknownUsage` "optional-v1, finite" stays red as the evidence; the fix (charge the unused ceiling) touches the
+  settlement arithmetic and its acknowledgement names, and was not attempted here.
+- (l) Two real-ccloop criteria pin token-allowance parking, which only a pre-release group does (`allowanceHeldSettlement`,
+  `tokenPolicyRuntime`); the real-ccloop world imports through the service, which takes no `modelVersion`, so they were
+  left red rather than given a new import path.
