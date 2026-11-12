@@ -53,6 +53,7 @@ import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspace
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
 import { applyRecheckAcceptance, applyWaiveAcceptance, type RecheckAcceptanceCommand, type WaiveAcceptanceCommand } from "./groupAcceptanceCommands.js";
+import { applyReopenTask, type ReopenTaskCommand } from "./reopenTask.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
@@ -1784,6 +1785,10 @@ export class WebControlService {
   /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
   recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {
     return this.mutate(() => applyRecheckAcceptance({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Tester follow-up G spec §1.4: revoke a task's no-change completion and run it again in the group with a note. */
+  reopenTask(command: ReopenTaskCommand): WebCommandResult {
+    return this.mutate(() => applyReopenTask({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
   }
   /** Tester follow-up E §5 (#241): a person accepts a group whose acceptance failed on its tip, with why. */
   waiveAcceptance(command: WaiveAcceptanceCommand): WebCommandResult {

@@ -16,12 +16,14 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   // Tester follow-up E §5 (#241): a group's acceptance on its final tip passed, failed, or was waived by a person.
   | "group-acceptance"
   // Tester follow-up G spec §1.2: a task completed with no change (who decided, the agent's explanation, the ordinal).
-  | "no-change-completed";
+  | "no-change-completed"
+  // Tester follow-up G spec §1.4: a person or an orchestrating agent reopened a no-change task with a note.
+  | "no-change-revoked";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
-  "no-change-completed",
+  "no-change-completed", "no-change-revoked",
 ] as const satisfies readonly ActivityKind[];
 export type ActivityRow = { groupId: string; taskId?: string | null; runId?: string | null; kind: ActivityKind; body: Record<string, unknown> };
 export type ActivityEntry = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKind; body: Record<string, unknown> };

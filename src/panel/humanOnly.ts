@@ -27,6 +27,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "close-run": "any",
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): landing an attempt no recovery path accepts is an owner's act.
   "accept-attempt": "human-only",
+  // Tester follow-up G spec §1.4, §7: a person and an orchestrating agent alike revoke a no-change completion with a note.
+  "reopen-task": "any",
   // Spec 2026-11-06 soft-mode loop run settlement (d): Orca's own booking of an approximate floor (orca-auto); no route sends it.
   "settle-approximate-usage": "panel",
   "shutdown": "panel",

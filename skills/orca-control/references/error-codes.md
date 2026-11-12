@@ -331,6 +331,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `task-checkpoint-not-committed` | 404 |
 | `task-has-no-loop-plan` | 422 |
 | `task-loop-version-conflict` | 409 |
+| `task-not-reopenable` | 409 |
 | `task-not-retryable` | 409 |
 | `task-run-moved` | 409 |
 | `usage-event-conflict` | 409 |

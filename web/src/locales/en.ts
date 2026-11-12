@@ -107,7 +107,7 @@ const activityKind = {
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
   "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
   "post-merge-check": "post-merge check", "group-acceptance": "group acceptance",
-  "no-change-completed": "no change completed",
+  "no-change-completed": "no change completed", "no-change-revoked": "no change revoked",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -2597,6 +2597,7 @@ export const enErrors: Record<string, string> = {
   "task-has-no-loop-plan": "This task has no loop plan.",
   "task-loop-version-conflict": "The loop plan changed after you started your draft. Read it again, then submit.",
   "task-run-moved": "This task has run again since you looked ({{detail}} is no longer its current run). Read the group again, then decide.",
+  "task-not-reopenable": "This task cannot be reopened now ({{detail}}). Reopen is for a task that completed (or stopped) with no change on its current run.",
   "task-not-retryable": "This task cannot be retried now ({{detail}}). Retry task is for a task whose run ended in a ccloop failure; a run blocked for another reason has Retry run.",
   "usage-event-conflict": "A usage event conflicts with the recorded one.",
   "usage-gap": "The usage record has a gap.",

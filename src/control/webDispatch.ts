@@ -452,7 +452,9 @@ export function createStartingRun(
     grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
-    ...(continuation?.operatorNote !== undefined ? { operatorNote: continuation.operatorNote } : {}),
+    ...(continuation?.operatorNote !== undefined ? { operatorNote: continuation.operatorNote }
+      // Tester follow-up G spec §1.4: a reopened task's note reaches its next run as the operator note (reopenTask.ts).
+      : (work as { reopenNote?: OperatorNote }).reopenNote !== undefined ? { operatorNote: (work as { reopenNote?: OperatorNote }).reopenNote } : {}),
     continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
   };
@@ -468,6 +470,7 @@ export function createStartingRun(
     .run(`work:${groupId}:${runId}`, canonicalBytes({ groupId, workItemId: work.workItemId, runId, envelopeHash, sessionReservation: 1, attemptReservation: 0 }).toString("utf8"));
   const record = readWork(store, groupId, target.workItemId) as unknown as { status: string; currentRunId: string | null; pendingRunId: string | null; claimOrdinal: number; lineageRunIds?: string[] };
   delete (record as {fundingReleased?:boolean}).fundingReleased;
+  delete (record as {reopenNote?:OperatorNote}).reopenNote;
   record.status = "running"; record.currentRunId = runId; record.pendingRunId = null; record.claimOrdinal = claimOrdinal;
   record.lineageRunIds = [...new Set([...(record.lineageRunIds ?? []), runId])].sort();
   saveWork(store, groupId, record as never);

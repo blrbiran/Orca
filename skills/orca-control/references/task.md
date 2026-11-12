@@ -78,6 +78,16 @@ land a failed, settled run's last attempt after Orca re-runs the task's checks o
 - `--run <run>` (required): the terminal run whose last attempt to accept (orca run show <run> names it)
 - `--note <note>` (required): why you accept it; recorded with the acceptance and in the run's decision ledger
 
+## `orca task reopen <group> <task> --note <note>`
+
+revoke a task's no-change completion and run it again in this group with a note for its agent
+
+- What it does: sends control verb `reopen-task`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `<task>`: a task id or a unique prefix
+- `--note <note>` (required): what the agent should know; delivered as the new run's operator note (at most 2048 bytes)
+
 ## `orca task settle-usage <group> <task> --acknowledge <acknowledge>`
 
 settle a run's unknown usage (cannot be undone)

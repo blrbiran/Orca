@@ -632,6 +632,8 @@ export const commandVerbSchema = z.enum([
   "close-run",
   // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a terminal run's attempt after Orca re-runs its checks.
   "accept-attempt",
+  // Tester follow-up G spec §1.4: revoke a task's no-change completion and run it again in the same group with a note.
+  "reopen-task",
   "shutdown",
   "set-workspace-mode",
   "set-agent-preferences",
@@ -828,6 +830,9 @@ export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, 
 export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
 /** Reviewed acceptance (spec 2026-11-11 §7): the terminal run whose last attempt lands after its checks, and why the person accepts it. */
 export const acceptAttemptPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
+/** Tester follow-up G spec §1.4: a note is required, non-blank and at most 2048 UTF-8 bytes (not characters). */
+export const noChangeNoteSchema = z.string().refine((note) => note.trim().length > 0, "note-empty").refine((note) => Buffer.byteLength(note, "utf8") <= 2048, "note-over-2048-bytes");
+export const reopenTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: noChangeNoteSchema }).strict();
 /** Tester follow-up E §5 (#241): why the person accepts a group whose acceptance failed on its tip. */
 export const waiveAcceptancePayloadSchema = z.object({ note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
 
@@ -1243,6 +1248,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("reopen-task"), target: groupCommandTargetSchema, payload: reopenTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1348,6 +1354,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("reopen-task"), target: groupCommandTargetSchema, payload: reopenTaskPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-workspace-mode"), target: repositoryCommandTargetSchema, payload: setWorkspaceModePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-integration-scheme"), target: repositoryCommandTargetSchema, payload: setIntegrationSchemePayloadSchema }).strict(),
@@ -1832,6 +1839,8 @@ export const activityKindSchema = z.enum([
   "group-acceptance",
   // Tester follow-up G spec §1.2: a task completed with no change.
   "no-change-completed",
+  // Tester follow-up G spec §1.4: a no-change completion revoked (or a no-change block reopened) with a note.
+  "no-change-revoked",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2333,6 +2342,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // Tester follow-up E §8: `nextRun`, what the new run starts with, when an explicit retry in a group with no token limit
   // gave it fresh attempts and active time (absent otherwise, so every other receipt is as it was).
   z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema, nextRun: z.object({ attempts: safeInteger, activeMs: safeInteger }).strict().optional() }).strict(),
+  // Tester follow-up G spec §1.4: a no-change task reopened; its next run carries the note.
+  z.object({ kind: z.literal("task-reopened"), taskId: idSchema, fromRunId: idSchema }).strict(),
   z
     .object({
       kind: z.literal("recovery-observed"),
