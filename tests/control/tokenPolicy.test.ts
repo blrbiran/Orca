@@ -58,8 +58,10 @@ it("confirms the new nullable policy and exposes valid draft and confirmed proje
  }finally{await h.dispose();}
 });
 
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task token ceiling (finite, edited, removed) is a pre-release
+// group's rule (spec G §2.2, §10.5); new groups default to the expectation model, so this criterion names that model.
 it("respects an explicitly authored finite handwritten token ceiling",async()=>{
- const h=await webFixture(undefined,[{taskId:"a",tokenBudget:99_000}],{tokenPolicy:"optional-v1"});try {
+ const h=await webFixture(undefined,[{taskId:"a",tokenBudget:99_000}],{tokenPolicy:"optional-v1",modelVersion:null});try {
  expect(readWork(h.store,"g","a").grant.work.tokens).toBe(99_000);
  }finally{await h.dispose();}
 });
@@ -98,8 +100,10 @@ it("keeps reconciliation independently finite while preserving larger explicitly
  expect(policy.finiteReconcileTokens([null,5_000_000])).toBe(5_000_000);
 });
 
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task token ceiling (finite, edited, removed) is a pre-release
+// group's rule (spec G §2.2, §10.5); new groups default to the expectation model, so this criterion names that model.
 it("edits a task ceiling finite then unlimited without changing its finite usage or handoff reserve",async()=>{
- const h=await webFixture(undefined,[{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1"});try {
+ const h=await webFixture(undefined,[{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",modelVersion:null});try {
  const service=new WebControlService(h.deps);
  for(const value of [500,null]) {
   const result=service.editProposal(h.command("proposal-edit",{baseProposalVersion:readBudgetProposal(h.store,"g").proposalVersion,operations:[{target:{scope:"task",taskId:"a",allocation:"work",dimension:"tokens"},value,provenance:"human"}]} as never));
@@ -155,8 +159,10 @@ it("clears a historical group ceiling explicitly while preserving its finite tas
   expect(readControlGroup(h.store,"epoch","g").ledger.groupLimit.tokens).toBeNull();
  }finally{await h.dispose();}
 });
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task token ceiling (finite, edited, removed) is a pre-release
+// group's rule (spec G §2.2, §10.5); new groups default to the expectation model, so this criterion names that model.
 it("an explicit pre-start task ceiling removal converts only mutable funding bookkeeping",async()=>{
- const h=await webFixture();try{
+ const h=await webFixture(undefined,undefined,{modelVersion:null});try{
   const service=new WebControlService(h.deps);
   expect(service.editProposal(h.command("proposal-edit",{baseProposalVersion:1,operations:[{target:{scope:"task",taskId:"a",allocation:"work",dimension:"tokens"},value:null,provenance:"human"}]}))).not.toHaveProperty("error");
   expect(readWork(h.store,"g","a").grant.work.tokens).toBeNull();
@@ -186,8 +192,10 @@ it("rejects a stale optional policy ceiling while preserving authoritative legal
   await expect(deliverScheduledStart(h.deps,"g")).rejects.toThrow("token-policy-identity");expect(h.store.db.prepare("SELECT id FROM runs").all()).toEqual([]);
  }finally{await h.dispose();}
 });
+// Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored task token ceiling (finite, edited, removed) is a pre-release
+// group's rule (spec G §2.2, §10.5); new groups default to the expectation model, so this criterion names that model.
 it("claims and releases mixed explicit finite and null tasks after a pre-start owner edit",async()=>{
- const h=await webFixture(undefined,[{taskId:"a"},{taskId:"b"}]);try{
+ const h=await webFixture(undefined,[{taskId:"a"},{taskId:"b"}],{modelVersion:null});try{
   const service=new WebControlService(h.deps);
   expect(service.editProposal(h.command("proposal-edit",{baseProposalVersion:1,operations:[{target:{scope:"task",taskId:"a",allocation:"work",dimension:"tokens"},value:null,provenance:"human"}]}))).not.toHaveProperty("error");
   expect(readWork(h.store,"g","b").grant.work.tokens).toBe(3_000_000);
