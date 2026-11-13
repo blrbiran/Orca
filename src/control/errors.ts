@@ -306,6 +306,9 @@ export const durableCommandErrorStatuses = {
   // Spec §2.5: a decision on a task that is not waiting at its pause line; a continue that would leave it no token to use.
   "usage-pause-not-waiting": 409,
   "usage-pause-no-headroom": 422,
+  // Tester #305 (follow-up J): a continue whose next line half the group's remainder cannot lift above what the task used;
+  // the detail names `orca group set-limit`.
+  "usage-pause-group-headroom": 422,
   "hard-cap-needs-tokens": 422,
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,

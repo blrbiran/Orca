@@ -18,14 +18,14 @@ type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
 const NOTE = { text: "finish the parser; skip the docs", scope: "next-attempt" as const };
 
-async function paused(tasks: string[], limit: number): Promise<{ t: Harness; driver: ReturnType<Harness["driver"]>; first: string; knobs: { exhausted: boolean } }> {
+async function paused(tasks: string[], limit: number, usedTokens = 10 * M): Promise<{ t: Harness; driver: ReturnType<Harness["driver"]>; first: string; knobs: { exhausted: boolean } }> {
   const knobs = { exhausted: true };
   const t = await driverHarness(tasks.map(taskId => ({ taskId })), {
     tokenPolicy: "optional-v1", modelVersion: "followup-g",
     behaviour: (id) => knobs.exhausted && id === "a" ? "exhausted" : "stoppable",
-    workTokens: (id) => id === "a" && knobs.exhausted ? 10 * M : 10,
+    workTokens: (id) => id === "a" && knobs.exhausted ? usedTokens : 10,
     liveCeilingStop: (id: string, envelope: StartEnvelope) => knobs.exhausted && id === "a" && envelope.liveCeiling !== undefined
-      ? { revision: 1, tokens: envelope.liveCeiling.tokens, cause: "pause-line" as const, observedTokens: 10 * M, phase: "execute" as const, at: "mid-call" as const } : undefined,
+      ? { revision: 1, tokens: envelope.liveCeiling.tokens, cause: "pause-line" as const, observedTokens: usedTokens, phase: "execute" as const, at: "mid-call" as const } : undefined,
   });
   const limitNow = readWebGroup(t.h.store, "g").ledger.groupLimit;
   t.service.setLimit(t.h.command("set-limit", { limit: { ...limitNow, tokens: limit } }));
@@ -90,8 +90,25 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       group.used.tokens = group.limit.tokens;
       t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(group));
       const before = JSON.stringify(readWork(t.h.store, "g", "a"));
-      expect(decide(t, { decision: "continue" })).toMatchObject({ error: { code: "usage-pause-no-headroom" } });
+      // Ruling (2026-11-13, tester follow-up J, #305): 「这一轮允许改写必要判据」 -- the refusal for a group with too little left is
+      // its own code now, and names the command that answers it; usage-pause-no-headroom is left for a task with no expectation.
+      // mutation: refuse with usage-pause-no-headroom again -> red
+      expect(decide(t, { decision: "continue" })).toMatchObject({ error: { code: "usage-pause-group-headroom", message: expect.stringContaining("orca group set-limit g") } });
       expect(JSON.stringify(readWork(t.h.store, "g", "a"))).toBe(before);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #305 (follow-up J): the run overshot its 10M line to 34.7M (ccloop stops at a boundary), past the next multiple
+  // (20M) too; that line was refused (20M <= 34.7M) for good, with the group 165M from its limit. The next line is now the
+  // first multiple above what the task used, still capped by half the group's remainder.
+  it("continue after an overshoot past the next multiple moves the line above what the task used", async () => {
+    const used = 34_756_045;
+    const { t, driver } = await paused(["a"], 200 * M, used);
+    try {
+      // mutation: drop floor(used / 10E) + 1 from the multiple -> 20M <= used, refused, red
+      expect(decide(t, { decision: "continue" })).toMatchObject({ result: { decision: "continue", nextLine: 40 * M } });
+      expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "ready", pauseLine: { multiple: 4, taskUsedAtDecision: used } });
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

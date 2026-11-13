@@ -8,7 +8,7 @@ import type { AdmissionGate } from "./admissionGate.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { commandPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
-import { pauseLineFor, taskExpectation } from "./expectationModel.js";
+import { PAUSE_LINE_MULTIPLE, pauseLineFor, taskExpectation } from "./expectationModel.js";
 import { refuseClarifying } from "./requirementRecords.js";
 import { commandSuccess, readStopIntent } from "./stopIntent.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -80,8 +80,10 @@ export type UsagePauseDecideCommand = Extract<RawAuthorityCommandV1, { verb: "us
 
 /**
  * Spec §2.5 (plan O5): a person or an orchestrating agent decides on a task waiting at its pause line.
- * - continue: the next line is pauseLineFor's next multiple (expectationModel.ts states the formula), refused
- *   usage-pause-no-headroom when it would not let the task use one more token; the task is ready again and continues
+ * - continue: the next line is pauseLineFor's next multiple (expectationModel.ts states the formula) -- tester #305: at
+ *   least the first multiple above what the task used -- refused usage-pause-group-headroom (naming group set-limit) when
+ *   half the group's remainder would not let the task use one more token, usage-pause-no-headroom when the task has no
+ *   expectation; the task is ready again and continues
  *   from its stopped run, the optional note delivered to that run as its operator note. Tester follow-up I (seat L): it
  *   resumes that run's checkpoint only when the checkpoint is complete; a run stopped mid-phase starts afresh (stepA2).
  * - stop: the task ends stopped (`usageStopped`, still blocked); the group and its other tasks go on.
@@ -111,9 +113,14 @@ export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate
           const state = pauseStateOf(work);
           const used = taskWorkTokens(store, groupId, taskId);
           const groupUsed = group.used.tokens;
-          nextLine = pauseLineFor({ expectationTokens: expectation, multiple: state.multiple + 1, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
-          if (nextLine <= used) throw new ControlError("usage-pause-no-headroom", `${nextLine}<=${used}`);
-          work.pauseLine = { multiple: state.multiple + 1, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed };
+          // Tester #305 (follow-up J): a run that overshot its line (ccloop stops at a phase boundary or between turns)
+          // may have used more than the next multiple too, and that line was then refused for good. The next line is the
+          // next multiple and at least the first one above what the task used: k = max(k + 1, floor(used / 10E) + 1).
+          const multiple = Math.max(state.multiple + 1, Math.floor(used / (PAUSE_LINE_MULTIPLE * expectation)) + 1);
+          nextLine = pauseLineFor({ expectationTokens: expectation, multiple, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
+          // Only half the group's remainder can still hold the line at or below what the task used: the group needs more.
+          if (nextLine <= used) throw new ControlError("usage-pause-group-headroom", `${nextLine}<=${used}:orca group set-limit ${groupId} --limit <a higher limit>`);
+          work.pauseLine = { multiple, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed };
           delete work.usagePause;
           work.status = "ready";
           if (note !== undefined) work.pendingOperatorNote = note; else delete work.pendingOperatorNote;
