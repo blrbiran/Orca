@@ -100,7 +100,7 @@ describe("the UserPromptSubmit hook writes, keeps and revokes the grant (spec §
   });
 
   it("a chain session (ORCA_CHAIN_ID) gets no grant: the chain wrote its prompt and no person is watching", async () => {
-    const env = { ...(await gateEnv()), ORCA_CHAIN_ID: "chain-1" };
+    const env: NodeJS.ProcessEnv = { ...(await gateEnv()), ORCA_CHAIN_ID: "chain-1" };
     expect(promptHookClaudeCode(prompt("allow-push"), env, NOW)).toEqual({ stdout: "", stderr: "orca gate: a chain session gets no push grant\n" });
     expect(await exists(env.ORCA_GATE_DIR!)).toBe(false);
   });
