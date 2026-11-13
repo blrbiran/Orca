@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { editedSplit } from "../../src/control/requirementDraftEdit.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
@@ -67,6 +68,20 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
       expect((readDraft(x.store, "r", 3).output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md", "CHANGELOG.md"]);
       expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 3)).toMatchObject({ impliedPathsOutsideTargets: [] });
     } finally { await x.dispose(); }
+  });
+
+  it("multi-directory: the path goes to the task's write in the directory its writer lists it in, a new write when it has none", () => {
+    const multi = (taskId: string, writes: Array<{ dir: string; targetPaths: string[]; checks: string[] }>, successCondition = "s") =>
+      ({ taskId, title: taskId, labels: ["feature"], goal: "g", successCondition, writes, dependsOn: [], traces: ["AC1"] });
+    const docs = multi("docs", [{ dir: "d2", targetPaths: ["README.md"], checks: ["true"] }]);
+    // mutation: always append to the task's first write -> d1 gets README.md, red
+    const fresh = editedSplit({ tasks: [multi("cli", [{ dir: "d1", targetPaths: ["src/cli.js"], checks: ["true"] }], "README.md lists it."), docs], notes: "" },
+      { kind: "add-implied-path", taskId: "cli", path: "README.md" });
+    expect((fresh.output.tasks[0] as { writes: unknown }).writes).toEqual([{ dir: "d1", targetPaths: ["src/cli.js"], checks: ["true"] }, { dir: "d2", targetPaths: ["README.md"], checks: [] }]);
+    // mutation: always push a new write -> d2 twice, red
+    const own = editedSplit({ tasks: [multi("cli", [{ dir: "d1", targetPaths: ["src/cli.js"], checks: ["true"] }, { dir: "d2", targetPaths: ["src/x.js"], checks: [] }], "README.md lists it."), docs], notes: "" },
+      { kind: "add-implied-path", taskId: "cli", path: "README.md" });
+    expect((own.output.tasks[0] as { writes: unknown }).writes).toEqual([{ dir: "d1", targetPaths: ["src/cli.js"], checks: ["true"] }, { dir: "d2", targetPaths: ["src/x.js", "README.md"], checks: [] }]);
   });
 
   it("refuses an edit that is not a listed hint, a draft the person did not read, and a result validation refuses -- changing nothing", async () => {
