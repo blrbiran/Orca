@@ -111,6 +111,28 @@ describe("raising running ceilings from free headroom (spec §2.1, plan O3)", { 
     } finally { await t.h.dispose(); }
   });
 
+  it("a blocked run takes no raise and no share: the running one gets all the headroom (tester follow-up K)", async () => {
+    // blockRun leaves the run active=1 with its group ceiling; it is waiting on a person, not working, so a share given
+    // to it would sit reserved and unused while the run that is working is starved of it.
+    const t = await harness(["a", "b"], 20 * M);
+    try {
+      const first = await t.claim(), second = await t.claim();
+      const blocked = t.body(second);
+      blocked.state = "blocked";
+      blocked.drive = { ...blocked.drive, blockedAt: "C", blockedReason: "test: waiting on a person" };
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(blocked), second);
+      expect(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(second)!.active).toBe(1);
+      const running = t.body(first).liveCeiling;
+      expect(running.cause).toBe("group");
+      setLimit(t, readGroup(t.h.store, "g").limit.tokens! + 8 * M);
+      const free = headroom(t);
+      expect(free).toBeGreaterThan(0);
+      const raises = planCeilingRaises(t.h.store, "g", Date.now());
+      expect(raises.map(raise => raise.runId)).toEqual([first]);
+      expect(raises[0]).toMatchObject({ tokens: running.tokens + free, cause: "group", revision: running.revision + 1 });
+    } finally { await t.h.dispose(); }
+  });
+
   it("a pause line caps a raise and only what is given is reserved", async () => {
     const t = await harness(["a", "b"], 20 * M);
     try {
