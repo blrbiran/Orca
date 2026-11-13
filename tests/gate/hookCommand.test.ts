@@ -10,8 +10,10 @@ import { GATE_HOOK_COMMAND, LEVEL_HOOK_COMMAND } from "../../src/gate/settings.j
 // source of what .claude/settings.json runs; each must name a registered `orca dev` command (not an old top-level name
 // that Task 14 deletes) and the settings file must carry the same bytes.
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// Ruling (2026-11-13, tester follow-up I): a push the human did not grant (spec §12) is still exit 2 with one line; the
+// line now ends with how a person grants one.
 const PUSH_LINE =
-  "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work.\n";
+  "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work. A person can allow a plain push for this session (12 h) by starting their next message with allow-push.\n";
 
 function sh(command: string, input: string) {
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolvePromise, reject) => {
