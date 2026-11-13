@@ -20,7 +20,8 @@ const mentions = (text: string, path: string): boolean => new RegExp(`(?<![\\w./
 
 /**
  * Tester #265 (Rule 5: code judges, and only hints): each task whose successCondition names, as a whole token, a path
- * that is exactly another task's targetPaths entry, while none of its own targetPaths covers it. Only paths some task
+ * that is exactly another task's targetPaths entry (or, tester follow-up K, that path's bare document name when no other
+ * listed path shares it), while none of its own targetPaths covers it. Only paths some task
  * lists count, so a prose word is never taken for a file. Multi-directory writes are compared by path alone. It never
  * refuses a draft. In task order, then the order the paths first appear in the tasks.
  */
@@ -32,11 +33,24 @@ export function impliedPathsOutsideTargets(output: SplitOutput | MultiSplitOutpu
     if (!list.includes(task.taskId)) list.push(task.taskId);
     writers.set(target, list);
   }
+  // Tester follow-up K: a document's bare name (`README` for README.md: upper case, its extension dropped) names the one
+  // listed path that has it; a name two listed paths share names neither.
+  const bareOf = (path: string): string | null => {
+    const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.[A-Za-z0-9]+$/, "");
+    return /^[A-Z][A-Z0-9_-]{2,}$/.test(name) ? name : null;
+  };
+  const bareCount = new Map<string, number>();
+  for (const path of writers.keys()) { const bare = bareOf(path); if (bare !== null) bareCount.set(bare, (bareCount.get(bare) ?? 0) + 1); }
+  const named = (text: string, path: string): boolean => {
+    if (mentions(text, path)) return true;
+    const bare = bareOf(path);
+    return bare !== null && bareCount.get(bare) === 1 && mentions(text, bare);
+  };
   const out: ImpliedPathOutsideTargets[] = [];
   for (const task of tasks) {
     const own = targetsOf(task).map(normal);
     for (const [path, owners] of writers) {
-      if (owners.includes(task.taskId) || own.some((target) => covers(target, path)) || !mentions(task.successCondition, path)) continue;
+      if (owners.includes(task.taskId) || own.some((target) => covers(target, path)) || !named(task.successCondition, path)) continue;
       out.push({ taskId: task.taskId, path, writers: [...owners] });
     }
   }

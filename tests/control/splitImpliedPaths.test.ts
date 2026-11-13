@@ -48,6 +48,21 @@ describe("a success condition naming a file only another task may write (#265)",
     ], notes: "" })).toEqual([]);
   });
 
+  it("tester follow-up K: a bare document name (README) counts when exactly one listed path has it", () => {
+    // mutation: drop the bare-name test in impliedPathsOutsideTargets -> [], red
+    expect(impliedPathsOutsideTargets({ tasks: [
+      task("cli", ["src/cli.js"], "src/cli.js prints the history and the README documents it."),
+      task("docs", ["README.md"], "README.md documents every command.", ["cli"]),
+    ], notes: "" })).toEqual([{ taskId: "cli", path: "README.md", writers: ["docs"] }]);
+    // Two listed paths share the name: ambiguous, not listed. A lower-case word (`cli`) is never taken for src/cli.js.
+    // mutation: drop the one-path-only test -> cli listed for both READMEs, red
+    expect(impliedPathsOutsideTargets({ tasks: [
+      task("cli", ["src/cli.js"], "The README documents it."),
+      task("docs", ["README.md", "docs/README.md"], "Both are complete.", ["cli"]),
+      task("usage", ["USAGE.md"], "The cli is described.", ["cli"]),
+    ], notes: "" })).toEqual([]);
+  });
+
   it("the requirement view carries it on the draft, it adds no hand-back reason, and the draft is still accepted", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: README_SPLIT }], startAt: "split" });
     try {
