@@ -4,7 +4,10 @@ import {webFixture} from "./fixtures/web.js";
 import {readControlGroup} from "../../src/panel/controlViews.js";
 import {WebControlService} from "../../src/control/webService.js";
 it("finite optional task ceiling can exceed free group reserve",async()=>{
- const h=await webFixture(undefined,[{taskId:"a",loop:{goal:"ship",successCondition:"passes",targetPaths:["a"],checks:["true"],tokenBudget:99000}}],{tokenPolicy:"optional-v1"});
+ // Ruling (2026-11-13, tester follow-up J, #307): 「这一轮允许改写必要判据」 -- a finite task ceiling is a pre-release group's
+ // (spec G §2.2, §10.5); in an expectation-model group set-loop's tokens are the task's expectation (its token intent,
+ // tests/control/setLoopExpectation.test.ts), so this criterion names the model it pins.
+ const h=await webFixture(undefined,[{taskId:"a",loop:{goal:"ship",successCondition:"passes",targetPaths:["a"],checks:["true"],tokenBudget:99000}}],{tokenPolicy:"optional-v1",modelVersion:null});
  try {
   const service=new WebControlService(h.deps);let view=readControlGroup(h.store,"epoch","g");
   // Tester round 2 (ruling H2, spec §5.2.2; 「这次批准改写所有必要的判据」): the queued estimate now commits the 1,000,000-token

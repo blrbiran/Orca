@@ -2611,8 +2611,19 @@ export class WebControlService {
           const handoff = proposal.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
           if (!allocation || !handoff) throw new ControlError("recovery-blocked");
           const before = allocation.amount;
+          // Tester #307 (follow-up J), G spec §2.2 / §10.3: in an expectation-model group whose task tokens are optional --
+          // the groups whose claim nulls the run's token grant and bounds it by a live ceiling (webDispatch.ts) -- a task's
+          // work tokens are its expectation, kept on the work item as its token intent (proposal-edit's rule), and the
+          // allocation's tokens stay as they are. set-loop has no hard switch, so the intent is soft. In a finite-legacy group
+          // the allocation is still the run's grant, so it moves as before. A payload whose tokens equal the allocation's
+          // leaves the intent alone: the plan card sends the allocation's amount with every change of plan or inputs.
+          const expectationGroup = expectationModelApplies(group) && hasTokenPolicy(this.store, id);
+          const tokenSource = payload.workProvenance?.tokens;
+          const intent = !expectationGroup || payload.work.tokens === before.tokens ? undefined
+            : writeTokenIntent(payload.work.tokens, false, tokenSource === undefined ? { provenance: "human", estimateId: null } : { provenance: "model", estimateId: tokenSource.estimateId });
+          const intentUnchanged = intent === undefined || canonicalBytes(work.tokenIntent ?? null).equals(canonicalBytes(intent));
           // R10: sessions is not in the payload; it is carried over unchanged.
-          const next: BudgetAmount = { ...before, tokens: payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
+          const next: BudgetAmount = { ...before, tokens: expectationGroup ? before.tokens : payload.work.tokens, activeMs: payload.work.activeMs, attempts: payload.work.attempts };
           if(next.tokens===null&&!hasTokenPolicy(this.store,id)){
             enableOptionalTokenPolicy(this.store,id);
             const draftTokens=sumAmounts(proposal.allocations.filter(a=>a.ownerKind==="task").map(a=>amountSchema.parse(a.amount))).tokens;
@@ -2621,12 +2632,12 @@ export class WebControlService {
           // A plan-version bump with identical bytes is a no-op too; the recipe then keeps its version.
           // Spec §10.4: a skills-only change is not a no-op.
           const skillsUnchanged = canonicalBytes(current.loop?.skills ?? null).equals(canonicalBytes(expanded.recipe.skills ?? null));
-          if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before) && skillsUnchanged) throw new ControlError("no-op-command");
+          if (expanded.canonicalJson === current.originalContractCanonicalJson && same(next, before) && skillsUnchanged && intentUnchanged) throw new ControlError("no-op-command");
           // W5: a dimension taken from an estimate is its suggestion for this task's work allocation (proposal-edit's rule).
           const modelDimensions = Object.entries(payload.workProvenance ?? {}).flatMap(([d, source]) => source ? [{ dimension: d as "tokens" | "activeMs" | "attempts", estimateId: source.estimateId }] : []);
           refuseAdvisoryTaskWork(proposal.groupLimit, modelDimensions.map(({ dimension }) => dimension));
           for (const { dimension, estimateId } of modelDimensions) {
-            verifyModelField(this.store, id, proposal, { scope: "task", taskId, allocation: "work", dimension }, next[dimension], estimateId);
+            verifyModelField(this.store, id, proposal, { scope: "task", taskId, allocation: "work", dimension }, dimension === "tokens" ? payload.work.tokens : next[dimension], estimateId);
           }
           // Step 6's refusal, before anything is written: the reserve may not go negative in any dimension.
           for (const d of dimensions) {
@@ -2660,9 +2671,10 @@ export class WebControlService {
           // saying "changed", even after a later change back to the imported contract. Never cleared; a budget-only change
           // (same contract bytes) does not set it.
           if (expanded.canonicalJson !== current.originalContractCanonicalJson) work.planChanged = true;
+          if (intent !== undefined) { if (intent === null) delete work.tokenIntent; else work.tokenIntent = intent; }
           // Step 6.
           for (const d of dimensions) if (next[d] !== before[d]) allocation.fieldProvenance[d] = { provenance: "human", estimateId: null };
-          for (const { dimension, estimateId } of modelDimensions) allocation.fieldProvenance[dimension] = { provenance: "model", estimateId };
+          for (const { dimension, estimateId } of modelDimensions) if (!(expectationGroup && dimension === "tokens")) allocation.fieldProvenance[dimension] = { provenance: "model", estimateId };
           allocation.amount = next;
           if (proposal.state === "editable") {
             // Step 7, draft: the proposal version advances, as every proposal change does, so a stale confirm is refused.

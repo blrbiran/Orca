@@ -185,7 +185,12 @@ export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId
  }
  if(!canonicalBytes(inherited).equals(canonicalBytes(parsed.data.inheritedUsage)))throw new ControlError("recovery-blocked","funded-lineage");
  const remaining=remainingBudget(authored,inherited),actual=parsed.data.grant.work;
- if((remaining.tokens!==null&&(actual.tokens===null||actual.tokens>remaining.tokens))||["activeMs","attempts","sessions"].some(d=>actual[d as keyof Amount]!==remaining[d as keyof Amount]))throw new ControlError("recovery-blocked","funded-grant-authority");
+ // Tester #307 (follow-up J): an expectation-model group's task run has no work-token grant whatever its authored ceiling --
+ // its live ceiling bounds it (webDispatch.ts createStartingRun nulls both the grant and this allowance's). Null there is
+ // that claim's shape, not an over-grant.
+ // Read only on that combination (a finite authored ceiling, a null grant), so no other run pays for the group read.
+ const overGranted=remaining.tokens!==null&&(actual.tokens===null?!expectationModelApplies(readGroup(store,run.groupId)):actual.tokens>remaining.tokens);
+ if(overGranted||["activeMs","attempts","sessions"].some(d=>actual[d as keyof Amount]!==remaining[d as keyof Amount]))throw new ControlError("recovery-blocked","funded-grant-authority");
  const {grant,...policy}=parsed.data;
  if(run.tokenPolicy!==undefined&&!canonicalBytes(policy).equals(canonicalBytes(run.tokenPolicy)))throw new ControlError("recovery-blocked","funded-policy-identity");
  return parsed.data;
