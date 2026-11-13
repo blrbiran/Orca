@@ -16,10 +16,34 @@ function checkPaths(write: Write): string[] {
     .filter((token) => token.length > 0).map((token) => `\0${write.dir}/${posix.normalize(token)}`);
 }
 
+const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Tester follow-up K: the names a task's text may use for what `task` writes -- each claimed path (a `<dir>/**` claim as
+ * its directory), that path without its extension, its last segment, that segment without its extension, and the
+ * taskId -- with the directory (`writes[].dir`, "" for one repository) each path is in. A name of two characters or
+ * fewer is not one (`a.ts` is not the article `a`).
+ */
+function namesOf(task: SplitOutput["tasks"][number] | MultiSplitOutput["tasks"][number]): Array<{ dir: string | null; name: string }> {
+  const names: Array<{ dir: string | null; name: string }> = [{ dir: null, name: task.taskId }];
+  const bare = (text: string): string => text.replace(/\.[A-Za-z0-9]+$/, "");
+  for (const write of writesOf(task)) for (const declared of write.targetPaths) {
+    const path = posix.normalize(declared).replace(/\/\*\*$/, "").replace(/\/+$/, "");
+    if (path === "**" || path === ".") continue;
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    for (const candidate of new Set([path, bare(path), name, bare(name)])) names.push({ dir: write.dir, name: candidate });
+  }
+  return names.filter((entry) => entry.name.length > 2);
+}
+/** The text names `name` as a whole token, case-insensitively: not inside a longer word or path (`searching`, `search.js.bak`). */
+const mentions = (text: string, name: string): boolean => new RegExp(`(?<![\\w-])${escaped(name)}(?![\\w-]|\\.\\w)`, "i").test(text);
+
 /**
  * Tester #284 (Rule 5: code judges, and only hints): each declared edge `before -> after` (after.dependsOn names before)
  * that is the only thing ordering the pair -- no other dependency path leads from before to after -- while the two write
- * sets are disjoint and no check of `after` names a path `before` writes. Code cannot see that `after` builds on
+ * sets are disjoint, no check of `after` names a path `before` writes, and (tester follow-up K) `after`'s title, goal,
+ * success condition and checks name none of `before`'s files nor `before` itself (namesOf): the follow-up I false
+ * positive listed `search ∥ cli` though cli was to import search, which at split time only the cli task's words say. When
+ * the words are unclear the edge is kept (not listed). Code cannot see that `after` builds on
  * `before`'s output in any other way, so this is a hint for a person or an orchestrating agent to send feedback on; it
  * never refuses a draft. In task order, then dependency order.
  */
@@ -46,6 +70,12 @@ export function parallelCandidates(output: SplitOutput | MultiSplitOutput): Para
     if (intersect(written, claims.get(after.taskId)!).length > 0) continue;
     const read = writesOf(after).flatMap(checkPaths);
     if (read.some((path) => written.some((claim) => contains(claim.normalized, path)))) continue;
+    // The prose has no directory, so any of before's names counts there; a check runs in its write's directory, so only
+    // the names of before's paths in that directory (and before's taskId) count in it.
+    const prose = [after.title, after.goal, after.successCondition].join("\n");
+    const names = namesOf(byId.get(before)!);
+    if (names.some((entry) => mentions(prose, entry.name))) continue;
+    if (writesOf(after).some((write) => names.some((entry) => (entry.dir === null || entry.dir === write.dir) && write.checks.some((check) => mentions(check, entry.name))))) continue;
     out.push({ before, after: after.taskId });
   }
   return out;

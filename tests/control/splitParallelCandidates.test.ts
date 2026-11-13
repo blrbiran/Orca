@@ -38,6 +38,24 @@ describe("the split's parallel candidates (#284)", () => {
     expect(parallelCandidates(out)).toEqual([{ before: "a", after: "b" }, { before: "b", after: "c" }]);
   });
 
+  it("tester follow-up K: an edge whose later task's goal, success condition or checks name the earlier task's files is not listed", () => {
+    // The follow-up I false positive: `search ∥ cli` was listed though cli imports search. The cli task's own words are
+    // all code has at split time (the import is what the task is about to write), so a mention of what search writes --
+    // its path, the path without extension, its file name or its module name -- or of the task itself keeps the edge.
+    const pair = (cli: Partial<ReturnType<typeof task>>) => ({ tasks: [task("search", ["src/search.js"], []), { ...task("cli", ["src/cli.js"], ["search"]), ...cli }], notes: "" });
+    // mutation: drop the text-mention test in parallelCandidates -> search ∥ cli listed for every case below, red
+    expect(parallelCandidates(pair({ successCondition: "src/cli.js runs `bm search <q>` through the search module." }))).toEqual([]);
+    expect(parallelCandidates(pair({ goal: "Import ./search.js from the CLI." }))).toEqual([]);
+    expect(parallelCandidates(pair({ checks: ["node --test test/cli.test.js src/search.js"] }))).toEqual([]);
+    expect(parallelCandidates(pair({ successCondition: "The CLI wires in what the Search task built." }))).toEqual([]);
+    // A directory claim: its last segment is the module's name.
+    expect(parallelCandidates({ tasks: [task("index", ["lib/search/**"], []), { ...task("cli", ["src/cli.js"], ["index"]), goal: "Call lib/search from the CLI." }], notes: "" })).toEqual([]);
+    // No mention: still listed. Names under three characters (a.ts, b.ts) are not matched as words, so `a` the article
+    // never counts; a longer word that merely contains the name (`searching`) does not either.
+    // mutation: match the stem inside longer words -> [] here, red
+    expect(parallelCandidates(pair({ goal: "Parse argv; searching is out of scope.", successCondition: "src/cli.js prints usage." }))).toEqual([{ before: "search", after: "cli" }]);
+  });
+
   it("multi-directory writes: a check in one directory names a file the earlier task writes in that directory only", () => {
     const multi = (taskId: string, writes: Array<{ dir: string; targetPaths: string[]; checks: string[] }>, dependsOn: string[]) =>
       ({ taskId, title: taskId, labels: ["feature"], goal: "g", successCondition: "s", writes, dependsOn, traces: ["AC1"] });
