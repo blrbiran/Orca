@@ -56,7 +56,9 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
   if (acknowledge === "release-known-zero" && !knownZeroProved(run)) throw new ControlError("run-usage-not-settleable", "known-zero-not-proved");
   if (acknowledge === "charge-observed-floor") {
     // Tester follow-up F §2 (#116, ledger C3): a finite remainder only (an unlimited one keeps its forms), and only with a floor.
-    if (run.remaining.work.tokens === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
+    // Tester follow-up I (G spec §16, human 「按你的建议走」): an expectation-model run's live ceiling bounds it as a finite
+    // remainder does, so it is admitted too; without a floor it is refused and its unused ceiling stays held.
+    if (run.remaining.work.tokens === null && liveCeilingOf(run) === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
     if (observedFloorOf(run) === null) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
   } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null && liveCeilingOf(run) === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
@@ -224,6 +226,9 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
           const request = latestRequestForRun(store, groupId, run.runId), group = readGroup(store, groupId);
           const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId);
           const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at });
+          // Tester follow-up I (G spec §16): the floor is booked and the unused live ceiling held for the unknown usage
+          // (follow-up H, gap k) is given back in the same write; the run's usage is no longer unknown.
+          if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
           const marker = usageSettlementSchema.parse({ method: "observed-floor", commandId: command.commandId, principal, at,
             groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
             charged, floorTokens, reason, reservationDisposition: disposition, ...evidence.proof, ...resolution(request) });

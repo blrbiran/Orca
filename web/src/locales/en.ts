@@ -783,7 +783,7 @@ export const en = {
       // Tester follow-up F §2 (#116): the explicit observed-floor form of a finite remainder, and its receipt.
       floorOpen: "Charge observed usage ({{tokens}} tokens, approximate)",
       floorConfirmation: "Confirm approximate usage settlement",
-      floorWarning: "This charges only the {{tokens}} work tokens ccloop observed before the run stopped, booked as approximate usage: what it did not observe is not charged, so the group's totals become a lower bound. The rest of the grant is not charged. It cannot be undone and does not restart the task.",
+      floorWarning: "This charges only the {{tokens}} work tokens ccloop observed before the run stopped, booked as approximate usage: what it did not observe is not charged, so the group's totals become a lower bound. The rest of the grant (or of the live ceiling) is not charged. It cannot be undone and does not restart the task.",
       floorApprove: "I understand and approve this approximate charge",
       floorConfirm: "Confirm approximate charge of {{tokens}} tokens",
       observedReceipt: "Settled by {{principal}} at {{at}}: at least {{tokens}} work tokens (observed usage, approximate)",

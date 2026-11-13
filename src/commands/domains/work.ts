@@ -588,10 +588,13 @@ export const WORK_ROWS: CommandDef[] = [
   // wants one (humanOnly.ts SOCKET_TIER), so the verb is open and its flag says which form is a person's.
   verb({ domain: "task", action: "settle-usage", summary: "settle a run's unknown usage (cannot be undone)", verb: "settle-unknown-usage", positionals: [GROUP, TASK], access: "open",
     // Tester follow-up F §2 (#116, ledger C3): charge-observed-floor books a finite remainder's run at ccloop's observed floor.
-    flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|charge-observed-floor|release-known-zero|release-unmetered: an agent may send charge-remaining-grant, or release-known-zero when ccloop proved the failed run spent nothing, or charge-observed-floor (charges only the floor ccloop observed, marked approximate; a finite remainder with a known floor, else refused observed-floor-unknown), without a person token; release-unmetered needs a person token (orca auth login, then --as-person); refused to a run Orca dispatched" }],
+    flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|charge-observed-floor|release-known-zero|release-unmetered: an agent may send charge-remaining-grant, or release-known-zero when ccloop proved the failed run spent nothing, or charge-observed-floor (charges only the floor ccloop observed, marked approximate; a finite remainder, or a live ceiling, with a known floor, else refused observed-floor-unknown: then charge-remaining-grant), without a person token; release-unmetered needs a person token (orca auth login, then --as-person); refused to a run Orca dispatched" }],
     hint: (error) => error.code === "control-person-token-required"
       ? "without a person token, send --acknowledge charge-remaining-grant (or release-known-zero when proved, or charge-observed-floor when ccloop observed a floor); release-unmetered is a person's: orca auth login, then --as-person"
-      : undefined,
+      // Tester follow-up I (G spec §16): no floor -- the unused grant or live ceiling stays held until charged.
+      : error.message.endsWith(":observed-floor-unknown")
+        ? "ccloop observed no usage floor for this run: settle with --acknowledge charge-remaining-grant (charges the unused grant or live ceiling), or wait; until then that part stays held"
+        : undefined,
     route: (c) => `groups/${group(c)}/settle-unknown-usage`,
     payload: async (c) => {
       const runId = await currentRun(c);

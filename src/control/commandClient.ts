@@ -108,7 +108,7 @@ export function settlingPrincipalFor(commandId: string, acknowledge: string): st
   return AGENT_SETTLE_ACKNOWLEDGE.includes(acknowledge) ? c.principal : null;
 }
 /** The refusal's note when no one may settle: which forms an agent may send without a person token. */
-export const AGENT_SETTLE_NOTE = "an agent without a person token may send acknowledge charge-remaining-grant, or release-known-zero when ccloop proved the run spent nothing, or charge-observed-floor when the remainder is finite and ccloop observed a floor";
+export const AGENT_SETTLE_NOTE = "an agent without a person token may send acknowledge charge-remaining-grant, or release-known-zero when ccloop proved the run spent nothing, or charge-observed-floor when the remainder is finite (or a live ceiling bounds it) and ccloop observed a floor";
 /**
  * Socket usage settlement spec 2026-10-29 §2: the ledger row's `person_principal` -- the person token's account for a
  * socket command with person authority, null for a Web row (its principal already names the account) and for anyone else.

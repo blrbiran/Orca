@@ -81,6 +81,10 @@ orca control get groups/<groupId>/decisions
   an unlimited remainder keeps its forms. A blocked requirement or estimate call takes the same value on `recovery-retry`
   (`--acknowledge charge-observed-floor`); a flow call does not. Choosing it is a judgement that the floor is close
   enough to what was spent: the group's totals then read as a lower bound.
+- Tester follow-up I: an expectation-model run (one with a live ceiling and no work grant) whose usage is unknown keeps its
+  unused ceiling held until settled; it admits `charge-remaining-grant` (charges that whole unused part) and, when ccloop
+  observed a floor, `charge-observed-floor` (books the floor, gives the held rest back). No floor: refused
+  `observed-floor-unknown`; charge the remaining grant or wait.
 - Saved-result verification is a distinct action after the eligibility read says `eligible`; its source run, attempt
   and capsule hash come from that answer. It skips execution, but validation/verification may consume model usage.
   `unavailable` is a reason to inspect evidence or use an otherwise legal ordinary retry, not an invitation to guess

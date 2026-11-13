@@ -643,7 +643,7 @@ export const zh: Translation<typeof en> = {
       approximateRefused: "Orca 未能自动结清用量：{{code}}",
       floorOpen: "按观测用量记账（{{tokens}} 个 token，近似）",
       floorConfirmation: "确认近似用量结清",
-      floorWarning: "只记入 ccloop 在运行停止前观测到的 {{tokens}} 个工作 token，作为近似用量：没观测到的部分不记，所以组的合计变成下限。授予额度的其余部分不记。此操作不可撤销，也不会重启任务。",
+      floorWarning: "只记入 ccloop 在运行停止前观测到的 {{tokens}} 个工作 token，作为近似用量：没观测到的部分不记，所以组的合计变成下限。授予额度（或实时上限）的其余部分不记。此操作不可撤销，也不会重启任务。",
       floorApprove: "我理解并同意此次近似记账",
       floorConfirm: "确认近似记入 {{tokens}} 个 token",
       observedReceipt: "{{principal}} 于 {{at}} 结清：至少 {{tokens}} 个工作 token（观测用量，近似）",

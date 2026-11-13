@@ -73,7 +73,7 @@ import { liveNotesOf } from "../control/liveNotes.js";
 import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenIntentOf } from "../control/expectationModel.js";
-import { liveCeilingRecordSchema } from "../control/liveCeiling.js";
+import { liveCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
@@ -1771,7 +1771,8 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
   const refusalReason = refusalFor();
   // Tester follow-up F §2 (#116): the observed-floor form, offered while unsettled with a finite remainder and a known floor.
   const floor = observedFloorOf(run as never);
-  const observedFloor = run.usageSettlement === undefined && run.remaining.work.tokens !== null && floor !== null
+  // Tester follow-up I (G spec §16): or an expectation-model run's live ceiling in place of a finite remainder.
+  const observedFloor = run.usageSettlement === undefined && (run.remaining.work.tokens !== null || liveCeilingOf(run) !== null) && floor !== null
     ? (reason => ({ observedFloor: { tokens: floor, allowed: reason === null, refusalReason: reason } }))(refusalFor("charge-observed-floor")) : {};
   // Spec 2026-11-06 §3.3 (finding 6): Orca's refused attempt is named on the run; the person's path stays offered.
   const auto = store.db.prepare("SELECT original_status,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, approximateCommandId(run.runId, run.generation));
