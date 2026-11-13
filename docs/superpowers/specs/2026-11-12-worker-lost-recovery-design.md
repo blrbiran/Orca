@@ -267,3 +267,48 @@ Left open (not built): a dead run blocked at C stays `active` and so keeps any u
 closed (`ceilingOutstanding` counts an active run that has not ended), and as an active `group`-cause run it is a raise
 candidate (`planCeilingRaises`); and ccloop's `settle-lost-worker` could compute a floor from the killed call's transcript
 (codex reports turn usage on stdout), which would make the floor a real observation (a ccloop change).
+
+## Correction and as built — review of #273, implementer seat E of tester follow-up I (Orca session `d467cbd2`, 2026-11-13)
+
+The human asked for an independent review of #273 and then its fixes (「派独立subagent review 然后实现」). Built on Orca main
+`b281f0ec` and ccloop main `b43e29b`, branch `i/worker-lost-fixes` in both repositories; Orca's pin is unchanged until the
+controller repins. The text above stays as written; where it no longer holds, this section says so.
+
+1. **§5.4 "at most 3 worker-lost restarts per task lineage" means: consecutive, in claim order.** The as-built Orca half,
+   item 5, counted the runs "back from the current one" by walking `lineageRunIds` reversed -- but that list is stored
+   sorted by run id (`webDispatch.ts`), and run ids are random, so the walk was in random order: the bound could be
+   skipped after a real failure, or fire on the first loss of a new streak. `workerLostCandidates` (systemDebug.ts) now
+   walks the lineage's runs newest first by the `runs` table's rowid -- the claim order every other "earlier run" reader
+   uses (fundedAllowance.ts, landingWatch.ts). The stored order of `lineageRunIds` is unchanged. Criterion:
+   `tests/control/workerLostStreak.test.ts` (ids chosen so that id order is not claim order).
+2. **A worker that dies between writing its candidate and releasing its lease** (its end is candidate → seal → lease
+   release) left a candidate whose stop could never be proved, and the run waited forever -- the #273 symptom. ccloop
+   as-built items 2 and 4 ("a run with a candidate never carries `worker`") no longer hold:
+   - ccloop `collect` reports `worker` (`lost` or `undetermined`) also beside a loop run's candidate that has no stop
+     proof while the launch is `claimed` or `sealed`. A candidate with a stop proof never carries it.
+   - ccloop `settle-lost-worker` settles a `sealed` run whose stop cannot be proved as it settles a claimed one (confirm
+     dead, reap, release the lease), and answers a sealed run whose stop is proved at once, without reading liveness.
+   - **A candidate the worker wrote is kept as its outcome** (a success stays a success): it is the worker's own decision,
+     already on disk; only the stop proof was missing. Only a run with no candidate is moved to the `worker-lost` failure.
+   - Orca stepC (`workerReportActionable`, executionDriver.ts) calls `settle-lost-worker` for `lost` also beside a
+     candidate without a stop proof, and treats `undetermined` there as in §5.2 (grace, then `worker-undetermined`). The
+     next round takes the now-proved candidate on as usual: a success lands; the run is not failed and not restarted. One
+     `worker-lost` activity row records that the worker was lost.
+   - **Not changed:** step H (a run with an open handoff request, item 9) still acts on `worker` only when there is no
+     candidate; a candidate without a proof under a request is left to the request's own grace (outcome-unknown), as
+     before -- it does not wait forever, but its checkpoint is not taken. No criterion was built for that path this round.
+3. **ccloop `readProcessStartedAt`** (the worker's recorded start) read `ps lstart` in the local zone, ambiguous in a DST
+   fall-back hour, where a live worker could be recorded an hour early and look lost. It now reads lstart under TZ=UTC and
+   parses it as UTC, as the owner liveness check does.
+4. **A `settle-lost-worker` interrupted after it wrote the failed state** is completed by running it again; the unknown
+   usage observation of the killed call is now booked from the stored failure cause, so the re-run books it too (before,
+   the re-run found a terminal state and booked none, so the run's usage looked known). **Not fixed, reported:** the
+   interrupted process leaves ccloop's `control/accepted.lock` behind, and ccloop has no stale-lock recovery for it, so in
+   that case every later `settle-lost-worker` answers `control-accepted-busy` until the file is removed (the criterion
+   removes it by hand, saying so). Orca surfaces that as a peer error each pass.
+5. **§5.1 "a live worker is never settled"** is now its own criterion (`workerLostE2E.test.ts`, "never asks ccloop to
+   settle a run whose worker is alive").
+
+Criteria (ccloop, added only): `tests/control/workerLost.test.ts` (two new describe blocks), `tests/control/workerLaunch.test.ts`.
+Criteria (Orca, added): `tests/control/workerLostStreak.test.ts`; `tests/control/workerLostE2E.test.ts` (a new describe block;
+its second case needs the ccloop branch above).
