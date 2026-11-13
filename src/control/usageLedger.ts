@@ -3,7 +3,10 @@ import type { ControlStore } from "./store.js";
 import type { ModelUsage, UsageEvent } from "./types.js";
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const modelUsageSchema = z.object({ model: z.string().min(1).max(200), input: count, output: count, cacheRead: count, cacheWrite: count }).strict();
+// Raw usage detail spec 2026-11-13 §3/§8 (tester follow-up J): optional sub-parts and annotations ccloop reports when its
+// source does; never addends -- entryTotal and the reconciliation of the four parts are unchanged.
+export const modelUsageSchema = z.object({ model: z.string().min(1).max(200), input: count, output: count, cacheRead: count, cacheWrite: count,
+  reasoning: count.optional(), cacheWrite5m: count.optional(), cacheWrite1h: count.optional(), requests: count.optional(), maxRequestInput: count.optional() }).strict();
 // ccloop's own schema (orca/usage-by-model, B1/B2 rulings): non-empty -- absent is the one way to say "unknown" -- and
 // strictly ascending by `model` in JS code-unit order (`<`, never localeCompare), so both sides agree on every name.
 export const byModelSchema = z.array(modelUsageSchema).min(1).refine((entries) => entries.every((entry, index) => index === 0 || entries[index - 1]!.model < entry.model), "byModel must be sorted by model, without repeats");

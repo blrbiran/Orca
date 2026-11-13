@@ -11,7 +11,7 @@ import { bookUsageDelta, byModelSchema } from "./usageLedger.js";
 import { growForEstimateOverrun } from "./estimateOverrun.js";
 import { liveCeilingOf, syncCeilingReserve } from "./liveCeiling.js";
 import { noteOverExpectation } from "./overExpectation.js";
-const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),byModel:byModelSchema.nullable().optional()}).strict();
+const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),byModel:byModelSchema.nullable().optional(),phase:z.enum(["plan","execute","verify","setup"]).optional()}).strict();
 /** Accounts spec §5.1: `appliedAt` (ms) stamps the usage-ledger rows this call books; callers with a clock pass it. */
 export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number=Date.now()):{applied:boolean;highWater:number} {
   eventSchema.parse(event);const hash=hashPayload(event);

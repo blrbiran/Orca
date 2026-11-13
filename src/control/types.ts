@@ -46,13 +46,17 @@ export type HandoffAck =
   | {kind:"complete";requestId:string;checkpointId:string}
   | {kind:"unknown";requestId:string};
 /** Accounts spec §4.1 / D7: one model's cumulative usage within a run's bucket; `input` is non-cached input. */
-export interface ModelUsage { model: string; input: number; output: number; cacheRead: number; cacheWrite: number }
+export interface ModelUsage { model: string; input: number; output: number; cacheRead: number; cacheWrite: number;
+  /** Raw usage detail spec 2026-11-13 (tester follow-up J): optional sub-parts / annotations, never addends. */
+  reasoning?: number; cacheWrite5m?: number; cacheWrite1h?: number; requests?: number; maxRequestInput?: number }
 export interface UsageEvent {
   runId: string; generation: number; eventSeq: number;
   bucket: "work" | "handoff";
   cumulative: Amount | null; source: ArtifactRef;
   /** Absent (or null) when the peer cannot tell; sorted by model, unique, non-empty otherwise. */
   byModel?: ModelUsage[] | null;
+  /** Raw usage detail spec §8.1: the loop phase that produced a work event; absent otherwise. */
+  phase?: "plan" | "execute" | "verify" | "setup";
 }
 export interface StopProof {
   executionId: string; generation: number; isolated: true; source: ArtifactRef;
