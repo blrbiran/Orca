@@ -2122,6 +2122,9 @@ function workerUndetermined(deps: ExecutionDriverDeps, run: DriverRun, reason: s
       .run(`${WORKER_UNDETERMINED}:${run.runId}`, run.groupId, run.runId, WORKER_UNDETERMINED, canonicalBytes({ evidenceIds: [] }).toString("utf8"));
     return true;
   });
+}
+
+/**
  * Tester follow-up G spec §2.1/§2.5 (plan O4, D3): a run stopped at its live ceiling (cause group or pause-line) is settled
  * recoverable with its partial candidate committed as a checkpoint -- the allowance path's settle without its ccloop
  * allowance packet -- and classifyCeilingStop decides whether its task continues now, waits for a top-up, or waits for a
