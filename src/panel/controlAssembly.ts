@@ -1,5 +1,6 @@
 import type { PanelCorrections } from "../control/correctionCommands.js";
-import { advanceFlowRuns, startFlowRun } from "../flow/kernel.js";
+import { advanceFlowRuns, recordRunError, startFlowRun } from "../flow/kernel.js";
+import { getFlowRun, listRunsWithOpenWork } from "../flow/store.js";
 import { registeredDirProject } from "../flow/flowCommands.js";
 import type { SchedulePassDeps } from "../control/schedules/pass.js";
 import { createPanelFlow, type PanelFlow } from "./flowAssembly.js";
@@ -344,6 +345,30 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   // gate for rows the first one is about to take. Dropping is the correct answer, not a shortcut.
   let driver: ExecutionDriver | null = null;
   let inFlight: Promise<void> | null = null;
+  // Tester follow-up I: a flow pass failing the same way every pass (a ccloop file gone mid-install answered
+  // `control-peer-exit:ENOENT` some 260 times in a real panel log) is logged once until it changes or a pass succeeds. When
+  // the agents cannot be listed, no flow run can advance: each open run shows why on its page (lastError), cleared by the
+  // next clean pass (advanceFlowRuns).
+  let flowFailure: string | null = null;
+  const flowFailed = (message: string): void => {
+    if (message === flowFailure) return;
+    flowFailure = message;
+    process.stderr.write(`orca-control: flow pass failed: ${message}\n`);
+  };
+  const flowPass = async (): Promise<void> => {
+    try { await flow!.refreshAgents(); }
+    catch (error) {
+      const message = `the agents could not be listed: ${error instanceof Error ? error.message : String(error)}`;
+      flowFailed(message);
+      for (const flowRunId of listRunsWithOpenWork(store)) {
+        if (getFlowRun(store, flowRunId)?.state === "stopped") continue;
+        try { recordRunError(flow!.deps, flowRunId, message); } catch { /* the line above already said it */ }
+      }
+      return;
+    }
+    try { await advanceFlowRuns(flow!.deps); flowFailure = null; }
+    catch (error) { flowFailed(error instanceof Error ? error.message : String(error)); }
+  };
   const pump = (): Promise<void> => {
     if (inFlight !== null) return inFlight;
     void correctionExporter?.maybeRun();
@@ -365,9 +390,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
         startGroup: groupScheduleStarter((command, origin) => service.importPlan(command, origin)),
       }))
       // A flow error never skips the auto-start pass of every other group (advanceFlowRuns records a run's own error on it).
-      .then(() => flow!.refreshAgents().then(() => advanceFlowRuns(flow!.deps)).catch((error: unknown) => {
-        process.stderr.write(`orca-control: flow pass failed: ${error instanceof Error ? error.message : String(error)}\n`);
-      }))
+      .then(() => flowPass())
       // Tester round 2 spec §7.2: unlimited-token groups a person created are confirmed before the auto-start pass, so one
       // confirmed here starts in the same pass. Refusals are booked (one per proposal version) and written here.
       .then(() => autoConfirmStep(service))

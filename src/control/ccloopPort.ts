@@ -207,7 +207,11 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
    const personDir=run===null?undefined:options.dispatchedPersonDir?.();
    const env=run===null?undefined:{...process.env,[DISPATCHED_RUN_ENV]:run,...(personDir===undefined?{}:{ORCA_PERSON_DIR:personDir})};
    const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs,...(env===undefined?{}:{env})},(error,stdout,stderr)=>{
-    if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
+    if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();
+    // Tester follow-up I: ccloop never started (an errno, not an exit: its file gone mid-install, say) -- name the path,
+    // which leads with "/" so peerFailure never reads it as a ccloop code. Was the bare `control-peer-exit:ENOENT`.
+    if(typeof e.code==="string"&&suffix==="")return reject(new ControlError("control-peer-exit",`${e.code}:${binary}: ccloop could not be started (${e.code})`));
+    return reject(new ControlError("control-peer-exit",`${String(e.code)}${suffix?":"+suffix:""}`));}
     if(Buffer.byteLength(stdout)>MAX_OUTPUT||Buffer.byteLength(stderr)>MAX_OUTPUT)return reject(new ControlError("control-response-too-large"));
     try{resolve(JSON.parse(stdout));}catch{reject(new ControlError("control-response-invalid"));}
    });
