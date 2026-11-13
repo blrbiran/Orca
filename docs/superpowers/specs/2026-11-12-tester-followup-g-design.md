@@ -483,3 +483,34 @@ break;` right before arming the sleep timer (or not unref'ing it). Evidence: a s
 resolves and resolves with the one-line fix; C3 against a ccloop copy whose watch read is slowed by 45 ms fails 2/2 on this
 branch, passes 2/2 with the fix added, passes 2/2 on `main` (no ceiling). No Orca change: the branch waits for that ccloop
 fix and a repin.
+
+## 16. Follow-up I (2026-11-13): an expectation-model run's unknown usage may settle at the observed floor
+
+Appended by implementer seat F of tester follow-up I (Orca session `d467cbd2`), on the branch
+`worktree-agent-a86417d89fd981a2c` (commit `afad7548` on `8fe365ad`). §14.1 stands as written; on the one point below it
+is superseded.
+
+- **Ruling.** The human asked of §14.1's arithmetic: 「感觉不合理，扣一半是不是比较合适？」. The controller recommended
+  not half (half is neither a provable floor nor a safe ceiling) but: keep holding the whole unused ceiling while the usage
+  is unknown (it protects the hard group cap, R4), and at settlement also admit `charge-observed-floor` with an explicit
+  acknowledgement when ccloop reported an observed floor -- the shape tester follow-up F gave finite groups for #116.
+  Human: 「Part B 的结算算术 => 按你的建议走」.
+- **Supersedes** §14.1's "the only admitted settlement is `charge-remaining-grant`" and its "`charge-observed-floor` is
+  not admitted for such a run". Everything else in §14.1 holds: the hold while unknown, `charge-remaining-grant`'s
+  arithmetic, and `finite-remainder` for `release-unmetered`.
+- **Admission.** As the finite path (tester follow-up F §2): the explicit `acknowledge: "charge-observed-floor"` only,
+  from a person or a socket agent without a token (never a run Orca dispatched); a run with a live ceiling counts as a
+  finite remainder for it. No floor (`usageLowerBound` absent): refused `run-usage-not-settleable:observed-floor-unknown`,
+  nothing written, the ceiling stays held; the CLI hint names `charge-remaining-grant` (or waiting). Never automatic:
+  the view's default `acknowledge` stays `charge-remaining-grant`, the floor is an offer beside it
+  (`unknownUsageSettlement.observedFloor`).
+- **Arithmetic.** By `bookObservedFloor` unchanged: charged work tokens = the floor F (other dimensions 0), the run's
+  cumulative becomes B + F (never below what was booked), `used += F`, the run is marked `usageApproximate`, marker
+  method `observed-floor`. The re-derivation of the ceiling reserve runs in the same write: the run's usage is no longer
+  unknown, so its held unused ceiling U leaves `liveCeilingReserved` and `reserved`. For a handoff-stopped run (disposition
+  `recovered`, optional-v1) the handoff remainder H is released as any recovered settlement releases it. So
+  `used + reserved` moves by `F - U - H`: below its old value whenever F < U. A floor above U is booked as it stands
+  (observed usage is not capped), the same as the finite path; the group then reads over its limit by what was observed.
+- Criteria I1-I4 (`tests/control/ceilingObservedFloor.test.ts`); mutations M1-M6 all seen red
+  (`/private/tmp/orca-i1113/seatF/mutations.md`). No existing criterion pinned the refusal (H9 pins
+  `release-unmetered` → `finite-remainder`, unchanged), so none was rewritten.
