@@ -97,3 +97,18 @@ export function layoutDependencies(items: ReadonlyArray<{ taskId: string; depend
   drawn.sort((left, right) => (key(left) < key(right) ? -1 : 1));
   return { nodes, edges: drawn, layers: byLayer.size, missing, cycleEdges, implied };
 }
+
+/**
+ * Tester #296: the work-items table read in plan order, which the canonical plan stores sorted by task id -- an
+ * alphabetical list that matched neither the split nor the graph. The table follows the graph instead: by layer (left to
+ * right), then by the row inside the layer. The layout is of `all` (the whole group), so a label filter that hides some
+ * rows does not reorder the rest.
+ */
+export function orderByLayout<T extends { taskId: string }>(shown: readonly T[], all: ReadonlyArray<{ taskId: string; dependencyTaskIds: readonly string[] }>): T[] {
+  const at = new Map(layoutDependencies(all).nodes.map((node) => [node.taskId, node]));
+  return [...shown].sort((left, right) => {
+    const a = at.get(left.taskId), b = at.get(right.taskId);
+    if (a === undefined || b === undefined) return a === b ? compareText(left.taskId, right.taskId) : a === undefined ? 1 : -1;
+    return a.layer - b.layer || a.index - b.index;
+  });
+}

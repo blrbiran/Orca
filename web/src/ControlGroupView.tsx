@@ -234,6 +234,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
 
 import { overviewRegionId } from "./overviewNavigation.js";
 import { GroupResults } from "./GroupResults.js";
+import { orderByLayout } from "./dependencyLayout.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
 import { RegionDrafts } from "./regionDraft.js";
 import { ReviewDetail } from "./ReviewDetail.js";
@@ -507,9 +508,10 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   // A checked label no task carries any more (removed in the detail editor, or by another read) has no checkbox left to
   // uncheck, so it must stop filtering -- otherwise the table stays empty with no way out.
   const activeFilter = labelFilter.filter((label) => allLabels.includes(label));
-  const shownItems = activeFilter.length === 0
+  // Tester #296: the table reads in the graph's order (dependency layer, then row), not the plan's alphabetical one.
+  const shownItems = orderByLayout(activeFilter.length === 0
     ? view.workItems
-    : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label)));
+    : view.workItems.filter((item) => (item.labels ?? []).some((label) => activeFilter.includes(label))), view.workItems);
   const shownBlocked = shownItems.filter((item) => shownWorkStatus(item) === "blocked").length;
   const hiddenBlocked = view.workItems.filter((item) => shownWorkStatus(item) === "blocked").length - shownBlocked;
   const toggleFilter = (label: string): void =>
