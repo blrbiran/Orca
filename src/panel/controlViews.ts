@@ -13,7 +13,7 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { allowObservedPathsCommand, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, modelUnavailableCommand, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
+import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -544,7 +544,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     // Issue #153: a blocked task whose run names no cause still shows (the overview's own `task-blocked`), not nothing.
     // Tester follow-up G spec §2.1/§2.5: a task waiting at its pause line or at the group cap says so, with what answers it.
     const waiting = (work as { usagePause?: unknown; groupCapStop?: unknown } | undefined);
-    if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop` }; break; }
+    if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop`, ...(continueRestartsFresh(store, work as never) ? { note: USAGE_PAUSE_FRESH_START } : {}) }; break; }
     if (work?.status === "blocked" && waiting?.groupCapStop !== undefined) { firstFailure = { taskId, cause: "group-cap-reached", next: `orca group set-limit ${groupId} --limit <a higher limit>` }; break; }
     const cause = runCause ?? (work?.status === "blocked" ? "task-blocked" : null);
     // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at a step other than C is not a ccloop failure (task
@@ -1095,7 +1095,7 @@ function workViews(
       ...topUpsView(topUps, task.taskId),
       // Tester follow-up G spec §1.2: the task's no-change record (who decided, the ordinal); omitted when it has none.
       ...noChangeView((body as { noChangeCompletion?: unknown }).noChangeCompletion),
-      ...budgetStateView(body),
+      ...budgetStateView(store, body),
     };
     // Tester #230: the driver blocks the run alone and leaves the stored work item `running` (scheduling, close-run and
     // recovery read that), so a person reads the task as blocked when its current run is -- the brief's count and the
@@ -1114,12 +1114,14 @@ function noChangeView(value: unknown): { noChangeCompletion?: z.infer<typeof noC
 }
 
 /** Tester follow-up G spec §2.3-§2.5: the task's budget state; absent when the work item has none of it. */
-function budgetStateView(body: Record<string, unknown>): { budgetState?: NonNullable<WorkItemViewV1["budgetState"]> } {
+function budgetStateView(store: ControlStore, body: Record<string, unknown>): { budgetState?: NonNullable<WorkItemViewV1["budgetState"]> } {
   const keys = ["tokenIntent", "overExpectation", "usagePause", "usageStopped", "groupCapStop"];
   if (!keys.some(key => body[key] !== undefined)) return {};
   return { budgetState: {
     hardCapTokens: hardCapOf(body),
-    overExpectation: (body.overExpectation ?? null) as never, usagePause: (body.usagePause ?? null) as never,
+    overExpectation: (body.overExpectation ?? null) as never,
+    // Tester #295 residue (follow-up K): `restartsFresh` when continue would start the task afresh; absent otherwise.
+    usagePause: (body.usagePause === undefined ? null : continueRestartsFresh(store, body) ? { ...(body.usagePause as object), restartsFresh: true } : body.usagePause) as never,
     usageStopped: (body.usageStopped ?? null) as never, groupCapStop: (body.groupCapStop ?? null) as never,
   } };
 }

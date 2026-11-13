@@ -553,6 +553,7 @@ export const zh: Translation<typeof en> = {
       overExpectation: "已超出预期：已用 {{used}}，预期 {{expected}}（×{{ratio}}）。任务继续进行。",
       waiting: "等待决定",
       waitingLine: "等待决定：已用 {{used}}，是预期的 ×{{ratio}}。可以继续到下一条暂停线，或者停止这个任务。",
+      restartsFresh: "继续会让这个任务从头开始：停下的那次运行没有留下完整的检查点，已做的部分会被丢弃。",
       note: "给它的 agent 的说明（可选）",
       continue: "继续",
       stop: "停止任务",

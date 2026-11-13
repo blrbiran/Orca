@@ -14,7 +14,9 @@ import { readStartEnvelope, stepA1 } from "../../src/control/executionDriver.js"
 import { readWork } from "../../src/control/queries.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
-import { readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
+import { readControlGroup, readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
+import { budgetStateLines } from "../../src/commands/domains/verbs.js";
+import { USAGE_PAUSE_FRESH_START } from "../../src/control/driveRecord.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
@@ -23,7 +25,7 @@ const M = 1_000_000;
 // What ccloop's candidate names missing for a run stopped inside its first execute (the real b89650fe checkpoint).
 const MID_EXECUTE = ["attempts/1/execution.json", "attempts/1/verify.json"];
 
-async function paused(): Promise<{ t: Harness; driver: ReturnType<Harness["driver"]>; first: string; knobs: { exhausted: boolean } }> {
+async function paused(decide = true): Promise<{ t: Harness; driver: ReturnType<Harness["driver"]>; first: string; knobs: { exhausted: boolean } }> {
   const knobs = { exhausted: true };
   const t = await driverHarness([{ taskId: "a" }], {
     tokenPolicy: "optional-v1", modelVersion: "followup-g",
@@ -45,8 +47,10 @@ async function paused(): Promise<{ t: Harness; driver: ReturnType<Harness["drive
   // The real shape: settled recoverable as a run, but its checkpoint cannot be continued from.
   expect(t.body(first)).toMatchObject({ state: "settled-recoverable", recoverable: false, checkpointId: `ceiling-${first}` });
   expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "blocked", usagePause: { multiple: 1 }, allowancePredecessorRunId: first });
-  const answer = t.service.usagePauseDecide(t.h.taskCommand("usage-pause-decide", "a", { decision: "continue" } as never));
-  expect(answer).toMatchObject({ result: { kind: "usage-pause-decided", decision: "continue" } });
+  if (decide) {
+    const answer = t.service.usagePauseDecide(t.h.taskCommand("usage-pause-decide", "a", { decision: "continue" } as never));
+    expect(answer).toMatchObject({ result: { kind: "usage-pause-decided", decision: "continue" } });
+  }
   knobs.exhausted = false;
   return { t, driver, first, knobs };
 }
@@ -101,6 +105,36 @@ describe("continue at the pause line when the stopped run has no complete checkp
       expect(readStartEnvelope(t.h.store, t.body(second)).inputCheckpoint).toBeNull();
       expect(readControlRecovery(t.h.store, "epoch").blockedRuns).toBeUndefined();
       expect(readGroupSummary(t.h.store, "g").recoveryBlockerCount).toBe(0);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #295 residue (follow-up K): continue on such a run starts the task afresh (A above), so its partial work is gone.
+  // A person or agent offered "continue|stop" must be told that before choosing, not find it out after.
+  it("C: every place that offers continue says it restarts the task from scratch, discarding the partial work", async () => {
+    const { t, driver, first } = await paused(false);
+    try {
+      expect(USAGE_PAUSE_FRESH_START).toMatch(/from scratch/);
+      expect(USAGE_PAUSE_FRESH_START).toMatch(/discard/);
+      // The board card's next step.
+      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "usage-paused",
+        next: "orca task decide-usage g a --decision continue|stop", note: USAGE_PAUSE_FRESH_START });
+      // The CLI's next-step lines (group show) from the group view.
+      const lines = budgetStateLines("g", readControlGroup(t.h.store, "epoch", "g") as never);
+      expect(lines.join("\n")).toContain(USAGE_PAUSE_FRESH_START);
+      // A run continue resumes from (a complete checkpoint) gets no such note: the note is about this run, not every pause.
+      const setRecoverable = (value: boolean) => {
+        const row = t.body(first);
+        row.recoverable = value;
+        t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), first);
+      };
+      setRecoverable(true);
+      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).not.toHaveProperty("note");
+      expect(budgetStateLines("g", readControlGroup(t.h.store, "epoch", "g") as never).join("\n")).not.toContain(USAGE_PAUSE_FRESH_START);
+      setRecoverable(false);
+      // The decide-usage answer.
+      const answer = t.service.usagePauseDecide(t.h.taskCommand("usage-pause-decide", "a", { decision: "continue" } as never));
+      expect(answer).toMatchObject({ result: { kind: "usage-pause-decided", decision: "continue", note: USAGE_PAUSE_FRESH_START } });
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

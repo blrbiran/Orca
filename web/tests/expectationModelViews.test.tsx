@@ -53,6 +53,16 @@ describe("a task's budget state (spec §2.4, §2.5)", () => {
     ]);
   });
 
+  // Tester #295 residue (follow-up K): continue on a run with no complete checkpoint starts the task afresh; say so before the press.
+  it("a pause whose continue restarts the task says so beside Continue; one that resumes does not", () => {
+    show({ ...NONE, usagePause: { line: 10_000_000, multiple: 1, usedTokens: 10_400_000, expectationTokens: 1_000_000, runId: "run-a", at: 1, restartsFresh: true } });
+    const waiting = screen.getByRole("group", { name: "Waiting for a decision" });
+    expect(within(waiting).getByTestId("budget-restarts-fresh").textContent).toContain("from scratch");
+    cleanup();
+    show({ ...NONE, usagePause: { line: 10_000_000, multiple: 1, usedTokens: 10_400_000, expectationTokens: 1_000_000, runId: "run-a", at: 1 } });
+    expect(screen.queryByTestId("budget-restarts-fresh")).toBeNull();
+  });
+
   it("at the group cap: says to raise the limit; the Problems list holds paused and capped tasks only", () => {
     show({ ...NONE, groupCapStop: { runId: "run-a", at: 1, observedTokens: 2_900_000 } });
     expect(screen.getByTestId("budget-group-cap").textContent).toContain("Raise the group's token limit");

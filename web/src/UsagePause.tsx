@@ -42,6 +42,8 @@ export function UsagePause(props: { groupId: string; revision: number; item: Wor
           <p className="detail-note num" data-tone="warn">
             {t("control.budgetState.waitingLine", { used: shortTokens(pause.usedTokens), ratio: ratioText(pause.usedTokens, pause.expectationTokens) ?? "?" })}
           </p>
+          {/* Tester #295 residue (follow-up K): continue starts this task afresh; its partial work is discarded. */}
+          {pause.restartsFresh === true && <p className="detail-note" data-tone="warn" data-testid="budget-restarts-fresh">{t("control.budgetState.restartsFresh")}</p>}
           {!props.archived && (
             <>
               <input aria-label={t("control.budgetState.note")} placeholder={t("control.budgetState.note")} value={note} onChange={(event) => setNote(event.target.value)} disabled={sending} />

@@ -692,6 +692,7 @@ export const en = {
       overExpectation: "Over its expectation: used {{used}} of an expected {{expected}} (×{{ratio}}). It keeps going.",
       waiting: "Waiting for a decision",
       waitingLine: "Waiting for a decision: used {{used}}, ×{{ratio}} of the expectation. Continue to the next pause line, or stop the task.",
+      restartsFresh: "Continue restarts this task from scratch: the stopped run left no complete checkpoint, so its partial work is discarded.",
       note: "Note for its agent (optional)",
       continue: "Continue",
       stop: "Stop task",

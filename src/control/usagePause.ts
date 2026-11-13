@@ -11,6 +11,7 @@ import { ControlError } from "./errors.js";
 import { PAUSE_LINE_MULTIPLE, pauseLineFor, taskExpectation } from "./expectationModel.js";
 import { refuseClarifying } from "./requirementRecords.js";
 import { commandSuccess, readStopIntent } from "./stopIntent.js";
+import { continueRestartsFresh, USAGE_PAUSE_FRESH_START } from "./driveRecord.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
 /**
@@ -107,6 +108,8 @@ export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate
         const at = store.now();
         const { decision, note } = command.payload;
         let nextLine: number | null = null;
+        // Tester #295 residue (follow-up K): continuing from a run with no complete checkpoint starts the task afresh.
+        const fresh = decision === "continue" && continueRestartsFresh(store, work as never);
         if (decision === "continue") {
           const expectation = work.usagePause.expectationTokens ?? taskExpectation(store, groupId, work as never)?.tokens ?? null;
           if (expectation === null) throw new ControlError("usage-pause-no-headroom", "no-expectation");
@@ -131,7 +134,7 @@ export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate
         }
         saveWork(store, groupId, work as never);
         recordActivity(store, { groupId, taskId, kind: "usage-pause-decided", body: { decision, nextLine, principal } });
-        return commandSuccess(context, { kind: "usage-pause-decided", taskId, decision, nextLine });
+        return commandSuccess(context, { kind: "usage-pause-decided", taskId, decision, nextLine, ...(fresh ? { note: USAGE_PAUSE_FRESH_START } : {}) });
       },
     }).body;
   } finally { release?.(); }

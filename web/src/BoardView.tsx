@@ -175,6 +175,10 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
           <button type="button" className="btn-quiet" onClick={() => { void navigator.clipboard?.writeText(facts.firstFailure!.next!); }}>{t("board.card.copyCommand")}</button>
         </p>
       )}
+      {/* Tester #295 residue (follow-up K): the one note the card carries -- continue at a pause restarts the task afresh. */}
+      {facts?.firstFailure?.note !== undefined && facts.firstFailure.cause === "usage-paused" && (
+        <p className="detail-note" data-tone="warn" data-testid="board-card-failure-note">{t("control.budgetState.restartsFresh")}</p>
+      )}
       {/* Checks spec 2026-10-22 §7: a model review's findings this group is involved in -- major red, minor grey (P5). */}
       {(facts?.reviewFindings?.major ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-tone="danger" data-testid="board-card-findings-major">{t("board.card.findingsMajor", { count: facts!.reviewFindings!.major })}</span>}
       {(facts?.reviewFindings?.minor ?? 0) > 0 && <span className={`badge ${cardBadge}`} data-testid="board-card-findings-minor">{t("board.card.findingsMinor", { count: facts!.reviewFindings!.minor })}</span>}

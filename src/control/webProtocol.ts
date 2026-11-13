@@ -1643,7 +1643,7 @@ export const groupSummarySchema = z
       pendingDecisions: safeInteger,
       // Tester #229 (plan 2026-11-10 follow-up B, T1): `next`, the command that resumes the failed task's run in place --
       // only when it is blocked at a step other than C.
-      firstFailure: z.object({ taskId: idSchema, cause: nonemptyString, next: nonemptyString.optional() }).strict().nullable(),
+      firstFailure: z.object({ taskId: idSchema, cause: nonemptyString, next: nonemptyString.optional(), note: nonemptyString.optional() }).strict().nullable(),
       // Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group (not dismissed) that another group
       // -- the review -- owns and names this one among its involved groups; present only when there is one.
       reviewFindings: z.object({ major: safeInteger, minor: safeInteger }).strict().optional(),
@@ -1943,7 +1943,7 @@ export const workItemViewSchema = z
     budgetState: z.object({
       hardCapTokens: safeInteger.positive().nullable(),
       overExpectation: z.object({ at: safeInteger, usedTokens: safeInteger, expectationTokens: safeInteger }).strict().nullable(),
-      usagePause: z.object({ line: safeInteger, multiple: positiveSafeInteger, usedTokens: safeInteger, expectationTokens: safeInteger.nullable(), runId: idSchema, at: safeInteger }).strict().nullable(),
+      usagePause: z.object({ line: safeInteger, multiple: positiveSafeInteger, usedTokens: safeInteger, expectationTokens: safeInteger.nullable(), runId: idSchema, at: safeInteger, restartsFresh: z.literal(true).optional() }).strict().nullable(),
       usageStopped: z.object({ at: safeInteger, principal: nonemptyString, note: z.string().optional() }).strict().nullable(),
       groupCapStop: z.object({ runId: idSchema, at: safeInteger, observedTokens: safeInteger }).strict().nullable(),
     }).strict().optional(),
@@ -2537,7 +2537,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("live-note-queued"), noteId: idSchema, taskId: idSchema }).strict(),
   z.object({ kind: z.literal("task-loop-set"), taskId: idSchema, loopVersion: positiveSafeInteger, proposalVersion: positiveSafeInteger }).strict(),
   // Tester follow-up G spec §2.5: the decision taken and, for continue, the task's next pause line (whole-task tokens).
-  z.object({ kind: z.literal("usage-pause-decided"), taskId: idSchema, decision: z.enum(["continue", "stop"]), nextLine: safeInteger.nullable() }).strict(),
+  z.object({ kind: z.literal("usage-pause-decided"), taskId: idSchema, decision: z.enum(["continue", "stop"]), nextLine: safeInteger.nullable(), note: nonemptyString.optional() }).strict(),
   z
     .object({
       kind: z.literal("task-continuing"),

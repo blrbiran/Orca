@@ -76,7 +76,7 @@ import { ingestRunHandoff, prepareRunHandoff } from "./taskHandoffs.js";
 import { noteLiveNoteDeliveries, settleLiveNotes, writeRunLiveNotes } from "./liveNotes.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { bookRejectedZeroInTransaction } from "./quotaProbeCall.js";
-import { FAILURE_DETAIL_MAX, STOP_REASON_MAX, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
+import { FAILURE_DETAIL_MAX, STOP_REASON_MAX, continuableRun, landedAnywhere, type DriveRecord, type DriveStep } from "./driveRecord.js";
 import { catalogMissReason, selectorMissOf } from "./estimatorCompatibility.js";
 import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionPort.js";
 import type { ExecutionReport } from "./executionPort.js";
@@ -705,7 +705,7 @@ function continuationOf(store: ControlStore, run: DriverRun): { predecessorRunId
 
 /** exportResumeBundle's precondition on the predecessor (resumeBundle.ts), read before A2 commits to a continuation. */
 function resumablePredecessor(run: DriverRun): boolean {
-  return (run.state === "settled" || (run.state as string) === "settled-recoverable") && run.recoverable === true && typeof run.checkpointId === "string";
+  return continuableRun(run as unknown as Record<string, unknown>);
 }
 
 /** spec §11 I5: exportResumeBundle refuses a second export, so a restarted A2 reuses (and re-verifies) the first. */

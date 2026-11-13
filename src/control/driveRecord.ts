@@ -320,6 +320,24 @@ export function allowObservedPathsCommand(groupId: string, taskId: string): stri
 }
 
 /**
+ * exportResumeBundle's precondition on a stopped run (resumeBundle.ts): a settled run with a complete checkpoint. A run
+ * that fails it is not continued from; its task starts afresh (executionDriver.ts stepA2, tester follow-up I).
+ */
+export function continuableRun(run: { state?: unknown; recoverable?: unknown; checkpointId?: unknown }): boolean {
+  return (run.state === "settled" || run.state === "settled-recoverable") && run.recoverable === true && typeof run.checkpointId === "string";
+}
+
+/** Tester #295 residue (follow-up K): what "continue" means for a task paused on a run that is not continuable. */
+export const USAGE_PAUSE_FRESH_START = "continue restarts the task from scratch: the stopped run left no complete checkpoint, so its partial work is discarded";
+/** Whether "continue" on this paused task starts it afresh: the run it would continue from is there and not continuable. */
+export function continueRestartsFresh(store: ControlStore, work: { allowancePredecessorRunId?: unknown; usagePause?: { runId?: unknown } }): boolean {
+  const runId = work.allowancePredecessorRunId ?? work.usagePause?.runId;
+  if (typeof runId !== "string") return false;
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+  return row !== undefined && !continuableRun(JSON.parse(String(row.body)) as Record<string, unknown>);
+}
+
+/**
  * Tester #267: a driver run that recovery retry --run puts back at the step it was blocked at -- blocked anywhere but at C
  * by a ccloop failure (isTerminallyFailedRun). Blocked at C with no outcome is one of these: its collect failed before
  * ccloop stated a terminal (a machine that slept through it), so collecting again is the way on.

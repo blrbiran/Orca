@@ -9,6 +9,7 @@ import { text } from "./format.js";
 import { phaseEndBudgetLines, phaseEndOfRuns, type UsageRun } from "./usageLines.js";
 import { groupUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
 import { adviceOf, usedRatio, type SuggestionView } from "../../control/budgetSuggestions.js";
+import { USAGE_PAUSE_FRESH_START } from "../../control/driveRecord.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../control/estimateInstructionAge.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
@@ -181,7 +182,7 @@ export function expectationLines(source: { workItems?: Array<{ taskId: string; l
   });
 }
 
-type BudgetState = { hardCapTokens: number | null; usagePause: { usedTokens: number; expectationTokens: number | null; line: number } | null; usageStopped: { principal: string } | null; groupCapStop: { observedTokens: number } | null };
+type BudgetState = { hardCapTokens: number | null; usagePause: { usedTokens: number; expectationTokens: number | null; line: number; restartsFresh?: true } | null; usageStopped: { principal: string } | null; groupCapStop: { observedTokens: number } | null };
 /**
  * Tester follow-up G spec §2.3-§2.5 (plan O6): what waits on a person or an orchestrating agent in an expectation-model
  * group, with the command that answers it; a hard cap is named so the operator knows the task has no pause line.
@@ -197,6 +198,7 @@ export function budgetStateLines(groupId: string, source: { workItems?: Array<{ 
       const ratio = e === null || e === 0 ? "" : `, ×${Math.round((s.usagePause.usedTokens / e) * 10) / 10} of the expectation`;
       lines.push(`task ${item.taskId}: waiting for a decision: used ${s.usagePause.usedTokens}${ratio} (pause line ${s.usagePause.line})`,
         `  next: orca task decide-usage ${groupId} ${item.taskId} --decision continue [--note '<what to do next>']  or  --decision stop`);
+      if (s.usagePause.restartsFresh === true) lines.push(`  note: ${USAGE_PAUSE_FRESH_START}`);
     }
     if (s.groupCapStop !== null) lines.push(`task ${item.taskId}: group cap reached (the group has used its token limit; this run used ${s.groupCapStop.observedTokens})`,
       `  next: orca group set-limit ${groupId} --limit '{"tokens":<higher>,...}'  (the task continues with its work; a codex task stops between turns, so it may pass the cap by one turn)`);

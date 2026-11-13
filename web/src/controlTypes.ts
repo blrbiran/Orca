@@ -108,7 +108,7 @@ export type GroupSummaryV1 = {
   };
   /** Kanban spec 2026-10-20 §4: a board card's facts; the server gives them for every group with a plan. */
   card?: {
-    budget: { usedTokens: number; limitTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string } | null;
+    budget: { usedTokens: number; limitTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string; note?: string } | null;
     /** Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group that a review group owns; absent when none. */
     reviewFindings?: { major: number; minor: number };
     /** Budget defaults spec 2026-11-11 §7 item 4: a group with no token limit -- its tasks' summed expectation and use (null: unknown). */
@@ -408,7 +408,7 @@ export type WorkItemViewV1 = {
   budgetState?: {
     hardCapTokens: number | null;
     overExpectation: { at: number; usedTokens: number; expectationTokens: number } | null;
-    usagePause: { line: number; multiple: number; usedTokens: number; expectationTokens: number | null; runId: string; at: number } | null;
+    usagePause: { line: number; multiple: number; usedTokens: number; expectationTokens: number | null; runId: string; at: number; restartsFresh?: true } | null;
     usageStopped: { at: number; principal: string; note?: string } | null;
     groupCapStop: { runId: string; at: number; observedTokens: number } | null;
   };
