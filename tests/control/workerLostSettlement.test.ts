@@ -80,7 +80,9 @@ describe("an expectation-model run whose worker was lost settles and stays reada
         .toEqual({ activeMs: before.cumulative.work.activeMs, attempts: before.cumulative.work.attempts, sessions: before.cumulative.work.sessions });
       // The worker-lost restart (spec §5.4), not the ladder's skip: the task is started again by Orca.
       await t.service.systemDebugPass();
-      // mutation K-C2: (with K-C1) the lineage counts the uncharged remainder -> ladder-skipped authored-budget-exhausted, red
+      // mutation K-C2: the uncharged remainder emptied anyway (keepUncharged ignored) -> remaining 0 beside the observed
+      // cumulative, the read below refuses run-identity, red
+      expect(() => groupShow(t)).not.toThrow();
       expect(t.h.store.db.prepare("SELECT body FROM activity WHERE run_id=? AND kind='ladder-skipped'").all(runId)).toEqual([]);
       const restart = t.h.store.db.prepare("SELECT original_status FROM commands WHERE group_id='g' AND id=?").get(workerLostCommandId("a", runId));
       expect(Number(restart?.original_status)).toBe(200);
