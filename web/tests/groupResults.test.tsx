@@ -42,24 +42,26 @@ it("group and task results show a running task whose run is blocked as blocked",
 
 // Review 2026-11-09: the collapsed badge must agree with the graph's displayed status.
 it("counts a running task with a blocked category in the collapsed task badge",()=>{
+  // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
  const data=view([workItem({status:"active",category:"blocked"})]);
  render(<ControlGroupView view={data} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
- expect(screen.getByRole("button",{name:"Tasks (1)"}).getAttribute("aria-expanded")).toBe("false");
+ expect(screen.getByRole("button",{name:"Work items (1)"}).getAttribute("aria-expanded")).toBe("false");
  expect(screen.getByText("1 blocked")).toBeTruthy();
 });
 
 it("counts only filtered blocked tasks beside Tasks and offers a way to reveal hidden blocked tasks",()=>{
+  // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
  const data=view([
   workItem({taskId:"blocked",status:"blocked",labels:["urgent"]}),
   workItem({taskId:"visible",status:"active",labels:["normal"]}),
  ]);
  render(<ControlGroupView view={data} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
  fireEvent.click(screen.getByRole("checkbox",{name:"normal"}));
- expect(screen.getByRole("button",{name:"Tasks (1)"})).toBeTruthy();
+ expect(screen.getByRole("button",{name:"Work items (1)"})).toBeTruthy();
  expect(screen.queryByText("1 blocked")).toBeNull();
  expect(screen.getByTestId("hidden-blocked-count").textContent).toContain("1 blocked");
- expect(screen.getByTestId("hidden-blocked-count").textContent).toContain("Labels (1)");
+ expect(screen.getByTestId("hidden-blocked-count").textContent).toContain("Filter by label (1)");
  fireEvent.click(within(screen.getByTestId("hidden-blocked-count")).getByRole("button",{name:"Clear labels"}));
- expect(screen.getByRole("button",{name:"Tasks (2)"})).toBeTruthy();
+ expect(screen.getByRole("button",{name:"Work items (2)"})).toBeTruthy();
  expect(screen.getByText("1 blocked")).toBeTruthy();
 });

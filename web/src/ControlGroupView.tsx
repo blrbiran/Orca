@@ -771,32 +771,37 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion}
         hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length, live: runningNow(view).length }} regions={{
         progress: <>
-      {allLabels.length > 0 && (
-        <div className="mb-2 flex flex-wrap items-start gap-2" role="toolbar" aria-label={t("control.group.filterRegion")}>
-          <details className="relative" open={filterOpen} onToggle={(event) => setFilterOpen(event.currentTarget.open)}>
-            <summary role="button" aria-expanded={filterOpen} className="cursor-pointer rounded-control border border-line-strong px-3 py-1.5">{t("control.group.filterButton", { n: activeFilter.length })}</summary>
-            <fieldset aria-label={t("control.group.filterRegion")} className="absolute z-10 min-w-40 rounded-card border border-line-strong bg-elevated p-3 shadow-float">
-              <legend>{t("control.group.filterLegend")}</legend>
-              {allLabels.map((label) => (
-                <label className="flex gap-1" key={label}>
-                  <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
-                  {label}
-                </label>
-              ))}
-              <button type="button" disabled={activeFilter.length === 0} onClick={() => setLabelFilter([])}>{t("control.group.filterClear")}</button>
-            </fieldset>
-          </details>
-        </div>
-      )}
       <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={toggleTask} />
-      <h3>{t("control.group.workItems")}</h3>
-      <button type="button" aria-expanded={tasksOpen} aria-controls={`tasks-${groupId}`} onClick={() => setTasksOpen(!tasksOpen)}>
-        {t("control.group.taskDisclosure", { n: shownItems.length })}
-      </button>
-      {!tasksOpen && shownBlocked > 0 && <span className="badge" data-tone="warn"> {t("control.group.blockedCount", { n: shownBlocked })}</span>}
-      {hiddenBlocked > 0 && <span className="badge" data-tone="warn" data-testid="hidden-blocked-count">
-        {t("control.group.blockedCount", { n: hiddenBlocked })} · {t("control.group.filterButton", { n: activeFilter.length })} · <button type="button" onClick={() => setLabelFilter([])}>{t("control.group.filterClear")}</button>
-      </span>}
+      {/* Tester #303/#304: one name for the list, which is its disclosure, and the label filter in the same header row, named
+          as a filter: it filters this table, not the graph above. */}
+      <div className="mt-4 mb-2 flex flex-wrap items-center gap-2" data-testid="work-items-header">
+        <h3 className="m-0">
+          <button type="button" className="btn-quiet px-1" aria-expanded={tasksOpen} aria-controls={`tasks-${groupId}`} onClick={() => setTasksOpen(!tasksOpen)}>
+            <span aria-hidden="true">{tasksOpen ? "▾ " : "▸ "}</span>{t("control.group.taskDisclosure", { n: shownItems.length })}
+          </button>
+        </h3>
+        {allLabels.length > 0 && (
+          <div className="flex flex-wrap items-start gap-2" role="toolbar" aria-label={t("control.group.filterRegion")}>
+            <details className="relative" open={filterOpen} onToggle={(event) => setFilterOpen(event.currentTarget.open)}>
+              <summary role="button" aria-expanded={filterOpen} className="cursor-pointer rounded-control border border-line-strong px-3 py-1.5">{t("control.group.filterButton", { n: activeFilter.length })}</summary>
+              <fieldset aria-label={t("control.group.filterRegion")} className="absolute z-10 min-w-40 rounded-card border border-line-strong bg-elevated p-3 shadow-float">
+                <legend>{t("control.group.filterLegend")}</legend>
+                {allLabels.map((label) => (
+                  <label className="flex gap-1" key={label}>
+                    <input type="checkbox" checked={activeFilter.includes(label)} onChange={() => toggleFilter(label)} />
+                    {label}
+                  </label>
+                ))}
+                <button type="button" disabled={activeFilter.length === 0} onClick={() => setLabelFilter([])}>{t("control.group.filterClear")}</button>
+              </fieldset>
+            </details>
+          </div>
+        )}
+        {!tasksOpen && shownBlocked > 0 && <span className="badge" data-tone="warn"> {t("control.group.blockedCount", { n: shownBlocked })}</span>}
+        {hiddenBlocked > 0 && <span className="badge" data-tone="warn" data-testid="hidden-blocked-count">
+          {t("control.group.blockedCount", { n: hiddenBlocked })} · {t("control.group.filterButton", { n: activeFilter.length })} · <button type="button" onClick={() => setLabelFilter([])}>{t("control.group.filterClear")}</button>
+        </span>}
+      </div>
       <table id={`tasks-${groupId}`} aria-label={t("control.group.taskTable")} data-collapsed={!tasksOpen}>
         <thead>
           <tr>

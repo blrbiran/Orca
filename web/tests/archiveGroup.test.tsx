@@ -157,7 +157,8 @@ describe("the group detail's order (spec §6.5)", () => {
     render(<ControlGroupView view={archived(view([workItem({ taskId: "a" })]))} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     const banner = screen.getByRole("status", { name: "Archived" });
     const graph = screen.getByRole("figure", { name: "Dependency graph" });
-    const items = screen.getByRole("heading", { name: "Work items" });
+    // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
+    const items = screen.getByRole("heading", { name: "Work items (1)" });
     // Ruling (2026-11-12, tester follow-up G): 「这次批准改写所有必要的判据」 — #219/R1: only the selected region is rendered, so a
     // region's content leaves the page on a switch. The order is read while each is shown: the Progress content against the
     // banner, then the Runs and Preparation content inside their own panels, which keep their place in the page.

@@ -67,14 +67,15 @@ afterEach(cleanup);
 
 describe("labels and progress in the work item table (spec §4.2)", () => {
   it("keeps the graph available while a running group's task list is collapsed", () => {
+    // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
     render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", status: "blocked" })])} onCommand={vi.fn()} />);
-    const disclosure = screen.getByRole("button", { name: "Tasks (2)" });
+    const disclosure = screen.getByRole("button", { name: "Work items (2)" });
     expect(disclosure.getAttribute("aria-expanded")).toBe("false");
     // The stylesheet hides the collapsed table; jsdom checks the explicit state.
     expect(screen.getByRole("table", { name: "Tasks" }).getAttribute("data-collapsed")).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Labels (0)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter by label (0)" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
-    expect(screen.getByRole("button", { name: "Labels (1)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Filter by label (1)" })).toBeTruthy();
     fireEvent.click(disclosure);
     expect(screen.getByRole("button", { name: "a" })).toBeTruthy();
   });
@@ -87,10 +88,11 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
   });
 
   it("filters work items by label, any of the checked ones", () => {
+    // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
     render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", labels: ["custom:x"] }), workItem({ taskId: "c", labels: [] })])} onCommand={vi.fn()} />);
     // Ruling: the running group's table is disclosed on demand; filtering remains in the toolbar.
-    fireEvent.click(screen.getByRole("button", { name: "Tasks (3)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Labels (0)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Work items (3)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter by label (0)" }));
     expect(rows()).toEqual(["a", "b", "c"]);
     fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
     expect(rows()).toEqual(["a"]);
@@ -99,10 +101,11 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
   });
 
   it("drops a checked label that no task carries any more, so the table does not stay empty", () => {
+    // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
     const { rerender } = render(<Stateful view={view([workItem({ taskId: "a", labels: ["bug"] }), workItem({ taskId: "b", labels: ["perf"] })])} onCommand={vi.fn()} />);
     // Ruling: open the filter toolbar and task disclosure before reading the running group's rows.
-    fireEvent.click(screen.getByRole("button", { name: "Tasks (2)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Labels (0)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Work items (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter by label (0)" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "bug" }));
     expect(rows()).toEqual(["a"]);
     // The person removed "bug" from its last task: the next read carries it on no task, so its checkbox is gone.
@@ -124,11 +127,12 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
 describe("the task detail panel (spec §4.2)", () => {
   // Ruling: human 「这次批准改写所有必要的判据」 (tester #114): labels save as they change; the two pickers, Save and Discard are gone.
   describe("the label row saves each change at once (tester #114)", () => {
+    // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
     const open = (item: Partial<WorkItemViewV1>): ReturnType<typeof vi.fn> => {
       const onCommand = vi.fn();
       render(<Stateful view={view([workItem(item)])} onCommand={onCommand} />);
       // Ruling: the running group's table is collapsed until asked for.
-      fireEvent.click(screen.getByRole("button", { name: "Tasks (1)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Work items (1)" }));
       fireEvent.click(screen.getByRole("button", { name: "a" }));
       return onCommand;
     };
@@ -245,9 +249,10 @@ describe("the task detail panel (spec §4.2)", () => {
     });
 
     it("lists the manifest's entries and downloads one with the session alone", async () => {
+      // Ruling (2026-11-13, tester follow-up J): 「#303 => 批，这一轮允许改写必要判据」 -- #303/#304: the list's one name is its disclosure, "Work items (n)" (was a "Work items" heading plus a "Tasks (n)" button), and the label filter is named "Filter by label (n)" (was "Labels (n)").
       render(<Stateful view={view([workItem({ currentRunId: "run-a", lineageRunIds: ["run-a"] })], [run({})])} onCommand={vi.fn()} />);
       // Ruling: the table is collapsed for running groups.
-      fireEvent.click(screen.getByRole("button", { name: "Tasks (1)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Work items (1)" }));
       fireEvent.click(screen.getByRole("button", { name: "a" }));
       fireEvent.click(screen.getByRole("button", { name: "List evidence of run-a" }));
       const list = await screen.findByRole("list", { name: "Evidence of run-a" });
