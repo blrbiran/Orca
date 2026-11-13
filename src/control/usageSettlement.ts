@@ -36,7 +36,9 @@ export const usageSettlementSchema = z.union([
   // Tester follow-up F §2 (#116, ledger C3): a person's or socket agent's explicit booking of a finite remainder at ccloop's
   // observed floor -- the approximate-floor shape (floorTokens, reason; the run's `usageApproximate` matches it), backed by
   // the settler's own `settle-unknown-usage` row. Only a known floor admits it, so floorTokens is never null.
-  z.object({ method: z.literal("observed-floor"), charged: pair, floorTokens: safeInteger.positive(), reason: z.string().min(1), ...settlerFields, ...markerFields }).strict(),
+  // Tester follow-up I (seat K): 0 for a worker-lost run whose dead worker left no floor (workerLostFloor; checked in
+  // hasValidUsageSettlement): its booked usage is what was observed.
+  z.object({ method: z.literal("observed-floor"), charged: pair, floorTokens: safeInteger, reason: z.string().min(1), ...settlerFields, ...markerFields }).strict(),
 ]).superRefine((v, ctx) => {
   if ((v.reservationDisposition !== "committed") !== (v.handoffResolution !== undefined)) ctx.addIssue({ code: "custom", message: "settlement-disposition-resolution" });
 });
@@ -175,6 +177,13 @@ function approximateFloorBooked(run: SettlementRun, m: Extract<UsageSettlement, 
   return run.remaining.work.tokens === (grant === null ? null : Math.max(grant - run.cumulative.work.tokens, 0));
 }
 
+/**
+ * Worker-lost recovery spec 2026-11-12 §5 (driveRecord.ts WORKER_LOST_CAUSE, written here to keep this module's imports
+ * light): a run ccloop settled because its worker died. Its usage before the death was observed; the killed call's is unknown.
+ */
+export const workerLostRun = (run: { drive?: unknown }): boolean =>
+  (run.drive as { failureCause?: { cause?: unknown } } | undefined)?.failureCause?.cause === "worker-lost";
+
 /** Issue #215 (human ruling 2026-11-09, option A): a terminal whose failure cause proves nothing was spent. */
 export const knownZeroProved = (run: Pick<SettlementRun, "drive" | "cumulative">): boolean =>
   (run.drive?.failureCause as { usageKnownZero?: unknown } | undefined)?.usageKnownZero === true
@@ -196,18 +205,36 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
     if (!unknown) return false;
     // Tester follow-up F §2: an observed floor is booked by the same arithmetic as Orca's approximate floor.
     if (m.method === "approximate-floor" || m.method === "observed-floor") {
+      // Tester follow-up I (seat K): an observed floor of 0 is only a worker-lost run's that observed some usage (workerLostFloor).
+      if (m.method === "observed-floor" && m.floorTokens === 0 && (!workerLostRun(run) || baseline.work.tokens === 0)) return false;
       if (!approximateFloorBooked(run, m, baseline)) return false;
     } else if (m.method === "known-zero") {
       if (!knownZeroProved(run)) return false;
       for (const b of ["work", "handoff"] as const) for (const d of ds) {
         if (m.charged[b][d] !== 0 || run.cumulative[b][d] !== baseline[b][d]) return false;
       }
-      if (run.remaining.work.tokens !== 0 || run.remaining.handoff.tokens !== 0 || run.remaining.work.activeMs !== 0
+      // Tester follow-up I (seat K): a run with no work token grant keeps no work token remainder (null; 0 as stored before).
+      if ((run.remaining.work.tokens !== 0 && !(run.remaining.work.tokens === null && run.grant.work.tokens === null)) || run.remaining.handoff.tokens !== 0 || run.remaining.work.activeMs !== 0
         || run.remaining.work.attempts !== 0 || run.remaining.work.sessions !== 0) return false;
     } else for (const b of ["work", "handoff"] as const) for (const d of ds) {
       if (m.method === "owner-acknowledged-unmetered" && b === "work" && d === "tokens") {
         // m.charged.work.tokens is null by unmeteredChargeSchema (parsed above), so it is not checked again here.
         if (run.grant.work.tokens !== null || run.remaining.work.tokens !== null || run.cumulative.work.tokens !== baseline.work.tokens) return false;
+        continue;
+      }
+      // Tester follow-up I (seat K): an expectation-model run has no work token grant; its remaining-grant charge is the unused
+      // part of its live ceiling (G spec §14.1), so the booking is checked against the ceiling -- which only ever rises -- and
+      // its remainder stays null (0 as the writer before this fix stored it: same booking, so read the same).
+      const ceiling = (run as { liveCeiling?: { tokens?: unknown } }).liveCeiling?.tokens;
+      if (b === "work" && d === "tokens" && run.grant.work.tokens === null && typeof ceiling === "number") {
+        if ((run.remaining.work.tokens !== null && run.remaining.work.tokens !== 0) || (m.charged.work.tokens ?? 0) > Math.max(ceiling - baseline.work.tokens, 0)
+          || run.cumulative.work.tokens !== baseline.work.tokens + (m.charged.work.tokens ?? 0)) return false;
+        continue;
+      }
+      // Tester follow-up I (seat K): a worker-lost run is charged what it observed in every dimension but tokens -- its
+      // remainder there was never spent (workerLostCharge) -- so it keeps that remainder.
+      if (d !== "tokens" && workerLostRun(run) && m.charged[b][d] === 0) {
+        if (run.grant[b][d] === null || run.cumulative[b][d] !== baseline[b][d] || run.remaining[b][d] !== Math.max(run.grant[b][d]! - baseline[b][d], 0)) return false;
         continue;
       }
       if (run.grant[b][d]===null || run.remaining[b][d] !== 0 || m.charged[b][d] !== Math.max(run.grant[b][d]! - baseline[b][d], 0)

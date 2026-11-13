@@ -11,7 +11,7 @@ import { AGENT_SETTLE_NOTE, settlingPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
-import { knownZeroProved, releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, type SettlementRun, type UsageSettlement } from "./usageSettlement.js";
+import { knownZeroProved, releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, workerLostRun, type SettlementRun, type UsageSettlement } from "./usageSettlement.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -38,6 +38,22 @@ export function observedFloorOf(run: SettlementRun): number | null {
   const tokens = (run.usageLowerBound as { tokens?: unknown } | undefined)?.tokens;
   return typeof tokens === "number" && Number.isSafeInteger(tokens) && tokens > 0 ? tokens : null;
 }
+/**
+ * Tester follow-up I (seat K; the controller's dogfood run, g-28d9b560): the floor `charge-observed-floor` books. ccloop's
+ * floor counts the calls that ended without a report, on top of the usage already booked (spec 2026-11-06 §3.2), and is
+ * written by the worker that ran them -- which, for a worker-lost run, was killed before it could. Such a run's usage up to
+ * the death was observed and is booked, so its floor beyond that is 0: settling at the floor books what was observed. A
+ * worker-lost run that observed nothing, and any other run without ccloop's floor, still has none (null).
+ */
+export function workerLostFloor(run: SettlementRun): number | null {
+  return observedFloorOf(run) ?? (workerLostRun(run) && run.cumulative.work.tokens > 0 ? 0 : null);
+}
+/**
+ * Tester follow-up I (seat K): a worker-lost run's `charge-remaining-grant`. Only tokens are unknown -- the killed call's --
+ * so only tokens are charged at the remainder (or the unused live ceiling); the attempts, sessions and active time it never
+ * reached were not spent (spec 2026-11-12 §5.4: the machine lost the work, the task did not fail), so they stay as observed.
+ */
+const workerLostCharge = (amount: Amount): Amount => ({ tokens: amount.tokens, activeMs: 0, attempts: 0, sessions: 0 });
 /** The work token remainder once a floor is booked (spec 2026-11-06 §3.2): max(grant - cumulative, 0), null when unlimited. */
 const remainderAfterFloor = (run: SettlementRun, floor: number): number | null =>
   run.grant.work.tokens === null ? null : Math.max(run.grant.work.tokens - (run.cumulative.work.tokens + floor), 0);
@@ -59,7 +75,7 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
     // Tester follow-up I (G spec §16, human 「按你的建议走」): an expectation-model run's live ceiling bounds it as a finite
     // remainder does, so it is admitted too; without a floor it is refused and its unused ceiling stays held.
     if (run.remaining.work.tokens === null && liveCeilingOf(run) === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
-    if (observedFloorOf(run) === null) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
+    if (workerLostFloor(run) === null) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
   } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null && liveCeilingOf(run) === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
@@ -83,7 +99,7 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
       // §3.2 finite-legacy: the charge and the commitment parked again for the continuation must both fit the group limit.
       const parked = add(run.remaining.work as never, run.remaining.handoff), available = budgetBalance(group.limit, group.used, group.reserved).reserve;
       // Tester follow-up F §2: an observed floor charges its tokens only and parks the remainder after it (bookObservedFloor).
-      const floor = acknowledge === "charge-observed-floor" ? observedFloorOf(run)! : null;
+      const floor = acknowledge === "charge-observed-floor" ? workerLostFloor(run)! : null;
       const after = floor === null ? null : add({ ...run.remaining.work, tokens: remainderAfterFloor(run, floor) ?? 0 } as never, run.remaining.handoff);
       for (const d of dimensions) {
         const needed = after === null ? 2 * parked[d] : after[d] + (d === "tokens" ? floor! : 0);
@@ -112,7 +128,7 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
 export function chargeRunRemainder(
   store: ControlStore, run: Pick<SettlementRun, "runId" | "groupId" | "remaining" | "cumulative" | "unknown"> & { phase?: string; purpose?: string },
   group: Pick<GroupRecord, "used" | "reserved">, charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount },
-  options: { unmetered: boolean; releaseReserved: boolean; releaseReservedAmount?: Amount; at: number },
+  options: { unmetered: boolean; releaseReserved: boolean; releaseReservedAmount?: Amount; at: number; keepUncharged?: boolean },
 ): void {
   // Unmetered work tokens book nothing: the run keeps its observed cumulative and its unlimited (null) remainder.
   const work = { ...charged.work, tokens: charged.work.tokens ?? 0 }, delta = add(work, charged.handoff);
@@ -121,7 +137,14 @@ export function chargeRunRemainder(
   if (options.releaseReserved) group.reserved = subtract(group.reserved, options.releaseReservedAmount ?? delta);
   for (const b of ["work", "handoff"] as const) {
     const amount = b === "work" ? work : charged.handoff, tokens = charged[b].tokens;
-    run.cumulative[b] = add(run.cumulative[b], amount); run.remaining[b] = { tokens: b === "work" && options.unmetered ? null : 0, activeMs: 0, attempts: 0, sessions: 0 } as never; run.unknown[b] = false;
+    // Tester follow-up I (seat K, the dogfood run's 423): a dimension with no grant has no remainder (null), as every read
+    // checks (controlViews.ts validAccounting) -- an expectation-model run's work tokens, charged at its unused ceiling;
+    // `keepUncharged` (a worker-lost run) keeps what was not charged.
+    const before = run.remaining[b] as unknown as Record<"tokens" | "activeMs" | "attempts" | "sessions", number | null>;
+    run.cumulative[b] = add(run.cumulative[b], amount);
+    run.remaining[b] = Object.fromEntries((["tokens", "activeMs", "attempts", "sessions"] as const).map(d => [d,
+      (b === "work" && d === "tokens" && options.unmetered) || before[d] === null ? null : options.keepUncharged ? Math.max(before[d]! - amount[d], 0) : 0])) as never;
+    run.unknown[b] = false;
     if (tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens, appliedAt: options.at });
   }
 }
@@ -221,7 +244,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
           ? { handoffResolution: { requestId: request!.requestId, previousState: "settled-unrecoverable", previousFailureCode: "usage-unsettled", ...evidence.checkpoint! } } : {};
         if (command.payload.acknowledge === "charge-observed-floor") {
           // Tester follow-up F §2 (#116, ledger C3): booked as the soft path books it (bookObservedFloor), but by this settler.
-          const at = (deps.now ?? (() => new Date()))().getTime(), floorTokens = observedFloorOf(run)!;
+          const at = (deps.now ?? (() => new Date()))().getTime(), floorTokens = workerLostFloor(run)!;
           const reason = (run.drive as { blockedReason?: string | null } | undefined)?.blockedReason ?? (run.failureCode as string | null | undefined) ?? "usage-unknown";
           const request = latestRequestForRun(store, groupId, run.runId), group = readGroup(store, groupId);
           const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId);
@@ -243,6 +266,9 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         const charged = unmetered ? unmeteredChargeSchema.parse({ work: run.remaining.work, handoff: run.remaining.handoff })
           : knownZero ? { work: { ...zero }, handoff: { ...zero } }
           : { work: amountSchema.parse(ceilingRemainder(run) === null ? run.remaining.work : { ...run.remaining.work, tokens: ceilingRemainder(run) }), handoff: amountSchema.parse(run.remaining.handoff) };
+        // Tester follow-up I (seat K): a worker-lost run is charged its token remainder only (workerLostCharge).
+        const lostWorker = !unmetered && !knownZero && workerLostRun(run);
+        if (lostWorker) Object.assign(charged, { work: workerLostCharge(charged.work as Amount), handoff: workerLostCharge(charged.handoff) });
         // Follow-up H (gap k): the ceiling's unused part is held through liveCeilingReserved, not run.remaining; the re-derivation
         // below gives that hold back, so the charge here releases only the rest.
         const ceilingHeld = !unmetered && !knownZero ? ceilingRemainder(run) ?? 0 : 0;
@@ -254,7 +280,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         const group = readGroup(store, groupId);
         // §3.2: an optional-v1 stop kept its reservation (allocations `unknown`); a finite-legacy stop already released it.
         const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId), parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
-        chargeRunRemainder(store, run, group, charged, { unmetered, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy),
+        chargeRunRemainder(store, run, group, charged, { unmetered, keepUncharged: lostWorker, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy),
           ...(knownZero ? { releaseReservedAmount: add(finiteCommitment(run.remaining.work), run.remaining.handoff) }
             : ceilingHeld > 0 ? { releaseReservedAmount: subtract(add(charged.work as Amount, charged.handoff), { tokens: ceilingHeld, activeMs: 0, attempts: 0, sessions: 0 }) } : {}), at });
         if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);

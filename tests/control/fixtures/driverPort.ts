@@ -28,6 +28,9 @@ export type FakeBehaviour = "succeed" | "unknown" | "forget-first-accept" | "los
   | "stoppable" | "stoppable-silent" | "orphan-candidate" | "stoppable-usage-unknown"
   // Terminal-closure spec 2026-11-07: a failed terminal whose work usage was never observed, so closure must await the owner's settlement.
   | "failed-usage-unknown"
+  // Tester follow-up I (seat K): a failed terminal whose work usage was observed, then a work observation with an unknown
+  // total -- what ccloop's settle-lost-worker leaves for a worker killed mid-call (the plan's usage known, the killed call's not).
+  | "failed-after-observed-usage-unknown"
   // Task 4 fix round 1: stoppable runs whose candidate fails exactly one of Web spec §6.2's hard conditions --
   // an open request id, a missing piece of evidence, a usage event past a gap (seq 3 never arrives), a handoff
   // usage that turned unknown after it was observed -- and one whose ccloop acknowledges some other request id.
@@ -108,14 +111,15 @@ export function fakeCcloopPort(input: {
       { runId: claim.runId, generation: claim.generation, eventSeq: 2, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-2`, Buffer.from(`handoff usage ${claim.runId}`)) },
     ];
     if (variant === "stoppable-usage-gap") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 4, bucket: "handoff", cumulative: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, source: put(`usage-${claim.runId}-4`, Buffer.from(`handoff usage ${claim.runId} 4`)) });
+    if (variant === "failed-after-observed-usage-unknown") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 3, bucket: "work", cumulative: null, source: put(`usage-${claim.runId}-3`, Buffer.from(`work usage ${claim.runId} 3`)) });
     if (variant === "stoppable-handoff-usage-unknown") events.push({ runId: claim.runId, generation: claim.generation, eventSeq: 3, bucket: "handoff", cumulative: null, source: put(`usage-${claim.runId}-3`, Buffer.from(`handoff usage ${claim.runId} 3`)) });
     const unresolvedRequestIds = variant === "stoppable-unresolved" ? ["open-question-1"] : [];
-    const outcome = variant === "exhausted" ? "exhausted" : variant === "failed" || variant === "failed-usage-unknown" ? "failed" : variant === "blocked-waiting-human" ? "blocked_waiting_human" : "succeeded";
+    const outcome = variant === "exhausted" ? "exhausted" : variant === "failed" || variant === "failed-usage-unknown" || variant === "failed-after-observed-usage-unknown" ? "failed" : variant === "blocked-waiting-human" ? "blocked_waiting_human" : "succeeded";
     const stopReason = input.stopReason?.(claim.workItemId) ?? null;
     // Fix round 1 (review Important 1): a `protocol:1` packet handoff.ts's `packetSchema` (and its
     // identity/usageHighWater check against the committed candidate) actually accepts -- the driver's
     // `stepE` carries this bytes-for-bytes into the committed candidate's own `handoff` field.
-    const usageHighWater = variant === "stoppable-handoff-usage-unknown" ? 3 : 2;
+    const usageHighWater = variant === "stoppable-handoff-usage-unknown" || variant === "failed-after-observed-usage-unknown" ? 3 : 2;
     const handoffPacket = {
       protocol: 1 as const,
       identity: {

@@ -9,7 +9,7 @@ import { WORKER_UNDETERMINED_GRACE_MS } from "../../src/control/executionDriver.
 import { readWork } from "../../src/control/queries.js";
 import { workerLostCommandId } from "../../src/control/systemDebug.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
-import { readControlRecovery } from "../../src/panel/controlViews.js";
+import { readControlGroup, readControlRecovery } from "../../src/panel/controlViews.js";
 import { ccloopWorlds, raw, realBinary, startGroup, until, type RunRow } from "./fixtures/ccloopWorld.js";
 
 /**
@@ -135,6 +135,47 @@ describe.skipIf(!realBinary)("a run whose ccloop worker died (#273)", { timeout:
       expect(activity(runtime, first.runId, "ladder-skipped")).toEqual([{ reason: "authored-budget-exhausted" }]);
       expect(runtime.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id=?").get(workerLostCommandId("a", first.runId))).toBeUndefined();
       expect(workRuns(runtime)).toHaveLength(1);
+      expect(blockerCodes(runtime)).toEqual([]);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { stderr.mockRestore(); await w.teardown(); }
+  });
+
+  // Tester follow-up I, seat K (the controller's dogfood run, g-28d9b560): the default expectation-model group with a token
+  // limit. The killed call's usage waits for an explicit settlement; settled by charging the remaining grant -- the unused
+  // live ceiling, since the run has no work token grant -- the group stayed unreadable (run-identity, 423) and the restart
+  // was skipped because the settlement had also charged the attempts, sessions and time the run never used.
+  it("in an expectation-model group with a token limit, a remaining-grant settlement keeps the group readable and Orca restarts the task", async () => {
+    const w = await world(unlimitedTask, { a: { files: { "answer.txt": "42\n" }, delayMs: { execute: 8_000 } } }, { tokenPolicy: "optional-v1" });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const runtime = await w.boot(); try {
+      await startGroup(runtime, w.repoId, 4_000_000);
+      orchestrate(runtime);
+      runtime.startPump(50);
+      const first = await inExecute(runtime, w, 1);
+      expect(first.body.grant.work.tokens).toBeNull();
+      expect(first.body.liveCeiling).toBeDefined();
+      await killWorker(first);
+      await waitFor(runtime, () => blockerCodes(runtime).some((blocker) => blocker.code === "worker-lost-usage-unknown"), 120_000, "the usage blocker");
+      const observed = workRuns(runtime)[0]!.body.cumulative.work;
+      const settled = await withCommandContext("settle", routedCommandContext("cli", { kind: "agent", client: "cli" }, { by: "agent", via: "cli" }),
+        () => runtime.service.settleUnknownUsage(raw(runtime, "settle", "settle-unknown-usage", { taskId: "a", runId: first.runId, generation: first.body.generation, acknowledge: "charge-remaining-grant" })));
+      expect("error" in settled ? settled.error : "settled").toBe("settled");
+      // mutation K-B1 (chargeRunRemainder empties a null remainder to 0) -> run-identity thrown here, red
+      expect(() => readControlGroup(runtime.store, runtime.epoch, "g")).not.toThrow();
+      const lost = workRuns(runtime)[0]!.body;
+      expect(lost.remaining.work.tokens).toBeNull();
+      expect({ activeMs: lost.cumulative.work.activeMs, attempts: lost.cumulative.work.attempts, sessions: lost.cumulative.work.sessions })
+        .toEqual({ activeMs: observed.activeMs, attempts: observed.attempts, sessions: observed.sessions });
+      // mutation K-C1 (the other dimensions charged too) -> ladder-skipped authored-budget-exhausted, no restart, red
+      await waitFor(runtime, () => runtime.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id=?").get(workerLostCommandId("a", first.runId)) !== undefined, 120_000, "the restart");
+      expect(activity(runtime, first.runId, "ladder-skipped")).toEqual([]);
+      // The charge took the whole unused ceiling (the group cap is hard), so the restarted task waits for tokens; a person's
+      // raise of the limit lets it run, and the group finishes.
+      const limit = readControlGroup(runtime.store, runtime.epoch, "g").ledger.groupLimit;
+      const raised = runtime.service.setLimit(raw(runtime, "raise-after", "set-limit", { limit: { ...limit, tokens: limit.tokens! + 4_000_000 } }));
+      expect("error" in raised ? raised.error : "raised").toBe("raised");
+      await waitFor(runtime, () => readWork(runtime.store, "g", "a").status === "done", 300_000, "the restarted task to finish");
+      expect(() => readControlGroup(runtime.store, runtime.epoch, "g")).not.toThrow();
       expect(blockerCodes(runtime)).toEqual([]);
       expect(await runtime.shutdown()).toBe(true);
     } finally { stderr.mockRestore(); await w.teardown(); }

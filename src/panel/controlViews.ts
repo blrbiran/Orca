@@ -32,7 +32,7 @@ import { z } from "zod";
 import { settleableSingleCallBlock } from "../control/singleCall.js";
 import { approximateCommandId } from "../control/softLoopSince.js";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
-import { observedFloorOf, settlementAcknowledgeFor, settlementAdmission, type SettleAcknowledge } from "../control/settleUnknownUsage.js";
+import { workerLostFloor, settlementAcknowledgeFor, settlementAdmission, type SettleAcknowledge } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
@@ -1137,6 +1137,17 @@ function sameBinding(binding: z.infer<typeof executionProfileAuthoritySchema>, e
 function validAccounting(run: z.infer<typeof persistedRunSchema>): boolean {
   for (const bucket of ["work", "handoff"] as const) {
     for (const dimension of ["tokens", "activeMs", "attempts", "sessions"] as const) {
+      // Tester follow-up I (seat K; the dogfood run's 423 on g-28d9b560): before the fix, settling an expectation-model run's
+      // unknown usage by charge-remaining-grant stored its work token remainder as 0 beside its null grant.
+      // That one shape is read: it comes only from that writer, its settlement marker -- checked next, against the ceiling,
+      // the usage events and the ledger receipt (hasValidUsageSettlement) -- states the booking, and the remainder carries no
+      // meaning of its own once the usage is settled. Anything else (no marker, another method, no ceiling) still refuses.
+      if (bucket === "work" && dimension === "tokens" && run.grant.work.tokens === null && run.remaining.work.tokens === 0 && run.liveCeiling !== undefined
+        && run.usageSettlement?.method === "remaining-grant") continue;
+      // Same class (found by seat K, tester follow-up I): a proved-zero settlement (#215) charges nothing and gives the whole
+      // reservation back, so it empties the remainder by design -- the shape hasValidUsageSettlement requires of it -- while
+      // the run's cumulative stays what was observed. Read as stored, every dimension 0.
+      if (run.usageSettlement?.method === "known-zero" && run.remaining[bucket][dimension] === 0) continue;
       if (run.remaining[bucket][dimension] !== (run.grant[bucket][dimension]===null?null:Math.max(run.grant[bucket][dimension]! - run.cumulative[bucket][dimension], 0))) return false;
     }
   }
@@ -1777,7 +1788,8 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
   };
   const refusalReason = refusalFor();
   // Tester follow-up F §2 (#116): the observed-floor form, offered while unsettled with a finite remainder and a known floor.
-  const floor = observedFloorOf(run as never);
+  // Tester follow-up I (seat K): a worker-lost run with none of ccloop's has the floor 0 beyond what it observed (workerLostFloor).
+  const floor = workerLostFloor(run as never);
   // Tester follow-up I (G spec §16): or an expectation-model run's live ceiling in place of a finite remainder.
   const observedFloor = run.usageSettlement === undefined && (run.remaining.work.tokens !== null || liveCeilingOf(run) !== null) && floor !== null
     ? (reason => ({ observedFloor: { tokens: floor, allowed: reason === null, refusalReason: reason } }))(refusalFor("charge-observed-floor")) : {};

@@ -2081,7 +2081,8 @@ export const runViewSchema = z
     unknownUsageSettlement: z.object({ generation: positiveSafeInteger, highWater: safeInteger, remaining: z.object({ work: budgetAmountSchema, handoff: amountSchema }).strict(), allowed: z.boolean(), refusalReason: nonemptyString.nullable(), acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero"]), settlement: usageSettlementSchema.optional(), approximateRefusal: nonemptyString.optional(),
       // Tester follow-up F §2 (#116): the explicit observed-floor form, offered beside `acknowledge` while the run is unsettled,
       // its work remainder finite and ccloop's floor known; its own admission answer (the floor may fit where the grant does not).
-      observedFloor: z.object({ tokens: positiveSafeInteger, allowed: z.boolean(), refusalReason: nonemptyString.nullable() }).strict().optional() }).strict().optional(),
+      // Tester follow-up I (seat K): 0 for a worker-lost run whose dead worker left no floor (its observed usage is booked).
+      observedFloor: z.object({ tokens: safeInteger, allowed: z.boolean(), refusalReason: nonemptyString.nullable() }).strict().optional() }).strict().optional(),
     continuable: z.boolean(),
     evidenceIds: sortedIdArraySchema,
     // Board spec 2026-10-03 D4: the git facts the run's drive record holds -- the workspace mode it ran in, the work

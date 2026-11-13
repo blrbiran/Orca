@@ -85,6 +85,9 @@ orca control get groups/<groupId>/decisions
   unused ceiling held until settled; it admits `charge-remaining-grant` (charges that whole unused part) and, when ccloop
   observed a floor, `charge-observed-floor` (books the floor, gives the held rest back). No floor: refused
   `observed-floor-unknown`; charge the remaining grant or wait.
+- Tester follow-up I (seat K): a `worker-lost` run (its ccloop worker died) that observed some usage has the floor 0 when
+  ccloop wrote none (the dead worker could not): `charge-observed-floor` books what it observed, no more. Settling it either
+  way charges tokens only -- its unused attempts, sessions and time were never spent -- and Orca then restarts the task.
 - Saved-result verification is a distinct action after the eligibility read says `eligible`; its source run, attempt
   and capsule hash come from that answer. It skips execution, but validation/verification may consume model usage.
   `unavailable` is a reason to inspect evidence or use an otherwise legal ordinary retry, not an invitation to guess
