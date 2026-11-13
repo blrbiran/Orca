@@ -31,13 +31,16 @@ describe("run show names the live ceiling (#290, #297)", () => {
     expect(text).toContain("live ceiling: 10,000,000 tokens (pause-line, revision 1)");
     expect(text).toContain("stopped at the live ceiling: 62,998,085 tokens used against 10,000,000 (pause-line, execute, boundary)");
     // mutation (no codex note) -> red here.
-    expect(text).toContain("note: codex is stopped only between turns");
+    // Ruling: 「这次批准改写所有必要的判据。」(human, tester follow-up K) -- the old note said codex stops "between turns", but
+    // `codex exec` runs one turn per phase, so the ceiling is checked only once the phase ends (#297, still a hint only).
+    expect(text).toContain("note: codex runs one turn per phase, so its live ceiling is checked only after the whole phase ends; a single execute can go past the ceiling (and the group limit)");
+    expect(text).not.toContain("between turns");
   });
   it("prints no codex note for another agent, nor when the agents read fails; nothing for a run without a ceiling", async () => {
-    expect(await show({ ...RUN, liveCeiling: CEILING }, "claude")).not.toContain("codex is stopped");
+    expect(await show({ ...RUN, liveCeiling: CEILING }, "claude")).not.toContain("codex runs one turn");
     const unread = await show({ ...RUN, liveCeiling: CEILING }, null);
     expect(unread).toContain("live ceiling: 10,000,000 tokens");
-    expect(unread).not.toContain("codex is stopped");
+    expect(unread).not.toContain("codex runs one turn");
     expect(await show(RUN, "codex")).not.toContain("live ceiling");
   });
 });

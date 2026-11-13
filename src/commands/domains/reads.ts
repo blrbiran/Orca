@@ -329,9 +329,10 @@ function executionCompleteLines(groupId: string, run: CompletedRun | undefined):
  */
 type LiveCeilingRun = { liveCeiling?: { tokens: number; cause: string; revision: number }; liveCeilingStop?: { tokens: number; cause: string; observedTokens: number; phase: string; at: string } };
 /**
- * Tester #290 / #297 (follow-up J): `run show` names the run's live ceiling and the stop at it. A codex run is stopped only
- * between its turns, so it can go past the ceiling before it stops (the dogfood run used 63M under a 10M pause line); the
- * human ruled a note, never a block (「codex 提示就好」).
+ * Tester #290 / #297 (follow-up J): `run show` names the run's live ceiling and the stop at it. `codex exec` runs one turn
+ * per phase, so a codex run's ceiling is checked only once the whole phase ends and a single execute can go past it (the
+ * dogfood run used 63M under a 10M pause line; follow-up K corrected "between turns"); the human ruled a note, never a
+ * block (「codex 提示就好」).
  */
 export function liveCeilingLines(run: LiveCeilingRun | undefined, agentKind: string | undefined): string[] {
   if (run?.liveCeiling === undefined) return [];
@@ -340,7 +341,7 @@ export function liveCeilingLines(run: LiveCeilingRun | undefined, agentKind: str
   return [
     `live ceiling: ${count(run.liveCeiling.tokens)} tokens (${run.liveCeiling.cause}, revision ${run.liveCeiling.revision})`,
     ...(stop === undefined ? [] : [`stopped at the live ceiling: ${count(stop.observedTokens)} tokens used against ${count(stop.tokens)} (${stop.cause}, ${stop.phase}, ${stop.at})`]),
-    ...(agentKind === "codex" ? ["note: codex is stopped only between turns, so a codex run can go past its live ceiling before it stops"] : []),
+    ...(agentKind === "codex" ? ["note: codex runs one turn per phase, so its live ceiling is checked only after the whole phase ends; a single execute can go past the ceiling (and the group limit) before it stops"] : []),
   ];
 }
 
@@ -480,7 +481,7 @@ export const READ_ROWS: CommandDef[] = [
       const lastTranscriptAt = field(await c.read(`runs/${ids(c, "run")}/transcripts`).catch(() => null), "lastTranscriptAt");
       const run = v.runs.find((r) => r.runId === ids(c, "run"));
       // Tester #297 (follow-up J; human: 「codex 提示就好」): the kind of a run's installation when it has a live ceiling, so the
-      // text can say a codex run is stopped only between turns. An agents read that fails adds nothing.
+      // text can say a codex run's ceiling is checked only after a whole phase. An agents read that fails adds nothing.
       const installation = (run as { liveCeiling?: unknown; agent?: { installation: string } } | undefined)?.liveCeiling === undefined ? undefined : (run as { agent?: { installation: string } }).agent?.installation;
       const agentKind = installation === undefined ? undefined
         : ((field(await c.read("agents").catch(() => null), "installations") as Array<{ id: string; kind?: string }> | undefined) ?? []).find((entry) => entry.id === installation)?.kind;

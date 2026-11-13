@@ -201,7 +201,7 @@ export function budgetStateLines(groupId: string, source: { workItems?: Array<{ 
       if (s.usagePause.restartsFresh === true) lines.push(`  note: ${USAGE_PAUSE_FRESH_START}`);
     }
     if (s.groupCapStop !== null) lines.push(`task ${item.taskId}: group cap reached (the group has used its token limit; this run used ${s.groupCapStop.observedTokens})`,
-      `  next: orca group set-limit ${groupId} --limit '{"tokens":<higher>,...}'  (the task continues with its work; a codex task stops between turns, so it may pass the cap by one turn)`);
+      `  next: orca group set-limit ${groupId} --limit '{"tokens":<higher>,...}'  (the task continues with its work; a codex task's ceiling is checked only after a whole phase ends, so a single execute can go past the cap)`);
     if (s.usageStopped !== null) lines.push(`task ${item.taskId}: stopped over its expectation by ${s.usageStopped.principal}`);
     return lines;
   });

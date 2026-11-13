@@ -9,7 +9,7 @@ import type { ControlStore } from "./store.js";
 
 /**
  * Tester follow-up G spec §2.1 / §2.5 (plan Part B, D1-D3): each running task run of an expectation-model group carries a
- * live token ceiling ccloop stops it at (mid-call for claude and omp, between turns for codex). The ceiling is the
+ * live token ceiling ccloop stops it at (mid-call for claude and omp; for codex, which runs one turn per phase, only once the phase ends). The ceiling is the
  * smallest of the run's slice of the group's remainder, the task's pause line and a person's hard cap, each less what the
  * task's earlier runs used. Its outstanding part -- the ceiling less what the run has used -- is held in the group's
  * reserve while the run is active, so the sum of the ceilings never passes what the group has left (D2).
