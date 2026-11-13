@@ -221,8 +221,8 @@ export const zh: Translation<typeof en> = {
   // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
   transcript: {
     producing: "正在产出，最近一次在 {{time}}",
-    disclosure: "转录", region: "{{runId}} 的转录", refused: "转录读取被拒绝 · {{code}}",
-    unsupported: "安装的 ccloop 版本过旧，不能记录转录。请在 Orca 目录运行 npm ci 并重启面板。", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
+    disclosure: "执行记录", region: "{{runId}} 的执行记录", refused: "执行记录读取被拒绝 · {{code}}",
+    unsupported: "安装的 ccloop 版本过旧，不能保存执行记录。请在 Orca 目录运行 npm ci 并重启面板。", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
     callLine: "{{phase}} · 第 {{seq}} 次调用 · {{runtime}} · {{size}}", callLineOne: "{{phase}} · {{runtime}} · {{size}}", notRecorded: "未记录", live: "进行中", final: "已结束",
     truncatedAt: "记录在 {{bytes}} 字节处停止", lineDropped: "有一行 {{bytes}} 字节未被记录",
     oversized: "超长行 · {{bytes}} 字节 · {{type}}", archived: "从运行的归档读取",
@@ -446,7 +446,7 @@ export const zh: Translation<typeof en> = {
       closeRun: "收起运行 {{run}}",
       th: { task: "任务", status: "状态", labels: "标签", progress: "进度", run: "运行", pending: "待定", dependsOn: "依赖" },
       runs: "运行",
-      runLabel: "运行 {{n}}", runDetail: "{{run}}：转录与证据",
+      runLabel: "运行 {{n}}", runDetail: "{{run}}：执行记录与证据",
       evidenceCount: "证据标识（{{n}}）",
       postMergePassed_one: "合并后检查通过（{{count}} 条命令，{{seconds}} 秒）",
       postMergePassed_other: "合并后检查通过（{{count}} 条命令，{{seconds}} 秒）",
