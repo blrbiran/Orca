@@ -93,6 +93,15 @@ describe("booking the detail (spec §5, §8.4, §8.5)", () => {
     } finally { await h.dispose(); }
   });
 
+  it("checks the event's bounds, not only the delta's: an event still over its bound is null even when its delta is not", async () => {
+    const { h, e } = await taskRun(); try {
+      recordUsage(h.store, { ...e, eventSeq: 1, cumulative: amount(14, 1, 1, 1), byModel: [m("z", 0, 10, 0, 4, { reasoning: 11, cacheWrite5m: 3, cacheWrite1h: 2 })] }, 1);
+      // Deltas: output +1, reasoning +1; cacheWrite +1, 5m + 1h +1 -- in bound; the event's 12 > 11 and 3 + 3 > 5 are not.
+      recordUsage(h.store, { ...e, eventSeq: 2, cumulative: amount(16, 1, 1, 1), byModel: [m("z", 0, 11, 0, 5, { reasoning: 12, cacheWrite5m: 3, cacheWrite1h: 3 })] }, 2);
+      expect(subParts(h)).toEqual([["z", null, null, null, null, null], ["z", null, null, null, null, null]]);
+    } finally { await h.dispose(); }
+  });
+
   it("a handoff bucket's row is phase handoff; a work event without a phase has none; a breakdown-mismatch row carries no detail", async () => {
     const { h, e } = await taskRun(); try {
       recordUsage(h.store, { ...e, eventSeq: 1, cumulative: amount(20, 1, 1, 1), byModel: [m("a", 10, 10, 0, 0, { requests: 1 })] }, 1);
