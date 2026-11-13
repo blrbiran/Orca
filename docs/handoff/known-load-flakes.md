@@ -331,3 +331,19 @@ ccloop：`tests/runtime/codex/stalledCauseAndFloor.test.ts`「throws the stall i
 **不是 flake、已查清的**：`savedResultRecovery.paired` 的 V10／exhausted 在 H 轮默认期望模型后源 run 直接 succeeded（夹具漂移，
 已改 `preRelease`）；V11／O19 是 ccloop saved-result 校验不认 handoff 目录的真回归（ccloop 本地 main 已修，等 repin）。
 配对文件整份跑会有 19 条 `saved-result-integration-prerequisites-missing`——它们要旧构建，不是红。
+
+### 会话 `c8b75eac` 2026-11-13→14（测试者反馈 J 轮；负载 18–45，最多 3 席并行）
+
+- `tests/control/workerLostE2E.test.ts`「a worker that died after writing a successful candidate…」：三次门（控制批席、用量席、
+  合并后 main 的 `test-affected --base=d382ebdf`，1050 文件）都红在测试自己的 240 s 等待「worker 写完 candidate 后停下」；
+  在负载 40 下单跑 3/3 全过（整文件 7/7，每次约 145 s；`/private/tmp/orca-j1113/wl-solo-{1,2,3}.log`）⇒ 负载。
+  它要整轮 fake plan／execute／verify 在 240 s 内走完，门里 800 文件并发时撑不住。
+- 同轮各席门里另见、单跑都过：`acceptAttemptLanding`、`driverReconcileN` N2、`taskResultCollector`「caches only old command
+  refusal」、`chainsApi` C1（500）、`startForm`（ECONNRESET）、`handoffE2E`／`sleepBlockedResumeE2E`（P0 席门里；控制器在同一
+  分支上分别用 pin `ccb0656` 与 ccloop `c7db270` 的构建各跑一次 22/22）。
+- **环境、不是代码**：本会话 `allow-push` 授权文件 `~/.orca/gate/push-grants/<session>.json` 在门运行中被钩子写入 ⇒ Rule 17
+  真 `~/.orca` 守卫在 `handoffE2E`／`workerLostE2E` 文件级报红；面板运行中 `control.sock` 出现也会让 `debugGroup` 守卫红。
+- ccloop（J 轮三席全量各一次，负载下）：`updates.test.ts`、`cli`、`runLoop.integration`、`setupCommands`／`runSetupCommands`
+  「a command over its time limit is killed」、`ompVerificationOnlyRecovery`、`extractFinalObject` perf、`skillsController`、
+  `parseArgs`「returns 0 for the example contract run」、`ompPhase`「keeps a stopped phase's…」——都在未改动 main clone 上同形或单跑过
+  （`/private/tmp/orca-j1113/ccloop-seat{,2,3}/ab-*.log`）。都**不在 `check-known-reds` 名单**（进不进归人）。

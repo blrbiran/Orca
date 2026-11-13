@@ -64,29 +64,25 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-13，会话 `d467cbd2`，测试者反馈 I 轮）—— push 闸门可经 `allow-push` 放行；test-affected 收窄；Part B 按观测下界结算；#273 复审修复；付费 dogfood 揪出并修好 4 个 P0 级卡死；#278／#243／#263／#230／#272／#265；**Orca main 有 repin 以外的全部，ccloop 三笔在其本地 main，都未推**
+### 3.最新（2026-11-13→14，会话 `c8b75eac`，测试者反馈 J 轮）—— 两次 repin（ccloop J 轮全部）；测试者新 issue 的 P0 与控制／Web 两批；原始用量明细（schema 24）；**三仓已推，7777 已装**
 
-- **人的话（原话全文在台账 `.superpowers/sdd/2026-11-13-tester-followup-i/progress.md`）**：开轮「这次批准改写所有必要的判据。这一轮允许必要的付费真跑。…临时允许你push…先按你的建议执行」；四问「Part B 的结算算术 => 按你的建议走」「#262 后半段（在 ccloop 里） => 时间预算只算真正在干活的时间」「#261 后半段 => 按你的建议走」「cacheRead 计费口径要不要这轮先 brainstorm？ => 下一轮做」「上面那个 push 授权的识别方式行不行？ => 可以」；#273「派独立subagent review 然后实现」。
-- **已在 Orca main（主题行按 `git log --grep` 取）**：
-  - **push 闸门**（`feat(gate): admit a plain git push when the human typed allow-push`；Rule 15、闸门 spec §12）：人在**自己消息的开头**敲 `allow-push` ⇒ `UserPromptSubmit` 钩子写 12 h 授权（`${ORCA_GATE_DIR:-~/.orca/gate}/push-grants/<session>.json`）⇒ 该会话只放行 `git push origin [<ref>…]`（另允许 -u/-q/-v/-n/--porcelain/--follow-tags）；force／删除／mirror／裸 push／非 origin／`-c`／`GIT_CONFIG*` 仍拦；`deny-push` 收回；chain 会话永不得授权；`permissions.deny` 去掉了 push 三条（§12 风险 13：钩子超时被杀时 push 无兜底）。**本轮人没敲 `allow-push` ⇒ 本会话 push 全被拦，控制器未伪造授权。**
-  - **test-affected**（`feat(test-affected): a pin-only repin selects only the tests that run the real ccloop`）：只改 pin 时只选读 `ORCA_CCLOOP_BIN` 或直接 import 读它的 helper 的测试；真 repin `09497063` 上 503 → 102 个文件。spec 2026-10-20 §10。
-  - **Part B 结算**（`feat(control): an expectation-model run's unknown usage may settle at ccloop's observed floor, explicitly`；G spec §16）：未知用量期间照旧扣住整份未用 ceiling；结算时**额外**允许显式 `charge-observed-floor`（没有下界 ⇒ `observed-floor-unknown`，继续扣住）；自动路径仍是 remaining-grant。不按一半扣（人「按你的建议走」）。
-  - **#273 复审**（独立 subagent 复审 → 修）：连丢计数按认领顺序（`runs.rowid`）而非随机 run id 顺序（`fix(control): count a task's worker-lost streak in claim order…`）。**stepC 认「有 candidate 无停止证明」的 `worker:lost` 那一笔留在分支 `i/worker-lost-fixes`（worktree `.claude/worktrees/i-worker-lost`），等 repin 再合**（其 E2E 只在新 ccloop 下过）。
-  - **付费 dogfood 揪出的（seat K、L，已修）**：
-    - worker-lost 期望模型 run 用 `charge-remaining-grant` 结算后存成 `grant.tokens null`＋`remaining 0` ⇒ `validAccounting` 拒 ⇒ **整组 `group show`、`task retry` 都 423 `recovery-blocked:run-identity`**；写端改为 null 保持 null、标记按 live ceiling 校验；读端接受旧写法的行（remaining-grant＋live ceiling＋有效标记）与 known-zero 形状（#215 同类）——**真组无需改库即恢复可读**。
-    - 该结算原来把未用的时间（约 4 h）、attempts、sessions 也扣光 ⇒ 阶梯 `authored-budget-exhausted`、不重启；现在 worker-lost 只扣 token，由 `workerLostPass` 重启。
-    - 被杀 worker 的 run 没有 ccloop 下界 ⇒ `observed-floor-unknown`；现在已观测过 token 的 worker-lost run 下界＝0（在已观测量之上）。
-    - 暂停线 `decide-usage continue` 时被停的 run 没有完整 checkpoint（codex 执行中途停）⇒ 续跑 run A2 `resume-predecessor-unrecoverable`、`recovery retry`／`task retry`／`close-run` 互相指回去的**死循环**，且 brief 说 running、0 blockers；现在 stepA2 只在 `exportResumeBundle` 前提成立时续跑，否则全新开始；`recovery list` 新增 `blockedRuns`，`recoveryBlockerCount` 计入（`claimBlocked` 不计）。
-    - 显示：apply-estimate 不再说「没有 token 上限」并点名 1M 期望下限（期望＝估算，下限 1,000,000，`EXPECTATION_FLOOR_TOKENS`，#266——**不是缺陷**）；期望模型组的估算按建议性显示；草稿任务的资金预览、`dependencies-pending`、null 额度读作 unlimited；retry 回执 `nextRun.because`。
-  - **#278 余项**：landing watch 与 requirement review 对已删工作分支走验收同一套 `work-branch-missing` 记录（一次 rev-parse、一行日志）。
-  - **面板日志 262 行 `control-peer-exit:ENOENT`**：H 轮 repin 时 `npm ci` 在面板运行中改写了 `node_modules/ccloop`（库里没有 flow，pump 每轮 `refreshAgents` 起 ccloop）；数据无损。错误现带路径、只记一次、打开的 flow run 有 `lastError`。**repin／`npm install` 前先停面板或之后重启。**
-  - **#282** `task note` 判据（主线已过）；**#243** Live 笔记 Enter 发送／Shift+Enter 换行／输入法组合不发；**#263** `run show` 与 Web 说明「执行已完成、只差验证」并给 `run eligibility`／`task verify-saved-result`；**#230** 不改码（brief 计数本来就按当前 run 推导；加判据）；**#272** `task retry`／`close-run` 拒绝带 `next`，>50 KB 的人读 `group show` 末尾一行提示；**#265** 草稿 `impliedPathsOutsideTargets` 非阻断提示＋拆分指令一句。
-  - **配对验收漂移**（seat I）：`savedResultWorld` 当前生产者世界改用 `preRelease`（H 轮默认期望模型后 V10／exhausted 的源 run 直接 succeeded）。
-  - 文档：`docs/superpowers/specs/2026-11-13-weighted-token-ledger-proposal.md`（cacheRead 加权提案，**未实施**，人「下一轮做」）。
-- **ccloop 本地 main（未推，Orca 未 repin）**：#262 只算干活时间（空档超过 120 s 的部分不计）、#273 复审修复（candidate 写后死掉、UTC lstart、重跑补记用量）、**saved-result 校验认 handoff 目录**（G 轮 `afb9a51` 起生产上 OMP 坏 final／codex 未知用量的已存结果恢复全被 `saved-result-config-mismatch` 拒——真回归）。见 ccloop handoff。
-- **付费 dogfood**（项目 `orca-dogfood-a9c43a99`，组 `g-28d9b560`，codex gpt-6-sol，限额 4M → 人身份抬到 4.6M）：澄清 1 问→`--finish`；拆分 draft 1 被 `check-write-scope` 正确拒、draft 2 tags∥search 并行（#284 ✓；但 `parallelCandidates` 把 cli 对 search 的真依赖也列成可删边——误报）；杀 worker 约 10 s 判 `worker-lost` ✓；组上限超 81k（codex 只能在回合之间停）；抬上限后 readme 自己续上（O4 ✓）；**组级验收跑了 `npm test` 全过（#279 ✓）**；落地主题＝任务目标＋trailer（#277 ✓）；**需求复核失败 `codex-single-call-not-single:messages`**（gpt-6-sol 同一回合先发一句前言再发 JSON；ccloop 拒多条消息，`codexSingleCall.test.ts:229` 钉着 ⇒ 改要人点名），控制器 `group review-rerun` 一次，**同样失败**（组停在 `requirement-review-not-passed:failed`，留给人）。用量只按工具账本记：组 4,387,239 token（复核重跑前）；没有工具给的美元数。
-- **门（现测）**：整轮 `test-affected --base=<本轮起点>` 1047 文件：根 804/812、web 235/235、typecheck 0；红全在负载名单或单跑过，`startForm` 与本轮起点 A/B 同形（各 失败,失败,通过）；之后 seat I／K／L 各自门只剩已知 `orchestration`。**全量门未跑（Rule 18）。** 日志 `/private/tmp/orca-i1113/`。
-- **装进 7777**：seat L 合入后 `npm run build`＋web build＋kickstart；`orca status` ok（`ccloop: 26b3127 pinned and installed`）。
+- **人的话（原话全文在台账 `.superpowers/sdd/2026-11-13-tester-followup-j/progress.md`）**：「#300 => 无限制组不要暂停线」「#297 => codex 提示就好」「#303 => 批，这一轮允许改写必要判据」「token 预算的本意是近似成本」→「应该以 token 为单位，美元可以之后换算」→「选3，都要记录原始token，而不是等效token…还有具体的模型…」「同意按这张表格记，但是有些项目不是must have，有就记录，没有就留空」；「上轮待你审的可逆决定 => 同意」（I 轮 §4.0 第 3 条整批）；ccloop 判据「点名允许改必要的测试」；「付费重跑 dogfood 组的需求复核 => 放在下一轮session做」；收尾授权（开头 `allow-push`）「这次批准改写所有必要的判据…先按你的建议执行。执行完在最后阶段报给我审核」。
+- **push 闸门两面都实测对了**：消息开头没有 `allow-push` 时 ccloop、Orca 两个 push 都被拦（带放行提示）；人下一条以 `allow-push` 开头 ⇒ 钩子写授权 ⇒ 两个 push 都过。
+- **repin**：先到 ccloop `ccb0656`（I 轮三笔；合了 `i/worker-lost-fixes`），再到含 J 轮全部的那笔（主题行 `chore(deps): repin ccloop to 9c83b38 …`）。Orca 在同一批里先接受 ccloop 的新键（`feat(usage): accept ccloop's raw usage detail and the work event's phase`）。配对 V10／V11／O19／exhausted 两次都 4/4（pin 那笔的 clone build）。
+- **ccloop J 轮**（详见 ccloop handoff「最新」）：codex 单次调用容许前言（chain spec §6.1 已追加更正）；`accepted.lock` 陈旧锁回收；#308 `launch:"never-claimed"`；#287 `dist/build-info.json`；#299 `model-unavailable`；原始用量明细生产者。
+- **Orca P0**（主题行带 `tester follow-up J`）：#294／#298 run 的 `operatorNote` 让组读取 423（`persistedRunSchema` 缺键，10-26 起潜伏）＋一个坏组不再让列表页全黑（summary 把该组列为 unreadable，recovery 独立读）；#307 set-loop 有限预算在期望模型组 423（读端接受 null grant；写成软 `tokenIntent`）；#289 停组死等（B：collect 抛错照样跑宽限；A：已落地的 blocked run 报 `handoff-unresolved`）；#305 超线后续跑把暂停线抬到用量之上（仍以组余量一半封顶，不够才拒 `usage-pause-group-headroom`）；#300 无限制组没有暂停线（G spec §19 更正）。
+- **Orca 控制批**：#308（重发 accept ≤2 次再 block `launch-never-claimed`，`recovery list` 新增 `blockedCalls`）、#299（阶梯豁免、不换模型）、#287（`orca status` 比 build-info：现报 `pinned, installed and built`）、#286（`changed-during-feature-probe` 瞬时 ×3）、#292（`archive-run-active` 带 `activeRuns`＋next）、#309（摘要按非空行数、超了截断仍下发）、#285（blocked 或 10 分钟无输出不再说「正在产出」）、#290＋#297（run 视图带 `liveCeiling`；`run show` 对 codex 提示「只在回合之间停」，**只在 CLI**）、#291（资金预览说清原因）。
+- **Orca Web 批**：#301（转录行不再显示 1970 时间；那条旧判据的夹具是假的、永远不会红）、#293（任务详情只在 Progress／Results，有关闭钮）、#303＋#304（一个「工作项（n）」折叠区，筛选在它的标题行）、#288（停止状态领先卡片）、#296（按依赖层排序）、#302（zh「执行记录」）、#306（Tasks 页「新建 ▾」：导入计划／启动流程）。
+- **原始用量明细**（spec `docs/superpowers/specs/2026-11-13-raw-usage-detail-design.md`，§8 是控制器按「先按你的建议执行」定的五条，§9 as-built）：预算口径不变；`usage_ledger` 新列 `reasoning`、`cache_write_5m`、`cache_write_1h`、`requests`、`max_request_input`、`phase`、`task_id`、`agent_kind`、`installation_id`、`basis`（schema 23→24，真库已迁，28 行保留）；`orca usage show` 带 `byModel` 明细与 `byModelPhase`，`run show`／`group show`／Web 用量面板显示，缺的显示「—」。加权提案追加了 Outcome（未建）。
+- **门（现测）**：合并后 main `test-affected --base=d382ebdf`：1050 文件（806 root／244 web）；root 3 红（既有 `orchestration`、`startForm`、`workerLostE2E` 240 s 等待——单跑 3/3 过，已登记 `known-load-flakes.md`），web 244/244，39 跳过全在配对／真 smoke 文件；typecheck 两侧 0。**全量门未跑（Rule 18）。** 日志 `/private/tmp/orca-j1113/`。
+- **装进 7777**：先 `sqlite3 .backup` 到 `~/.orca/backups/pre-schema24-20261114/`（integrity ok），迁移另留 `control.sqlite.pre-v23-1794586642038`；`orca status` 全 ok（schema 24，ccloop `9c83b38`）。
+- **控制器的偏差（如实）**：一次删除型变异在**主工作树**里做（应在 clone，Rule 15），已按字节还原、`git diff --stat` 只剩本意的 4 个文件；第一次 repin 用手拼的 SHA（错的），npm 没装上、树干净，重试用 `rev-parse`。
+
+### 3.I 测试者反馈 I 轮的结论（会话 `d467cbd2`，2026-11-13；2026-11-14 会话 `c8b75eac` 压成结论：已由 J 轮 repin、推送；I 轮可逆决定人已「同意」；过程按 §十 取回；台账 `.superpowers/sdd/2026-11-13-tester-followup-i/progress.md`）
+
+- 已落地：push 闸门可经人在消息**开头**敲 `allow-push` 放行普通 push（12 h、本会话、只 `git push origin [<ref>…]`；闸门 spec §12）；`test-affected` 只改 pin 时只选读 `ORCA_CCLOOP_BIN` 的测试；Part B 期望模型组的未知用量可显式 `charge-observed-floor`；#273 复审修复（连丢按认领顺序、stepC 认「有 candidate 无停止证明」的 `worker:lost`）；付费 dogfood 揪出的 4 个 P0 卡死（worker-lost 结算读不了／扣光非 token 维度／无下界；暂停线续跑死循环 ⇒ 无完整 checkpoint 就全新开始，`recovery list` 有 `blockedRuns`）；#278 #243 #263 #230（不改码）#272 #265 #282。
+- 判过的：#266 的 1M 期望下限是设计（`EXPECTATION_FLOOR_TOKENS`）；#261 决定不改；#230 读侧维持。
+- 坑：repin／`npm ci` 前先停面板（否则面板每轮 `control-peer-exit:ENOENT`）；配对验收是 opt-in，常规门看不到它的漂移。
 
 ### 3.H 测试者反馈 H 轮的结论（会话 `7e164691`，2026-11-12→13；2026-11-13 会话 `d467cbd2` 压成结论：全部已由人推、Orca 钉 ccloop `26b3127`；过程按 §十 取回；台账 `.superpowers/sdd/2026-11-12-tester-followup-h/progress.md`）
 
@@ -219,8 +215,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - `~/.orca/profile.json` 的 `profile.estimatorPreflight.instructionVersion`：2 → 3（2026-11-07，备份 `.bak.1794052467224`）→ 4（2026-11-09 人授权，备份 `.bak.20261109-v4`）。
 - `~/.orca/agents.json`：claude／codex 的 `command[0]` 改到 nvm 22.23.4、codex `version` 0.167.0（2026-11-07，备份目录 `~/.orca/backups/node-22.23.4-switch-1793982205000/`，内含 `codex-config.toml.before-paid-run`）；三个 `timeoutMs` 被 2 h 迁移改成 7200000（2026-10-31 一次事故，内容即人裁结果，原字节在标记文件 `<table>.bak-pre-2h-timeout`；迁移现在只在 `mode.service === true` 跑）；更早 claude 改 `bypassPermissions`（备份 `.bak-20261020`、`.bak-20261020-perm`）。ccmem daemon 的 plist 改指 22.23.4 的 claude（ccmem handoff）。
-- 控制库升级前备份（`~/.orca/backups/`）：`schema14-cutover-1792329773353`、`schema15-cutover-1792586473769`、`pre-schema18-20261023-230314`、`pre-schema19-20261024-062118`、`pre-schema20-20261025-023827`、`pre-schema21-20261029-135742`、`schema22-cutover-1793909239424`、`schema23-cutover-1793941018824`、`2026-11-07-d2-o19/`；另有 `~/.orca/control-bak-20261020` 与迁移自留在库旁的 `control.sqlite.pre-v*-*`。
+- 控制库升级前备份（`~/.orca/backups/`）：`schema14-cutover-1792329773353`、`schema15-cutover-1792586473769`、`pre-schema18-20261023-230314`、`pre-schema19-20261024-062118`、`pre-schema20-20261025-023827`、`pre-schema21-20261029-135742`、`schema22-cutover-1793909239424`、`schema23-cutover-1793941018824`、`2026-11-07-d2-o19/`、`pre-schema24-20261114/`（会话 `c8b75eac`）；另有迁移自留的 `control.sqlite.pre-v23-1794586642038`；另有 `~/.orca/control-bak-20261020` 与迁移自留在库旁的 `control.sqlite.pre-v*-*`。
 - `~/.zshrc` 加了 `ORCA_CCMEM_BIN`（备份 `~/.zshrc.bak-20261023-orca`）；orca-control skill 经 syncskill 装上（备份 `~/.syncskill/config.json.bak-20261023-orca`）；`~/.claude/skills/tech-writer{,-deslop,-voice}` 软链改指 `/Users/biran/code/skills/skills/runskills/skills/*`；`~/.claude/skills/orca-control` 是指向仓内的软链（改仓即生效）。
+- push 授权文件 `~/.orca/gate/push-grants/<session>.json`（0700／0600，由 `UserPromptSubmit` 钩子在人敲 `allow-push` 时写；会话 `c8b75eac` 起出现）。
 - `~/.codex/config.toml` 的 trust 条目历次按人裁清理（备份 `.bak-o9-20261026`、`.bak-o9-20261026b`、`.bak-af2ceee1-20261104`、`.bak-af2ceee1-df2`）。
 
 ### 3.1 已经做成的（都在 Orca／ccloop main 上）
@@ -234,7 +231,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **错误码**：ccloop 进程失败答 424 `ccloop-failed:<码>[: 细节]`（例外：`apply-agent-update` 仍 500）；「组在执行」单一判定（`src/control/executionPending.ts`），执行中 `start` 答 409 `group-execution-pending`。`set-task-loop` 在组 `running`／`review`／暂停时也能改**未开始**的任务。omp clarify／split 的上限拒绝不自动重试，人点 group 重试时按冻结的 `agentSlot.selection` 重算上限。web 统一经 `web/src/ccloopCodes.ts` 解释码（兜底文案不说「ccloop」）。
 - **纠正 ⇒ debug task**（会话 `3d44b2fb`／`f3a75a90`，spec `2026-10-18-correction-debug-task-design.md`）：纠正开独立 debug group、复现优先检查、落地带关闭记录、「已关闭」＝目标 ref 的树里有关闭行、只限人的记录／人工关闭／撤回 verb、Decisions 页里的纠正列表。**付费端到端与推送类合入方案的关闭都没验过**。
 - **Decisions 页撤回**：撤回自己的审阅／未关闭的纠正（spec `2026-10-18-decisions-review-withdraw-design.md` §10 优先）；撤回记录在 `reviews.jsonl` 的 `withdrawn` 行与 `~/.orca/correction-withdrawals.jsonl`。
-- 控制库：**schema 23、单向**，真实 `~/.orca` 已迁到 23（2026-11-06 会话 `86352010`；各次升级前的备份清单见 §3.A「仓库外的写」；引用前现测）（切换与回退：`2026-10-12-live-service-cutover.md`）。Linux systemd 用户服务跑通过一次（两仓全量没在 Linux 跑过；`2026-10-12-followup-acceptance.md`）。
+- 控制库：**schema 24、单向**，真实 `~/.orca` 已迁到 24（2026-11-14 会话 `c8b75eac`，原始用量明细；23 是 2026-11-06 会话 `86352010`；各次升级前的备份清单见 §3.A「仓库外的写」；引用前现测）（切换与回退：`2026-10-12-live-service-cutover.md`）。Linux systemd 用户服务跑通过一次（两仓全量没在 Linux 跑过；`2026-10-12-followup-acceptance.md`）。
 
 ### 3.2 还不能说的（**诚实边界，原样保留**）
 
@@ -292,22 +289,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `d467cbd2` 2026-11-13 收尾）
+### 4.0 接手顺序（会话 `c8b75eac` 2026-11-14 收尾）
 
-1. **等人：在消息开头敲 `allow-push`**（本会话没有授权 ⇒ 三仓都没推；一律 `ls-remote` 现核）。有了授权后按序做：
-   1. 推 ccloop main（#262、#273 复审、saved-result handoff 目录三笔＋handoff）。
-   2. Orca repin：**先停面板或之后立刻重启**（`npm ci` 改写 `node_modules/ccloop` 会让运行中的面板每轮 ENOENT）；`node scripts/pin-ccloop.mjs <ccloop main>`＋`npm ci`；rebase 并合分支 `i/worker-lost-fixes`（worktree `.claude/worktrees/i-worker-lost`；stepC 认「有 candidate 无停止证明」的 `worker:lost`）；`npm test`（新 `test-affected` 只选读 `ORCA_CCLOOP_BIN` 的约 100 个文件）＋配对 `ORCA_SAVED_RESULT_VERIFY=1 … savedResultRecovery.paired -t 'V10:|V11:|O19:|a real exhausted completion'`（pin 那笔的 clone build）；装进 7777；推 Orca、ccmem。
-   3. Orca spec／文档里把 `used.activeMs` 写成墙钟的地方按 ccloop #262 改成「干活时间」（ccloop 只改了含义、协议不变）。
-2. **要人点名的 ccloop 判据（ccloop Rule 15）**：
-   - **`tests/runtime/codex/codexSingleCall.test.ts:229`（`not-single:${what}` 的 `messages` 一支）**：gpt-6-sol 做需求复核时同一回合先发一句前言再发 JSON ⇒ `codex-single-call-not-single:messages` ⇒ **codex 组的需求复核目前过不了**（dogfood 组 `g-28d9b560` 两次复核都失败、现停在 `requirement-review-not-passed:failed`）。建议：同一回合、无工具、`-o` 文件里有合 schema 的答案时容许前置消息。人点名后改。
-   - 旧判据标题「a run with a candidate never carries worker」现在说多了。
-   - `settle-lost-worker` 被杀留下的 `control/accepted.lock` 无陈旧回收（claim／seal 共用锁，改法要人定）。
-3. **人审（都可逆，台账「Controller decisions」与各 seat 报告）**：push 闸门的设计（只认消息开头、白名单、授权覆盖子 agent 与别的仓、push 不再有 deny 兜底）；Part B 下界（超过扣住额的下界照记、可让组读数超限；worker-lost 无 ccloop 下界时取 0）；#262 的 120 s 门槛；ccloop「candidate 永远保留为结果」；seat K／L 的读端兼容旧行、`blockedRuns` 计入 `recoveryBlockerCount`；#230 不改码；#272 `next` 在 CLI 侧、恒为数组；#265 只提示；test-affected 的已知漏选（两层 helper、`process.env["…"]` 写法）；#261 判「决定不改」；dogfood 组 `g-28d9b560` 怎么收（`review-accept`／等 ccloop 修好后 `review-rerun`）。
-4. **下一轮（人已定）**：cacheRead 计费口径 brainstorm（提案 `docs/superpowers/specs/2026-11-13-weighted-token-ledger-proposal.md`）。
-5. **余项（agent 能做）**：组上限停住等充值时 `recovery list` 不列（只在 brief 显示 blocked 1）；`parallelCandidates` 把 import 关系的真依赖列成可删边（#284 误报，要看 import 图）；`orca` CLI stdout 被提前关闭时抛未处理 EPIPE；死 run 停在 C 仍占着未用 ceiling 且仍是抬上限候选（`planCeilingRaises`）；ccloop 可从被杀调用的转录算出真下界（要 repin）；配对 V10／O19 只覆盖发布前世界，期望模型世界没有对应验收；19 个 schema10／old11 配对场景需旧构建（配方：Orca `c2a1f422`、ccloop `5b0adea4`、Orca `f00bfdb7`，见台账 seat I）；`handoff.ts` 把被 block 的当前 run 报成 `active-run`；服务端与 Web 的状态词规则不一致；ccloop `savedResultRecovery.ts` ~358 omp 胶囊复核是松的 `indexOf`；多目录组的暂停线续跑仍 `multi-dir-continuation-unsupported`；`stalledCauseAndFloor`（ccloop）是否进 known-reds 名单。H 轮 §4.0 第 4 条余项里 #278（landing watch／requirement review）、#273 资金外拒绝已在本轮处理，其余（#285 依赖图 stalled 只看 `lastActivityAt`、Board「无改动」标记、`runs/<run>/{in,out}` 不清理、Web 计划导入不按写集排序、ccloop #193／#122）仍在。
-6. **等证物／先量再说**：#237、#191、#195、#196 不变；预算期望模型、worker-lost、组级验收全量命令本轮在真 codex 组上见过（见 3.最新），**需求复核在 codex 下过不了**（见第 2 条）；claude／omp 下都没真跑过。
-7. **其余不变**：#145／#160、#174 方向、#235 不重开；全量门只在发版时跑（Rule 18）。
-8. **清理（人做，需要 `--force` 或属别的会话）**：Orca worktree——G／H 轮的 `agent-*` 13 个、`g-repin`、`h-fix-282`、`h-repin2`（都已合入；内含未跟踪的 `node_modules` 软链）；本轮的 `i-worker-lost` 等 repin 后合；ccloop worktree `g-ccloop-bc`、`g4-small`、`g7-stalled`、`h-ccloop`；临时目录 `/private/tmp/orca-g1112/`、`/private/tmp/orca-h1112/`（`ccloop-pin3` 是 pin `26b3127` 的 build，repin 前还要用）、`/private/tmp/orca-i1113/`（本轮各席日志、变异副本、基线 clone）。
+1. **付费重跑 dogfood 组 `g-28d9b560` 的需求复核**（人：「放在下一轮session做」；付费，先跟人确认）：现在的 pin 已带 ccloop 的 codex 前言修复 ⇒ `orca group review-rerun g-28d9b560`，看 codex `gpt-6-sol` 的复核是否通过；不过就把 `codex-single-call-not-single:*` 的具体形状记下来。
+2. **人审（都可逆；台账「Seat」各节与各席报告）**：原始用量 spec §8 五条＋§9 as-built 的决定（claude 子项取自信封、`agent_kind` 恒 NULL、单次调用自动下界记 `observed-floor`、若干单次调用 phase 为 NULL、子项界限在事件与差值两层都查）；ccloop 席：前言里「前一条也是对象 ⇒ 歧义拒」、无身份旧锁保持占用、`never-claimed` 重拉不改 2 s 接收超时；P0 席：set-loop 意图只在期望模型组、`#305` 续跑公式、D/R run 未记落地时仍 `handoff-pending`；控制席：`LAUNCH_RELAUNCH_LIMIT=2`、`TRANSCRIPT_STALE_MS=10 min`、saved-result run 不重拉、#297 提示只在 CLI；Web 席：Overview→Problems 不再带出任务详情、启动流程用对话框、Board 卡片保留停止徽标。
+3. **余项（agent 能做）**：`agent_kind` 要在认领时冻结到 run 上（或读时按安装 join）；#297 的 codex 提示与实时上限还没进 Web；`App` 启动流程后跳转没有判据；`archive-run-active` 对 settled-* 仍 active 的 run 没有 next；#272 `next` 还缺在 `decide-usage`／`proposal set-budget`／`settle-usage` 的拒绝上；`orca` CLI stdout 提前关闭抛未处理 EPIPE；`parallelCandidates` 把 import 关系列成可删边（#284 误报）；`handoff.ts` 把 blocked 当前 run 报成 `active-run`；服务端与 Web 状态词规则不一致；组上限停住等充值时 `recovery list` 不列；死 run 停在 C 仍占未用 ceiling 且是抬上限候选；生成的 CLI 文档没重生成（`orca usage show` 新字段）；ccloop `savedResultRecovery.ts` ~358 omp 胶囊复核是松的 `indexOf`；多目录组暂停线续跑仍 `multi-dir-continuation-unsupported`；配对 V10／O19 只覆盖发布前世界。
+4. **测试者台账里仍开着、本轮没动的**：#92、#108、#109／#197（人裁不做跨调用 session 复用）、#193、#194、#235（不重开）、#71／#78／#81／#84／#94（产品／视觉）；#267 大概率已修，未在真 run 上看过。
+5. **等证物／先量再说**：#237、#191、#195、#196 不变；需求复核在 codex 下等第 1 条；claude／omp 下的期望模型、worker-lost、组级验收都没真跑过。
+6. **其余不变**：#145／#160、#174 方向、#235 不重开；全量门只在发版时跑（Rule 18）。
+7. **清理（人做，需要 `-D`／`--force`）**：ccloop 分支 `j-backup-before-reword`；Orca 上锁未用的 worktree `.claude/worktrees/agent-a9f5980377b583500`；G／H 轮 Orca worktree（`agent-*` 13 个、`g-repin`、`h-fix-282`、`h-repin2`）；ccloop worktree `g-ccloop-bc`、`g4-small`、`g7-stalled`、`h-ccloop`；临时目录 `/private/tmp/orca-{g1112,h1112,i1113,j1113}/`（`j1113/ccloop-pin2` 是当前 pin 的 build，下一轮跑真 ccloop 判据还能用）；本轮 J 的 Orca／ccloop 席 worktree 都已删。
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
@@ -496,9 +486,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：删去已了结的条目——各轮的 push 请求（2026-11-11 `ls-remote` 现核三仓本地 main＝`origin/main`）、已做的 repin（当前 pin 是 `chore(deps): pin ccloop to the zero-usage and prompt-mode exhausted fixes`）、`~~划掉~~` 的条目、已答复的问题（UI 信息架构四问、#158／#138 方向、#162／#173 取舍、#212、profile 升 v4、#168／#179／#157、流程第一期安全裁定、soft／failover D1–D6、F5／F6、O9 claude 付费段）、已查清的 `multiDirLandingD` 间歇红与 `dev checkpoint write`「挂住」（见 §3.A）、已不存在的清理路径（`/tmp/orca158-*`、`/tmp/chk-x`、`/private/tmp/orca-{ffec7b28,0e13a9b7,b37f7ce9}`、`.claude/worktrees/tester-followup-20261108`、ccloop 的 prunable worktree，2026-11-11 现测都已不在）；同类项各并成一条。更早（会话 `a3b2a7a7`）删过的见 git 历史。
 
-1. **push**（会话 `d467cbd2`；闸门已改：人在消息开头敲 `allow-push` 后 agent 可推；本轮人的授权是聊天里的话、没有该标记 ⇒ ccloop 试推一次被拦）：Orca main（I 轮全部＋handoff），ccloop main（三笔＋handoff），ccmem main（只有 handoff），以 `ls-remote` 现核。7777 已装上本轮 main。
+1. **push**：会话 `c8b75eac` 收尾时三仓都已推（人开头 `allow-push`）；以 `ls-remote` 现核。
 2. **看真面板**（人此前「先默认通过，之后有问题我会再找你」——不催）：G 轮新 UI——Settings → Agents 首次使用检测与安装、`--repo` 面板的「怎么换多项目」、模型不在目录时禁用提交、「按零结算并关闭」、accept-attempt 表单的 diff 统计与检查、组详情只渲染当前区域、依赖图层内排序与「N 条隐含依赖已隐藏」、无改动标记与「撤销并重跑／按无改动接受」、需求复核面板与三个出口、Problems 里的落地回归行、本组放行按钮与放行列表——都只在 jsdom 测过；F、E、D 轮的同样没在真浏览器看过（F 轮：低频功能收进 More／「⋯」、需求表单「选项」、Board 无主按钮等）。
-2d. **审 H 轮与 G 轮控制器与各席按「先按你的建议执行」定的事**（H 轮的清单在 §4.0 第 3 条）（F 轮那批人 2026-11-12 会话 `d1cbbd58` 开轮「同意」，已删）：spec §10 五条（命令验证器的无改动先过目标判断、handoff 由 ccloop 合同带目录、任务 token 一律是预期＋单独的硬上限开关、放行只放点名的路径、迁移按建组标记）与 §11 单一标记；G5 把 `dirRequirementE2E` 改写成按 §5.2.5 串行（控制器定）；G2 #174 设置要 person token；G3 #173 停下（见 §4.0 第 3 条）；Part A／B／D 各自的可逆决定（台账与 spec as-built 节）；Part D 的 `round()` 等待自己发起的 settle（计时判据改为显式放行）。
+2d. ~~审 H 轮与 G 轮控制器与各席的可逆决定~~ 人已审（I 轮开轮「未评论的部分同意」，原话在 I 轮台账）；I 轮的可逆决定人 2026-11-13「同意」（J 轮台账）。J 轮待审的在 §4.0 第 2 条。
 3. **付费真跑（每一次先问）**：
    - #162／#173：一次真跑比较 v4 估算与 task run 的实际用量（v4 至今没被付费验证）。
    - prompt-mode exhausted 的验收：需人先在 agents 配置里加一个 `structuredOutput:"prompt"` 的 codex 安装。
