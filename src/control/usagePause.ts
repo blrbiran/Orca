@@ -119,6 +119,8 @@ export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate
           // Tester #305 (follow-up J): a run that overshot its line (ccloop stops at a phase boundary or between turns)
           // may have used more than the next multiple too, and that line was then refused for good. The next line is the
           // next multiple and at least the first one above what the task used: k = max(k + 1, floor(used / 10E) + 1).
+          // Correction (follow-up L): "between turns" holds only for claude and omp, which ccloop stops inside a call; codex
+          // runs one turn per phase, so it stops only after the whole phase (follow-up K) and can overshoot by far more.
           const multiple = Math.max(state.multiple + 1, Math.floor(used / (PAUSE_LINE_MULTIPLE * expectation)) + 1);
           nextLine = pauseLineFor({ expectationTokens: expectation, multiple, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
           // Only half the group's remainder can still hold the line at or below what the task used: the group needs more.
