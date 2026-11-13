@@ -452,6 +452,23 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       ))}
       {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
       {olderInstruction !== null && <p role="note" data-testid="budget-older-instruction">{t("budget.olderInstruction", { profileId: estimatorProfileId ?? "", version: olderInstruction, newest: NEWEST_ESTIMATE_INSTRUCTION })}</p>}
+      {/* Tester #173/#224/#266 (follow-up L): this repository's median task spend and each estimate's multiple of it (the view's, before confirm). */}
+      {view.estimateHistory !== undefined && (
+        <div role="note" data-testid="budget-history">
+          {view.estimateHistory.medianTokens === null
+            ? <p className="my-[6px]">{t("budget.history.tooFew", { n: view.estimateHistory.sampleCount, minimum: view.estimateHistory.minimumSample })}</p>
+            : <>
+              <p className="my-[6px]">{t("budget.history.median", { median: shortTokens(view.estimateHistory.medianTokens), n: view.estimateHistory.sampleCount })}</p>
+              <ul>
+                {view.estimateHistory.tasks.map((task) => (
+                  <li key={task.taskId} className="num">{task.estimateTokens === null
+                    ? t("budget.history.unestimated", { taskId: task.taskId })
+                    : t("budget.history.task", { taskId: task.taskId, estimate: shortTokens(task.estimateTokens), ratio: task.ratio ?? "—" })}</li>
+                ))}
+              </ul>
+            </>}
+        </div>
+      )}
       {/* Tester follow-up F §4 (#162): a task's work attempts the estimate put below the floor is applied raised; say so. */}
       {advice !== null && !advice.stale && !archived && !estimateIsAdvisory(view) && advice.output.tasks.filter((task) => task.work.attempts < MIN_APPLIED_WORK_ATTEMPTS).map((task) => (
         <p role="note" key={`attempts-raised:${task.taskId}`} data-testid={`budget-attempts-raised-${task.taskId}`}>

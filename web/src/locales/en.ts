@@ -1184,6 +1184,13 @@ export const en = {
     hardCapValue: "hard cap {{value}}",
     staleEstimate: "This estimate predates a plan change; estimate again to update the suggestions",
     olderInstruction: "Estimator profile {{profileId}} uses estimate instruction {{version}}; the newest is {{newest}}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest.",
+    // Tester #173/#224/#266 (follow-up L): the group view's estimateHistory.
+    history: {
+      median: "Finished tasks of other groups in this repository used a median of {{median}} tokens each (n={{n}}, every run of a task).",
+      tooFew: "Too few finished tasks in this repository to compare the estimates with ({{n}}; at least {{minimum}} needed).",
+      task: "Task {{taskId}}: estimate {{estimate}} tokens, {{ratio}}× that median.",
+      unestimated: "Task {{taskId}}: not estimated.",
+    },
     attemptsRaised: "Task {{taskId}}: the estimate said {{estimated}} work attempt(s); applying it sets {{applied}}, as an applied estimate sets at least {{min}}.",
     applyAll: "Apply all suggestions",
     rationale: "Estimate rationale ({{estimateId}})",

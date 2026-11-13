@@ -1024,6 +1024,12 @@ export const zh: Translation<typeof en> = {
     hardCapValue: "硬上限 {{value}}",
     staleEstimate: "这份估算早于一次做法修改；重新估算以更新建议",
     olderInstruction: "估算 profile {{profileId}} 用的是估算指令 {{version}}，最新的是 {{newest}}。它的估算按旧指令做；要用最新的，请更新该 profile 的 estimatorPreflight.instructionVersion。",
+    history: {
+      median: "这个仓库里其他任务组已完成的任务，每个用量的中位数是 {{median}} token（n={{n}}，含每个任务的所有运行）。",
+      tooFew: "这个仓库里已完成的任务太少，无法和估算对比（{{n}} 个；至少要 {{minimum}} 个）。",
+      task: "任务 {{taskId}}：估算 {{estimate}} token，是这个中位数的 {{ratio}}×。",
+      unestimated: "任务 {{taskId}}：未估算。",
+    },
     attemptsRaised: "任务 {{taskId}}：估算给的工作尝试次数是 {{estimated}}；应用时设为 {{applied}}，因为应用估算至少设 {{min}} 次。",
     applyAll: "应用全部建议",
     rationale: "估算理由（{{estimateId}}）",
