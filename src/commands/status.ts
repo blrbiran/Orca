@@ -159,7 +159,18 @@ export async function ccloopPinCheck(ctx: CheckContext): Promise<StatusCheck> {
   if (pinned === null) return { level: "fail", subject: "ccloop", fact: "package.json pins no ccloop commit", fix: "node scripts/pin-ccloop.mjs <commit>" };
   if (installed === null) return { level: "fail", subject: "ccloop", fact: `pinned ${pinned.slice(0, 7)}, none installed under ${join(ctx.checkout, "node_modules")}${override}`, fix: "npm install" };
   if (installed !== pinned) return { level: "fail", subject: "ccloop", fact: `pinned ${pinned.slice(0, 7)}, installed ${installed.slice(0, 7)}${override}`, fix: "npm install" };
-  return { level: "ok", subject: "ccloop", fact: `${pinned.slice(0, 7)} pinned and installed${override}` };
+  // Tester #287: the lockfile names what npm resolved, not what node_modules/ccloop/dist was built from; ccloop 9c83b38
+  // writes dist/build-info.json {commit, builtAt}. A dist built before that file existed, or from an unknown commit, cannot
+  // be verified (a warning); one built from another commit is a failure naming both.
+  const buildInfo = join(ctx.checkout, "node_modules", "ccloop", "dist", "build-info.json");
+  if (!existsSync(buildInfo)) return { level: "warn", subject: "ccloop", fact: `${pinned.slice(0, 7)} pinned and installed, but ${buildInfo} is missing: built before build-info; cannot verify the build${override}`, fix: "npm install" };
+  let built: unknown;
+  try { built = (JSON.parse(readFileSync(buildInfo, "utf8")) as { commit?: unknown } | null)?.commit; }
+  catch (error) { return { level: "warn", subject: "ccloop", fact: `${pinned.slice(0, 7)} pinned and installed, but ${buildInfo} is not JSON (${message(error)}); cannot verify the build${override}`, fix: "npm install" }; }
+  if (typeof built !== "string" || built.length === 0) return { level: "warn", subject: "ccloop", fact: `${pinned.slice(0, 7)} pinned and installed, but its dist names no build commit (commit ${JSON.stringify(built ?? null)}); cannot verify the build${override}` };
+  const same = built.startsWith(pinned) || pinned.startsWith(built);
+  if (!same) return { level: "fail", subject: "ccloop", fact: `pinned ${pinned.slice(0, 7)}, but node_modules/ccloop/dist was built from ${built.slice(0, 7)}${override}`, fix: "npm install" };
+  return { level: "ok", subject: "ccloop", fact: `${pinned.slice(0, 7)} pinned, installed and built${override}` };
 }
 
 /** ORCA_CCMEM_BIN: unset is a warning (memory off); set, it must be an absolute executable file. */
