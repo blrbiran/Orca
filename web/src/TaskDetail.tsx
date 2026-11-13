@@ -228,6 +228,8 @@ export interface TaskDetailProps {
   /** Fix round 1 (Rule 12): the code the group's decisions read failed with; said in place of its decisions. */
   decisionsFailed?: string | null;
   onCorrectDecision?: (projectKey: string, decisionId: string, origin?: { groupId: string; taskId: string | null; runId: string }) => void;
+  /** Tester #293: the open task's visible close control; absent, none is shown. */
+  onClose?: () => void;
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
@@ -274,7 +276,12 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
   return (
     // Tester #21: the open task is set apart from the table and graph around it by an accent edge (ui/classes.ts taskDetail).
     <section tabIndex={-1} className={`task-detail ${taskDetail}`} data-task-id={item.taskId} aria-label={t("control.task.region", { taskId: item.taskId })}>
-      <h4>{t("control.task.region", { taskId: item.taskId })}</h4>
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="mt-0">{t("control.task.region", { taskId: item.taskId })}</h4>
+        {props.onClose !== undefined && (
+          <button type="button" className="btn-quiet" aria-label={t("control.task.closeLabel", { taskId: item.taskId })} onClick={props.onClose}>{t("control.task.close")}</button>
+        )}
+      </div>
       <p>
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
       </p>

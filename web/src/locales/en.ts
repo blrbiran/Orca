@@ -651,6 +651,8 @@ export const en = {
     },
     task: {
       region: "Task {{taskId}}",
+      close: "Close",
+      closeLabel: "Close task {{taskId}}",
       labelsFrom: "labels from {{source}} · version {{version}}",
       labelSource: { plan: "plan", operator: "operator" },
       labelsOf: "Labels of {{taskId}}",

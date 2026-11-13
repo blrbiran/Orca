@@ -516,6 +516,8 @@ export const zh: Translation<typeof en> = {
     },
     task: {
       region: "任务 {{taskId}}",
+      close: "关闭",
+      closeLabel: "关闭任务 {{taskId}}",
       labelsFrom: "标签来自{{source}} · 版本 {{version}}",
       labelSource: { plan: "计划", operator: "操作者" },
       labelsOf: "{{taskId}} 的标签",

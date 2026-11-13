@@ -63,7 +63,10 @@ it("repeated explicit navigation reopens the requested region and task after man
  const props={view:value,focus,config,uncertain:[],drafts:{},onDraft:vi.fn(),onCommand:vi.fn()};
  const app=render(<ControlGroupView {...props} focusRequest={1}/>);select("Progress");fireEvent.click(screen.getAllByRole("button",{name:"a"})[0]!);
  app.rerender(<ControlGroupView {...props} focusRequest={2}/>);
- expect(selected()).toBe("Problems");expect(screen.getByRole("region",{name:"Task a"})).toBeTruthy();
+ // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the task detail is rendered only in Progress and Results,
+ // so Problems shows none; the task stays open and Progress shows it.
+ expect(selected()).toBe("Problems");expect(screen.queryByRole("region",{name:"Task a"})).toBeNull();
+ select("Progress");expect(screen.getByRole("region",{name:"Task a"})).toBeTruthy();
 });
 it("problem run navigation opens and focuses the exact existing run controls without sending commands", () => {
  const failed=run({runId:"failed",taskId:"b",state:"blocked",outcome:"failed"});const onCommand=vi.fn();

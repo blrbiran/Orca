@@ -660,6 +660,13 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </div>
   </>);
 
+  // Tester #293: the open task's detail belongs to the regions that list tasks (Progress, Results). Outside them it is not
+  // rendered -- it followed the person to every tab, and under Live it was a second transcript of a task Live already
+  // follows. Only the selected region is rendered, so at most one copy exists.
+  const taskDetail = openItem === undefined ? null : (
+    <TaskDetail key={openItem.taskId} active={props.active !== false} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} onClose={() => toggleTask(openItem.taskId)} />
+  );
+
   return (
     // Ruling R1 (#219): only the selected region is rendered; unsent input in a region lives in this store meanwhile.
     <RegionDrafts.Provider value={regionDrafts.current}>
@@ -820,7 +827,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           ))}
         </tbody>
       </table>
-
+      {taskDetail}
         </>,
         live: <LiveRegion view={view} active={props.active !== false && region === "live"} now={props.now} archived={archived} onCommand={onCommand} />,
         preparation: <>
@@ -901,6 +908,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       )}
 
       </div>
+      {taskDetail}
 </>,
         runs: <>
       <h3>{t("control.group.runs")}</h3>
@@ -1015,7 +1023,6 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 
 </>,
       }} />
-      {openItem !== undefined && <TaskDetail key={openItem.taskId} active={props.active !== false} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} />}
     </section>
     </RegionDrafts.Provider>
   );

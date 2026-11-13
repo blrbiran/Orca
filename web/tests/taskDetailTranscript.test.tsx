@@ -51,7 +51,9 @@ afterEach(() => { cleanup(); vi.useRealTimers(); Reflect.deleteProperty(document
 
 const flush = async (ms = 0): Promise<void> => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
 const props = (over: Partial<Parameters<typeof ControlGroupView>[0]> = {}, groupView: GroupViewV1 = view): Parameters<typeof ControlGroupView>[0] =>
-  ({ view: groupView, config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand: vi.fn(), route: { region: "runs", taskId: "a" }, ...over });
+  // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the open task's detail is rendered only in
+  // the Progress and Results regions, so these criteria open task a in Progress (they opened it under Runs).
+  ({ view: groupView, config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand: vi.fn(), route: { region: "progress", taskId: "a" }, ...over });
 const taskDetail = (root: HTMLElement): HTMLElement => root.querySelector('[data-task-id="a"]') as HTMLElement;
 const runsRow = (root: HTMLElement): HTMLElement => {
   const row = root.querySelector(`tr[data-run-id="${RUN}"]`) as HTMLElement;
@@ -222,9 +224,12 @@ describe("T12: the task detail and the runs table", () => {
     const { container } = render(<ControlGroupView {...props()} />);
     await openIn(taskDetail(container));
     expect(within(taskDetail(container)).getAllByTestId("transcript-call")).toHaveLength(1);
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the task detail and the runs table are no
+    // longer on one screen (the detail is in Progress, the table in Runs), so the person moves to Runs and opens it there.
+    fireEvent.click(within(container).getByRole("tab", { name: "Runs and evidence" }));
     await openIn(runsRow(container));
     expect(within(runsRow(container)).getAllByTestId("transcript-call")).toHaveLength(1);
-    expect(within(taskDetail(container)).queryAllByTestId("transcript-call")).toHaveLength(0);
+    expect(taskDetail(container)).toBeNull();
     expect(container.querySelectorAll('[data-testid="transcript-call"]')).toHaveLength(1);
   });
 

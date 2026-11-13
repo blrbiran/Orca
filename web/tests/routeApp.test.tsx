@@ -77,7 +77,9 @@ describe("a group's region and open task are in the route (C31, C35)", () => {
     render(<App />);
     await groupRegion("g");
     await waitFor(() => expect(screen.getByRole("tab", { selected: true }).textContent).toBe("Preparation"));
-    expect(screen.getByRole("region", { name: "Task a" })).toBeTruthy();
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the task detail is rendered only in Progress and
+    // Results; under Preparation the task is open (it is in the route) but not shown.
+    expect(screen.queryByRole("region", { name: "Task a" })).toBeNull();
     const length = window.history.length;
     fireEvent.click(screen.getByRole("tab", { name: "Runs and evidence" }));
     expect(window.location.hash).toBe("#tasks/g/runs/a");
@@ -168,6 +170,10 @@ describe("review minor 4: an Overview target's task is written under the region 
     fireEvent.click(await screen.findByRole("button", { name: /task problem.*g|g.*task problem/i }));
     await groupRegion("g");
     await waitFor(() => expect(window.location.hash).toBe("#tasks/g/problem/a"));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the task detail is rendered only in Progress and
+    // Results; the task stays open, so Progress shows it.
+    expect(screen.queryByRole("region", { name: "Task a" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Progress" }));
     expect(screen.getByRole("region", { name: "Task a" })).toBeTruthy();
     expect(panel.posts).toHaveLength(0);
   });

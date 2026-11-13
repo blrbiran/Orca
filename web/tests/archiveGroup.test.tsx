@@ -23,7 +23,9 @@ const allRegionActions = (): string[] => {
   for (const region of ["Progress", "Live", "Preparation", "Problems", "Results", "Runs and evidence", "Technical details"]) {
     selectRegion(region); for (const button of actionButtons()) buttons.add(button);
   }
-  return [...buttons].map(button => button.getAttribute("aria-label") ?? button.textContent ?? "");
+  // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the open task's detail has a Close control, which
+  // moves on the page and sends nothing, so it is not an action an archived group must refuse.
+  return [...buttons].map(button => button.getAttribute("aria-label") ?? button.textContent ?? "").filter(name => !/^Close task /.test(name));
 };
 const archived = (base: GroupViewV1): GroupViewV1 => ({ ...base, summary: { ...base.summary, state: "ready", archived: true } });
 

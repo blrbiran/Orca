@@ -106,6 +106,9 @@ describe("applying a loop suggestion keeps the plan card's open draft (W7)", () 
     fireEvent.change(within(card()).getByRole("textbox", { name: "Goal" }), { target: { value: "fix login, typed" } });
     fireEvent.click(screen.getByRole("tab", { name: "Preparation" }));
     fireEvent.click(screen.getByRole("button", { name: "use 4000 for a work tokens" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the open task's detail (and its plan card) is
+    // rendered only in Progress and Results, so the person goes back to Progress to see the draft; it lives in App's store.
+    fireEvent.click(screen.getByRole("tab", { name: "Progress" }));
     await waitFor(() => expect(within(card()).getByRole("status").textContent).toBe("The plan changed after you started this draft (v2 → v3)"));
     expect(requests.filter((request) => request.method === "POST").map((request) => request.url)).toEqual([LOOP_ROUTE]);
     expect((within(card()).getByRole("textbox", { name: "Goal" }) as HTMLInputElement).value).toBe("fix login, typed");

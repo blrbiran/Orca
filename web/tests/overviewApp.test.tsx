@@ -177,8 +177,12 @@ it("a task/run attention destination opens the requested task before focusing it
  render(<App />); const page = await screen.findByRole("region", { name: "Overview" });
  fireEvent.click(await within(page).findByRole("button", { name: "Review task problem · ga" }));
  const detail = await screen.findByRole("region", { name: "Control group ga" });
- await waitFor(() => expect(within(detail).getByRole("region", { name: "Task target-task" })).toBeTruthy());
+ // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the task detail is rendered only in Progress and Results;
+ // the task is still the open one (Progress shows it), while Problems takes the focus.
  await waitFor(() => expect(document.activeElement?.getAttribute("data-overview-region")).toBe("problem"));
+ expect(within(detail).queryByRole("region", { name: "Task target-task" })).toBeNull();
+ fireEvent.click(within(detail).getByRole("tab", { name: "Progress" }));
+ expect(within(detail).getByRole("region", { name: "Task target-task" })).toBeTruthy();
  expect(panel.posts).toHaveLength(0);
 });
 
