@@ -522,3 +522,40 @@ a worker-lost run that observed usage has the observed floor 0 when ccloop wrote
 `charge-observed-floor` is admitted for it; a worker-lost run's `charge-remaining-grant` charges tokens only; and the
 settled run keeps a null work token remainder (the old stored 0 is read). Details: worker-lost recovery spec
 (2026-11-12), "Correction (2026-11-13, tester follow-up I, implementer seat K …)".
+
+## 18. Follow-up I, seat L (2026-11-13): "continue" after a mid-phase stop, the blocked run nobody saw, and the 1M floor
+
+Appended by implementer seat L of tester follow-up I (Orca session `d467cbd2`, Claude Opus 5.5; branch
+`worktree-agent-a0ba926ac7655137a`, commits `d7cfa747`, `7cf26b8f`, `8a50284b` on `bcb6d815`). §12.3 ("the task is ready
+again and continues from its stopped run") and the O4/O5 commits stand, corrected as follows.
+
+Measured (the controller's paid dogfood run, group `g-28d9b560`, read-only from the panel database): codex run
+`run-b89650fe…` stopped at its pause line (2,000,000) at an execute boundary. Its committed checkpoint
+`ceiling-run-b89650fe…` names `attempts/1/execution.json` and `attempts/1/verify.json` missing, so commitCandidate stored
+`recoverable: false` (§6.3 ruling of 2026-09-22: only a complete checkpoint is continuable) -- while classifyCeilingStop
+still pointed `allowancePredecessorRunId` at it. `task decide-usage … --decision continue` then claimed `run-4c75c470…`,
+whose A2 called exportResumeBundle on that predecessor and blocked `resume-predecessor-unrecoverable` (0 tokens used);
+`recovery retry --run` re-ran A2 into the same refusal; `task retry` and `group close-run` named recovery retry; recovery
+list and `recoveryBlockerCount` were empty.
+
+1. **Resume or fresh start (A).** A2 continues from the allowance predecessor (a live-ceiling stop's or a token
+   allowance's) only when it meets exportResumeBundle's own precondition: settled or settled-recoverable, `recoverable`,
+   a checkpoint id. Otherwise the run is prepared fresh: base the group's work branch, no input checkpoint, priorFailures
+   built as for any fresh run, the run's handoff directories (dependencies' handoffs and the previous attempt's summary),
+   live and operator notes; the stopped run's workspace is removed as a continued predecessor's is (its archived snapshot
+   stays). This covers every route into such a claim: decide-usage continue, the group-cap auto-continue, a set-limit
+   top-up. A complete checkpoint is still resumed. A multi-directory group is unchanged (it refuses continuations by
+   name, `multi-dir-continuation-unsupported`); not built.
+2. **No silent blocked run (B).** The recovery view gains `blockedRuns` -- every current work run blocked where
+   `recovery retry --run` resumes it (driveRecord `resumableBlockedRun`: blocked anywhere but a ccloop failure at C) --
+   with `blockedAt`, `reason` and `next` (`orca recovery retry --run <r>`). The group summary's `recoveryBlockerCount`
+   counts them too; `claimBlocked` does not (they hold no other task's claim). A run the old driver left blocked as in
+   the measurement is started fresh by that retry (item 1), so the real `run-4c75c470…` needs no database edit.
+3. **The expectation was not lost (C).** `orca group apply-estimate` recorded the estimate (search: 150,000), and the
+   task's expectation is that estimate floored at 1,000,000 -- §2 item 2 (#266), `EXPECTATION_FLOOR_TOKENS`; no person
+   amount (`tokenIntent`) was stored. First pause line `min(10 × 1M, 4M / 2) = 2,000,000`; the continue's line
+   `min(20M, 2,093,082 + ⌊(4,000,000 − 2,970,713) / 2⌋) = 2,607,725`, both as measured. Only the apply-estimate line misled:
+   it now adds "an expectation is at least 1000000, so its pause line counts from 1000000" (`floorTokens`, only-add).
+   (The 2,093,082 includes 1,932,240 booked by the earlier worker-lost settlement under the charging seat K corrected.)
+4. **Retry wording (D).** A retry receipt's `nextRun` gains `because`: `no-token-limit` (§E8 fresh start) or
+   `worker-lost` (worker-lost recovery spec §5.4 credit); the CLI line names that reason.
