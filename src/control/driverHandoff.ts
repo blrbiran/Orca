@@ -20,7 +20,7 @@ import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
-  INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
+  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -226,7 +226,22 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
       return true;
     });
   }
-  const report = await collectInto(deps, run);
+  let report: Awaited<ReturnType<typeof collectInto>>;
+  try { report = await collectInto(deps, run); }
+  catch (error) {
+    // Tester #289 path B (follow-up J): a blocked run's collect that keeps failing (a peer whose workspace is gone) went
+    // to recordStepFailure every round, so the grace below was never checked and the request never ended. Under a stop a
+    // blocked run's collect failure is caught as the delivery's is: named once per message, then the grace decides.
+    // An accepted run's failure still blocks it at C first (recordStepFailure), as before.
+    if (run.state !== "blocked" || error instanceof DriverCrash || (error instanceof ControlError && error.code === "panel-draining")) throw error;
+    const message = describeError(error);
+    if (lastCollectFailure.get(run.runId) !== message) {
+      lastCollectFailure.set(run.runId, message);
+      process.stderr.write(`orca-driver: ${run.runId}: handoff collect under stop: ${message}\n`);
+    }
+    return await settleIfPastGrace(deps, run, request);
+  }
+  lastCollectFailure.delete(run.runId);
   // Single-call estimate spec §6.5: an estimate run's stop always settles restartable -- its estimate is interrupted and
   // its unused commitment returned (terminaliseRun) -- even when the call had already finished; the output stays as
   // evidence and a person can re-estimate. Never a checkpoint: there is no work to continue.
@@ -243,6 +258,9 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
     && await settleLostWorker(deps, run, report.worker.reason, true)) return true;
   return (await settleIfPastGrace(deps, run, request)) || report.events.length > 0;
 }
+
+/** The last collect failure named for each blocked run under a stop, so a failure that repeats every round is named once. */
+const lastCollectFailure = new Map<string, string>();
 
 /** N1 spec §5.1: the stop proof of a single call closes its request restartable, nothing else. */
 function settleSingleCallUnderStop(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): boolean {

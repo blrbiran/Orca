@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ControlError } from "../../src/control/errors.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { INSPECT_UNKNOWN_LIMIT, blockRun, createExecutionDriver, stepA1, stepA2 } from "../../src/control/executionDriver.js";
 import { HANDOFF_EXTRA_GRACE_MS } from "../../src/control/driverHandoff.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { exportResumeBundle } from "../../src/control/resumeBundle.js";
-import { handoffRequestFromOutbox, readHandoffRequest, readStopIntent } from "../../src/control/stopIntent.js";
+import { groupStopState, handoffRequestFromOutbox, readHandoffRequest, readStopIntent } from "../../src/control/stopIntent.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { landingPathOf } from "../../src/control/workspace.js";
 import type { FakeBehaviour } from "./fixtures/driverPort.js";
@@ -376,7 +377,45 @@ describe("blocked runs under a stop (spec §11 I1, §13.1 C-5, §13.2 I-3; H8)",
       expect(t.body(runId)).toMatchObject({ state: "blocked", drive: { blockedAt: "E", landedCommit } });
       expect(t.fake.calls.handoff).toHaveLength(0);
       expect(Number(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM checkpoints WHERE run_id=?").get(runId)!.n)).toBe(0);
-      expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-pending");
+      // Tester #289 path A (follow-up J): nothing moves that request but a person's recovery-retry, so the stop is not
+      // pending on it -- it is unresolved; the request itself is left open, never settled on the person's behalf.
+      // mutation: drop the blocked-and-landed branch in deriveFrozenStopState -> handoff-pending, red
+      expect(readStopIntent(t.h.store, "g")!.state).toBe("handoff-unresolved");
+      expect(groupStopState(t.h.store, "g")).toBe("handoff-unresolved");
+    } finally { await t.h.dispose(); }
+  });
+});
+
+// Tester #289 path B (follow-up J): a blocked run under a stop whose collect keeps failing (its workspace's .git was gone,
+// every collect a control-peer-exit) went to recordStepFailure each round: the request stayed `collecting` for good, the
+// stop `handoff-pending`, and the same error was logged every ~2 s. The failure is now named once and the grace decides.
+describe("a blocked run whose collect keeps failing under a stop (tester #289 path B)", { timeout: 120_000 }, () => {
+  it("names the failure once and turns the request outcome-unknown past deadline + grace", async () => {
+    let peerGone = false;
+    // "stoppable": once the request is latched every collect reaches duringCollect (a silent run answers before it).
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable",
+      duringCollect: async () => { if (peerGone) throw new ControlError("control-peer-exit", "128:fatal: not a git repository"); } }); try {
+      const runId = await t.claim();
+      let now = Date.now();
+      const driver = createExecutionDriver({ ...t.deps, now: () => new Date(now) });
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      blockRun(t.deps, runId, "C", "control-peer-exit");
+      peerGone = true;
+      const [requestId] = await stop(t);
+      const lines: string[] = [];
+      const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => { lines.push(String(chunk)); return true; });
+      try {
+        for (let i = 0; i < 6; i += 1) await driver.round();
+        expect(requestState(t, requestId!)).toBe("collecting");
+        // mutation: drop the once-per-message guard -> one line per round, red
+        expect(lines.filter((line) => line.includes(runId)).length).toBe(1);
+        // This harness's grace is max(5_000, 30_000 + 5_000) + 60_000 (see "nothing arrives" above).
+        now = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt) + 95_001;
+        // mutation: rethrow the collect failure instead of checking the grace -> stays collecting, red
+        await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
+      } finally { spy.mockRestore(); }
+      expect(t.body(runId)).toMatchObject({ state: "blocked", drive: { blockedAt: "C" } });
+      expect(groupStopState(t.h.store, "g")).toBe("handoff-unresolved");
     } finally { await t.h.dispose(); }
   });
 });

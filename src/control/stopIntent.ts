@@ -19,7 +19,7 @@ import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } fro
 import { writeCanonicalRecord } from "./snapshot.js";
 import { continuationWakeBody, rearmFailedContinuation } from "./continuation.js";
 import { nextClaimableTask } from "./webDispatch.js";
-import { isTerminallyFailedRun, resumableBlockedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, landedAnywhere, resumableBlockedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
@@ -289,6 +289,10 @@ function deriveFrozenStopState(store: ControlStore, groupId: string, frozenRunId
   for (const runId of frozenRunIds) {
     const state = runId === closedRunId ? "settled-failed" : latestRequestForRun(store, groupId, runId)?.state ?? null;
     if (state === null || state === "outcome-unknown") unresolved = true;
+    // Tester #289 path A (follow-up J): a blocked run whose change already landed is left to a person's recovery-retry
+    // (driverHandoff.ts closeBlocked); its open request is never moved by the driver, so the stop is not pending on it.
+    // The request itself stays open -- the retry settles it through E and C1.
+    else if (OPEN_STATES.includes(state) && blockedAndLanded(store, runId)) unresolved = true;
     else if (OPEN_STATES.includes(state)) pending = true;
     // Handoff delivery (controller ruling 2026-09-25 on Task 3's open question; Web spec §6.2): a run still active
     // under a settled request is a contradiction and a recovery blocker, never a finished stop.
@@ -296,6 +300,15 @@ function deriveFrozenStopState(store: ControlStore, groupId: string, frozenRunId
     else if (state === "settled-unrecoverable") partial = true;
   }
   return unresolved ? "handoff-unresolved" : pending ? "handoff-pending" : partial ? "handoff-partial" : "handoff-complete";
+}
+
+function blockedAndLanded(store: ControlStore, runId: string): boolean {
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+  if (!row) return false;
+  try {
+    const run = JSON.parse(String(row.body)) as { state?: unknown; drive?: { landedCommit?: unknown; landedDirs?: unknown } };
+    return run.state === "blocked" && landedAnywhere(run.drive);
+  } catch { return false; }
 }
 
 export function freezeHandoffDuration(acceptedAt: string, deadlineAt: string): number {
