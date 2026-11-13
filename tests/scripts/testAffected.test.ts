@@ -592,4 +592,37 @@ describe("a repin that changes only ccloop", () => {
     commit(repo);
     expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
   });
+
+  // Tester follow-up I: the narrowing applies to the two pin files only. A repin is often committed with other work; the
+  // other paths keep their own rows, and anything else in the pin files keeps the whole suite.
+  it("a pin plus a src change selects the src module's rows and the real-ccloop tests, nothing else", () => {
+    const repo = pinnedRepo();
+    write(repo, "package.json", pkg("b".repeat(40)));
+    write(repo, "package-lock.json", lock("b".repeat(40)));
+    write(repo, "src/a/util.ts", "export const a = 2;\n");
+    commit(repo);
+    const r = dry(repo);
+    expect(r.files).toEqual(["root tests/a/other.test.ts", "root tests/a/util.test.ts", "root tests/b/user.test.ts", ...CCLOOP_TESTS]);
+  });
+
+  it("a second dependency added beside the pin keeps the whole suite", () => {
+    const repo = pinnedRepo();
+    write(repo, "package.json", pkg("b".repeat(40), { dependencies: { ccloop: PIN("b".repeat(40)), "left-pad": "^1.0.0" } }));
+    const both = JSON.parse(lock("b".repeat(40), { "node_modules/left-pad": { version: "1.0.0" } }));
+    both.packages[""].dependencies["left-pad"] = "^1.0.0";
+    write(repo, "package-lock.json", JSON.stringify(both, null, 2) + "\n");
+    commit(repo);
+    const r = dry(repo);
+    expect(r.files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    expect(r.out).not.toContain("ccloop pin only");
+  });
+
+  it("a lockfile change outside ccloop with the pin unchanged keeps the whole suite", () => {
+    const repo = pinnedRepo();
+    write(repo, "package-lock.json", lock("a".repeat(40), { "node_modules/left-pad": { version: "1.0.0" } }));
+    commit(repo);
+    const r = dry(repo);
+    expect(r.files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    expect(r.out).toContain("package-lock.json (config: whole suite)");
+  });
 });

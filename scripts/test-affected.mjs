@@ -161,9 +161,40 @@ function namedBy(suite, p) {
 
 // A ccloop repin (plan 2026-11-10-tester-followup-b T9, ruling R6): when package.json differs from the merge base only in
 // dependencies.ccloop and package-lock.json only in its root entry's ccloop line and ccloop's own entries (the shape
-// scripts/pin-ccloop.mjs checks), the two files select the tests that reach ccloop -- those naming it, and those importing a
-// helper that names it -- instead of the whole suite. Any other difference keeps them whole-suite config.
-const NAMES_CCLOOP = /ORCA_CCLOOP_BIN|ccloopBin|node_modules\/ccloop|ccloop\/dist|["'`]ccloop["'`/]/;
+// scripts/pin-ccloop.mjs checks), the two files select only the tests that run the real ccloop instead of the whole suite.
+// Any other difference keeps them whole-suite config.
+// Tester follow-up I (2026-11-13, human: 「点头改」): "run the real ccloop" is decided by code, not by naming ccloop. The
+// real binary enters a test only as the value of process.env.ORCA_CCLOOP_BIN, so a file reads it (an assignment or a
+// delete is not a read), or imports, directly, a helper under tests/ or web/tests/ that reads it (ccloopWorld's
+// realBinary, the scheduler sandbox). Naming ccloop selected ~500 files: shared fixtures carry a fake `ccloopBin` field and
+// the module graph is transitive, so every importer of web.ts or driverHarness.ts ran on a repin.
+const READS_REAL_CCLOOP = /(?<!delete\s+)\bprocess\.env\.ORCA_CCLOOP_BIN\b(?!\s*=(?!=))/;
+const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'`](\.{1,2}\/[^"'`]+)["'`]/g;
+function directImports(file, text) {
+  const out = [];
+  for (const [, spec] of text.matchAll(RELATIVE_IMPORT)) {
+    const target = relative(root, join(root, file, "..", spec));
+    out.push(target, ...[".ts", ".tsx"].map((ext) => target.replace(/\.[cm]?js$/, ext)));
+  }
+  return out;
+}
+const realCcloop = new Map();
+function realCcloopTests(suite) {
+  if (!realCcloop.has(suite)) {
+    const [dir, pattern] = suite === "web" ? ["web/tests", WEB_TEST] : ["tests", ROOT_TEST];
+    const texts = listTests(dir, CODE).map((f) => [f, readFileSync(join(root, f), "utf8")]);
+    const readers = new Set(texts.filter(([, text]) => READS_REAL_CCLOOP.test(text)).map(([f]) => f));
+    const rows = [];
+    for (const [f, text] of texts) {
+      if (!pattern.test(f)) continue;
+      const via = readers.has(f) ? null : directImports(f, text).find((target) => readers.has(target));
+      if (readers.has(f)) rows.push([f, "reads ORCA_CCLOOP_BIN"]);
+      else if (via) rows.push([f, `imports ${via}, which reads ORCA_CCLOOP_BIN`]);
+    }
+    realCcloop.set(suite, rows);
+  }
+  return realCcloop.get(suite);
+}
 const ccloopOwn = (key) => key === "node_modules/ccloop" || key.startsWith("node_modules/ccloop/");
 function withoutCcloop(manifest) {
   const copy = structuredClone(manifest ?? {});
@@ -204,11 +235,8 @@ for (const p of changed) {
   if (p.startsWith("web/") || p === "src/control/webProtocol.ts") webTypecheck = true;
   const present = existsSync(join(root, p));
   if (pinOnly && PIN_FILES.has(p)) {
-    for (const [suite, dir, pattern] of [["root", "tests", ROOT_TEST], ["web", "web/tests", WEB_TEST]]) {
-      for (const f of listTests(dir, CODE).filter((f) => NAMES_CCLOOP.test(readFileSync(join(root, f), "utf8")))) {
-        if (pattern.test(f)) select(suite, [f], `${p} (ccloop pin only: names ccloop)`, p);
-        else (suite === "web" ? relatedWeb : relatedRoot).push([f, p]); // a helper naming ccloop: the tests importing it
-      }
+    for (const suite of ["root", "web"]) {
+      for (const [f, why] of realCcloopTests(suite)) select(suite, [f], `${p} (ccloop pin only: ${why})`, p);
     }
   } else if (isRootConfig(p)) select("root", listTests("tests", ROOT_TEST), `${p} (config: whole suite)`, p);
   else if (WEB_CONFIG.has(p)) select("web", listTests("web/tests", WEB_TEST), `${p} (config: whole web suite)`, p);
@@ -275,6 +303,10 @@ for (const [suite, p] of dataFiles) {
 const rootFiles = [...selection.root.keys()].sort();
 const webFiles = [...selection.web.keys()].sort();
 console.log(`test-affected: ${changed.length} changed paths against ${base} (committed since the merge base, staged, unstaged, untracked)`);
+if (pinOnly) {
+  console.log("test-affected: package.json and package-lock.json differ only in the ccloop pin: they select only the tests " +
+    "that run the real ccloop (read ORCA_CCLOOP_BIN, or import a helper that does); other changed paths select as usual");
+}
 for (const [suite, files] of [["root", rootFiles], ["web", webFiles]]) {
   for (const file of files) console.log(`  ${suite} ${file} <- ${selection[suite].get(file).join("; ")}`);
 }

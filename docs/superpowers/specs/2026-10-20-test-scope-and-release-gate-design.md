@@ -233,3 +233,25 @@ change to `package.json`; this section narrows it for one shape only.
 - Measured on the repin commit `871b275d` against its parent (dry run): 433 test files (432 root, 1 web) instead of the
   whole suite (945 at `43f76e90`).
 - A repin no longer re-runs ccloop's own full suite: that is ccloop's commit gate, run when ccloop's commit was made.
+
+## 10. Correction (2026-11-13, Orca session `d467cbd2`, tester follow-up I) — a pin-only repin selects the tests that run the real ccloop
+
+Human (verbatim, on the previous controller's proposal): 「点头改，下个session做改动」. §9's selection ("names ccloop", then
+every transitive importer of a helper naming it) is replaced; §9's pin-only shape check is unchanged.
+
+- The real ccloop binary enters a test only as the value of `process.env.ORCA_CCLOOP_BIN`. On a pin-only diff the two pin
+  files select a root or web test file when its own text reads that variable (an assignment to it or a `delete` of it is
+  not a read), or when it directly imports (a relative static or dynamic import) a file under `tests/` / `web/tests/`
+  that reads it — e.g. `tests/control/fixtures/ccloopWorld.ts` (`realBinary`), `tests/scheduler/sandbox.ts`. Rows print
+  `(ccloop pin only: reads ORCA_CCLOOP_BIN)` or `(ccloop pin only: imports <helper>, which reads ORCA_CCLOOP_BIN)`, and one
+  line says the pin files were read as pin-only.
+- Naming ccloop is no longer enough (shared fixtures such as `tests/control/fixtures/web.ts` and `driverHarness.ts` carry a
+  fake `ccloopBin` field), and the module graph is not followed past the direct import (a helper re-importing
+  `ccloopWorld.ts` made most of the suite its importers).
+- Other changed paths in the same diff keep their own rows (the selection is the union); anything else in the two pin files
+  keeps them whole-suite config (§8, §9).
+- Accepted gap, added to §9's: a test that receives the binary from a helper through a second helper, or reads it under
+  another spelling (`process.env["ORCA_CCLOOP_BIN"]`, destructuring), is not selected; the release gate still runs it.
+- Measured on the repin commit `09497063` (ccloop `26b3127`) with `--base=09497063^ --dry-run`: 503 test files (502 root,
+  1 web) under §9's rule, 102 (102 root, 0 web) under this one. Measured with this section's commit's script in a
+  `git clone --local` checked out at `09497063`.
