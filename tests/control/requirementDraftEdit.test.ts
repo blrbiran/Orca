@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { editedSplit } from "../../src/control/requirementDraftEdit.js";
-import { readDraft } from "../../src/control/requirementRecords.js";
+import { readDraft, writeDraft } from "../../src/control/requirementRecords.js";
+import { WebControlService } from "../../src/control/webService.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
+import { multiHarness } from "./fixtures/multiRequirement.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
@@ -107,6 +109,95 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
       expect((refused as { error: { message: string } }).error.message).toMatch(/^group-state-invalid:draft-edit-invalid:expand:probe:investigate-/);
       expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", feedback: null });
       expect(() => readDraft(x.store, "r", 2)).toThrow();
+    } finally { await x.dispose(); }
+  });
+});
+
+// Tester follow-up L: the multi-directory edit through the real verb. The harness's members, in registered order, are the
+// folder "posts" (README.md, notes/p1.md; the primary) and the repository "alpha" (README.md, src/a.ts): both have a
+// README.md, so a path put in the wrong directory still exists there and only the stored write set tells the two apart.
+type MultiWrite = { dir: string; targetPaths: string[]; checks: string[] };
+const multiTask = (taskId: string, writes: MultiWrite[], traces: string[], extra: Record<string, unknown> = {}) =>
+  ({ taskId, title: taskId, labels: [], goal: "g", successCondition: "s", writes, dependsOn: [], traces, ...extra });
+/** cli writes posts' note and names README.md, which only docs writes -- in alpha. */
+const MULTI_IMPLIED = { notes: "", tasks: [
+  multiTask("cli", [{ dir: "posts", targetPaths: ["notes/p1.md"], checks: ["true"] }], ["AC1"], { successCondition: "notes/p1.md shows the history; README.md documents it." }),
+  multiTask("docs", [{ dir: "alpha", targetPaths: ["README.md"], checks: ["true"] }], ["AC2"]),
+] };
+type MultiHarness = Awaited<ReturnType<typeof multiHarness>>;
+const multiEdit = (x: MultiHarness, service: WebControlService, change: Record<string, unknown>, draftHash = readDraft(x.store, "r", 1).draftHash) =>
+  service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo: 1, draftHash, edit: change }));
+const writesOf = (output: unknown, taskId: string) => (output as { tasks: Array<{ taskId: string; writes: MultiWrite[] }> }).tasks.find((t) => t.taskId === taskId)!.writes;
+
+describe("a multi-directory group's draft edit, re-validated end to end (tester follow-up L)", () => {
+  it("add-implied-path puts the path in the writer's directory, and the re-validation orders the two writers there", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_IMPLIED }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ layers: [["cli", "docs"]], implicitEdges: [] });
+      // mutation: editedSplit always appends to the task's first write -> posts:README.md (it exists there too), red
+      expect(await multiEdit(x, x.service, { kind: "add-implied-path", taskId: "cli", path: "README.md" }))
+        .toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 1, nextDraftNo: 2 } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "rejected", feedback: "person edit: added README.md to cli's target paths (implied path)" });
+      const next = readDraft(x.store, "r", 2);
+      expect(writesOf(next.output, "cli")).toEqual([{ dir: "posts", targetPaths: ["notes/p1.md"], checks: ["true"] }, { dir: "alpha", targetPaths: ["README.md"], checks: [] }]);
+      expect(writesOf(next.output, "docs")).toEqual([{ dir: "alpha", targetPaths: ["README.md"], checks: ["true"] }]);
+      // Re-validated as a multi split: the claim is qualified by alpha, so the two writers are ordered by an implicit edge.
+      expect(next).toMatchObject({ state: "awaiting-review", reasons: [], calls: [], layers: [["cli"], ["docs"]],
+        implicitEdges: [{ from: "cli", to: "docs", conflicts: [{ a: "alpha:README.md", b: "alpha:README.md" }] }] });
+      // Not asserted: draft 2's draftHash differs from draft 1's. A multi draft's hash is of the expanded plan, which holds
+      // only each task's primary write, so an edit that adds a non-primary write keeps the hash (reported, tester follow-up L).
+      // The edited draft is accepted as any other.
+      const accepted = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 2, draftHash: next.draftHash }));
+      expect(accepted).not.toHaveProperty("error");
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses a multi-directory edit whose result validation refuses, storing nothing", async () => {
+    const split = { notes: "", tasks: [
+      // An investigate task writes exactly one file: README.md added to its alpha write makes the split invalid.
+      multiTask("probe", [{ dir: "alpha", targetPaths: ["src/report.md"], checks: ["true"] }], ["AC1"], { labels: ["investigate"], successCondition: "src/report.md explains README.md." }),
+      multiTask("docs", [{ dir: "alpha", targetPaths: ["README.md"], checks: ["true"] }], ["AC2"]),
+      multiTask("notes", [{ dir: "posts", targetPaths: ["notes/p1.md"], checks: ["true"] }], ["AC2"]),
+    ] };
+    const x = await multiHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const before = readDraft(x.store, "r", 1);
+      // mutation: drop the `!evaluation.ok` refusal -> an invalid draft 2 written and draft 1 rejected, red
+      const refused = await multiEdit(x, x.service, { kind: "add-implied-path", taskId: "probe", path: "README.md" });
+      expect(refused).toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-invalid:expand:probe:investigate-target" } });
+      expect(readDraft(x.store, "r", 1)).toEqual(before);
+      expect(() => readDraft(x.store, "r", 2)).toThrow();
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses an edit when the draft moved between the first check and the transaction, storing nothing", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_IMPLIED }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      // The seam is the service's own resolveRepository: a multi group's re-validation resolves each member through it,
+      // after the first check and before the transaction (requirementDraftEdit.ts). No product code is changed for it.
+      let move: (() => void) | null = null;
+      const resolve = x.service.deps.resolveRepository!;
+      const service = new WebControlService({ ...x.service.deps, resolveRepository: (repoId: string) => { const m = move; move = null; m?.(); return resolve(repoId); } });
+      const read = readDraft(x.store, "r", 1);
+      // 1. Same draft, still awaiting review, but its plan re-written (its hash moves) while the repositories are read.
+      move = () => writeDraft(x.store, "r", { ...read, plan: { ...read.plan!, goal: "moved" } });
+      // mutation: the transaction looks the draft up without reviewed() (readDraft by number) -> draft 2 written, red
+      expect(await multiEdit(x, service, { kind: "add-implied-path", taskId: "cli", path: "README.md" }, read.draftHash))
+        .toMatchObject({ error: { code: "plan-version-conflict", message: "plan-version-conflict:draft-hash" } });
+      expect(readDraft(x.store, "r", 1)).toEqual({ ...read, plan: { ...read.plan!, goal: "moved" } });
+      expect(() => readDraft(x.store, "r", 2)).toThrow();
+      // 2. The draft superseded (rejected, a later draft awaiting review) while the repositories are read.
+      writeDraft(x.store, "r", read);
+      const later = { ...read, draftNo: 2 };
+      move = () => { writeDraft(x.store, "r", { ...read, state: "rejected", feedback: "elsewhere" }); writeDraft(x.store, "r", later); };
+      expect(await multiEdit(x, service, { kind: "add-implied-path", taskId: "cli", path: "README.md" }, read.draftHash))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-not-awaiting-review" } });
+      expect(readDraft(x.store, "r", 1)).toEqual({ ...read, state: "rejected", feedback: "elsewhere" });
+      expect(readDraft(x.store, "r", 2)).toEqual(later);
+      expect(() => readDraft(x.store, "r", 3)).toThrow();
     } finally { await x.dispose(); }
   });
 });
