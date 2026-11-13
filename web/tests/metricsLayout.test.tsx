@@ -90,7 +90,8 @@ describe("Metrics layout (P2-5)", () => {
   it("lets wide usage tables scroll inside their own box", () => {
     const usage = src("../src/UsagePanel.tsx");
     // by-model table and caps table scroll in the wide box, the two-column groups table in the narrow one: three boxes.
-    expect(usage.match(/<div className=\{tableScroll\}>/g)?.length).toBe(2);
+    // Ruling: 「这次批准改写所有必要的判据」 (raw usage detail spec §5 "Readers": the per-model-and-phase table is a third wide box).
+    expect(usage.match(/<div className=\{tableScroll\}>/g)?.length).toBe(3);
     expect(usage.match(/<div className=\{tableScrollNarrow\}>/g)?.length).toBe(1);
     const wide = /const tableScroll = "([^"]*)"/.exec(src("../src/ui/classes.ts"))?.[1];
     expect(wide).toBeDefined();
