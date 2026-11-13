@@ -2353,6 +2353,8 @@ export const recoveryViewSchema = z
     terminalRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, outcome: z.string().min(1), next: z.enum(["settle-usage", "close-run"]) }).strict()).optional(),
     // Tester #171: a start-family wake the drainer keeps deferring, with the condition that defers it. Absent when none does.
     deferredWakes: z.array(z.object({ groupId: idSchema, kind: nonemptyString, reason: z.enum(["dispatch-blocked", "group-blocker", "group-archived"]) }).strict()).optional(),
+    // Tester follow-up I (seat L): a current work run blocked where recovery retry resumes it, with that command. Absent when none.
+    blockedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) =>

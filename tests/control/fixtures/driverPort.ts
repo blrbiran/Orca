@@ -76,6 +76,8 @@ export function fakeCcloopPort(input: {
   toolRules?: (workItemId: string) => ToolRulesReport | undefined;
   /** Tester follow-up G spec §2.1: the stop ccloop reports when it stopped the run at its live ceiling; undefined = absent. */
   liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => ExecutionReport["liveCeilingStop"];
+  /** Tester follow-up I (seat L): the evidence a terminal candidate names missing (ccloop's `missing`), e.g. a run stopped mid-execute. */
+  candidateMissing?: (workItemId: string) => string[];
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -134,7 +136,7 @@ export function fakeCcloopPort(input: {
     const candidate: Candidate = {
       groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
       graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater,
-      result: outcome === "succeeded" ? "complete" : "partial", artifacts: [], snapshot: null, missing: variant === "stoppable-missing" ? ["evidence-lost"] : [], unresolvedRequestIds,
+      result: outcome === "succeeded" ? "complete" : "partial", artifacts: [], snapshot: null, missing: variant === "stoppable-missing" ? ["evidence-lost"] : stop.terminal ? input.candidateMissing?.(claim.workItemId) ?? [] : [], unresolvedRequestIds,
       stopProof: { executionId, generation: claim.generation, isolated: true, source: stopSource(claim.runId, executionId, claim.generation) },
       terminalOutcome: stop.terminal ? outcome : "executing", handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify(handoffPacket))),
     };

@@ -77,6 +77,8 @@ export interface HarnessOptions {
   setLiveCeiling?: ExecutionPort["setLiveCeiling"];
   /** Tester follow-up G spec §2.1: the live-ceiling stop the synthetic ccloop reports with a terminal (driverPort.ts). */
   liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => import("../../../src/control/executionPort.js").ExecutionReport["liveCeilingStop"];
+  /** Tester follow-up I (seat L): the evidence a terminal candidate names missing (driverPort.ts). */
+  candidateMissing?: (workItemId: string) => string[];
 }
 
 /**
@@ -108,6 +110,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.budgetSnapshot ? { budgetSnapshot: options.budgetSnapshot } : {}),
     ...(options.toolRules ? { toolRules: options.toolRules } : {}),
     ...(options.liveCeilingStop ? { liveCeilingStop: options.liveCeilingStop } : {}),
+    ...(options.candidateMissing ? { candidateMissing: options.candidateMissing } : {}),
     ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;

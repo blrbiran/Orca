@@ -451,7 +451,15 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   catch { blockRun(deps, runId, "A2", "repository-path"); return true; }
   if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)assertCurrentSavedRecovery(store,run,(deps.now?.()??new Date()).getTime());
   const savedAllowance=(allowanceWork(store,run.groupId,run.workItemId) as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
-  const allowanceSource=savedAllowance?readDriverRun(store,savedAllowance):null;
+  const savedSource=savedAllowance?readDriverRun(store,savedAllowance):null;
+  // Tester follow-up I (seat L; dogfood g-28d9b560): a stopped run is continued from only when exportResumeBundle can
+  // continue from it -- its own precondition, `recoverable` (commitCandidate sets it for a complete checkpoint alone). A
+  // run stopped mid-phase (a codex execute at its pause line: its attempt's execution and verify evidence missing) has
+  // none, and resuming it blocked every claim at A2 `resume-predecessor-unrecoverable` for ever. Its task starts afresh
+  // instead, from the group branch, carrying what every fresh run carries (handoffs and the previous attempt's summary,
+  // priorFailures, live and operator notes); the stopped run's workspace goes once this run's exists, as a predecessor's does.
+  const allowanceSource=savedSource!==null&&resumablePredecessor(savedSource)?savedSource:null;
+  const skippedPredecessor=savedSource!==null&&allowanceSource===null&&run.continuationIntentId==null?savedSource.runId:null;
   const continued = run.continuationIntentId ? continuationOf(store, run) : allowanceSource?.drive?.base?{predecessorRunId:allowanceSource.runId,base:allowanceSource.drive.base}:null;
   if (run.continuationIntentId && continued === null) { blockRun(deps, runId, "A2", "continuation-registration"); return true; }
   // Handoff delivery spec §4 (human ruling, plan X): a continuation keeps its predecessor's base and never reads
@@ -477,7 +485,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     deps.crash?.("A2-after-bundle");
     // spec §4: the predecessor's workspace goes only once the bundle exists and has verified itself.
     await cleanupPredecessor(deps, targetRepo, continued.predecessorRunId);
-  }
+  } else if (skippedPredecessor !== null && recovery === null) await cleanupPredecessor(deps, targetRepo, skippedPredecessor);
   const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId);
   // ccloop opens its attempt worktrees from repoPath's HEAD, not from `base` (spec §3.2), so the
   // contract points at this run's own workspace. The frozen derivedContractHash is unchanged.
@@ -683,6 +691,11 @@ function continuationOf(store: ControlStore, run: DriverRun): { predecessorRunId
   if (registered === null || registered.continuationIntentId !== run.continuationIntentId) return null;
   const base = readDriverRun(store, registered.predecessorRunId).drive?.base ?? null;
   return base === null ? null : { predecessorRunId: registered.predecessorRunId, base };
+}
+
+/** exportResumeBundle's precondition on the predecessor (resumeBundle.ts), read before A2 commits to a continuation. */
+function resumablePredecessor(run: DriverRun): boolean {
+  return (run.state === "settled" || (run.state as string) === "settled-recoverable") && run.recoverable === true && typeof run.checkpointId === "string";
 }
 
 /** spec §11 I5: exportResumeBundle refuses a second export, so a restarted A2 reuses (and re-verifies) the first. */

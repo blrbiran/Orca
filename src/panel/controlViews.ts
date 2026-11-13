@@ -674,7 +674,13 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     stopMode: stop?.mode ?? null,
     stopState: stop?.state ?? null,
     claimBlocked: blockers.length > 0,
-    recoveryBlockerCount: blockers.length,
+    // Tester follow-up I (seat L): a blocked run that recovery retry resumes is something a person must act on too
+    // (blockedRunRows); it does not hold the group's other claims, so claimBlocked stays the blocker rows' alone.
+    recoveryBlockerCount: blockers.length + (readSnapshot === undefined ? 0 : readSnapshot.runsByRowid.filter((row) => {
+      if (Number(row.active) !== 1) return false;
+      try { const run = decodedValue(readSnapshot.decodeRun(String(row.id))) as { phase?: unknown; state?: unknown; drive?: { blockedAt?: unknown; outcome?: unknown } } | undefined;
+        return run !== undefined && run !== null && run.phase === "work" && resumableBlockedRun(run); } catch { return false; }
+    }).length),
     ...(completion === undefined || counts === undefined ? {} : { completion, counts }),
     goal: archived !== null ? archived.plan.goal : readRequirementGroup(store, groupId).requirement.idea,
     branch: workBranchRef(groupId).slice("refs/heads/".length),
@@ -1602,7 +1608,8 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
 export function readControlRecovery(store: ControlStore, epoch: string): RecoveryViewV1 {
   const terminalRuns = terminalRunRows(store);
   const deferredWakes = deferredWakeRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }) };
+  const blockedRuns = blockedRunRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -1625,6 +1632,24 @@ function deferredWakeRows(store: ControlStore): Array<{ groupId: string; kind: s
     if (store.dispatchBlocked) out.push({ groupId, kind, reason: "dispatch-blocked" });
     else if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId) !== undefined) out.push({ groupId, kind, reason: "group-blocker" });
     else if (archived) out.push({ groupId, kind, reason: "group-archived" });
+  }
+  return out;
+}
+
+/**
+ * Tester follow-up I (seat L; dogfood g-28d9b560): every current work run the driver blocked anywhere but at a ccloop
+ * failure (driveRecord.ts resumableBlockedRun) -- a run blocked at A2 before any provider call included -- with the
+ * command that resumes it. Such a run has no recovery blocker row, so `recovery list` said nothing while its task sat
+ * blocked (half an hour in the dogfood run); the group summary counts the same runs in recoveryBlockerCount.
+ */
+function blockedRunRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }> = [];
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
+    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown } };
+    if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
+    if (!resumableBlockedRun(run)) continue;
+    out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, blockedAt: String(run.drive!.blockedAt),
+      reason: typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason.slice(0, 200) : null, next: recoveryRetryCommand(run.runId) });
   }
   return out;
 }

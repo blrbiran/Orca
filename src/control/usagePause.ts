@@ -82,7 +82,8 @@ export type UsagePauseDecideCommand = Extract<RawAuthorityCommandV1, { verb: "us
  * Spec §2.5 (plan O5): a person or an orchestrating agent decides on a task waiting at its pause line.
  * - continue: the next line is pauseLineFor's next multiple (expectationModel.ts states the formula), refused
  *   usage-pause-no-headroom when it would not let the task use one more token; the task is ready again and continues
- *   from its stopped run, the optional note delivered to that run as its operator note.
+ *   from its stopped run, the optional note delivered to that run as its operator note. Tester follow-up I (seat L): it
+ *   resumes that run's checkpoint only when the checkpoint is complete; a run stopped mid-phase starts afresh (stepA2).
  * - stop: the task ends stopped (`usageStopped`, still blocked); the group and its other tasks go on.
  */
 export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate?: AdmissionGate }, command: UsagePauseDecideCommand): CommandSuccessV1 | CommandErrorBodyV1 {
