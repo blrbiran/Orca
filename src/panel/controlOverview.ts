@@ -29,17 +29,45 @@ function scheduledWaitingReason(store: ControlStore, groupId: string, body: Reco
   return row === undefined ? null : `scheduled-waiting:${String(row.reason)}`;
 }
 
-/** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. */
-export function readControlOverview(store: ControlStore, epoch: string): OverviewV1 {
-  const changeSeq = readProjectionState(store).changeSeq;
-  const groups: OverviewV1["groups"] = [], issues: OverviewV1["issues"] = [];
-  const steps = new Map<string, OverviewStepV1>();
-  function add(kind: OverviewStepV1["kind"], groupId: string | null, repoId: string | null, reason: string,
-    destination: OverviewDestinationV1, identity: string, taskId: string | null = null, runId: string | null = null, ownerRequired = false) {
-    const key = JSON.stringify([kind, groupId, identity]);
-    steps.set(key, { key, kind, groupId, repoId, taskId, runId, reason, ownerRequired: ownerRequired || (steps.get(key)?.ownerRequired ?? false), destination });
-  }
-  function groupSteps(source: Source) {
+type Add = (kind: OverviewStepV1["kind"], groupId: string | null, repoId: string | null, reason: string,
+  destination: OverviewDestinationV1, identity: string, taskId?: string | null, runId?: string | null, ownerRequired?: boolean) => void;
+
+/**
+ * Tester follow-up K, item 1: THE needs-you rule. A group needs you exactly when the overview gives it a problem row --
+ * one of these kinds -- and the summary's `needsYou` (what the Tasks list's "needs you" filter and the board's column
+ * read) is computed from the same rows (`groupNeedsYou`), so Overview and Tasks cannot disagree. Seen from the person:
+ *  - a stop that completed its handoff asks for no decision (only a stop still settling does; a pause they asked for is
+ *    a state, #218);
+ *  - a blocked task the escalation ladder is still debugging or rerunning is Orca's, not yet theirs (an exhausted
+ *    ladder is theirs again);
+ *  - a group stopped at a spend cap waits for their top-up, so it is theirs;
+ *  - a blocked group, a start refused again and again, and a failed final acceptance are theirs too.
+ */
+const PROBLEM_KINDS: ReadonlySet<OverviewStepV1["kind"]> = new Set(["requirement-attention", "task-attention", "stop-review", "recovery-review", "integration-review"]);
+
+/**
+ * The summary's `needsYou` for one group, from the overview's own problem rows. Undefined when a stored fact the
+ * overview needs does not read (the overview lists that group as an issue instead); the page then keeps its fallback.
+ */
+export function groupNeedsYou(store: ControlStore, groupId: string): boolean | undefined {
+  try {
+    const source = readOverviewGroupSource(store, groupId);
+    if (source === null) return false;
+    let problem = false;
+    groupSteps(store, source, (kind) => { if (PROBLEM_KINDS.has(kind)) problem = true; });
+    return problem;
+  } catch { return undefined; }
+}
+
+/** The summaries with `needsYou` set by the rule above (absent where the overview could not read the group). */
+export function withNeedsYou<T extends { groupId: string }>(store: ControlStore, groups: T[]): Array<T & { needsYou?: boolean }> {
+  return groups.map((group) => {
+    const needsYou = groupNeedsYou(store, group.groupId);
+    return needsYou === undefined ? group : { ...group, needsYou };
+  });
+}
+
+function groupSteps(store: ControlStore, source: Source, add: Add) {
     const { summary, body, proposal, estimates, workItems, runs, blockers } = source;
     const { groupId, repoId } = summary;
     const workById = new Map(workItems.map(work => [work.workItemId, work]));
@@ -75,19 +103,27 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
         JSON.stringify([blocker.scope, groupId, blocker.runId, blocker.code]), null, blocker.runId);
     }
     // Issue #218 (human ruling 2026-11-10): a pause the person asked for is not a queue item; a stop still settling is.
-    if (summary.stopState !== null && summary.stopState !== "paused") add("stop-review", groupId, repoId, summary.stopState, groupDestination("problem"), `stop:${summary.stopMode}`);
+    // Tester follow-up K (the needs-you rule above): nor is a stop that completed its handoff -- nothing is left to decide.
+    if (summary.stopState !== null && summary.stopState !== "paused" && summary.stopState !== "handoff-complete") add("stop-review", groupId, repoId, summary.stopState, groupDestination("problem"), `stop:${summary.stopMode}`);
     // Issue #216: the ledger flag and the active run that set it are one problem; the run's row (below) owns it, and the
     // group's row is said only when no active run explains the flag.
     const runOwnsUnknown = runs.some(run => run.active && (run.unknown.work || run.unknown.handoff));
     if (body.ledger.usageUnknown && body.status !== "clarifying" && !runOwnsUnknown) add("recovery-review", groupId, repoId, "usage-unknown", groupDestination("problem"), JSON.stringify(["group", groupId, null, "usage-unknown"]), null, null, true);
     const capBlock = readSpendCapBlock(store, groupId);
     if (capBlock !== null) add(body.status === "clarifying" ? "requirement-attention" : "task-attention", groupId, repoId, "spend-cap-blocked", body.status === "clarifying" ? requirementDestination("problem") : groupDestination("problem"), "spend-cap-blocked", null, null, true);
+    const ladderHolds = new Set((summary.escalation ?? []).filter(entry => entry.state !== "exhausted").map(entry => entry.taskId));
+    // The needs-you rule: the group-level states the Tasks list always counted, now rows here too.
+    if (summary.state === "blocked") add("task-attention", groupId, repoId, "group-blocked", groupDestination("problem"), "group-blocked");
+    const refusal = summary.orchestration?.refusal;
+    if (refusal?.persistent === true) add("task-attention", groupId, repoId, refusal.code, groupDestination("problem"), "start-refused-persistent");
+    if (summary.acceptance?.result === "failed") add("task-attention", groupId, repoId, summary.acceptance.problem ?? "group-acceptance-failed", groupDestination("problem"), "acceptance-failed");
     for (const work of workItems) {
       const run = work.currentRunId == null ? undefined : runById.get(work.currentRunId);
       if (work.status === "blocked" || work.status === "held" || run?.state === "blocked") {
         if (run !== undefined) attendedRuns.add(run.runId);
+        // The needs-you rule: a task the escalation ladder is still debugging or rerunning is Orca's, not yet yours.
         const reason = run?.drive?.blockedReason ?? run?.failureCode ?? `task-${work.status === "held" ? "held" : "blocked"}`;
-        add("task-attention", groupId, repoId, reason, groupDestination("problem", work.taskId, run?.runId ?? null), `task:${work.taskId}:${run?.runId ?? ""}`, work.taskId, run?.runId ?? null);
+        if (work.taskId === null || !ladderHolds.has(work.taskId)) add("task-attention", groupId, repoId, reason, groupDestination("problem", work.taskId, run?.runId ?? null), `task:${work.taskId}:${run?.runId ?? ""}`, work.taskId, run?.runId ?? null);
       }
       if (work.status === "start-unknown" && run === undefined) add("recovery-review", groupId, repoId, "start-unknown", groupDestination("problem", work.taskId), `task:${work.taskId}:start-unknown`, work.taskId);
     }
@@ -143,7 +179,17 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
       && (!hasRequirementBlock(body as {requirement?:unknown}) || requirement?.exportState === "done")) {
       add("start-review", groupId, repoId, "ready-to-start-review", groupDestination("dispatch"), `proposal:${proposal.proposalVersion}`);
     }
-  }
+}
+
+/** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. */
+export function readControlOverview(store: ControlStore, epoch: string): OverviewV1 {
+  const changeSeq = readProjectionState(store).changeSeq;
+  const groups: OverviewV1["groups"] = [], issues: OverviewV1["issues"] = [];
+  const steps = new Map<string, OverviewStepV1>();
+  const add: Add = (kind, groupId, repoId, reason, destination, identity, taskId = null, runId = null, ownerRequired = false) => {
+    const key = JSON.stringify([kind, groupId, identity]);
+    steps.set(key, { key, kind, groupId, repoId, taskId, runId, reason, ownerRequired: ownerRequired || (steps.get(key)?.ownerRequired ?? false), destination });
+  };
   // Flow engine spec §6.2: a flow run's groups are shown by its run page (Task 16), not here.
   for (const row of store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NULL ORDER BY g.id`).all()) {
     const groupId = String(row.id);
@@ -154,8 +200,9 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
       repoId = source.summary.repoId;
       if (source.summary.archived) continue;
       // Build into the request-local map, rolling back this group's rows if a later stored fact is corrupt.
-      groupSteps(source);
-      groups.push(source.summary);
+      groupSteps(store, source, add);
+      const problem = [...steps.values()].some(step => step.groupId === groupId && PROBLEM_KINDS.has(step.kind));
+      groups.push({ ...source.summary, needsYou: problem });
     } catch (error) {
       for (const [key, step] of steps) if (step.groupId === groupId) steps.delete(key);
       issues.push({ groupId, repoId, reason: error instanceof ControlError ? error.detail ?? error.code : "stored-group-invalid" });

@@ -84,6 +84,8 @@ export type GroupSummaryV1 = {
   stopState: null | "paused" | "handoff-pending" | "handoff-partial" | "handoff-unresolved" | "handoff-complete";
   claimBlocked: boolean;
   recoveryBlockerCount: number;
+  /** Tester follow-up K: the server's one needs-you rule (the rows Overview lists); absent where it could not read the group. */
+  needsYou?: boolean;
   /** Labels and progress spec §4.1: tasks done out of the plan's tasks. Optional so literal fixtures need no edit. */
   completion?: { done: number; total: number };
   /** N1 spec §11.2: present on a group that carries a requirement block. */

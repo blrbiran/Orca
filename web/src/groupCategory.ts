@@ -16,6 +16,10 @@ export const GROUP_FILTER_KEY = "orca.panel.groupFilter";
  * Kanban spec 2026-10-20 §3.1: also an automatic start refused again and again (needs-you for this group only).
  */
 export function needsAttention(summary: GroupSummaryV1): boolean {
+  // Tester follow-up K, item 1: the server's one needs-you rule (src/panel/controlOverview.ts, PROBLEM_KINDS) -- the same
+  // rows Overview lists -- decides whenever it is sent. What follows is only the fallback for a summary without it (a
+  // group the overview could not read, an older server, a literal fixture).
+  if (typeof summary.needsYou === "boolean") return summary.needsYou;
   // System debug task spec 2026-10-21 §3.5: a blocked task the escalation ladder is still working on is Orca's, not yours.
   const escalating = (summary.escalation ?? []).filter((entry) => entry.state !== "exhausted").length;
   // Issue #218 (human ruling 2026-11-10): a pause the person asked for is a state, not a request for them; only a stop

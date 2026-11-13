@@ -1597,6 +1597,9 @@ export const groupSummarySchema = z
     stopState: z.enum(["paused", "handoff-pending", "handoff-partial", "handoff-unresolved", "handoff-complete"]).nullable(),
     claimBlocked: z.boolean(),
     recoveryBlockerCount: safeInteger,
+    // Tester follow-up K, item 1: the one needs-you rule (src/panel/controlOverview.ts, PROBLEM_KINDS): true exactly when
+    // Overview gives this group a problem row. Optional: absent where the overview could not read the group.
+    needsYou: z.boolean().optional(),
     // Labels and progress spec §4.1 (§8 R14, R19): tasks done out of the plan's tasks. Optional on the wire so older
     // fixtures still parse; the server always gives it. The group view's `summary` is this same object (finding F7).
     completion: z.object({ done: safeInteger, total: safeInteger }).strict().optional(),

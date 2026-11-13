@@ -3,7 +3,7 @@ import { readFlowJournal, readFlowList, readFlowRun } from "../flow/views.js";
 import { asFlowControlError, dirProjectOf, registeredDirProject } from "../flow/flowCommands.js";
 import { FLOW_VAULT_REPO_PREFIX } from "../flow/groups.js";
 import { readResultOutputBytes } from './taskResultOutputs.js';
-import { readControlOverview } from "./controlOverview.js";
+import { readControlOverview, withNeedsYou } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
 import { fundingPreview } from "../control/fundedAllowance.js";
@@ -235,7 +235,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendControlError(res, 400, "query-invalid", "sinceChangeSeq must be a canonical decimal safe integer");
       return;
     }
-    res.json(readControlSummary(deps.store, deps.epoch, since));
+    const summary = readControlSummary(deps.store, deps.epoch, since);
+    res.json({ ...summary, groups: withNeedsYou(deps.store, summary.groups) });
   }));
 
   app.get("/api/control/overview", asyncRoute((_req, res) => {
@@ -266,7 +267,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 
   app.get("/api/control/groups", (_req, res) => {
-    res.json(readControlSummary(deps.store, deps.epoch, null, true));
+    const summary = readControlSummary(deps.store, deps.epoch, null, true);
+    res.json({ ...summary, groups: withNeedsYou(deps.store, summary.groups) });
   });
 
   // N1 spec §11.2: a requirement's details; its group view is refused while it is clarifying (DR25).
