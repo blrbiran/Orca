@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
@@ -223,5 +225,79 @@ describe.skipIf(!realBinary)("a run whose ccloop worker died (#273)", { timeout:
       expect(blockerCodes(runtime)).toEqual([]);
       expect(await runtime.shutdown()).toBe(true);
     } finally { stderr.mockRestore(); await w.teardown(); }
+  });
+});
+
+/**
+ * Tester follow-up I (Orca session d467cbd2, 2026-11-13; independent review of #273, findings 2 and 4). A port that counts
+ * Orca's settle-lost-worker calls, so a criterion can say how often Orca asked ccloop to settle a run.
+ */
+function countingSettles(): { wrap: (port: ExecutionPort) => ExecutionPort; settles: () => number } {
+  let count = 0;
+  const wrap = (port: ExecutionPort): ExecutionPort => new Proxy(port, { get(target, key, receiver) {
+    const value = Reflect.get(target, key, receiver);
+    if (typeof value !== "function") return value;
+    if (key === "settleLostWorker") return async (...args: unknown[]) => { count += 1; return (value as (...a: unknown[]) => unknown).apply(target, args); };
+    return value.bind(target);
+  } });
+  return { wrap, settles: () => count };
+}
+
+describe.skipIf(!realBinary)("a worker lost around its own end, and a live one (#273, tester follow-up I)", { timeout: 600_000 }, () => {
+  relocateHome("orca-worker-lost-i-home-");
+
+  // §5.1 "a live worker is never settled", stated on its own: a run whose worker stays alive to its end is never the subject
+  // of a settle-lost-worker call, and never waits on the undetermined grace.
+  it("never asks ccloop to settle a run whose worker is alive", async () => {
+    const w = await world(unlimitedTask, { a: { files: { "answer.txt": "42\n" }, delayMs: { execute: 3_000 } } }, { tokenPolicy: "optional-v1" });
+    const counter = countingSettles();
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const runtime = await w.boot(undefined, counter.wrap); try {
+      await startGroup(runtime, w.repoId);
+      runtime.startPump(50);
+      const run = await inExecute(runtime, w, 1);
+      await waitFor(runtime, () => readWork(runtime.store, "g", "a").status === "done", 300_000, "the task to finish");
+      // mutation: stepC settles a run with no terminal and no candidate whatever `worker` says -> settle calls, red
+      expect(counter.settles()).toBe(0);
+      expect(activity(runtime, run.runId, "worker-lost")).toEqual([]);
+      expect(workRuns(runtime)[0]!.body.workerUndeterminedSince).toBeUndefined();
+      expect(workRuns(runtime)).toHaveLength(1);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { stderr.mockRestore(); await w.teardown(); }
+  });
+
+  // Needs ccloop with tester follow-up I (branch i/worker-lost-fixes): collect reports `worker` beside a candidate with no stop
+  // proof. The worker is held at ccloop's test crash point `candidate-fsynced` -- after it wrote its (successful) candidate,
+  // before it sealed or released its lease -- then killed. Before, the run waited forever for a stop proof.
+  it("a worker that died after writing a successful candidate: the stop is proved and the success lands, not restarted", async () => {
+    const w = await world(unlimitedTask, { a: { files: { "answer.txt": "42\n" } } }, { tokenPolicy: "optional-v1" });
+    const counter = countingSettles();
+    const markerDir = await realpath(await mkdtemp(join(tmpdir(), "orca-worker-lost-crash-"))), marker = join(markerDir, "candidate-fsynced");
+    const saved = { point: process.env.CCLOOP_CONTROL_TEST_CRASH_POINT, marker: process.env.CCLOOP_CONTROL_TEST_CRASH_MARKER };
+    const restoreEnv = (): void => {
+      if (saved.point === undefined) delete process.env.CCLOOP_CONTROL_TEST_CRASH_POINT; else process.env.CCLOOP_CONTROL_TEST_CRASH_POINT = saved.point;
+      if (saved.marker === undefined) delete process.env.CCLOOP_CONTROL_TEST_CRASH_MARKER; else process.env.CCLOOP_CONTROL_TEST_CRASH_MARKER = saved.marker;
+    };
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const runtime = await w.boot(undefined, counter.wrap); try {
+      process.env.CCLOOP_CONTROL_TEST_CRASH_POINT = "candidate-fsynced"; process.env.CCLOOP_CONTROL_TEST_CRASH_MARKER = marker;
+      await startGroup(runtime, w.repoId);
+      orchestrate(runtime);
+      runtime.startPump(50);
+      await until(() => existsSync(marker), 240_000, "the worker to stop after writing its candidate");
+      restoreEnv();
+      const run = workRuns(runtime)[0]!;
+      await killWorker(run);
+      await waitFor(runtime, () => readWork(runtime.store, "g", "a").status === "done", 300_000, "the task to finish");
+      // mutation: stepC acts on `worker` only without a candidate (the #273 trigger) -> the run waits for a proof forever, red
+      expect(workRuns(runtime)).toHaveLength(1);
+      expect(workRuns(runtime)[0]!.body.drive).toMatchObject({ outcome: "succeeded" });
+      expect(workRuns(runtime)[0]!.body.drive.landedCommit).toMatch(/^[0-9a-f]{40}$/);
+      expect(counter.settles()).toBe(1);
+      expect(activity(runtime, run.runId, "worker-lost")).toHaveLength(1);
+      expect(runtime.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id=?").get(workerLostCommandId("a", run.runId))).toBeUndefined();
+      expect(blockerCodes(runtime)).toEqual([]);
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { restoreEnv(); stderr.mockRestore(); await w.teardown(); await rm(markerDir, { recursive: true, force: true }); }
   });
 });

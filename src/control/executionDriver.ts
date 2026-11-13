@@ -958,8 +958,12 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   const candidate = report.candidate;
   // Worker-lost recovery spec 2026-11-12 §5.2: ccloop reports a worker that is not alive only for a claimed loop run with
   // neither a candidate nor a terminal (a saved-result recovery has its own settlement above).
-  if (!report.terminal && candidate === null && report.worker !== undefined && run.mode === undefined && run.recoveryOf === undefined) {
-    return report.worker.state === "lost" ? settleLostWorker(deps, run, report.worker.reason) : workerUndetermined(deps, run, report.worker.reason);
+  // Tester follow-up I (review of #273, finding 2): also beside a candidate with no stop proof -- the worker died after writing
+  // it, before sealing or releasing its lease. ccloop then keeps the worker's own candidate and only proves the stop, so the
+  // next round takes that candidate on as usual (a success lands).
+  const worker = report.worker;
+  if (worker !== undefined && workerReportActionable(report) && run.mode === undefined && run.recoveryOf === undefined) {
+    return worker.state === "lost" ? settleLostWorker(deps, run, worker.reason) : workerUndetermined(deps, run, worker.reason);
   }
   if (typeof run.workerUndeterminedSince === "number") write(deps, () => { const current = readDriverRun(store, runId); delete current.workerUndeterminedSince; saveDriverRun(store, current); });
   // Handoff delivery spec §3 (X1): a proved stop with no terminal and no request of this run's is not
@@ -2086,6 +2090,16 @@ async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report
 export const WORKER_UNDETERMINED_GRACE_MS = 10 * 60_000;
 /** A run recovery blocker's code for a worker that stayed undetermined past the grace (recovery list, Problems). */
 export const WORKER_UNDETERMINED = "worker-undetermined";
+
+/**
+ * Whether ccloop's `worker` report is one to act on: a run with neither a candidate nor a terminal (spec §5.2), or -- tester
+ * follow-up I, review of #273 finding 2 -- a candidate whose stop is not proved (the worker died between writing it and
+ * releasing its lease). A candidate with a stop proof is never settled again.
+ */
+export function workerReportActionable(report: Pick<ExecutionReport, "worker" | "terminal" | "candidate">): boolean {
+  if (report.worker === undefined) return false;
+  return report.candidate === null ? !report.terminal : !report.candidate.stopProof;
+}
 
 /**
  * Worker-lost recovery spec §5.2: ccloop confirmed the run's worker dead (the machine restarted or it was killed). ccloop

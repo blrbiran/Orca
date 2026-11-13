@@ -46,6 +46,7 @@ export interface ExecutionReport {
  /**
   * Worker-lost recovery spec 2026-11-12 §5 (as built, ccloop half item 2): present only for a claimed loop run with no
   * candidate and no terminal whose worker is not alive -- `lost` (confirmed dead) or `undetermined`. Absent = alive or n/a.
+  * Tester follow-up I (ccloop branch i/worker-lost-fixes): also beside a loop run's candidate that has no stop proof.
   */
  worker?:{state:"lost"|"undetermined";reason:string};
  /** Tester follow-up G spec §2.1: present iff ccloop stopped the run at its live ceiling (ccloop live-ceiling spec). */
