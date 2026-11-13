@@ -107,8 +107,12 @@ describe.skipIf(!realBinary)("a run whose ccloop worker died (#273)", { timeout:
 
   // §5.5 names finite groups; the same person path holds for a task whose budget a person set (approximateLoopScope), which
   // is the world here: no group token limit, a task with its own token budget.
+  // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 — since Part B made the expectation model the default,
+  // a person's task budget in a new group is an expectation (human: 任务额度…只是「预期」), so the killed call's usage settles at
+  // the approximate floor and the task restarts by itself (the unlimited case above covers that). The person path this
+  // criterion pins -- a task grant that is a hard line -- exists only in a group created before the release: preRelease.
   it("when a person set the task's budget, waits for the killed call's usage to be settled before deciding the restart", async () => {
-    const w = await world([{ ...unlimitedTask[0]!, loop: { ...unlimitedTask[0]!.loop, tokenBudget: 1_000_000 } }], { a: { files: { "answer.txt": "42\n" }, delayMs: { execute: 8_000 } } }, { tokenPolicy: "optional-v1" });
+    const w = await world([{ ...unlimitedTask[0]!, loop: { ...unlimitedTask[0]!.loop, tokenBudget: 1_000_000 } }], { a: { files: { "answer.txt": "42\n" }, delayMs: { execute: 8_000 } } }, { tokenPolicy: "optional-v1", preRelease: true });
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const runtime = await w.boot(); try {
       await startGroup(runtime, w.repoId);
