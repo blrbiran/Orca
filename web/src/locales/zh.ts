@@ -737,6 +737,7 @@ export const zh: Translation<typeof en> = {
       bytes: "{{bytes}} / {{max}} 字节",
       tooLarge: "备注超过 2048 字节。",
       send: "发送备注",
+      hint: "Enter 发送，Shift+Enter 换行",
       list: "备注",
       queuedRunning: "排队中——下一步送达",
       queuedWaiting: "排队中——任务继续时送达",

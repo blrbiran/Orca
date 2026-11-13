@@ -73,3 +73,68 @@ it("disables the box for a completed task and in an archived group", () => {
   expect((screen.getByRole("button", { name: "Send note" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByRole("note").textContent).toBe("This group is archived.");
 });
+
+/*
+ * #243 (tester follow-up I): the box behaves like a chat composer. Enter sends once, Shift+Enter is a new line, and an
+ * Enter that confirms an input-method composition (Chinese, Japanese) must never send the half-typed note.
+ */
+const box = (onCommand = vi.fn()) => {
+  render(<LiveNoteBox view={running()} taskId="a" archived={false} onCommand={onCommand} />);
+  const area = screen.getByRole("textbox", { name: "Note for the agent" }) as HTMLTextAreaElement;
+  return { onCommand, area };
+};
+
+// mutation M-I1a: drop the Enter handler -> Enter never sends, red
+it("sends once on Enter and clears the box", () => {
+  const { onCommand, area } = box();
+  fireEvent.change(area, { target: { value: "use v2" } });
+  const notCancelled = fireEvent.keyDown(area, { key: "Enter", code: "Enter" });
+  expect(notCancelled).toBe(false);
+  expect(onCommand).toHaveBeenCalledTimes(1);
+  expect(onCommand.mock.calls[0]?.[0]).toMatchObject({ verb: "add-live-note", taskId: "a", payload: { text: "use v2" } });
+  expect(area.value).toBe("");
+  expect(screen.getByText("Enter to send, Shift+Enter for a new line")).toBeTruthy();
+});
+
+// mutation M-I1b: ignore shiftKey -> Shift+Enter sends, red
+it("Shift+Enter does not send and leaves the newline to the textarea", () => {
+  const { onCommand, area } = box();
+  fireEvent.change(area, { target: { value: "line one" } });
+  const notCancelled = fireEvent.keyDown(area, { key: "Enter", code: "Enter", shiftKey: true });
+  expect(notCancelled).toBe(true);
+  expect(onCommand).not.toHaveBeenCalled();
+  expect(area.value).toBe("line one");
+});
+
+// mutations M-I1c (drop the compositionstart/end flag), M-I1d (drop isComposing), M-I1e (drop keyCode 229): each red
+it("Enter during an IME composition never sends; Enter after compositionend does", () => {
+  const { onCommand, area } = box();
+  fireEvent.change(area, { target: { value: "用 v2" } });
+  fireEvent.compositionStart(area);
+  fireEvent.keyDown(area, { key: "Enter", code: "Enter" });
+  expect(onCommand).not.toHaveBeenCalled();
+  fireEvent.compositionEnd(area);
+  fireEvent.keyDown(area, { key: "Enter", code: "Enter", isComposing: true });
+  expect(onCommand).not.toHaveBeenCalled();
+  fireEvent.keyDown(area, { key: "Enter", code: "Enter", keyCode: 229 });
+  expect(onCommand).not.toHaveBeenCalled();
+  expect(area.value).toBe("用 v2");
+  fireEvent.keyDown(area, { key: "Enter", code: "Enter" });
+  expect(onCommand).toHaveBeenCalledTimes(1);
+  expect(onCommand.mock.calls[0]?.[0]).toMatchObject({ payload: { text: "用 v2" } });
+});
+
+// mutation M-I1f: send on Enter without checking canSend -> an empty note is sent, red
+it("Enter on an empty box, a too-large note or a finished task sends nothing", () => {
+  const { onCommand, area } = box();
+  fireEvent.keyDown(area, { key: "Enter", code: "Enter" });
+  fireEvent.change(area, { target: { value: "é".repeat(1025) } });
+  fireEvent.keyDown(area, { key: "Enter", code: "Enter" });
+  expect(onCommand).not.toHaveBeenCalled();
+  cleanup();
+  const done = running({ workItems: [workItem({ taskId: "a", status: "completed", category: "done", currentRunId: "run-a", lineageRunIds: ["run-a"] })] });
+  const onDone = vi.fn();
+  render(<LiveNoteBox view={done} taskId="a" archived={false} onCommand={onDone} />);
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Note for the agent" }), { key: "Enter", code: "Enter" });
+  expect(onDone).not.toHaveBeenCalled();
+});

@@ -1,4 +1,4 @@
-import { useState, type JSX } from "react";
+import { useRef, useState, type JSX, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupViewV1, LiveNoteViewV1 } from "./controlTypes.js";
@@ -30,7 +30,11 @@ export function LiveNoteList(props: { notes: readonly LiveNoteViewV1[]; running?
   </ul>;
 }
 
-/** The box under a task in Live: a textarea, its byte count, and Send note. */
+/**
+ * The box under a task in Live: a textarea, its byte count, and Send note. Enter sends (when Send would), Shift+Enter is a
+ * new line, and Enter while an input method is composing (isComposing, keyCode 229, or between compositionstart and
+ * compositionend) only confirms the composition -- it never sends (#243).
+ */
 export function LiveNoteBox(props: { view: GroupViewV1; taskId: string; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element {
   const { t } = useTranslation();
   const [text, setText] = useState("");
@@ -39,16 +43,26 @@ export function LiveNoteBox(props: { view: GroupViewV1; taskId: string; archived
   const reason = props.archived ? t("control.liveNotes.archived") : finished ? t("control.liveNotes.finished") : null;
   const bytes = utf8Bytes(text);
   const tooLarge = bytes > LIVE_NOTE_MAX_BYTES;
+  const composing = useRef(false);
+  const canSend = reason === null && text.length > 0 && !tooLarge;
   const send = (): void => {
     props.onCommand({ verb: "add-live-note", groupId: props.view.summary.groupId, taskId: props.taskId, expectedRevision: props.view.summary.commandRevision, payload: { text } });
     setText("");
   };
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    if (canSend) send();
+  };
   return <div className="grid max-w-2xl gap-2" role="group" aria-label={t("control.liveNotes.title", { taskId: props.taskId })}>
     <textarea aria-label={t("control.liveNotes.text")} placeholder={t("control.liveNotes.placeholder")} value={text} disabled={reason !== null}
-      aria-invalid={tooLarge} onChange={(event) => setText(event.currentTarget.value)} />
+      aria-invalid={tooLarge} onChange={(event) => setText(event.currentTarget.value)} onKeyDown={onKeyDown}
+      onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} />
+    <p>{t("control.liveNotes.hint")}</p>
     <p className="num">{t("control.liveNotes.bytes", { bytes, max: LIVE_NOTE_MAX_BYTES })}</p>
     {tooLarge && <p data-tone="warn" role="status">{t("control.liveNotes.tooLarge")}</p>}
     {reason !== null && <p role="note">{reason}</p>}
-    <div><button type="button" disabled={reason !== null || text.length === 0 || tooLarge} onClick={send}>{t("control.liveNotes.send")}</button></div>
+    <div><button type="button" disabled={!canSend} onClick={send}>{t("control.liveNotes.send")}</button></div>
   </div>;
 }

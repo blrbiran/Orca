@@ -884,6 +884,7 @@ export const en = {
       bytes: "{{bytes}} / {{max}} bytes",
       tooLarge: "The note is longer than 2048 bytes.",
       send: "Send note",
+      hint: "Enter to send, Shift+Enter for a new line",
       list: "Notes",
       queuedRunning: "queued — delivered at the next step",
       queuedWaiting: "queued — delivered when the task continues",
