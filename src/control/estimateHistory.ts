@@ -31,11 +31,12 @@ export function repoTaskHistory(store: ControlStore, groupId: string): RepoTaskH
       const runs = new Map<string, Array<{ unknown?: { work?: boolean }; usageApproximate?: unknown; cumulative?: { work?: { tokens?: number } } }>>();
       for (const r of store.db.prepare("SELECT work_item_id, body FROM runs WHERE group_id=?").all(String(row.id))) {
         const list = runs.get(String(r.work_item_id)) ?? [];
-        list.push(JSON.parse(String(r.body)));
+        try { list.push(JSON.parse(String(r.body))); } catch { list.push({ unknown: { work: true } }); } // unreadable: its total is not known
         runs.set(String(r.work_item_id), list);
       }
       for (const w of store.db.prepare("SELECT id, body FROM work_items WHERE group_id=?").all(String(row.id))) {
-        const work = JSON.parse(String(w.body)) as { kind?: unknown; status?: unknown };
+        let work: { kind?: unknown; status?: unknown };
+        try { work = JSON.parse(String(w.body)) as typeof work; } catch { continue; }
         const taskRuns = runs.get(String(w.id)) ?? [];
         if (work.kind !== "task" || work.status !== "done" || taskRuns.length === 0) continue;
         if (taskRuns.some((r) => r.unknown?.work === true || r.usageApproximate !== undefined)) continue;

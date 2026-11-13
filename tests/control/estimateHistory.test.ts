@@ -106,6 +106,19 @@ describe("this repository's history beside the estimate, before confirm (#173/#2
     } finally { await h.dispose(); }
   });
 
+  // Controller review (follow-up L): the history reads every other group's rows; one unreadable row there must not make
+  // this group's view fail (#298's lesson: one bad run used to take the whole summary down). Its task is left out.
+  it("skips another group's unreadable run or work-item row instead of failing this group's view", async () => {
+    const h = await webFixture(undefined, [TASK]);
+    try {
+      seedHistory(h.store);
+      seedTask(h.store, "o3", "bad-run", "done", [run(100)]);
+      h.store.db.prepare("UPDATE runs SET body='{not json' WHERE group_id='o3' AND work_item_id='bad-run'").run();
+      h.store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES ('o3','bad-item',1,'{not json')").run();
+      expect(repoTaskHistory(h.store, "g")).toEqual({ medianTokens: 2 * M, sampleCount: 3 });
+    } finally { await h.dispose(); }
+  });
+
   it("is absent once the proposal is confirmed: it is read before confirm", async () => {
     const h = await webFixture(undefined, [TASK]);
     try {
