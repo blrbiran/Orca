@@ -3,7 +3,8 @@ import { basename, resolve } from "node:path";
 import { parseShell, type SimpleCommand, type Word } from "./shell.js";
 
 export type Action = "push" | "delete a branch" | "remove a worktree" | "outward gh write" | "merge into main" | "this command";
-export type Verdict = { kind: "allow" } | { kind: "block"; action: Action; unclear?: string };
+/** `notCovered`: a push this session's push grant does not admit (Tier 0 gate spec §12), and why. */
+export type Verdict = { kind: "allow" } | { kind: "block"; action: Action; unclear?: string; notCovered?: string };
 export type BranchOf = (absoluteDir: string) => Promise<string>;
 type Block = Extract<Verdict, { kind: "block" }>;
 
@@ -21,33 +22,42 @@ const unclear = (reason: string): Verdict => ({ kind: "block", action: "this com
 /** Tier 0 gate spec 3.5. */
 export function blockMessage(verdict: Block): string {
   const head = `orca gate: ${verdict.action} is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work.`;
+  if (verdict.notCovered !== undefined) return `${head} This session's push grant does not cover it: ${verdict.notCovered}. ${GRANT_SCOPE}`;
   return verdict.unclear === undefined ? head : `${head} Could not decide: ${verdict.unclear}.`;
 }
 
-/** Tier 0 gate spec 3: what a Bash tool command would do to the four irreversible moves. */
-export function classify(command: string, cwd: string, branchOf: BranchOf): Promise<Verdict> {
-  return classifyText(command, cwd, branchOf, 0);
+/** Tier 0 gate spec §12: what a push grant admits, said in every refusal that names the grant. */
+export const GRANT_SCOPE =
+  "A grant admits only `git push origin [<ref>…]` with -u/--set-upstream, -q/--quiet, -v/--verbose, -n/--dry-run, --porcelain or --follow-tags; a person runs any other push in their own terminal.";
+
+/**
+ * Tier 0 gate spec 3: what a Bash tool command would do to the four irreversible moves. `pushGranted` (spec §12): the
+ * session holds a live push grant, so a plain push to origin is admitted; without it every push is blocked.
+ */
+export function classify(command: string, cwd: string, branchOf: BranchOf, pushGranted = false): Promise<Verdict> {
+  return classifyText(command, cwd, branchOf, 0, pushGranted);
 }
 
 interface Context {
   cwd: string;
   branchOf: BranchOf;
+  pushGranted: boolean;
   dir: string;
   dirProblem: string | null;
   headChanged: boolean;
   grouping: boolean;
 }
 
-async function classifyText(src: string, cwd: string, branchOf: BranchOf, depth: number): Promise<Verdict> {
+async function classifyText(src: string, cwd: string, branchOf: BranchOf, depth: number, pushGranted: boolean): Promise<Verdict> {
   if (!/git|gh/.test(src)) return ALLOW;
   if (depth > MAX_DEPTH) return unclear(`nested more than ${MAX_DEPTH} levels deep`);
   const parsed = parseShell(src);
   if (parsed.problem !== null) return unclear(parsed.problem);
   for (const body of parsed.substitutions) {
-    const v = await classifyText(body, cwd, branchOf, depth + 1);
+    const v = await classifyText(body, cwd, branchOf, depth + 1, pushGranted);
     if (v.kind === "block") return v;
   }
-  const ctx: Context = { cwd, branchOf, dir: cwd, dirProblem: null, headChanged: false, grouping: parsed.grouping };
+  const ctx: Context = { cwd, branchOf, pushGranted, dir: cwd, dirProblem: null, headChanged: false, grouping: parsed.grouping };
   for (const cmd of parsed.commands) {
     const v = await classifyCommand(cmd, ctx, depth);
     if (v.kind === "block") return v;
@@ -71,7 +81,7 @@ async function classifyCommand(cmd: SimpleCommand, ctx: Context, depth: number):
   }
   if (first !== undefined && SHELLS.has(basename(first)) && !words.some((w) => /^-[A-Za-z]*c[A-Za-z]*$/.test(w.text))) {
     for (const heredoc of cmd.heredocs) {
-      const v = await classifyText(heredoc.body, ctx.cwd, ctx.branchOf, depth + 1);
+      const v = await classifyText(heredoc.body, ctx.cwd, ctx.branchOf, depth + 1, ctx.pushGranted);
       if (v.kind === "block") return v;
     }
   }
@@ -86,14 +96,16 @@ async function classifyCommand(cmd: SimpleCommand, ctx: Context, depth: number):
     if (SHELLS.has(name)) {
       const option = words.findIndex((w, j) => j > k && /^-[A-Za-z]*c[A-Za-z]*$/.test(w.text));
       if (option >= 0 && words[option + 1] !== undefined) {
-        const v = await classifyText(words[option + 1].text, ctx.cwd, ctx.branchOf, depth + 1);
+        const v = await classifyText(words[option + 1].text, ctx.cwd, ctx.branchOf, depth + 1, ctx.pushGranted);
         if (v.kind === "block") return v;
       }
     } else if (name === "eval") {
-      const v = await classifyText(words.slice(k + 1).map((w) => w.text).join(" "), ctx.cwd, ctx.branchOf, depth + 1);
+      const v = await classifyText(words.slice(k + 1).map((w) => w.text).join(" "), ctx.cwd, ctx.branchOf, depth + 1, ctx.pushGranted);
       if (v.kind === "block") return v;
     } else if (name === "git") {
-      const v = await classifyGit(words.slice(k + 1), assignments, ctx);
+      // Spec §12: GIT_CONFIG_* anywhere before git can inject config (e.g. remote.origin.mirror) into a granted push.
+      const configInjected = words.slice(0, k).some((w) => w.text.startsWith("GIT_CONFIG"));
+      const v = await classifyGit(words.slice(k + 1), assignments, ctx, configInjected);
       if (v.kind === "block") return v;
     } else if (name === "gh") {
       const v = classifyGh(words.slice(k + 1));
@@ -109,15 +121,17 @@ function shortLetters(args: Word[]): Set<string> {
   return letters;
 }
 
-async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context): Promise<Verdict> {
+async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context, configInjected: boolean): Promise<Verdict> {
   let i = 0;
   const cPaths: Word[] = [];
+  let configOption = configInjected;
   let otherRepository = assignments.has("GIT_DIR") || assignments.has("GIT_WORK_TREE");
   while (i < args.length && args[i].text.startsWith("-")) {
     const t = args[i].text;
     if (GIT_VALUE_OPTIONS.has(t)) {
       if (t === "-C" && args[i + 1] !== undefined) cPaths.push(args[i + 1]);
       if (t === "--git-dir" || t === "--work-tree") otherRepository = true;
+      if (t === "-c") configOption = true;
       i += 2;
     } else if (t.startsWith("--git-dir=") || t.startsWith("--work-tree=")) {
       otherRepository = true;
@@ -137,7 +151,8 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
   const longs = new Set(beforeDashdash.filter((w) => w.text.startsWith("--")).map((w) => w.text.split("=")[0]));
 
   // Human ruling 2026-10-18 (Orca session a3b2a7a7): the forms git itself protects (a fast-forward-only merge, -d,
-  // worktree remove without force) are not Tier 0; their forced forms still are. Push stays Tier 0.
+  // worktree remove without force) are not Tier 0; their forced forms still are. Push stays Tier 0 unless the session
+  // holds a push grant (spec §12, human 2026-11-13: 「在人明确要求的情况下要允许push」).
   const force = letters.has("f") || longs.has("--force");
   const fastForwardOnly = longs.has("--ff-only") && !longs.has("--ff") && !longs.has("--no-ff");
 
@@ -161,8 +176,11 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
   };
 
   switch (sub) {
-    case "push":
-      return block("push");
+    case "push": {
+      if (!ctx.pushGranted) return block("push");
+      const notCovered = configOption ? "a -c or GIT_CONFIG_* setting can change what the push does" : pushNotCovered(rest);
+      return notCovered === null ? ALLOW : { kind: "block", action: "push", notCovered };
+    }
     case "branch":
       if (letters.has("D")) return block("delete a branch");
       if (letters.has("d") || longs.has("--delete")) return force || positionals.includes("main") ? block("delete a branch") : ALLOW;
@@ -204,6 +222,36 @@ async function classifyGit(args: Word[], assignments: Set<string>, ctx: Context)
     default:
       return ALLOW;
   }
+}
+
+const GRANT_PUSH_LONGS = new Set(["--set-upstream", "--quiet", "--verbose", "--dry-run", "--porcelain", "--follow-tags"]);
+const GRANT_PUSH_LETTERS = new Set(["u", "q", "v", "n"]);
+
+/**
+ * Spec §12: why a push is more than a grant admits, or null. An allowlist, so every force, delete, mirror, all, prune,
+ * tags or push-option form falls outside it without being named; the remote must be the literal `origin` (a bare
+ * `git push` goes wherever the config says), and no refspec may force (`+src:dst`), delete (`:dst`) or match by pattern.
+ * A word with `$`, a backquote or an unquoted glob character is not literal.
+ */
+function pushNotCovered(rest: Word[]): string | null {
+  const positionals: string[] = [];
+  for (const w of rest) {
+    const t = w.text;
+    if (w.dynamic) return `${t} is not a literal word`;
+    if (t.startsWith("--")) {
+      if (!GRANT_PUSH_LONGS.has(t)) return `option ${t}`;
+    } else if (t.length > 1 && t.startsWith("-")) {
+      if ([...t.slice(1)].some((c) => !GRANT_PUSH_LETTERS.has(c))) return `option ${t}`;
+    } else positionals.push(t);
+  }
+  if (positionals.length === 0) return "no remote named";
+  if (positionals[0] !== "origin") return `remote ${positionals[0]} is not origin`;
+  for (const ref of positionals.slice(1)) {
+    if (ref.startsWith("+")) return `refspec ${ref} forces`;
+    if (ref.startsWith(":")) return `refspec ${ref} deletes`;
+    if (GLOB.test(ref)) return `refspec ${ref} is a pattern`;
+  }
+  return null;
 }
 
 function classifyGh(args: Word[]): Verdict {

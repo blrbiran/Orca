@@ -10,10 +10,18 @@ export const GATE_HOOK_TIMEOUT_S = 10;
 // .claude/settings.json (tests/gate/hookCommand.test.ts).
 export const LEVEL_HOOK_COMMAND =
   '"$CLAUDE_PROJECT_DIR"/node_modules/.bin/tsx "$CLAUDE_PROJECT_DIR"/src/cli.ts dev level --hook claude-code || { rc=$?; echo "orca level: no reading — hook command failed (exit $rc)" >&2; exit 2; }';
+// Tier 0 gate spec §12: the UserPromptSubmit side of the push grant. Never blocks a prompt (always exit 0); a prompt
+// without "push" in any case never starts tsx.
+export const PROMPT_HOOK_COMMAND =
+  'in=$(cat); case "$in" in *[pP][uU][sS][hH]*) ;; *) exit 0;; esac; printf \'%s\' "$in" | "$CLAUDE_PROJECT_DIR"/node_modules/.bin/tsx "$CLAUDE_PROJECT_DIR"/src/cli.ts dev gate --hook claude-code-prompt || echo "orca gate: prompt hook failed (exit $?) — no push grant changed" >&2; exit 0';
+export const GATE_USER_PROMPT_SUBMIT: Array<{ hooks: Array<{ type: "command"; command: string; timeout: number }> }> = [
+  { hooks: [{ type: "command", command: PROMPT_HOOK_COMMAND, timeout: GATE_HOOK_TIMEOUT_S }] },
+];
 // Human ruling 2026-10-18 (Orca session a3b2a7a7): `git branch -d`, `git branch --delete` and `git worktree remove`
 // left this list; their forced forms are blocked by the hook (src/gate/classify.ts), which a prefix rule cannot tell apart.
+// Human 2026-11-13 (Orca session 7e164691, spec §12): `git push*` left it too — a deny rule cannot be overridden by a hook,
+// so it would refuse the push a person granted; every push is now the hook's alone.
 export const GATE_DENY_BASE: string[] = [
-  "git push*",
   "git branch -D*",
   "git worktree prune*",
   "gh pr merge*",

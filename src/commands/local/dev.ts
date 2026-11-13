@@ -23,10 +23,20 @@ const positional = (args: ParsedArgs, name: string): string[] => {
   return value === undefined ? [] : Array.isArray(value) ? value : [value];
 };
 
-/** CLI v2 spec §5, §14 R8: `orca dev gate`; exit 2 = block. */
+/**
+ * CLI v2 spec §5, §14 R8: `orca dev gate`; exit 2 = block. Tier 0 gate spec §12: `--hook claude-code-prompt` is the
+ * UserPromptSubmit side (the push grant); it never blocks the prompt, so it always exits 0.
+ */
 export async function runGate(args: ParsedArgs, io: CommandIo): Promise<number> {
+  if (args.flags.hook === "claude-code-prompt") {
+    const { promptHookClaudeCode } = await import("../../gate/pushGrant.js");
+    const result = promptHookClaudeCode(io.stdinText ?? (await readStdin()), process.env, Date.now());
+    io.stdout(result.stdout);
+    io.stderr(result.stderr);
+    return 0;
+  }
   if (args.flags.hook !== "claude-code") {
-    io.stderr("orca dev gate: only --hook claude-code is supported\n");
+    io.stderr("orca dev gate: only --hook claude-code or --hook claude-code-prompt is supported\n");
     return 1;
   }
   const { gateHookClaudeCode } = await import("../../gate/hook.js");

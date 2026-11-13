@@ -3,6 +3,10 @@ import type { CommandDef, FlagDef, LocalHandler } from "../types.js";
 type Local = typeof import("../local/dev.js");
 const local = (pick: (module: Local) => LocalHandler): CommandDef["mapsTo"] => ({ kind: "local", load: async () => pick(await import("../local/dev.js")) });
 const HOOK: FlagDef = { name: "hook", type: "string", required: true, summary: "the hook protocol; only claude-code" };
+const GATE_HOOK: FlagDef = {
+  name: "hook", type: "string", required: true,
+  summary: "claude-code (PreToolUse: the gate) or claude-code-prompt (UserPromptSubmit: a prompt starting with allow-push grants this session a plain push for 12 h; deny-push revokes)",
+};
 const REPO_PATH: FlagDef = { name: "repo", type: "string", summary: "the repository (default: cwd)" };
 const REPO_PAIRS: FlagDef = { name: "repo", type: "string", repeatable: true, summary: "<projectKey>=<path>, repeatable" };
 const ROOT: FlagDef = { name: "root", type: "string", summary: "a directory whose git repositories are read" };
@@ -35,10 +39,10 @@ const AGENT_SUMMARY = {
 export const DEV_ROWS: CommandDef[] = [
   {
     domain: "dev", action: "gate", hidden: true,
-    summary: "Tier 0 gate: read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr when the Bash command would push, merge into main, delete a branch or remove a worktree, or when it cannot decide",
-    positionals: [], flags: [HOOK], access: "panel-local", mapsTo: local((m) => m.runGate),
-    exitCodes: { 0: "allowed", 1: "refused here (bad arguments)", 2: "block" },
-    examples: ["orca dev gate --hook claude-code < pretooluse.json"], format: () => "",
+    summary: "Tier 0 gate: read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr when the Bash command would push (without this session's push grant, or beyond a plain push to origin), merge into main, delete a branch or remove a worktree, or when it cannot decide",
+    positionals: [], flags: [GATE_HOOK], access: "panel-local", mapsTo: local((m) => m.runGate),
+    exitCodes: { 0: "allowed (always, for claude-code-prompt)", 1: "refused here (bad arguments)", 2: "block" },
+    examples: ["orca dev gate --hook claude-code < pretooluse.json", "orca dev gate --hook claude-code-prompt < userpromptsubmit.json"], format: () => "",
   },
   {
     domain: "dev", action: "level", hidden: true,
