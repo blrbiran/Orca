@@ -160,13 +160,13 @@ describe.skipIf(!realBinary)("a run whose ccloop worker died (#273)", { timeout:
       const settled = await withCommandContext("settle", routedCommandContext("cli", { kind: "agent", client: "cli" }, { by: "agent", via: "cli" }),
         () => runtime.service.settleUnknownUsage(raw(runtime, "settle", "settle-unknown-usage", { taskId: "a", runId: first.runId, generation: first.body.generation, acknowledge: "charge-remaining-grant" })));
       expect("error" in settled ? settled.error : "settled").toBe("settled");
-      // mutation K-B1 (chargeRunRemainder empties a null remainder to 0) -> run-identity thrown here, red
       expect(() => readControlGroup(runtime.store, runtime.epoch, "g")).not.toThrow();
       const lost = workRuns(runtime)[0]!.body;
+      // mutation K-B1 (chargeRunRemainder empties a null remainder to 0) -> remaining 0 here, red
       expect(lost.remaining.work.tokens).toBeNull();
+      // mutation K-C1 (the other dimensions charged too) -> the whole unused time, attempts and sessions booked here, red
       expect({ activeMs: lost.cumulative.work.activeMs, attempts: lost.cumulative.work.attempts, sessions: lost.cumulative.work.sessions })
         .toEqual({ activeMs: observed.activeMs, attempts: observed.attempts, sessions: observed.sessions });
-      // mutation K-C1 (the other dimensions charged too) -> ladder-skipped authored-budget-exhausted, no restart, red
       await waitFor(runtime, () => runtime.store.db.prepare("SELECT 1 FROM commands WHERE group_id='g' AND id=?").get(workerLostCommandId("a", first.runId)) !== undefined, 120_000, "the restart");
       expect(activity(runtime, first.runId, "ladder-skipped")).toEqual([]);
       // The charge took the whole unused ceiling (the group cap is hard), so the restarted task waits for tokens; a person's

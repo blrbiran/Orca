@@ -63,7 +63,8 @@ describe("an expectation-model run whose worker was lost settles and stays reada
       const run = t.body(runId);
       // B: no work grant, so no work token remainder -- the invariant every group read checks (remaining = max(grant -
       // cumulative, 0), null when the grant is null).
-      // mutation K-B1: chargeRunRemainder empties the remainder to 0 whatever it was -> remaining 0 and the read below refuses, red
+      // mutation K-B1: chargeRunRemainder empties the remainder to 0 whatever it was -> remaining 0 here, red (the read below
+      // takes that stored shape since K2, so it is measured here directly)
       expect(run.remaining.work.tokens).toBeNull();
       // mutation K-B2: hasValidUsageSettlement checks every remaining-grant charge against a grant -> run-usage-settlement refusal, red
       expect(() => groupShow(t)).not.toThrow();
