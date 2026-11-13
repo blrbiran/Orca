@@ -43,13 +43,14 @@ describe("task note on a group holding a requirement-review run stored without e
       expect(summary.status, summary.text).toBe(200);
       const revision = (JSON.parse(summary.text) as { groups: Array<{ groupId: string; commandRevision: number }> }).groups.find((g) => g.groupId === "g")?.commandRevision;
       expect(typeof revision).toBe("number");
-      // Step 2: the add-live-note POST on the task's live-notes route. mutation R (read schema's estimateId default removed) -> 423, red
+      // Step 2: the add-live-note POST on the task's live-notes route (on this build it does not read the group view).
       const note = await overSocket(socketPath, "POST", "/api/control/groups/g/tasks/review-fix-1/live-notes", { "x-orca-client": "mcp:test" },
         { commandId: "note-282", expectedRevision: revision, payload: { text: "the fixture lives in test/data" } });
       expect(note.status, note.text).toBe(200);
       expect(JSON.parse(note.text)).toMatchObject({ result: { kind: "live-note-queued", noteId: "note-282", taskId: "review-fix-1" } });
 
       // `group show` reads groups/g; `proposal show` reads groups/g and groups/g/funding-preview.
+      // mutation R (read schema's estimateId default removed) -> groups/g answers 423 run-invalid, red
       for (const path of ["/api/control/groups/g", "/api/control/groups/g/funding-preview"]) {
         const read = await overSocket(socketPath, "GET", path, { "x-orca-client": "mcp:test" });
         expect(read.status, `${path}: ${read.text}`).toBe(200);

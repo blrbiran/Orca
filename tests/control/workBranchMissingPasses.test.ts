@@ -124,7 +124,6 @@ describe("the requirement review over a done group whose work branch is gone (#2
       const { revParse, logged } = await rounds(10, async () => { await acceptGroups(passDeps(t), checks); await reviewRequirements(reviewDeps(t)); });
       // mutation R1: drop the workBranchKnownMissing skip in reviewRequirements -> a rev-parse every round, red
       expect(revParse).toHaveLength(1);
-      // mutation R2: revParse instead of workBranchTip in the review (a throw, logged) -> red
       expect(logged).toEqual(["orca-driver: group g: acceptance: not run, orca/g does not exist (checked again after a new landing)\n"]);
       expect(reviewOf(group(t))?.state).toBe("pending");
       expect(group(t).status).toBe("done");
@@ -135,6 +134,7 @@ describe("the requirement review over a done group whose work branch is gone (#2
     const w = await dueAgain(); const t = w.t; try {
       git(t.repo, "update-ref", "-d", "refs/heads/orca/g");
       const { revParse, logged } = await rounds(10, () => reviewRequirements(reviewDeps(t)));
+      // mutation R2: revParse instead of workBranchTip in the review (a throw every round, nothing recorded) -> red
       expect(revParse).toHaveLength(1);
       expect(logged).toEqual(["orca-driver: group g: requirement review: not run, orca/g does not exist (checked again after a new landing)\n"]);
       expect(group(t).acceptance).toMatchObject({ tip: null, result: "not-run", why: "work-branch-missing", landings: 2 });
