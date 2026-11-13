@@ -29,7 +29,7 @@ import { landingWatchOf } from "../control/landingWatchRecord.js";
 import { allowancesOf } from "../control/groupAllowances.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
-import { settleableSingleCallBlock } from "../control/singleCall.js";
+import { SINGLE_CALL_SETTLE_ACKNOWLEDGE, settleableSingleCallBlock, singleCallPurposeOf } from "../control/singleCall.js";
 import { approximateCommandId } from "../control/softLoopSince.js";
 import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
 import { workerLostFloor, settlementAcknowledgeFor, settlementAdmission, type SettleAcknowledge } from "../control/settleUnknownUsage.js";
@@ -459,7 +459,10 @@ function blockedRequirementRun(store: ControlStore, groupId: string, clarifying:
   const charge = settleableSingleCallBlock(run as never) === null ? {}
     : { blockedRunCharge: { tokens: run.remaining?.work?.tokens ?? 0, usageLowerBound: run.singleCallUsageLowerBound?.tokens ?? null } };
   // Plan follow-up B, T10: a call blocked on its agent names the verb that re-selects it (the brief, requirement show).
-  const next = run.state === "blocked" && blockedOnRequirementAgent(run.drive?.blockedAt, run.drive?.blockedReason) ? { next: requirementSetAgentCommand(groupId) } : {};
+  // Tester follow-up J (#308): a call blocked at B' (a launch no worker claimed, an inspection that stayed unknown) is
+  // resumed by recovery-retry, which the view names; other blocks keep what they said before.
+  const next = run.state === "blocked" && blockedOnRequirementAgent(run.drive?.blockedAt, run.drive?.blockedReason) ? { next: requirementSetAgentCommand(groupId) }
+    : run.state === "blocked" && run.drive?.blockedAt === "B'" ? { next: recoveryRetryCommand(runId) } : {};
   return { blockedRun: { runId, reason: run.drive?.blockedReason ?? null, ...next }, ...charge };
 }
 
@@ -1614,7 +1617,8 @@ export function readControlRecovery(store: ControlStore, epoch: string): Recover
   const terminalRuns = terminalRunRows(store);
   const deferredWakes = deferredWakeRows(store);
   const blockedRuns = blockedRunRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }) };
+  const blockedCalls = blockedCallRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -1655,6 +1659,28 @@ function blockedRunRows(store: ControlStore): Array<{ groupId: string; taskId: s
     if (!resumableBlockedRun(run)) continue;
     out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, blockedAt: String(run.drive!.blockedAt),
       reason: typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason.slice(0, 200) : null, next: recoveryRetryCommand(run.runId) });
+  }
+  return out;
+}
+
+/**
+ * Tester follow-up J (#308): every current single call (a requirement's clarify, split or review, an estimate, a flow call)
+ * the driver blocked where recovery-retry resumes it, with that command -- a split whose worker never started sat blocked
+ * while `recovery list` was empty. A call blocked on unknown usage is settled, not resumed, so its command names the
+ * acknowledgement; its charge is shown where the requirement is (requirement show).
+ */
+function blockedCallRows(store: ControlStore): Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }> {
+  const out: Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }> = [];
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
+    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; phase?: unknown; purpose?: unknown; state?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown } };
+    if ((run.phase !== "single-call" && run.phase !== "estimate") || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string") continue;
+    if (!resumableBlockedRun(run)) continue;
+    // A purpose this Orca does not know is the run view's to refuse; this list skips it rather than fail every row.
+    let purpose: string, settleable: boolean;
+    try { purpose = singleCallPurposeOf(run)!; settleable = settleableSingleCallBlock(run as never) !== null; } catch { continue; }
+    out.push({ groupId: run.groupId, runId: run.runId, purpose, blockedAt: String(run.drive!.blockedAt),
+      reason: typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason.slice(0, 200) : null,
+      next: settleable ? `${recoveryRetryCommand(run.runId)} --acknowledge ${SINGLE_CALL_SETTLE_ACKNOWLEDGE}` : recoveryRetryCommand(run.runId) });
   }
   return out;
 }

@@ -2750,6 +2750,7 @@ export const zhErrors: Record<string, string> = {
   "config-hash-mismatch": "ccloop 接受这个运行时用的配置与冻结的不一致，所以停在这里。",
   "stop-proof-generation": "ccloop 的停止证明属于这个运行的另一代。",
   "inspect-unknown": "多次检查后 ccloop 仍说不清这个运行是否还活着；ccloop 能回答后再重试运行。",
+  "launch-never-claimed": "ccloop 多次拉起这个运行的 worker，都没有真正开始，所以什么都没跑。确认 agent 能启动后再重试运行。",
   "accept-refused": "ccloop 拒绝接受这个运行：{{detail}}",
   "candidate-without-terminal": "ccloop 停止了这个运行，但没有最终报告，所以无法结算。",
   "terminal": "ccloop 结束了这个运行，但没有成功（结果 {{detail}}）。",

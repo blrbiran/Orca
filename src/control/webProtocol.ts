@@ -2355,6 +2355,8 @@ export const recoveryViewSchema = z
     deferredWakes: z.array(z.object({ groupId: idSchema, kind: nonemptyString, reason: z.enum(["dispatch-blocked", "group-blocker", "group-archived"]) }).strict()).optional(),
     // Tester follow-up I (seat L): a current work run blocked where recovery retry resumes it, with that command. Absent when none.
     blockedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
+    // Tester follow-up J (#308): the same for a single call (requirement clarify/split/review, estimate, flow call), which has no task.
+    blockedCalls: z.array(z.object({ groupId: idSchema, runId: idSchema, purpose: nonemptyString, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) =>

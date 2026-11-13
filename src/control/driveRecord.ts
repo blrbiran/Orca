@@ -151,6 +151,9 @@ export const driveRecordSchema = z.object({
   landedDirs: z.record(z.string().min(1), commitSchema).nullable().default(null),
   envelopeHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   inspectUnknown: safeInteger,
+  // Tester follow-up J (#308): accepts re-issued at B' for an execution ccloop reports never claimed by a worker
+  // (executionDriver.ts LAUNCH_RELAUNCH_LIMIT). Optional: absent on every run that never needed one; recovery-retry drops it.
+  relaunches: safeInteger.optional(),
   outcome: z.string().min(1).nullable(),
   attemptSha: commitSchema.nullable(),
   landedCommit: commitSchema.nullable(),
@@ -345,7 +348,7 @@ export function resumeBlockedDriverRun(store: ControlStore, runId: string): bool
   const step = run.drive.blockedAt;
   run.state = RESUME_STATE[step];
   run.drive = {
-    ...run.drive, blockedAt: null, blockedReason: null, inspectUnknown: 0,
+    ...run.drive, blockedAt: null, blockedReason: null, inspectUnknown: 0, relaunches: undefined,
     prepared: step === "A2" ? false : run.drive.prepared,
     reconcile: step === "R" && run.drive.reconcile !== null ? { ...run.drive.reconcile, spawning: false, pid: null, attemptSha: null } : run.drive.reconcile,
   };

@@ -19,7 +19,9 @@ export interface SingleCallWork { kind:"single-call";prompt:string;responseSchem
 /** Tester follow-up G spec §2.1: the live token ceiling ccloop stops the run at (ccloop live-ceiling spec, protocol 4 only). */
 export interface LiveCeilingWire { protocol:1;revision:number;tokens:number;cause:"group"|"pause-line"|"task-cap" }
 export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedResultRecovery?:{packagePath:string;packageHash:string;admissionHash:string;recoveryOf:RecoveryOf};tokenPolicy?:TokenPolicy;liveCeiling?:LiveCeilingWire;claim:Claim;contractHash:string;inputCheckpoint:InputCheckpointV1|null; work:LoopWork|SingleCallWork }
-export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown"}|{kind:"stopped";proof:StopProof};
+// Tester follow-up J (#308): ccloop 9c83b38 marks an unknown whose launcher gave up before any worker claimed it
+// (`launch:"never-claimed"`); a re-issued accept with the same envelope launches it afresh.
+export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown";launch?:"never-claimed"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
  terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null;failureCause?:RunFailureCause;lastFailure?:LastFailure;budgetSnapshot?:{attemptsRemaining:number;timeRemainingMs:number;tokenBudgetRemaining:number|null}}|null;

@@ -114,6 +114,13 @@ export class DriverCrash extends Error {
 
 /** spec §2.2 B': consecutive unknown inspections before the run is blocked. A controller choice (spec §9). */
 export const INSPECT_UNKNOWN_LIMIT = 10;
+/**
+ * Tester follow-up J (#308): accepts B' re-issues, with the stored envelope byte for byte, for an execution ccloop reports
+ * `launch:"never-claimed"` (its launcher gave up before any worker claimed it, so nothing ran and a re-issued accept
+ * launches it afresh under a new execution id). After that many the run is blocked `launch-never-claimed`, which
+ * `recovery retry --run` resumes with the count reset. A controller choice.
+ */
+export const LAUNCH_RELAUNCH_LIMIT = 2;
 
 export interface ExecutionDriverDeps {
   taskResults?:TaskResultCollector;
@@ -845,6 +852,15 @@ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Prom
     const current=readDriverRun(deps.store,runId);status=await portFor(deps,current).inspect(readStartEnvelope(deps.store,current));
   }
   if(status.kind==="absent"&&(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&savedDispatchSchema.parse(run.savedDispatch).state!=="never-submitted")status={kind:"unknown"};
+  // Tester follow-up J (#308): never claimed means never ran, so the same envelope is accepted again (bounded) instead of
+  // counted as an unknown outcome. A saved-result run is left to its own settlement above (it never calls accept again).
+  if (status.kind === "unknown" && status.launch === "never-claimed" && run.mode !== "verify-saved-result" && run.recoveryOf === undefined) {
+    const relaunches = run.drive.relaunches ?? 0;
+    if (relaunches >= LAUNCH_RELAUNCH_LIMIT) { blockRun(deps, runId, "B'", "launch-never-claimed"); return true; }
+    write(deps, () => { const current = readDriverRun(deps.store, runId); current.drive = { ...current.drive!, relaunches: relaunches + 1 }; saveDriverRun(deps.store, current); });
+    try { status = await portFor(deps, run).accept(readStartEnvelope(deps.store, run)); }
+    catch (error) { const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line); status = { kind: "unknown" }; }
+  }
   return persistStatus(deps, runId, status, "B'");
 }
 

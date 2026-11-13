@@ -2860,6 +2860,8 @@ export const enErrors: Record<string, string> = {
   "config-hash-mismatch": "The configuration ccloop accepted this run with differs from the frozen one, so the run stopped here.",
   "stop-proof-generation": "ccloop's stop proof belongs to a different attempt of this run.",
   "inspect-unknown": "After several checks ccloop still cannot tell whether this run is alive. Choose \"Retry run\" once ccloop can answer.",
+  // Tester follow-up J (#308): ccloop launched the run's worker and none ever claimed it, even after Orca asked again.
+  "launch-never-claimed": "ccloop started this run's worker several times and none of them began, so nothing ran. Check the agent can start, then choose \"Retry run\".",
   "accept-refused": "ccloop refused to accept this run: {{detail}}",
   "candidate-without-terminal": "ccloop stopped this run without a final report, so it cannot be settled.",
   "terminal": "ccloop finished this run without success (outcome {{detail}}).",

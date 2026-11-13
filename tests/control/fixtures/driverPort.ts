@@ -28,6 +28,9 @@ export type FakeBehaviour = "succeed" | "unknown" | "forget-first-accept" | "los
   | "stoppable" | "stoppable-silent" | "orphan-candidate" | "stoppable-usage-unknown"
   // Terminal-closure spec 2026-11-07: a failed terminal whose work usage was never observed, so closure must await the owner's settlement.
   | "failed-usage-unknown"
+  // Tester follow-up J (#308): ccloop's `launch:"never-claimed"` unknown -- every launch (`never-claimed`), or only the
+  // first, so a re-issued accept starts it (`never-claimed-once`).
+  | "never-claimed" | "never-claimed-once"
   // Tester follow-up I (seat K): a failed terminal whose work usage was observed, then a work observation with an unknown
   // total -- what ccloop's settle-lost-worker leaves for a worker killed mid-call (the plan's usage known, the killed call's not).
   | "failed-after-observed-usage-unknown"
@@ -83,6 +86,7 @@ export function fakeCcloopPort(input: {
   const handoffs = new Map<string, HandoffRequest>();
   const executions = new Map<string, string>();
   const forgotten = new Set<string>();
+  const unclaimed = new Set<string>();
   const evidence = new Map<string, Buffer>();
   const reports = new Map<string, ExecutionReport>();
   const put = (artifactId: string, bytes: Buffer): ArtifactRef => {
@@ -161,6 +165,7 @@ export function fakeCcloopPort(input: {
       const behaviour = input.behaviour(workItemId);
       if (behaviour === "refuse") throw new ControlError("control-peer-exit", "2:control-config-hash-mismatch");
       if (behaviour === "unknown") return { kind: "unknown" };
+      if (behaviour === "never-claimed" || (behaviour === "never-claimed-once" && !unclaimed.has(runId))) { unclaimed.add(runId); return { kind: "unknown", launch: "never-claimed" }; }
       if (behaviour === "forget-first-accept" && !forgotten.has(runId)) { forgotten.add(runId); return { kind: "unknown" }; }
       const executionId = executions.get(runId) ?? `execution-${runId}`;
       executions.set(runId, executionId);
@@ -173,6 +178,7 @@ export function fakeCcloopPort(input: {
       const behaviour = input.behaviour(workItemId);
       if (behaviour === "unknown") return { kind: "unknown" };
       const executionId = executions.get(runId);
+      if ((behaviour === "never-claimed" || behaviour === "never-claimed-once") && unclaimed.has(runId) && executionId === undefined) return { kind: "unknown", launch: "never-claimed" };
       if (executionId === undefined) return { kind: "absent" };
       if (behaviour === "lost-accept") return { kind: "stopped", proof: { executionId, generation, isolated: true, source: stopSource(runId, executionId, generation) } };
       return { kind: "accepted", executionId, configHash };

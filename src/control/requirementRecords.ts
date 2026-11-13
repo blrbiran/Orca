@@ -141,9 +141,24 @@ export function isClarifying(store: ControlStore, groupId: string): boolean {
   return row !== undefined && (JSON.parse(String(row.body)) as { status?: unknown }).status === "clarifying";
 }
 
+/**
+ * Tester follow-up J (#308): a clarifying group's refusal names the requirement call the driver blocked, so a split whose
+ * worker never started does not read as a group with no plan; undefined (the bare code, as before) when none is blocked.
+ */
+export function blockedRequirementCall(store: ControlStore, groupId: string): string | undefined {
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId)) {
+    let run: { phase?: unknown; state?: unknown; drive?: { blockedReason?: unknown } };
+    try { run = JSON.parse(String(row.body)) as typeof run; } catch { continue; }
+    if (run.phase !== "single-call" || run.state !== "blocked") continue;
+    const reason = typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason.slice(0, 200) : "blocked";
+    return `requirement call ${String(row.id)} blocked: ${reason}; see orca requirement show ${groupId} or orca recovery list`;
+  }
+  return undefined;
+}
+
 /** N1 spec §4.1 (DR6): every reader of a plan, proposal or work items refuses a clarifying group by name. */
 export function refuseClarifying(store: ControlStore, groupId: string): void {
-  if (isClarifying(store, groupId)) throw new ControlError("requirement-not-split");
+  if (isClarifying(store, groupId)) throw new ControlError("requirement-not-split", blockedRequirementCall(store, groupId));
 }
 
 export const newRound = (roundNo: number): RoundBody => ({

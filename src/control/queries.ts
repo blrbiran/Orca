@@ -5,7 +5,7 @@ import type { AgentSelection, FrozenSlot } from "./agentSelection.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readCanonicalRecord } from "./snapshot.js";
-import { refuseClarifying } from "./requirementRecords.js";
+import { blockedRequirementCall, refuseClarifying } from "./requirementRecords.js";
 import {
   amountProvenanceSchema,
   budgetEstimateRequestSchema,
@@ -119,7 +119,7 @@ function readGroupAuthority(store: ControlStore, groupId: string): z.infer<typeo
   if (!row) throw new ControlError("group-not-found");
   const body = parseJson(row.body);
   // N1 spec §4.1 (DR6): a clarifying group has no plan, proposal or work items; every reader of them refuses by name.
-  if ((body as { status?: unknown } | null)?.status === "clarifying") throw new ControlError("requirement-not-split");
+  if ((body as { status?: unknown } | null)?.status === "clarifying") throw new ControlError("requirement-not-split", blockedRequirementCall(store, groupId));
   const parsed = groupAuthoritySchema.safeParse(body);
   if (!parsed.success || parsed.data.groupId !== groupId || parsed.data.plan.planHash !== parsed.data.planHash
     || parsed.data.proposal.planHash !== parsed.data.planHash) return recoveryBlocked();

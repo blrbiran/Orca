@@ -52,6 +52,8 @@ const VIEW_REASONS = [
   "agent-unfrozen", "repository-path", "continuation-registration", "skills-unsupported-agent", "skills-inject-failed",
   "config-hash-mismatch", "stop-proof-generation", "inspect-unknown", "accept-refused", "candidate-without-terminal", "terminal",
   "out-of-bounds", "single-call-record-invalid", "single-call-prompt-mismatch", "settle-incomplete",
+  // Tester follow-up J (#308): stepBPrime's block after LAUNCH_RELAUNCH_LIMIT re-issued accepts no worker claimed.
+  "launch-never-claimed",
   // Dir-requirements spec §6.5, §9.3: a dir group with no work branch in its vault.
   "dir-base-missing",
   // Debug task plan Task 8: the reproduce-first check (debug-repro:<reason>).

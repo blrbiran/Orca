@@ -21,7 +21,8 @@ import { recordObservedVersions } from "../agents/versionRefresh.js";
 
 const MAX_OUTPUT=24*1024*1024;
 const executionStatusSchema=z.discriminatedUnion("kind",[
- z.object({kind:z.literal("absent")}).strict(),z.object({kind:z.literal("unknown")}).strict(),
+ // Tester follow-up J (#308): `launch` is optional and additive (ccloop 9c83b38 accept.ts); an older ccloop never sends it.
+ z.object({kind:z.literal("absent")}).strict(),z.object({kind:z.literal("unknown"),launch:z.literal("never-claimed").optional()}).strict(),
  z.object({kind:z.literal("accepted"),executionId:z.string().min(1),configHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
  z.object({kind:z.literal("stopped"),proof:z.object({executionId:z.string().min(1),generation:safeInteger.positive(),isolated:z.literal(true),source:artifactSchema}).strict()}).strict(),
 ]);

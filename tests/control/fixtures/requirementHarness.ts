@@ -57,12 +57,19 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
   let models: AgentModelsView | null = null;
   // Issue #236: a criterion can make accept refuse as ccloop does before it writes anything (exit 2).
   let acceptRefusal: ControlError | null = null;
+  // Tester follow-up J (#308): the next n accepts launch a worker that never claims (ccloop's `launch:"never-claimed"`).
+  let neverClaimLaunches = 0;
+  const unclaimed = new Set<string>();
   const port: ExecutionPort = {
     resolveAgent: async (partial) => (resolveOverride ?? resolveAgent)(partial),
     listModels: async () => { if (models === null) throw new Error("queuedPort: no catalog"); return structuredClone(models); },
     listAgents: async () => ({ installations: [{ id: "codex", kind: "codex", defaults: { model: "fixture-model", contextWindow: "agent-default" as const }, contextOptions: ["agent-default" as const], version: "0.0.0-fixture" }] }),
-    async accept(envelope) { calls.accept.push(structuredClone(envelope)); if (acceptRefusal !== null) throw acceptRefusal; return accepted(envelope); },
-    async inspect(envelope) { return accepted(envelope); },
+    async accept(envelope) {
+      calls.accept.push(structuredClone(envelope)); if (acceptRefusal !== null) throw acceptRefusal;
+      if (neverClaimLaunches > 0) { neverClaimLaunches -= 1; unclaimed.add(envelope.claim.runId); return { kind: "unknown", launch: "never-claimed" }; }
+      unclaimed.delete(envelope.claim.runId); return accepted(envelope);
+    },
+    async inspect(envelope) { return unclaimed.has(envelope.claim.runId) ? { kind: "unknown", launch: "never-claimed" } : accepted(envelope); },
     async requestHandoff(_envelope, request) { if (handoffFailure !== null) throw handoffFailure; requested = true; return { kind: "latched", requestId: request.requestId }; },
     async collect(envelope): Promise<ExecutionReport> {
       calls.collect += 1;
@@ -98,7 +105,8 @@ function queuedPort(answers: QueuedAnswer[], stoppable: boolean) {
   };
   return { port, calls, baseResolveAgent: resolveAgent, setResolveAgent: (fn: ((partial: PartialSelection) => Promise<AgentResolution>) | null) => { resolveOverride = fn; },
     failHandoff: (error: Error | null) => { handoffFailure = error; },
-    setModels: (view: AgentModelsView | null) => { models = view; }, refuseAccept: (error: ControlError | null) => { acceptRefusal = error; } };
+    setModels: (view: AgentModelsView | null) => { models = view; }, refuseAccept: (error: ControlError | null) => { acceptRefusal = error; },
+    neverClaim: (launches: number) => { neverClaimLaunches = launches; } };
 }
 
 /**
