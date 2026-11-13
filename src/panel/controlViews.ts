@@ -1374,6 +1374,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(run.drive?.postMergeCheck === undefined ? {} : { postMergeCheck: run.drive.postMergeCheck }),
       // Tester follow-up G spec §10.1: the goal judge of a no-change run; omitted for every other run.
       ...(run.drive?.noChangeJudge === undefined ? {} : { noChangeJudge: run.drive.noChangeJudge }),
+      // Tester #290 (follow-up J): the live ceiling and its stop, as stored; absent on a run without them.
+      ...(run.liveCeiling === undefined ? {} : { liveCeiling: run.liveCeiling }),
+      ...(run.liveCeilingStop === undefined ? {} : { liveCeilingStop: run.liveCeilingStop }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),

@@ -2070,6 +2070,11 @@ export const runViewSchema = z
       diff: z.object({ shortstat: z.string(), stat: z.array(z.string()) }).strict().nullable() }).strict().optional(),
     // Tester follow-up G spec §10.1: the goal judge of a command-verified no-change run; omitted for every other run.
     noChangeJudge: z.object({ runId: idSchema.nullable(), state: z.enum(["pending", "met", "not-met", "cannot-judge", "failed", "unfunded"]), finding: z.string().optional() }).strict().optional(),
+    // Tester #290 (follow-up J): the run's live token ceiling (liveCeiling.ts) and the stop ccloop reported at it, as the run
+    // body holds them; absent on a run without one (every run before follow-up G), so older views are unchanged.
+    liveCeiling: z.object({ revision: positiveSafeInteger, tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), deliveredRevision: safeInteger }).strict().optional(),
+    liveCeilingStop: z.object({ revision: positiveSafeInteger, tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger,
+      phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),
     // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check did (driveRecord.ts postMergeCheckRecordSchema);
     // omitted for a run that did not land through it and for a record written before the field.
     postMergeCheck: z.object({

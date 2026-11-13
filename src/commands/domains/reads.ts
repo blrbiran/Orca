@@ -326,6 +326,23 @@ function executionCompleteLines(groupId: string, run: CompletedRun | undefined):
  * Tester D19: an installation's model here is the default a run gets when nothing chose another, not what any run ran on
  * (`orca run show` names that); the line says so.
  */
+type LiveCeilingRun = { liveCeiling?: { tokens: number; cause: string; revision: number }; liveCeilingStop?: { tokens: number; cause: string; observedTokens: number; phase: string; at: string } };
+/**
+ * Tester #290 / #297 (follow-up J): `run show` names the run's live ceiling and the stop at it. A codex run is stopped only
+ * between its turns, so it can go past the ceiling before it stops (the dogfood run used 63M under a 10M pause line); the
+ * human ruled a note, never a block (「codex 提示就好」).
+ */
+export function liveCeilingLines(run: LiveCeilingRun | undefined, agentKind: string | undefined): string[] {
+  if (run?.liveCeiling === undefined) return [];
+  const count = (n: number): string => n.toLocaleString("en-US");
+  const stop = run.liveCeilingStop;
+  return [
+    `live ceiling: ${count(run.liveCeiling.tokens)} tokens (${run.liveCeiling.cause}, revision ${run.liveCeiling.revision})`,
+    ...(stop === undefined ? [] : [`stopped at the live ceiling: ${count(stop.observedTokens)} tokens used against ${count(stop.tokens)} (${stop.cause}, ${stop.phase}, ${stop.at})`]),
+    ...(agentKind === "codex" ? ["note: codex is stopped only between turns, so a codex run can go past its live ceiling before it stops"] : []),
+  ];
+}
+
 function agentList(body: unknown): string {
   const b = body as { installations?: Array<{ id: string; kind?: string; version?: string; defaults?: { model?: string } }>; rests?: Array<{ installation: string; until: number; source: string }> };
   const lines = (b.installations ?? []).map((i) => `${i.id}  ${i.kind ?? "?"}  ${i.version ?? "?"}  default model ${i.defaults?.model ?? "?"}`);
@@ -460,9 +477,16 @@ export const READ_ROWS: CommandDef[] = [
       const manifest = (field(evidence, "entries") as Array<{ evidenceId: string; kind: string; byteLength: number }> | undefined) ?? [];
       // Tester #285: the transcript's last write, when the listing gives one; a refused or older listing adds nothing.
       const lastTranscriptAt = field(await c.read(`runs/${ids(c, "run")}/transcripts`).catch(() => null), "lastTranscriptAt");
+      const run = v.runs.find((r) => r.runId === ids(c, "run"));
+      // Tester #297 (follow-up J; human: 「codex 提示就好」): the kind of a run's installation when it has a live ceiling, so the
+      // text can say a codex run is stopped only between turns. An agents read that fails adds nothing.
+      const installation = (run as { liveCeiling?: unknown; agent?: { installation: string } } | undefined)?.liveCeiling === undefined ? undefined : (run as { agent?: { installation: string } }).agent?.installation;
+      const agentKind = installation === undefined ? undefined
+        : ((field(await c.read("agents").catch(() => null), "installations") as Array<{ id: string; kind?: string }> | undefined) ?? []).find((entry) => entry.id === installation)?.kind;
       return {
-        schema: "orca-run-show-v1", groupId: v.summary.groupId, run: v.runs.find((r) => r.runId === ids(c, "run")),
+        schema: "orca-run-show-v1", groupId: v.summary.groupId, run,
         ...(typeof lastTranscriptAt === "number" ? { lastTranscriptAt } : {}),
+        ...(typeof agentKind === "string" ? { agentKind } : {}),
         activity: { entries: entries.slice(0, 10), more: entries.length > 10 },
         evidence: { count: manifest.length, entries: manifest.map(({ evidenceId, kind, byteLength }) => ({ evidenceId, kind, byteLength })) },
       };
@@ -476,6 +500,7 @@ export const READ_ROWS: CommandDef[] = [
         // Tester D19: the agent and model this run was frozen with, not the installation's default.
         ...(b.run?.agent === undefined ? [] : [`agent: ${b.run.agent.installation}, model ${b.run.agent.model ?? "(the agent's default)"}`]),
         ...runUsageLines(b.run as UsageRun | undefined, (body as { lastTranscriptAt?: number }).lastTranscriptAt),
+        ...liveCeilingLines(b.run as LiveCeilingRun | undefined, (body as { agentKind?: string }).agentKind),
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         // Tester #267: a work run blocked before ccloop stated an outcome is resumed where it stopped, not retried as a task.
         ...(b.run?.state === "blocked" && b.run.phase === "work" && b.run.outcome === null && b.run.runId !== undefined ? [`To resume it where it stopped: ${recoveryRetryCommand(b.run.runId)}`] : []),

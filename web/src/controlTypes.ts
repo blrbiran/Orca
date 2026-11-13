@@ -496,6 +496,9 @@ export type RunViewV1 = {
   usageObservation?: "realtime" | "phase-end" | "unavailable";
   usageAt?: number;
   usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  /** Tester #290 (follow-up J): the run's live token ceiling and the stop at it; absent on a run without them. */
+  liveCeiling?: { revision: number; tokens: number; cause: "group" | "pause-line" | "task-cap"; deliveredRevision: number };
+  liveCeilingStop?: { revision: number; tokens: number; cause: "group" | "pause-line" | "task-cap"; observedTokens: number; phase: "plan" | "execute" | "verify"; at: "mid-call" | "boundary" };
   /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
   createdOrdinal?: number;
   /** Debug task plan Task 13: a debug run's reproduce-first check, in progress or skipped with the agent's reason. */
