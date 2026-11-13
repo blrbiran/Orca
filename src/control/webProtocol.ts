@@ -2123,6 +2123,10 @@ export const runViewSchema = z
     usageObservation: z.enum(["realtime", "phase-end", "unavailable"]).optional(),
     usageAt: safeInteger.optional(),
     usageBreakdown: z.object({ input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger }).strict().optional(),
+    // Raw usage detail spec 2026-11-13 §2: the run's booked usage per model and phase (model null: unattributed); absent before any.
+    usageDetail: z.array(z.object({ model: nonemptyString.nullable(), phase: nonemptyString.nullable(), tokens: safeInteger,
+      input: safeInteger.nullable(), output: safeInteger.nullable(), cacheRead: safeInteger.nullable(), cacheWrite: safeInteger.nullable(),
+      reasoning: safeInteger.nullable(), cacheWrite5m: safeInteger.nullable(), cacheWrite1h: safeInteger.nullable(), requests: safeInteger.nullable(), maxRequestInput: safeInteger.nullable() }).strict()).optional(),
     // Spec 2026-10-15 §6.2 (R2): a single call's (estimate or requirement) output bound and, when the observed output (the sum
     // of its usage event's byModel[].output) went over it, by how much. Optional on the wire; read-time only.
     outputBound: positiveSafeInteger.optional(),
@@ -2905,9 +2909,15 @@ const capStatusSchema = z
     from: safeInteger.nullable(), to: safeInteger.nullable(),
   })
   .strict();
+// Raw usage detail spec 2026-11-13 §3, §5 "Readers" (additive): sub-parts and the largest request, null when unknown.
+const usageDetailFields = {
+  reasoning: safeInteger.nullable().optional(), cacheWrite5m: safeInteger.nullable().optional(), cacheWrite1h: safeInteger.nullable().optional(),
+  requests: safeInteger.nullable().optional(), maxRequestInput: safeInteger.nullable().optional(),
+};
 const usageModelEntrySchema = z
-  .object({ model: nonemptyString.nullable(), input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger, tokens: safeInteger })
+  .object({ model: nonemptyString.nullable(), input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger, tokens: safeInteger, ...usageDetailFields })
   .strict();
+export const usageModelPhaseEntrySchema = usageModelEntrySchema.extend({ phase: nonemptyString.nullable() }).strict();
 export const usageViewSchema = z
   .object({
     schema: z.literal("orca-usage-view-v1"),
@@ -2922,6 +2932,7 @@ export const usageViewSchema = z
       .object({
         tokens: safeInteger,
         byModel: z.array(usageModelEntrySchema),
+        byModelPhase: z.array(usageModelPhaseEntrySchema).optional(),
         groups: z.array(z.object({ key: nonemptyString.nullable(), tokens: safeInteger }).strict()),
       })
       .strict(),

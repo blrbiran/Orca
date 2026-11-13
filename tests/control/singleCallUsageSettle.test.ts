@@ -58,6 +58,8 @@ describe("settling a clarify call blocked on unknown usage (§9 R1-R4)", () => {
       // The charge moves the grant from `reserved` to `used` (code review S3: before the retry is claimed, nothing is held).
       expect(x.group()).toMatchObject({ used: { tokens: GRANT.tokens }, reserved: { tokens: 0 }, ledger: { usageUnknown: false } });
       expect(usageLedgerTokens(x, blocked.runId)).toBe(GRANT.tokens);
+      // Raw usage detail spec §8.3: the charge's row says it was the remaining grant.
+      expect(x.store.db.prepare("SELECT basis FROM usage_ledger WHERE run_id=?").all(blocked.runId)).toEqual([{ basis: "remaining-grant" }]);
       expect(x.round(1)).toMatchObject({ state: "drafting", retries: 1, calls: [{ runId: blocked.runId, outcome: "failed", reason: "omp-stalled", usage: GRANT }] });
       expect(x.store.db.prepare("SELECT kind FROM activity WHERE run_id=? AND kind='usage-settled'").all(blocked.runId)).toHaveLength(1);
       // The next claim is not parked on requirement-usage-unknown: the retry is sent and answered.

@@ -153,6 +153,8 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
   const { view, grouped, owner, project, onSend } = props;
   const { t } = useTranslation();
   const label = (key: string | null): string => key ?? t("usage.unattributed");
+  // Raw usage detail spec §5 "Readers": a sub-part the agent did not report (or not for every row summed) reads "—".
+  const detail = (n: number | null | undefined, tokens = true): JSX.Element | string => (n == null ? "—" : tokens ? <Tokens n={n} /> : n.toLocaleString(currentLanguage()));
   return (
     <>
       <dl className="flex gap-6">
@@ -173,20 +175,44 @@ function UsageBody(props: { view: UsageViewV1; grouped: boolean; owner: boolean;
       <table>
         <thead>
           <tr>
-            <th>{t("usage.th.model")}</th><th>{t("usage.th.input")}</th><th>{t("usage.th.output")}</th>
-            <th>{t("usage.th.cacheRead")}</th><th>{t("usage.th.cacheWrite")}</th><th>{t("usage.th.total")}</th>
+            <th>{t("usage.th.model")}</th><th>{t("usage.th.input")}</th><th>{t("usage.th.output")}</th><th>{t("usage.th.reasoning")}</th>
+            <th>{t("usage.th.cacheRead")}</th><th>{t("usage.th.cacheWrite")}</th><th>{t("usage.th.cacheWrite5m")}</th><th>{t("usage.th.cacheWrite1h")}</th>
+            <th>{t("usage.th.requests")}</th><th>{t("usage.th.maxRequestInput")}</th><th>{t("usage.th.total")}</th>
           </tr>
         </thead>
         <tbody>
           {view.range.byModel.map((entry) => (
-            <tr key={entry.model ?? "\u0000unattributed"}>
-              <td>{label(entry.model)}</td><td><Tokens n={entry.input} /></td><td><Tokens n={entry.output} /></td>
-              <td><Tokens n={entry.cacheRead} /></td><td><Tokens n={entry.cacheWrite} /></td><td><Tokens n={entry.tokens} /></td>
+            <tr key={entry.model ?? "\u0000unattributed"} data-testid="usage-model-row">
+              <td>{label(entry.model)}</td><td><Tokens n={entry.input} /></td><td><Tokens n={entry.output} /></td><td>{detail(entry.reasoning)}</td>
+              <td><Tokens n={entry.cacheRead} /></td><td><Tokens n={entry.cacheWrite} /></td><td>{detail(entry.cacheWrite5m)}</td><td>{detail(entry.cacheWrite1h)}</td>
+              <td>{detail(entry.requests, false)}</td><td>{detail(entry.maxRequestInput)}</td><td><Tokens n={entry.tokens} /></td>
             </tr>
           ))}
         </tbody>
       </table>
       </div>
+      {view.range.byModelPhase !== undefined && view.range.byModelPhase.length > 0 && (<>
+        <h3>{t("usage.byModelPhase")}</h3>
+        <div className={tableScroll}>
+        <table data-testid="usage-model-phase">
+          <thead>
+            <tr>
+              <th>{t("usage.th.model")}</th><th>{t("usage.th.phase")}</th><th>{t("usage.th.input")}</th><th>{t("usage.th.output")}</th>
+              <th>{t("usage.th.cacheRead")}</th><th>{t("usage.th.cacheWrite")}</th><th>{t("usage.th.maxRequestInput")}</th><th>{t("usage.th.total")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.range.byModelPhase.map((entry) => (
+              <tr key={JSON.stringify([entry.model, entry.phase])}>
+                <td>{label(entry.model)}</td><td>{entry.phase ?? t("usage.noPhase")}</td><td><Tokens n={entry.input} /></td><td><Tokens n={entry.output} /></td>
+                <td><Tokens n={entry.cacheRead} /></td><td><Tokens n={entry.cacheWrite} /></td><td>{detail(entry.maxRequestInput)}</td><td><Tokens n={entry.tokens} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      </>)}
+      <p className="text-xs text-muted">{t("usage.detailNote")}</p>
       {grouped && (
         <div className={tableScrollNarrow}><table data-testid="usage-groups">
           <thead><tr><th>{t("usage.th.group")}</th><th>{t("usage.th.total")}</th></tr></thead>

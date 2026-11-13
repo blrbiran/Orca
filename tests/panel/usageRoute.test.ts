@@ -56,10 +56,12 @@ describe("GET /api/control/usage (spec §5.3)", () => {
     for (const view of [JSON.parse(socket.text), await member.json()]) {
       expect(view.schema).toBe("orca-usage-view-v1");
       expect(view.range.tokens).toBe(100 + 50 + 30 + 7);
+      // Ruling: 「这次批准改写所有必要的判据」 (raw usage detail spec §5 "Readers": each entry gains its sub-parts, null for rows without them).
+      const nil = { reasoning: null, cacheWrite5m: null, cacheWrite1h: null, requests: null, maxRequestInput: null };
       expect(view.range.byModel).toEqual([
-        { model: "m-a", input: 150, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 150 },
-        { model: "m-b", input: 30, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 30 },
-        { model: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 7 },
+        { model: "m-a", input: 150, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 150, ...nil },
+        { model: "m-b", input: 30, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 30, ...nil },
+        { model: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 7, ...nil },
       ]);
       expect(view.range.groups).toEqual([{ key: "m-a", tokens: 150 }, { key: "m-b", tokens: 30 }, { key: null, tokens: 7 }]);
       expect(view.counts).toEqual({ unattributedRows: 1, breakdownMismatchRows: 1, unknownUsageRuns: 0 });

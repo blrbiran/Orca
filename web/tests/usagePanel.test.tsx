@@ -71,13 +71,32 @@ describe("UsagePanel (spec §5.3, §6, §7)", () => {
     expect(screen.getByTestId("usage-week").textContent).toBe("4.3K");
     expect(screen.getByTestId("usage-month").textContent).toBe("8.6K");
     const rows = screen.getAllByRole("row").map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent));
-    expect(rows).toContainEqual(["claude-haiku-4-5", "11", "12", "13", "14", "50"]);
-    expect(rows).toContainEqual(["claude-opus-5-5", "101", "102", "103", "104", "410"]);
-    expect(rows).toContainEqual(["unattributed", "0", "0", "0", "0", "7.3K"]);
+    // Ruling: 「这次批准改写所有必要的判据」 (raw usage detail spec §5 "Readers": reasoning after output; 5m, 1h, requests and the
+    // largest request after cache write; "—" where the view has no value).
+    expect(rows).toContainEqual(["claude-haiku-4-5", "11", "12", "—", "13", "14", "—", "—", "—", "—", "50"]);
+    expect(rows).toContainEqual(["claude-opus-5-5", "101", "102", "—", "103", "104", "—", "—", "—", "—", "410"]);
+    expect(rows).toContainEqual(["unattributed", "0", "0", "—", "0", "0", "—", "—", "—", "—", "7.3K"]);
     expect(screen.getByTestId("usage-unattributed").textContent).toMatch(/unattributed[^0-9]*1$/i);
     expect(screen.getByTestId("usage-mismatch").textContent).toMatch(/2$/);
     expect(screen.getByTestId("usage-unknown").textContent).toMatch(/0$/);
     expect(rows).toContainEqual(["all projects", "weekly", "1K", "400", "100", "500"]);
+  });
+
+  // Raw usage detail spec 2026-11-13 §5 "Readers": the sub-parts, the request count and the largest request per model, "—"
+  // for null; and the split per model and phase, a phase-less row named as such. Distinct numbers, so no cell passes on another's.
+  it("shows each model's sub-parts and its split per phase, with — for what was not reported", async () => {
+    view = { ...VIEW, range: { ...VIEW.range,
+      byModel: [{ model: "m", input: 21, output: 22, cacheRead: 23, cacheWrite: 24, tokens: 90, reasoning: 5, cacheWrite5m: 6, cacheWrite1h: null, requests: 1234, maxRequestInput: 17 }],
+      byModelPhase: [
+        { model: "m", phase: "execute", input: 31, output: 32, cacheRead: 33, cacheWrite: 34, tokens: 130, reasoning: null, cacheWrite5m: null, cacheWrite1h: null, requests: null, maxRequestInput: 37 },
+        { model: null, phase: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 41, reasoning: null, cacheWrite5m: null, cacheWrite1h: null, requests: null, maxRequestInput: null },
+      ] } };
+    renderAs(member);
+    await screen.findByTestId("usage-total");
+    const cells = (rows: HTMLElement[]) => rows.map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent));
+    expect(cells(screen.getAllByTestId("usage-model-row"))).toEqual([["m", "21", "22", "5", "23", "24", "6", "—", "1,234", "17", "90"]]);
+    const phases = within(screen.getByTestId("usage-model-phase")).getAllByRole("row").slice(1);
+    expect(cells(phases)).toEqual([["m", "execute", "31", "32", "33", "34", "37", "130"], ["unattributed", "(no phase)", "0", "0", "0", "0", "—", "41"]]);
   });
 
   // Spec §14 / final review Important 2: the total and the all-time caps count pre-ledger tokens that no range holds, so

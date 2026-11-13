@@ -365,6 +365,8 @@ describe("an integration conflict, materialised and approved (integration spec ย
       expect(w.record()).toMatchObject({ state: "conflict", reason: "integration-resolution-terminal:failed", resolution: null, conflict: { attempt: 2 } });
       expect(w.store.db.prepare("SELECT run_id,source,model,tokens,quality FROM usage_ledger WHERE group_id='g'").all())
         .toEqual([{ run_id: null, source: "run-work", model: null, tokens: 1_000, quality: "unattributed" }]);
+      // Raw usage detail spec ยง8.3: the resolution's row says how it was booked.
+      expect(w.store.db.prepare("SELECT basis FROM usage_ledger WHERE group_id='g'").all()).toEqual([{ basis: "integration" }]);
       expect(Number((groupBody(w.store).used as { tokens: number }).tokens)).toBe(usedBefore + 1_000);
       expect(w.store.db.prepare("SELECT kind,delivered FROM outbox WHERE id='integration-usage:integrate-g-1'").get()).toEqual({ kind: "integration-usage", delivered: 1 });
     } finally { await w.dispose(); }

@@ -2109,7 +2109,11 @@ export const en = {
     th: {
       model: "model", input: "input tokens", output: "output tokens", cacheRead: "cache read", cacheWrite: "cache write", total: "total", group: "period",
       scope: "scope", capPeriod: "period", cap: "cap", used: "used", committed: "committed", headroom: "headroom", change: "change",
+      reasoning: "of output: reasoning", cacheWrite5m: "cache write 5m", cacheWrite1h: "cache write 1h", requests: "requests", maxRequestInput: "largest request input", phase: "phase",
     },
+    byModelPhase: "Tokens per model and phase",
+    detailNote: "— : not reported by the agent, or not reported for every row in the sum.",
+    noPhase: "(no phase)",
     counts: {
       unattributed: "Unattributed rows (no model reported): {{n}}",
       mismatch: "Rows whose model breakdown did not add up (not counted toward totals or caps): {{n}}",

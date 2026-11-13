@@ -111,3 +111,33 @@ them).
    phase that produced this event (not cumulative, not delta'd); `requests` stays cumulative and is delta'd. A later
    long-context price step then reads, per row, whether any request in that phase crossed a provider's threshold.
    §5's "Cumulative vs delta" paragraph is superseded on this point.
+
+## 9. As built (Orca consumer half) — 2026-11-13, implementer seat `j-usage` of session `c8b75eac`, branch `j/usage` off `d382ebdf`
+
+- **Schema 23 → 24** (`src/control/migrations.ts` `schema23To24` / `migrate23To24`): `usage_ledger` gains nullable `reasoning`,
+  `cache_write_5m`, `cache_write_1h`, `requests`, `max_request_input` (each `CHECK(… IS NULL OR … >= 0)`), `phase` (CHECK: the
+  nine §3 values), `task_id`, `agent_kind`, `installation_id`, `basis` (CHECK: the seven §8.3 values). One `ALTER TABLE … ADD
+  COLUMN` per missing column (idempotent; no table rebuild; `quality` and its CHECK unchanged). The store's generic backup
+  (`control.sqlite.pre-v23-<now>`, `VACUUM INTO`, mode 0600) precedes the step. Old rows: every new column NULL. The one
+  exception: a store upgraded from before schema 8 gets its pre-ledger rows booked by that same upgrade, and those rows say
+  `basis='pre-ledger'`; pre-ledger rows booked by an earlier upgrade stay NULL (§8.3 "every old row").
+- **Booking** (`src/control/usageLedger.ts`): sub-parts and `requests` are delta'd against the baseline; a sub-part absent in
+  the event, or in **any** earlier applied event of the run and bucket for that model, is NULL (§8.4); a model new in the event
+  starts from 0. `maxRequestInput` is the event's own value (§8.5). The §5 bounds are checked on the event's cumulative **and**
+  on the delta; a violating field (the 5m/1h pair together) is NULL, the row stays `reported`, the four parts are untouched.
+  `breakdown-mismatch` rows carry no detail. `phase` (`ledgerPhase`): handoff bucket → `handoff`; estimate run → `estimate`;
+  single call `clarify`/`split` → itself, `requirement-review`/`flow-review` → `review`, other purposes (flow-ask, flow-draft,
+  no-change-judge, quota-probe, rerun-proposal) → NULL; a task work event → ccloop's event `phase` or NULL. `task_id` = the run's
+  `taskId`; `installation_id` = the run's frozen `agent.agent`; **`agent_kind` is always NULL**: the frozen selection names the
+  installation, not its CLI kind, and the kind is only known through ccloop's asynchronous `listAgents` (see the report's open
+  question). `basis`: `remaining-grant` (settle-unknown-usage, single-call settlement), `known-zero` (passed, but a known-zero
+  settlement charges 0 and so books no row), `observed-floor` (Orca's approximate single-call floor and an explicit
+  `charge-observed-floor`), `soft-loop-floor` (softLoopSettlement), `reconcile`, `integration`, `pre-ledger`; measured rows NULL.
+- **Readers**: `GET /api/control/usage` (`orca usage show`, JSON) — `range.byModel[]` gains the five detail fields (sum of rows;
+  NULL as soon as one summed row lacks it; `maxRequestInput` the max, NULL likewise) and `range.byModelPhase[]` (same per model
+  and phase; the unattributed bucket per phase with model NULL). Run view `usageDetail[]` (`runUsageDetail`, per model and
+  phase from the run's rows) → `orca run show` lines; `orca group show` sums its runs' lines (rows booked to no run, i.e.
+  integration, are not in any run: `orca usage show` has them). Web Usage panel: the model table gains the five columns,
+  a "per model and phase" table follows, "—" for NULL, both inside the existing horizontal-scroll wrapper.
+- **Guard**: every budget/cap/pause-line comparison still reads `tokens` / `group.used`; criterion in
+  `tests/control/rawUsageDetail.test.ts` ("guard: …").

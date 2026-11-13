@@ -1933,7 +1933,11 @@ export const zh: Translation<typeof en> = {
     th: {
       model: "模型", input: "输入", output: "输出", cacheRead: "缓存读", cacheWrite: "缓存写", total: "合计", group: "时段",
       scope: "范围", capPeriod: "周期", cap: "上限", used: "已用", committed: "已承诺", headroom: "余量", change: "修改",
+      reasoning: "输出中的推理", cacheWrite5m: "缓存写 5 分钟", cacheWrite1h: "缓存写 1 小时", requests: "请求数", maxRequestInput: "最大单次请求输入", phase: "阶段",
     },
+    byModelPhase: "各模型各阶段的 token",
+    detailNote: "— ：agent 没有报告，或合计里有记录没有报告。",
+    noPhase: "（无阶段）",
     counts: {
       unattributed: "未归属的记录（没有报告模型）：{{n}}",
       mismatch: "模型拆分对不上总数的记录（不计入总数和上限）：{{n}}",

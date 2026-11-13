@@ -30,6 +30,8 @@ describe("unknown usage in a group with no token limit", () => {
         usageApproximate: { floorTokens: 1_234, reason: "requirement-usage-unknown:omp-stalled" } });
       expect(first.drive).toMatchObject({ blockedAt: null, blockedReason: null });
       expect(ledgerTokens(x, first.runId)).toBe(1_234);
+      // Raw usage detail spec §8.3: the floor's row says it is an observed floor, on the clarify call it was spent in.
+      expect(x.store.db.prepare("SELECT basis,phase,quality FROM usage_ledger WHERE run_id=?").all(first.runId)).toEqual([{ basis: "observed-floor", phase: "clarify", quality: "unattributed" }]);
       expect(x.round(1).calls[0]).toMatchObject({ runId: first.runId, outcome: "failed", reason: "omp-stalled" });
       expect(x.fake.calls.accept).toHaveLength(2);
       expect(x.group()).toMatchObject({ used: { tokens: 1_234 + 777 }, reserved: { tokens: 0 }, ledger: { usageUnknown: false } });

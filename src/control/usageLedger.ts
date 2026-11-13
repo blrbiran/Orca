@@ -44,10 +44,81 @@ function baseline(store: ControlStore, runId: string, bucket: "work" | "handoff"
 }
 
 type Quality = "reported" | "unattributed" | "breakdown-mismatch";
-function insertRow(store: ControlStore, row: { appliedAt: number; groupId: string; repoId: string | null; runId: string | null; source: ReturnType<typeof usageSource>; model: string | null; entry: Omit<ModelUsage, "model"> | null; tokens: number; quality: Quality }): void {
-  const e = row.entry;
-  store.db.prepare("INSERT INTO usage_ledger(applied_at,group_id,repo_id,run_id,source,model,input,output,cache_read,cache_write,tokens,quality) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(row.appliedAt, row.groupId, row.repoId, row.runId, row.source, row.model, e?.input ?? null, e?.output ?? null, e?.cacheRead ?? null, e?.cacheWrite ?? null, row.tokens, row.quality);
+/** Raw usage detail spec §8.3: how a non-measured row was booked; measured rows carry none. */
+export type UsageBasis = "remaining-grant" | "observed-floor" | "known-zero" | "soft-loop-floor" | "reconcile" | "integration" | "pre-ledger";
+/** Spec §3: a reported row's sub-parts (never addends) and the event's per-phase largest request; each null when unknown. */
+export interface UsageDetail { reasoning: number | null; cacheWrite5m: number | null; cacheWrite1h: number | null; requests: number | null; maxRequestInput: number | null }
+/** Spec §3: where and by whom a row was spent, from Orca's own records. */
+export interface UsageAnnotation { phase: string | null; taskId: string | null; agentKind: string | null; installationId: string | null }
+type RunFacts = { runId: string; groupId: string; phase?: string; purpose?: string; taskId?: string | null; agent?: { agent?: unknown } };
+const noAnnotation: UsageAnnotation = { phase: null, taskId: null, agentKind: null, installationId: null };
+
+/**
+ * Spec §3 `phase` and §8.1: a task work event's loop phase as ccloop reports it; a handoff bucket's `handoff`; a single
+ * call's purpose (an estimate, clarify, split, or a review); null for anything else (never guessed).
+ */
+export function ledgerPhase(run: { phase?: string; purpose?: string }, bucket: "work" | "handoff", eventPhase: string | undefined): string | null {
+  if (bucket === "handoff") return "handoff";
+  if (run.phase === "estimate") return "estimate";
+  if (run.phase === "single-call") {
+    if (run.purpose === "clarify" || run.purpose === "split") return run.purpose;
+    return run.purpose === "requirement-review" || run.purpose === "flow-review" ? "review" : null;
+  }
+  return eventPhase ?? null;
+}
+
+/**
+ * Spec §3 annotations from the run's own record: its task and the installation of its frozen selection (`agent.agent`).
+ * The frozen selection names no CLI kind, so `agentKind` stays null (spec §3: 有就记录，没有就留空).
+ */
+function annotationOf(run: RunFacts, bucket: "work" | "handoff", eventPhase?: string): UsageAnnotation {
+  const installation = run.agent?.agent;
+  return { phase: ledgerPhase(run, bucket, eventPhase), taskId: typeof run.taskId === "string" ? run.taskId : null, agentKind: null,
+    installationId: typeof installation === "string" ? installation : null };
+}
+
+function insertRow(store: ControlStore, row: { appliedAt: number; groupId: string; repoId: string | null; runId: string | null; source: ReturnType<typeof usageSource>; model: string | null; entry: Omit<ModelUsage, "model"> | null; tokens: number; quality: Quality;
+  detail?: UsageDetail | null; annotation: UsageAnnotation; basis: UsageBasis | null }): void {
+  const e = row.entry, d = row.detail ?? null, a = row.annotation;
+  store.db.prepare("INSERT INTO usage_ledger(applied_at,group_id,repo_id,run_id,source,model,input,output,cache_read,cache_write,tokens,quality,reasoning,cache_write_5m,cache_write_1h,requests,max_request_input,phase,task_id,agent_kind,installation_id,basis) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(row.appliedAt, row.groupId, row.repoId, row.runId, row.source, row.model, e?.input ?? null, e?.output ?? null, e?.cacheRead ?? null, e?.cacheWrite ?? null, row.tokens, row.quality,
+      d?.reasoning ?? null, d?.cacheWrite5m ?? null, d?.cacheWrite1h ?? null, d?.requests ?? null, d?.maxRequestInput ?? null, a.phase, a.taskId, a.agentKind, a.installationId, row.basis);
+}
+
+type SubPart = "reasoning" | "cacheWrite5m" | "cacheWrite1h" | "requests";
+const subParts: readonly SubPart[] = ["reasoning", "cacheWrite5m", "cacheWrite1h", "requests"];
+
+/**
+ * Spec §8.4: per model, the sub-parts some earlier applied event of this run and bucket left absent -- absent once, absent
+ * for the rest of the run, so a later value never yields a partial sum that looks measured.
+ */
+function absentSubParts(store: ControlStore, runId: string, bucket: "work" | "handoff", beforeSeq: number): Map<string, Set<SubPart>> {
+  const absent = new Map<string, Set<SubPart>>();
+  for (const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<?").all(runId, beforeSeq)) {
+    const prior = JSON.parse(String(row.body)) as UsageEvent;
+    if (prior.bucket !== bucket || prior.cumulative === null || prior.byModel == null) continue;
+    for (const entry of prior.byModel) for (const part of subParts) if (entry[part] === undefined) absent.set(entry.model, (absent.get(entry.model) ?? new Set()).add(part));
+  }
+  return absent;
+}
+
+/**
+ * Spec §5 / §8.4 / §8.5: one model's detail for a reported delta. A sub-part absent now or before is null; its delta is the
+ * cumulative's difference; a value over its bound (reasoning > output, 5m + 1h > cacheWrite, maxRequestInput > input +
+ * cacheRead + cacheWrite), in the event or in the delta, is null -- the four parts are never touched. `maxRequestInput`
+ * is the event's own per-phase value, never a difference.
+ */
+function detailOf(now: ModelUsage, before: ModelUsage | undefined, absent: ReadonlySet<SubPart> | undefined, delta: Omit<ModelUsage, "model">): UsageDetail {
+  const part = (key: SubPart): number | null => {
+    if (now[key] === undefined || absent?.has(key)) return null;
+    const value = now[key]! - (before === undefined ? 0 : before[key] ?? Number.NaN);
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  };
+  let reasoning = part("reasoning"), cacheWrite5m = part("cacheWrite5m"), cacheWrite1h = part("cacheWrite1h");
+  if ((now.reasoning ?? 0) > now.output || (reasoning ?? 0) > delta.output) reasoning = null;
+  if ((now.cacheWrite5m ?? 0) + (now.cacheWrite1h ?? 0) > now.cacheWrite || (cacheWrite5m ?? 0) + (cacheWrite1h ?? 0) > delta.cacheWrite) { cacheWrite5m = null; cacheWrite1h = null; }
+  const maxRequestInput = now.maxRequestInput !== undefined && now.maxRequestInput <= now.input + now.cacheRead + now.cacheWrite ? now.maxRequestInput : null;
+  return { reasoning, cacheWrite5m, cacheWrite1h, requests: part("requests"), maxRequestInput };
 }
 
 /**
@@ -57,18 +128,19 @@ function insertRow(store: ControlStore, row: { appliedAt: number; groupId: strin
  * Integration spec §7: an integration conflict's resolution belongs to no run, so its row is booked with `runId` null
  * (the column is nullable).
  */
-export function bookReconcileUsage(store: ControlStore, input: { runId: string | null; groupId: string; groupBody: Record<string, unknown>; tokens: number; appliedAt: number }): void {
+export function bookReconcileUsage(store: ControlStore, input: { runId: string | null; groupId: string; groupBody: Record<string, unknown>; tokens: number; appliedAt: number; basis: "reconcile" | "integration" }): void {
   if (input.tokens === 0) return;
-  insertRow(store, { appliedAt: input.appliedAt, groupId: input.groupId, repoId: groupRepoIdOf(input.groupBody), runId: input.runId, source: "run-work", model: null, entry: null, tokens: input.tokens, quality: "unattributed" });
+  insertRow(store, { appliedAt: input.appliedAt, groupId: input.groupId, repoId: groupRepoIdOf(input.groupBody), runId: input.runId, source: "run-work", model: null, entry: null, tokens: input.tokens, quality: "unattributed",
+    annotation: noAnnotation, basis: input.basis });
 }
 
 /** Accounts spec §5.1: called inside recordUsage's transaction, once per applied event whose cumulative is known. */
-export function bookUsageDelta(store: ControlStore, input: { run: { runId: string; groupId: string; phase?: string; purpose?: string }; groupBody: Record<string, unknown>; event: UsageEvent; deltaTokens: number; appliedAt: number }): void {
+export function bookUsageDelta(store: ControlStore, input: { run: RunFacts; groupBody: Record<string, unknown>; event: UsageEvent; deltaTokens: number; appliedAt: number }): void {
   const { run, event, deltaTokens, appliedAt } = input;
   if (deltaTokens === 0 || event.cumulative === null) return; // D16
-  const source = usageSource(run, event.bucket), repoId = groupRepoIdOf(input.groupBody);
-  const insert = (model: string | null, entry: Omit<ModelUsage, "model"> | null, tokens: number, quality: Quality) =>
-    insertRow(store, { appliedAt, groupId: run.groupId, repoId, runId: run.runId, source, model, entry, tokens, quality });
+  const source = usageSource(run, event.bucket), repoId = groupRepoIdOf(input.groupBody), annotation = annotationOf(run, event.bucket, event.phase);
+  const insert = (model: string | null, entry: Omit<ModelUsage, "model"> | null, tokens: number, quality: Quality, detail: UsageDetail | null = null) =>
+    insertRow(store, { appliedAt, groupId: run.groupId, repoId, runId: run.runId, source, model, entry, tokens, quality, detail, annotation, basis: null });
   const byModel = event.byModel ?? null;
   const base = byModel === null ? null : baseline(store, run.runId, event.bucket, event.eventSeq);
   if (byModel === null || base === null) { insert(null, null, deltaTokens, "unattributed"); return; }
@@ -78,13 +150,18 @@ export function bookUsageDelta(store: ControlStore, input: { run: { runId: strin
   });
   const nonNegative = (d: ModelUsage) => d.input >= 0 && d.output >= 0 && d.cacheRead >= 0 && d.cacheWrite >= 0;
   const ok = reconciles(byModel, event.cumulative.tokens) && deltas.every(nonNegative) && [...base.keys()].every((model) => byModel.some((e) => e.model === model));
-  if (ok) { for (const d of deltas) if (entryTotal(d) > 0) insert(d.model, d, entryTotal(d), "reported"); return; }
+  if (ok) {
+    const absent = absentSubParts(store, run.runId, event.bucket, event.eventSeq);
+    deltas.forEach((d, index) => { if (entryTotal(d) > 0) insert(d.model, d, entryTotal(d), "reported", detailOf(byModel[index]!, base.get(d.model), absent.get(d.model), d)); });
+    return;
+  }
   insert(null, null, deltaTokens, "unattributed"); // D18: the authoritative row
   for (const d of deltas) if (nonNegative(d) && entryTotal(d) > 0) insert(d.model, d, entryTotal(d), "breakdown-mismatch");
 }
 
 /** D9: artificial settlement is unattributed usage at the owner's accounting time, never a provider event. */
-export function bookSettledUsage(store: ControlStore, input: { run: { runId: string; groupId: string; phase?: string; purpose?: string }; groupBody: Record<string, unknown>; bucket: "work" | "handoff"; tokens: number; appliedAt: number }): void {
+export function bookSettledUsage(store: ControlStore, input: { run: RunFacts; groupBody: Record<string, unknown>; bucket: "work" | "handoff"; tokens: number; appliedAt: number; basis: UsageBasis }): void {
   if (input.tokens === 0) return;
-  insertRow(store, { appliedAt: input.appliedAt, groupId: input.run.groupId, repoId: groupRepoIdOf(input.groupBody), runId: input.run.runId, source: usageSource(input.run, input.bucket), model: null, entry: null, tokens: input.tokens, quality: "unattributed" });
+  insertRow(store, { appliedAt: input.appliedAt, groupId: input.run.groupId, repoId: groupRepoIdOf(input.groupBody), runId: input.run.runId, source: usageSource(input.run, input.bucket), model: null, entry: null, tokens: input.tokens, quality: "unattributed",
+    annotation: annotationOf(input.run, input.bucket), basis: input.basis });
 }

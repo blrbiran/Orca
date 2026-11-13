@@ -77,6 +77,7 @@ import { liveCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.j
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
 import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
+import { runUsageDetail } from "../control/usageQuery.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
 import {
   agentSelectionPreviewSchema,
@@ -1392,6 +1393,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       usageObservation: run.agentCapabilities.usageObservation,
       ...((at) => at === null ? {} : { usageAt: at })(usageBookedAt(store, runId)),
       ...((split) => split === null ? {} : { usageBreakdown: split })(usageBreakdownOf(store, runId, bucket)),
+      ...((detail) => detail.length === 0 ? {} : { usageDetail: detail })(runUsageDetail(store, runId)),
       createdOrdinal: createdOrdinal.get(runId)!,
       ...outputBoundView(store, groupId, run),
       // Debug task plan Task 13: what the panel shows of the reproduce-first check; the restore facts stay in the body.

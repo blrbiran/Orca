@@ -7,6 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import type { CommandDef, FlagDef, PositionalDef, VerbMapping, WriteContext } from "../types.js";
 import { text } from "./format.js";
 import { phaseEndBudgetLines, phaseEndOfRuns, type UsageRun } from "./usageLines.js";
+import { groupUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
 import { adviceOf, usedRatio, type SuggestionView } from "../../control/budgetSuggestions.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../control/estimateInstructionAge.js";
 
@@ -394,6 +395,7 @@ export function formatWithUnestimated(body: unknown): string {
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     // Tester #285: the group's used figure lags while a run whose agent reports at phase end is under way.
     ...((note) => phaseEndBudgetLines(note.runIds, note.asOf))(phaseEndOfRuns(runs as UsageRun[])),
+    ...groupUsageDetailLines(runs as Array<{ usageDetail?: UsageDetailLine[] }>),
     ...(typeof groupId === "string" && b !== null ? budgetStateLines(groupId, b as Parameters<typeof budgetStateLines>[1]) : []),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),

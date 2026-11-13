@@ -86,7 +86,7 @@ export function settleSingleCallUsageInTransaction(
     // As the soft path books it (bookCallFloor): only what the floor adds to the call's booked usage, marked approximate.
     const tokens = bookCallFloor(store, run, group, { floorTokens: run.singleCallUsageLowerBound!.tokens, reason: run.drive!.blockedReason!, at: input.at, releaseReserved: !block.closed });
     charged = { ...zero(), tokens };
-  } else chargeRunRemainder(store, run, group, { work: charged, handoff: amountSchema.parse(run.remaining.handoff) }, { unmetered: false, releaseReserved: !block.closed, at: input.at });
+  } else chargeRunRemainder(store, run, group, { work: charged, handoff: amountSchema.parse(run.remaining.handoff) }, { unmetered: false, releaseReserved: !block.closed, at: input.at, basis: "remaining-grant" });
   const disposition = block.closed ? "stopped" : moved ? "interrupted" : "completed";
   const marker = singleCallSettlementSchema.parse({
     method: observed ? "observed-floor" : "remaining-grant", commandId: input.commandId, principal, at: input.at, groupId: run.groupId, runId: run.runId, highWater: run.highWater,

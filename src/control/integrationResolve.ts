@@ -216,7 +216,7 @@ export function recordIntegrationUsage(deps: Pick<IntegrationDeps, "store" | "ad
     if (deps.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(id)) return;
     const group = readGroup(deps.store, groupId);
     group.used = add(group.used, { tokens, activeMs: 0, attempts: 1, sessions: 1 });
-    bookReconcileUsage(deps.store, { runId: null, groupId, groupBody: group as unknown as Record<string, unknown>, tokens, appliedAt: deps.now() });
+    bookReconcileUsage(deps.store, { runId: null, groupId, groupBody: group as unknown as Record<string, unknown>, tokens, appliedAt: deps.now(), basis: "integration" });
     syncWebBudget(deps.store, group, null);
     group.budgetVersion += 1;
     saveGroup(deps.store, group);

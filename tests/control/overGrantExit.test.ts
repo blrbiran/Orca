@@ -185,7 +185,7 @@ describe("criterion 12: the 21 -> 22 repair", () => {
       const grant = unlimited.body(runId).grant.work as Amount;
       book(unlimited, runId, 1, { tokens: 10, activeMs: grant.activeMs + 1, attempts: 1, sessions: 1 });
       store = await reopenedAt21(unlimited);
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("24"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail)
       const body = read(store);
       // The claimed run is still active: the rule gives `running`.
       expect(body.status).toBe("running");

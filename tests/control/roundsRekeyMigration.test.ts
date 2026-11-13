@@ -42,8 +42,8 @@ describe("schema 17: flow journal tables and requirement_rounds keyed by step ex
     const { root, dir, before } = await v16Store();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(schemaVersion).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
+      expect(schemaVersion).toBe("24"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail)
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("24"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail)
       const after = store.db.prepare("SELECT group_id,step_key,exec_seq,round_no,state,body FROM requirement_rounds ORDER BY group_id,round_no").all();
       expect(after).toHaveLength(3);
       expect(after.map(({ step_key, exec_seq, ...rest }) => { expect([step_key, exec_seq]).toEqual(["clarify", 1]); return rest; })).toEqual(before);

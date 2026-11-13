@@ -128,7 +128,7 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
 export function chargeRunRemainder(
   store: ControlStore, run: Pick<SettlementRun, "runId" | "groupId" | "remaining" | "cumulative" | "unknown"> & { phase?: string; purpose?: string },
   group: Pick<GroupRecord, "used" | "reserved">, charged: { work: Omit<Amount, "tokens"> & { tokens: number | null }; handoff: Amount },
-  options: { unmetered: boolean; releaseReserved: boolean; releaseReservedAmount?: Amount; at: number; keepUncharged?: boolean },
+  options: { unmetered: boolean; releaseReserved: boolean; releaseReservedAmount?: Amount; at: number; keepUncharged?: boolean; basis: "remaining-grant" | "known-zero" },
 ): void {
   // Unmetered work tokens book nothing: the run keeps its observed cumulative and its unlimited (null) remainder.
   const work = { ...charged.work, tokens: charged.work.tokens ?? 0 }, delta = add(work, charged.handoff);
@@ -145,7 +145,7 @@ export function chargeRunRemainder(
     run.remaining[b] = Object.fromEntries((["tokens", "activeMs", "attempts", "sessions"] as const).map(d => [d,
       (b === "work" && d === "tokens" && options.unmetered) || before[d] === null ? null : options.keepUncharged ? Math.max(before[d]! - amount[d], 0) : 0])) as never;
     run.unknown[b] = false;
-    if (tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens, appliedAt: options.at });
+    if (tokens !== null) bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: b, tokens, appliedAt: options.at, basis: options.basis });
   }
 }
 /**
@@ -156,7 +156,7 @@ export function chargeRunRemainder(
  * finite-legacy continuation's commitment, §3.4 last row).
  */
 export function bookObservedFloor(store: ControlStore, run: SettlementRun, group: GroupRecord,
-  input: { floorTokens: number | null; reason: string; disposition: "committed" | "released" | "recovered"; legacy: boolean; at: number },
+  input: { floorTokens: number | null; reason: string; disposition: "committed" | "released" | "recovered"; legacy: boolean; at: number; basis: "observed-floor" | "soft-loop-floor" },
 ): { charged: { work: Amount; handoff: Amount }; parked: { work: unknown; handoff: Amount } } {
   const { disposition, legacy, at } = input, floor = input.floorTokens ?? 0;
   if (!Number.isSafeInteger(floor) || floor < 0) throw new ControlError("recovery-blocked", `approximate-floor:${floor}`);
@@ -174,7 +174,7 @@ export function bookObservedFloor(store: ControlStore, run: SettlementRun, group
     const release = add(finiteCommitment(before.work), before.handoff);
     group.reserved = Object.fromEntries((["tokens", "activeMs", "attempts", "sessions"] as const).map(d => [d, Math.max(group.reserved[d] - release[d], 0)])) as unknown as Amount;
   }
-  bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens: floor, appliedAt: at });
+  bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens: floor, appliedAt: at, basis: input.basis });
   const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
   return { charged: { work: { ...zero, tokens: floor }, handoff: zero }, parked: { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) } };
 }
@@ -248,7 +248,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
           const reason = (run.drive as { blockedReason?: string | null } | undefined)?.blockedReason ?? (run.failureCode as string | null | undefined) ?? "usage-unknown";
           const request = latestRequestForRun(store, groupId, run.runId), group = readGroup(store, groupId);
           const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId);
-          const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at });
+          const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at, basis: "observed-floor" });
           // Tester follow-up I (G spec §16): the floor is booked and the unused live ceiling held for the unknown usage
           // (follow-up H, gap k) is given back in the same write; the run's usage is no longer unknown.
           if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
@@ -282,7 +282,8 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
         const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId), parked = { work: structuredClone(run.remaining.work), handoff: structuredClone(run.remaining.handoff) };
         chargeRunRemainder(store, run, group, charged, { unmetered, keepUncharged: lostWorker, releaseReserved: disposition === "committed" || (disposition === "recovered" && !legacy),
           ...(knownZero ? { releaseReservedAmount: add(finiteCommitment(run.remaining.work), run.remaining.handoff) }
-            : ceilingHeld > 0 ? { releaseReservedAmount: subtract(add(charged.work as Amount, charged.handoff), { tokens: ceilingHeld, activeMs: 0, attempts: 0, sessions: 0 }) } : {}), at });
+            : ceilingHeld > 0 ? { releaseReservedAmount: subtract(add(charged.work as Amount, charged.handoff), { tokens: ceilingHeld, activeMs: 0, attempts: 0, sessions: 0 }) } : {}), at,
+          basis: knownZero ? "known-zero" : "remaining-grant" });
         if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
         finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked, activity: { method: marker.method, charged, principal, at } });
         deps.beforeCommit?.();

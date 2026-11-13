@@ -43,7 +43,7 @@ export function bookCallFloor(store: ControlStore, run: RunRecord & { usageAppro
   if (input.releaseReserved) group.reserved = { ...group.reserved, tokens: Math.max(group.reserved.tokens - Math.min(tokens, held), 0) };
   run.unknown = { work: false, handoff: false };
   run.usageApproximate = { floorTokens: input.floorTokens, reason: input.reason, at: input.at };
-  bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens, appliedAt: input.at });
+  bookSettledUsage(store, { run, groupBody: group as unknown as Record<string, unknown>, bucket: "work", tokens, appliedAt: input.at, basis: "observed-floor" });
   return tokens;
 }
 

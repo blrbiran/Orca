@@ -12,6 +12,7 @@ import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
 import { impliedPathLine, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
 import { phaseEndBudgetLines, runUsageLines, type UsageRun } from "./usageLines.js";
+import { runUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
@@ -501,6 +502,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(b.run?.agent === undefined ? [] : [`agent: ${b.run.agent.installation}, model ${b.run.agent.model ?? "(the agent's default)"}`]),
         ...runUsageLines(b.run as UsageRun | undefined, (body as { lastTranscriptAt?: number }).lastTranscriptAt),
         ...liveCeilingLines(b.run as LiveCeilingRun | undefined, (body as { agentKind?: string }).agentKind),
+        ...runUsageDetailLines((b.run as { usageDetail?: UsageDetailLine[] } | undefined)?.usageDetail),
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
         // Tester #267: a work run blocked before ccloop stated an outcome is resumed where it stopped, not retried as a task.
         ...(b.run?.state === "blocked" && b.run.phase === "work" && b.run.outcome === null && b.run.runId !== undefined ? [`To resume it where it stopped: ${recoveryRetryCommand(b.run.runId)}`] : []),

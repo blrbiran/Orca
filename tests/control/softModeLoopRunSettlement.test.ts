@@ -57,6 +57,8 @@ describe("soft mode: a loop run's unknown usage is booked at its floor by Orca",
       expect(t.body(runId).usageSettlement.charged).toEqual({ work: { tokens: 500, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } });
       expect(groupBody(t).used.tokens).toBe(used + 500);
       expect(workLedger(t, runId)).toEqual([...rows, 500]);
+      // Raw usage detail spec §8.3: Orca's own settlement of a soft-mode loop run books its floor as such.
+      expect(t.h.store.db.prepare("SELECT basis FROM usage_ledger WHERE run_id=? ORDER BY id DESC LIMIT 1").all(runId)).toEqual([{ basis: "soft-loop-floor" }]);
       expect(settledActivity(t, runId)).toEqual([{ method: "approximate-floor", floorTokens: 500, reason: "terminal:failed", principal: "orca-auto", at: t.body(runId).usageApproximate.at }]);
     } finally { await driver.stop(); await t.h.dispose(); }
   });

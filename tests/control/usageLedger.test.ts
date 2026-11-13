@@ -88,9 +88,11 @@ describe("the usage ledger (spec §5.1, D7, D16, D18)", () => {
   it("books a reconciliation's spend as its run's work, unattributed, and nothing for 0 (D16)", async () => {
     const h = await openTestStore(); try {
       const body = { projectKey: "example/repo" };
-      bookReconcileUsage(h.store, { runId: "run-r", groupId: "g1", groupBody: body, tokens: 0, appliedAt: 1 });
-      bookReconcileUsage(h.store, { runId: "run-r", groupId: "g1", groupBody: body, tokens: 7, appliedAt: 2 });
+      // Ruling: 「这次批准改写所有必要的判据」 (raw usage detail spec §8.3: each call names its basis; the row now records it).
+      bookReconcileUsage(h.store, { runId: "run-r", groupId: "g1", groupBody: body, tokens: 0, appliedAt: 1, basis: "reconcile" });
+      bookReconcileUsage(h.store, { runId: "run-r", groupId: "g1", groupBody: body, tokens: 7, appliedAt: 2, basis: "reconcile" });
       expect(rows(h).map((r) => [r.applied_at, r.run_id, r.source, r.model, r.tokens, r.quality])).toEqual([[2, "run-r", "run-work", null, 7, "unattributed"]]);
+      expect(h.store.db.prepare("SELECT basis FROM usage_ledger WHERE source<>'pre-ledger'").all()).toEqual([{ basis: "reconcile" }]);
     } finally { await h.dispose(); }
   });
 

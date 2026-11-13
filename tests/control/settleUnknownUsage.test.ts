@@ -38,6 +38,10 @@ describe("D9 owner conservative settlement", () => {
         { source: "run-work", quality: "unattributed", model: null, tokens: before.remaining.work.tokens },
         { source: "run-handoff", quality: "unattributed", model: null, tokens: before.remaining.handoff.tokens },
       ]);
+      // Raw usage detail spec §8.3: the measured event's row has no basis; the two settled rows were charged the remaining grant.
+      expect(t.h.store.db.prepare("SELECT basis,phase FROM usage_ledger WHERE run_id=? ORDER BY id").all(runId)).toEqual([
+        { basis: null, phase: null }, { basis: "remaining-grant", phase: null }, { basis: "remaining-grant", phase: "handoff" },
+      ]);
       expect(readRunActivity(t.h.store, runId, 50).filter(a => a.kind === "usage-settled")).toHaveLength(1);
       expect(readControlGroup(t.h.store, "epoch-test", "g").runs[0]!.unknownUsageSettlement).toMatchObject({ allowed: false, refusalReason: "run-usage-settled", settlement: after.usageSettlement });
       expect(await settle(t, runId, command)).toEqual(result);
@@ -234,7 +238,8 @@ describe("D9 accounting time and spend caps", () => {
       const tokens = sum(t.body(runId).grant).tokens;
       const view = readUsageView(t.h.store, { scope: "all", from: at, to: at + 1, groupBy: "model" }, at);
       expect(view.headline).toEqual({ total: tokens, week: tokens, month: tokens });
-      expect(view.range.byModel).toEqual([{ model: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens }]);
+      // Ruling: 「这次批准改写所有必要的判据」 (raw usage detail spec §5 "Readers": the entry gains its sub-parts, null for a settled row).
+      expect(view.range.byModel).toEqual([{ model: null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens, reasoning: null, cacheWrite5m: null, cacheWrite1h: null, requests: null, maxRequestInput: null }]);
       expect(readUsageView(t.h.store, { scope: "all", from: null, to: null, groupBy: "model" }, next).headline).toEqual({ total: tokens, week: 0, month: 0 });
       expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).not.toHaveProperty("error");
       const wake = await t.service.start(t.h.command("start", {}));

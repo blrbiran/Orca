@@ -826,7 +826,7 @@ export function recordReconcileUsage(deps: ExecutionDriverDeps, groupId: string,
     if (deps.store.db.prepare("SELECT id FROM outbox WHERE id=?").get(id)) return;
     const group = readGroup(deps.store, groupId);
     group.used = add(group.used, { tokens, activeMs: 0, attempts: 1, sessions: 1 });
-    bookReconcileUsage(deps.store, { runId, groupId, groupBody: group as unknown as Record<string, unknown>, tokens, appliedAt: deps.now?.().getTime() ?? Date.now() });
+    bookReconcileUsage(deps.store, { runId, groupId, groupBody: group as unknown as Record<string, unknown>, tokens, appliedAt: deps.now?.().getTime() ?? Date.now(), basis: "reconcile" });
     syncWebBudget(deps.store, group, readRun(deps.store, runId));
     group.budgetVersion += 1;
     saveGroup(deps.store, group);

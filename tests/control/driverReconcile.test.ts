@@ -224,6 +224,8 @@ describe("reconciling a conflict (spec §5.3)", { timeout: 30_000 }, () => {
       const ledger = t.h.store.db.prepare("SELECT run_id,source,model,tokens,quality FROM usage_ledger WHERE group_id='g' ORDER BY id").all();
       expect(ledger.reduce((sum, row) => sum + Number(row.tokens), 0)).toBe(27);
       expect(ledger.filter((row) => row.tokens === 7)).toEqual([{ run_id: expect.any(String), source: "run-work", model: null, tokens: 7, quality: "unattributed" }]);
+      // Raw usage detail spec §8.3: the reconciliation's row says how it was booked.
+      expect(t.h.store.db.prepare("SELECT basis FROM usage_ledger WHERE group_id='g' AND tokens=7").all()).toEqual([{ basis: "reconcile" }]);
     } finally { await t.h.dispose(); }
   });
 

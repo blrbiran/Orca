@@ -78,6 +78,8 @@ describe("charge-observed-floor on a finite group's loop run (tester follow-up F
       // Committed: only the floor leaves the run's reservation (soft path §3.4); the rest stays for its retry.
       expect(groupBody(t).reserved.tokens).toBe(reserved - Math.min(500, before.remaining.work.tokens));
       expect(workLedger(t, runId)).toEqual([...rows, 500]);
+      // Raw usage detail spec §8.3: a person's or agent's explicit observed floor is booked as one.
+      expect(t.h.store.db.prepare("SELECT basis FROM usage_ledger WHERE run_id=? ORDER BY id DESC LIMIT 1").all(runId)).toEqual([{ basis: "observed-floor" }]);
       expect(run.unknown).toEqual({ work: false, handoff: false });
       // Marker: the soft path's shape (floorTokens, reason; usageApproximate matches) with its own method and the settler.
       expect(run.usageSettlement).toMatchObject({ method: "observed-floor", principal: "user:owner", commandId, floorTokens: 500, reason: "terminal:failed", reservationDisposition: "committed",

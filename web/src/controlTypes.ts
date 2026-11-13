@@ -615,6 +615,11 @@ export type CapStatusV1 = {
   used: number; committed: number; headroom: number; from: number | null; to: number | null;
 };
 /** Accounts spec §5.3: GET /api/control/usage. A null model or group key is the unattributed bucket. */
+/** Raw usage detail spec 2026-11-13 §3: sub-parts (never addends) and the largest single request; null when unknown. */
+export type UsageModelEntryV1 = {
+  model: string | null; input: number; output: number; cacheRead: number; cacheWrite: number; tokens: number;
+  reasoning?: number | null; cacheWrite5m?: number | null; cacheWrite1h?: number | null; requests?: number | null; maxRequestInput?: number | null;
+};
 export type UsageViewV1 = {
   schema: "orca-usage-view-v1";
   scope: string;
@@ -626,7 +631,9 @@ export type UsageViewV1 = {
   headline: { total: number; week: number; month: number };
   range: {
     tokens: number;
-    byModel: Array<{ model: string | null; input: number; output: number; cacheRead: number; cacheWrite: number; tokens: number }>;
+    byModel: Array<UsageModelEntryV1>;
+    /** Raw usage detail spec 2026-11-13 §3: the same split per model and phase (the unattributed bucket per phase, model null). */
+    byModelPhase?: Array<UsageModelEntryV1 & { phase: string | null }>;
     groups: Array<{ key: string | null; tokens: number }>;
   };
   counts: { unattributedRows: number; breakdownMismatchRows: number; unknownUsageRuns: number };

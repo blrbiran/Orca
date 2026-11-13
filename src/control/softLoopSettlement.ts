@@ -74,7 +74,7 @@ export function applySettleApproximateUsage(deps: SoftLoopSettlementDeps, comman
       const legacy = disposition === "recovered" && !hasTokenPolicy(store, groupId);
       // §3.2 arithmetic (finding 1) and §3.4 reservations: shared with the explicit observed-floor form (tester follow-up F §2).
       // A finite-legacy continuation is funded from the remainder after the floor (§3.4 last row): `parked`.
-      const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at });
+      const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at, basis: "soft-loop-floor" });
       const marker = usageSettlementSchema.parse({ method: "approximate-floor", commandId: command.commandId, principal: ORCA_AUTO, at,
         groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
         charged, floorTokens, reason, reservationDisposition: disposition, ...proof,

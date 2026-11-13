@@ -26,8 +26,8 @@ describe("schema 20 -> 21: commands.person_principal", () => {
       raw.close();
       const store = await openControlStore({ stateDir: dir, now: () => 2000 });
       try {
-        expect(schemaVersion).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
-        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("23"); // Ruling: 「这次批准改写所有必要的判据。」 (schema 22 -> 23, work top-ups)
+        expect(schemaVersion).toBe("24"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail)
+        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("24"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail)
         expect(store.db.prepare("SELECT group_id,id,payload_hash,result,client,principal,person_principal FROM commands").all())
           .toEqual([{ group_id: "g", id: "c1", payload_hash: "h", result: "{}", client: "web", principal: "user:owner", person_principal: null }]);
       } finally { store.close(); }

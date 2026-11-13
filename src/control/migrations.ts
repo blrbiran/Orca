@@ -3,7 +3,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { overGrantBlockRuns } from "./overGrantBlock.js";
 
-export const schemaVersion = "23";
+export const schemaVersion = "24";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -240,6 +240,30 @@ export const schema22To23WorkTopUps = `CREATE TABLE IF NOT EXISTS work_grant_top
 CREATE INDEX IF NOT EXISTS work_grant_top_ups_by_task ON work_grant_top_ups(group_id, work_item_id);
 `;
 
+// Raw usage detail spec 2026-11-13 §3, §6, §8 (tester follow-up J): the ledger's sub-parts and annotations, all nullable;
+// existing rows read NULL (no backfill guesses). Sub-parts never add to `tokens` (D7); `quality` and its CHECK are unchanged
+// (§8.3) and `basis` names how a non-measured row was booked. One ALTER per column, each only when the column is missing,
+// so a store a criterion downgraded by dropping only the marker keeps working.
+const usageDetailColumns: ReadonlyArray<readonly [string, string]> = [
+  ["reasoning", "INTEGER CHECK(reasoning IS NULL OR reasoning >= 0)"],
+  ["cache_write_5m", "INTEGER CHECK(cache_write_5m IS NULL OR cache_write_5m >= 0)"],
+  ["cache_write_1h", "INTEGER CHECK(cache_write_1h IS NULL OR cache_write_1h >= 0)"],
+  ["requests", "INTEGER CHECK(requests IS NULL OR requests >= 0)"],
+  ["max_request_input", "INTEGER CHECK(max_request_input IS NULL OR max_request_input >= 0)"],
+  ["phase", "TEXT CHECK(phase IS NULL OR phase IN ('plan','execute','verify','setup','clarify','split','estimate','review','handoff'))"],
+  ["task_id", "TEXT"],
+  ["agent_kind", "TEXT"],
+  ["installation_id", "TEXT"],
+  ["basis", "TEXT CHECK(basis IS NULL OR basis IN ('remaining-grant','observed-floor','known-zero','soft-loop-floor','reconcile','integration','pre-ledger'))"],
+];
+export const schema23To24 = usageDetailColumns.map(([name, type]) => `ALTER TABLE usage_ledger ADD COLUMN ${name} ${type};\n`).join("");
+
+/** 23 → 24: idempotent per column (see usageDetailColumns). */
+function migrate23To24(store: DatabaseSync): void {
+  const present = new Set(store.prepare("PRAGMA table_info(usage_ledger)").all().map((row) => String(row.name)));
+  for (const [name, type] of usageDetailColumns) if (!present.has(name)) store.exec(`ALTER TABLE usage_ledger ADD COLUMN ${name} ${type}`);
+}
+
 /** 20 → 21: idempotent, so a store a criterion downgraded by dropping only the marker keeps working. */
 function migrate20To21(store: DatabaseSync): void {
   if (!store.prepare("PRAGMA table_info(commands)").all().some((row) => row.name === "person_principal")) store.exec(schema20To21);
@@ -253,7 +277,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -380,7 +404,7 @@ export function repairOverGrantUnlimitedGroups(store: DatabaseSync, now: () => n
   }
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, 22 → 23, then the version marker. */
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, 22 → 23, 23 → 24, then the version marker. */
 function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
@@ -391,6 +415,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   migrate20To21(store);
   repairOverGrantUnlimitedGroups(store, now);
   store.exec(schema22To23WorkTopUps);
+  migrate23To24(store);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -399,23 +424,31 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
  * version-3/4/5 criteria keep principal and the five tables). The pre-ledger rows are booked only when the ledger is new,
  * so a repeated step never counts a group's usage twice. Runs inside the store's migration transaction.
  */
-function migrate7To8(store: DatabaseSync): void {
+function migrate7To8(store: DatabaseSync): boolean {
   const hasPrincipal = store.prepare("PRAGMA table_info(commands)").all().some((row) => row.name === "principal");
   const ledgerExisted = store.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='usage_ledger'").get() !== undefined;
   if (!hasPrincipal) store.exec(schema7To8Principal);
   store.exec(schema7To8Tables);
   if (!ledgerExisted) store.exec(schema7To8PreLedger);
+  return !ledgerExisted;
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
+  if (fromVersion === "23") {
+    migrate23To24(store);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "22") {
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "21") {
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -425,6 +458,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -433,6 +467,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -442,6 +477,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -452,6 +488,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -463,6 +500,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate20To21(store);
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
+    migrate23To24(store);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -498,7 +536,9 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
   else if (fromVersion === "6") store.exec(schema6To7);
   else if (fromVersion !== "7" && fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") throw new Error("control-schema-unsupported");
   // Every version before 8 goes through 7 to 8 first; 8 itself only gains the activity table (spec §5.2).
-  if (fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10") migrate7To8(store);
+  const preLedgerBooked = fromVersion !== "8" && fromVersion !== "9" && fromVersion !== "10" && migrate7To8(store);
   store.exec(schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15);
   finishMigration(store, now);
+  // Raw usage detail spec §8.3: pre-ledger rows booked by this very upgrade say so; rows booked by an earlier one stay NULL.
+  if (preLedgerBooked) store.exec("UPDATE usage_ledger SET basis='pre-ledger' WHERE source='pre-ledger'");
 }
