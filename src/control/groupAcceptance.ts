@@ -76,8 +76,42 @@ export interface GroupAcceptanceDeps {
  */
 let checkSeq = 0;
 const inUse = new Set<string>();
-/** #278: per driver (keyed by its checks map), the failure last logged for each group; cleared by a round without one. */
-const logged = new WeakMap<Map<string, GroupAcceptanceCheck>, Map<string, string>>();
+/**
+ * #278: per owner (a driver's checks map, or the store for a pass without one) and pass, the failure last logged for each
+ * group; a round without one clears it, so the same failure coming back later is logged again.
+ */
+const logged = new WeakMap<object, Map<string, string>>();
+export function logGroupFailureOnce(owner: object, pass: string, groupId: string, error: unknown): void {
+  const last = logged.get(owner) ?? new Map<string, string>();
+  logged.set(owner, last);
+  const message = error instanceof Error ? error.message : String(error), key = `${pass}\0${groupId}`;
+  if (last.get(key) === message) return;
+  last.set(key, message);
+  process.stderr.write(`orca-driver: group ${groupId}: ${pass}: ${message}\n`);
+}
+export function clearGroupFailure(owner: object, pass: string, groupId: string): void {
+  logged.get(owner)?.delete(`${pass}\0${groupId}`);
+}
+
+/**
+ * #278 (and follow-up I for the landing watch and the requirement review): the work branch was recorded missing and no
+ * run landed since -- nothing to look at, and no git child to find that out again. A DB read.
+ */
+export function workBranchKnownMissing(store: ControlStore, groupId: string, body: unknown): boolean {
+  const recorded = acceptanceOf(body);
+  return recorded?.why === "work-branch-missing" && recorded.landings === landedRunCount(store, groupId);
+}
+
+/**
+ * #278: a missing work branch is the acceptance record `not-run: work-branch-missing`, keyed by the runs landed so far,
+ * whichever pass found it (acceptance, landing watch, requirement review): one record, shown in `group show` and Problems,
+ * and one stderr line. Every pass skips the group (workBranchKnownMissing) until a new landing.
+ */
+export function recordWorkBranchMissing(deps: Pick<GroupAcceptanceDeps, "store" | "write">, groupId: string, pass: string): void {
+  const { store } = deps;
+  deps.write(() => saveAcceptance(store, groupId, { tip: null, result: "not-run", why: "work-branch-missing", landings: landedRunCount(store, groupId), commands: [], at: store.now() }));
+  process.stderr.write(`orca-driver: group ${groupId}: ${pass}: not run, orca/${groupId} does not exist (checked again after a new landing)\n`);
+}
 
 /** Every task done and no run of any phase active (integrationPass.ts groupComplete, read here to stay off its imports). */
 function tasksComplete(store: ControlStore, groupId: string): boolean {
@@ -109,8 +143,6 @@ export function acceptanceCommands(store: ControlStore, groupId: string, which: 
 export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string, GroupAcceptanceCheck>): Promise<boolean> {
   const { store } = deps;
   let moved = false;
-  const last = logged.get(checks) ?? new Map<string, string>();
-  logged.set(checks, last);
   for (const row of store.db.prepare("SELECT id, body FROM groups ORDER BY rowid").all()) {
     if (deps.stopped()) break;
     const groupId = String(row.id);
@@ -119,14 +151,11 @@ export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
     try {
       if (await acceptGroup(deps, checks, groupId, body)) moved = true;
-      last.delete(groupId);
+      clearGroupFailure(checks, "acceptance", groupId);
     } catch (error) {
       // This group's alone (a repository that does not resolve, a contract that does not read); tried again next round,
       // and logged once while the same failure repeats (#278).
-      const message = error instanceof Error ? error.message : String(error);
-      if (last.get(groupId) === message) continue;
-      last.set(groupId, message);
-      process.stderr.write(`orca-driver: group ${groupId}: acceptance: ${message}\n`);
+      logGroupFailureOnce(checks, "acceptance", groupId, error);
     }
   }
   return moved;
@@ -146,14 +175,13 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     return true;
   }
   // #278: the branch was found missing and nothing landed since: nothing to check, and no git child to find that out again.
-  if (recorded?.why === "work-branch-missing" && recorded.landings === landedRunCount(store, groupId)) return false;
+  if (workBranchKnownMissing(store, groupId, body)) return false;
   const repo = deps.resolveRepository(groupRepoId(store, groupId));
   const tip = await workBranchTip(repo, groupId);
   const inFlight = checks.get(groupId);
   if (tip === null) {
     if (inFlight !== undefined) { inFlight.controller.abort(); checks.delete(groupId); }
-    deps.write(() => saveAcceptance(store, groupId, { tip: null, result: "not-run", why: "work-branch-missing", landings: landedRunCount(store, groupId), commands: [], at: store.now() }));
-    process.stderr.write(`orca-driver: group ${groupId}: acceptance: not run, orca/${groupId} does not exist (checked again after a new landing)\n`);
+    recordWorkBranchMissing(deps, groupId, "acceptance");
     return true;
   }
   if (inFlight !== undefined) {

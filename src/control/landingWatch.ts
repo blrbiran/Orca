@@ -2,11 +2,11 @@ import { recordActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { runEveryCheck, type EveryCheckOutcome } from "./checkCommand.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
-import { acceptanceCommands, runOnScratchTip, type GroupAcceptanceDeps } from "./groupAcceptance.js";
+import { acceptanceCommands, clearGroupFailure, logGroupFailureOnce, recordWorkBranchMissing, runOnScratchTip, workBranchKnownMissing, type GroupAcceptanceDeps } from "./groupAcceptance.js";
 import { landingWatchOf, nextLandingWatch } from "./landingWatchRecord.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { recordProjectionChange } from "./projectionJournal.js";
-import { isLandingWatchPathOf, landingWatchPathOf, revParse, workBranchRef } from "./workspace.js";
+import { isLandingWatchPathOf, landingWatchPathOf, workBranchTip } from "./workspace.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import type { ControlStore } from "./store.js";
 
@@ -19,6 +19,10 @@ import type { ControlStore } from "./store.js";
  * acceptance. Single-repo groups only (as acceptance's not-run); once every task is done group acceptance owns the tip.
  * A watch is not aborted when the tip moves under it: it is recorded for the tip it ran on, and the next one names only
  * the later landings.
+ *
+ * Tester #278 rest (follow-up I): a work branch that does not exist is recorded as acceptance records it
+ * (`not-run: work-branch-missing`, keyed by the runs landed so far) and the group is skipped without a git child until a
+ * new landing; any other failure is retried every round and logged once per distinct message per group.
  */
 export interface LandingWatchCheck {
   controller: AbortController; tip: string; coveredRunIds: string[]; landedTaskIds: string[];
@@ -63,8 +67,9 @@ export async function watchLandings(deps: GroupAcceptanceDeps, checks: Map<strin
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
     try {
       if (await watchGroup(deps, checks, groupId, body)) moved = true;
+      clearGroupFailure(checks, "landing watch", groupId);
     } catch (error) {
-      process.stderr.write(`orca-driver: group ${groupId}: landing watch: ${error instanceof Error ? error.message : String(error)}\n`);
+      logGroupFailureOnce(checks, "landing watch", groupId, error);
     }
   }
   return moved;
@@ -104,8 +109,10 @@ async function watchGroup(deps: GroupAcceptanceDeps, checks: Map<string, Landing
   if (later.length === 0) return false;
   // A round still running when stop() was called starts nothing stop() could no longer abort.
   if (deps.stopped()) return false;
+  if (workBranchKnownMissing(store, groupId, body)) return false;
   const repo = deps.resolveRepository(groupRepoId(store, groupId));
-  const tip = await revParse(repo, workBranchRef(groupId));
+  const tip = await workBranchTip(repo, groupId);
+  if (tip === null) { recordWorkBranchMissing(deps, groupId, "landing watch"); return true; }
   const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId, "all");
   const controller = new AbortController();
   const landedTaskIds = [...new Set(later.map((run) => run.taskId))];

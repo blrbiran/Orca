@@ -8,7 +8,7 @@ import { chainRounds } from "./clarifyChain.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedReconcileSlot } from "./executionSnapshot.js";
-import { acceptanceCommands } from "./groupAcceptance.js";
+import { acceptanceCommands, clearGroupFailure, logGroupFailureOnce, recordWorkBranchMissing, workBranchKnownMissing } from "./groupAcceptance.js";
 import { acceptanceOf, acceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
 import { readArchivedContract, readArchivedPlan } from "./queries.js";
@@ -21,7 +21,7 @@ import { taskContractSchema } from "../scheduler/planFile.js";
 import { readRounds } from "./requirementRecords.js";
 import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
 import type { SingleCallHandler, SingleCallRunRow } from "./singleCallPurposes.js";
-import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
+import { QUIET_GIT, workBranchTip } from "./workspace.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -181,6 +181,7 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
     const groupId = String(row.id);
     let body: Record<string, unknown>;
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
+    let threw = false;
     try {
       if (body.planHash === undefined || !reviewRequired(store, groupId, body) || isGroupArchived(store, groupId)) continue;
       if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined || !tasksDone(store, groupId)) continue;
@@ -193,7 +194,11 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
         continue;
       }
       if (!roundDue(store, groupId, review)) continue;
-      const tip = await revParse(deps.resolveRepository(groupRepoId(store, groupId)), workBranchRef(groupId));
+      // Tester #278 rest (follow-up I): a work branch recorded missing is skipped without a git child until a new landing;
+      // one found missing here is recorded as the acceptance pass records it (one record, one stderr line).
+      if (workBranchKnownMissing(store, groupId, body)) continue;
+      const tip = await workBranchTip(deps.resolveRepository(groupRepoId(store, groupId)), groupId);
+      if (tip === null) { recordWorkBranchMissing(deps, groupId, "requirement review"); moved = true; continue; }
       // A fix task moved the tip: wait for the acceptance pass to check the new tip before reviewing it.
       const accepted = acceptanceOf(body);
       if (accepted !== null && accepted.tip !== null && accepted.tip !== tip) continue;
@@ -216,8 +221,10 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       });
       moved = true;
     } catch (error) {
-      process.stderr.write(`orca-driver: group ${groupId}: requirement review: ${error instanceof Error ? error.message : String(error)}\n`);
-    }
+      // Tried again next round, logged once while the same failure repeats (#278); a round without it clears it.
+      threw = true;
+      logGroupFailureOnce(store, "requirement review", groupId, error);
+    } finally { if (!threw) clearGroupFailure(store, "requirement review", groupId); }
   }
   return moved;
 }
