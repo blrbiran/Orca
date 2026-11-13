@@ -13,7 +13,7 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { allowObservedPathsCommand, isTerminallyFailedRun, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
+import { allowObservedPathsCommand, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, modelUnavailableCommand, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -440,7 +440,7 @@ function blockedRequirementRun(store: ControlStore, groupId: string, clarifying:
   const rows = snapshot === undefined
     ? store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)
     : snapshot.runsByRowid;
-  type Row = { phase?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
+  type Row = { phase?: string; state?: string; unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string | null; blockedReason?: string | null; failureCause?: { cause?: unknown } }; remaining?: { work?: { tokens?: number } }; singleCallUsageLowerBound?: { tokens: number } };
   const decode = (row: (typeof rows)[number]): { runId: string; run: Row } => ({ runId: String(row.id),
     run: (snapshot === undefined ? JSON.parse(String(row.body)) : decodedValue(snapshot.decodeRun(String(row.id)))) as Row });
   // Re-review m-a: an inactive run whose body does not decode is not this search's to refuse (the group view judges every
@@ -461,7 +461,8 @@ function blockedRequirementRun(store: ControlStore, groupId: string, clarifying:
   // Plan follow-up B, T10: a call blocked on its agent names the verb that re-selects it (the brief, requirement show).
   // Tester follow-up J (#308): a call blocked at B' (a launch no worker claimed, an inspection that stayed unknown) is
   // resumed by recovery-retry, which the view names; other blocks keep what they said before.
-  const next = run.state === "blocked" && blockedOnRequirementAgent(run.drive?.blockedAt, run.drive?.blockedReason) ? { next: requirementSetAgentCommand(groupId) }
+  // Tester follow-up J (#299): so does a call whose model the provider does not serve.
+  const next = run.state === "blocked" && (blockedOnRequirementAgent(run.drive?.blockedAt, run.drive?.blockedReason) || run.drive?.failureCause?.cause === MODEL_UNAVAILABLE_CAUSE) ? { next: requirementSetAgentCommand(groupId) }
     : run.state === "blocked" && run.drive?.blockedAt === "B'" ? { next: recoveryRetryCommand(runId) } : {};
   return { blockedRun: { runId, reason: run.drive?.blockedReason ?? null, ...next }, ...charge };
 }
@@ -551,7 +552,9 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const resumable = typeof runId === "string" && run !== undefined && run !== null && resumableBlockedRun(run);
     // Tester #265: a run ccloop stopped on paths outside its allowlist names the retry that allows only those paths.
     const pathPolicy = run?.state === "blocked" && Array.isArray(run.drive?.pathPolicyMisses) && run.drive.pathPolicyMisses.length > 0;
-    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : pathPolicy ? { next: allowObservedPathsCommand(groupId, taskId) } : {}) }; break; }
+    // Tester follow-up J (#299): a model the provider does not serve is retried on another agent or model, by a person.
+    const modelUnavailable = run?.drive?.failureCause?.cause === MODEL_UNAVAILABLE_CAUSE;
+    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : pathPolicy ? { next: allowObservedPathsCommand(groupId, taskId) } : modelUnavailable ? { next: modelUnavailableCommand(groupId, taskId) } : {}) }; break; }
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
   const major = findings.filter((row) => row.severity === "major").length;

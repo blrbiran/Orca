@@ -6,7 +6,7 @@ import { isGroupArchived } from "./archivedMark.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
-import { isTerminallyFailedRun, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
 import { validTerminalClosure } from "./terminalRunClosure.js";
 import { groupStopped } from "./executionDriver.js";
 import { ControlError } from "./errors.js";
@@ -400,7 +400,9 @@ export function ladderLevelOneCommandId(taskId: string): string { return `orca-a
  * would break them the same way. Task setup and check retry spec 2026-11-04 §4.7: a `setup-failed` run would fail its setup
  * again before the agent could change anything.
  */
-export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated", "setup-failed"]);
+// Tester follow-up J (#299): `model-unavailable` (ccloop 9c83b38: the provider answered 404 for the frozen model) would fail
+// the same way on the same model; failover ruling D2 keeps a person's or plan's agent, so the person chooses another.
+export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated", "setup-failed", MODEL_UNAVAILABLE_CAUSE]);
 /** §5: how long a quota wait holds a failed task before Orca retries it (re-probe interval; no reset time is reported today). */
 export const QUOTA_REPROBE_MS = 30 * 60_000;
 

@@ -9,7 +9,7 @@ import { compact, field, text } from "./format.js";
 import { contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
-import { recoveryRetryCommand } from "../../control/driveRecord.js";
+import { MODEL_UNAVAILABLE_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
 import { impliedPathLine, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
 import { phaseEndBudgetLines, runUsageLines, type UsageRun } from "./usageLines.js";
 
@@ -483,6 +483,8 @@ export const READ_ROWS: CommandDef[] = [
         ...(cause?.detail == null ? [] : [`detail: ${cause.detail}`]),
         // Issue #209: a 0-usage rate limit on a model the agent's catalog does not list may be the provider refusing the model.
         ...(b.run?.catalogMiss === undefined ? [] : [`hint: this run used no tokens and its model is not in the agent's catalog (${b.run.catalogMiss}); the provider may have refused the model rather than limited the rate. Choose a listed model (agent preferences, or the group's agent selection) and retry the task.`]),
+        // Tester follow-up J (#299): a provider 404 on the model is not retried and the model is never switched by Orca.
+        ...(cause?.cause !== MODEL_UNAVAILABLE_CAUSE ? [] : [`hint: the provider does not serve model ${b.run?.agent?.model ?? "(the agent's default)"} for ${b.run?.agent?.installation ?? "this agent"}; Orca does not retry it or switch the model. Choose another agent or model: ${b.run?.taskId ? `orca task retry ${b.groupId} ${b.run.taskId} --agent <installation>, ` : ""}orca agent set-preferences (the operator's model), or orca proposal set-agent / orca requirement set-agent (this group's selection).`]),
         // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode.
         ...(rejectsOutputSchema([cause?.detail, b.run?.diagnosis?.failureCause?.detail, b.run?.stopReason])
           ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),

@@ -12,7 +12,9 @@ import { rejectsOutputSchema } from "../../src/control/structuredOutputHint.js";
 
 /** Failure-cause spec 2026-10-21 §5: the causes this panel words; any other (a newer ccloop's) reads as `unknown`. */
 export const KNOWN_FAILURE_CAUSES = ["auth", "quota", "rate-limited", "provider-5xx", "network", "context-overflow", "stalled", "executable-missing",
-  "required-check-failed", "verifier-rejected", "budget-exhausted", "tool-rule-violated", "setup-failed", "worker-lost", "unknown"] as const;
+  "required-check-failed", "verifier-rejected", "budget-exhausted", "tool-rule-violated", "setup-failed", "worker-lost",
+  // Tester follow-up J (#299): ccloop 9c83b38's cause for a provider 404 on the model (not retryable).
+  "model-unavailable", "unknown"] as const;
 export type KnownFailureCause = typeof KNOWN_FAILURE_CAUSES[number];
 export const knownCause = (cause: string): KnownFailureCause => (KNOWN_FAILURE_CAUSES as readonly string[]).includes(cause) ? cause as KnownFailureCause : "unknown";
 

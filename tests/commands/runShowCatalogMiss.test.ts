@@ -33,3 +33,16 @@ describe("run show names a rate-limited run's catalog miss (#209)", () => {
     expect((await show(RUN)).join("\n")).not.toContain("agent's catalog");
   });
 });
+
+// Tester follow-up J (#299): a provider 404 on the model is named with the frozen model and the commands that choose
+// another; Orca neither retries it nor switches the model.
+describe("run show names a model the provider does not serve (#299)", () => {
+  it("prints the model, the installation and the commands that choose another", async () => {
+    const lines = await show({ ...RUN, agent: { installation: "codex", model: "gpt-6-sol" }, failureCause: { cause: "model-unavailable", phase: "plan", retries: 0, detail: "404" } });
+    // mutation M3 (no model-unavailable hint line) -> red here.
+    const hint = lines.find((line) => line.startsWith("hint: the provider does not serve model gpt-6-sol for codex"));
+    expect(hint).toContain("orca task retry g-alpha t1 --agent <installation>");
+    expect(hint).toContain("orca agent set-preferences");
+    expect((await show(RUN)).join("\n")).not.toContain("does not serve model");
+  });
+});

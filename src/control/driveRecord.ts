@@ -299,6 +299,12 @@ export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord;
 
 /** Worker-lost recovery spec 2026-11-12 §4.2/§5.4: ccloop's failure cause for a run whose worker died (settle-lost-worker). */
 export const WORKER_LOST_CAUSE = "worker-lost";
+/** Tester follow-up J (#299): ccloop 9c83b38's cause for a provider that does not serve the run's model (a 404); not retryable. */
+export const MODEL_UNAVAILABLE_CAUSE = "model-unavailable";
+/** #299: what a person does about it -- Orca never switches an agent a person or plan chose (failover ruling D2). */
+export function modelUnavailableCommand(groupId: string, taskId: string): string {
+  return `orca task retry ${groupId} ${taskId} --agent <installation>`;
+}
 
 /**
  * Tester #229 (plan 2026-11-10 follow-up B, T1): the command that resumes a run blocked at a step other than C in place
