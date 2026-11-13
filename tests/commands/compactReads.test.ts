@@ -120,8 +120,12 @@ describe("a large group show names the smaller reads (#272)", () => {
   it("a small full view and a --runs summary read carry no tip", async () => {
     const small = await world();
     expect((await cli(["group", "show", "g-alpha"], small.dir)).stdout).not.toContain(TIP);
+    // A view that stays over 50 KB after its runs are summarised: --runs summary is already the smaller read, so no tip.
+    // mutation: the tip is armed on a summary read too -> red here
     const w = await world();
-    w.state.view = { ...w.state.view, runs: RUNS } as never;
-    expect((await cli(["group", "show", "g-alpha", "--runs", "summary"], w.dir)).stdout).not.toContain(TIP);
+    w.state.view = { ...w.state.view, runs: RUNS, checkpoints: Array.from({ length: 400 }, (_, i) => ({ checkpointId: `cp-${i}`, runId: "run-01", state: "complete", note: "x".repeat(200) })) } as never;
+    const summary = await cli(["group", "show", "g-alpha", "--runs", "summary"], w.dir);
+    expect(Buffer.byteLength(summary.stdout)).toBeGreaterThan(50_000);
+    expect(summary.stdout).not.toContain(TIP);
   });
 });
