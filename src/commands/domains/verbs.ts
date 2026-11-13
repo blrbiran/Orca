@@ -414,7 +414,6 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
-    ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances)]);
 }
 
