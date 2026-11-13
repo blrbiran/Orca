@@ -42,7 +42,8 @@ const PINNED = {
   // Ruling: 2026-11-08, human 「这次批准改写所有必要的判据」: #168 changes the instruction to version 5 so document-only tasks cannot inherit unfixable repository checks; only this split-prompt hash changes.
   // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #280 adds REGRESSION_CRITERIA_RULE (repository-wide regression criteria are group acceptance's); version stays 5; only this split-prompt hash changes.
   // Ruling (2026-11-12, tester follow-up H): #284 adds the partition-first rule (PARALLEL_RULE) to the split instruction; version stays 5; only this split-prompt hash changes (recomputed over both #280 and #284).
-  splitPrompt: "c7917d261d9f921930838f8140e9592dd4c81604c42b44dc2001f58a73f8d90d",
+  // Ruling (2026-11-13, tester follow-up I): 「这次批准改写所有必要的判据」 -- #265 adds IMPLIED_PATH_RULE (give a task every file its successCondition requires it to change) to the split instruction; version stays 5; only this split-prompt hash changes.
+  splitPrompt: "8a2fb311e87c30f8d5a2500f75f40cdb04e4b1b98528237c090c4c1aa37e4f0a",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
