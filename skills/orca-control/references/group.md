@@ -19,7 +19,7 @@ orca group list --json --fields state,completion,counts
 
 ## `orca group show <group> [--runs <runs>]`
 
-one group's full view
+one group's full view (large; poll with group brief, and read runs with --runs summary first)
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).

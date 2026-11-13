@@ -97,6 +97,20 @@ function runsMode(c: WriteContext): typeof RUNS_MODES[number] {
 }
 const runSummary = (run: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(RUN_SUMMARY_FIELDS.filter((key) => run[key] !== undefined).map((key) => [key, run[key]]));
+/**
+ * Tester #272 (2) rest: the default stays the full view (agents and the Web read its shape), so a full view over this
+ * many bytes ends its human text with one line naming the smaller reads; --json is never changed.
+ */
+const LARGE_SHOW_BYTES = 50_000;
+/** The group `group show` read in full, for its output's tip (one command per CLI process); null after a summary read. */
+let fullShowGroup: string | null = null;
+function largeShowTip(body: unknown): string[] {
+  const groupId = fullShowGroup;
+  fullShowGroup = null;
+  if (groupId === null) return [];
+  const bytes = Buffer.byteLength(JSON.stringify(body));
+  return bytes <= LARGE_SHOW_BYTES ? [] : [`tip: this full view is ${Math.round(bytes / 1000)} KB; poll with orca group brief ${groupId}, and read runs with orca group show ${groupId} --runs summary`];
+}
 
 /**
  * Tester #272 (2): `group list --json` answered every group's whole summary (173 KB on 90 groups). `--fields` keeps the
@@ -380,12 +394,12 @@ export const READ_ROWS: CommandDef[] = [
       return keep === null ? body : { ...body, groups: body.groups.map((g) => Object.fromEntries(Object.entries(g).filter(([key]) => key === "groupId" || keep.includes(key)))) };
     },
     format: groupList }),
-  read({ domain: "group", action: "show", summary: "one group's full view", positionals: [GROUP],
+  read({ domain: "group", action: "show", summary: "one group's full view (large; poll with group brief, and read runs with --runs summary first)", positionals: [GROUP],
     flags: [{ name: "runs", type: "string", summary: `${RUNS_MODES.join(" or ")}: full (default) prints each run's whole entry; summary prints one compact entry per run (${RUN_SUMMARY_FIELDS.join(", ")})` }],
     examples: ["orca group show g1", "orca group show g1 --runs summary --json"],
     paths: (c) => { runsMode(c); return [`groups/${ids(c, "group")}`]; },
-    compose: ([view], c) => runsMode(c) === "full" ? view : { ...(view as object), runs: (view as { runs: Array<Record<string, unknown>> }).runs.map(runSummary) },
-    format: formatWithUnestimated }),
+    compose: ([view], c) => { fullShowGroup = runsMode(c) === "full" ? ids(c, "group") : null; return runsMode(c) === "full" ? view : { ...(view as object), runs: (view as { runs: Array<Record<string, unknown>> }).runs.map(runSummary) }; },
+    format: (body) => [formatWithUnestimated(body), ...largeShowTip(body)].join("\n") }),
   // Issue #199: the summary route answers the compact body itself, so a poll ships neither the full view's plan and
   // runs nor a clarifying group's refusal (its full view is refused; its summary is not).
   read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],

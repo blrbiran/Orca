@@ -22,7 +22,7 @@ export function errorOf(body: unknown): { code: string; message: string } | null
  */
 export function printResponse(
   response: CliResponseV1,
-  options: { json: boolean; quiet: boolean; format(body: unknown): string; hint?(error: { code: string; message: string }): string | undefined },
+  options: { json: boolean; quiet: boolean; format(body: unknown): string; hint?(error: { code: string; message: string }): string | undefined; next?: readonly string[] },
   io: { stdout(text: string): void; stderr(text: string): void },
   request?: SentRequest,
 ): number {
@@ -42,6 +42,7 @@ export function printResponse(
   io.stderr(`orca: ${error === null ? `status ${response.status}` : `${error.code}: ${error.message}`}\n`);
   const hint = error === null ? undefined : options.hint?.(error);
   if (hint !== undefined) io.stderr(`orca: ${hint}\n`);
+  for (const command of options.next ?? []) io.stderr(`orca: next: ${command}\n`);
   if (response.commandId !== undefined) io.stderr(`orca: command id ${response.commandId}\n`);
   // Issue #149 (session 3cfc2e73): a reused --command-id naming other arguments, or another --if-revision, is a different
   // request (spec §14 R1 keeps the replay identity byte-exact; a re-run with the same arguments is replayed by runWrite);

@@ -155,6 +155,50 @@ const answeredFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body
   const result = (body as { result?: { kind?: unknown; finished?: unknown } } | null)?.result;
   return result?.kind === "requirement-answered" && result.finished === true && answeredGroup !== null ? { ...(body as object), next: `orca requirement accept ${answeredGroup}` } : body;
 } });
+/** Tester #272 (4): what follows `<code>:` in a refusal's message ("" when nothing does). */
+const refusalDetail = (error: { code: string; message: string }): string =>
+  error.message.startsWith(`${error.code}:`) ? error.message.slice(error.code.length + 1) : "";
+/** A refusal that already names its way on (driveRecord.ts recoveryRetryCommand) gives that command as `next`. */
+const namedRecovery = (detail: string): string | undefined => /orca recovery retry --run \S+/.exec(detail)?.[0];
+/** settle-usage cannot be undone, so its acknowledgement is left to choose (the verb's flag says which form is whose). */
+const settleUsageCommand = (groupId: string, taskId: string): string =>
+  `orca task settle-usage ${groupId} ${taskId} --acknowledge <charge-remaining-grant|charge-observed-floor|release-known-zero>`;
+
+/**
+ * Tester #272 (4): `task retry`'s refusals that leave an agent without a next step. A run still in Orca's hands (any state
+ * but settled-*) is watched, and recovery list names what holds it if it does not move; a settled or blocked run that is
+ * not retryable is read with run show, which says what it can still be; unknown usage is settled first; pending usage
+ * is retried again once it lands.
+ */
+async function retryNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
+  if (error.code !== "task-not-retryable") return undefined;
+  const detail = refusalDetail(error);
+  const named = namedRecovery(detail);
+  if (named !== undefined) return [named];
+  if (detail.startsWith("run-state:") || detail.startsWith("blocked-at:") || detail.startsWith("outcome:")) {
+    const runId = await currentRun(c);
+    const state = detail.startsWith("run-state:") ? detail.slice("run-state:".length) : null;
+    return state !== null && !state.startsWith("settled-") ? [`orca run show ${runId}`, "orca recovery list"] : [`orca run show ${runId}`];
+  }
+  if (detail === "usage-unknown") return [settleUsageCommand(group(c), task(c))];
+  if (detail === "usage-pending") return [`orca task retry ${group(c)} ${task(c)}`];
+  return undefined;
+}
+
+/**
+ * Tester #272 (4): `group close-run`'s refusals for a run with no proved terminal failure. A run that recovery retry
+ * resumes names that command; unknown usage is settled first; otherwise the run is read, and its task retried.
+ */
+async function closeRunNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
+  if (error.code !== "run-closure-not-terminal" && error.code !== "run-closure-evidence") return undefined;
+  const detail = refusalDetail(error), runId = str(c, "run")!;
+  const named = namedRecovery(detail);
+  if (named !== undefined) return [named];
+  const taskId = (await groupView(c)).runs.find((run) => run.runId === runId)?.taskId ?? null;
+  if (detail === "usage-unknown" && taskId !== null) return [settleUsageCommand(group(c), taskId)];
+  return [`orca run show ${runId}`, ...(taskId === null ? [] : [`orca task retry ${group(c)} ${taskId}`])];
+}
+
 /** The group `requirement answer` answered, for its output's next step (one command per CLI process). */
 let answeredGroup: string | null = null;
 
@@ -405,7 +449,8 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/close-run`, payload: (c) => ({ runId: str(c, "run") }),
     hint: (error) => error.code === "run-closure-evidence" || error.code === "run-closure-not-terminal"
       ? "this run has no proved terminal failure; retry the task, or settle unknown usage if the run reports it"
-      : undefined }),
+      : undefined,
+    next: closeRunNext }),
   verb({ domain: "group", action: "set-limit", summary: "set the group's budget limit", verb: "set-limit", positionals: [GROUP], access: "token",
     flags: [{ name: "limit", type: "string", required: true, summary: "JSON {tokens,activeMs,attempts,sessions}" }],
     route: (c) => `groups/${group(c)}/set-limit`, payload: (c) => ({ limit: json(c, "limit") }) }),
@@ -494,7 +539,7 @@ export const WORK_ROWS: CommandDef[] = [
       if (work !== undefined && (work === null || typeof work !== "object" || Array.isArray(work))) throw invalid("--work wants a JSON object {tokens?,activeMs?,attempts?,sessions?}");
       if (work !== undefined) retryNote = await retryFundingLines(c, (work as { tokens?: unknown }).tokens ?? 0);
       return { taskId: task(c), runId: await currentRun(c), ...(c.args.flags["allow-observed-paths"] === true ? { allowObservedPaths: true } : {}), ...(typeof c.args.flags.agent === "string" ? { agent: c.args.flags.agent } : {}), ...(work === undefined ? {} : { work }) };
-    } }),
+    }, next: retryNext }),
     // Tester follow-up B T2 (#202): the fresh grant the retry's next run gets, read before the write (print-only).
     format: (body: unknown) => {
       // Tester follow-up E §8: what the new run starts with, when the receipt says (an explicit retry in a group with no token limit).

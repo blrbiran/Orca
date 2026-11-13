@@ -97,3 +97,31 @@ describe("group list --fields (#272)", () => {
     expect(w.requests.slice(before).map((r) => r.path)).not.toContain("summary");
   });
 });
+
+// Tester #272 (2) rest: the default is kept (agents and the Web read the full shape); a person reading a large full view
+// in text is told, in one last line, which smaller reads exist. --json and --runs summary never carry it.
+describe("a large group show names the smaller reads (#272)", () => {
+  const TIP = "poll with orca group brief g-alpha, and read runs with orca group show g-alpha --runs summary";
+  const lastLine = (stdout: string) => stdout.trimEnd().split("\n").at(-1)!;
+
+  it("a full view over 50 KB ends its text with the tip; the same view under --json is unchanged", async () => {
+    const w = await world();
+    const view = { ...w.state.view, runs: RUNS };
+    w.state.view = view as never;
+    expect(Buffer.byteLength(JSON.stringify(view))).toBeGreaterThan(50_000);
+    const full = await cli(["group", "show", "g-alpha"], w.dir);
+    expect(full.code).toBe(0);
+    expect(lastLine(full.stdout)).toMatch(/^tip: this full view is \d+ KB; /);
+    expect(lastLine(full.stdout).endsWith(TIP)).toBe(true);
+    expect(full.stdout.split("\n").filter((line) => line.startsWith("tip: this full view"))).toHaveLength(1);
+    expect((await cli(["group", "show", "g-alpha", "--json"], w.dir)).json().body).toEqual(view);
+  });
+
+  it("a small full view and a --runs summary read carry no tip", async () => {
+    const small = await world();
+    expect((await cli(["group", "show", "g-alpha"], small.dir)).stdout).not.toContain(TIP);
+    const w = await world();
+    w.state.view = { ...w.state.view, runs: RUNS } as never;
+    expect((await cli(["group", "show", "g-alpha", "--runs", "summary"], w.dir)).stdout).not.toContain(TIP);
+  });
+});

@@ -124,7 +124,12 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
     const error = args.global.json || def.hint === undefined || exitCodeFor(response) === 0 ? null : errorOf(response.body);
     let hint: string | undefined;
     if (error !== null) { try { hint = await def.hint!(error, context); } catch { hint = undefined; } }
-    return printResponse(response, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(hint === undefined ? {} : { hint: () => hint }) }, io, request);
+    // Tester #272 (4): a refusal's next commands, under --json as the body's `next` (only-add) and in human text as lines.
+    const refused = def.next === undefined || context === undefined || exitCodeFor(response) === 0 ? null : errorOf(response.body);
+    let next: string[] = [];
+    if (refused !== null) { try { next = await def.next!(refused, context!) ?? []; } catch { next = []; } }
+    const shown = next.length > 0 && args.global.json && typeof response.body === "object" && response.body !== null ? { ...response, body: { ...(response.body as object), next } } : response;
+    return printResponse(shown, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(hint === undefined ? {} : { hint: () => hint }), ...(next.length === 0 ? {} : { next }) }, io, request);
   };
   try {
     // Spec §6.3: the one command refused without --if-revision, before anything is asked of the panel.

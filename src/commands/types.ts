@@ -148,6 +148,12 @@ export interface CommandDef {
    * one existed); it is asked only for human output, and a hint that throws is no hint.
    */
   hint?(error: { code: string; message: string }, context?: WriteContext): string | undefined | Promise<string | undefined>;
+  /**
+   * Tester #272 (4): the commands to run next after a panel refusal (each one a whole command line), under --json as the
+   * error body's `next` array (only-add) and in human text as `orca: next:` lines; undefined or empty = none. Asked only
+   * when the invocation's context exists; one that throws gives none.
+   */
+  next?(error: { code: string; message: string }, context: WriteContext): string[] | undefined | Promise<string[] | undefined>;
 }
 
 export type FindResult = { def: CommandDef; rest: string[] } | { suggestion: string | null };
