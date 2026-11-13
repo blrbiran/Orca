@@ -89,7 +89,10 @@ export function maxLandingsWithoutAcceptance(suite: string | null): number {
 /** Full suite spec §5: the warning a recorded acceptance gives about its full suite (never a blocking problem); else null. */
 export function fullSuiteWarning(record: GroupAcceptance | null): string | null {
   const suite = record?.fullSuite;
-  if (record === null || suite === undefined || record.result === "failed") return null;
+  if (record === null || record.result === "failed") return null;
+  // Tester follow-up K, item 2: a passed (or not-needed) record written before the full suite existed ran none either --
+  // read as not set. A waived or not-run record without the field never had a suite to run, so it says nothing.
+  if (suite === undefined) return record.result === "passed" || record.result === "not-needed" ? "full-suite-not-set" : null;
   if (suite.command === null) return "full-suite-not-set";
   return suite.flaky ? `full-suite-flaky:${suite.command}` : null;
 }

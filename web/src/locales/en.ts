@@ -250,7 +250,7 @@ export const en = {
     noProgress: "No active groups. Start one with New requirement or Import plan above.", nextMark: "Next", noAttention: "Nothing needs your attention.", viewAllDecisions: "View all {{n}} decisions", tasks: "Tasks: {{done}} / {{total}}", taskProgress: "Plan task completion",
     requirementProgress: "Requirement round {{round}} · {{questions}} open questions", taskCountsUnavailable: "Task counts unavailable", goalReview: "goal review is in progress", tasksBlocked: "tasks are blocked", deliverySeparate: "Git delivery is separate", completed: "Completed ({{n}})",
     source: { progress: "Progress", decisions: "Decisions", recovery: "Recovery" }, status: { loading: "loading", available: "available", stale: "stale", unavailable: "unavailable" },
-    step: { "requirement-answer": "Answer requirement", "requirement-review": "Review split", "requirement-attention": "Review requirement problem", "budget-review": "Review budget", "start-review": "Review start", "task-attention": "Review task problem", "stop-review": "Review stopped work", "recovery-review": "Review recovery", "integration-review": "Review integration", "decision-review": "Review decision", "command-unknown": "Check command outcome" },
+    step: { "requirement-answer": "Answer requirement", "requirement-review": "Review split", "requirement-attention": "Review requirement problem", "budget-review": "Review budget", "start-review": "Review start", "task-attention": "Review task problem", "stop-review": "Review stopped work", "recovery-review": "Review recovery", "integration-review": "Review integration", "acceptance-warning": "Check full suite", "decision-review": "Review decision", "command-unknown": "Check command outcome" },
     usageSettlement: "Settle usage",
     forTask: "task {{taskId}}",
   },
@@ -820,6 +820,7 @@ export const en = {
       suiteSuggested: "Orca detected {{command}}; it runs only once adopted.",
       adopt: "Adopt {{command}}",
       adopted: "Adopted: the next acceptance runs it.",
+      confirmSuiteNotSet: "This project has no full-suite command, so group acceptance will run only the tasks' own checks.",
       suiteFlaky: "The full suite {{command}} failed once and passed on the retry (flaky).",
     },
     // Tester follow-up G spec §1.2, §1.4, §10.1: a task completed (or stopped) with no change, and its two actions.

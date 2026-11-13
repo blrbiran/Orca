@@ -6,6 +6,7 @@ import { readGroupIntegration } from "../control/integrationScheme.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
+import { fullSuiteCommand } from "../control/fullSuite.js";
 import { hasRequirementBlock } from "../control/requirementRecords.js";
 import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
 import { BUSY_WORK, decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
@@ -14,7 +15,7 @@ type Source = NonNullable<ReturnType<typeof readOverviewGroupSource>>;
 const UNKNOWN_RUN = new Set(["unknown", "attempt-unknown", "attempt-proof-invalid"]);
 const PRIORITY: Record<OverviewStepV1["kind"], number> = {
   "requirement-attention": 0, "task-attention": 0, "stop-review": 0, "recovery-review": 0, "integration-review": 0,
-  "requirement-answer": 1, "requirement-review": 1, "budget-review": 2, "start-review": 3,
+  "requirement-answer": 1, "requirement-review": 1, "budget-review": 2, "start-review": 3, "acceptance-warning": 4,
 };
 
 /**
@@ -27,6 +28,11 @@ function scheduledWaitingReason(store: ControlStore, groupId: string, body: Reco
   const row = store.db.prepare("SELECT reason FROM schedule_fires WHERE schedule_id=? AND slot=? AND group_id=? AND outcome='waiting' AND reason IS NOT NULL")
     .get(origin.scheduleId, origin.slot, groupId);
   return row === undefined ? null : `scheduled-waiting:${String(row.reason)}`;
+}
+
+/** Whether the project has adopted a full-suite command; settings that do not read say no (the row is only a warning). */
+function projectHasFullSuite(store: ControlStore, repoId: string): boolean {
+  try { return fullSuiteCommand(store, repoId) !== null; } catch { return false; }
 }
 
 type Add = (kind: OverviewStepV1["kind"], groupId: string | null, repoId: string | null, reason: string,
@@ -116,6 +122,9 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     if (summary.state === "blocked") add("task-attention", groupId, repoId, "group-blocked", groupDestination("problem"), "group-blocked");
     const refusal = summary.orchestration?.refusal;
     if (refusal?.persistent === true) add("task-attention", groupId, repoId, refusal.code, groupDestination("problem"), "start-refused-persistent");
+    // Tester follow-up K, item 2 (human ruling ①): an acceptance that ran no full suite is a row while the project still
+    // has none adopted -- a warning (not in PROBLEM_KINDS), so the group is not "needs you" for it.
+    if (summary.acceptance?.warning === "full-suite-not-set" && !projectHasFullSuite(store, repoId)) add("acceptance-warning", groupId, repoId, "full-suite-not-set", groupDestination("problem"), "full-suite-not-set");
     if (summary.acceptance?.result === "failed") add("task-attention", groupId, repoId, summary.acceptance.problem ?? "group-acceptance-failed", groupDestination("problem"), "acceptance-failed");
     for (const work of workItems) {
       const run = work.currentRunId == null ? undefined : runById.get(work.currentRunId);

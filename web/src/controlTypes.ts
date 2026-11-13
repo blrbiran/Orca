@@ -676,6 +676,8 @@ export type GroupAcceptanceV1 = {
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
   /** Full suite spec 2026-11-12 §4-§5 (#279): the full-suite command and its runs' exits; `warning` never blocks. */
   fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean }; warning?: string;
+  /** Tester follow-up K, item 2: true only on a `passed` acceptance that ran no full suite (none adopted). */
+  passedWithoutFullSuite?: true;
 };
 /** Tester follow-up G §6.3 (#189): the request an allowance was granted from or covers (src/control/groupAllowances.ts). */
 export type AllowanceRequestKindV1 =
@@ -1181,7 +1183,7 @@ export type OverviewDestinationV1 =
   | { kind: "recovery" };
 export interface OverviewStepV1 {
   key: string; groupId: string | null; repoId: string | null; taskId: string | null; runId: string | null;
-  kind: "requirement-answer" | "requirement-review" | "requirement-attention" | "budget-review" | "start-review" | "task-attention" | "stop-review" | "recovery-review" | "integration-review";
+  kind: "requirement-answer" | "requirement-review" | "requirement-attention" | "budget-review" | "start-review" | "task-attention" | "stop-review" | "recovery-review" | "integration-review" | "acceptance-warning";
   reason: string; ownerRequired: boolean; destination: OverviewDestinationV1;
 }
 export interface OverviewIssueV1 { groupId: string | null; repoId: string | null; reason: string }

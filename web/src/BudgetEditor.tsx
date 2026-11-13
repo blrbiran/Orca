@@ -8,6 +8,7 @@
  * from the model or a complex-1m default says so next to the box, because the
  * person is about to type over it.
  */
+import { ConfirmFullSuiteNote } from "./GroupFullSuiteWarning.js";
 import { useContext, useEffect } from "react";
 import { useRegionDraft } from "./regionDraft.js";
 import type { JSX } from "react";
@@ -528,6 +529,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {!archived && editable && checklist.length > 0 && <ul aria-label={t("budget.checklist.title")} className="confirm-checklist">{checklist}</ul>}
       {!archived && editable && blockers.length === 0 && !autoEligible && <p role="status" data-testid="blocker-none">{t("budget.blocker.none")}</p>}
       {!archived && editable && unlimitedGroup && view.autoConfirm?.eligible === false && view.integration !== undefined && <p role="note" data-testid="auto-integration">{t("budget.autoConfirm.integration")}</p>}
+      {/* Tester follow-up K, item 2: no full-suite command adopted, one detected -- say what acceptance runs, offer Adopt. */}
+      {!archived && editable && <ConfirmFullSuiteNote repoId={view.plan.repoId} />}
       {!archived && editable && (autoEligible
         ? <p role="note" data-testid="auto-confirm-pending">{t("budget.autoConfirm.pending")}</p>
         : <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>)}

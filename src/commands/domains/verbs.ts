@@ -81,7 +81,7 @@ export function file(c: WriteContext, flag = "file"): unknown {
 
 export interface GroupView {
   summary: { groupId: string; commandRevision: number; state?: string; archived?: boolean };
-  plan: { planHash: string };
+  plan: { planHash: string; repoId?: string };
   proposal: { state?: string; proposalVersion: number; budgetMode: "strict" | "soft" | null; contextPolicy: { handoffAtContextTokens: number | null }; profiles: null | Record<"estimator" | "worker" | "handoff" | "goalReview", { profileId: string; profileHash: string } | null> };
   ledger: { groupLimit: { tokens: number | null; activeMs: number; attempts: number; sessions: number } };
   allocations: Array<{ ownerKind: string; ownerId: string; bucket: string; amount: Record<string, number | null>; fieldProvenance?: Record<string, { provenance: string; estimateId: string | null }> }>;
@@ -237,7 +237,17 @@ export function contextHandoffLines(threshold: number | null): string[] {
     : `the threshold ${threshold} is recorded, but nothing acts on it`}`];
 }
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
-interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string } }
+interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
+  warning?: string; passedWithoutFullSuite?: true; fullSuite?: { suggestion: string | null } }
+
+/**
+ * Tester follow-up K, item 2 (human ruling ①: Orca runs no suite a person did not set): the words for an acceptance with
+ * no full-suite command, and -- when Orca detected one -- the command that adopts it. Shared with `group confirm`.
+ */
+export const FULL_SUITE_NOT_SET = "this project has no full-suite command";
+export function adoptFullSuiteLine(suggestion: string | null | undefined): string[] {
+  return typeof suggestion === "string" ? [`  Orca detected ${suggestion}; it runs only once adopted: orca check adopt --as-person`] : [];
+}
 
 /**
  * Tester follow-up E §5 (#241): the group's acceptance on its final tip. A failed one is the problem
@@ -248,8 +258,10 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   const tip = a.tip === null ? "" : ` on ${a.tip.slice(0, 12)}`;
   const n = a.commands.length;
   const ran = `(${n} command${n === 1 ? "" : "s"}, ${Math.round(a.commands.reduce((sum, c) => sum + c.ms, 0) / 1000)} s)`;
-  if (a.result === "passed") return [`acceptance: passed${tip} ${ran}`];
-  if (a.result === "not-needed") return [`acceptance: not needed (${a.why ?? "?"})`];
+  const notSet = a.warning === "full-suite-not-set"
+    ? [`warning: full-suite-not-set: ${FULL_SUITE_NOT_SET}, so only the tasks' own checks ran`, ...adoptFullSuiteLine(a.fullSuite?.suggestion)] : [];
+  if (a.result === "passed") return [`acceptance: passed${a.passedWithoutFullSuite === true ? " without a full suite" : ""}${tip} ${ran}`, ...notSet];
+  if (a.result === "not-needed") return [`acceptance: not needed (${a.why ?? "?"})`, ...notSet];
   // #278: a work branch that no longer exists is recorded, not retried; a new landing checks it again.
   if (a.result === "not-run" && a.why === "work-branch-missing") return [`acceptance: not run (work-branch-missing: orca/${groupId} does not exist; checked again after a new landing)`];
   if (a.result === "not-run") return [`acceptance: not run (${a.why ?? "?"})`];

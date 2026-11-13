@@ -56,7 +56,8 @@ export function deriveOverview(input: OverviewInputs): OverviewModel {
     if (step.destination.kind !== "recovery" && !scoped(step.repoId)) continue;
     const key = stepRecoveryIdentity(step) ?? `step:${step.key}`;
     const target: OverviewTarget = step.destination.kind === "recovery" ? { kind: "global-control", region: "recovery" } : step.destination;
-    const priority = ["budget-review", "start-review", "requirement-answer", "requirement-review"].includes(step.kind) ? 1 : 0;
+    // Tester follow-up K, item 2: an acceptance warning is not a problem; it waits with the preparation steps.
+    const priority = ["budget-review", "start-review", "requirement-answer", "requirement-review", "acceptance-warning"].includes(step.kind) ? 1 : 0;
     const prior = rows.get(key);
     rows.set(key, { key, kind: step.kind, reason: step.reason, ...ownerOf(step.repoId), ownerRequired: step.ownerRequired || (prior?.ownerRequired ?? false), target, priority });
   }

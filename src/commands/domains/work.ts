@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  checkpointOf, type ClarifyRoundView, config, contextHandoffLines, currentRun, file, fillRoundAnswer, fundingLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -742,6 +742,12 @@ async function retryFundingLines(c: WriteContext, tokens: unknown): Promise<stri
 /** Spec §4: confirm's pins, as the Web's confirm builds them (BudgetEditor.tsx submitConfirm), read now. */
 /** Session 3cfc2e73 D3: the unestimated-default lines of the view `group confirm` read, for its human output (one command per CLI process). */
 let confirmNote: string[] = [];
+async function fullSuiteConfirmLines(c: WriteContext, repoId: string): Promise<string[]> {
+  let suggested: unknown;
+  try { suggested = (await c.read(`checks?repoId=${encodeURIComponent(repoId)}`) as { suggestedCommand?: unknown } | null)?.suggestedCommand; } catch { return []; }
+  return typeof suggested === "string"
+    ? [`full suite: ${FULL_SUITE_NOT_SET}, so group acceptance will run only the tasks' own checks`, ...adoptFullSuiteLine(suggested)] : [];
+}
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
   const funding = await c.read(`groups/${group(c)}/funding-preview`);
@@ -773,6 +779,11 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
   const tokens = c.args.flags["handoff-at-context-tokens"];
   const threshold = typeof tokens === "number" ? tokens : view.proposal.contextPolicy.handoffAtContextTokens;
   confirmNote.push(...contextHandoffLines(threshold));
+  // Tester follow-up K, item 2 (human ruling ①): no full-suite command set, one detected -- name it and how to adopt it;
+  // nothing is run or required. A panel without the read, or one that refuses it, adds no line.
+  const suiteLines = typeof view.plan.repoId === "string" ? await fullSuiteConfirmLines(c, view.plan.repoId) : [];
+  confirmNote.push(...suiteLines);
+  instructionWarnings.push(...suiteLines.slice(0, 1));
   return {
     planHash: view.plan.planHash, proposalVersion: view.proposal.proposalVersion, budgetMode,
     profileIds: { estimator: bindings.estimator?.profileId ?? null, worker: bindings.worker!.profileId, handoff: bindings.handoff!.profileId, goalReview: bindings.goalReview!.profileId },

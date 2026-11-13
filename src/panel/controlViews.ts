@@ -706,7 +706,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(escalation.length === 0 ? {} : { escalation }),
     ...(criteriaReviews.length === 0 ? {} : { criteriaReviews }),
     ...(acceptance === null ? {} : { acceptance: { ...acceptance, ...(acceptanceProblemCode === null ? {} : { problem: acceptanceProblemCode }),
-      ...(acceptanceWarning === null ? {} : { warning: acceptanceWarning }) } }),
+      ...(acceptanceWarning === null ? {} : { warning: acceptanceWarning }),
+      // Tester follow-up K, item 2 (human ruling ①): a pass with no adopted full suite is its own label, beside `passed`.
+      ...(acceptance.result === "passed" && acceptanceWarning === "full-suite-not-set" ? { passedWithoutFullSuite: true as const } : {}) } }),
     // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
     ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
     // Tester follow-up G §6.3 (#189): what this group lets through, with who, how, when and from which request.

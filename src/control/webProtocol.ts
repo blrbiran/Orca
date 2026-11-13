@@ -1685,6 +1685,8 @@ export const groupSummarySchema = z
       // the suggestion code detected); `warning` is `full-suite-not-set` or `full-suite-flaky:<command>`, never blocking.
       fullSuite: z.object({ command: nonemptyString.nullable(), suggestion: nonemptyString.nullable(), exits: z.array(nonemptyString).max(2), flaky: z.boolean() }).strict().optional(),
       warning: nonemptyString.optional(),
+      // Tester follow-up K, item 2: present (true) only on a `passed` acceptance that ran no full suite (none adopted).
+      passedWithoutFullSuite: z.literal(true).optional(),
     }).strict().optional(),
     // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is
     // `requirement-review-not-passed:<why>` when it did not pass. Optional so a group without one parses unchanged.
@@ -1777,7 +1779,7 @@ export const overviewDestinationSchema = z.discriminatedUnion("kind", [
 ]);
 export const overviewStepSchema = z.object({
   key: nonemptyString, groupId: idSchema.nullable(), repoId: idSchema.nullable(), taskId: idSchema.nullable(), runId: idSchema.nullable(),
-  kind: z.enum(["requirement-answer", "requirement-review", "requirement-attention", "budget-review", "start-review", "task-attention", "stop-review", "recovery-review", "integration-review"]),
+  kind: z.enum(["requirement-answer", "requirement-review", "requirement-attention", "budget-review", "start-review", "task-attention", "stop-review", "recovery-review", "integration-review", "acceptance-warning"]),
   reason: nonemptyString, ownerRequired: z.boolean(), destination: overviewDestinationSchema,
 }).strict();
 export const overviewIssueSchema = z.object({ groupId: idSchema.nullable(), repoId: idSchema.nullable(), reason: nonemptyString }).strict();

@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -429,7 +429,10 @@ export const READ_ROWS: CommandDef[] = [
     paths: (c) => [`groups/${ids(c, "group")}/brief`],
     // Tester #285: the brief names the runs under way whose agent reports usage only at phase end (controlApi.ts).
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
-      return [text(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf))].join("\n"); } }),
+      const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
+      return [text(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
+        // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
+        ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : [])].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
     format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],

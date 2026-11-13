@@ -292,7 +292,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     const groupId = String(req.params.groupId);
     // Tester #285: with a run under way whose agent reports usage only at phase end, the brief says so (absent otherwise).
     try { const summary = readGroupSummary(deps.store, groupId), phaseEndUsage = phaseEndUsageOf(deps.store, groupId);
-      res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }) }); }
+      // Tester follow-up K, item 2: the acceptance's warning (no full suite adopted, or a flaky one) as the brief's own key.
+      const warnings = summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning];
+      res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");
