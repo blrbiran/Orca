@@ -199,6 +199,40 @@ async function closeRunNext(error: { code: string; message: string }, c: WriteCo
   return [`orca run show ${runId}`, ...(taskId === null ? [] : [`orca task retry ${group(c)} ${taskId}`])];
 }
 
+/**
+ * Tester follow-up K (#272 rest): `task decide-usage`'s refusals. No room for the next line names the set-limit the refusal
+ * already carries; a task not waiting is read in the group's brief; with no expectation stop is the decision left; a paused
+ * or stopped group is read, and resumed if it was paused.
+ */
+function decideUsageNext(error: { code: string; message: string }, c: WriteContext): string[] | undefined {
+  if (error.code === "usage-pause-group-headroom") {
+    const named = /orca group set-limit \S+ --limit .+$/.exec(refusalDetail(error))?.[0];
+    return named === undefined ? undefined : [named];
+  }
+  if (error.code === "usage-pause-not-waiting") return [`orca group brief ${group(c)}`];
+  if (error.code === "usage-pause-no-headroom") return [`orca task decide-usage ${group(c)} ${task(c)} --decision stop`];
+  if (error.code === "group-stopped") return [`orca group brief ${group(c)}`, `orca group resume ${group(c)}`];
+  return undefined;
+}
+
+/**
+ * Tester follow-up K (#272 rest): `task settle-usage`'s refusals. The wrong acknowledgement for this run names the one it
+ * takes (settleUnknownUsage.ts settlementAcknowledgeFor: an unlimited remainder is released, by a person; any other is
+ * charged); usage still arriving is settled again; a run this verb cannot settle is read.
+ */
+async function settleUsageNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
+  const settle = (acknowledge: string) => `orca task settle-usage ${group(c)} ${task(c)} --acknowledge ${acknowledge}`;
+  const detail = refusalDetail(error);
+  if (error.code === "run-usage-pending") return [settle(str(c, "acknowledge")!)];
+  if (error.code === "run-usage-not-settleable") {
+    if (detail === "unlimited-remainder") return [`${settle("release-unmetered")} --as-person`];
+    if (["observed-floor-unknown", "known-zero-not-proved", "finite-remainder"].includes(detail)) return [settle("charge-remaining-grant")];
+    return [`orca run show ${await currentRun(c)}`];
+  }
+  if (error.code === "run-usage-settled" || error.code === "run-usage-not-unknown") return [`orca run show ${await currentRun(c)}`];
+  return undefined;
+}
+
 /** The group `requirement answer` answered, for its output's next step (one command per CLI process). */
 let answeredGroup: string | null = null;
 
@@ -574,6 +608,7 @@ export const WORK_ROWS: CommandDef[] = [
       const note = operatorNote(c);
       return { decision, ...(note === undefined ? {} : { note }) };
     },
+    next: decideUsageNext,
     examples: ["orca task decide-usage g1 t1 --decision continue --note \"finish the parser, skip the docs\"", "orca task decide-usage g1 t1 --decision stop"] }),
   verb({ domain: "task", action: "set-loop", summary: "set a task's loop plan from a JSON file {plan,inputs,work,workProvenance?,skills?}", verb: "set-task-loop", positionals: [GROUP, TASK],
     flags: [{ name: "file", type: "string", required: true, summary: "the loop JSON" }],
@@ -649,7 +684,7 @@ export const WORK_ROWS: CommandDef[] = [
       const generation = (await groupView(c)).runs.find((r) => r.runId === runId)?.unknownUsageSettlement?.generation;
       if (generation === undefined) throw new EntryRejection("usage-not-unknown", `run ${runId} has no unknown usage to settle`);
       return { taskId: task(c), runId, generation, acknowledge: str(c, "acknowledge") };
-    } }),
+    }, next: settleUsageNext }),
 ];
 
 /** One generated id per invocation: the payload and the revision lookup must name the same new group. */

@@ -69,11 +69,13 @@ function activeRunRef(groupId: string, runId: string, body: string): ActiveRunRe
   const blockedAt = typeof run.drive?.blockedAt === "string" ? run.drive.blockedAt : null;
   const taskId = typeof run.taskId === "string" ? run.taskId : null;
   const terminalFailure = state === "blocked" && blockedAt === "C" && typeof run.drive?.outcome === "string" && run.drive.outcome !== "succeeded";
+  const unknownUsage = (run.unknown?.work === true || run.unknown?.handoff === true) && taskId !== null;
+  const settle = `orca task settle-usage ${groupId} ${taskId} --acknowledge charge-remaining-grant`;
+  // Tester follow-up K (#272 rest): a run still active once settled-* named nothing; it is read, its unknown usage settled first.
   const next = terminalFailure
-    ? (run.unknown?.work === true || run.unknown?.handoff === true) && taskId !== null
-      ? `orca task settle-usage ${groupId} ${taskId} --acknowledge charge-remaining-grant`
-      : `orca group close-run ${groupId} --run ${runId}`
-    : resumableBlockedRun(run) ? recoveryRetryCommand(runId) : undefined;
+    ? unknownUsage ? settle : `orca group close-run ${groupId} --run ${runId}`
+    : resumableBlockedRun(run) ? recoveryRetryCommand(runId)
+      : state.startsWith("settled-") ? unknownUsage ? settle : `orca run show ${runId}` : undefined;
   return { runId, state, blockedAt, ...(next === undefined ? {} : { next }) };
 }
 

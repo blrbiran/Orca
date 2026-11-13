@@ -72,6 +72,19 @@ async function runEdit(args: ParsedArgs, io: CommandIo): Promise<number> {
   }
 }
 
+/**
+ * Tester follow-up K (#272 rest): `proposal set-budget`'s refusals. A started task's allocation is fixed: the group limit
+ * is raised, or (a task given) work is added to it by retrying it; a stale proposal is read again.
+ */
+function setBudgetNext(error: { code: string; message: string }, c: Parameters<typeof groupView>[0]): string[] | undefined {
+  if (error.code === "grant-amendment-unsupported") {
+    const taskId = str(c, "task");
+    return [`orca group set-limit ${group(c)} --limit '{"tokens":<higher>,...}'`, ...(taskId === undefined ? [] : [`orca task retry ${group(c)} ${taskId} --work '{"tokens":<n>}'`])];
+  }
+  if (error.code === "proposal-version-conflict") return [`orca proposal show ${group(c)}`];
+  return undefined;
+}
+
 export const PROPOSAL_ROWS: CommandDef[] = [
   verb({ domain: "proposal", action: "set-budget", summary: "set one budget value: --task <t> --allocation work|handoff, or --goal-review; --dimension; --value <n>|none",
     verb: "proposal-edit", positionals: [GROUP],
@@ -105,6 +118,7 @@ export const PROPOSAL_ROWS: CommandDef[] = [
         ...(limit === undefined ? {} : { proposedGroupLimit: limit }),
       };
     },
+    next: setBudgetNext,
     examples: ["orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 800000", "orca proposal set-budget g1 --task t1 --allocation work --dimension tokens --value 400000 --hard"] }),
   verb({ domain: "proposal", action: "set-agent", summary: "set one agent selection layer (--slot worker|estimator|reconcile, or --task <t>); --clear removes it",
     verb: "proposal-set-agent", positionals: [GROUP],

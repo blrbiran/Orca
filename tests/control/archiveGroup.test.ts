@@ -143,6 +143,11 @@ describe("archive-group and unarchive-group (issue-fixes spec §6.3)", () => {
       const resumable = as({ state: "blocked" }, { blockedAt: "B'", outcome: null });
       expect(resumable.error.activeRuns).toEqual([{ runId, state: "blocked", blockedAt: "B'", next: `orca recovery retry --run ${runId}` }]);
       expect(resumable.error.message).toBe(`archive-run-active:${runId} blocked at B' (orca recovery retry --run ${runId})`);
+      // Tester follow-up K (#272 rest): a run still active in a settled-* state named nothing; it is read with run show,
+      // and its unknown usage, when it has any, is settled first.
+      expect(as({ state: "settled-recoverable" }, {}).error.activeRuns).toEqual([{ runId, state: "settled-recoverable", blockedAt: null, next: `orca run show ${runId}` }]);
+      expect(as({ state: "settled-unrecoverable", unknown: { work: true, handoff: false } }, {}).error.activeRuns)
+        .toEqual([{ runId, state: "settled-unrecoverable", blockedAt: null, next: `orca task settle-usage g ${taskId} --acknowledge charge-remaining-grant` }]);
       expect(Object.hasOwn(body(h), "archived")).toBe(false);
     } finally { await h.dispose(); }
   });

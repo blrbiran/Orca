@@ -14,7 +14,8 @@ async function panel(answer: Record<string, unknown>, runTaskId: string | null =
     "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", groups: [{ groupId: "g-alpha", state: "running", commandRevision: 5 }] } },
     "GET groups/g-alpha": { status: 200, body: {
       schema: "orca-control-group-v1", summary: { groupId: "g-alpha", repoId: "repo-1", state: "running", commandRevision: 5 },
-      workItems: [{ taskId: "t1", status: "active", currentRunId: "run-1" }], runs: [{ runId: "run-1", taskId: runTaskId, phase: "work", state: "accepted" }],
+      workItems: [{ taskId: "t1", status: "active", currentRunId: "run-1" }], runs: [{ runId: "run-1", taskId: runTaskId, phase: "work", state: "accepted", unknownUsageSettlement: { generation: 1 } }],
+      proposal: { proposalVersion: 3 },
     } },
     ...answer,
   });
@@ -80,5 +81,59 @@ describe("group close-run's refusals name the next command (#272)", () => {
 
   it("a run with no task in the view is only read", async () => {
     expect((await nextOf(CLOSE, close("run-closure-not-terminal"), null)).next).toEqual(["orca run show run-1"]);
+  });
+});
+
+// Tester follow-up K (#272 rest): three more refusals left an agent without a way on -- task decide-usage, proposal
+// set-budget and task settle-usage. Each now names the command that answers it, the way task retry and close-run do.
+const DECIDE = ["task", "decide-usage", "g-alpha", "t1", "--decision", "continue"];
+const BUDGET = ["proposal", "set-budget", "g-alpha", "--task", "t1", "--allocation", "work", "--dimension", "tokens", "--value", "800000"];
+const settle = (acknowledge: string) => ["task", "settle-usage", "g-alpha", "t1", "--acknowledge", acknowledge];
+const decideRefused = (code: string, message: string) => ({
+  "POST groups/g-alpha/tasks/t1/usage-pause": { status: 409, body: { error: { code, message, commandRevision: 5, evidenceIds: [], retryable: false } } },
+});
+const SET_LIMIT = "orca group set-limit g-alpha --limit '{\"tokens\":<higher>,...}'";
+
+describe("task decide-usage's refusals name the next command (tester follow-up K)", () => {
+  it("the group has no room for the next line: the set-limit the refusal names", async () => {
+    expect((await nextOf(DECIDE, decideRefused("usage-pause-group-headroom", "usage-pause-group-headroom:900<=1000:orca group set-limit g-alpha --limit <a higher limit>"))).next)
+      .toEqual(["orca group set-limit g-alpha --limit <a higher limit>"]);
+  });
+  it("the task is not waiting: read the group's state; no expectation: stop is the decision left", async () => {
+    expect((await nextOf(DECIDE, decideRefused("usage-pause-not-waiting", "usage-pause-not-waiting:t1"))).next).toEqual(["orca group brief g-alpha"]);
+    expect((await nextOf(DECIDE, decideRefused("usage-pause-no-headroom", "usage-pause-no-headroom:no-expectation"))).next).toEqual(["orca task decide-usage g-alpha t1 --decision stop"]);
+  });
+  it("a paused or stopped group: read it, and resume it if it was paused", async () => {
+    expect((await nextOf(DECIDE, decideRefused("group-stopped", "group-stopped"))).next).toEqual(["orca group brief g-alpha", "orca group resume g-alpha"]);
+  });
+});
+
+describe("proposal set-budget's refusals name the next command (tester follow-up K)", () => {
+  it("the task already started: raise the group limit, or add work to the task by retrying it", async () => {
+    expect((await nextOf(BUDGET, refused("proposal/edit", "grant-amendment-unsupported", "grant-amendment-unsupported"))).next)
+      .toEqual([SET_LIMIT, "orca task retry g-alpha t1 --work '{\"tokens\":<n>}'"]);
+  });
+  it("a stale proposal: read it again", async () => {
+    expect((await nextOf(BUDGET, refused("proposal/edit", "proposal-version-conflict", "proposal-version-conflict"))).next).toEqual(["orca proposal show g-alpha"]);
+  });
+});
+
+describe("task settle-usage's refusals name the next command (tester follow-up K)", () => {
+  const settleRefused = (code: string, detail?: string) => refused("settle-unknown-usage", code, detail === undefined ? code : `${code}:${detail}`);
+  it("the wrong acknowledgement for this run: the one it takes", async () => {
+    expect((await nextOf(settle("charge-observed-floor"), settleRefused("run-usage-not-settleable", "observed-floor-unknown"))).next)
+      .toEqual(["orca task settle-usage g-alpha t1 --acknowledge charge-remaining-grant"]);
+    expect((await nextOf(settle("release-known-zero"), settleRefused("run-usage-not-settleable", "known-zero-not-proved"))).next)
+      .toEqual(["orca task settle-usage g-alpha t1 --acknowledge charge-remaining-grant"]);
+    expect((await nextOf(settle("release-unmetered"), settleRefused("run-usage-not-settleable", "finite-remainder"))).next)
+      .toEqual(["orca task settle-usage g-alpha t1 --acknowledge charge-remaining-grant"]);
+    expect((await nextOf(settle("charge-remaining-grant"), settleRefused("run-usage-not-settleable", "unlimited-remainder"))).next)
+      .toEqual(["orca task settle-usage g-alpha t1 --acknowledge release-unmetered --as-person"]);
+  });
+  it("usage still arriving: the same settle again; a run this cannot settle: read it", async () => {
+    expect((await nextOf(settle("charge-remaining-grant"), settleRefused("run-usage-pending"))).next)
+      .toEqual(["orca task settle-usage g-alpha t1 --acknowledge charge-remaining-grant"]);
+    expect((await nextOf(settle("charge-remaining-grant"), settleRefused("run-usage-not-settleable", "current-failed-task"))).next).toEqual(["orca run show run-1"]);
+    expect((await nextOf(settle("charge-remaining-grant"), settleRefused("run-usage-settled"))).next).toEqual(["orca run show run-1"]);
   });
 });
