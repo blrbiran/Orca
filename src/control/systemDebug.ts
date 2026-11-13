@@ -375,9 +375,14 @@ export function workerLostCandidates(store: ControlStore): Array<{ groupId: stri
       const run = terminallyFailedRun(store, groupId, taskId);
       if (run === null || run.drive?.failureCause?.cause !== WORKER_LOST_CAUSE) continue;
       const lineage = (work as { lineageRunIds?: unknown }).lineageRunIds;
+      // Tester follow-up I (review of #273, finding 1): lineageRunIds is kept sorted by id, and run ids are random, so its
+      // order says nothing about when a run was claimed. The streak is walked newest first in claim order -- the runs
+      // table's rowid, the order every other "earlier run" reader uses (fundedAllowance.ts, landingWatch.ts).
+      const newestFirst = store.db.prepare("SELECT r.body AS body FROM runs r JOIN json_each(?) j ON j.value=r.id ORDER BY r.rowid DESC")
+        .all(JSON.stringify(Array.isArray(lineage) ? lineage : []));
       let consecutive = 0;
-      for (const id of [...(Array.isArray(lineage) ? lineage : [])].reverse()) {
-        if (runBody(store, id)?.drive?.failureCause?.cause !== WORKER_LOST_CAUSE) break;
+      for (const row of newestFirst) {
+        if ((JSON.parse(String(row.body)) as { drive?: DriveRecord }).drive?.failureCause?.cause !== WORKER_LOST_CAUSE) break;
         consecutive += 1;
       }
       out.push({ groupId, taskId, run, consecutive: Math.max(consecutive, 1) });
