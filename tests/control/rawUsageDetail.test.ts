@@ -11,6 +11,9 @@ import { ledgerPhase } from "../../src/control/usageLedger.js";
 import { readUsageView, runUsageDetail, usedTokens } from "../../src/control/usageQuery.js";
 import type { ModelUsage } from "../../src/control/types.js";
 import { groupUsageDetailLines, runUsageDetailLines } from "../../src/commands/domains/usageDetailLines.js";
+import { findCommand } from "../../src/commands/registry.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
+import { driverHarness } from "./fixtures/driverHarness.js";
 import { amount, openTestStore, seedBudgetCase } from "./fixtures/store.js";
 const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
 
@@ -149,6 +152,26 @@ describe("reading the detail (spec §2, §5 Readers)", () => {
       ]);
       expect(groupUsageDetailLines([{}])).toEqual([]);
     } finally { await h.dispose(); }
+  });
+});
+
+describe("the views carry the lines to run show and group show (spec §2)", () => {
+  const def = (argv: string[]) => { const found = findCommand(argv); if (!("def" in found)) throw new Error(argv.join(" ")); return found.def; };
+  const LINE = "  unattributed (no phase): 10 tokens";
+
+  it("the run view gives usageDetail from the run's ledger rows; run show and group show print it", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim(); const driver = t.driver();
+      // The synthetic ccloop reports work 10 without a breakdown or a phase.
+      await t.until(driver, () => t.body(runId).highWater >= 2);
+      const run = readControlGroup(t.h.store, "epoch-test", "g").runs.find((r) => r.runId === runId)!;
+      expect(run.usageDetail).toEqual([{ model: null, phase: null, tokens: 10, input: null, output: null, cacheRead: null, cacheWrite: null,
+        reasoning: null, cacheWrite5m: null, cacheWrite1h: null, requests: null, maxRequestInput: null }]);
+      const shown = def(["run", "show"]).format({ groupId: "g", run, activity: { entries: [] }, evidence: { count: 0 } }).split("\n");
+      expect(shown).toEqual(expect.arrayContaining(["usage by model and phase:", LINE]));
+      const group = def(["group", "show"]).format({ schema: "orca-control-group-v1", summary: { groupId: "g" }, workItems: [], runs: [run, run] }).split("\n");
+      expect(group).toEqual(expect.arrayContaining(["group usage by model and phase (booked to its runs):", "  unattributed (no phase): 20 tokens"]));
+    } finally { await t.h.dispose(); }
   });
 });
 
