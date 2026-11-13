@@ -119,7 +119,8 @@ export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate
           const multiple = Math.max(state.multiple + 1, Math.floor(used / (PAUSE_LINE_MULTIPLE * expectation)) + 1);
           nextLine = pauseLineFor({ expectationTokens: expectation, multiple, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
           // Only half the group's remainder can still hold the line at or below what the task used: the group needs more.
-          if (nextLine <= used) throw new ControlError("usage-pause-group-headroom", `${nextLine}<=${used}:orca group set-limit ${groupId} --limit <a higher limit>`);
+          // Tester #300: an unlimited group has no pause line (null); a task paused before that ruling continues with none.
+          if (nextLine !== null && nextLine <= used) throw new ControlError("usage-pause-group-headroom", `${nextLine}<=${used}:orca group set-limit ${groupId} --limit <a higher limit>`);
           work.pauseLine = { multiple, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed };
           delete work.usagePause;
           work.status = "ready";

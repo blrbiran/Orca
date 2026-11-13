@@ -131,7 +131,9 @@ export function pauseLineOf(store: ControlStore, group: GroupRecord, work: { tas
   if (expectation === null) return null;
   const state = pauseStateOf(work);
   const limit = (group.limit as { tokens: number | null }).tokens;
-  return { line: pauseLineFor({ expectationTokens: expectation.tokens, multiple: state.multiple, groupLimitTokens: limit, taskUsedAtDecision: state.taskUsedAtDecision, groupUsedAtDecision: state.groupUsedAtDecision }), expectationTokens: expectation.tokens, multiple: state.multiple };
+  // Tester #300 (follow-up J): an unlimited group's task has no pause line, so its claim has no pause-line ceiling.
+  const line = pauseLineFor({ expectationTokens: expectation.tokens, multiple: state.multiple, groupLimitTokens: limit, taskUsedAtDecision: state.taskUsedAtDecision, groupUsedAtDecision: state.groupUsedAtDecision });
+  return line === null ? null : { line, expectationTokens: expectation.tokens, multiple: state.multiple };
 }
 
 /**

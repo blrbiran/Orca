@@ -45,7 +45,9 @@ describe("the pause line formula (spec §2.5, plan O5)", () => {
   it("each continue moves to the next multiple of 10x, never more than half of what the group had left", () => {
     expect(pauseLineFor({ expectationTokens: M, multiple: 1, groupLimitTokens: 20 * M, taskUsedAtDecision: 0, groupUsedAtDecision: 0 })).toBe(10 * M);
     expect(pauseLineFor({ expectationTokens: M, multiple: 1, groupLimitTokens: 8 * M, taskUsedAtDecision: 0, groupUsedAtDecision: 0 })).toBe(4 * M);
-    expect(pauseLineFor({ expectationTokens: M, multiple: 3, groupLimitTokens: null, taskUsedAtDecision: 0, groupUsedAtDecision: 0 })).toBe(30 * M);
+    // Ruling (2026-11-13, tester follow-up J, #300): 「无限制组不要暂停线」 with 「这一轮允许改写必要判据」 -- a group with no
+    // token limit has no pause line (was 10kE).
+    expect(pauseLineFor({ expectationTokens: M, multiple: 3, groupLimitTokens: null, taskUsedAtDecision: 0, groupUsedAtDecision: 0 })).toBeNull();
     expect(pauseLineFor({ expectationTokens: M, multiple: 2, groupLimitTokens: 20 * M, taskUsedAtDecision: 10 * M, groupUsedAtDecision: 14 * M })).toBe(13 * M);
   });
   it("an orchestrating agent may decide, as it may continue a task", () => {
@@ -131,6 +133,22 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       // A second decision finds nothing waiting.
       expect(decide(t, { decision: "continue" })).toMatchObject({ error: { code: "usage-pause-not-waiting" } });
       await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #300 (follow-up J), human: 「无限制组不要暂停线」. A task with an expectation in a group with no token limit got a
+  // 10x pause-line ceiling at every claim, a hidden per-task limit in a group created as unlimited. It has none now.
+  it("a task with an expectation in an unlimited group has no pause line: its claim carries no pause-line ceiling", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", behaviour: () => "stoppable" });
+    try {
+      expect(readWebGroup(t.h.store, "g").ledger.groupLimit.tokens).toBeNull();
+      const work = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      work.tokenIntent = { tokens: M, hard: false, provenance: "human", estimateId: null };
+      t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify(work));
+      const runId = await t.claim();
+      // mutation: drop `if (l === null) return null` from pauseLineFor -> liveCeiling { cause: "pause-line", tokens: 10M }, red
+      expect(t.body(runId)).not.toHaveProperty("liveCeiling");
+      expect(t.body(runId).grant.work.tokens).toBeNull();
     } finally { await t.h.dispose(); }
   });
 

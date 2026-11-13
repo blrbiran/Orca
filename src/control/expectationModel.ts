@@ -88,11 +88,13 @@ export function taskExpectation(store: ControlStore, groupId: string, work: { ta
  * - k > 1: L === null ? 10kE : min(10kE, u + floor(max(0, L - G) / 2)).
  * In words: each continue moves the line to the next multiple of 10x the expectation, but never lets the task take more
  * than half of what the group had left when the person decided.
+ * Tester #300 (follow-up J, human: 「无限制组不要暂停线」): a group with no token limit has no pause line at all (null);
+ * the L === null branches above are no longer reached through here.
  */
-export function pauseLineFor(input: { expectationTokens: number; multiple: number; groupLimitTokens: number | null; taskUsedAtDecision: number; groupUsedAtDecision: number }): number {
+export function pauseLineFor(input: { expectationTokens: number; multiple: number; groupLimitTokens: number | null; taskUsedAtDecision: number; groupUsedAtDecision: number }): number | null {
   const { expectationTokens: e, multiple: k, groupLimitTokens: l } = input;
+  if (l === null) return null;
   const line = PAUSE_LINE_MULTIPLE * k * e;
-  if (l === null) return line;
   if (k <= 1) return Math.min(line, Math.floor(l / 2));
   return Math.min(line, input.taskUsedAtDecision + Math.floor(Math.max(0, l - input.groupUsedAtDecision) / 2));
 }
