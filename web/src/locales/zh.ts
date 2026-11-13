@@ -754,6 +754,7 @@ export const zh: Translation<typeof en> = {
       task: "任务 {{taskId}}",
       version: "运行 {{runId}}（{{outcome}}）：交接 {{handoff}}，摘要 {{summary}}",
       stored: "已保存",
+      truncated: "已截断",
       missing: "缺失",
       invalid: "无效",
       summary: "摘要",

@@ -593,7 +593,7 @@ export type GroupViewV1 = {
 };
 
 /** Tester follow-up G Part 4: a stored file's state (src/control/taskHandoffs.ts). */
-export type HandoffFileStateV1 = { state: "stored" | "missing" | "invalid"; reason: "empty" | "too-large" | "not-utf8" | "too-many-lines" | "not-a-file" | "notes-only" | null; bytes: number | null };
+export type HandoffFileStateV1 = { state: "stored" | "truncated" | "missing" | "invalid"; reason: "empty" | "too-large" | "not-utf8" | "too-many-lines" | "not-a-file" | "notes-only" | null; bytes: number | null };
 export type TaskHandoffViewV1 = { taskId: string; runId: string; outcome: string; handoff: HandoffFileStateV1; summary: HandoffFileStateV1; summaryText: string | null; recordedAt: number; notesMerged: number };
 export type LiveNoteViewV1 = { noteId: string; taskId: string; text: string; at: number; by: string; state: "queued" | "delivered" | "undelivered"; delivered: { runId: string; phase: "plan" | "execute" | "verify"; attempt: number; at: string } | null };
 /** GET /api/control/groups/:groupId/handoffs/:taskId/:runId. */

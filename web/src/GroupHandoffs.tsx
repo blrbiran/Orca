@@ -28,7 +28,7 @@ function HandoffVersion(props: { groupId: string; entry: TaskHandoffViewV1 }): J
   const { entry } = props;
   const [handoff, setHandoff] = useState<string | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
-  const word = (file: HandoffFileStateV1): string => file.state === "stored" ? t("control.handoffs.stored") : file.state === "missing" ? t("control.handoffs.missing") : t("control.handoffs.invalid");
+  const word = (file: HandoffFileStateV1): string => file.state === "stored" ? t("control.handoffs.stored") : file.state === "truncated" ? t("control.handoffs.truncated") : file.state === "missing" ? t("control.handoffs.missing") : t("control.handoffs.invalid");
   const state = (file: HandoffFileStateV1): string => file.reason === null ? word(file) : `${word(file)} (${file.reason})`;
   const open = (): void => {
     if (handoff !== undefined || entry.handoff.state !== "stored") return;

@@ -904,6 +904,8 @@ export const en = {
       task: "Task {{taskId}}",
       version: "run {{runId}} ({{outcome}}): handoff {{handoff}}, summary {{summary}}",
       stored: "stored",
+      // Tester #309: kept as its first lines and passed on.
+      truncated: "truncated",
       missing: "missing",
       invalid: "invalid",
       summary: "Summary",

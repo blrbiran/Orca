@@ -2212,7 +2212,8 @@ const groupIntegrationViewSchema = z
 
 // Tester follow-up G Part 4.7: one run's stored handoff as the group detail lists it (taskHandoffs.ts records).
 const handoffFileStateSchema = z.object({
-  state: z.enum(["stored", "missing", "invalid"]),
+  // Tester #309 (follow-up J): `truncated` -- kept as its first lines (taskHandoffs.ts judgeAgentFile).
+  state: z.enum(["stored", "truncated", "missing", "invalid"]),
   reason: z.enum(["empty", "too-large", "not-utf8", "too-many-lines", "not-a-file", "notes-only"]).nullable(),
   bytes: safeInteger.nullable(),
 }).strict();

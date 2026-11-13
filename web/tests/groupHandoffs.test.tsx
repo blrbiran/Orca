@@ -44,3 +44,11 @@ it("lists each task's handoff versions with the summary; opening one fetches and
   expect(await within(second).findByLabelText("Handoff")).toHaveProperty("textContent", "# Learned\nX\n");
   expect(within(second).getByLabelText("Summary").textContent).toBe("did a again\n");
 });
+
+// Tester #309 (follow-up J): a summary kept as its first lines reads "truncated (too-many-lines)", not stored or invalid.
+it("names a truncated summary", async () => {
+  const value: GroupViewV1 = { ...view([workItem({ taskId: "a" })]), handoffs: [entry({ summary: { state: "truncated", reason: "too-many-lines", bytes: 793 }, summaryText: "l0\n… (truncated)\n" })] };
+  render(<GroupHandoffs view={value} />);
+  // mutation (no truncated word: it falls through to invalid) -> red here.
+  expect(screen.getByText("run run-1 (succeeded): handoff stored, summary truncated (too-many-lines)")).toBeTruthy();
+});

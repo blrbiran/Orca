@@ -34,3 +34,14 @@ describe("orca task handoff", () => {
     expect(out.stdout.trim()).toBe("summary:\ndid t1\n\n\nhandoff:\n# H\nlearned X");
   });
 });
+
+// Tester #309 (follow-up J): the CLI says a summary was truncated and still prints what was kept.
+describe("orca task handoff names a truncated summary (#309)", () => {
+  it("prints `summary truncated (too-many-lines)` and the kept lines", async () => {
+    const w = await world();
+    w.state.view = { ...w.state.view, handoffs: [RECORD("t1", "run-1", { summary: { state: "truncated", reason: "too-many-lines", bytes: 793 }, summaryText: "l0\n… (truncated)\n" })] } as typeof w.state.view;
+    const out = await cli(["task", "handoff", "g-alpha", "t1"], w.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout.trim()).toBe(["run run-1 (succeeded): handoff stored, summary truncated (too-many-lines)", "  l0", "  … (truncated)"].join("\n"));
+  });
+});

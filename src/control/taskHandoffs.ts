@@ -18,10 +18,16 @@ import { writePrivateFile } from "../service/privateFiles.js";
 
 export const HANDOFF_MAX_BYTES = 8192;
 export const SUMMARY_MAX_BYTES = 4096;
+/** Non-empty lines (tester #309: a title and blank separators are not the summary's lines); past it the summary is truncated. */
 export const SUMMARY_MAX_LINES = 10;
+export const TRUNCATED_LINE = "… (truncated)";
 
+/**
+ * Tester #309 (follow-up J): `truncated` -- a summary over SUMMARY_MAX_LINES non-empty lines kept as its first ones and
+ * TRUNCATED_LINE (reason too-many-lines), stored and passed on like `stored`; an 11-line summary used to be dropped whole.
+ */
 export type HandoffFileState = {
-  state: "stored" | "missing" | "invalid";
+  state: "stored" | "truncated" | "missing" | "invalid";
   reason: "empty" | "too-large" | "not-utf8" | "too-many-lines" | "not-a-file" | "notes-only" | null;
   bytes: number | null;
 };
@@ -71,11 +77,13 @@ export function readStoredHandoff(stateDir: string, groupId: string, taskId: str
   const root = existingHandoffsDir(stateDir, groupId);
   const record = readRecord(root, taskId, runId);
   if (record === null) return null;
-  const text = (state: HandoffFileState, name: string): string | null => state.state === "stored" ? readFileSync(join(root, name), "utf8") : null;
+  const text = (state: HandoffFileState, name: string): string | null => kept(state) ? readFileSync(join(root, name), "utf8") : null;
   return { record, handoff: text(record.handoff, handoffName(taskId, runId)), summary: text(record.summary, summaryName(taskId, runId)) };
 }
 
-const hasStored = (record: TaskHandoffRecord): boolean => record.handoff.state === "stored" || record.summary.state === "stored";
+/** A file whose text Orca kept (whole, or truncated: #309). */
+export const kept = (file: HandoffFileState): boolean => file.state === "stored" || file.state === "truncated";
+const hasStored = (record: TaskHandoffRecord): boolean => kept(record.handoff) || kept(record.summary);
 
 /**
  * Prepares the run's two directories and fills `in` (Part 4.3, 4.4): for each direct predecessor its newest succeeded run
@@ -109,14 +117,14 @@ export function prepareRunHandoff(store: ControlStore, groupId: string, taskId: 
   }
   const seen = new Set<string>();
   sources = sources.filter((record) => !seen.has(record.runId) && seen.add(record.runId));
-  const previous = records.filter((record) => record.taskId === taskId && record.runId !== runId && record.summary.state === "stored").at(-1) ?? null;
+  const previous = records.filter((record) => record.taskId === taskId && record.runId !== runId && kept(record.summary)).at(-1) ?? null;
 
   const files = new Map<string, string>();
   const sourceLines: string[] = [];
   for (const source of sources) {
     const listed: string[] = [];
-    if (source.handoff.state === "stored") { const name = handoffName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(name); }
-    if (source.summary.state === "stored") { const name = summaryName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(name); }
+    if (kept(source.handoff)) { const name = handoffName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(name); }
+    if (kept(source.summary)) { const name = summaryName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(source.summary.state === "truncated" ? `${name} (truncated to its first ${SUMMARY_MAX_LINES} lines)` : name); }
     sourceLines.push(`- ${source.taskId} (run ${source.runId}): ${listed.join(", ")}`);
   }
   const previousLines: string[] = [];
@@ -160,7 +168,10 @@ function judgeAgentFile(path: string, maxBytes: number, maxLines: number | null)
     let text: string;
     try { text = new TextDecoder("utf-8", { fatal: true }).decode(content); }
     catch { return { state: { state: "invalid", reason: "not-utf8", bytes: read }, text: null }; }
-    if (maxLines !== null && text.replace(/\n$/, "").split("\n").length > maxLines) return { state: { state: "invalid", reason: "too-many-lines", bytes: read }, text: null };
+    if (maxLines !== null) {
+      const lines = text.split("\n").filter((line) => line.trim() !== "");
+      if (lines.length > maxLines) return { state: { state: "truncated", reason: "too-many-lines", bytes: read }, text: `${[...lines.slice(0, maxLines), TRUNCATED_LINE].join("\n")}\n` };
+    }
     return { state: { state: "stored", reason: null, bytes: read }, text };
   } catch {
     return { state: { state: "invalid", reason: "not-a-file", bytes: null }, text: null };
@@ -190,7 +201,8 @@ export function ingestRunHandoff(store: ControlStore, run: { groupId: string; ta
   };
   writePrivateFile(join(root, recordName(run.taskId, run.runId)), `${JSON.stringify(record)}\n`);
   const states = [handoff.state.state, summary.state.state];
-  return { record, activity: states.includes("invalid") || (outcome === "succeeded" && states.includes("missing")) };
+  // #309: a truncated summary is named too (the activity row's body says truncated), so a cut is never silent.
+  return { record, activity: states.includes("invalid") || states.includes("truncated") || (outcome === "succeeded" && states.includes("missing")) };
 }
 
 /**

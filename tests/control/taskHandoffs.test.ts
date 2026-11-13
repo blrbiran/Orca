@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGroup, putWork } from "../../src/control/commands.js";
@@ -114,19 +114,44 @@ describe("ingestRunHandoff (Part 4.1, 4.6)", () => {
   });
 
   // mutation M-O2c: `>` -> `>=` on the 8192 bound -> the exactly-8192 handoff above is refused, red
-  it("8193-byte handoff ⇒ invalid/too-large; 11-line summary ⇒ invalid/too-many-lines; invalid UTF-8 ⇒ not-utf8; empty ⇒ empty; activity:true", async () => {
+  // Ruling: 「这次批准改写所有必要的判据」 (human, tester follow-up J, 2026-11-13): tests/control/taskHandoffs.test.ts:117-122
+  // asserted an 11-line summary invalid/too-many-lines; #309 keeps it truncated (taskHandoffs.ts judgeAgentFile), so this
+  // criterion now asserts that, and the stored text, beside the unchanged too-large/not-utf8/empty cases.
+  it("8193-byte handoff ⇒ invalid/too-large; 11-line summary ⇒ truncated/too-many-lines; invalid UTF-8 ⇒ not-utf8; empty ⇒ empty; activity:true", async () => {
     const store = await world([{ id: "a" }, { id: "b" }]);
     const eleven = Array.from({ length: 11 }, (_, i) => `l${i}`).join("\n");
     const big = finish(store, "a", "r1", "succeeded", { "handoff.md": "x".repeat(8193), "summary.md": eleven });
     expect(big.record.handoff).toEqual({ state: "invalid", reason: "too-large", bytes: 8193 });
-    expect(big.record.summary).toEqual({ state: "invalid", reason: "too-many-lines", bytes: Buffer.byteLength(eleven) });
+    expect(big.record.summary).toEqual({ state: "truncated", reason: "too-many-lines", bytes: Buffer.byteLength(eleven) });
     expect(big.activity).toBe(true);
+    const keptRoot = groupHandoffsDir(store.stateDir, "g");
+    expect(readFileSync(join(keptRoot, "summary-a-r1.md"), "utf8")).toBe(`${eleven.split("\n").slice(0, 10).join("\n")}\n… (truncated)\n`);
+    rmSync(join(keptRoot, "summary-a-r1.md"));
     const bad = finish(store, "b", "r2", "failed", { "handoff.md": Buffer.from([0xff, 0xfe, 0x41]), "summary.md": "" });
     expect(bad.record.handoff).toEqual({ state: "invalid", reason: "not-utf8", bytes: 3 });
     expect(bad.record.summary).toEqual({ state: "invalid", reason: "empty", bytes: 0 });
     expect(bad.activity).toBe(true);
     const root = groupHandoffsDir(store.stateDir, "g");
     expect(readdirSync(root).filter((name) => name.endsWith(".md"))).toEqual([]);
+  });
+
+  // Tester #309 (follow-up J): the dogfood summary was 11 lines -- a title, blanks and five paragraphs -- and was dropped
+  // whole, so the next task read no summary. Blank lines are not counted; past ten non-empty lines the first ten are kept
+  // with a truncation line, recorded `truncated`, and still passed downstream (the README names the cut).
+  it("counts non-empty lines, keeps an over-long summary truncated and passes it downstream (#309)", async () => {
+    const store = await world([{ id: "a", status: "done" }, { id: "b", dependsOn: ["a"] }]);
+    const dogfood = ["# Schema", "", "p1", "", "p2", "", "p3", "", "p4", "", "p5"].join("\n") + "\n";
+    // mutation (count every line again) -> red here: 11 lines, truncated.
+    expect(finish(store, "a", "r0", "succeeded", { "handoff.md": "h", "summary.md": dogfood }).record.summary).toEqual({ state: "stored", reason: null, bytes: Buffer.byteLength(dogfood) });
+    const twelve = Array.from({ length: 12 }, (_, i) => `p${i}`).join("\n\n");
+    const cut = finish(store, "a", "r1", "succeeded", { "handoff.md": "h", "summary.md": twelve });
+    // mutation (over the limit is invalid again, nothing stored) -> red here and below.
+    expect(cut.record.summary).toMatchObject({ state: "truncated", reason: "too-many-lines" });
+    const expected = `${Array.from({ length: 10 }, (_, i) => `p${i}`).join("\n")}\n… (truncated)\n`;
+    expect(readStoredHandoff(store.stateDir, "g", "a", "r1")!.summary).toBe(expected);
+    const dirs = prepareRunHandoff(store, "g", "b", "rb");
+    expect(readFileSync(join(dirs.inputDir, "summary-a-r1.md"), "utf8")).toBe(expected);
+    expect(readFileSync(join(dirs.inputDir, "README.md"), "utf8")).toContain("summary-a-r1.md (truncated to its first 10 lines)");
   });
 
   // mutation M-O2a: statSync instead of lstatSync (and no O_NOFOLLOW) -> the secret is copied, red
