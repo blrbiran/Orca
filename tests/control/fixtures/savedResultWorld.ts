@@ -43,7 +43,11 @@ export async function savedResultWorld(options:{completeArchive?:boolean;verify?
  const oldWorld=await import(`${producer}/tests/control/fixtures/ccloopWorld.ts`),oldContext=await import(`${producer}/src/control/commandClient.ts`);
  const worlds=oldWorld.ccloopWorlds({rootPrefix:'w-',epochPrefix:'historical'});
  const check=`node -e "const f=require('fs');f.appendFileSync('${join(short,'checks')}', 'check\\n');if(f.readFileSync('answer.txt','utf8')!=='${options.ompMalformed?'42':'saved candidate'}\\n')process.exit(1)"`;
- const w=await worlds.world([{taskId:'a',targetPaths:['answer.txt'],requiredChecks:[check],...(options.ompMalformed?{agent:{agent:'omp'},verifierType:'command' as const}:{})}],{},(options.optional||options.currentCapsule||options.exhausted||options.ompMalformed)?{tokenPolicy:'optional-v1',env:{ORCA_CCLOOP_BIN:sourceBinary}}:{});
+ // Ruling (2026-11-13, tester follow-up I): 「这次批准改写所有必要的判据。」 -- these acceptances were written when every group
+ // was created before the follow-up G release (finite task token grants: `exhausted` ends on the authored 25-token
+ // budget, unknown usage is charged against a finite grant). Since round H's expectation-model default a current world
+ // must say so: `preRelease` imports with `modelVersion: null` (ccloopWorld). An old producer's world is pre-release anyway.
+ const w=await worlds.world([{taskId:'a',targetPaths:['answer.txt'],requiredChecks:[check],...(options.ompMalformed?{agent:{agent:'omp'},verifierType:'command' as const}:{})}],{},(options.optional||options.currentCapsule||options.exhausted||options.ompMalformed)?{tokenPolicy:'optional-v1',preRelease:true,env:{ORCA_CCLOOP_BIN:sourceBinary}}:{});
  if(options.timeoutMs||options.toolRules||options.exhausted||options.ompMalformed){const path=join(w.root,'contracts/a.json'),contract=JSON.parse(await readFileText(path));if(options.timeoutMs)contract.executionPolicy.perAttemptTimeoutMs=options.timeoutMs;if(options.toolRules)contract.executionPolicy.toolRules=options.toolRules;if(options.exhausted)contract.executionPolicy.tokenBudget=25;if(options.ompMalformed)contract.verification.commandChecksDecideGoal=true;await writeFile(path,JSON.stringify(contract));}
  const marker=join(w.root,'calls'),fake=join(w.root,'fake.mjs');
  await writeFile(fake,`import {appendFileSync,readFileSync,writeFileSync} from 'node:fs';
