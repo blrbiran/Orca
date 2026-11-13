@@ -304,3 +304,14 @@ retry 的 `setup-failed` 后，工作树单跑 1/1。另一条 `startForm` 是�
 `/private/tmp/orca-d1-kMINyw/o19-startform-{branch1,main1,branch2,main2-corrected}.log`。整套原始 RC 1
 保持原样，`/private/tmp/orca-d1-kMINyw/o19-orca-final-full.log`；D2 的真实 ccloop 用例和 O19 的默认跳过
 条件均按预期，O19 另用 `ORCA_SAVED_RESULT_VERIFY=1` 单跑通过（`o19-final-pin-e2e.log`）。
+
+### 会话 `7e164691` 2026-11-12→13（测试者反馈 H 轮；负载 20–180，三席并行时常在 50 以上）
+
+新见到、单跑能过的（各门日志在 `/private/tmp/orca-h1112/`，单跑日志同目录 `*rerun*`／`*-alone*`）：
+`driverSettleLane`（5 s 超时放行定时器，负载 60 下单跑红一次、随后 5/5×2，未改 main 同样 5/5）、`handoffE2E`
+（只有 `afterAll` 的 10 s hook 超时，12/12 条都过）、`skillsE2E`、`taskResultCollector`（`metadata-gated` 对
+`core-progress` 的时序断言，新旧 pin 各 30/30）、`correctionCoarseDebug`、`driverPostMergeRecord`、`agentWalk`、
+`driftLock`、`panel/security`、`chainsApi`。门在跑时人做 `orca auth login`／`orca project add` ⇒ Rule 17 守卫
+（真 `~/.orca` 的 `person/token.json`、`projects.json` 变了）让一批文件整文件红——不是 flake，不是代码问题。
+**不是 flake、已查清的**：`agentSelectionE2E` C3 在预算新模型下 3/6 红 ⇒ ccloop live-ceiling 轮询停止竞态（ccloop 已修，
+Orca pin `26b3127`）；`handoffE2E` G 在 ccloop `d5a4bd2`＋旧 Orca 下稳定红 ⇒ 严格解析拒 `worker` 键（与 #273 Orca 半边同合）。
