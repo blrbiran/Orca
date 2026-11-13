@@ -522,31 +522,49 @@ describe("a repin that changes only ccloop", () => {
       ...extraPackages,
     },
   }, null, 2) + "\n";
+  // The tests that run the real ccloop, and every q fixture test (the whole suite is ALL_ROOT plus Q_TESTS).
   const CCLOOP_TESTS = ["root tests/q/spawnsCcloop.test.ts", "root tests/q/viaWorld.test.ts"];
+  const Q_TESTS = [...CCLOOP_TESTS, "root tests/q/deepVia.test.ts", "root tests/q/fakeCcloop.test.ts", "root tests/q/setsFake.test.ts"].sort();
 
-  // main gets the old pin and two tests that reach ccloop (one names it, one through a helper that names it).
+  // main gets the old pin and tests around the real binary: one reads ORCA_CCLOOP_BIN, one imports a helper that reads
+  // it; and three that name ccloop without running it -- a fake `ccloopBin` field through a helper, an assignment, a
+  // delete and a fake env value, and a helper that only re-exports the reading helper.
   function pinnedRepo(): string {
     const repo = graphRepo();
     git(repo, "checkout", "-q", "main");
     write(repo, "package.json", pkg("a".repeat(40)));
     write(repo, "package-lock.json", lock("a".repeat(40)));
-    write(repo, "tests/q/spawnsCcloop.test.ts", T(`const bin = process.env.ORCA_CCLOOP_BIN;\nvoid bin;`));
-    write(repo, "tests/helpers/ccloopWorld.ts", `export const world = "node_modules/ccloop/dist/cli.js";\n`);
-    write(repo, "tests/q/viaWorld.test.ts", T(`import { world } from "../helpers/ccloopWorld.js";\nvoid world;`));
+    write(repo, "tests/q/spawnsCcloop.test.ts", T(`if (process.env.ORCA_CCLOOP_BIN === undefined) void 0;`));
+    write(repo, "tests/helpers/ccloopWorld.ts", `export const realBinary = process.env.ORCA_CCLOOP_BIN;\n`);
+    write(repo, "tests/q/viaWorld.test.ts", T(`import { realBinary } from "../helpers/ccloopWorld.js";\nvoid realBinary;`));
+    write(repo, "tests/helpers/fakePlan.ts", `export const plan = { ccloopBin: "/bin/true", note: "ccloop" };\n`);
+    write(repo, "tests/q/fakeCcloop.test.ts", T(`import { plan } from "../helpers/fakePlan.js";\nvoid plan;`));
+    write(repo, "tests/q/setsFake.test.ts", T(
+      `process.env.ORCA_CCLOOP_BIN = "/fake/cli.js";\ndelete process.env.ORCA_CCLOOP_BIN;\nconst env = { ORCA_CCLOOP_BIN: "/fake" };\nvoid env;`));
+    write(repo, "tests/helpers/harness.ts", `export { realBinary as reExported } from "./ccloopWorld.js";\n`);
+    write(repo, "tests/q/deepVia.test.ts", T(`import { reExported } from "../helpers/harness.js";\nvoid reExported;`));
     commit(repo);
     git(repo, "checkout", "-q", "-B", "work", "main");
     return repo;
   }
 
-  it("selects only the tests that name ccloop or import a helper naming it, each with its reason", () => {
+  // Ruling (2026-11-13, tester follow-up I): the human approved narrowing a pin-only repin to the tests that run the real
+  // ccloop (「点头改」, and this round's 「这次批准改写所有必要的判据」). The old row selected every file naming ccloop and
+  // every transitive importer of a helper naming it -- 503 files on the 26b3127 repin, because shared fixtures carry a fake
+  // `ccloopBin`. Rewritten whole: a read of ORCA_CCLOOP_BIN, or a direct import of a helper that reads it, is selected;
+  // naming ccloop, assigning or deleting the variable, and reaching the reader only through another helper are not.
+  it("selects only the tests that read ORCA_CCLOOP_BIN or directly import a helper reading it, each with its reason", () => {
     const repo = pinnedRepo();
     write(repo, "package.json", pkg("b".repeat(40)));
     write(repo, "package-lock.json", lock("b".repeat(40), { "node_modules/ccloop/node_modules/inner": { version: "1.1.0" } }));
     commit(repo);
     const r = dry(repo);
     expect(r.files).toEqual(CCLOOP_TESTS);
-    expect(r.out).toContain("root tests/q/spawnsCcloop.test.ts <- package-lock.json (ccloop pin only: names ccloop)");
-    expect(r.out).toMatch(/root tests\/q\/viaWorld\.test\.ts <- .*named by tests\/helpers\/ccloopWorld\.ts, imported/);
+    expect(r.out).toContain("root tests/q/spawnsCcloop.test.ts <- package-lock.json (ccloop pin only: reads ORCA_CCLOOP_BIN)");
+    expect(r.out).toContain(
+      "root tests/q/viaWorld.test.ts <- package-lock.json (ccloop pin only: imports tests/helpers/ccloopWorld.ts, which reads ORCA_CCLOOP_BIN)");
+    expect(r.out).toContain(
+      "test-affected: package.json and package-lock.json differ only in the ccloop pin: they select only the tests that run the real ccloop");
   });
 
   it("a lock entry outside ccloop keeps the whole suite", () => {
@@ -554,7 +572,7 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "package.json", pkg("b".repeat(40)));
     write(repo, "package-lock.json", lock("b".repeat(40), { "node_modules/left-pad": { version: "1.0.0" } }));
     commit(repo);
-    expect(dry(repo).files).toEqual([...ALL_ROOT, ...CCLOOP_TESTS].sort());
+    expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
   });
 
   it("a package.json change beside the pin keeps the whole suite", () => {
@@ -562,7 +580,7 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "package.json", pkg("b".repeat(40), { version: "2.0.0" }));
     write(repo, "package-lock.json", lock("b".repeat(40)));
     commit(repo);
-    expect(dry(repo).files).toEqual([...ALL_ROOT, ...CCLOOP_TESTS].sort());
+    expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
   });
 
   it("another root dependency changed in the lock's root entry keeps the whole suite", () => {
@@ -572,6 +590,6 @@ describe("a repin that changes only ccloop", () => {
     changedRoot.packages[""].dependencies["left-pad"] = "^1.0.0";
     write(repo, "package-lock.json", JSON.stringify(changedRoot, null, 2) + "\n");
     commit(repo);
-    expect(dry(repo).files).toEqual([...ALL_ROOT, ...CCLOOP_TESTS].sort());
+    expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
   });
 });
