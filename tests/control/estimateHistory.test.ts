@@ -30,7 +30,8 @@ const REPO = { plan: { repoId: "repo" } };
 
 /**
  * Three tasks that count -- 1M; 1.5M + 0.5M over two runs (a failed attempt and the one that landed); 4M in an archived
- * group -- median 2M. Each task that must not count spends 100 tokens, so counting any of them moves the median and n.
+ * group -- median 2M. Each task that must not count spends 100 tokens (the one with no run, 0), so counting any of them
+ * moves the median to 1.5M and n to 4.
  */
 function seedHistory(store: ControlStore): void {
   seedGroup(store, "o1", REPO); seedTask(store, "o1", "a", "done", [run(1 * M)]);
