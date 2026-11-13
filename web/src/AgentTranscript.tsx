@@ -136,7 +136,11 @@ function toolTone(row: Row): "ok" | "danger" | "info" | undefined {
   return row.result.flag?.error === true ? "danger" : "ok";
 }
 
-/** One displayed row: its first line; expanded, every field's head of its event (and of the joined result). */
+/**
+ * One displayed row: its first line; expanded, every field's head of its event (and of the joined result).
+ * Tester #301: a row shows no time. `event.at` is the byte offset of the event's line (the paging and expand address),
+ * not a time, and an event carries no time of its own; the call's start (`startedAt`) is shown on the call's row instead.
+ */
 function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Element {
   const { t } = useTranslation();
   const { event, result } = props.row;
@@ -147,7 +151,6 @@ function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Elemen
   const opens = expandable(event) || expandable(result);
   return (
     <li className={`transcript-event transcript-${event.kind} min-w-0`} data-testid="transcript-event" data-tone={tone}>
-      {eventTime(event.at)}{" "}
       {opens
         ? <button type="button" className="max-w-full wrap-anywhere" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{line}</button>
         : <span className="transcript-line wrap-anywhere">{line}</span>}
@@ -360,28 +363,6 @@ const STARTED_CLOCK: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-
 function startedTime(startedAt: string): JSX.Element {
   const at = new Date(startedAt);
   return <time data-testid="transcript-call-started" dateTime={startedAt} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>;
-}
-
-/**
- * Tester #281: each event's own time (`event.at`) as the row's lead, a local clock time with the full date on hover. The
- * list's numbers were only a position in the 200-row window, so they changed under Earlier/Later; they are hidden now and
- * the same event shows the same time whatever window holds it.
- */
-function eventTime(at: number): JSX.Element {
-  const date = new Date(at);
-  const { clock, full } = formatters(currentLanguage());
-  return <time data-testid="transcript-event-time" className="num text-xs text-muted" dateTime={date.toISOString()} title={full.format(date)}>{clock.format(date)}</time>;
-}
-/** Up to 200 rows re-render on every poll; building a locale formatter per row and call is what made that slow. */
-const FORMATTERS = new Map<string, { clock: Intl.DateTimeFormat; full: Intl.DateTimeFormat }>();
-function formatters(language: string): { clock: Intl.DateTimeFormat; full: Intl.DateTimeFormat } {
-  let found = FORMATTERS.get(language);
-  if (found === undefined) {
-    // `full` is what toLocaleString gives: the date and the time.
-    found = { clock: new Intl.DateTimeFormat(language, STARTED_CLOCK), full: new Intl.DateTimeFormat(language, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" }) };
-    FORMATTERS.set(language, found);
-  }
-  return found;
 }
 
 function sizeText(bytes: number): string {

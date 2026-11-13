@@ -132,9 +132,10 @@ describe("#254: result rows", () => {
     await opened();
     // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #281: every row now leads with its event's
     // time, so the row is that time, then the same line as before.
-    const time = rows()[0]!.querySelector("[data-testid='transcript-event-time']")!.textContent;
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #301: `event.at` is a byte offset, not a
+    // time, so a row no longer leads with one; the row is the line alone again.
     // mutation: summary reads fields.text only -> the codex result row says just "result" -> red
-    expect(rows()[0]!.textContent).toBe(`${time} result input tokens 1200 · cached 800 · output tokens 90 · reasoning 40`);
+    expect(rows()[0]!.textContent).toBe("result input tokens 1200 · cached 800 · output tokens 90 · reasoning 40");
   });
 
   it("does not offer to open a row with nothing to show (omp agent_end, a turn-end notice)", async () => {
