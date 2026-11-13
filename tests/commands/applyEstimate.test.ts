@@ -138,6 +138,20 @@ describe("orca group apply-estimate (#156)", () => {
     expect(out.stdout).toContain("  task t1: expected 800 tokens");
   });
 
+  it("an expectation-model group: a task whose estimate is under the 1M floor names the expectation Orca uses (tester follow-up I, C)", async () => {
+    // Dogfood g-28d9b560: apply-estimate said "task search: expected 150000 tokens" while the pause line was 10x the
+    // 1,000,000 floor (spec §2 item 2, #266). The server's view carries each task's expectation, floored (`expected`).
+    const view = { ...adviceView(), expectationModel: true } as ReturnType<typeof adviceView>;
+    (view.workItems[0] as Record<string, unknown>).expected = { tokens: 1_000_000, estimateId: "est-new", stale: false, usedTokens: 0 };
+    // t2's expectation is a person's own amount (estimateId null): the estimate's floor says nothing about it.
+    (view.workItems[1] as Record<string, unknown>).expected = { tokens: 2_000_000, estimateId: null, stale: false, usedTokens: 0 };
+    const out = await cli(["group", "apply-estimate", "g-alpha"], (await advisedWorld(view)).dir);
+    expect(out.code).toBe(0);
+    // mutation C1 (no floorTokens on the answer) -> red here.
+    expect(out.stdout).toContain("  task t1: expected 800 tokens; an expectation is at least 1000000, so its pause line counts from 1000000");
+    expect(out.stdout).toContain("  task t2: expected 300 tokens\n");
+  });
+
   it("an unlimited group: the estimate is recorded as the expectation, exit 0, and no task-work ceiling is sent (§7 item 5)", async () => {
     const w = await advisedWorld(adviceView({ unlimited: true }));
     const out = await cli(["group", "apply-estimate", "g-alpha"], w.dir);

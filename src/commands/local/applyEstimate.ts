@@ -22,7 +22,7 @@ interface Planned { verb: SuggestionAction["verb"]; route: string; payload: unkn
 interface Applied extends Planned { commandId: string; expectedRevision: number; commandRevision: number | null }
 
 export function formatApplied(body: unknown): string {
-  const b = body as { groupId: string; estimateId: string; dryRun: boolean; groupTokenLimit?: number; actions: Planned[]; applied: Applied[]; expectations?: Array<{ taskId: string; tokens: number }>; raisedAttempts?: RaisedAttempts[] };
+  const b = body as { groupId: string; estimateId: string; dryRun: boolean; groupTokenLimit?: number; actions: Planned[]; applied: Applied[]; expectations?: Array<{ taskId: string; tokens: number; floorTokens?: number }>; raisedAttempts?: RaisedAttempts[] };
   const list = b.dryRun ? b.actions : b.applied;
   // Budget defaults spec 2026-11-11 §7 item 5: in a group with no token limit the estimate is each task's expectation; no
   // task-work ceiling is sent, so "already matches / nothing to apply" would misstate what happened.
@@ -30,7 +30,7 @@ export function formatApplied(body: unknown): string {
     // Tester follow-up I (seat K; dogfood g-28d9b560): or a group of the expectation model, whose token limit is the only ceiling.
     b.groupTokenLimit === undefined ? `${b.groupId}: the group has no token limit, so estimate ${b.estimateId} is recorded as the expectation, not a ceiling`
       : `${b.groupId}: a task's tokens are an expectation in this group (its token limit, ${b.groupTokenLimit}, is the only ceiling), so estimate ${b.estimateId} is recorded as the expectation, not a ceiling`,
-    ...b.expectations.map((e) => `  task ${e.taskId}: expected ${e.tokens} tokens`),
+    ...b.expectations.map((e) => `  task ${e.taskId}: expected ${e.tokens} tokens${e.floorTokens === undefined ? "" : `; an expectation is at least ${e.floorTokens}, so its pause line counts from ${e.floorTokens}`}`),
   ];
   if (list.length === 0) return expected.length > 0 ? expected.join("\n") : `${b.groupId}: the proposal already matches estimate ${b.estimateId}; nothing to apply`;
   const lines = [...expected, `${b.groupId}: ${b.dryRun ? "would send" : "sent"} ${list.length} command(s) from estimate ${b.estimateId}`];
@@ -76,7 +76,13 @@ export async function runApplyEstimate(args: ParsedArgs, io: CommandIo): Promise
     const raised = raisedAttempts(advice.output, actions);
     const base = { schema: "orca-apply-estimate-v1", groupId: view.summary.groupId, estimateId: advice.estimateId, dryRun: args.flags["dry-run"] === true,
       // §7 item 5: present only in a group with no token limit, so a finite group's answer keeps its bytes.
-      ...(estimateIsAdvisory(view) ? { expectations: advice.output.tasks.map((task) => ({ taskId: task.taskId, tokens: task.work.tokens })) } : {}),
+      // Tester follow-up I (seat L; dogfood g-28d9b560, finding C): in an expectation-model group an estimate's tokens are
+      // raised to the 1M floor (spec §2 item 2, #266) -- the view's `expected` says so -- and the line named the raw 150000
+      // while the pause line was 10x 1,000,000. `floorTokens` (only-add) is the expectation Orca uses when it differs.
+      ...(estimateIsAdvisory(view) ? { expectations: advice.output.tasks.map((task) => {
+        const used = (view.workItems as ReadonlyArray<{ taskId: string; expected?: { tokens: number; estimateId: string | null } }>).find((item) => item.taskId === task.taskId)?.expected;
+        return { taskId: task.taskId, tokens: task.work.tokens, ...(view.expectationModel === true && used?.estimateId === advice.estimateId && used.tokens > task.work.tokens ? { floorTokens: used.tokens } : {}) };
+      }) } : {}),
       // Tester follow-up I (seat K): an expectation-model group's finite limit, so the line does not say it has none (only-add).
       ...(estimateIsAdvisory(view) && view.ledger.groupLimit.tokens !== null ? { groupTokenLimit: view.ledger.groupLimit.tokens } : {}),
       // #162: present only when an attempts was raised to the floor (only-add).
