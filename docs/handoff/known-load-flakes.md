@@ -315,3 +315,19 @@ retry 的 `setup-failed` 后，工作树单跑 1/1。另一条 `startForm` 是�
 （真 `~/.orca` 的 `person/token.json`、`projects.json` 变了）让一批文件整文件红——不是 flake，不是代码问题。
 **不是 flake、已查清的**：`agentSelectionE2E` C3 在预算新模型下 3/6 红 ⇒ ccloop live-ceiling 轮询停止竞态（ccloop 已修，
 Orca pin `26b3127`）；`handoffE2E` G 在 ccloop `d5a4bd2`＋旧 Orca 下稳定红 ⇒ 严格解析拒 `worker` 键（与 #273 Orca 半边同合）。
+
+### 会话 `d467cbd2` 2026-11-13（测试者反馈 I 轮；负载 5–160，最多 5 席并行）
+
+整轮门（`test-affected --base=<本轮起点>`，1047 文件）红的 8 个文件逐个单跑（`/private/tmp/orca-i1113/round-rerun/`）：
+`panelSocketE2e`（C3 SIGTERM 删 socket）、`driftLock`（D15）、`panel/security`、`allowanceHeldSettlement`、
+`driverSettleLane`、`schedulerBridge` 单跑全过；`startForm`（`fetch failed`／`ECONNRESET` 后 hook 10 s 超时）单跑仍红，
+**与本轮起点的 clone 交替各三次同形**（基线 失败,失败,通过／main 失败,失败,通过；`/private/tmp/orca-i1113/ab-startform/`）
+⇒ 负载。各席门里另见：`correctionCoarseDebug`、`schedulerBridge`（负载 80–140 超时，负载 22 下 19/19）、`chainsApi` C1
+（500，单跑过）、`security`、`criteriaBaseRun`、`driverReconcileN`、`tokenPolicyRuntime`、`debugRepro`、`taskResultPaired`、
+`multiDirOverview`、`controlOverviewApi`、`driverReconcile`、`handoffE2E`（单跑都过）。
+ccloop：`tests/runtime/codex/stalledCauseAndFloor.test.ts`「throws the stall instead of answering null」（前提 `io-error`
+对 `stalled`）在本轮之前的 `b43e29b` 上同样时过时红（`/private/tmp/orca-i1113/stalled-ab/`：a0901e4 过,过／2151aeb
+过,红／b43e29b 红,过）⇒ 既有负载 flake，**不在 `check-known-reds` 名单**（进不进归人）。
+**不是 flake、已查清的**：`savedResultRecovery.paired` 的 V10／exhausted 在 H 轮默认期望模型后源 run 直接 succeeded（夹具漂移，
+已改 `preRelease`）；V11／O19 是 ccloop saved-result 校验不认 handoff 目录的真回归（ccloop 本地 main 已修，等 repin）。
+配对文件整份跑会有 19 条 `saved-result-integration-prerequisites-missing`——它们要旧构建，不是红。
