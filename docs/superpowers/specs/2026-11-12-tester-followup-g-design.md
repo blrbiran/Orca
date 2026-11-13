@@ -559,3 +559,26 @@ list and `recoveryBlockerCount` were empty.
    (The 2,093,082 includes 1,932,240 booked by the earlier worker-lost settlement under the charging seat K corrected.)
 4. **Retry wording (D).** A retry receipt's `nextRun` gains `because`: `no-token-limit` (§E8 fresh start) or
    `worker-lost` (worker-lost recovery spec §5.4 credit); the CLI line names that reason.
+
+## 19. Correction (tester follow-up J, 2026-11-13): no pause line in an unlimited group; the continue's next line
+
+Recorded by the P0 implementation seat of Orca session `c8b75eac`, on branch `j/p0` from main `ef48cb04`. §2 item 7 and
+§12.3 above are kept as written; where they disagree with this section, this section holds.
+
+1. **An unlimited group has no pause line (#300).** Human ruling, session `c8b75eac`: 「#300 => 无限制组不要暂停线」. §2 item 7's
+   "an unlimited group has no group limit, so the pause line there is 10× the expectation only" no longer holds: a group
+   whose token limit is null has no pause line at all. `pauseLineFor` answers null when L is null (§12.3's
+   `L null ? 10E` / `L null ? 10kE` branches are gone), `pauseLineOf` answers none, so a claim's live ceiling never has
+   cause `pause-line` there; with no spend cap and no hard cap the claim carries no live ceiling (as a task with no
+   expectation already did). The expectation itself, the over-expectation hint and a person's hard cap are unchanged. A
+   task already waiting at a pause line in such a group (paused before this) may still be decided; a continue there
+   sets no next line. Groups with a finite limit are unchanged. Criterion: `tests/control/usagePauseDecision.test.ts`
+   "a task with an expectation in an unlimited group has no pause line".
+2. **The continue's next line is above what the task used (#305).** §2 item 5 left the formula to the builder; §12.3's
+   "continue sets the next line (refused `usage-pause-no-headroom` when it leaves the task nothing)" refused for good a
+   task whose run overshot its line past the next multiple too (ccloop stops a phase at a boundary or between turns).
+   The continue now takes k = max(k + 1, ⌊used / 10E⌋ + 1) -- the first multiple of 10E above the task's whole-lineage
+   use -- still capped at u + ⌊max(0, L − G) / 2⌋. Only when that cap holds the line at or below what the task used is
+   it refused, as `usage-pause-group-headroom` (detail `<line><=<used>:orca group set-limit <g> --limit <a higher
+   limit>`); `usage-pause-no-headroom` is left for a task with no expectation. Criterion:
+   `tests/control/usagePauseDecision.test.ts` "continue after an overshoot past the next multiple".
