@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -276,10 +276,14 @@ const estimateFormat = (row: CommandDef, reasonField: "estimateReasonCode" | "re
 let instructionWarnings: string[] = [];
 /** Issue #212: the funding preview `group confirm` read, for --json's `funding` (withFunding; only-add). */
 let confirmFunding: unknown = null;
+/** Tester #173/#224/#266 (follow-up L): the view's estimateHistory `group confirm` read, for --json's `estimateHistory` (only-add). */
+let confirmHistory: EstimateHistory | undefined;
 const withWarnings = (row: CommandDef): CommandDef => ({ ...row, jsonBody: (body) => {
   const warnings = instructionWarnings; instructionWarnings = [];
   const funding = confirmFunding; confirmFunding = null;
-  return withFunding(warnings.length === 0 || typeof body !== "object" || body === null ? body : { ...body, warnings }, funding);
+  const history = confirmHistory; confirmHistory = undefined;
+  const answered = withFunding(warnings.length === 0 || typeof body !== "object" || body === null ? body : { ...body, warnings }, funding);
+  return history === undefined || typeof answered !== "object" || answered === null || "error" in answered ? answered : { ...answered, estimateHistory: history };
 } });
 
 /** #224: the lines a row's payload left for its human output, after what the row prints (one command per CLI process). */
@@ -762,7 +766,8 @@ async function fullSuiteConfirmLines(c: WriteContext, repoId: string): Promise<s
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
   const funding = await c.read(`groups/${group(c)}/funding-preview`);
-  confirmNote = [...unestimatedLines(group(c), view, { afterConfirm: true }), ...fundingLines(funding)];
+  confirmHistory = (view as { estimateHistory?: EstimateHistory }).estimateHistory;
+  confirmNote = [...unestimatedLines(group(c), view, { afterConfirm: true }), ...fundingLines(funding), ...historyLines(confirmHistory)];
   confirmFunding = funding;
   const defaults = (await config(c)).defaults;
   const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;

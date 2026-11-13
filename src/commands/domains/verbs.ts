@@ -218,6 +218,21 @@ export function fundingLines(preview: unknown): string[] {
     ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.reason === "dependencies-pending" ? "nothing yet (it waits for its dependencies)"
       : row.reason !== null ? `nothing (${row.reason})` : tokens(row.fundableTokens)}`)];
 }
+/** The group view's `estimateHistory` (src/control/estimateHistory.ts), absent on a confirmed proposal or an older panel. */
+export interface EstimateHistory { medianTokens: number | null; sampleCount: number; minimumSample: number; tasks: Array<{ taskId: string; estimateTokens: number | null; ratio: number | null }> }
+/**
+ * Tester #173/#224/#266 (follow-up L; human, round K): the median work tokens of this repository's finished tasks, and
+ * each task's estimate as a multiple of it, under `proposal show` and `group confirm`. Information only; none without it.
+ */
+export function historyLines(history: EstimateHistory | undefined): string[] {
+  if (history === undefined) return [];
+  if (history.medianTokens === null) {
+    return [`history: too few finished tasks in this repository to compare the estimates with (${history.sampleCount}; at least ${history.minimumSample} needed)`];
+  }
+  return [`history: finished tasks of other groups in this repository used a median of ${history.medianTokens} tokens each (n=${history.sampleCount}; every run of a task, ledger units)`,
+    ...history.tasks.map((task) => task.estimateTokens === null ? `  task ${task.taskId}: not estimated`
+      : `  task ${task.taskId}: estimate ${task.estimateTokens} tokens, ${task.ratio === null ? "no multiple" : `${task.ratio}x`} that median`)];
+}
 /**
  * Issue #212: agents read --json, not the funding lines. A body gains `funding`, the funding preview's rows (each task's
  * authored tokens and what a claim now funds, or why nothing), after its own fields; absent when the preview has no rows.

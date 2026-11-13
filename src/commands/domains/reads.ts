@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { acceptanceLines, contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -441,9 +441,15 @@ export const READ_ROWS: CommandDef[] = [
     // Dogfood run 3 F23: the document carries no estimates, so its lines are read from the view it is composed from (the
     // confirm row's pattern, one command per CLI process); its JSON is unchanged.
     // Issue #212: --json carries the funding rows the human lines are made from (only-add; absent when there are none).
-    compose: ([view, funding]) => { const v = view as Parameters<typeof proposalDocument>[0]; proposalNote = [...unestimatedLines(v.summary.groupId, v), ...fundingLines(funding), ...contextHandoffLines(v.proposal.contextPolicy.handoffAtContextTokens)]; return withFunding(proposalDocument(v), funding); },
+    // Tester #173/#224/#266 (follow-up L): the view's estimateHistory as lines and, only-add, as --json's `estimateHistory`.
+    compose: ([view, funding]) => {
+      const v = view as Parameters<typeof proposalDocument>[0], history = (view as { estimateHistory?: EstimateHistory }).estimateHistory;
+      proposalNote = [...unestimatedLines(v.summary.groupId, v), ...fundingLines(funding), ...historyLines(history), ...contextHandoffLines(v.proposal.contextPolicy.handoffAtContextTokens)];
+      const body = withFunding(proposalDocument(v), funding) as Record<string, unknown>;
+      return history === undefined ? body : { ...body, estimateHistory: history };
+    },
     format: (body) => {
-      const { funding: _shownAsLines, ...document } = body as Record<string, unknown>;
+      const { funding: _shownAsLines, estimateHistory: _historyAsLines, ...document } = body as Record<string, unknown>;
       const lines = proposalNote; proposalNote = []; return lines.length === 0 ? text(document) : `${text(document)}\n${lines.join("\n")}`;
     } }),
   read({ domain: "task", action: "show", summary: "one task of a group and its runs", positionals: [GROUP, TASK], paths: (c) => [`groups/${ids(c, "group")}`],
