@@ -329,7 +329,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           // own -- the ladder and the quota retries keep counting the lineage) credits back the attempts and active time the
           // lineage used beyond earlier top-ups, so the new run starts with the task's own.
           const prior=topUpSum(store,groupId,taskId,null);
-          const want=workerLostWant(freshStartWant(store,groupId,command,inherited,prior),drive,run);
+          const unlimitedWant=freshStartWant(store,groupId,command,inherited,prior);
+          const want=workerLostWant(unlimitedWant,drive,run);
           const authored=withTopUp(work.grant.work,add(add(prior,incoming??{tokens:0,activeMs:0,attempts:0,sessions:0}),want??{tokens:0,activeMs:0,attempts:0,sessions:0}));
           let left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,authored,inherited,left));
@@ -366,7 +367,9 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, command.payload.allowanceId !== undefined ? `allowance:${command.payload.allowanceId}` : commandPrincipalFor(command.commandId) ?? command.actorId);
           deps.beforeCommit?.();
           // The receipt says what the new run starts with when the fresh-start rule applied (the CLI prints it).
-          return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId,...(want===null?{}:{nextRun:{attempts:left.attempts,activeMs:left.activeMs}})});
+          // Tester follow-up I (seat L; dogfood g-28d9b560): and why it is fresh -- the group has no token limit, or (in any
+          // group) the run lost its worker -- so the CLI line never says "no token limit" of a group that has one.
+          return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId,...(want===null?{}:{nextRun:{attempts:left.attempts,activeMs:left.activeMs,because:unlimitedWant!==null?"no-token-limit":"worker-lost"}})});
         }
         const retrying = held || released || closed || work.retryGrantSourceRunId !== undefined || allocations.some(a => a.state === "continuing");
         const grant = both(retrying ? run.grant : work.grant), remaining = released || closed ? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } : both(run.remaining);

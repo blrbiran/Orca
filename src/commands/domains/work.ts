@@ -543,8 +543,11 @@ export const WORK_ROWS: CommandDef[] = [
     // Tester follow-up B T2 (#202): the fresh grant the retry's next run gets, read before the write (print-only).
     format: (body: unknown) => {
       // Tester follow-up E §8: what the new run starts with, when the receipt says (an explicit retry in a group with no token limit).
-      const next = (body as { result?: { taskId?: string; nextRun?: { attempts: number; activeMs: number } } } | null)?.result;
-      const fresh = next?.nextRun === undefined ? [] : [`the new run of ${next.taskId} gets ${next.nextRun.attempts} attempts and ${Math.round(next.nextRun.activeMs / 60_000)} min active time (fresh: the group has no token limit)`];
+      // Tester follow-up I (seat L; dogfood g-28d9b560): the receipt says why (`because`); a worker-lost credit in a group with
+      // a token limit read "the group has no token limit". A receipt without it (an older panel) keeps the old words.
+      const next = (body as { result?: { taskId?: string; nextRun?: { attempts: number; activeMs: number; because?: string } } } | null)?.result;
+      const why = next?.nextRun?.because === "worker-lost" ? "its lost run's attempts are credited back: the machine lost that work" : "fresh: the group has no token limit";
+      const fresh = next?.nextRun === undefined ? [] : [`the new run of ${next.taskId} gets ${next.nextRun.attempts} attempts and ${Math.round(next.nextRun.activeMs / 60_000)} min active time (${why})`];
       const lines = [...retryNote, ...fresh]; retryNote = [];
       return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } },

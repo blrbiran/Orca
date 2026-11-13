@@ -923,7 +923,7 @@ export type CommandSuccessV1 = {
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "usage-pause-decided"; taskId: string; decision: "continue" | "stop"; nextLine: number | null }
-    | { kind: "task-retried"; taskId: string; fromRunId: string; nextRun?: { attempts: number; activeMs: number } }
+    | { kind: "task-retried"; taskId: string; fromRunId: string; nextRun?: { attempts: number; activeMs: number; because?: "no-token-limit" | "worker-lost" } }
     | { kind: "task-reopened"; taskId: string; fromRunId: string }
     | { kind: "no-change-accepted"; taskId: string; runId: string }
     | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: "answer" | "consensus" | "review" | "call" | "person" }

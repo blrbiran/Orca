@@ -70,6 +70,8 @@ describe("an explicit retry in an unlimited group starts with fresh attempts and
       expect(answer.error).toBeUndefined();
       // mutation: drop nextRun from the receipt -> red
       expect(answer.result).toMatchObject({ kind: "task-retried", taskId: "a", fromRunId: first, nextRun: { attempts: 2, activeMs: AUTHORED_ACTIVE_MS } });
+      // Tester follow-up I (seat L): and why. mutation D3 (because always worker-lost) -> red here.
+      expect(answer.result).toMatchObject({ nextRun: { because: "no-token-limit" } });
       const second = await claimAgain(t, driver);
       await prepared(t, driver, second);
       const funded = readFundedAllowance(t.h.store, t.body(second))!;

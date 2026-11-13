@@ -2535,7 +2535,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("usage-settled"), taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, charged: z.object({ work: amountSchema.extend({ tokens: amountSchema.shape.tokens.nullable() }).strict(), handoff: amountSchema }).strict(), at: safeInteger, method: z.enum(["remaining-grant", "owner-acknowledged-unmetered", "approximate-floor", "known-zero", "observed-floor"]) }).strict(),
   // Tester follow-up E §8: `nextRun`, what the new run starts with, when an explicit retry in a group with no token limit
   // gave it fresh attempts and active time (absent otherwise, so every other receipt is as it was).
-  z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema, nextRun: z.object({ attempts: safeInteger, activeMs: safeInteger }).strict().optional() }).strict(),
+  z.object({ kind: z.literal("task-retried"), taskId: idSchema, fromRunId: idSchema, nextRun: z.object({ attempts: safeInteger, activeMs: safeInteger, because: z.enum(["no-token-limit", "worker-lost"]).optional() }).strict().optional() }).strict(),
   // Tester follow-up G spec §1.4: a no-change task reopened; its next run carries the note.
   z.object({ kind: z.literal("task-reopened"), taskId: idSchema, fromRunId: idSchema }).strict(),
   // Tester follow-up G spec §10.1: a stopped no-change task accepted as done.
