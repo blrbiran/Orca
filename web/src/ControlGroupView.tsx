@@ -29,6 +29,7 @@ import { RefusalNotice } from "./RefusalNotice.js";
 import { RunReason } from "./RunReason.js";
 import { RunOutputBound } from "./RunOutputBound.js";
 import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
+import { RunLiveCeiling } from "./RunLiveCeiling.js";
 import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
 import { GroupFullSuiteWarning } from "./GroupFullSuiteWarning.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
@@ -967,6 +968,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <div key={run.runId} id={`run-detail-${run.runId}`} data-run-detail={run.runId} className="min-w-0 rounded-card border border-line bg-well p-3">
           <h4 className="mt-0">{t("control.group.runDetail", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}</h4>
           <RunPostMergeCheck check={run.postMergeCheck} />
+          <RunLiveCeiling run={run} agents={props.agents} />
           {usageByKind(run) !== null && <p className="num" data-testid="usage-by-kind">{usageByKind(run)}</p>}
           <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen blocked={run.state === "blocked"} />
           <EvidenceLink runId={run.runId} />
