@@ -29,7 +29,7 @@ When `request` is present the outcome is uncertain (timeout, dropped connection,
 - `orca agent init`: 0 done; 1 refused by name
 - `orca agent show`: 0 done; 1 refused by name
 - `orca agent refresh`: 0 done; 1 refused by name
-- `orca dev gate`: 0 allowed; 1 refused here (bad arguments); 2 block
+- `orca dev gate`: 0 allowed (always, for claude-code-prompt); 1 refused here (bad arguments); 2 block
 - `orca dev level`: 0 answered (a missing reading is answered too); 1 refused here (bad arguments)
 - `orca dev checkpoint write`: 0 written and committed; 1 refused by name
 - `orca dev resume`: 0 every measurement as recorded; 1 refused by name; 2 a re-run measurement changed its exit code

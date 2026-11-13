@@ -254,7 +254,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca dev`
 
-- `orca dev gate --hook <hook>` — Tier 0 gate: read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr when the Bash command would push, merge into main, delete a branch or remove a worktree, or when it cannot decide
+- `orca dev gate --hook <hook>` — Tier 0 gate: read a Claude Code PreToolUse hook's JSON on stdin; exit 2 with one line on stderr when the Bash command would push (without this session's push grant, or beyond a plain push to origin), merge into main, delete a branch or remove a worktree, or when it cannot decide
 - `orca dev level --hook <hook>` — context level: read a Claude Code PostToolUse hook's JSON on stdin and print the reading (and a checkpoint request past T1) as additional context
 - `orca dev checkpoint write [--repo <repo>] --session <session> [--transcript <transcript>] --draft <draft>` — write and commit a checkpoint for this session from a draft file outside the repository
 - `orca dev resume [--repo <repo>] [--checkpoint <checkpoint>]` — print the latest checkpoint and re-run the shell commands it recorded
@@ -601,20 +601,34 @@ Design: `docs/superpowers/specs/2026-09-17-checkpoint-handoff-design.md`.
 A `PreToolUse` hook (`.claude/settings.json`, `Bash` matcher) runs every Bash
 command in this repository's Claude Code sessions through
 `scripts/gate-prefilter.mjs` and, when that does not resolve it, `orca dev gate
---hook claude-code`. It blocks four irreversible git/gh moves — `git push`,
-`git branch -d`/`-D`/`--delete`, `git worktree remove`/`prune`, and `gh pr
-merge`/`gh repo sync` — plus any non-`GET` `gh api` call, whether typed
+--hook claude-code`. It blocks four irreversible git/gh moves — `git push`
+(unless the human granted it, below), `git branch -D` (and `-d` with force or
+on `main`), `git worktree remove --force`/`prune`, and `gh pr merge`/`gh repo
+sync` — plus any non-`GET` `gh api` call, whether typed
 directly or through `rtk`/`rtk proxy`. It also blocks a merge into `main`:
-on `main` this means `git merge`, `git pull`, `git rebase` and any `git
+on `main` this means `git merge` (except `--ff-only`), `git pull`, `git rebase` and any `git
 reset` that moves HEAD; whatever the current branch, it also means `git
 branch -f`/`-M`/`-m`/`-C`/`-c … main`, `git checkout -B main`, `git switch
 -C main`, a `git fetch` refspec ending in `:main`, and `git update-ref
-refs/heads/main`. `permissions.deny` backs only the
-eight literal move patterns above (each also in `rtk `/`rtk proxy ` form) at
+refs/heads/main`. `permissions.deny` backs only `git branch -D`, `git worktree
+prune`, `gh pr merge` and `gh repo sync` (each also in `rtk `/`rtk proxy ` form) at
 the literal-string layer, ahead of the hook — it has no entry for `gh api`
-(its arbitrary flags can't be enumerated as literal prefixes) and none for a
-merge into main, so those, and any non-literal form of the moves above, rest
+(its arbitrary flags can't be enumerated as literal prefixes), none for a
+merge into main, and none for `git push` (a deny rule would refuse a granted
+push too), so those, and any non-literal form of the moves above, rest
 on the hook alone.
+
+**Push with the human's grant.** When the human starts a message with
+`allow-push` (case-insensitive, `/allow-push` too), a `UserPromptSubmit` hook
+(`orca dev gate --hook claude-code-prompt`) writes a grant for that session,
+valid 12 hours, to `${ORCA_GATE_DIR:-~/.orca/gate}/push-grants/<session_id>.json`,
+and tells the model so in one line. While it lives, the gate admits a plain
+`git push origin [<ref>…]` (options `-u`, `-q`, `-v`, `-n`/`--dry-run`,
+`--porcelain`, `--follow-tags` only) from that session. Force, delete,
+mirror, `--all`, `--prune`, `--tags`, a `+`/`:`/pattern refspec, another
+remote, no remote, and `-c`/`GIT_CONFIG_*` stay blocked; a person runs those
+in their own terminal. `deny-push` or `revoke-push` anywhere in a message
+deletes the grant. A chain session never gets one.
 
 A blocked move is not lost: do it in your own terminal, outside the agent
 session. `orca dev resume` and `orca dev checkpoint write` refuse to record a

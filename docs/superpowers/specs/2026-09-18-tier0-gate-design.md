@@ -296,3 +296,63 @@ Mechanically: `src/gate/classify.ts` allows the three forms; `GATE_DENY_BASE` (`
 rule cannot tell `-d` from `-d -f`, so the forced forms are left to the hook. The pinned sha256 in
 `tests/gate/settings.test.ts` changes on purpose; the old literal is kept in a comment there. CLAUDE.md Rule 15 is
 rewritten to match.
+
+## 12. Correction (2026-11-13, tester follow-up I): push with a human grant
+
+Implementer seat A of tester follow-up I (controller: Orca session `d467cbd2`), 2026-11-13. The text above, §11
+included, is kept verbatim (CLAUDE.md Rule 13); this section narrows §3.2's "`git push` in every form" and §11's
+"`git push` in every form (the human's ruling)".
+
+The human, Orca session `7e164691`, verbatim: 「下一个session我们要将 push 闸门去掉。在人明确要求的情况下要允许push」.
+A hook cannot see the conversation, so "the human explicitly asked" is made machine-checkable (controller decision (d),
+ledger `.superpowers/sdd/2026-11-13-tester-followup-i/progress.md`):
+
+1. **Grant.** A `UserPromptSubmit` hook in `.claude/settings.json` (`PROMPT_HOOK_COMMAND`, `src/gate/settings.ts`) runs
+   `orca dev gate --hook claude-code-prompt` (`src/gate/pushGrant.ts`). When the prompt **starts** with the token
+   `allow-push` (case-insensitive, optional leading `/`, not followed by a word character or `-`), it writes
+   `{sessionId, grantedAt, expiresAt}` (12 h) for the input's `session_id` and prints one stdout line the model sees:
+   `orca gate: push allowed for this session until <ISO time> (human said allow-push)`. Only the start of the prompt
+   counts, so text a person pastes or quotes (a subagent's report, a resume output, a chain goal) cannot grant by
+   mentioning the token. `deny-push` or `revoke-push` as a standalone word anywhere deletes the grant (and wins over a
+   leading `allow-push`). A session with `ORCA_CHAIN_ID` set (a chain session: the chain wrote the prompt, no person is
+   watching) never gets a grant. The hook never blocks a prompt: it always exits 0, its own failures are one stderr line,
+   and a prompt without `push` in any case is answered by the shell without starting tsx. The input field is `prompt`
+   (seen in a third-party UserPromptSubmit hook's fixtures; Claude Code's own docs were not found locally); `user_prompt`
+   is read as a fallback.
+2. **Admission.** The PreToolUse gate reads the grant for the input's `session_id` (file name and the `sessionId` inside
+   must both match, `grantedAt <= now < expiresAt`; anything unreadable is no grant) and passes it to `classify`. With a
+   grant, `git push` is admitted only as `git push origin [<ref>…]`: options limited to `-u`/`--set-upstream`,
+   `-q`/`--quiet`, `-v`/`--verbose`, `-n`/`--dry-run`, `--porcelain`, `--follow-tags`; the remote must be the literal
+   `origin`; no refspec may start with `+` or `:` or contain a glob character; no word may be non-literal; no `-c`
+   before the subcommand and no `GIT_CONFIG*` word before `git`. Everything else stays blocked even with a grant —
+   among them `--force`, `-f`, `--force-with-lease[=…]`, `--force-if-includes`, `--delete`, `-d`, `--mirror`, `--all`,
+   `--prune`, `--tags`, `-o`, a bare `git push` (its remote comes from config), any remote other than `origin`. `gh pr
+   merge`, `gh repo sync`, `gh api` writes and every §3.3 / §11 rule are unchanged. `orca dev resume` / `checkpoint
+   write` measurements never consult a grant (`classify`'s grant argument defaults to false), so a recorded push stays
+   `measurement-gated`.
+3. **Deny layer.** `git push*`, `rtk git push*` and `rtk proxy git push*` leave `permissions.deny` and `GATE_DENY_BASE`:
+   a deny rule cannot be overridden by a hook, so it would refuse a granted push. Push now rests on the hook alone.
+4. **Refusal text** (spec 3.5 head unchanged). Without a grant:
+   `orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work. A person can allow a plain push for this session (12 h) by starting their next message with allow-push.`
+   With a grant, for a form it does not cover:
+   `orca gate: push is Tier 0 (CLAUDE.md Rule 15) — … continue with reversible work. This session's push grant does not cover it: <why>. A grant admits only `git push origin [<ref>…]` with -u/--set-upstream, -q/--quiet, -v/--verbose, -n/--dry-run, --porcelain or --follow-tags; a person runs any other push in their own terminal.`
+   (`<why>` e.g. `option --force`, `refspec +main forces`, `refspec :x deletes`, `remote upstream is not origin`,
+   `no remote named`.)
+
+**Out-of-repo write (Rule 17).**
+
+| Path | Who writes it | Mode | Residue |
+|---|---|---|---|
+| `${ORCA_GATE_DIR:-$HOME/.orca/gate}/push-grants/<session_id>.json` (and the directories `gate/`, `gate/push-grants/` when missing) | the UserPromptSubmit hook, only on a prompt starting with `allow-push` in a non-chain session; deleted by `deny-push`/`revoke-push` | dirs 0700, file 0600, created explicitly (not from umask); existing directories are not chmod'ed | one small JSON file per granted session; expired files are ignored, not cleaned up (they hold only a session id and two times) |
+
+`session_id` must match `^[A-Za-z0-9_-]{1,128}$` before it names a file. Criteria (`tests/gate/pushGrant.test.ts`) use a
+temp `ORCA_GATE_DIR` only. The PreToolUse gate and the chain's gate check (`src/chain/gateCheck.ts`) only read that path.
+
+**Residual risks added to §7.**
+13. The deny layer no longer backs push: a PreToolUse hook killed by its timeout lets a push through (§2.1).
+14. Within the threat model (§1) an agent does not forge a grant; deliberately writing the grant file with a Bash command
+    or a file tool, or a pasted message that starts with `allow-push`, is not stopped.
+15. A grant covers the whole session, its subagents included (they share the session id), and any repository the session
+    pushes from (`git -C <other> push origin …`), for 12 h or until `deny-push`.
+16. `origin` itself is whatever the repository's config says; `remote.origin.mirror` or a `push` refspec in the
+    repository's own config is the person's configuration, not judged.

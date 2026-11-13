@@ -131,10 +131,12 @@ Default to surfacing uncertainty, not hiding it.
 **push** 与**强制形式**（`push --force`、`branch -D`、`branch -d -f`、`worktree remove --force`、`worktree prune`、
 非 fast-forward 的合并进 `main`、`gh pr merge`）**每一次都要人单独点头**，不因为上一次批准过就自动延续。
 ⚠️ **Tier 0 闸门（`docs/superpowers/specs/2026-09-18-tier0-gate-design.md`）**：上面这些在本仓库的 agent 会话里被机械拦下，
-**人点头了 agent 也做不成** —— 由人在自己的终端里做，agent 只把它列进检查点的 `awaitingHuman`。
+**聊天里点头了 agent 也做不成** —— 由人在自己的终端里做，agent 只把它列进检查点的 `awaitingHuman`。
 ✅ **git 自己有保护的形式 agent 可以直接做**（人裁，2026-10-18，会话 `a3b2a7a7`，闸门 spec §11）：
 `git merge --ff-only` 合进 `main`、`git branch -d`（只删已合并的）、`git worktree remove`（不带 force）。
-**push 仍默认由人来做。** 合进 `main` 一律 `--ff-only`。
+✅ **push 要人明确要求**（人裁，2026-11-13，会话 `7e164691`，闸门 spec §12）：人在**自己的消息开头**敲 `allow-push`
+⇒ 本会话 12 小时内可以 `git push origin <ref>`（不带 force／删除／mirror 等）；`deny-push` 收回。没有它，push 照拦。
+**强制形式的 push 仍只能由人在自己的终端里做。** 合进 `main` 一律 `--ff-only`。
 
 变异 / 故障注入**只在 `git clone --local` 副本里做**，主工作树全程零触碰；
 还原证明看 `git diff` 与 `git diff --cached` 的**字节数**，不看肉眼。
