@@ -55,7 +55,8 @@ describe("group summary repository identity (project filtering spec §4)", () =>
       const group = readRequirementGroup(x.store, "r");
       saveRequirementGroup(x.store, { ...group, requirement: { ...group.requirement, repoId: "other" } });
       expect(() => readGroupSummary(x.store, "r")).toThrow(/group-summary:repository-mismatch/);
-      expect(() => readControlSummary(x.store, "epoch", null)).toThrow(/group-summary:repository-mismatch/);
+      // Tester #298 (follow-up J): the summary no longer goes dark over it; it lists the group as unreadable, by that reason.
+      expect(readControlSummary(x.store, "epoch", null).unreadable).toEqual([{ groupId: "r", reason: "group-summary:repository-mismatch", requirement: true }]);
     } finally { await x.dispose(); }
   });
 

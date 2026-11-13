@@ -68,3 +68,24 @@ describe("the Board's first load (tester #77)", () => {
     expect(await screen.findByRole("region", { name: "Board" })).toBeTruthy();
   });
 });
+
+describe("a refused summary (tester #298)", () => {
+  // mutation: read recovery back inside the summary's try in readControlTick -> recovery is never asked for after a
+  // refused summary, and the Tasks pane stays on its load state instead of showing the refusal -> red
+  it("still reads recovery, so the Tasks pane shows the refusal with the recovery list", async () => {
+    let recoveryReads = 0;
+    const base = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
+      if (String(input) === "/api/control/recovery") recoveryReads++;
+      return base(input);
+    }) as typeof fetch;
+    answerSummary = async () => json({ error: { code: "recovery-blocked", message: "recovery-blocked:run-invalid:run-1:bad", commandRevision: null, evidenceIds: [], retryable: false } }, 423);
+    window.location.hash = "#tasks";
+    render(<App />);
+    await waitFor(() => expect(recoveryReads).toBeGreaterThan(0));
+    const tasks = within(document.querySelector('[data-section="tasks"]') as HTMLElement);
+    // The panel's own refusal line (ControlPanel), which renders only once recovery has been read.
+    await waitFor(() => expect(tasks.getAllByRole("alert").some((line) => /recovery-blocked/.test(line.textContent ?? ""))).toBe(true));
+    expect(tasks.queryByText(NOT_AVAILABLE)).toBeNull();
+  });
+});

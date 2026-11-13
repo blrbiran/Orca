@@ -12,6 +12,7 @@ import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
+import { readControlGroup, readControlSummary } from "../../src/panel/controlViews.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
@@ -74,6 +75,10 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       expect(envelope.inputCheckpoint).not.toBeNull();
       expect(first).not.toBe(second);
       expect(readWork(t.h.store, "g", "a")).not.toHaveProperty("pendingOperatorNote");
+      // Tester #294 (follow-up J): the continued run carries the note on its top level; its group and the summary still read.
+      // mutation: drop operatorNote from persistedRunSchema (controlViews.ts) -> run-invalid:<run>, red
+      expect(readControlGroup(t.h.store, "epoch", "g").summary.groupId).toBe("g");
+      expect(readControlSummary(t.h.store, "epoch", null)).not.toHaveProperty("unreadable");
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

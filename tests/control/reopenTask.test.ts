@@ -4,6 +4,7 @@ import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { reopenTaskPayloadSchema } from "../../src/control/webProtocol.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
+import { readControlGroup, readControlSummary } from "../../src/panel/controlViews.js";
 
 /**
  * Tester follow-up G spec §1.4-§1.5 (human: 「希望这个任务直接在同一组里带你写的一句说明重新跑一次」): a person or an
@@ -49,6 +50,10 @@ describe("task reopen: revoke a no-change completion and run it again with a not
       // mutation M4b: drop the operatorNote copy in createStartingRun -> undefined, red
       expect(t.body(next).operatorNote).toEqual({ text: NOTE, scope: "remaining-attempts" });
       expect(workOf(t).reopenNote).toBeUndefined();
+      // Tester #294 (follow-up J): the run carrying the note leaves its group and the summary readable.
+      // mutation: drop operatorNote from persistedRunSchema (controlViews.ts) -> run-invalid:<run>, red
+      expect(readControlGroup(t.h.store, "epoch", "g").summary.groupId).toBe("g");
+      expect(readControlSummary(t.h.store, "epoch", null)).not.toHaveProperty("unreadable");
     } finally { await t.h.dispose(); }
   }, 60000);
 

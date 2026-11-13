@@ -5,7 +5,7 @@ import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSche
 import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
 import { groupTopUps, type TopUpRow } from "../control/workTopUp.js";
 import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.js";
-import { budgetAmountSchema } from "../control/schema.js";
+import { budgetAmountSchema, operatorNoteSchema } from "../control/schema.js";
 import { listFlagsInvolving } from "../control/flaggedDecisions.js";
 import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
@@ -274,6 +274,9 @@ const persistedRunSchema = z.object({
   liveCeilingStop: z.object({ revision: safeInteger.positive(), tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger, phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),
   // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner's accept-attempt intent and its outcome (acceptAttempt.ts
   // OperatorAcceptance). The fields the view shows are checked; the driver's own bookkeeping passes through untouched.
+  // Tester #294 (follow-up J): the operator's note a claim copies onto the run (webDispatch.ts createStartingRun: a
+  // continuation's, a reopen's, a usage-pause decision's), which A2 delivers in the start envelope (executionDriver.ts).
+  operatorNote: operatorNoteSchema.optional(),
   operatorAcceptance: z.object({
     state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: z.string().min(1), at: safeInteger,
     reason: z.string().nullable(), landedCommit: z.string().nullable(),
@@ -809,13 +812,15 @@ export function readControlSummary(
     : readProjectionChanges(store, sinceChangeSeq);
   const groupIds = changes.resetRequired || forceComplete ? allGroupIds(store) : withoutFlowGroups(store, changes.groups.map(group => group.groupId));
   // Issue 94: a group whose stored body does not parse is listed by id and parse error instead of failing every
-  // group's summary. Only that refusal: any other stored fact a summary cannot trust still refuses the whole read.
+  // group's summary. Tester #298 (follow-up J): so is a group any other stored fact of which refuses while it is read
+  // (a run's body, run-invalid:<run>:..., a proposal), with the refusal's detail verbatim. Anything else -- an error that
+  // is not a recovery-blocked refusal, or the summary's own schema below -- still refuses the whole read.
   const groups: GroupSummaryV1[] = [], unreadable: Array<{ groupId: string; reason: string; requirement: boolean | null }> = [];
   for (const groupId of sortedUnique(groupIds)) {
     try { groups.push(readGroupSummary(store, groupId)); }
     catch (error) {
-      if (!(error instanceof ControlError) || error.code !== "recovery-blocked" || !error.detail?.startsWith("group-body-invalid")) throw error;
-      unreadable.push({ groupId, reason: error.detail, requirement: storedRequirementBlock(store, groupId) });
+      if (!(error instanceof ControlError) || error.code !== "recovery-blocked") throw error;
+      unreadable.push({ groupId, reason: error.detail ?? error.code, requirement: storedRequirementBlock(store, groupId) });
     }
   }
   const view = {

@@ -52,6 +52,25 @@ describe("a group whose stored body does not parse (issue 94)", () => {
     } finally { await x.dispose(); }
   });
 
+  // Tester #298 (follow-up J): any other fact a group's summary cannot trust -- #294's run body with a top-level
+  // operatorNote answered run-invalid:<run> -- refused the whole summary, so Requirements, Tasks and Board went blank for
+  // every group. Any recovery-blocked raised while reading one group now lists that group as unreadable with its reason
+  // verbatim (a run's names the run); its own read still refuses.
+  it("lists a group any of whose stored facts refuses as unreadable, with that reason, and keeps every other group (#298)", async () => {
+    const x = await webFixture();
+    try {
+      x.importDeferred("h");
+      // A proposal body that is no longer canonical (one trailing space) refuses as recovery-blocked:proposal-noncanonical.
+      x.store.db.prepare("UPDATE budget_proposals SET body=body||' ' WHERE group_id='h'").run();
+      // mutation: keep the group-body-invalid-only filter in readControlSummary -> the summary throws, red
+      const summary = readControlSummary(x.store, "epoch", null);
+      expect(summary.groups.map((group) => group.groupId)).toEqual(["g"]);
+      expect(summary.unreadable).toEqual([{ groupId: "h", reason: "proposal-noncanonical", requirement: false }]);
+      expect(controlSummarySchema.safeParse(summary).success).toBe(true);
+      expect(() => readControlGroup(x.store, "epoch", "h")).toThrow(/proposal-noncanonical/);
+    } finally { await x.dispose(); }
+  });
+
   it("leaves a summary with no unreadable group byte-for-byte as before: no unreadable key at all", async () => {
     const x = await webFixture();
     try {

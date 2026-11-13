@@ -497,10 +497,16 @@ export function App(): JSX.Element {
     try {
       const summary = await fetchControlSummary(since);
       dispatchControl({ type: "summary", value: summary, partial: since !== undefined });
-      dispatchControl({ type: "recovery", value: await fetchControlRecovery() });
       // N1 spec §11.2: the open requirement's details move with the summary's changeSeq pull -- re-read when it is listed.
       const open = requirementNow.current;
       if (open !== null && summary.groups.some((group) => group.groupId === open)) void readRequirement(open);
+    } catch (err) {
+      dispatchControl({ type: "refusal", place: "panel", groupId: null, value: controlFailureFrom(err) });
+    }
+    // Tester #298 (follow-up J): recovery is read whether or not the summary was, so a refused summary still shows the
+    // blockers that explain it (the Tasks pane shows both) instead of leaving recovery unread.
+    try {
+      dispatchControl({ type: "recovery", value: await fetchControlRecovery() });
     } catch (err) {
       dispatchControl({ type: "refusal", place: "panel", groupId: null, value: controlFailureFrom(err) });
     }
@@ -1911,7 +1917,7 @@ export function App(): JSX.Element {
       </SectionPane>
       <SectionPane section="board" active={section}>
         {/* Mounted only while shown: its cards would otherwise duplicate the Task control list's buttons in every pane. */}
-        {section !== "board" ? null : controlConfig === null || control.recovery === null ? controlLoadState("control.loadingBoard") : (
+        {section !== "board" ? null : controlConfig === null || control.recovery === null || control.epoch === null ? controlLoadState("control.loadingBoard") : (
           <FlowBoard groups={summaryView(control).groups} scope={scope} repoLabel={repoLabel} prefs={boardPrefs} onPrefs={setBoardPrefs}
             openFlowRunId={route.kind === "flow-run" ? route.flowRunId : null}
             onOpenFlowRun={(flowRunId) => navigate(flowRunId === null ? { kind: "section", section: "board" } : { kind: "flow-run", section: "board", flowRunId })}
@@ -1926,8 +1932,9 @@ export function App(): JSX.Element {
         )}
       </SectionPane>
       <SectionPane section="requirements" active={section}>
-        {(controlConfig === null || control.recovery === null) && controlLoadState("control.loading")}
-        {controlConfig !== null && control.recovery !== null && (
+        {/* Tester #298: recovery is now read even when the summary is refused; a list with no summary yet still says why. */}
+        {(controlConfig === null || control.recovery === null || control.epoch === null) && controlLoadState("control.loading")}
+        {controlConfig !== null && control.recovery !== null && control.epoch !== null && (
           <RequirementsPanel config={controlConfig} summary={summaryView(control)} views={requirementViews} selected={selectedRequirement} agents={agents}
             preferences={agentPreferences?.preferences ?? null}
             models={modelsFor} onModels={(id) => { void loadModels(id, false); }}
