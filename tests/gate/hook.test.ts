@@ -10,8 +10,10 @@ import { runCli } from "../helpers/runCli.js";
 import { tempRepo } from "../helpers/tempRepo.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// Ruling (2026-11-13, tester follow-up I): the human allowed a push the human explicitly asked for (spec §12), so a push
+// refused for want of a grant now also tells the agent how the human grants one; the line is otherwise unchanged.
 const PUSH_LINE =
-  "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work.\n";
+  "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work. A person can allow a plain push for this session (12 h) by starting their next message with allow-push.\n";
 const stdin = (command: string, cwd = "/", extra: Record<string, unknown> = {}) =>
   JSON.stringify({ session_id: "s", transcript_path: "/t.jsonl", cwd, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, ...extra });
 
