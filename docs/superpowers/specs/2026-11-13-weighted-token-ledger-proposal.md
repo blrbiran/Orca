@@ -52,3 +52,8 @@ against runaway sessions (where raw counts are the right unit)? Should weights b
 
 Reducing the replay itself (context handoff thresholds, #195; session reuse, #109/#197, which the human ruled out and
 which would not remove in-session replay anyway).
+
+## Outcome (2026-11-13, Orca session c8b75eac)
+
+Not built. The human chose to keep raw-token budgets and record raw usage detail for a later price conversion
+(「选3，都要记录原始token，而不是等效token」); see `2026-11-13-raw-usage-detail-design.md`.
