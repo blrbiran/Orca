@@ -11,8 +11,10 @@ import { GATE_DENY, GATE_HOOK_COMMAND } from "../../src/gate/settings.js";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const COMMAND = GATE_HOOK_COMMAND;
 const DENY = GATE_DENY;
+// Ruling (2026-11-13, tester follow-up I): a push without the human's grant (spec §12) is still exit 2 with one line;
+// the line now ends with how a person grants one.
 const PUSH_LINE =
-  "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work.\n";
+  "orca gate: push is Tier 0 (CLAUDE.md Rule 15) — do not retry or rephrase it; list it under awaitingHuman in the checkpoint and continue with reversible work. A person can allow a plain push for this session (12 h) by starting their next message with allow-push.\n";
 const stdin = (command: string) => JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: "/" });
 
 function sh(projectDir: string, input: string) {
@@ -36,7 +38,8 @@ describe(".claude/settings.json wires the Tier 0 gate (spec 5, 6.2)", () => {
     // misspelled top-level key (e.g. a stray "denny") — it does NOT catch an invalid value
     // nested inside a key that is itself spelled correctly.
     expect(Object.keys(settings).sort()).toEqual(["hooks", "permissions"]);
-    expect(Object.keys(settings.hooks).sort()).toEqual(["PostToolUse", "PreToolUse"]);
+    // Ruling (2026-11-13, tester follow-up I): the push grant's UserPromptSubmit hook (spec §12) is the one added key.
+    expect(Object.keys(settings.hooks).sort()).toEqual(["PostToolUse", "PreToolUse", "UserPromptSubmit"]);
   });
 
   it("command line layer: without node_modules a push is blocked naming exit 127, and a command without git or gh still runs", async () => {
@@ -62,8 +65,11 @@ describe(".claude/settings.json wires the Tier 0 gate (spec 5, 6.2)", () => {
     // Changed on purpose 2026-10-22 (CLI v2 plan Task 7, session b37f7ce9; ruling 8b1469ea "允许改必要的test"): the hook
     // now runs `src/cli.ts dev gate --hook claude-code` (the old top-level `gate` moves under `orca dev`, spec §5). The
     // previous literal was ed88ba55956978ea4b94cc32717f3f57e6864bf9807eac22fa61a18b42d89bcf.
+    // Ruling (2026-11-13, tester follow-up I; human, Orca session 7e164691 「在人明确要求的情况下要允许push」): `git push*`
+    // and its rtk forms left the deny list, which a hook cannot override (spec §12). The previous literal was
+    // 5ccfb3af072c8cec3ad6e3c79a01adbd360466834ea93db667015b41e90b87ee.
     expect(createHash("sha256").update(JSON.stringify({ COMMAND, DENY })).digest("hex")).toBe(
-      "5ccfb3af072c8cec3ad6e3c79a01adbd360466834ea93db667015b41e90b87ee",
+      "0db9d415fedee5d64abf8c475966a34c8dfe1cff58536cdacff165c0c3784687",
     );
   });
 });
