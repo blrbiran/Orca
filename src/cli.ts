@@ -163,6 +163,12 @@ function isMainModule(): boolean {
 
 // Only runs when invoked directly (`tsx src/cli.ts` or `node dist/cli.js`). Not executed on import.
 if (isMainModule()) {
+  // Tester follow-up K: a reader that stopped reading (`orca help | head -1`) closes stdout; node then throws an
+  // unhandled EPIPE with a stack trace. Nothing more can reach that reader, so stop writing and exit 0, as head expects.
+  process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") process.exit(0);
+    throw err;
+  });
   void main(process.argv.slice(2)).then(
     (code) => {
       process.exitCode = code;
