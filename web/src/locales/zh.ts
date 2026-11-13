@@ -1303,6 +1303,7 @@ export const zh: Translation<typeof en> = {
     layer: "第 {{n}} 层：{{tasks}}",
     implicitEdge: "{{from}} 先于 {{to}}：{{paths}}",
     parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间只有 dependsOn 一条边在排先后，双方都不写、也不检查对方写的文件；如果后一个任务并不需要前一个的产物，可以发反馈去掉这条边。",
+    impliedPath: "{{task}} 的完成条件提到了 {{path}}，但只有 {{writers}} 可以写它（implied-path-outside-targets）；它的 run 会因 allowlist miss 停下。可以发反馈，把这个文件加进 {{task}} 的目标路径，或把这处改动交给 {{writers}}。",
     handedBack: "退回原因：",
     splitReason: {
       expand: {

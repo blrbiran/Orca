@@ -77,6 +77,12 @@ export const NO_LOCKFILE_RULE = "When \"manifests\" shows no lockfile, omit \"se
  */
 const PARALLEL_RULE = "- First partition the work into independent branches by deliverable and target paths; then add a `dependsOn` edge only where a task truly needs another's output (it reads or builds on files the other writes). Never chain tasks to be safe: independent tasks run in parallel.";
 /**
+ * Tester #265 (follow-up I; version stays 5): a task's success condition asked for README.md while only a later task
+ * listed it, so its run stopped on `allowlist miss`. requirementView's impliedPathsOutsideTargets (splitImpliedPaths.ts)
+ * is the code-side hint for the drafts that still do.
+ */
+const IMPLIED_PATH_RULE = "- Give a task every file its `successCondition` requires it to change in its target paths (a README or document it must update included); a task cannot write a file only another task lists.";
+/**
  * N1 spec §8.1: the fixed instruction. The two word lists come from the code that reads them. Version 2 (N1 spec §16,
  * Orca session 7753e97d): the requirement document Orca commits before the tasks run (§9.2) and Orca's own files are in
  * the repository, so a check must not assert a directory holds only certain files -- a paid O9 run failed on exactly
@@ -105,6 +111,7 @@ const SPLIT_INSTRUCTION_V5 = [
   `- \`targetPaths\` are paths relative to the repository root, ${PATH_SHAPES}`,
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
   PARALLEL_RULE,
+  IMPLIED_PATH_RULE,
   TRACE_RULE,
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   ...PLAN_RULES,
@@ -160,6 +167,7 @@ export const SPLIT_INSTRUCTION_MULTI_V5 = [
   "- List `writes` in the project's registered order (as `project-overview` lists the directories), one entry per directory, each directory at most once; the first entry is the task's primary directory and its `checks` must not be empty.",
   "- `dependsOn` names the taskIds a task needs done first. Do not declare an order for any other reason: tasks whose target paths overlap are ordered by code.",
   PARALLEL_RULE,
+  IMPLIED_PATH_RULE,
   TRACE_RULE,
   `- \`labels\` are words from: ${SYSTEM_LABELS.join(", ")}. \`loopPlan\`, when given, is one of ${LOOP_PLAN_IDS.join(", ")}.`,
   "- A task's plan rules below apply to its first `writes` entry (its primary directory).",

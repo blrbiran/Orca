@@ -10,6 +10,7 @@ import { contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnest
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { recoveryRetryCommand } from "../../control/driveRecord.js";
+import { impliedPathLine, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
 import { phaseEndBudgetLines, runUsageLines, type UsageRun } from "./usageLines.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
@@ -58,10 +59,12 @@ async function groupOfRun(context: WriteContext, runId: string): Promise<string>
  * (controlViews.ts readRequirementView) are spelled out after the body; --json is the body as served.
  */
 function requirementShow(body: unknown): string {
-  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }> }>;
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[] }>;
   const lines = drafts.flatMap((draft) => [
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file one writes is written or checked by the other; send feedback to drop the edge): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
+    // Tester #265: a hint, one line each; send feedback to give the task the file, or move the change to its writer.
+    ...(draft.impliedPathsOutsideTargets ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathLine(entry)}`),
   ]);
   return [text(body), ...lines].join("\n");
 }

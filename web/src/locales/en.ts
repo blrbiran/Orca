@@ -1467,6 +1467,7 @@ export const en = {
     layer: "Layer {{n}}: {{tasks}}",
     implicitEdge: "{{from}} before {{to}}: {{paths}}",
     parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and neither writes or checks a file the other writes; send feedback to drop the edge if the later task does not need the earlier one's output.",
+    impliedPath: "{{task}}'s success condition names {{path}}, which only {{writers}} may write (implied-path-outside-targets); its run would stop on an allowlist miss. Send feedback to add the file to {{task}}'s target paths, or to move that change to {{writers}}.",
     handedBack: "Handed back for:",
     splitReason: {
       expand: {

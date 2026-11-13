@@ -309,6 +309,8 @@ export type DraftViewV1 = {
   implicitEdges: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null;
   /** Tester #284: declared edges code sees no reason for (a hint; only on a draft with layers). */
   parallelCandidates?: Array<{ before: string; after: string }>;
+  /** Tester #265: tasks whose success condition names a file only another task may write (a hint; only on a draft with layers). */
+  impliedPathsOutsideTargets?: Array<{ taskId: string; path: string; writers: string[] }>;
   reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised";
   calls: RequirementCallRecordV1[];
 };
