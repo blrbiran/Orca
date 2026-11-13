@@ -47,8 +47,8 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
 
   it("add-implied-path adds the file to the task's targets, and the re-validation orders the two writers (#268)", async () => {
     const split = { tasks: [
-      task("cli", ["src/cli.js"], [], { successCondition: "src/cli.js prints the history; README.md documents the history command." }),
-      task("docs", ["README.md"], []),
+      task("cli", ["src/cli.js"], [], { successCondition: "src/cli.js prints the history; README.md documents the history command and CHANGELOG.md notes it." }),
+      task("docs", ["README.md", "CHANGELOG.md"], []),
     ], notes: "" };
     const x = await requirementHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
     try {
@@ -60,7 +60,12 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
       expect((next.output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md"]);
       // The two write sets now intersect: the re-validation's implicit edge orders them (accept makes it a dependsOn).
       expect(next).toMatchObject({ state: "awaiting-review", reasons: [], layers: [["cli"], ["docs"]], implicitEdges: [{ from: "cli", to: "docs" }] });
-      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 2)).toMatchObject({ impliedPathsOutsideTargets: [] });
+      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 2)).toMatchObject({ impliedPathsOutsideTargets: [{ taskId: "cli", path: "CHANGELOG.md", writers: ["docs"] }] });
+      // An edited draft has no call of its own: its edit is judged at the overview of the draft it was edited from.
+      // mutation: judgedRun reads only the named draft's calls -> recovery-blocked, red
+      expect(await edit(x, 2, { kind: "add-implied-path", taskId: "cli", path: "CHANGELOG.md" })).toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 2, nextDraftNo: 3 } });
+      expect((readDraft(x.store, "r", 3).output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md", "CHANGELOG.md"]);
+      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 3)).toMatchObject({ impliedPathsOutsideTargets: [] });
     } finally { await x.dispose(); }
   });
 
