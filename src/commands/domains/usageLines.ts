@@ -4,6 +4,7 @@
  * output when its transcript says so, and, once the run has ended, its usage by kind. Times are UTC.
  */
 import { isTerminalRunState } from "../../control/budget.js";
+import { TRANSCRIPT_STALE_MS, transcriptLive } from "../../control/transcriptLiveness.js";
 
 export interface UsageRun {
   runId?: string; state?: string; endedAt?: number | null; used?: { tokens: number };
@@ -12,18 +13,23 @@ export interface UsageRun {
 
 const clock = (ms: number, seconds = false): string => `${new Date(ms).toISOString().slice(11, seconds ? 19 : 16)}Z`;
 const count = (n: number): string => n.toLocaleString("en-US");
-/** Under way: not ended (issue-fixes spec §5.2) and not settled. */
-export const underWay = (run: UsageRun): boolean => run.endedAt == null && typeof run.state === "string" && !isTerminalRunState(run.state);
+/** Under way: not ended (issue-fixes spec §5.2), not settled, and (tester #285, follow-up J) not blocked. */
+export const underWay = (run: UsageRun): boolean => run.endedAt == null && typeof run.state === "string" && !isTerminalRunState(run.state) && run.state !== "blocked";
 const PHASE_END = "this agent reports usage only when a phase ends";
 
 /** `orca run show`: the used figure's footing, the transcript's last write, and the split once the run has ended. */
-export function runUsageLines(run: UsageRun | undefined, lastTranscriptAt: number | undefined): string[] {
+export function runUsageLines(run: UsageRun | undefined, lastTranscriptAt: number | undefined, now: number = Date.now()): string[] {
   if (run === undefined) return [];
   const live = underWay(run);
+  // Tester #285 (follow-up J): "producing output" only for a run not blocked whose transcript was written within
+  // TRANSCRIPT_STALE_MS; a blocked run, or a stale write, says when the output stopped instead.
+  const transcript = lastTranscriptAt === undefined || (!live && run.state !== "blocked") ? []
+    : transcriptLive(run, lastTranscriptAt, now) ? [`transcript: producing output, last at ${clock(lastTranscriptAt, true)}`]
+      : [`transcript: no output since ${clock(lastTranscriptAt, true)}${run.state === "blocked" ? " (the run is blocked)" : ` (over ${TRANSCRIPT_STALE_MS / 60_000} minutes ago)`}`];
   return [
     ...(live && run.usageObservation === "phase-end" && run.used !== undefined
       ? [`used: ${count(run.used.tokens)} tokens (${run.usageAt === undefined ? "no phase has ended yet" : `as of the last phase end at ${clock(run.usageAt)}`}; ${PHASE_END})`] : []),
-    ...(live && lastTranscriptAt !== undefined ? [`transcript: producing output, last at ${clock(lastTranscriptAt, true)}`] : []),
+    ...transcript,
     ...(!live && run.usageBreakdown !== undefined ? [`usage by kind: input ${count(run.usageBreakdown.input)} / output ${count(run.usageBreakdown.output)} / cacheRead ${count(run.usageBreakdown.cacheRead)}${run.usageBreakdown.cacheWrite > 0 ? ` / cacheWrite ${count(run.usageBreakdown.cacheWrite)}` : ""}`] : []),
   ];
 }

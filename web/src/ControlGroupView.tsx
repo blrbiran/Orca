@@ -161,7 +161,7 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; a
       return <section key={run.runId} aria-label={name}>
         <h4>{name}</h4>
         <p className="num" title={formatTokens(run.used.tokens, currentLanguage())}>{enumText("runState", run.state)} · {facts(run)}</p>
-        <RunTranscript runId={run.runId} active={props.active} follow />
+        <RunTranscript runId={run.runId} active={props.active} follow blocked={run.state === "blocked"} />
         {/* Tester follow-up G Part 5: the task's notes and the box to add one, at the bottom of its Live entry. */}
         {run.taskId !== null && <>
           <LiveNoteList notes={(view.liveNotes ?? []).filter((note) => note.taskId === run.taskId)} running={latest === undefined} />
@@ -968,7 +968,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           <h4 className="mt-0">{t("control.group.runDetail", { run: run.taskId ?? run.estimateId ?? t("control.group.runLabel", { n: index + 1 }) })}</h4>
           <RunPostMergeCheck check={run.postMergeCheck} />
           {usageByKind(run) !== null && <p className="num" data-testid="usage-by-kind">{usageByKind(run)}</p>}
-          <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen />
+          <RunTranscript runId={run.runId} active={props.active !== false && region === "runs"} autoOpen blocked={run.state === "blocked"} />
           <EvidenceLink runId={run.runId} />
           {run.evidenceIds.length > 0 && <details><summary>{t("control.group.evidenceCount", { n: run.evidenceIds.length })}</summary><ul>{run.evidenceIds.map((id) => <li key={id}><code>{id}</code></li>)}</ul></details>}
         </div>

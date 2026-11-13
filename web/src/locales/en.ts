@@ -367,6 +367,8 @@ export const en = {
   // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
   transcript: {
     producing: "producing output, last at {{time}}",
+    // Tester #285 (follow-up J): the run is blocked, or nothing was written for a while.
+    quiet: "no output since {{time}}",
     disclosure: "Transcript", region: "Transcript of {{runId}}", refused: "transcript refused · {{code}}",
     unsupported: "The installed ccloop is too old to record transcripts. Run npm ci in the Orca checkout and restart the panel.", none: "no agent call listed yet", attempt: "attempt {{attempt}}",
     callLine: "{{phase}} · call {{seq}} · {{runtime}} · {{size}}", callLineOne: "{{phase}} · {{runtime}} · {{size}}", notRecorded: "not recorded", live: "live", final: "finished",

@@ -22,6 +22,7 @@ import { currentLanguage } from "./i18n.js";
 import { clockText } from "./usageNotes.js";
 import { controlFailureFrom, fetchRunTranscripts, fetchTranscriptPage, fetchTranscriptWindow, type TranscriptWindowAsk } from "./controlApi.js";
 import type { RunTranscriptsV1, TranscriptCallV1, TranscriptEventV1, TranscriptWindowV1 } from "./controlTypes.js";
+import { transcriptLive } from "../../src/control/transcriptLiveness.js";
 
 /** Spec §6.5 / §10.7 T8: the most event rows the list keeps mounted. */
 export const MAX_ROWS = 200;
@@ -381,7 +382,7 @@ function sizeText(bytes: number): string {
  * as one is recorded, and a newer call (execute after plan, the next attempt) replaces the open one -- until the person
  * picks a call themselves. It takes the tab's one open transcript from a hidden region, never from another follower.
  */
-export function RunTranscript(props: { runId: string; active: boolean; autoOpen?: boolean; follow?: boolean }): JSX.Element {
+export function RunTranscript(props: { runId: string; active: boolean; autoOpen?: boolean; follow?: boolean; blocked?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const following = props.follow === true;
   const [expanded, setExpanded] = useState(following);
@@ -450,9 +451,12 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
           {refusal !== null && <p className="detail-note">{t("transcript.refused", { code: refusal })}</p>}
           {listing !== null && !listing.available && <p className="detail-note">{t("transcript.unsupported")}</p>}
           {listing !== null && listing.available && listing.calls.length === 0 && <p>{t("transcript.none")}</p>}
-          {/* Tester #285: a live call's transcript still being written is the sign the run is working, whatever its activity row says. */}
+          {/* Tester #285: a live call's transcript still being written is the sign the run is working, whatever its activity row says --
+              follow-up J: only while the run is not blocked and the write is recent (TRANSCRIPT_STALE_MS); else when it stopped. */}
           {listing?.available === true && listing.lastTranscriptAt !== undefined && listing.calls.some((call) => !call.final) &&
-            <p className="detail-note" data-testid="transcript-producing">{t("transcript.producing", { time: clockText(listing.lastTranscriptAt, true) })}</p>}
+            (transcriptLive({ blocked: props.blocked === true }, listing.lastTranscriptAt, Date.now())
+              ? <p className="detail-note" data-testid="transcript-producing">{t("transcript.producing", { time: clockText(listing.lastTranscriptAt, true) })}</p>
+              : <p className="detail-note" data-testid="transcript-quiet">{t("transcript.quiet", { time: clockText(listing.lastTranscriptAt, true) })}</p>)}
           {listing !== null && listing.available && attempts.map((attempt) => (
             <div key={attempt}>
               <h6>{t("transcript.attempt", { attempt })}</h6>

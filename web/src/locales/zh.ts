@@ -221,6 +221,7 @@ export const zh: Translation<typeof en> = {
   // Live transcript spec §1, §10.4.4, §12.3 (web/src/AgentTranscript.tsx).
   transcript: {
     producing: "正在产出，最近一次在 {{time}}",
+    quiet: "{{time}} 之后没有新输出",
     disclosure: "执行记录", region: "{{runId}} 的执行记录", refused: "执行记录读取被拒绝 · {{code}}",
     unsupported: "安装的 ccloop 版本过旧，不能保存执行记录。请在 Orca 目录运行 npm ci 并重启面板。", none: "还没有列出 agent 调用", attempt: "第 {{attempt}} 次尝试",
     callLine: "{{phase}} · 第 {{seq}} 次调用 · {{runtime}} · {{size}}", callLineOne: "{{phase}} · {{runtime}} · {{size}}", notRecorded: "未记录", live: "进行中", final: "已结束",

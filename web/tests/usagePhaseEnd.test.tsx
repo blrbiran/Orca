@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../src/i18n.js";
 import { BudgetEditor } from "../src/BudgetEditor.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
+import { RunTranscript } from "../src/AgentTranscript.js";
 import type { GroupViewV1, RunTranscriptsV1, RunViewV1 } from "../src/controlTypes.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
 
@@ -18,7 +19,10 @@ const BOOKED = NOW - 9 * 60_000, WRITTEN = NOW - 12_000;
 const clock = (ms: number, seconds = false): string => new Date(ms).toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" } : {}), hourCycle: "h23" });
 let lastTranscriptAt: number | undefined;
 beforeEach(() => {
-  vi.useFakeTimers();
+  // Ruling: 「这次批准改写所有必要的判据」 (human, tester follow-up J, 2026-11-13): web/tests/usagePhaseEnd.test.tsx:21 faked the
+  // timers at the real clock, a day after WRITTEN; #285's second half bounds "producing output" by TRANSCRIPT_STALE_MS, so the
+  // clock now starts at NOW (12 s after the write), the moment these views are rendered at.
+  vi.useFakeTimers({ now: NOW });
   lastTranscriptAt = WRITTEN;
   globalThis.fetch = (async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
@@ -97,5 +101,28 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     cleanup();
     const { container: live } = render(<BudgetEditor view={executing({ usageObservation: "realtime" })} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(live.textContent).not.toContain("phase end");
+  });
+});
+
+// Tester #285 (follow-up J): a blocked run's transcript, or one silent for over TRANSCRIPT_STALE_MS, says when its output
+// stopped instead of "producing output".
+describe("the transcript of a blocked or silent run is not producing output (#285, follow-up J)", () => {
+  it("a blocked run's transcript says no output since its last write", async () => {
+    render(<RunTranscript runId="run-a" active follow blocked />);
+    await flush();
+    const panel = screen.getByRole("region", { name: "Transcript of run-a" });
+    // mutation: RunTranscript ignores `blocked` -> red here.
+    expect(panel.querySelector("[data-testid=transcript-producing]")).toBeNull();
+    expect(panel.querySelector("[data-testid=transcript-quiet]")?.textContent).toBe(`no output since ${clock(WRITTEN, true)}`);
+  });
+  it("a run under way whose last write is over ten minutes old says no output since it", async () => {
+    vi.setSystemTime(WRITTEN + 10 * 60_000 + 1);
+    mount(executing());
+    fireEvent.click(screen.getByRole("tab", { name: "Live" }));
+    await flush();
+    const item = within(screen.getByRole("tabpanel", { name: "Live" })).getByRole("region", { name: "Running: a" });
+    // mutation: transcriptLive ignores the age -> red here.
+    expect(item.querySelector("[data-testid=transcript-producing]")).toBeNull();
+    expect(item.querySelector("[data-testid=transcript-quiet]")?.textContent).toBe(`no output since ${clock(WRITTEN, true)}`);
   });
 });

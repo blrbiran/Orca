@@ -117,7 +117,8 @@ export function runNumberOf(view: GroupViewV1, run: RunViewV1, createdUpTo: read
 
 /** Tester #285: a run not yet ended (issue-fixes spec §5.2) and not settled; its usage may still grow. */
 const SETTLED = new Set(["settled", "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"]);
-export const runUnderWay = (run: RunViewV1): boolean => run.endedAt == null && !SETTLED.has(run.state);
+// Tester #285 (follow-up J): a blocked run waits on a person; it is not under way.
+export const runUnderWay = (run: RunViewV1): boolean => run.endedAt == null && !SETTLED.has(run.state) && run.state !== "blocked";
 /** Tester #285: a run under way whose agent reports usage only when a phase ends, so its `used` lags. */
 export const usesPhaseEndUsage = (run: RunViewV1): boolean => runUnderWay(run) && run.usageObservation === "phase-end";
 /** The group's runs under way that report at phase end, and the newest time any of them booked usage. */

@@ -83,6 +83,10 @@ describe("a run's usage observation, booking time and split by kind (#285)", () 
       t.h.store.db.prepare("UPDATE runs SET body=json_set(body,'$.endedAt',?) WHERE id=?").run(10_000, runId);
       // mutation: phaseEndUsageOf ignores endedAt -> red
       expect((await web.get(`/api/control/groups/${groupId}/brief`)).body).not.toHaveProperty("phaseEndUsage");
+      // Tester #285 (follow-up J): nor is a run the driver blocked -- it waits on a person, its used is not a phase in progress.
+      t.h.store.db.prepare("UPDATE runs SET body=json_remove(json_set(body,'$.state','blocked','$.drive.blockedAt','C'),'$.endedAt') WHERE id=?").run(runId);
+      // mutation: runUnderWay ignores blocked -> red
+      expect((await web.get(`/api/control/groups/${groupId}/brief`)).body).not.toHaveProperty("phaseEndUsage");
     } finally { await web.close(); await t.h.dispose(); }
   });
 

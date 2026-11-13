@@ -28,8 +28,13 @@ export function usageBreakdownOf(store: ControlStore, runId: string, bucket: "wo
   return null;
 }
 
-/** A run still under way: not settled and not yet landed or ended (issue-fixes spec §5.2's endedAt). */
-export const runUnderWay = (run: { state: string; endedAt?: number }): boolean => run.endedAt === undefined && !isTerminalRunState(run.state);
+/**
+ * A run still under way: not settled and not yet landed or ended (issue-fixes spec §5.2's endedAt). Tester #285 (follow-up
+ * J): nor blocked -- a run the driver blocked (drive.blockedAt) is waiting on a person, not working, so its lagging usage is
+ * not a phase in progress.
+ */
+export const runUnderWay = (run: { state: string; endedAt?: number; drive?: { blockedAt?: string | null } }): boolean =>
+  run.endedAt === undefined && !isTerminalRunState(run.state) && run.state !== "blocked" && (run.drive?.blockedAt ?? null) === null;
 
 /**
  * `orca group brief`'s note: the runs under way whose agent reports usage only at phase end, and the newest time any of
@@ -37,7 +42,7 @@ export const runUnderWay = (run: { state: string; endedAt?: number }): boolean =
  */
 export function phaseEndUsageOf(store: ControlStore, groupId: string): { runIds: string[]; asOf: number | null } | null {
   const runIds = store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY id").all(groupId).flatMap((row) => {
-    const body = JSON.parse(String(row.body)) as { state: string; endedAt?: number; agentCapabilities?: { usageObservation?: string } };
+    const body = JSON.parse(String(row.body)) as { state: string; endedAt?: number; drive?: { blockedAt?: string | null }; agentCapabilities?: { usageObservation?: string } };
     return runUnderWay(body) && body.agentCapabilities?.usageObservation === "phase-end" ? [String(row.id)] : [];
   });
   if (runIds.length === 0) return null;
