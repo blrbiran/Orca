@@ -1817,3 +1817,11 @@ handoff ("add an explicit off value when ccloop can observe context, do not rela
 - Criteria: `tests/control/confirmWorkerWindow.test.ts` ("a declared profile window confirms with no threshold …"),
   `tests/panel/confirmNullThreshold.test.ts` (Web API and control socket), `tests/commands/agentWalk.test.ts` (the CLI
   on a real panel confirms with no threshold), `tests/commands/contextHandoff.test.ts`, `web/tests/tokenInput.test.tsx`.
+
+## Correction (2026-11-13, tester follow-up J, Orca session `c8b75eac`): `activeMs` counts working time
+
+The text above is kept. Since ccloop `fix(runtime): the time budget charges only the time the agent was working (Orca
+#262)` (pinned by Orca from follow-up J; the human: 「时间预算只算真正在干活的时间」), the `activeMs` ccloop reports and
+charges excludes, inside an agent-process window, the part of a gap longer than `IDLE_CHARGE_LIMIT_MS = 120 s` with no
+observed output and no tool open; setup, verifier checks and ccloop's own work are charged in full. The wire is
+unchanged; only what one `activeMs` means changed. Orca's labels already say "active time" and need no change.
