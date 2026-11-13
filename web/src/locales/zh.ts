@@ -801,6 +801,7 @@ export const zh: Translation<typeof en> = {
     quotaRest: { vendor: "{{installation}} 的额度已用尽，{{time}} 恢复。", default: "{{installation}} 正在休息，约 {{time}} 后可重试。" },
     // Tester #274: 见 en.ts。
     formatField: "agent 的回答不符合 execute 的格式；被拒的字段：{{field}}。",
+    executionComplete: "执行已完成（第 {{attempt}} 次尝试）；验证没有运行——运行在执行之后因预算停下（保存来源：{{kind}}）。可以验证它已保存的成果，而不必重跑任务：在任务里点“验证已保存成果”，或运行 orca run eligibility {{runId}}。",
     catalogMiss: "这次运行没有用掉 token，且它的模型不在 agent 的模型目录里（{{warning}}）；可能是 provider 拒绝了这个模型，而不是限流。请在 设置 → Agent 里选一个目录列出的模型，再重试这个任务。",
     formatFailureWork: {
       heading_one: "执行格式失败（第 {{attempt}} 次尝试）：这次尝试的成果保存在项目仓库的下列 ref 下",

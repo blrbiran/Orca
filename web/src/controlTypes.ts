@@ -470,6 +470,8 @@ export type RunViewV1 = {
   quotaRest?: { installation: string; until: number; source: "vendor" | "default" };
   /** Issue #209: a 0-usage rate-limited run whose model the agent's catalog does not list (`model-not-in-catalog: ...`). */
   catalogMiss?: string;
+  /** Tester #263 (follow-up I): an exhausted run whose execute had completed (its saved source); absent for every other run. */
+  executionCompleteBeforeVerification?: { sourceKind: "execution-complete-before-verification-v1"; attempt: number };
   /** Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; absent when none was sent. */
   operatorAcceptance?: { state: "pending" | "landed" | "refused"; note: string; principal: string; at: number; reason: string | null; landedCommit: string | null };
   /** #227 residual: for a run the server could accept, the checks Orca will run and the attempt's diff (null until read). */

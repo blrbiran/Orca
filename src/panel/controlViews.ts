@@ -1332,6 +1332,11 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(quotaRest === undefined ? {} : { quotaRest }),
       // Issue #209: the catalog miss the driver kept with a rate-limited failure, named only while the run used no tokens.
       ...(run.drive?.catalogMiss === undefined || run.cumulative[bucket].tokens !== 0 ? {} : { catalogMiss: run.drive.catalogMiss }),
+      // Tester #263 (follow-up I): an exhausted run whose execute had completed -- the driver kept ccloop's
+      // execution-complete-before-verification capsule for it -- stopped before verification, not mid-work; its saved
+      // result can be verified instead of re-run. Omitted for every other run (a plain exhausted run included).
+      ...(run.drive?.outcome === "exhausted" && run.savedSource?.authorityKind === "execution-complete-before-verification-v1"
+        ? { executionCompleteBeforeVerification: { sourceKind: run.savedSource.authorityKind, attempt: run.savedSource.attempt } } : {}),
       ...(attemptReview === undefined ? {} : { attemptReview }),
       // Reviewed acceptance (#227): what the Web needs to say where an owner's acceptance stands; omitted when none.
       ...(run.operatorAcceptance === undefined ? {} : { operatorAcceptance: { state: run.operatorAcceptance.state, note: run.operatorAcceptance.note,

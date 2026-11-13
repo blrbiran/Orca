@@ -289,6 +289,22 @@ function runResultsText(body: unknown): string {
   return lines.join("\n");
 }
 
+type CompletedRun = { runId?: string; taskId?: string | null; executionCompleteBeforeVerification?: { sourceKind: string; attempt: number } };
+
+/**
+ * Tester #263 (follow-up I): an exhausted run whose execute had completed stopped before verification, not mid-work; a
+ * person reading only `exhausted` re-runs it from scratch. The facts, and the commands that verify the saved result.
+ */
+function executionCompleteLines(groupId: string, run: CompletedRun | undefined): string[] {
+  const done = run?.executionCompleteBeforeVerification;
+  if (run === undefined || done === undefined) return [];
+  const runId = run.runId ?? "<run>";
+  return [
+    `execution: completed (attempt ${done.attempt}); verification: not run -- the run stopped on its budget after execute (saved source: ${done.sourceKind})`,
+    `To verify the saved result instead of re-running: orca run eligibility ${runId}${run.taskId == null ? "" : `, then orca task verify-saved-result ${groupId} ${run.taskId}`}`,
+  ];
+}
+
 /**
  * Tester D19: an installation's model here is the default a run gets when nothing chose another, not what any run ran on
  * (`orca run show` names that); the line says so.
@@ -459,6 +475,7 @@ export const READ_ROWS: CommandDef[] = [
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
         ...emptyResultLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
         ...workerLostLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
+        ...executionCompleteLines(b.groupId, b.run as CompletedRun | undefined),
         ...postMergeCheckLines(b.run?.postMergeCheck),
       ];
       return [`group ${b.groupId}`, `run ${compact(b.run)}`, ...why, "activity (newest first):", ...b.activity.entries.map((e) => `  ${e.at} ${e.kind} ${compact(e.body, 100)}`), `evidence: ${b.evidence.count} entr${b.evidence.count === 1 ? "y" : "ies"}`].join("\n");
