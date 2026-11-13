@@ -1673,7 +1673,7 @@ export function driverRunIds(store: ControlStore): string[] {
 
 /** How a blocked run's reason records a later error: the reason it was blocked for, then only the newest error. */
 export const LATER_ERROR = " | then: ";
-function laterError(reason: string | null, error: string): string {
+export function laterError(reason: string | null, error: string): string {
   const original = reason === null ? "" : reason.split(LATER_ERROR)[0]!;
   return original === "" ? error : `${original}${LATER_ERROR}${error}`;
 }

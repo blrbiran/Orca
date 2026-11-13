@@ -346,6 +346,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `task-run-moved` | 409 |
 | `usage-event-conflict` | 409 |
 | `usage-gap` | 422 |
+| `usage-pause-group-headroom` | 422 |
 | `usage-pause-no-headroom` | 422 |
 | `usage-pause-not-waiting` | 409 |
 | `usage-query-invalid` | 400 |

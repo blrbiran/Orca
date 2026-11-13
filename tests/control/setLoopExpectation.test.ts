@@ -29,7 +29,7 @@ async function claimAfterConfirm(h: Fixture, service: WebControlService): Promis
 }
 
 describe("set-loop with a finite token budget in an expectation-model group (#307)", () => {
-  it("writes the amount as the task's soft token intent, its expectation and pause line follow it, and every view reads", async () => {
+  it("writes the amount as the task's soft token intent, its expectation follows it, and every view reads", async () => {
     // The default model for a new group is the expectation model (followup-g); its token limit is null here.
     const h = await webFixture(undefined, [{ taskId: "a", loop: loop("a") }], { tokenPolicy: "optional-v1" });
     try {
@@ -49,7 +49,8 @@ describe("set-loop with a finite token budget in an expectation-model group (#30
       const runId = await claimAfterConfirm(h, service);
       const work = readWork(h.store, "g", "a");
       expect(taskExpectation(h.store, "g", work as never)).toMatchObject({ tokens: BIG, source: "intent" });
-      expect(pauseLineOf(h.store, readGroup(h.store, "g"), work as never)?.line).toBe(10 * BIG);
+      // This group has no token limit, so the task has no pause line (#300); in a finite group it is min(10 x 500M, L/2).
+      expect(pauseLineOf(h.store, readGroup(h.store, "g"), work as never)).toBeNull();
       expect(readRun(h.store, runId).grant.work.tokens).toBeNull();
       // group show, task show and run show all read this view (run show finds the run in it).
       expect(readControlGroup(h.store, "epoch", "g").runs.map((r) => r.runId)).toContain(runId);

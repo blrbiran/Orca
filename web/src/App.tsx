@@ -503,8 +503,8 @@ export function App(): JSX.Element {
     } catch (err) {
       dispatchControl({ type: "refusal", place: "panel", groupId: null, value: controlFailureFrom(err) });
     }
-    // Tester #298 (follow-up J): recovery is read whether or not the summary was, so a refused summary still shows the
-    // blockers that explain it (the Tasks pane shows both) instead of leaving recovery unread.
+    // Tester #298 (follow-up J): recovery is read whether or not the summary was, so its blockers are current the moment a
+    // summary arrives; until then the panes say "not available" with the summary's refusal (controlLoadState).
     try {
       dispatchControl({ type: "recovery", value: await fetchControlRecovery() });
     } catch (err) {
@@ -932,7 +932,10 @@ export function App(): JSX.Element {
    */
   const controlLoadState = (loading: "control.loading" | "control.loadingBoard"): JSX.Element =>
     controlConfigFailed || (controlConfig !== null && control.panelRefusal !== null)
-      ? <div className="empty"><p>{t("control.unavailable")}</p><button type="button" onClick={() => { void readControlConfig(); }}>{t("control.retryRead")}</button></div>
+      ? <div className="empty"><p>{t("control.unavailable")}</p>
+        {/* Tester #298 (follow-up J): the refusal that made the read fail, so a 423 names its group and run instead of nothing. */}
+        {controlConfig !== null && control.panelRefusal !== null && <RefusalNotice refusal={control.panelRefusal} testId="control-load-refusal" />}
+        <button type="button" onClick={() => { void readControlConfig(); }}>{t("control.retryRead")}</button></div>
       : <p className="empty" role="status">{t(loading)}</p>;
 
   useEffect(() => {
@@ -1846,8 +1849,9 @@ export function App(): JSX.Element {
       )}
       </SectionPane>
       <SectionPane section="tasks" active={section}>
-      {(controlConfig === null || control.recovery === null) && controlLoadState("control.loading")}
-      {controlConfig !== null && control.recovery !== null && (
+      {/* Tester #298: recovery is now read even when the summary is refused; a pane with no summary yet still says why. */}
+      {(controlConfig === null || control.recovery === null || control.epoch === null) && controlLoadState("control.loading")}
+      {controlConfig !== null && control.recovery !== null && control.epoch !== null && (
         <ControlPanel
           active={section === "tasks"}
           resultsScope={JSON.stringify([account?.user.id, scope])}

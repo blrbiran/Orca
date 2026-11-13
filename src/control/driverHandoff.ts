@@ -20,7 +20,7 @@ import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
-  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, collectInto, describeError, driverRunIds, groupRepoId, portFor, readDriverRun,
+  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, laterError, driverRunIds, groupRepoId, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -235,6 +235,10 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
     // An accepted run's failure still blocks it at C first (recordStepFailure), as before.
     if (run.state !== "blocked" || error instanceof DriverCrash || (error instanceof ControlError && error.code === "panel-draining")) throw error;
     const message = describeError(error);
+    // The later error is still recorded after the original reason, as recordStepFailure did (FR-C2), written only when
+    // it changes the reason, so a failure that repeats every round writes it once.
+    const reason = laterError(run.drive?.blockedReason ?? null, message);
+    if (run.drive?.blockedAt != null && reason !== run.drive.blockedReason) blockRun(deps, run.runId, run.drive.blockedAt, reason);
     if (lastCollectFailure.get(run.runId) !== message) {
       lastCollectFailure.set(run.runId, message);
       process.stderr.write(`orca-driver: ${run.runId}: handoff collect under stop: ${message}\n`);
