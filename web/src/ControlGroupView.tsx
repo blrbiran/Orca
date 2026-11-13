@@ -777,7 +777,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <div className="mt-4 mb-2 flex flex-wrap items-center gap-2" data-testid="work-items-header">
         <h3 className="m-0">
           <button type="button" className="btn-quiet px-1" aria-expanded={tasksOpen} aria-controls={`tasks-${groupId}`} onClick={() => setTasksOpen(!tasksOpen)}>
-            <span aria-hidden="true">{tasksOpen ? "▾ " : "▸ "}</span>{t("control.group.taskDisclosure", { n: shownItems.length })}
+            {/* A drawn chevron, not a text glyph: the open state is aria-expanded, not part of the list's name or text. */}
+            <svg aria-hidden="true" viewBox="0 0 10 10" className={`me-1 inline-block size-2.5 align-baseline ${tasksOpen ? "rotate-90" : ""}`}><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+            {t("control.group.taskDisclosure", { n: shownItems.length })}
           </button>
         </h3>
         {allLabels.length > 0 && (
