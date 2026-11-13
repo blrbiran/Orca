@@ -83,3 +83,38 @@ describe("B/B'/C: a transient failure is retried in place before the run blocks 
     });
   });
 });
+
+// Tester #286 (follow-up J): an `npm install` under a running panel changed the ccloop binary between the two identity
+// reads of a feature probe, and every run in flight blocked at C as control-binary-invalid. That one detail is transient (the
+// next round probes the new binary), bounded by TRANSIENT_START_RETRIES; any other control-binary-invalid still blocks.
+describe("C: a ccloop binary that changed during the feature probe is probed again (#286)", () => {
+  it("classes only changed-during-feature-probe as transient", () => {
+    // mutation (no control-binary-invalid branch) -> red on the first.
+    expect(transientDriveError(new ControlError("control-binary-invalid", "changed-during-feature-probe"))).toBe(true);
+    expect(transientDriveError(new ControlError("control-binary-invalid"))).toBe(false);
+    expect(transientDriveError(new ControlError("control-binary-invalid", "not-regular-file"))).toBe(false);
+  });
+
+  it("lets the run land after one such failure, and blocks after three in a row", async () => {
+    let failures = 0;
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { behaviour: () => "succeed", duringCollect: async () => { if (failures > 0) { failures -= 1; throw new ControlError("control-binary-invalid", "changed-during-feature-probe"); } } }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      failures = 1;
+      await withStderr(async (lines) => {
+        for (let i = 0; i < 40 && t.body(runId).drive?.cleanedUp !== true && t.body(runId).state !== "blocked"; i += 1) await driver.round();
+        expect({ state: t.body(runId).state, blockedAt: t.body(runId).drive.blockedAt }).toEqual({ state: "settled", blockedAt: null });
+        expect(lines.filter((line) => line.startsWith(`orca-driver: ${runId}: `))).toEqual([`orca-driver: ${runId}: C: control-binary-invalid:changed-during-feature-probe; transient, retry 1 of 3\n`]);
+      });
+      const second = await t.claim();
+      await t.until(driver, () => t.body(second).state === "accepted");
+      failures = 100;
+      await withStderr(async () => {
+        for (let i = 0; i < 20 && t.body(second).state !== "blocked"; i += 1) await driver.round();
+        expect({ state: t.body(second).state, blockedAt: t.body(second).drive.blockedAt, reason: t.body(second).drive.blockedReason })
+          .toEqual({ state: "blocked", blockedAt: "C", reason: "control-binary-invalid:changed-during-feature-probe" });
+      });
+    } finally { await t.h.dispose(); }
+  }, 60000);
+});

@@ -260,6 +260,9 @@ const TRANSIENT_PEER_ERRNO = new Set(["ECONNRESET", "ECONNREFUSED", "EPIPE", "ET
  */
 export function transientDriveError(error: unknown): boolean {
   if (transientSettleError(error)) return true;
+  // Tester #286 (follow-up J): the ccloop binary changed while its features were probed (an `npm install` under a running
+  // panel); the next round probes the new one. Any other control-binary-invalid (a missing or wrong binary) still blocks.
+  if (error instanceof ControlError && error.code === "control-binary-invalid") return error.detail === "changed-during-feature-probe";
   if (error instanceof ControlError) return error.code === "control-peer-timeout";
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" && TRANSIENT_PEER_ERRNO.has(code);
