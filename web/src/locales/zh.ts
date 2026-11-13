@@ -1313,8 +1313,10 @@ export const zh: Translation<typeof en> = {
     columns: { id: "任务", title: "标题", labels: "标签", loopPlan: "做法", targetPaths: "目标路径", checks: "检查", dependsOn: "依赖", traces: "对应标准" },
     layer: "第 {{n}} 层：{{tasks}}",
     implicitEdge: "{{from}} 先于 {{to}}：{{paths}}",
-    parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间只有 dependsOn 一条边在排先后，双方都不写、也不检查对方写的文件；如果后一个任务并不需要前一个的产物，可以发反馈去掉这条边。",
-    impliedPath: "{{task}} 的完成条件提到了 {{path}}，但只有 {{writers}} 可以写它（implied-path-outside-targets）；它的 run 会因 allowlist miss 停下。可以发反馈，把这个文件加进 {{task}} 的目标路径，或把这处改动交给 {{writers}}。",
+    parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间只有 dependsOn 一条边在排先后，后一个任务既不写、不检查、也不提及前一个任务写的文件。如果后面的任务并不需要前面的产物，可以去掉这些边（Orca 会把拆分重新校验一遍，作为下一稿），也可以发反馈。",
+    impliedPath: "{{task}} 的完成条件提到了 {{path}}，但只有 {{writers}} 可以写它（implied-path-outside-targets）；它的 run 会因 allowlist miss 停下。可以把这个文件加进 {{task}} 的目标路径（Orca 会把拆分重新校验一遍，作为下一稿），或发反馈把这处改动交给 {{writers}}。",
+    applyParallel: "去掉这些边",
+    addImpliedPath: "把 {{path}} 加给 {{task}}",
     handedBack: "退回原因：",
     splitReason: {
       expand: {

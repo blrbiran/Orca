@@ -814,6 +814,9 @@ export type RequirementAnswerPayloadV1 = {
 export type RequirementConsensusPayloadV1 = { roundNo: number };
 export type RequirementDraftFeedbackPayloadV1 = { draftNo: number; feedback: string };
 export type RequirementDraftAcceptPayloadV1 = { draftNo: number; draftHash: string };
+/** Tester follow-up K: apply one of the draft's hints; the server re-validates the edited split as the next draft. */
+export type RequirementDraftEditPayloadV1 = { draftNo: number; draftHash: string;
+  edit: { kind: "apply-parallel-candidates" } | { kind: "add-implied-path"; taskId: string; path: string } };
 /** Agent selection spec §3: model and context window are opaque here; ccloop's descriptor judges them. */
 export type ContextWindowV1 = "agent-default" | number;
 /** Spec §6.3: where a resolved selection field came from. */
@@ -838,7 +841,7 @@ export type CommandSuccessV1 = {
   commandId: string;
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "usage-pause-decide" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
-    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
+    | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-draft-edit" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
@@ -948,6 +951,7 @@ export type CommandSuccessV1 = {
     | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null; finished?: true }
     | { kind: "requirement-consensus"; roundNo: number; draftNo: number; wakeId: string }
     | { kind: "requirement-draft-rejected"; draftNo: number; nextDraftNo: number; wakeId: string }
+    | { kind: "requirement-draft-edited"; draftNo: number; nextDraftNo: number }
     | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }
     | { kind: "requirement-classified"; scope: RequirementScopeV1; clarity: RequirementClarityV1 }
     | { kind: "requirement-revised"; roundNo: number; revises: number; consensusWithdrawn: boolean; nextRoundNo: number | null; wakeId: string | null }

@@ -54,6 +54,7 @@ import type {
   RequirementAnswerPayloadV1,
   RequirementConsensusPayloadV1,
   RequirementDraftAcceptPayloadV1,
+  RequirementDraftEditPayloadV1,
   RequirementClarityV1,
   RequirementScopeV1,
   RequirementDraftFeedbackPayloadV1,
@@ -485,6 +486,7 @@ export type ControlAction =
   | { verb: "requirement-consensus"; groupId: string; expectedRevision: number; payload: RequirementConsensusPayloadV1 }
   | { verb: "requirement-draft-feedback"; groupId: string; expectedRevision: number; payload: RequirementDraftFeedbackPayloadV1 }
   | { verb: "requirement-draft-accept"; groupId: string; expectedRevision: number; payload: RequirementDraftAcceptPayloadV1 }
+  | { verb: "requirement-draft-edit"; groupId: string; expectedRevision: number; payload: RequirementDraftEditPayloadV1 }
   // Clarify caps spec 2026-10-21 §3.1, §3.3: one more round after the latest, and the person's class.
   | { verb: "requirement-clarify-more"; groupId: string; expectedRevision: number; payload: { roundNo: number } }
   | { verb: "requirement-classify"; groupId: string; expectedRevision: number; payload: { scope: RequirementScopeV1; clarity: RequirementClarityV1 } }
@@ -601,6 +603,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/requirement/feedback`;
     case "requirement-draft-accept":
       return `${group}/requirement/accept`;
+    case "requirement-draft-edit":
+      return `${group}/requirement/edit`;
     case "requirement-clarify-more":
       return `${group}/requirement/clarify-more`;
     case "requirement-classify":

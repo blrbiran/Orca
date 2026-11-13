@@ -25,7 +25,7 @@ import { Menu, MenuItem } from "./ui/Menu.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
-import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, OperatorPreferencesV1, RequirementViewV1 } from "./controlTypes.js";
+import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, OperatorPreferencesV1, RequirementDraftEditPayloadV1, RequirementViewV1 } from "./controlTypes.js";
 import { requirementSelection } from "./requirementAgent.js";
 import { inScope } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
@@ -358,6 +358,9 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
   const maySave = mayHumanOnly(useContext(AccountContext)) && props.archived !== true && draft.draftHash !== null
     && (draft.state === "awaiting-review" || props.view.requirement.acceptedDraftNo === draft.draftNo);
   const [moreOpen, setMoreOpen] = useState(false);
+  const mayEdit = !props.archived && draft.state === "awaiting-review" && draft.draftHash !== null;
+  const edit = (change: RequirementDraftEditPayloadV1["edit"]) =>
+    props.onCommand({ verb: "requirement-draft-edit", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash!, edit: change } });
   return (
     <section aria-label={t("requirements.draft", { n: draft.draftNo })}>
       <h4>{t("requirements.draft", { n: draft.draftNo })} · {enumText("draftState", draft.state)}</h4>
@@ -381,8 +384,11 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
       )}
       {draft.layers?.map((layer, index) => <p key={index}>{t("requirements.layer", { n: index + 1, tasks: layer.join(", ") })}</p>)}
       {draft.implicitEdges?.map((edge) => <p key={`${edge.from}>${edge.to}`}>{t("requirements.implicitEdge", { from: edge.from, to: edge.to, paths: [...new Set(edge.conflicts.map((c) => `${c.a} ∩ ${c.b}`))].join(", ") })}</p>)}
-      {(draft.parallelCandidates ?? []).length > 0 && <p role="note" data-parallel-candidates>{t("requirements.parallelCandidates", { pairs: draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ") })}</p>}
-      {(draft.impliedPathsOutsideTargets ?? []).map((entry) => <p role="note" data-implied-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.impliedPath", { task: entry.taskId, path: entry.path, writers: entry.writers.join(", ") })}</p>)}
+      {(draft.parallelCandidates ?? []).length > 0 && <p role="note" data-parallel-candidates>{t("requirements.parallelCandidates", { pairs: draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ") })}
+        {/* Tester follow-up K: the person applies the hint; the server re-validates the edited split as the next draft. */}
+        {mayEdit && <button type="button" className="ms-2" data-apply-parallel onClick={() => edit({ kind: "apply-parallel-candidates" })}>{t("requirements.applyParallel")}</button>}</p>}
+      {(draft.impliedPathsOutsideTargets ?? []).map((entry) => <p role="note" data-implied-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.impliedPath", { task: entry.taskId, path: entry.path, writers: entry.writers.join(", ") })}
+        {mayEdit && <button type="button" className="ms-2" data-add-implied-path onClick={() => edit({ kind: "add-implied-path", taskId: entry.taskId, path: entry.path })}>{t("requirements.addImpliedPath", { task: entry.taskId, path: entry.path })}</button>}</p>)}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>

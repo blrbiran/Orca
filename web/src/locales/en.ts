@@ -1481,8 +1481,10 @@ export const en = {
     columns: { id: "Task", title: "Title", labels: "Labels", loopPlan: "Loop plan", targetPaths: "Target paths", checks: "Checks", dependsOn: "Depends on", traces: "Traces" },
     layer: "Layer {{n}}: {{tasks}}",
     implicitEdge: "{{from}} before {{to}}: {{paths}}",
-    parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and neither writes or checks a file the other writes; send feedback to drop the edge if the later task does not need the earlier one's output.",
-    impliedPath: "{{task}}'s success condition names {{path}}, which only {{writers}} may write (implied-path-outside-targets); its run would stop on an allowlist miss. Send feedback to add the file to {{task}}'s target paths, or to move that change to {{writers}}.",
+    parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and the later task neither writes, checks nor mentions a file the earlier one writes. If the later tasks do not need the earlier ones' output, drop the edges (Orca re-checks the split as the next draft), or send feedback.",
+    impliedPath: "{{task}}'s success condition names {{path}}, which only {{writers}} may write (implied-path-outside-targets); its run would stop on an allowlist miss. Add the file to {{task}}'s target paths (Orca re-checks the split as the next draft), or send feedback to move that change to {{writers}}.",
+    applyParallel: "Drop these edges",
+    addImpliedPath: "Add {{path}} to {{task}}",
     handedBack: "Handed back for:",
     splitReason: {
       expand: {
