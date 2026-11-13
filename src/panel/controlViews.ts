@@ -1626,7 +1626,8 @@ export function readControlRecovery(store: ControlStore, epoch: string): Recover
   const deferredWakes = deferredWakeRows(store);
   const blockedRuns = blockedRunRows(store);
   const blockedCalls = blockedCallRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }) };
+  const capBlocked = capBlockedRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -1689,6 +1690,22 @@ function blockedCallRows(store: ControlStore): Array<{ groupId: string; runId: s
     out.push({ groupId: run.groupId, runId: run.runId, purpose, blockedAt: String(run.drive!.blockedAt),
       reason: typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason.slice(0, 200) : null,
       next: settleable ? `${recoveryRetryCommand(run.runId)} --acknowledge ${SINGLE_CALL_SETTLE_ACKNOWLEDGE}` : recoveryRetryCommand(run.runId) });
+  }
+  return out;
+}
+
+/**
+ * Tester follow-up K: every group whose claim a spend cap stopped (the block gateClaim recorded), with the command that
+ * raises that cap. Only the Overview read the block, so `recovery list` was empty while the group waited for a top-up.
+ */
+function capBlockedRows(store: ControlStore): Array<{ groupId: string; scope: string; period: string; capTokens: number; grantTokens: number | null; next: string }> {
+  const out: Array<{ groupId: string; scope: string; period: string; capTokens: number; grantTokens: number | null; next: string }> = [];
+  for (const row of store.db.prepare("SELECT group_id FROM spend_cap_blocks ORDER BY group_id").all()) {
+    const groupId = String(row.group_id);
+    const block = readSpendCapBlock(store, groupId) as { scope?: unknown; period?: unknown; capTokens?: unknown; grantTokens?: unknown } | null;
+    if (block === null || typeof block.scope !== "string" || typeof block.period !== "string" || typeof block.capTokens !== "number") continue;
+    out.push({ groupId, scope: block.scope, period: block.period, capTokens: block.capTokens, grantTokens: typeof block.grantTokens === "number" ? block.grantTokens : null,
+      next: `orca usage set-cap --scope ${block.scope} --period ${block.period} --tokens <more than ${block.capTokens}>` });
   }
   return out;
 }

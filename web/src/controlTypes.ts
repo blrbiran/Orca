@@ -648,6 +648,8 @@ export type RecoveryViewV1 = {
   terminalRuns?: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }>;
   blockedRuns?: Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }>;
   blockedCalls?: Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }>;
+  /** Tester follow-up K: a group a spend cap stopped, with the command that raises the cap. */
+  capBlocked?: Array<{ groupId: string; scope: string; period: string; capTokens: number; grantTokens: number | null; next: string }>;
 };
 export type EvidenceManifestV1 = {
   schema: "orca-run-evidence-v1";

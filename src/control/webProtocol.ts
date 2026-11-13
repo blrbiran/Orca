@@ -2367,6 +2367,8 @@ export const recoveryViewSchema = z
     blockedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
     // Tester follow-up J (#308): the same for a single call (requirement clarify/split/review, estimate, flow call), which has no task.
     blockedCalls: z.array(z.object({ groupId: idSchema, runId: idSchema, purpose: nonemptyString, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
+    // Tester follow-up K: a group a spend cap stopped, waiting for the cap to be raised, with the command that raises it. Absent when none.
+    capBlocked: z.array(z.object({ groupId: idSchema, scope: nonemptyString, period: nonemptyString, capTokens: z.number().int().nonnegative(), grantTokens: z.number().int().nonnegative().nullable(), next: nonemptyString }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) =>

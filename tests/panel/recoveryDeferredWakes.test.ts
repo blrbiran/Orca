@@ -44,6 +44,18 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
     } finally { await dispose(); }
   }, 20000);
 
+  it("names a group stopped at a spend cap and the command that raises it (tester follow-up K)", async () => {
+    // Only the Overview read the spend-cap block, so `recovery list` said nothing while the group waited for a top-up.
+    const block = JSON.stringify({ code: "spend-cap-reached", scope: "repo:r1", period: "week", capTokens: 500000, grantTokens: 120000, claim: "start" });
+    const { store, dispose } = await storeWith([group("g-capped", JSON.stringify({ groupId: "g-capped" })), `INSERT INTO spend_cap_blocks(group_id,body) VALUES ('g-capped','${block}')`]);
+    try {
+      expect(readControlRecovery(store, "epoch-test").capBlocked).toEqual([{ groupId: "g-capped", scope: "repo:r1", period: "week", capTokens: 500000, grantTokens: 120000,
+        next: "orca usage set-cap --scope repo:r1 --period week --tokens <more than 500000>" }]);
+      store.db.prepare("DELETE FROM spend_cap_blocks").run();
+      expect(readControlRecovery(store, "epoch-test")).not.toHaveProperty("capBlocked");
+    } finally { await dispose(); }
+  }, 20000);
+
   it("says nothing when every start-family wake was delivered", async () => {
     const { store, dispose } = await storeWith([group("g-clear", JSON.stringify({ groupId: "g-clear" }))]);
     try {
