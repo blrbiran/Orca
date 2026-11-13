@@ -9,9 +9,7 @@ import { codedNextStep } from "./ccloopCodes.js";
 import { explainRunReason } from "./refusalExplain.js";
 import { hasFailureOutcome, reasonCode, runReasonText } from "./runFacts.js";
 import { rejectsOutputSchema } from "../../src/control/structuredOutputHint.js";
-
-/** Tester #235 (follow-up K): ccloop's stop reason for a failure that repeats (stopController's isRepeatedFailure). */
-const REPEATED_FAILURE_STOP = "repeated failure pattern detected";
+import { REPEATED_FAILURE_STOP } from "../../src/control/repeatedFailureStop.js";
 
 /** Failure-cause spec 2026-10-21 §5: the causes this panel words; any other (a newer ccloop's) reads as `unknown`. */
 export const KNOWN_FAILURE_CAUSES = ["auth", "quota", "rate-limited", "provider-5xx", "network", "context-overflow", "stalled", "executable-missing",

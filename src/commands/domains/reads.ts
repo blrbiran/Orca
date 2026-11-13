@@ -10,6 +10,7 @@ import { contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnest
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
+import { REPEATED_FAILURE_STOP } from "../../control/repeatedFailureStop.js";
 import { impliedPathLine, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
 import { phaseEndBudgetLines, runUsageLines, type UsageRun } from "./usageLines.js";
 import { runUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
@@ -18,8 +19,6 @@ type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
   paths: ReadMapping["paths"]; compose?: ReadMapping["compose"];
 };
-/** Tester #235 (follow-up K): ccloop's stop reason for a failure that repeats (stopController's isRepeatedFailure). */
-const REPEATED_FAILURE_STOP = "repeated failure pattern detected";
 const read = (row: Row): CommandDef => ({
   domain: row.domain, action: row.action, summary: row.summary, positionals: row.positionals ?? [], flags: row.flags ?? [], access: "open",
   mapsTo: { kind: "read", paths: row.paths, ...(row.compose === undefined ? {} : { compose: row.compose }) },
