@@ -10,6 +10,9 @@ import { explainRunReason } from "./refusalExplain.js";
 import { hasFailureOutcome, reasonCode, runReasonText } from "./runFacts.js";
 import { rejectsOutputSchema } from "../../src/control/structuredOutputHint.js";
 
+/** Tester #235 (follow-up K): ccloop's stop reason for a failure that repeats (stopController's isRepeatedFailure). */
+const REPEATED_FAILURE_STOP = "repeated failure pattern detected";
+
 /** Failure-cause spec 2026-10-21 §5: the causes this panel words; any other (a newer ccloop's) reads as `unknown`. */
 export const KNOWN_FAILURE_CAUSES = ["auth", "quota", "rate-limited", "provider-5xx", "network", "context-overflow", "stalled", "executable-missing",
   "required-check-failed", "verifier-rejected", "budget-exhausted", "tool-rule-violated", "setup-failed", "worker-lost",
@@ -43,7 +46,8 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   const phase = t(`control.diagnosis.phase.${diagnosis.phase}`);
   const cause = t(`control.diagnosis.cause.${diagnosis.cause}`);
   const next = t(`control.diagnosis.next.${diagnosis.cause}`);
-  const text = raw === null ? null : explainRunReason(reasonCode(raw));
+  // Tester #235 (follow-up K): ccloop's repeated-failure stop ends `exhausted` while attempts remain; it is not a budget running out.
+  const text = raw === null ? null : raw === REPEATED_FAILURE_STOP ? t("control.repeatedFailureStop") : explainRunReason(reasonCode(raw));
   // ccloop's typed cause, when it stated one, with what to do next (en/zh); the raw reason stays beside it.
   const failure = props.run.failureCause ?? null, causeKey = knownCause(failure?.cause ?? "unknown");
   // Issue #60: under an unknown (or unstated) cause, a ccloop code the panel has words for names the next step itself.

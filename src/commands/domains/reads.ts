@@ -18,6 +18,8 @@ type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags
   positionals?: PositionalDef[]; flags?: FlagDef[]; examples?: string[]; format?: CommandDef["format"];
   paths: ReadMapping["paths"]; compose?: ReadMapping["compose"];
 };
+/** Tester #235 (follow-up K): ccloop's stop reason for a failure that repeats (stopController's isRepeatedFailure). */
+const REPEATED_FAILURE_STOP = "repeated failure pattern detected";
 const read = (row: Row): CommandDef => ({
   domain: row.domain, action: row.action, summary: row.summary, positionals: row.positionals ?? [], flags: row.flags ?? [], access: "open",
   mapsTo: { kind: "read", paths: row.paths, ...(row.compose === undefined ? {} : { compose: row.compose }) },
@@ -505,6 +507,8 @@ export const READ_ROWS: CommandDef[] = [
         ...liveCeilingLines(b.run as LiveCeilingRun | undefined, (body as { agentKind?: string }).agentKind),
         ...runUsageDetailLines((b.run as { usageDetail?: UsageDetailLine[] } | undefined)?.usageDetail),
         ...(b.run?.stopReason == null ? [] : [`stopReason: ${b.run.stopReason}`]),
+        // Tester #235 (follow-up K): ccloop's repeated-failure stop ends `exhausted` while attempts remain; say what it is.
+        ...(b.run?.stopReason === REPEATED_FAILURE_STOP ? ["why: the same failure repeated, so it stopped (not a budget or attempt limit)"] : []),
         // Tester #267: a work run blocked before ccloop stated an outcome is resumed where it stopped, not retried as a task.
         ...(b.run?.state === "blocked" && b.run.phase === "work" && b.run.outcome === null && b.run.runId !== undefined ? [`To resume it where it stopped: ${recoveryRetryCommand(b.run.runId)}`] : []),
         ...(cause === null ? [] : [`failureCause: ${cause.cause}${cause.phase === null ? "" : ` (phase ${cause.phase})`}${cause.retries > 0 ? `, ${cause.retries} retr${cause.retries === 1 ? "y" : "ies"}` : ""}`]),
