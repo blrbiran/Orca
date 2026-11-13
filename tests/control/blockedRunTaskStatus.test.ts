@@ -31,4 +31,25 @@ describe("a run the driver blocked reads blocked in every view (#230)", { timeou
       expect(readControlGroup(t.h.store, "epoch", "g").workItems.find((entry) => entry.taskId === "a")!.status).toBe("active");
     } finally { await t.h.dispose(); }
   });
+
+  // Tester follow-up I (#230 rest): the store keeps `running` on purpose -- a stored `blocked` already means "checkpoint
+  // committed, not accepted" (retryTask's released branches, handoff.ts `checkpoint-blocked`), so writing it from blockRun
+  // would route a live run into those branches. Both views derive from the same run instead (categoryOf ->
+  // workItemCategory), so there is nothing to keep in step: blocked, both say blocked; resumed, both say running.
+  it("the brief's counts and the group view's word move together, both ways, from the run alone", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
+      const runId = await t.claim();
+      const views = () => ({
+        status: readControlGroup(t.h.store, "epoch", "g").workItems.find((entry) => entry.taskId === "a")!.status,
+        counts: readGroupSummary(t.h.store, "g").counts,
+      });
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      expect(work(t, "a").status).toBe("running");
+      expect(views()).toMatchObject({ status: "blocked", counts: { blocked: 1, running: 0 } });
+      const retried = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect("error" in retried ? retried.error : retried.result).toMatchObject({ kind: "recovery-observed", resolved: true });
+      expect(work(t, "a").status).toBe("running");
+      expect(views()).toMatchObject({ status: "active", counts: { blocked: 0, running: 1 } });
+    } finally { await t.h.dispose(); }
+  });
 });
