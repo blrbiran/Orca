@@ -135,6 +135,7 @@ import { reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { insertSingleCallRun } from "./singleCallLedger.js";
+import { applyRequirementDraftEdit, type RequirementDraftEditCommand } from "./requirementDraftEdit.js";
 import {
   applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementRevise, applyRequirementClassify, applyRequirementSetAgent, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
   type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementReviseCommand, type RequirementClassifyCommand, type RequirementSetAgentCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
@@ -1834,6 +1835,8 @@ export class WebControlService {
   requirementSetAgent(command: RequirementSetAgentCommand): Promise<WebCommandResult> { return applyRequirementSetAgent(this.deps, command); }
   /** N1 spec §9.1. */
   acceptRequirementDraft(command: RequirementDraftAcceptCommand): Promise<WebCommandResult> { return applyRequirementDraftAccept(this.deps, command); }
+  /** Tester follow-up K: a person applies a draft's parallel-candidates or implied-path hint. */
+  editRequirementDraft(command: RequirementDraftEditCommand): Promise<WebCommandResult> { return applyRequirementDraftEdit(this.deps, command); }
   /** Execution driver spec §3.2. A panel started without the repository refuses it by name. */
   async setWorkspaceMode(command: SetWorkspaceModeCommand): Promise<WebCommandResult> {
     return applySetWorkspaceMode({ store: this.store, admissionGate: this.deps.admissionGate, knownRepository: this.settingsKnownRepository() }, command) as WebCommandResult;

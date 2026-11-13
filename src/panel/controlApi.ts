@@ -953,6 +953,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/requirement/consensus", verb: "requirement-consensus", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/feedback", verb: "requirement-draft-feedback", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/accept", verb: "requirement-draft-accept", target: fromParams },
+    // Tester follow-up K: a person applies a draft's parallel-candidates or implied-path hint.
+    { path: "/api/control/groups/:groupId/requirement/edit", verb: "requirement-draft-edit", target: fromParams },
     // Clarify caps spec 2026-10-21 §3.1, §3.3.
     { path: "/api/control/groups/:groupId/requirement/clarify-more", verb: "requirement-clarify-more", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/revise", verb: "requirement-revise", target: fromParams },
@@ -1091,6 +1093,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "requirement-consensus": service.requirementConsensus(command); break;
           case "requirement-draft-feedback": service.requirementDraftFeedback(command); break;
           case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
+          case "requirement-draft-edit": await service.editRequirementDraft(command); break;
           case "requirement-clarify-more": service.requirementClarifyMore(command); break;
           case "requirement-revise": service.requirementRevise(command); break;
           case "requirement-classify": service.requirementClassify(command); break;

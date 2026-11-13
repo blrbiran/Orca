@@ -85,6 +85,33 @@ accept the current draft: the group becomes a draft task group
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca requirement apply-parallel <group>`
+
+drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft
+
+- What it does: sends control verb `requirement-draft-edit`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+
+```
+orca requirement show g1   # lists 'could run in parallel'
+orca requirement apply-parallel g1
+```
+
+## `orca requirement add-implied-path <group> --task <task> --path <path>`
+
+add a path the current draft lists as implied to that task's target paths; the result is the next draft
+
+- What it does: sends control verb `requirement-draft-edit`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--task <task>` (required): the task whose success condition names the path
+- `--path <path>` (required): the path, as requirement show lists it
+
+```
+orca requirement add-implied-path g1 --task cli --path README.md
+```
+
 ## `orca requirement classify <group> --scope <scope> --clarity <clarity>`
 
 set the requirement's class (it sets the clarification caps)

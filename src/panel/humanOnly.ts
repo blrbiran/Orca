@@ -49,6 +49,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "requirement-consensus": "any",
   "requirement-draft-feedback": "any",
   "requirement-draft-accept": "any",
+  // Tester follow-up K: as feedback and accept, the other things a person does with a draft.
+  "requirement-draft-edit": "any",
   // Clarify caps spec 2026-10-21 §3.3: as answer and consensus.
   "requirement-clarify-more": "any",
   "requirement-classify": "any",

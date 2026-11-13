@@ -413,7 +413,7 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
 };
 
 /** What Ce of a split judged, before its transaction: the parsed output, its expansion and every reason (spec §8.2-§8.4). */
-interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "autoRetry" | "waiting" | "feedback" | "reasonCode" | "calls" | "plan"> {
+export interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "autoRetry" | "waiting" | "feedback" | "reasonCode" | "calls" | "plan"> {
   schemaValid: boolean; ok: boolean; plan: SplitPlanFile | null;
 }
 
@@ -455,8 +455,9 @@ async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRu
 /**
  * Evaluated outside the transaction (it reads the target repositories at the commits A2's overview named); its result is
  * what `complete` records. A call that failed with no output is schema-invalid (Task 6 ruling: it uses a retry).
+ * Tester follow-up K: a person's draft edit (requirementDraftEdit.ts) re-validates the edited split through it too.
  */
-async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<SplitEvaluation> {
+export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, rawOutput: unknown): Promise<SplitEvaluation> {
   const group = readRequirementGroup(deps.store, run.groupId);
   const multi = multiDirOf(group);
   if (multi !== null) return evaluateMultiSplit(deps, run, multi, rawOutput);

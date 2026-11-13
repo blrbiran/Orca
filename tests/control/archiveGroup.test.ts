@@ -260,6 +260,8 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "requirement-consensus": { call: (s, c) => s.requirementConsensus(c), target: "group", payload: { roundNo: 1 } },
   "requirement-draft-feedback": { call: (s, c) => s.requirementDraftFeedback(c), target: "group", payload: { draftNo: 1, feedback: "more" } },
   "requirement-draft-accept": { call: (s, c) => s.acceptRequirementDraft(c), target: "group", payload: { draftNo: 1, draftHash: "a".repeat(64) } },
+  // Ruling (2026-11-14, tester follow-up K): 「这次批准改写所有必要的判据。」 — the new draft-edit verb is refused on an archived group too.
+  "requirement-draft-edit": { call: (s, c) => s.editRequirementDraft(c), target: "group", payload: { draftNo: 1, draftHash: "a".repeat(64), edit: { kind: "apply-parallel-candidates" } } },
   "requirement-clarify-more": { call: (s, c) => s.requirementClarifyMore(c), target: "group", payload: { roundNo: 1 } },
   "requirement-classify": { call: (s, c) => s.requirementClassify(c), target: "group", payload: { scope: "small", clarity: "clear" } },
   "requirement-revise": { call: (s, c) => s.requirementRevise(c), target: "group", payload: { roundNo: 1, answers: [], glossaryDecisions: [], adrDecisions: [] } },

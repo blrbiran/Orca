@@ -52,6 +52,11 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["requirement", "continue", "g-alpha"], "groups/g-alpha/requirement/clarify-more", 5, { roundNo: 2 }],
   [["requirement", "feedback", "g-alpha", "--text", "split it"], "groups/g-alpha/requirement/feedback", 5, { draftNo: 1, feedback: "split it" }],
   [["requirement", "accept", "g-alpha"], "groups/g-alpha/requirement/accept", 5, { draftNo: 1, draftHash: H.draft }],
+  // Tester follow-up K: the two draft hints a person applies, against the latest draft's hash.
+  // mutation: send the edit without draftHash -> red
+  [["requirement", "apply-parallel", "g-alpha"], "groups/g-alpha/requirement/edit", 5, { draftNo: 1, draftHash: H.draft, edit: { kind: "apply-parallel-candidates" } }],
+  [["requirement", "add-implied-path", "g-alpha", "--task", "cli", "--path", "README.md"], "groups/g-alpha/requirement/edit", 5,
+    { draftNo: 1, draftHash: H.draft, edit: { kind: "add-implied-path", taskId: "cli", path: "README.md" } }],
   [["requirement", "classify", "g-alpha", "--scope", "medium", "--clarity", "fair"], "groups/g-alpha/requirement/classify", 5, { scope: "medium", clarity: "fair" }],
   [["task", "retry", "g-alpha", "t1"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1" }],
   [["task", "retry", "g-alpha", "t1", "--allow-observed-paths"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1", allowObservedPaths: true }],

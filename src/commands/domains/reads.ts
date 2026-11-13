@@ -64,9 +64,10 @@ function requirementShow(body: unknown): string {
   const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[] }>;
   const lines = drafts.flatMap((draft) => [
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
-    ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file one writes is written or checked by the other; send feedback to drop the edge): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
-    // Tester #265: a hint, one line each; send feedback to give the task the file, or move the change to its writer.
-    ...(draft.impliedPathsOutsideTargets ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathLine(entry)}`),
+    ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file the earlier writes is written, checked or mentioned by the later; orca requirement apply-parallel drops the edges, or send feedback): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
+    // Tester #265: a hint, one line each; tester follow-up K: `orca requirement add-implied-path` gives the task the file,
+    // or feedback moves the change to its writer.
+    ...(draft.impliedPathsOutsideTargets ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathLine(entry)} (orca requirement add-implied-path <group> --task ${entry.taskId} --path ${entry.path})`),
   ]);
   return [text(body), ...lines].join("\n");
 }

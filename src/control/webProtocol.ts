@@ -652,6 +652,7 @@ export const commandVerbSchema = z.enum([
   "requirement-consensus",
   "requirement-draft-feedback",
   "requirement-draft-accept",
+  "requirement-draft-edit",
   "requirement-clarify-more",
   "requirement-classify",
   "requirement-revise",
@@ -1115,6 +1116,18 @@ export const requirementDraftFeedbackPayloadSchema = z.object({
   draftNo: positiveSafeInteger, feedback: nonemptyString.refine((text) => Buffer.byteLength(text, "utf8") <= IDEA_MAX_BYTES, "feedback-too-large"),
 }).strict();
 export const requirementDraftAcceptPayloadSchema = z.object({ draftNo: positiveSafeInteger, draftHash: hashSchema }).strict();
+/**
+ * Tester follow-up K (#284, #265): a person applies one of the draft's code-made hints -- drop every listed parallel
+ * candidate's dependsOn edge, or add one implied path to the task's targets -- and Orca re-validates the edited split
+ * as a new draft. `draftHash` names the draft the person read, as for accept.
+ */
+export const requirementDraftEditPayloadSchema = z.object({
+  draftNo: positiveSafeInteger, draftHash: hashSchema,
+  edit: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("apply-parallel-candidates") }).strict(),
+    z.object({ kind: z.literal("add-implied-path"), taskId: nonemptyString, path: nonemptyString }).strict(),
+  ]),
+}).strict();
 // Clarify caps spec 2026-10-21 §3.1, §3.3: the person grants one more round after the latest one, or sets the class.
 export const requirementClarifyMorePayloadSchema = z.object({ roundNo: positiveSafeInteger }).strict();
 export const requirementClassifyPayloadSchema = classPairSchema;
@@ -1370,6 +1383,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-draft-edit"), target: groupCommandTargetSchema, payload: requirementDraftEditPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
@@ -1482,6 +1496,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-consensus"), target: groupCommandTargetSchema, payload: requirementConsensusPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-feedback"), target: groupCommandTargetSchema, payload: requirementDraftFeedbackPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-accept"), target: groupCommandTargetSchema, payload: requirementDraftAcceptPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-draft-edit"), target: groupCommandTargetSchema, payload: requirementDraftEditPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-clarify-more"), target: groupCommandTargetSchema, payload: requirementClarifyMorePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
@@ -2578,6 +2593,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("requirement-answered"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable(), finished: z.literal(true).optional() }).strict(),
   z.object({ kind: z.literal("requirement-consensus"), roundNo: positiveSafeInteger, draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-draft-rejected"), draftNo: positiveSafeInteger, nextDraftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
+  // Tester follow-up K: the edited split, re-validated, is the next draft, awaiting review (no call was made).
+  z.object({ kind: z.literal("requirement-draft-edited"), draftNo: positiveSafeInteger, nextDraftNo: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("requirement-clarify-more"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-classified"), scope: z.enum(SCOPES), clarity: z.enum(CLARITIES) }).strict(),
   z.object({ kind: z.literal("requirement-revised"), roundNo: positiveSafeInteger, revises: positiveSafeInteger, consensusWithdrawn: z.boolean(), nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
@@ -2798,6 +2815,7 @@ export type RequirementAnswerPayload = z.infer<typeof requirementAnswerPayloadSc
 export type RequirementConsensusPayload = z.infer<typeof requirementConsensusPayloadSchema>;
 export type RequirementDraftFeedbackPayload = z.infer<typeof requirementDraftFeedbackPayloadSchema>;
 export type RequirementDraftAcceptPayload = z.infer<typeof requirementDraftAcceptPayloadSchema>;
+export type RequirementDraftEditPayload = z.infer<typeof requirementDraftEditPayloadSchema>;
 
 // Agent selection spec §6.8 (plan T14): the three reads the panel's agent UI is built on. The component schemas
 // (contextWindowSchema, partialSelectionSchema, operatorPreferencesSchema, groupAgentOverridesSchema,

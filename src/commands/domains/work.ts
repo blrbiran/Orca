@@ -363,6 +363,17 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "requirement", action: "accept", summary: "accept the current draft: the group becomes a draft task group", verb: "requirement-draft-accept", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/accept`,
     payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash }; } }),
+  // Tester follow-up K (#284, #265): apply one of the current draft's hints (requirement show lists them); Orca re-validates
+  // the edited split as the next draft, awaiting review. No model call is made.
+  verb({ domain: "requirement", action: "apply-parallel", summary: "drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
+    route: (c) => `groups/${group(c)}/requirement/edit`,
+    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash, edit: { kind: "apply-parallel-candidates" } }; },
+    examples: ["orca requirement show g1   # lists 'could run in parallel'", "orca requirement apply-parallel g1"] }),
+  verb({ domain: "requirement", action: "add-implied-path", summary: "add a path the current draft lists as implied to that task's target paths; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
+    flags: [{ name: "task", type: "string", required: true, summary: "the task whose success condition names the path" }, { name: "path", type: "string", required: true, summary: "the path, as requirement show lists it" }],
+    route: (c) => `groups/${group(c)}/requirement/edit`,
+    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash, edit: { kind: "add-implied-path", taskId: str(c, "task"), path: str(c, "path") } }; },
+    examples: ["orca requirement add-implied-path g1 --task cli --path README.md"] }),
   verb({ domain: "requirement", action: "classify", summary: "set the requirement's class (it sets the clarification caps)", verb: "requirement-classify", positionals: [GROUP],
     flags: [{ name: "scope", type: "string", required: true, summary: "small|medium|large" }, { name: "clarity", type: "string", required: true, summary: "the clarity class" }],
     route: (c) => `groups/${group(c)}/requirement/classify`, payload: (c) => ({ scope: str(c, "scope"), clarity: str(c, "clarity") }) }),

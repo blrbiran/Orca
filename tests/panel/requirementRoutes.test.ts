@@ -26,6 +26,8 @@ describe("requirement routes (N1 spec §11.1)", () => {
       ["answer", "requirement-answer", { roundNo: 1, answers: [], glossaryDecisions: [], adrDecisions: [] }],
       ["consensus", "requirement-consensus", { roundNo: 1 }],
       ["feedback", "requirement-draft-feedback", { draftNo: 1, feedback: "Merge them." }],
+      // Ruling (2026-11-14, tester follow-up K): 「这次批准改写所有必要的判据。」 — the edit route reaches its verb (no draft yet: refused).
+      ["edit", "requirement-draft-edit", { draftNo: 1, draftHash: "a".repeat(64), edit: { kind: "apply-parallel-candidates" } }],
     ] as const) {
       const refused = await command(panel, `/api/control/groups/n/requirement/${path}`, { commandId: `${path}-n`, expectedRevision: at, payload });
       expect([path, refused.status, refused.body]).toMatchObject([path, 422, { error: { code: "group-state-invalid" } }]);
