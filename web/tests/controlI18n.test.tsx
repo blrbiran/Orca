@@ -75,7 +75,9 @@ describe("the task control and recovery areas in Chinese", () => {
     // Rewritten for feedback #61 (human-named 2026-10-15): this now encodes that the Runs table names providerAttemptOrdinal as the attempt within this run, with the task's run number beside it.
     for (const expected of [
       "服务会话 epoch-a · 状态序号 4 · 调度已阻断", "未配置执行端口 · ", "服务端要求重置 · ", "需要重新拉取状态序号 · ", "调度已阻断 · 必须先观察到恢复",
-      "导入计划…", "g · 运行中 · 已完成 0/1 · 已暂停 · 1 个阻塞项",
+      // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #288: a stop leads the card's state line
+      // ("g · 已暂停 · 运行中 …"), it no longer trails it.
+      "导入计划…", "g · 已暂停 · 运行中 · 已完成 0/1 · 1 个阻塞项",
       // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the header
       // without its counters (#81/#228): "g · 运行中" leads, and the counters and plan hash read in the Technical region.
       "g · 运行中", "版本 6 · 状态序号 4", "认领已阻断 · ", "goal-x", "计划 aaaaaaaaaaaa · 图 v1", "停止 暂停 已暂停 · 受理于 不适用 · 截止 无 · 0 个冻结的运行：无",

@@ -357,6 +357,7 @@ export const zh: Translation<typeof en> = {
       updatedNow: "刚刚更新",
       updatedHours: "{{hours}} 小时前更新",
       updatedDays: "{{days}} 天前更新",
+      stop: { pausing: "正在暂停", paused: "已暂停", stopping: "正在停止", stopped: "已停止", partial: "已停止（部分交接）", unresolved: "停止未决" },
     },
     reading: "正在读取 {{groupId}}…",
     outcomeUnknown: "命令结果未知，正在查询：{{commands}}",
@@ -2205,7 +2206,8 @@ export const zh: Translation<typeof en> = {
     draftState: { drafting: "起草中", "awaiting-review": "待审", accepted: "已接受", rejected: "已退回", invalid: "已自动退回", interrupted: "已中断", failed: "失败" },
     exportState: { "not-due": "未到时候", pending: "待导出", done: "已导出", conflict: "受阻" },
     stopMode: { pause: "暂停", shutdown: "关停", handoff: "交接" },
-    stopState: { paused: "已暂停", "handoff-pending": "交接待处理", "handoff-partial": "交接部分完成", "handoff-unresolved": "交接未决", "handoff-complete": "交接完成" },
+    // Tester #288: these read as states of a stop, not as to-dos (「交接待处理」 read like work waiting for the person).
+    stopState: { paused: "已暂停", "handoff-pending": "正在停止", "handoff-partial": "已停止（部分交接）", "handoff-unresolved": "停止未决", "handoff-complete": "已停止" },
     workStatus: { draft: "草稿", ready: "就绪", starting: "启动中", "start-unknown": "启动情况未知", active: "进行中", held: "已挂起", continuing: "续跑中", completed: "已完成", blocked: "已阻塞" },
     runPhase: { estimate: "估算", work: "工作", handoff: "交接", "single-call": "单次调用" },
     runState: {

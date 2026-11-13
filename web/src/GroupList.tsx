@@ -34,6 +34,23 @@ export interface GroupListProps {
   now?: number;
 }
 
+/**
+ * Tester #288: a group with a stop intent leads its state line with the stop, so "review" after a stop no longer reads
+ * as a group still at work. Pausing/Stopping: the intent is recorded and the stop has no state yet (or is settling).
+ * "Needs you" stays a category chip; it is not a state.
+ */
+export type StopLabel = "pausing" | "paused" | "stopping" | "stopped" | "partial" | "unresolved";
+export function stopLabel(group: Pick<GroupSummaryV1, "stopMode" | "stopState">): StopLabel | null {
+  switch (group.stopState) {
+    case "paused": return "paused";
+    case "handoff-pending": return "stopping";
+    case "handoff-complete": return "stopped";
+    case "handoff-partial": return "partial";
+    case "handoff-unresolved": return "unresolved";
+    case null: return group.stopMode === null ? null : group.stopMode === "pause" ? "pausing" : "stopping";
+  }
+}
+
 /** Final review (E8 deferred minor): minutes up to 119, then whole hours up to 47, then whole days. */
 function updatedText(t: TFunction, minutes: number): string {
   if (minutes === 0) return t("control.groupCard.updatedNow");
@@ -47,6 +64,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
   const { group } = props;
   const base = useId();
   const category = groupCategory(group);
+  const stop = stopLabel(group);
   const updated = group.updatedAt === undefined || group.updatedAt === null ? null : Math.max(0, Math.floor((props.now - group.updatedAt) / 60_000));
   return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal} onOpenDispatch={props.onOpenDispatch}>{(onContextMenu) => (
     <button
@@ -64,9 +82,8 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       <span id={`${base}-name`} className={`group-card-name ${groupCardName}`}>
         {/* Ruling H8: the status light; decorative, the state is in this text. */}
         <span className="led" data-led={groupLed(group)} aria-hidden="true" />
-        {group.groupId} · {enumText("groupState", group.state)}
+        {group.groupId} · {stop !== null && <><strong data-testid="group-card-stop">{t(`control.groupCard.stop.${stop}` as const)}</strong> · </>}{enumText("groupState", group.state)}
         {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
-        {group.stopState !== null ? ` · ${enumText("stopState", group.stopState)}` : ""}
         {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
       </span>
       <span id={`${base}-detail`} className={`group-card-detail ${groupCardDetail}`}>

@@ -503,6 +503,8 @@ export const en = {
       updatedNow: "updated just now",
       updatedHours: "updated {{hours}} h ago",
       updatedDays: "updated {{days}} days ago",
+      // Tester #288: a stop leads the card's state line, as a state, not as a trailing note.
+      stop: { pausing: "Pausing", paused: "Paused", stopping: "Stopping", stopped: "Stopped", partial: "Stopped (partial)", unresolved: "Stop unresolved" },
     },
     reading: "Reading {{groupId}}…",
     outcomeUnknown: "Command outcome unknown, being looked up: {{commands}}",
