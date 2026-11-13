@@ -131,6 +131,14 @@ export interface FundingPreviewRow { taskId:string; authoredTokens:number|null; 
  * this is exactly the claim-time calculation.
  */
 export function fundingPreview(store:ControlStore,groupId:string,at:number):FundingPreviewRow[] {
+ // Tester #291 (follow-up J): decideFundedAllowance answers task-budget-unavailable for every task or group it skips, so a
+ // running group's preview said "funds nothing" for tasks that were running. The preview names the reason first -- display
+ // only (ruling #212); the claim's own semantics are unchanged.
+ const group=readGroup(store,groupId);
+ const groupReason=group.stopped||store.db.prepare("SELECT group_id FROM stop_intents WHERE group_id=?").get(groupId)?"group-stopped"
+  :store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=?").get(groupId)?"recovery-blocked":null;
+ const taskReason=(work:{workItemId:string;status:string}):string|null=>groupReason??(["done","completed"].includes(work.status)?"task-done"
+  :store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId,work.workItemId)||work.status==="active"?"task-active":null);
  let extraReserved=zero();
  if(store.db.prepare("SELECT group_id FROM budget_proposals WHERE group_id=?").get(groupId)){
   const proposal=readBudgetProposal(store,groupId);
@@ -139,6 +147,8 @@ export function fundingPreview(store:ControlStore,groupId:string,at:number):Fund
  return allWork(store,groupId).sort((a,b)=>a.workItemId<b.workItemId?-1:a.workItemId>b.workItemId?1:0).flatMap(work=>{
   if(work.kind!=="task"||work.taskId===null)return [];
   const authored=budgetAmountSchema.parse(work.grant.work);
+  const named=taskReason(work);
+  if(named!==null)return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:null,reason:named}];
   const decision=decideFundedAllowance(store,groupId,work.workItemId,at,{previewGroupId:groupId,extraReserved});
   return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:decision.allowance?.grant.work.tokens??null,reason:decision.allowance===null?decision.reason:null,...(decision.minimumTokens===undefined?{}:{minimumTokens:decision.minimumTokens})}];
  });
