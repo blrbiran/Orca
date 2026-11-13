@@ -230,3 +230,40 @@ arrived -- settled the same run as worker-lost. Which won depended on timing. No
 
 Criteria: `handoffE2E.test.ts` "H-lost" (new); "G" rewritten (Ruling, tester follow-up H) to freeze the worker with
 SIGSTOP -- alive, yielding nothing -- since its subject is the grace timing, not the worker's death.
+
+
+## Correction (2026-11-13, tester follow-up I, implementer seat K of Orca session `d467cbd2`): settling a lost worker's unknown usage
+
+The text above is kept as written. Measured on the controller's paid dogfood run (group `g-28d9b560`, run `run-a4ed7f10`;
+an expectation-model group with a 4M token limit; codex worker SIGKILLed mid-execute after the plan's 61,193 tokens were
+observed). Built on Orca main `827b3059`; criteria `tests/control/workerLostSettlement.test.ts` K1-K6 and
+`workerLostE2E.test.ts` "in an expectation-model group with a token limit …"; mutations
+`/private/tmp/orca-i1113/seatK/mutations.md`.
+
+1. **As-built item 7's "a settlement by `charge-remaining-grant` charges the whole remaining grant, so the restart is then
+   unfunded" no longer holds.** Only tokens are unknown (the killed call's): a worker-lost run is charged at its token
+   remainder -- or, without a work token grant, its unused live ceiling (G spec §14.1, R4) -- and every other dimension in
+   both buckets (active time, attempts, sessions) stays as observed, its remainder kept, because the run never reached it
+   (§5.4: the machine lost the work, the task did not fail). Orca's worker-lost restart then follows in the same pass; in
+   a task whose own token budget is a hard line (a group created before the release) the token charge still exhausts it
+   and the run stays with the person, as before.
+2. **§5.5 / G spec §16 "no floor: refused `observed-floor-unknown`" no longer holds for a worker-lost run.** ccloop's
+   floor (`usageLowerBound`) is written by the worker that ran the calls, which here was killed first, so it can never
+   exist. The floor counts on top of the booked usage (spec 2026-11-06 §3.2), so for a worker-lost run that observed some
+   usage the floor is 0: `charge-observed-floor` books what was observed (marker `observed-floor`, `floorTokens: 0`) and
+   gives the held ceiling back. A worker-lost run that observed nothing, and every other run without ccloop's floor, is
+   still refused. Explicit, never automatic, as before (#116 C3).
+3. **Every group read refused the settled run (`recovery-blocked:run-identity`, the CLI's 423).** The settlement stored
+   `remaining.work.tokens: 0` beside `grant.work.tokens: null`, against the invariant every read checks; and its marker
+   could not validate (nothing to check the charge against), which also refused the task's retry (`retry-settlement`).
+   Now the writer keeps a null remainder null, and the marker is checked against the run's live ceiling for that
+   dimension. A row the old writer stored (like `run-a4ed7f10`) is read as it stands: a 0 work token remainder beside a
+   null grant is taken only for a `remaining-grant` settlement of a run with a live ceiling, whose marker, booking and
+   ledger receipt are checked; its old charge of the other dimensions is read too. Same class, found here: a
+   `release-known-zero` settlement (#215) empties the remainder by design and was refused by every read as well; that
+   stored shape is read now.
+
+Left open (not built): a dead run blocked at C stays `active` and so keeps any unused ceiling held until it is retried or
+closed (`ceilingOutstanding` counts an active run that has not ended), and as an active `group`-cause run it is a raise
+candidate (`planCeilingRaises`); and ccloop's `settle-lost-worker` could compute a floor from the killed call's transcript
+(codex reports turn usage on stdout), which would make the floor a real observation (a ccloop change).

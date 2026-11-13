@@ -514,3 +514,11 @@ is superseded.
 - Criteria I1-I4 (`tests/control/ceilingObservedFloor.test.ts`); mutations M1-M6 all seen red
   (`/private/tmp/orca-i1113/seatF/mutations.md`). No existing criterion pinned the refusal (H9 pins
   `release-unmetered` → `finite-remainder`, unchanged), so none was rewritten.
+
+## 17. Follow-up I, seat K (2026-11-13): a worker-lost run's floor, and the settled run's readability
+
+Appended by implementer seat K of tester follow-up I (Orca session `d467cbd2`). §14.1 and §16 stand as written, except:
+a worker-lost run that observed usage has the observed floor 0 when ccloop wrote none (its dead worker could not), so
+`charge-observed-floor` is admitted for it; a worker-lost run's `charge-remaining-grant` charges tokens only; and the
+settled run keeps a null work token remainder (the old stored 0 is read). Details: worker-lost recovery spec
+(2026-11-12), "Correction (2026-11-13, tester follow-up I, implementer seat K …)".
