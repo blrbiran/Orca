@@ -36,7 +36,8 @@ describe("one primary button per view (DESIGN.md)", () => {
   // mutation: Import plan keeps btn-primary -> 1 primary with no group open, 2 beside a ready group's Start -> red
   it("Tasks with no group open has no primary; Import plan is secondary", () => {
     tasks(view([]), null);
-    expect(screen.getByRole("button", { name: "Import a plan…" }).classList.contains("btn-primary")).toBe(false);
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    expect(screen.getByRole("button", { name: "New" }).classList.contains("btn-primary")).toBe(false);
     expect(primaries()).toHaveLength(0);
   });
 

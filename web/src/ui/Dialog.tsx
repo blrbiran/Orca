@@ -6,10 +6,11 @@
 import * as RadixDialog from "@radix-ui/react-dialog";
 import type { JSX, ReactElement, ReactNode } from "react";
 
-export function Dialog(props: { trigger: ReactElement; title: string; closeLabel: string; children: ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }): JSX.Element {
+export function Dialog(props: { trigger?: ReactElement; title: string; closeLabel: string; children: ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }): JSX.Element {
   return (
     <RadixDialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-      <RadixDialog.Trigger asChild>{props.trigger}</RadixDialog.Trigger>
+      {/* Tester #306: a dialog opened from a menu item has no trigger of its own; its caller owns `open`. */}
+      {props.trigger !== undefined && <RadixDialog.Trigger asChild>{props.trigger}</RadixDialog.Trigger>}
       <RadixDialog.Portal>
         <RadixDialog.Overlay data-overlay="scrim" className="fixed inset-0 z-40 bg-scrim" />
         {/* aria-describedby={undefined}: the body is a list, not one description sentence (Radix asks for either). */}

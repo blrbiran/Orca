@@ -75,7 +75,8 @@ describe("settings scopes", () => {
     await open("tasks");
     const task = screen.getByRole("region", { name: "Task control" });
     // Ruling: Tasks exposes import as a dialog entry.
-    expect(within(task).getByRole("button", { name: "Import a plan…" })).toBeTruthy();
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    expect(within(task).getByRole("button", { name: "New" })).toBeTruthy();
     expect(within(task).queryByRole("button", { name: "Save agent preferences" })).toBeNull();
     expect(within(task).queryByRole("region", { name: "Workspace mode" })).toBeNull();
   });

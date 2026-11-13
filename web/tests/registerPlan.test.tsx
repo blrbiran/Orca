@@ -8,6 +8,7 @@ import { ControlPanel, type RegisterPlan } from "../src/ControlPanel.js";
 import i18n from "../src/i18n.js";
 import { explainRefusal } from "../src/refusalExplain.js";
 import type { ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 afterEach(() => { cleanup(); void i18n.changeLanguage("en"); });
 
@@ -29,7 +30,8 @@ function Held(props: { onRegisterPlan?: RegisterPlan }): JSX.Element {
 const mount = (onRegisterPlan?: RegisterPlan) => render(<Held {...(onRegisterPlan === undefined ? {} : { onRegisterPlan })} />);
 const openForm = (): HTMLElement => {
   // Ruling: register the tracked file in the on-demand import dialog.
-  fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+  // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+  openImportMenu();
   return screen.getByRole("region", { name: "Import plan" });
 };
 

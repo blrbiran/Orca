@@ -13,6 +13,7 @@ import i18n from "../src/i18n.js";
 import { enErrors } from "../src/locales/en.js";
 import { ALPHA, groupSummary, installFakePanel, planGroupView } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
+import { findAndOpenImportMenu } from "./fixtures/newMenu.js";
 
 let panel: FakePanel;
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -126,7 +127,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
-    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await findAndOpenImportMenu();
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     await within(form).findByTestId("import-refusal");
@@ -152,7 +154,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
-    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await findAndOpenImportMenu();
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     await within(form).findByTestId("import-refusal");
@@ -169,7 +172,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
-    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await findAndOpenImportMenu();
     const form = await screen.findByRole("region", { name: "Import plan" });
     const notice = await within(form).findByTestId("import-refusal");
     expect(within(notice).getByText("command-result-not-found").tagName).toBe("CODE");
@@ -194,7 +198,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
-    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await findAndOpenImportMenu();
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     expect(within(await within(form).findByTestId("import-refusal")).getByText("panel-unavailable").tagName).toBe("CODE");
@@ -214,7 +219,8 @@ describe("an import's refusal stays in the import form (spec §2.2(d))", () => {
     window.location.hash = "#tasks";
     render(<App />);
     // Ruling: the import refusal is read in its dialog after opening the Tasks entry.
-    fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await findAndOpenImportMenu();
     const form = await screen.findByRole("region", { name: "Import plan" });
     fireEvent.click(await within(form).findByRole("button", { name: "Import plan" }));
     const notice = await within(form).findByTestId("import-refusal");

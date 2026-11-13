@@ -19,6 +19,7 @@ import { requirementView } from "./fixtures/requirement.js";
 import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import { ALPHA, BETA, TWO_PROJECTS, decisionRow, groupSummary, installFakePanel, planGroupView, twoConfig } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
@@ -279,7 +280,8 @@ describe("two-project lists", () => {
   };
   const importRegion = (): HTMLElement => {
     // Ruling: the import form opens from the Tasks entry instead of living on the page.
-    if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    if (screen.queryByRole("region", { name: "Import plan" }) === null) openImportMenu();
     return screen.getByRole("region", { name: "Import plan" });
   };
   const newRequirement = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });

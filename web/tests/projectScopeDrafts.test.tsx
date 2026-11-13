@@ -19,6 +19,7 @@ import { optionsOf as offered, pickOption, shownText } from "./selectControl.js"
 import type { RequirementFixtureState } from "./fixtures/requirement.js";
 import { ALPHA, BETA, TWO_PROJECTS, decisionRow, installFakePanel } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 let panel: FakePanel;
 beforeEach(() => { panel = installFakePanel(); });
@@ -345,7 +346,8 @@ describe("an All-projects target that is no longer held is unchosen (Task 4 revi
     await waitFor(() => expect(selectedText()).toBe("All projects"));
     const importRegion = (): HTMLElement => {
       // Ruling: import opens on demand in a dialog.
-      if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+      // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+      if (screen.queryByRole("region", { name: "Import plan" }) === null) openImportMenu();
       return screen.getByRole("region", { name: "Import plan" });
     };
     const form = (): HTMLElement => screen.getByRole("form", { name: "New requirement" });

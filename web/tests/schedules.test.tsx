@@ -31,6 +31,7 @@ import { PlanLibraryView } from "../src/PlanLibraryView.js";
 import { commandEnvelope, controlCommandPath, nextCommandId, scheduleIdFor, sendControlCommand, type ControlAction } from "../src/controlApi.js";
 import { requirementView, summaryWith } from "./fixtures/requirement.js";
 import "../src/i18n.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -709,7 +710,8 @@ const panel = (onCommand: (action: ControlAction) => void, controlConfig: Contro
     onSelect={() => {}} onCommand={onCommand} onDraft={() => {}} />);
 
 describe("the import form reads the plan library beside registered plans (spec §13.3, §14)", () => {
-  const openImport = (): void => { fireEvent.click(screen.getByRole("button", { name: "Import a plan…" })); };
+  // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+  const openImport = (): void => { openImportMenu(); };
   it("says there is no plan anywhere when the repository has none and its library read is empty", async () => {
     serve((url) => url.startsWith("/api/control/plan-library?") ? libraryList([]) : {});
     render(panel(vi.fn()));

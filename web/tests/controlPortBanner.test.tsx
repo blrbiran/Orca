@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlPanel } from "../src/ControlPanel.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1 } from "../src/controlTypes.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 /**
  * Assembly plan Task 4b (rulings R6 and R7). A panel that cannot run work still serves every read,
@@ -94,7 +95,8 @@ describe("the panel says when no estimator was configured", () => {
     renderDom(<ControlPanel config={config({ defaults: null })} summary={summary} recovery={recovery}
       groups={{}} selected={null} drafts={{}} uncertain={[]} refusal={null} refetchRequired={false}
       onSelect={vi.fn()} onCommand={vi.fn()} onDraft={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    openImportMenu();
     // Ruling: 2026-11-09 independent review; verify the startup flags in the opened dialog.
     const dialog = screen.getByRole("dialog", { name: "Import plan" });
     expect(dialog.textContent).toContain("No estimator profile is configured");
@@ -104,7 +106,8 @@ describe("the panel says when no estimator was configured", () => {
 
   it("offers the import when an estimator is configured", () => {
     const html = render();
-    expect(html).toContain("Import a plan…</button>");
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    expect(html).toMatch(/>New<svg[^]*?<\/button>/);
     expect(html).not.toContain("No estimator profile is configured");
   });
 });

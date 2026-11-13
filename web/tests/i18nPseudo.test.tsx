@@ -231,7 +231,11 @@ const AREAS: Array<{ name: string; chinese: string; element: () => JSX.Element; 
       refusal={{ status: 409, code: "revision-conflict", message: "m-1", commandRevision: 7 }} refetchRequired onSelect={noop} onDraft={noop} onCommand={noop}
       workspace={workspace} />
   ), settle: async () => {
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: the import dialog opens from the
+    // Tasks page's New menu, so the scan opens the menu and picks its first item, Import a plan.
     fireEvent.click(document.querySelector<HTMLButtonElement>("#overview-control-import button")!);
+    await waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull());
+    fireEvent.click(document.querySelector<HTMLButtonElement>('[role="menuitem"]')!);
     await waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
   }, scan: () => document.body },
   { name: "task detail and loop card", chinese: "手写契约", element: () => (

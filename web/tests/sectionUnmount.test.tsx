@@ -16,6 +16,7 @@ import type { RequirementFixtureState } from "./fixtures/requirement.js";
 import { pickOption, shownText } from "./selectControl.js";
 import { ALPHA, TWO_PROJECTS, installFakePanel } from "./fixtures/twoProjects.js";
 import type { FakePanel } from "./fixtures/twoProjects.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 const S = <T,>(value: T) => ({ value, source: "builtin" as const, lockedBy: null });
 /** A global flow settings read, so the Flows category renders its fields (among them the skill sources). */
@@ -143,10 +144,12 @@ describe("unsent input survives leaving its section (R1, #219)", () => {
     window.location.hash = "#tasks";
     render(<App />);
     const region = (): HTMLElement => {
-      if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+      // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+      if (screen.queryByRole("region", { name: "Import plan" }) === null) openImportMenu();
       return screen.getByRole("region", { name: "Import plan" });
     };
-    await screen.findByRole("button", { name: "Import a plan…" });
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await screen.findByRole("button", { name: "New" });
     await pickOption(within(region()).getByRole("combobox", { name: "Repository" }), "Alpha");
     const path = (): HTMLInputElement => within(region()).getByRole("textbox", { name: /^Register a plan file/ }) as HTMLInputElement;
     fireEvent.change(path(), { target: { value: "plans/half.json" } });
@@ -163,11 +166,13 @@ describe("unsent input survives leaving its section (R1, #219)", () => {
     window.location.hash = "#tasks";
     render(<App />);
     const region = (): HTMLElement => {
-      if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+      // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+      if (screen.queryByRole("region", { name: "Import plan" }) === null) openImportMenu();
       return screen.getByRole("region", { name: "Import plan" });
     };
     const projectSelect = (): HTMLElement => screen.getByRole("combobox", { name: "Project" });
-    await screen.findByRole("button", { name: "Import a plan…" });
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await screen.findByRole("button", { name: "New" });
     await pickOption(within(region()).getByRole("combobox", { name: "Repository" }), "Beta");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await pickOption(projectSelect(), "Alpha");
@@ -187,7 +192,8 @@ describe("unsent input survives leaving its section (R1, #219)", () => {
     await screen.findByRole("region", { name: "Import plan" });
     await go("#overview");
     await go("#tasks");
-    await screen.findByRole("button", { name: "Import a plan…" });
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    await screen.findByRole("button", { name: "New" });
     // mutation: keep App's overview focus after its section is left -> the remounted Task control reopens the dialog, red
     expect(screen.queryByRole("region", { name: "Import plan" })).toBeNull();
   });

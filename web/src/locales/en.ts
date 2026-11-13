@@ -517,6 +517,8 @@ export const en = {
     },
     requirementBadge: "requirement — open in Requirements",
     groupMenu: { openDispatch: "Open dispatch controls", more: "More actions", owner: "Group {{groupId}}", open: "Open details", copyId: "Copy group ID", archiveUnavailable: "This action is unavailable until this group can be read.", archivePending: "Wait for active work or recovery before archiving." },
+    // Tester #306: the Tasks page's secondary "New" menu.
+    new: { entry: "New", startFlow: "Start a flow…" },
     import: {
       region: "Import plan",
       title: "Import a plan",

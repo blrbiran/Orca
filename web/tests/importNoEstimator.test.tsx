@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlPanel } from "../src/ControlPanel.js";
 import i18n from "../src/i18n.js";
 import type { ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 afterEach(() => { cleanup(); void i18n.changeLanguage("en"); });
 
@@ -18,7 +19,8 @@ const recovery: RecoveryViewV1 = { schema: "orca-control-recovery-v1", epoch: "e
 const mount = (onCommand = vi.fn(), shownConfig = config) => render(<ControlPanel config={shownConfig} summary={summary} recovery={recovery} groups={{}} selected={null}
   drafts={{}} uncertain={[]} refusal={null} refetchRequired={false} onSelect={vi.fn()} onCommand={onCommand} onDraft={vi.fn()} />);
 const openImport = (): HTMLElement => {
-  fireEvent.click(screen.getByRole("button", { name: i18n.language === "zh" ? "导入计划…" : "Import a plan…" }));
+  // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+  openImportMenu(i18n.language === "zh");
   return screen.getByRole("region", { name: i18n.language === "zh" ? "导入计划" : "Import plan" });
 };
 
@@ -27,7 +29,8 @@ describe("plan import with no estimator configured", () => {
     mount();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("region", { name: "Import plan" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Import a plan…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+    openImportMenu();
     expect(within(screen.getByRole("dialog", { name: "Import plan" })).getByRole("region", { name: "Import plan" })).toBeTruthy();
   });
   it("keeps the configured estimator fields on an ordinary import", () => {

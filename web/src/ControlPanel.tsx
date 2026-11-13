@@ -22,6 +22,8 @@ import { enumText, refusalText } from "./i18n.js";
 import { GroupList } from "./GroupList.js";
 import { Select } from "./ui/Select.js";
 import { Dialog } from "./ui/Dialog.js";
+import { Menu, MenuItem } from "./ui/Menu.js";
+import { FlowStartDialog } from "./FlowBoard.js";
 import { ALL_PROJECTS } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
 import type {
@@ -39,6 +41,8 @@ export interface ControlPanelProps {
   resultsScope?: string;
   focusRequest?: number;
   importFocusRequest?: number;
+  /** Tester #306: a flow started from the Tasks page's New menu; absent, the menu offers no Start a flow. */
+  onFlowStarted?: (flowRunId: string) => void;
   focus?: Extract<OverviewTarget, { kind: "group" }> | null;
   roles?: readonly import("./auth.js").Role[];
   config: ControlConfigV1;
@@ -320,6 +324,9 @@ function importPlan(props: ImportFormProps, repoId: string, planId?: string, lib
 export function ControlPanel(props: ControlPanelProps): JSX.Element {
   const { t } = useTranslation();
   const [importOpen, setImportOpen] = useState(false);
+  // Tester #306: the Tasks page's "New" menu -- Import a plan and Start a flow, both secondary (one primary per view).
+  const [newOpen, setNewOpen] = useState(false);
+  const [flowStarting, setFlowStarting] = useState(false);
   const openedRequest = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (props.importFocusRequest === undefined || props.importFocusRequest === openedRequest.current || props.active === false) return;
@@ -357,9 +364,24 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
       {refetchRequired && <p role="alert" data-tone="info">{t("control.refetchRequired")}</p>}
       {recovery.dispatchBlocked && <p role="alert" data-tone="danger">{t("control.dispatchBlockedRecovery")}</p>}
       <div id="overview-control-import" tabIndex={-1} data-overview-region="import">
+        {/* DESIGN.md: one primary per view -- an open group's Start or Confirm is this page's; the New menu is secondary. */}
+        <Menu open={newOpen} onOpenChange={setNewOpen} trigger={
+          <button type="button">
+            {t("control.new.entry")}
+            <svg aria-hidden="true" viewBox="0 0 10 10" className="ms-1.5 inline-block size-2.5"><path d="M1.5 3 5 6.5 8.5 3" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+          </button>
+        }>
+          <MenuItem onSelect={() => setImportOpen(true)}>{t("control.import.entry")}</MenuItem>
+          {props.onFlowStarted !== undefined && <MenuItem onSelect={() => setFlowStarting(true)}>{t("control.new.startFlow")}</MenuItem>}
+        </Menu>
+        {/* Tester #306: Tasks hides flow groups, so a started flow opens on its own page (the caller navigates). The
+            start form sits in a modal dialog, so its Start is the one primary while it is open. */}
+        {props.onFlowStarted !== undefined && (
+          <Dialog open={flowStarting} onOpenChange={setFlowStarting} title={t("flow.start.title")} closeLabel={t("control.import.close")}>
+            <FlowStartDialog onStarted={(flowRunId) => { setFlowStarting(false); props.onFlowStarted?.(flowRunId); }} onClose={() => setFlowStarting(false)} />
+          </Dialog>
+        )}
         <Dialog open={importOpen} onOpenChange={setImportOpen}
-          // DESIGN.md: one primary per view -- an open group's Start or Confirm is this page's; importing is secondary.
-          trigger={<button type="button">{t("control.import.entry")}</button>}
           title={t("control.import.region")} closeLabel={t("control.import.close")}>
           {/* Keyed by repository, so another project starts on its own first plan. */}
           <ImportForm

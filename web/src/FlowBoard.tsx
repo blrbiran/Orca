@@ -90,7 +90,7 @@ export function typed(param: FlowTemplateParamV1, value: ParamValue): ParamValue
  * absolute. Start sends `flow-start` and, on success, opens the new run; a refusal stays in the dialog. Cancel and Escape
  * close it and send nothing.
  */
-function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClose: () => void }): JSX.Element {
+export function FlowStartDialog(props: { onStarted: (flowRunId: string) => void; onClose: () => void }): JSX.Element {
   const { t } = useTranslation();
   const [templates, setTemplates] = useState<Template[] | null | "failed">(null);
   const [presets, setPresets] = useState<FlowSettingsReadV1["paramDefaults"] | "unread">({});

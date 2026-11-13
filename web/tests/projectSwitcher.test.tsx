@@ -12,6 +12,7 @@ import { App } from "../src/App.js";
 import { PROJECT_KEY } from "../src/project.js";
 import { optionsOf as offered, pickOption, shownText } from "./selectControl.js";
 import type { ControlConfigV1, ControlSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
+import { findAndOpenImportMenu } from "./fixtures/newMenu.js";
 
 // Fixtures copied from web/tests/controlPollSettles.test.tsx, with three repositories and their plans.
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -87,7 +88,8 @@ const projectSelect = (): HTMLElement => {
 };
 const importRegion = async (): Promise<HTMLElement> => {
   // Ruling: import stays closed until the Tasks entry is chosen.
-  if (screen.queryByRole("region", { name: "Import plan" }) === null) fireEvent.click(await screen.findByRole("button", { name: "Import a plan…" }));
+  // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" menu now, not a button of its own.
+  if (screen.queryByRole("region", { name: "Import plan" }) === null) await findAndOpenImportMenu();
   return screen.findByRole("region", { name: "Import plan" });
 };
 

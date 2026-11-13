@@ -17,6 +17,7 @@ import { WorkspaceModeSelector } from "../src/WorkspaceModeSelector.js";
 import { EvidenceList, TaskDetail, progressText } from "../src/TaskDetail.js";
 import type { MetricsReport } from "../src/types.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, RepositoryWorkspaceV1, RunViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
+import { openImportMenu } from "./fixtures/newMenu.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: 1_000, attempts: 3, sessions: 3 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -77,7 +78,8 @@ describe("the task control and recovery areas in Chinese", () => {
       "服务会话 epoch-a · 状态序号 4 · 调度已阻断", "未配置执行端口 · ", "服务端要求重置 · ", "需要重新拉取状态序号 · ", "调度已阻断 · 必须先观察到恢复",
       // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #288: a stop leads the card's state line
       // ("g · 已暂停 · 运行中 …"), it no longer trails it.
-      "导入计划…", "g · 已暂停 · 运行中 · 已完成 0/1 · 1 个阻塞项",
+      // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" (新建) menu now, not a button of its own.
+      "新建", "g · 已暂停 · 运行中 · 已完成 0/1 · 1 个阻塞项",
       // Ruling (2026-11-11, session f958ec3f): human approved rewriting necessary criteria; this now encodes the header
       // without its counters (#81/#228): "g · 运行中" leads, and the counters and plan hash read in the Technical region.
       "g · 运行中", "版本 6 · 状态序号 4", "认领已阻断 · ", "goal-x", "计划 aaaaaaaaaaaa · 图 v1", "停止 暂停 已暂停 · 受理于 不适用 · 截止 无 · 0 个冻结的运行：无",
@@ -128,7 +130,8 @@ describe("the rest of the control area's branches in Chinese", () => {
     expect(within(panel).getByRole("heading", { level: 2 }).textContent).toBe("任务控制");
     expect(container.textContent).toContain("服务会话 epoch-a · 状态序号 4 · 调度正常");
     // Ruling: import is opened from the Tasks entry.
-    fireEvent.click(screen.getByRole("button", { name: "导入计划…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" (新建) menu now, not a button of its own.
+    openImportMenu(true);
     const importForm = screen.getByRole("region", { name: "导入计划" });
     expect(within(importForm).getByRole("heading", { level: 3 }).textContent).toBe("导入一个计划");
     expect(within(importForm).getByText("Repo X · Demo P · 估算模式 宽松")).toBeTruthy();
@@ -143,7 +146,8 @@ describe("the rest of the control area's branches in Chinese", () => {
       <ControlPanel config={{ ...ready, repositories: [] }} summary={summary} recovery={recovery} groups={{}} selected={null} drafts={{}} uncertain={[]}
         refusal={null} refetchRequired={false} onSelect={vi.fn()} onDraft={vi.fn()} onCommand={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "导入计划…" }));
+    // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #306: Import a plan is an item of the Tasks page's "New" (新建) menu now, not a button of its own.
+    openImportMenu(true);
     expect(screen.getByRole("note").textContent).toBe("这个面板没有配置受信任的仓库和计划。");
   });
 
