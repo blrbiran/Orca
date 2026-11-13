@@ -434,3 +434,15 @@ writer (3) note in `src/agents/codexIsolation.ts`. Measured with codex-cli 0.163
 prompt input has 0 personal-skill lines (real HOME: 2) and keeps the target repository's `AGENTS.md` and repo skill;
 `~/.codex/auth.json` and `config.toml` byte-identical before and after. Not yet measured: a paid codex phase under
 isolation (ccloop plan Task 7).
+
+## Correction (2026-11-13, tester follow-up J, Orca session `c8b75eac`): a codex single call may open with preamble messages
+
+The §6.1 line "more than one completed agent message ⇒ `codex-single-call-not-single:<what>`" no longer holds as
+written. Measured on the paid dogfood group `g-28d9b560` (codex `gpt-6-sol`, requirement review): the model sent a
+one-line preamble agent message and then the JSON answer in the same turn, and the review failed
+`codex-single-call-not-single:messages` twice. The human named the ccloop criterion for change (「点名允许改必要的测试」).
+ccloop `fix(codex): a single call may open with preamble messages; the -o answer stays the answer (Orca follow-up J)`:
+within one turn, earlier agent messages are accepted and the `-o` file (codex's last agent message) is the answer.
+Still refused: more than one turn, any tool or command event, an `-o` answer that is not an object, and an earlier
+message that itself parses as an object (two answers ⇒ ambiguous, `not-single:messages`). Takes effect in Orca at the
+repin to that ccloop commit.
