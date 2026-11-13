@@ -2403,7 +2403,8 @@ export const enErrors: Record<string, string> = {
   "agents-table-invalid": "The agents table is not valid: {{detail}}",
   "archive-call-in-flight": "A model call for this group is still running ({{detail}}). Archive it once the call has finished.",
   "archive-integration-resolving": "An agent is resolving this group's integration conflict. Archive it once that has finished.",
-  "archive-run-active": "This group still has an active run. Wait for it to finish, or stop it with Handoff stop, then archive. If the group is paused, press Resume dispatch first: Handoff stop is not offered under a pause.",
+  // Tester #292 (follow-up J): the refusal names each active run and its next step; Handoff stop is only for a run still working.
+  "archive-run-active": "This group still has an active run; the refusal names each one and what moves it. A failed run is closed (close-run) or has its usage settled, a blocked run is resumed (Retry run), and a run still working finishes or is stopped with Handoff stop (under a pause, press Resume dispatch first). Then archive.",
   "archive-stop-pending": "A stop is still settling. Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
   "artifact-not-found": "The artifact was not found.",

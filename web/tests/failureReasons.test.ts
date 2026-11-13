@@ -55,7 +55,12 @@ describe("archive-stop-pending names the recovery step (final fix wave W1)", () 
 // active run is refused archive-run-active; the text names what works there: Resume dispatch, then Handoff stop.
 describe("archive-run-active names a way out a paused group has (final review M4)", () => {
   it("tells a paused group to resume dispatch before Handoff stop, in both languages", () => {
-    expect(enErrors["archive-run-active"]).toContain("If the group is paused, press Resume dispatch first: Handoff stop is not offered under a pause.");
-    expect(zhErrors["archive-run-active"]).toContain("如果组已暂停，先点「恢复调度」：暂停时不提供「交接停止」。");
+    // Ruling: 「这次批准改写所有必要的判据」 (human, tester follow-up J, 2026-11-13): web/tests/failureReasons.test.ts:58-59 asserted
+    // the old sentence; #292 rewrote it so Handoff stop is named only for a run still working (a completed stop's leftover
+    // run is closed, settled or resumed). The pause guidance it guarded is kept and asserted here.
+    expect(enErrors["archive-run-active"]).toContain("a run still working finishes or is stopped with Handoff stop (under a pause, press Resume dispatch first)");
+    expect(zhErrors["archive-run-active"]).toContain("仍在工作的运行等它结束或用“交接停止”停下（暂停时先点「恢复调度」）");
+    // Tester #292: the text no longer sends every active run to Handoff stop.
+    expect(enErrors["archive-run-active"]).toContain("A failed run is closed (close-run) or has its usage settled, a blocked run is resumed (Retry run)");
   });
 });

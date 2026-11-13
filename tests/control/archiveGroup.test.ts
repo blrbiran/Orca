@@ -119,6 +119,34 @@ describe("archive-group and unarchive-group (issue-fixes spec §6.3)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Tester #292 (follow-up J): the refusal names every active run, its state and block point, and the command that moves
+  // it -- close-run for a terminal failure, settle-usage when its usage is unknown, recovery retry for a resumable block,
+  // none for a run still working. It is still a refusal: nothing is archived and no run is closed.
+  it("archive-run-active names each active run with its state, block point and next", async () => {
+    const { h, service } = await confirmed();
+    try {
+      const runId = await claimed(h, service);
+      const original = String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body);
+      const taskId = String((JSON.parse(original) as { taskId: string }).taskId);
+      const as = (fields: Record<string, unknown>, drive: Record<string, unknown>) => {
+        const run = JSON.parse(original) as Record<string, unknown>;
+        h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...run, ...fields, drive: { ...(run.drive as object ?? {}), ...drive } }), runId);
+        return service.archiveGroup(h.command("archive-group", {})) as { error: { code: string; message: string; activeRuns?: unknown } };
+      };
+      // mutation (archive-run-active without activeRuns) -> red on each.
+      const working = as({}, {});
+      expect(working.error).toMatchObject({ code: "archive-run-active", activeRuns: [{ runId, state: "starting", blockedAt: null }] });
+      expect(as({ state: "blocked" }, { blockedAt: "C", outcome: "failed" }).error.activeRuns)
+        .toEqual([{ runId, state: "blocked", blockedAt: "C", next: `orca group close-run g --run ${runId}` }]);
+      expect(as({ state: "blocked", unknown: { work: true, handoff: false } }, { blockedAt: "C", outcome: "exhausted" }).error.activeRuns)
+        .toEqual([{ runId, state: "blocked", blockedAt: "C", next: `orca task settle-usage g ${taskId} --acknowledge charge-remaining-grant` }]);
+      const resumable = as({ state: "blocked" }, { blockedAt: "B'", outcome: null });
+      expect(resumable.error.activeRuns).toEqual([{ runId, state: "blocked", blockedAt: "B'", next: `orca recovery retry --run ${runId}` }]);
+      expect(resumable.error.message).toBe(`archive-run-active:${runId} blocked at B' (orca recovery retry --run ${runId})`);
+      expect(Object.hasOwn(body(h), "archived")).toBe(false);
+    } finally { await h.dispose(); }
+  });
+
   it("refuses while a handoff stop is still settling: archive-stop-pending (ahead of the run it waits for)", async () => {
     const { h, service } = await confirmed();
     try {

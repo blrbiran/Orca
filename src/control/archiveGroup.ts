@@ -1,7 +1,8 @@
 import { recordActivity } from "./activity.js";
 import { archivedMarkOf } from "./archivedMark.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
-import { ControlError } from "./errors.js";
+import { ArchiveRunActiveError, ControlError, type ActiveRunRef } from "./errors.js";
+import { recoveryRetryCommand, resumableBlockedRun } from "./driveRecord.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { pendingRequirementCall, type RequirementTarget } from "./requirementCalls.js";
 import { readDraft, readRound, writeDraft, writeRound } from "./requirementRecords.js";
@@ -51,8 +52,29 @@ function refuseArchive(store: ControlStore, groupId: string, group: Record<strin
     if (state !== "handoff-complete" && state !== "handoff-partial") throw new ControlError("archive-stop-pending", `${intent.mode}:${state}`);
   }
   if (readGroupIntegration(group)?.state === "resolving") throw new ControlError("archive-integration-resolving");
-  if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId)) throw new ControlError("archive-run-active");
+  const active = store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND active=1 ORDER BY rowid").all(groupId);
+  if (active.length > 0) throw new ArchiveRunActiveError(active.map((row) => activeRunRef(groupId, String(row.id), String(row.body))));
   return pending;
+}
+
+/**
+ * Tester #292: an active run's state, block point and the one command that moves it, when one does -- a terminal failure's
+ * accounting (settle its unknown usage, else close it), or a run blocked where recovery retry resumes it. A run still
+ * working, or one whose stop is settling, names none: it ends on its own, or by a stop.
+ */
+function activeRunRef(groupId: string, runId: string, body: string): ActiveRunRef {
+  let run: { state?: unknown; taskId?: unknown; unknown?: { work?: unknown; handoff?: unknown }; drive?: { blockedAt?: unknown; outcome?: unknown } };
+  try { run = JSON.parse(body) as typeof run; } catch { return { runId, state: "unreadable", blockedAt: null }; }
+  const state = typeof run.state === "string" && run.state.length > 0 ? run.state : "unknown";
+  const blockedAt = typeof run.drive?.blockedAt === "string" ? run.drive.blockedAt : null;
+  const taskId = typeof run.taskId === "string" ? run.taskId : null;
+  const terminalFailure = state === "blocked" && blockedAt === "C" && typeof run.drive?.outcome === "string" && run.drive.outcome !== "succeeded";
+  const next = terminalFailure
+    ? (run.unknown?.work === true || run.unknown?.handoff === true) && taskId !== null
+      ? `orca task settle-usage ${groupId} ${taskId} --acknowledge charge-remaining-grant`
+      : `orca group close-run ${groupId} --run ${runId}`
+    : resumableBlockedRun(run) ? recoveryRetryCommand(runId) : undefined;
+  return { runId, state, blockedAt, ...(next === undefined ? {} : { next }) };
 }
 
 /** A pending call with no run is parked when the claim would not send it: it waits on a reason, or a stop holds the group. */

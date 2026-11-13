@@ -641,3 +641,15 @@ export class ControlError extends Error {
     this.name = "ControlError";
   }
 }
+
+/** Tester #292 (follow-up J): one run that keeps a group from being archived, with the command that ends it (when one does). */
+export type ActiveRunRef = { runId: string; state: string; blockedAt: string | null; next?: string };
+/**
+ * Tester #292: archive-run-active names every active run, its state and block point, and the command that moves it --
+ * the bare code left a person with no way to tell which run, or what to do. The refusal stays a refusal (no force-archive).
+ */
+export class ArchiveRunActiveError extends ControlError {
+  constructor(public readonly activeRuns: ActiveRunRef[]) {
+    super("archive-run-active", activeRuns.map((run) => `${run.runId} ${run.state}${run.blockedAt === null ? "" : ` at ${run.blockedAt}`}${run.next === undefined ? "" : ` (${run.next})`}`).join("; "));
+  }
+}

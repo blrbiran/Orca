@@ -2385,7 +2385,9 @@ export const runActivitySchema = z
   .strict();
 
 export const commandErrorSchema = z
-  .object({ code: nonemptyString, message: nonemptyString, commandRevision: safeInteger.nullable(), evidenceIds: sortedIdArraySchema, retryable: z.boolean() })
+  .object({ code: nonemptyString, message: nonemptyString, commandRevision: safeInteger.nullable(), evidenceIds: sortedIdArraySchema, retryable: z.boolean(),
+    // Tester #292 (follow-up J): on archive-run-active only, the active runs and what moves each. Absent on every other error.
+    activeRuns: z.array(z.object({ runId: idSchema, state: nonemptyString, blockedAt: nonemptyString.nullable(), next: nonemptyString.optional() }).strict()).optional() })
   .strict();
 export const commandErrorBodySchema = z.object({ error: commandErrorSchema }).strict();
 

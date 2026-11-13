@@ -2293,7 +2293,7 @@ export const zhErrors: Record<string, string> = {
   "agents-table-invalid": "agent 安装表不合法：{{message}}",
   "archive-call-in-flight": "这个组还有一次模型调用在进行（{{detail}}）。等调用结束后再归档。",
   "archive-integration-resolving": "agent 正在解决这个组的集成冲突。等它结束后再归档。",
-  "archive-run-active": "这个组还有正在进行的运行。等它结束，或先用“交接停止”停下，再归档。如果组已暂停，先点「恢复调度」：暂停时不提供「交接停止」。",
+  "archive-run-active": "这个组还有未结束的运行；拒绝信息逐个列出它们和下一步。失败的运行先关闭（close-run）或结算用量，阻塞的运行点「重试运行」，仍在工作的运行等它结束或用“交接停止”停下（暂停时先点「恢复调度」）。之后再归档。",
   "archive-stop-pending": "停止还没有完成。等交接结束（全部完成或部分完成）后再归档。如果停止状态未解决，请先重试恢复。",
   "artifact-id-conflict": "产物 id 冲突。",
   "artifact-not-found": "找不到这个产物。",

@@ -2,7 +2,7 @@ import {revokeRecoveryFence} from "./savedResultRecoveryPackage.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commandArgumentsHash } from "./commandArguments.js";
 import { commandClientFor, commandPrincipalFor, ledgerPersonFor } from "./commandClient.js";
-import { ControlError, durableCommandErrorStatus } from "./errors.js";
+import { ArchiveRunActiveError, ControlError, durableCommandErrorStatus } from "./errors.js";
 import { appendActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { orchestrationRevision } from "./orchestration.js";
@@ -230,7 +230,9 @@ function domainErrorOutcome(error: ControlError, commandRevision: number | null)
   if (status === null) return null;
   return {
     status,
-    body: { error: { code: error.code, message: error.message, commandRevision, evidenceIds: [], retryable: false } },
+    body: { error: { code: error.code, message: error.message, commandRevision, evidenceIds: [], retryable: false,
+      // Tester #292: the runs that refused an archive, each with its state and next step.
+      ...(error instanceof ArchiveRunActiveError ? { activeRuns: error.activeRuns } : {}) } },
   };
 }
 
