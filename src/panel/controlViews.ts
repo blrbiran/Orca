@@ -73,6 +73,7 @@ import { liveNotesOf } from "../control/liveNotes.js";
 import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from "../control/taskHandoffs.js";
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenIntentOf } from "../control/expectationModel.js";
+import { estimateHistoryView } from "../control/estimateHistory.js";
 import { liveCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
@@ -1504,6 +1505,9 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     ...liveNotesView(body),
     // Tester follow-up G spec §2.2: only for an expectation-model group, so every other view is what it was.
     ...(expectationModelApplies(body) ? { expectationModel: true as const } : {}),
+    // Tester #173/#224/#266 (follow-up L): read before confirm, so only while the proposal is editable.
+    ...(proposal.state === "editable" ? { estimateHistory: estimateHistoryView(store, groupId,
+      plan.tasks.map(task => task.taskId).sort(compareText), newestReadyEstimate(estimates.views, archived.planHash)) } : {}),
   };
   view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
   deriveExpectations(view, readSnapshot);

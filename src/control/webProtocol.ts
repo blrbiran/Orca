@@ -2337,6 +2337,15 @@ export const groupViewSchema = z
     // Tester follow-up G spec §2.2: present only for a group created under the expectation model (a task's tokens are an
     // expectation; the group limit is the one hard line), so every other group's view is what it was.
     expectationModel: z.literal(true).optional(),
+    // Tester #173/#224/#266 (follow-up L, estimateHistory.ts): while the proposal is editable, the median work tokens of
+    // this repository's finished tasks (null below `minimumSample`) and each task's ready estimate as a multiple of it.
+    // Absent on a confirmed proposal, so every other view is what it was.
+    estimateHistory: z.object({
+      medianTokens: safeInteger.nonnegative().nullable(),
+      sampleCount: safeInteger.nonnegative(),
+      minimumSample: positiveSafeInteger,
+      tasks: z.array(z.object({ taskId: idSchema, estimateTokens: safeInteger.nonnegative().nullable(), ratio: z.number().nonnegative().finite().nullable() }).strict()),
+    }).strict().optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

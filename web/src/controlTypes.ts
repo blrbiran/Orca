@@ -595,7 +595,20 @@ export type GroupViewV1 = {
   liveNotes?: LiveNoteViewV1[];
   /** Tester follow-up G spec §2.2: true only for a group created under the expectation model. */
   expectationModel?: true;
+  /**
+   * Tester #173/#224/#266 (follow-up L): while the proposal is editable, the median work tokens of this repository's
+   * finished tasks (null below `minimumSample`) and each task's ready estimate as a multiple of it; absent otherwise.
+   */
+  estimateHistory?: EstimateHistoryV1;
 };
+
+/** src/control/estimateHistory.ts EstimateHistoryView. */
+export interface EstimateHistoryV1 {
+  medianTokens: number | null;
+  sampleCount: number;
+  minimumSample: number;
+  tasks: Array<{ taskId: string; estimateTokens: number | null; ratio: number | null }>;
+}
 
 /** Tester follow-up G Part 4: a stored file's state (src/control/taskHandoffs.ts). */
 export type HandoffFileStateV1 = { state: "stored" | "truncated" | "missing" | "invalid"; reason: "empty" | "too-large" | "not-utf8" | "too-many-lines" | "not-a-file" | "notes-only" | null; bytes: number | null };
