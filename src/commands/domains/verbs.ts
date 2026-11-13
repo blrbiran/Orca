@@ -113,6 +113,8 @@ export interface UnestimatedSource {
   summary?: { state?: string; archived?: boolean };
   estimates?: SuggestionView["estimates"];
   ledger?: { groupLimit: { tokens: number | null } };
+  /** Tester follow-up G §11: present (true) on a group of the expectation model, where task tokens are expectations. */
+  expectationModel?: true;
 }
 
 /**
@@ -132,8 +134,13 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
     : adviceOf({ plan: source.plan, proposal: { state: "editable", proposalVersion: source.proposal?.proposalVersion ?? 0 }, estimates: source.estimates } as SuggestionView);
   // Budget defaults spec 2026-11-11 §7 item 5: in a group with no token limit an estimate is each task's expectation, not a
   // ceiling, so a ready one is named by what it expects -- never as "not applied" -- and there is nothing to apply.
-  if (source.ledger?.groupLimit.tokens === null) {
-    const advisory = "in a group with no token limit an estimate is advisory: each task's expected tokens, not a ceiling";
+  // Tester follow-up I (seat K; dogfood g-28d9b560): so is a group of the expectation model with a token limit -- its
+  // estimate is applied as each task's expectation, so it was still named "ready but not applied" after apply-estimate.
+  const limitTokens = source.ledger?.groupLimit.tokens;
+  if (limitTokens === null || source.expectationModel === true) {
+    const advisory = typeof limitTokens === "number"
+      ? `in this group a task's tokens are an expectation and the group's token limit (${limitTokens}) is the only ceiling, so an estimate is advisory: each task's expected tokens`
+      : "in a group with no token limit an estimate is advisory: each task's expected tokens, not a ceiling";
     if (ready !== null) {
       const expected = (taskId: string) => ready.output.tasks.find((t) => t.taskId === taskId)?.work.tokens;
       const lines = tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${expected(a.ownerId) === undefined ? "default, not estimated" : `default; expected ${expected(a.ownerId)} tokens from estimate ${ready.estimateId}`})`);
@@ -203,7 +210,10 @@ export function fundingLines(preview: unknown): string[] {
   if (rows.length === 0) return [];
   const tokens = (n: number | null): string => n === null ? "unlimited" : String(n);
   return ["funding at the current group limit (the authored allocations are requests, not grants):",
-    ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.fundableTokens === null ? `nothing (${row.reason ?? "unavailable"})` : tokens(row.fundableTokens)}`)];
+    // Tester follow-up I (seat K): a funded claim with no token amount (no group token limit) is funded unlimited, not
+    // "nothing"; a task waiting for its dependencies is named so, not as a missing budget.
+    ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.reason === "dependencies-pending" ? "nothing yet (it waits for its dependencies)"
+      : row.reason !== null ? `nothing (${row.reason})` : tokens(row.fundableTokens)}`)];
 }
 /**
  * Issue #212: agents read --json, not the funding lines. A body gains `funding`, the funding preview's rows (each task's

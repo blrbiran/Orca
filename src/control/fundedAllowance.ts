@@ -86,11 +86,14 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
   const repo=groupRepoIdOf(group as unknown as Record<string,unknown>);
   for(const cap of capStatuses(store,repo,at))applicable.push(binder(`cap:${cap.scope}:${cap.period}`,"spend-cap",cap.headroom,cap));
   const works=allWork(store,id).sort((a,b)=>a.workItemId<b.workItemId?-1:a.workItemId>b.workItemId?1:0);
-  const eligible=previewing?["pending","ready","continuing"]:["ready","continuing"];
+  // Tester follow-up I (seat K; dogfood g-28d9b560): before confirmation every task is `draft`, so the preview `proposal show`
+  // and `group confirm` print said "funds nothing (task-budget-unavailable)" for every task that then ran at once.
+  const eligible=previewing?["draft","pending","ready","continuing"]:["ready","continuing"];
   for(const work of works) {
    if(work.kind!=="task"||!eligible.includes(work.status)||store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(id,work.workItemId))continue;
    // Tester follow-up G §6.1 (#192): a dependency that landed releases its dependent before its own settle.
-   if(work.dependsOn.some(dep=>!dependencyReady(store,id,dep)))continue;
+   // Tester follow-up I (seat K): the preview names that wait instead of the generic task-budget-unavailable.
+   if(work.dependsOn.some(dep=>!dependencyReady(store,id,dep))){if(previewing&&id===groupId&&(workId===null||workId===work.workItemId))blocked={allowance:null,workItemId:work.workItemId,reason:"dependencies-pending"};continue;}
    const fixed=!hasOptionalTaskPolicy(store,id,work.workItemId);
    const observed=inheritedWorkUsage(store,id,work.workItemId);if(observed===null)continue;
    const inheritedUsage=fixed?zero():observed;

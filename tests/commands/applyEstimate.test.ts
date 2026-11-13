@@ -127,6 +127,17 @@ describe("orca group apply-estimate (#156)", () => {
     expect(out.stdout).toContain("nothing to apply");
   });
 
+  it("an expectation-model group with a token limit: the line names that limit as the only ceiling, never 'no token limit' (tester follow-up I)", async () => {
+    // Dogfood g-28d9b560 (limit 4,000,000) printed "the group has no token limit" when its estimate was applied.
+    const w = await advisedWorld({ ...adviceView(), expectationModel: true } as ReturnType<typeof adviceView>);
+    const out = await cli(["group", "apply-estimate", "g-alpha"], w.dir);
+    expect(out.code).toBe(0);
+    // mutation K-D1: formatApplied ignores groupTokenLimit -> "the group has no token limit", red
+    expect(out.stdout).toContain("g-alpha: a task's tokens are an expectation in this group (its token limit, 50000, is the only ceiling), so estimate est-new is recorded as the expectation, not a ceiling");
+    expect(out.stdout).not.toContain("no token limit");
+    expect(out.stdout).toContain("  task t1: expected 800 tokens");
+  });
+
   it("an unlimited group: the estimate is recorded as the expectation, exit 0, and no task-work ceiling is sent (§7 item 5)", async () => {
     const w = await advisedWorld(adviceView({ unlimited: true }));
     const out = await cli(["group", "apply-estimate", "g-alpha"], w.dir);

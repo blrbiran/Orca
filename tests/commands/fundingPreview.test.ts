@@ -40,4 +40,16 @@ describe("the grant a claim would fund is shown (#212)", () => {
     ] } } });
     expect((await cli(["proposal", "show", "g-alpha"], w.dir)).stdout).toContain("task t1: authored 600000; a claim now funds nothing (group-budget-unavailable)");
   });
+
+  it("a funded claim with no token amount reads unlimited, and a task waiting for its dependencies says so (tester follow-up I)", async () => {
+    const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
+      { taskId: "t1", authoredTokens: null, fundableTokens: null, reason: null },
+      { taskId: "t2", authoredTokens: null, fundableTokens: null, reason: "dependencies-pending" },
+    ] } } });
+    const out = (await cli(["proposal", "show", "g-alpha"], w.dir)).stdout;
+    // mutation K-D3: fundingLines reads a null amount as nothing -> "funds nothing (unavailable)", red
+    expect(out).toContain("task t1: authored unlimited; a claim now funds unlimited");
+    // mutation K-D4: no dependencies-pending words -> "funds nothing (dependencies-pending)", red
+    expect(out).toContain("task t2: authored unlimited; a claim now funds nothing yet (it waits for its dependencies)");
+  });
 });

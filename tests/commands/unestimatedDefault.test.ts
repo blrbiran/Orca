@@ -106,6 +106,24 @@ describe("the unestimated lines follow the proposal and estimate state (F23)", (
     expect(confirmed).toContain("\nto apply it: before the group starts, reopen its proposal with a proposal edit (orca proposal replace g-alpha --file <ops.json> --if-revision <n>), then " + APPLY + "\n");
   });
 
+  it("an expectation-model group with a token limit names the estimate's expectation, never 'ready but not applied' (tester follow-up I)", async () => {
+    // Dogfood g-28d9b560: after apply-estimate, proposal show and group confirm still said the estimate was not applied --
+    // in this model it is applied as each task's expectation, and the task's tokens stay without a ceiling.
+    const w = await unestimated();
+    ready(w);
+    (w.state.view as Record<string, unknown>).expectationModel = true;
+    ((w.state.view as unknown as { estimates: Array<{ output: { tasks: unknown[] } }> }).estimates)[0]!.output.tasks = [{ taskId: "t1", complexity: "S", confidence: "high", work: { tokens: 800, activeMs: 20, attempts: 1, sessions: 1 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }, rationale: "r", assumptions: [] }];
+    const limit = (w.state.view as unknown as { ledger: { groupLimit: { tokens: number | null } } }).ledger.groupLimit.tokens;
+    expect(limit).not.toBeNull();
+    for (const args of [["proposal", "show", "g-alpha"], ["group", "confirm", "g-alpha"]]) {
+      const out = (await cli(args, w.dir)).stdout;
+      // mutation K-D2: unestimatedLines reads only a null limit as advisory -> "ready but not applied", red
+      expect(out, args.join(" ")).not.toContain("ready but not applied");
+      expect(out, args.join(" ")).toContain("task t1: tokens: unlimited (default; expected 800 tokens from estimate est-9)");
+      expect(out, args.join(" ")).toContain(`in this group a task's tokens are an expectation and the group's token limit (${limit}) is the only ceiling`);
+    }
+  });
+
   it("an estimate for another plan, or one not ready, leaves the line as not estimated", async () => {
     for (const change of [{ state: "queued" }, { output: { schema: "budget-estimate-v1", planHash: "f".repeat(64), tasks: [], goalReviewReserve: null } }]) {
       const w = await unestimated();
