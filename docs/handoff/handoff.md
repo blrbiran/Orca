@@ -64,20 +64,22 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-14，会话 `6b727312`，测试者反馈 L 轮）—— K 轮三席已合、L 轮小件与 #173 已合、review-fix 的两个真缺陷已修、g-28d9b560 等人；全部已推、已装 7777；台账 `.superpowers/sdd/2026-11-14-tester-followup-l/progress.md`
+### 3.最新（2026-11-14，会话 `3ffce7ec`，承 L 轮余项）—— 多目录草稿 hash、隐含路径按钮、K2 Web 回退、#229 并发判据、#170 诊断已合；g-28d9b560 的 AC4 实测为真、等人；codex 实时用量可行性已探明并写 spec，等人裁；台账 `.superpowers/sdd/2026-11-14-session-3ffce7ec/progress.md`
 
-- **人的话（原话全文在台账）**：K 轮各席可逆决定「同意」；`allow-push`（本会话可推三仓）；「同意你的顺序，现在开始」「这一轮先不做需要 brainstorm 或写 spec 的工作」；`g-28d9b560`「按你的建议走」（抬组上限约 1M 再 `review-fix`）；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」；L 轮待审项「等你审 => 同意」（含 #173 席 8 条可逆决定；下面发现 A／B 只登记不修）。
-- **已合进 main、已推、已装**（按主题行 `git log --grep` 取，L 轮都以 `(tester follow-up L)` 结尾）：
-  - K1／K2／K3 依次 rebase、`--ff-only`（无冲突；每次 tc／web tc 0）。K 轮内容见 §3.K。
-  - `fix(cli): group show prints each landing regression once`（`formatWithUnestimated` 把 `landingWatchLines` 展开了两次）；`usagePause.ts:119` 注释追加更正（只有 claude／omp 在轮间停，codex 整个阶段结束才停）。
-  - K3 缺的判据：多目录草稿编辑经 verb 重验（有效／无效）、事务内 draftHash 复核（`test(requirement): a multi-directory draft edit through the verb…`，只加测试）。
-  - **#173／#224／#266 历史参照**：`src/control/estimateHistory.ts`。同仓**其他组** `done` 的 task（排除 systemDebug 组、无 run 的、用量未知／近似的；归档组算）每个 task 所有 run 的 `cumulative.work.tokens` 之和取中位数，样本 <3 不给数；group view 可选 `estimateHistory`（只在提案可编辑时算）；CLI `proposal show`／`group confirm` 打 `history:` 行与每任务「估算是中位数的几倍」，`--json` 带同名字段；Web BudgetEditor 一条中性 note（`budget.history.*`）。只提示，不改估算、不拦。控制器审出别组一行坏数据会让本组视图读失败，已补 `fix(control): the repository history skips another group's unreadable row…`。
-  - **`fix(control): a review fix task's allowlist admits its own write set`**（真缺陷）：修复任务的 allowlist 原来只是其他任务 allowlist 的并集，不含它自己的 targetPaths（`--path` 给的「修复任务可以写的文件」）⇒ 新文件必撞 allowlist miss。现在非空并集再并上 targetPaths，空的保持空（全放行）——与 `debugPlan.ts` 同一规则（导出 `fixTaskAllowlist`）。
-  - **`fix(control): a review fix task opens in an expectation-model group, and a refused one names the cause`**（真缺陷，自 G 轮 `4db13ca9` 起）：新组（optional-v1）task 的 work grant tokens 为 null，`openFixTask` 用 `?? 0` 变 0，`deriveContract` 拒 `execution-policy-unrepresentable`，被吞成裸 `recovery-blocked:review-fix` ⇒ **所有新组的自动修复轮与手动 review-fix 都开不出修复任务**。现在照搬兄弟任务的 grant、append 用 `finiteCommitment` 记承诺；拒绝消息带 `review-fix:<code>[:<detail>]`。在 `control.sqlite` 的 `.backup` 副本上重放定位（副本 identity 行改指副本，真库零触碰）。
-- **门**（`TMPDIR=/tmp ORCA_CCLOOP_BIN=<pin 9c83b38 的 build> node scripts/test-affected.mjs`，分四段：K 合完 base `d2a014b8`；L 小件／#173 base K3 末笔；两笔 review-fix 修复各以前一笔为 base；⚠️ worktree 里跑门要软链 `web/dist`，否则一大片 `panel-dist-missing` 假红）：名单外红全部在 `known-load-flakes.md` 登记的形状或单跑 3/3（L 轮新加一段）；`orchestration` 已知红照旧。K1 那 12 个负载文件＋`workerLostE2E`＋`schedulerBridge` 低负载各单跑 3/3。
-- **`g-28d9b560`**：人授权、agent 用人存的 person token `--as-person` 把组上限 4.6M → 5.6M（其他维度不变）；`review-fix` 开出 `review-fix-3`（目标：读入时强制标签「小写、去重、排序」、补 `test/tags.test.js`）。修复 run 先因 allowlist 没收 `test/tags.test.js` 停在 `blocked_waiting_human`（又一个真缺陷，见下条修复），按它自己给的 `task retry … --allow-observed-paths` 重试后落地；第 4 轮复核 `cannot-judge`：**AC1／AC2／AC3／AC6 满足（标签规则已修好）**，AC4 新判不满足（「每次 CLI 调用都是新 store，命令之间不带笔记」——第 3 轮判的是满足），AC5 无法判断（没有整套 `npm test` 结果：组没设全量命令，按 ①）。账 5,176,876／5,600,000。控制器到此停付费：复核在两轮间翻了 AC4、剩下的是产品判断（需求原文没定 load 是替换还是合并）⇒ **等人**：`review-accept`，或采纳全量命令／说清 AC4 后再 `review-fix`（要再抬上限）。
-- **登记未修（人「同意」只登记）**：A 多目录草稿的 `draftHash`（`requirementCalls.ts:451` 只含各任务主目录）不覆盖主目录外的写入，而 accept 从 `draft.output` 重建合同——有 `draftNo` 兜底、风险低，改会变所有多目录草稿的 hash；B 隐含路径的写入方目录排在任务主目录前时，加出的 `checks: []` 写入成了主目录 ⇒ 拒 `checks-primary`，该 Web 按钮永远点不成（安全拒、不存）；ccloop `savedResultRecovery.ts:359-361` 的松 `indexOf`（缺旗标比的是 `args[0]`；伪造需先能写 run 目录，不值一次 repin）；#195 只在 CLI／Web 标「不生效」，接 context 观测是设计活。
-- 本轮仓库外写入：经面板的 `set-limit`／`review-fix`（人授权）；面板重启两次。ccloop／ccmem 零代码改动。
+- **人的话（原话全文在台账）**：「这一轮暂时忽略 context 大小，尽量多处理一些问题」；开头 `allow-push`；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」；g-28d9b560「按你的建议先跑一次 npm test 再决定」；#279／#283「之前轮我已经裁了，暂时不改」。
+- **已合进 main**（按主题行 `git log --grep` 取）：
+  - `fix(control): a multi-directory draft's hash binds its secondary writes, and the Web names what waits` —— 发现 A：新增 `src/control/requirementDraftHash.ts`，多目录草稿的 `draftHash` 现在覆盖 `{plan, output}`（单目录草稿字节不变）；生产、accept、draft-edit、plan-library-save 四处统一校验；**读取视图对旧规则下存下的多目录草稿给出新 hash**，旧 hash 仍被拒（审阅抓到的兼容问题，判据先红后绿）。发现 B：隐含路径的新写入在写入方目录、`orderWrites` 按登记顺序排，把写入挪到主目录之后做不到 ⇒ 服务端会以 `checks-primary` 拒时 Web 隐藏该按钮，提示与原因保留。K2 回退：`web/src/groupCategory.ts` 的旧服务端回退补上需求侧五类事实、评审未过、等待决定的暂停（6 条 `it.each` 先红后绿）。
+  - `test(control): concurrent archives reuse shared artifacts across twenty rounds (#229)`（只加判据：3 个来源 × 20 轮并发归档共享 artifact store；变异红；与 `driverSettleRetry` 共 6/6。**不是完整驱动的并发 settlement 验收**——step E 本身串行）。
+  - `fix(control): distinguish old handoff outbox rows in recovery (#170)`：`recovery list` 可选 `handoffOutbox`，按请求实际状态把未投递行分成 open-request／in-progress／finished／service-record；本机当前 0 行，不显示。
+- **codex 实时用量（#297／#285／#195 的共同根因）**：免费探针（隔离 HOME／CODEX_HOME＋本地假 Responses 端点，codex-cli 0.167.0）证实：去掉 `--ephemeral` 后会话文件写在 `CODEX_HOME/sessions/**/rollout-*-<thread_id>.jsonl`，**每个响应之后、下一次请求之前**追加 `token_count`（含 total／last 用量与 `model_context_window`）；8 个并发 exec 共用一个私有 CODEX_HOME 全部成功、8 个不同 thread、各自数值与 `turn.completed` 一致。代价：文件保留整个对话、`thread_history` SQLite 行、必须按 thread_id 精确取文件。设计与风险在 `docs/superpowers/specs/2026-11-14-codex-live-usage-design.md`，**§7 等人裁**（重开「#297 只做提示」这一裁定，仅限 loop phase）。
+- **g-28d9b560**：在组分支 tip 的导出树上跑目标仓整套 `npm test` = **20/20 绿**（AC5 因此事实上满足）。同时**直接复现了 AC4**：`add` 之后的下一次 `search`／`tag` 看不到前一次的数据（每次 CLI 调用新建 store）。⇒ AC4 不是判官抖动能解释的，是 CLI 跨调用不持久化的产品缺口；组未动，等人选 accept／paid review-fix。
+- **门**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=<9c83b38 build> node scripts/test-affected.mjs --base=3ffce7ec`；已知红（`orchestration`「admits a debug group…」）照旧。本机负载约 20–40。
+
+### 3.L（2026-11-14，会话 `6b727312`，测试者反馈 L 轮；压成结论；台账 `.superpowers/sdd/2026-11-14-tester-followup-l/progress.md`）
+
+- **已合、已装**：K1／K2／K3（`--ff-only`）；`group show` 不再重复打落地回归行；`usagePause.ts` 注释更正（claude／omp 轮间停、codex 整阶段结束才停）；K3 缺的两条多目录草稿判据；#173／#224／#266 估算历史中位数（`estimateHistory.ts`，只提示）；两个 review-fix 真缺陷（**期望模型组开不出修复任务**——`openFixTask` 的 `?? 0`；**修复任务 allowlist 不含自己的 targetPaths**）。
+- **登记未修**（后两条已在会话 `3ffce7ec` 修掉）：ccloop `savedResultRecovery.ts` 的松 `indexOf`；#195 context 观测。
+- **仓库外**：经面板 `set-limit`／`review-fix`（人授权）；面板重启两次。ccloop／ccmem 零代码改动。
 
 ### 3.K 测试者反馈 K 轮的结论（会话 `23ce4a7b`，2026-11-14；L 轮会话 `6b727312` 合入、压成结论；台账 `.superpowers/sdd/2026-11-14-tester-followup-k/progress.md`）
 
@@ -300,15 +302,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `6b727312` 2026-11-14 收尾）
+### 4.0 接手顺序（会话 `3ffce7ec` 2026-11-14 收尾）
 
-1. **`g-28d9b560` 等人**（§3.最新）：第 4 轮 `cannot-judge`，标签规则已满足，剩 AC4（CLI 命令之间不带笔记，复核新提的）与 AC5（没全量命令）。人选：`review-accept`，或采纳全量命令（`orca check adopt --as-person`）／说清 AC4 后再 `review-fix`（账 5.18M／5.6M，要再抬上限）。⚠️ 复核同一棵树前后两轮对 AC4 判法不同——判官稳定性值得记一笔。
-2. **余项（agent 能做，不需设计）**：
-   - L 轮发现 B：隐含路径按钮在写入方目录排在主目录前时注定被拒 ⇒ 要么不显示该提示，要么把新写入排在主目录后（改前先问人选哪种）；
-   - K2 的 Web 回退分支缺 usage-unknown 等几类（服务端已给 `needsYou`，回退只在旧服务端时用）；
-   - #170 handoff-request 旧行 `delivered=0` 的诊断区分；#229 20 次并发 settlement 验收；
-   - J 轮遗留：`agent_kind` 认领时冻结、`App` 启动流程后跳转无判据、多目录组暂停线续跑仍 `multi-dir-continuation-unsupported`。
-3. **要先 brainstorm／写 spec 的（人说过本轮不做，下一轮问人选）**：#196 plan 成本；#285 codex 实时用量只显示（ccloop 去 `--ephemeral` 后读会话文件 `token_count`；与「codex 只提示」裁定的边界要人确认）；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测；发现 A 多目录 draftHash。
+1. **等人裁 codex 实时用量**（§3.最新、spec `2026-11-14-codex-live-usage-design.md` §7）：探针已证实去掉 loop phase 的 `--ephemeral` 能读到每次响应的 `token_count`；要不要重开「#297 只做提示」只差这一句话。裁了才动 ccloop（含会话保留与清理）。
+2. **`g-28d9b560` 等人**（§3.最新）：整套 `npm test` 20/20 绿（AC5 事实上满足），但 AC4 已实测为真——每次 CLI 调用新建 store。人选：`review-accept`（接受跨调用不持久化），或再开一轮 review-fix 让它把状态落到文件（账 5.18M／5.6M，要抬上限；需求原文没要求跨调用持久化，先确认这是不是期望行为）。
+3. **余项（agent 能做，不需设计）**：
+   - J 轮遗留：`agent_kind` 认领时冻结、`App` 启动流程后跳转无判据、多目录组暂停线续跑仍 `multi-dir-continuation-unsupported`；
+   - ccloop `savedResultRecovery.ts` 的松 `indexOf`（只影响 `execution-without-final-v1` 分支；下次 ccloop 有别的改动时一起修，判据要用 `ompVerificationOnlyRecovery` 的夹具）。
+4. **要先 brainstorm／写 spec 的**：#196 plan 成本；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测（与第 1 条同一份读写）。
 4. **测试者台账里可以改状态的**（台账是测试者的文件，不替他改，只在报告里列）：
    - 已修可关：#278 #127 #105 #263 #262 #174 #192 #286–#294 #296 #298–#309，K 轮的 #295 #272 #284 #265 #235（措辞）#297（提示）#279／#283（①）；L 轮 #173（历史参照已做，估算校准 #224／#266 仍开）；
    - 代码已修、还没在真 run 上看过：#273 #267；#163 只涉老组可关；#60 关掉或拆开；
