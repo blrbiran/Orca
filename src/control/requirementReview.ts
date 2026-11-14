@@ -28,6 +28,7 @@ import type { AdmissionGate } from "./admissionGate.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
+import type { BudgetAmount } from "./tokenPolicy.js";
 
 /**
  * Tester follow-up G spec §3 (human: 「没有统一标准，一般会对照需求看具体实现的结果（这个结果可以是代码、文档、图片等等）」, the
@@ -361,23 +362,25 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
 }
 
 /** Appends the fix task in the caller's transaction (a savepoint: a refusal leaves nothing); `refused` says why it could not. */
-export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string, paths?: readonly string[]): { taskId: string } | { refused: ReviewWhy } {
+export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string, paths?: readonly string[]): { taskId: string } | { refused: ReviewWhy; detail: string } {
   const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
   const criteria = reviewInputsOf(store, groupId, body).criteria;
   const plan = readArchivedPlan(store, groupId);
   const appended = new Set(plan.appendedTaskIds ?? []);
   const first = plan.plan.tasks.find((task) => !appended.has(task.taskId))!.taskId;
   const taskId = fixTaskIdOf(store, groupId, round.roundNo);
-  const grant = (readWork(store, groupId, first) as unknown as { grant: { work: Amount; handoff: Amount } }).grant;
+  const grant = (readWork(store, groupId, first) as unknown as { grant: { work: BudgetAmount; handoff: Amount } }).grant;
   store.db.exec("SAVEPOINT review_fix");
   try {
     appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, goal, paths), agentFrom: first,
-      work: { ...grant.work, tokens: grant.work.tokens ?? 0 } as Amount, handoff: grant.handoff, dependsOn: [] });
+      // Follow-up L: the sibling task's work grant as it is -- in an expectation-model group it has no token number (null);
+      // `?? 0` made it 0, which deriveContract refuses, so no fix task could open there.
+      work: grant.work, handoff: grant.handoff, dependsOn: [] });
     store.db.exec("RELEASE review_fix");
     return { taskId };
   } catch (error) {
     store.db.exec("ROLLBACK TO review_fix"); store.db.exec("RELEASE review_fix");
     if (!(error instanceof ControlError)) throw error;
-    return { refused: error.code === "group-budget-unavailable" ? "unfunded" : "failed" };
+    return { refused: error.code === "group-budget-unavailable" ? "unfunded" : "failed", detail: error.detail === undefined ? error.code : `${error.code}:${error.detail}` };
   }
 }

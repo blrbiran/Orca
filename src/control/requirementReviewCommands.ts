@@ -62,7 +62,8 @@ export function applyReviewFix(deps: { store: ControlStore }, command: ReviewFix
       const last = review.rounds.at(-1);
       if (last === undefined) throw new ControlError("requirement-review-not-open", "no-round");
       const opened = openFixTask(deps.store, groupId, last, by, command.payload.goal, command.payload.paths);
-      if ("refused" in opened) throw new ControlError(opened.refused === "unfunded" ? "group-budget-unavailable" : "recovery-blocked", "review-fix");
+      // Follow-up L: say what refused the fix task (it used to be a bare recovery-blocked:review-fix).
+      if ("refused" in opened) throw new ControlError(opened.refused === "unfunded" ? "group-budget-unavailable" : "recovery-blocked", `review-fix:${opened.detail}`);
       const rounds = review.rounds.map((round) => round === last ? { ...round, fixTaskId: opened.taskId, fixBy: by } : round);
       const { why: _why, ...rest } = review;
       saveReview(deps.store, groupId, { ...rest, rounds, state: "fixing" });

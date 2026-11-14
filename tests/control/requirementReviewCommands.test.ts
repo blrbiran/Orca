@@ -56,6 +56,20 @@ describe("the requirement review's exits (tester follow-up G §3.5)", () => {
     } finally { await w.t.h.dispose(); }
   }, 300000);
 
+  // Follow-up L (dogfood g-28d9b560): a fix task that could not be appended answered a bare recovery-blocked:review-fix,
+  // hiding why. The refusal now names the cause, and nothing is appended.
+  it("review-fix that cannot append its task names the cause", async () => {
+    const w = await notPassed();
+    try {
+      const runId = String(w.t.h.store.db.prepare("SELECT id FROM runs WHERE group_id='g' ORDER BY rowid LIMIT 1").get()!.id);
+      w.t.h.store.db.prepare("UPDATE runs SET active=1 WHERE id=?").run(runId);
+      expect(refusal(w.t.service.reviewFix(w.t.h.command("review-fix", { goal: "g" })))).toMatchObject({
+        code: "recovery-blocked", message: "recovery-blocked:review-fix:recovery-blocked:append-while-active" });
+      expect(w.t.h.store.db.prepare("SELECT COUNT(*) AS n FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").get()!.n).toBe(0);
+      w.t.h.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(runId);
+    } finally { await w.t.h.dispose(); }
+  }, 240000);
+
   it("each is refused unless the review is not-passed", async () => {
     const w = await reviewWorld();
     try {

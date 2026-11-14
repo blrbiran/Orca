@@ -13,6 +13,7 @@ type TaskContract = z.infer<typeof taskContractSchema>;
 import { executionSnapshotSchema } from "./webProtocol.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
+import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
 
 /**
  * Tester follow-up G spec §3.4 (human: 「自动在同一组里开一个修复任务」): a task appended to a confirmed group -- the
@@ -21,7 +22,7 @@ import type { Amount } from "./types.js";
  * canonical record, and the confirmed snapshot gains its derived contract, allocations and frozen agent (copied from an
  * existing task), every other entry byte for byte. Its allocations come out of the group's unallocated reserve.
  */
-export interface AppendTaskInput { taskId: string; contract: TaskContract; agentFrom: string; work: Amount; handoff: Amount; dependsOn: string[] }
+export interface AppendTaskInput { taskId: string; contract: TaskContract; agentFrom: string; work: BudgetAmount; handoff: Amount; dependsOn: string[] }
 
 const compare = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 const keyOf = (a: { ownerKind: string; ownerId: string; bucket: string }) => `${a.ownerKind}\0${a.ownerId}\0${a.bucket}`;
@@ -37,7 +38,8 @@ export function appendConfirmedTaskInTransaction(store: ControlStore, groupId: s
   const missing = input.dependsOn.find((id) => !plan.plan.tasks.some((task) => task.taskId === id));
   if (missing !== undefined) throw new ControlError("recovery-blocked", `append-dependency:${missing}`);
   // The reserve must fund both allocations in every finite dimension, or nothing is written.
-  const total = add(input.work, input.handoff);
+  // A work grant with no token number (expectation model) commits no tokens, as confirm commits it (finiteCommitment).
+  const total = add(finiteCommitment(input.work), input.handoff);
   for (const d of ["tokens", "activeMs", "attempts", "sessions"] as const) {
     const left = proposal.explicitUnallocatedReserve[d];
     if (left !== null && left < total[d]) throw new ControlError("group-budget-unavailable", d);
