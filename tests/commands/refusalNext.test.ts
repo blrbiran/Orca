@@ -116,6 +116,12 @@ describe("proposal set-budget's refusals name the next command (tester follow-up
   it("a stale proposal: read it again", async () => {
     expect((await nextOf(BUDGET, refused("proposal/edit", "proposal-version-conflict", "proposal-version-conflict"))).next).toEqual(["orca proposal show g-alpha"]);
   });
+  it("a draft limit that cannot hold the change: read the exact deficit, then an owner raises the shown limit", async () => {
+    expect((await nextOf(BUDGET, refused("proposal/edit", "group-budget-unavailable", "group-budget-unavailable:attempts:+2,sessions:+2"))).next).toEqual([
+      "orca proposal show g-alpha",
+      "orca proposal set-budget g-alpha --goal-review --dimension attempts --value <its current value> --proposed-group-limit '<the shown limit with the missing amount added>' --as-person",
+    ]);
+  });
 });
 
 describe("task settle-usage's refusals name the next command (tester follow-up K)", () => {

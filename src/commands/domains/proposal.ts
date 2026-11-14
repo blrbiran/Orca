@@ -82,6 +82,8 @@ function setBudgetNext(error: { code: string; message: string }, c: Parameters<t
     return [`orca group set-limit ${group(c)} --limit '{"tokens":<higher>,...}'`, ...(taskId === undefined ? [] : [`orca task retry ${group(c)} ${taskId} --work '{"tokens":<n>}'`])];
   }
   if (error.code === "proposal-version-conflict") return [`orca proposal show ${group(c)}`];
+  if (error.code === "group-budget-unavailable") return [`orca proposal show ${group(c)}`,
+    `orca proposal set-budget ${group(c)} --goal-review --dimension attempts --value <its current value> --proposed-group-limit '<the shown limit with the missing amount added>' --as-person`];
   return undefined;
 }
 

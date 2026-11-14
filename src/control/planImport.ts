@@ -79,10 +79,12 @@ function checkedAdd(left: Amount, right: Amount): Amount {
   }
   return result;
 }
-function reserve20(base: Amount): Amount {
+function reserve20(base: Amount, taskCount: number): Amount {
   const result = zero();
   for (const dimension of dimensions) {
-    const value = (BigInt(base[dimension]) * 20n + 99n) / 100n;
+    // #311: leave the usual 20% cushion after one handoff attempt and session per task is estimated.
+    const value = (BigInt(base[dimension]) * 20n + 99n) / 100n +
+      (dimension === "attempts" || dimension === "sessions" ? BigInt(taskCount) : 0n);
     if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new ControlError("numeric-overflow");
     result[dimension] = Number(value);
   }
@@ -351,7 +353,7 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   ]);
   let base = stripped === null ? checkedAdd(ESTIMATE_GRANT, GOAL_REVIEW) : zero();
   for (const _task of plan.tasks) base = checkedAdd(base, stripped === null ? checkedAdd(TASK_WORK, TASK_HANDOFF) : { ...TASK_WORK, tokens: stripped.workTokens });
-  const initialReserve = stripped === null ? reserve20(base) : zero();
+  const initialReserve = stripped === null ? reserve20(base, plan.tasks.length) : zero();
   const explicitUnallocatedReserve:BudgetAmount = queued || stripped !== null ? initialReserve : checkedAdd(initialReserve, ESTIMATE_GRANT);
   const groupLimit = checkedAdd(base, initialReserve);
   // Spec §6.3.2 (H10), D4, D10: an agent's import may not promise more than the caps leave -- its fresh limit (no carried

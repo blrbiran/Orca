@@ -545,7 +545,19 @@ function refuseStaleEstimate(store: ControlStore, id: string, estimateId: string
  */
 function resetDraftReserve(store: ControlStore, id: string, group: Group, proposal: BudgetProposalRecord): Amount {
   const commitments = sumAmounts([...proposal.allocations.filter(a => a.ownerKind !== "reserve").map(a => hasTokenPolicy(store,id)&&a.ownerKind==="task"?{...a.amount,tokens:0}:amountSchema.parse(a.amount)), ...estimateCommitments(store, id).map(a => a.amount)]);
-  setReserve(proposal, residual(proposal.groupLimit, group.used, commitments));
+  try { setReserve(proposal, residual(proposal.groupLimit, group.used, commitments)); }
+  catch (error) {
+    if (!(error instanceof ControlError) || error.code !== "group-budget-unavailable") throw error;
+    // #311: name each dimension and the exact missing amount on the proposed draft; preserve the same refusal code and atomic rollback.
+    const shortfalls = dimensions.flatMap(d => {
+      const limit = proposal.groupLimit[d];
+      if (limit === null) return [];
+      const missing = BigInt(group.used[d]) + BigInt(commitments[d]) - BigInt(limit);
+      return missing > 0n ? [`${d}:+${missing}`] : [];
+    });
+    if (shortfalls.length === 0) throw error;
+    throw new ControlError("group-budget-unavailable", shortfalls.join(","));
+  }
   return commitments;
 }
 

@@ -64,7 +64,8 @@ export function complex1mDefaults(taskCount: number): DefaultLedger {
   const base = zero(), reserve = zero(), limit = zero();
   for (const d of dimensions) {
     const total = BigInt(taskCount) * (BigInt(TASK_WORK[d]) + BigInt(TASK_HANDOFF[d])) + BigInt(GOAL_REVIEW[d]) + BigInt(ESTIMATE_GRANT[d]);
-    const extra = (total * 20n + 99n) / 100n;
+    // #311: a new group can accept one estimated handoff per task without spending its ordinary 20% buffer.
+    const extra = (total * 20n + 99n) / 100n + (d === "attempts" || d === "sessions" ? BigInt(taskCount) : 0n);
     base[d] = safeNumber(total); reserve[d] = safeNumber(extra); limit[d] = safeNumber(total + extra);
   }
   return { base, reserve, limit };

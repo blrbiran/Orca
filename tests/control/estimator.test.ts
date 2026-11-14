@@ -13,8 +13,18 @@ import { webFixture, profileSnapshot } from "./fixtures/web.js";
 describe("frozen estimator", () => {
   it("builds the five-task complex-1m ledger exactly and rejects aggregate overflow", () => {
     // Tester round 2 (ruling H2, spec §5.2.2, §16.2; 「这次批准改写所有必要的判据」): ESTIMATE_GRANT is now the 1,000,000-token / 30-minute cap.
-    expect(complex1mDefaults(5)).toEqual({ base: { tokens: 18500000, activeMs: 86400000, attempts: 17, sessions: 17 }, reserve: { tokens: 3700000, activeMs: 17280000, attempts: 4, sessions: 4 }, limit: { tokens: 22200000, activeMs: 103680000, attempts: 21, sessions: 21 } });
+    // Ruling (human, 2026-11-14, current session: all necessary criteria may be rewritten): #311 keeps one handoff attempt/session per task beyond the 20% group buffer.
+    expect(complex1mDefaults(5)).toEqual({ base: { tokens: 18500000, activeMs: 86400000, attempts: 17, sessions: 17 }, reserve: { tokens: 3700000, activeMs: 17280000, attempts: 9, sessions: 9 }, limit: { tokens: 22200000, activeMs: 103680000, attempts: 26, sessions: 26 } });
     expect(() => complex1mDefaults(Number.MAX_SAFE_INTEGER)).toThrow("numeric-overflow");
+  });
+  // #311: an eight-task group must keep its ordinary buffer after accepting one estimated handoff per task.
+  it("reserves a handoff attempt and session per task beyond the ordinary group buffer", () => {
+    const defaults = complex1mDefaults(8);
+    // Eight task work grants (3 each), one review and one estimate: 26 commitments; 8 handoffs add 8.
+    expect(defaults.base.attempts).toBe(26);
+    expect(defaults.base.sessions).toBe(26);
+    expect(defaults.limit.attempts).toBeGreaterThanOrEqual(26 + 8 + 6);
+    expect(defaults.limit.sessions).toBeGreaterThanOrEqual(26 + 8 + 6);
   });
   it("claims an explicitly soft estimate when its unchanged declaration has no proof", async () => {
     const profile = profileSnapshot(); profile.profile.capabilities.requestBoundProof = null;

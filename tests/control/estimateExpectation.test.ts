@@ -100,6 +100,58 @@ const setLoop = (h: Fixture, work: { tokens: number | null; activeMs: number; at
     work, ...(workProvenance === undefined ? {} : { workProvenance }) } as never);
 const workAmount = (h: Fixture, taskId: string) => readControlGroup(h.store, "epoch", "g").allocations.find((a) => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work")!.amount;
 
+describe("eight estimated handoffs fit a new group's non-token limit (#311)", () => {
+  it("applies all eight handoff attempt and session suggestions without a person top-up", async () => {
+    const tasks: WebFixtureTask[] = Array.from({ length: 8 }, (_, index) => ({ taskId: `t${index + 1}`, tokenBudget: null }));
+    const h = await webFixture(undefined, tasks, { tokenPolicy: "optional-v1" });
+    try {
+      const service = new WebControlService(h.deps);
+      const estimateId = await h.requestEstimate(service);
+      const run = await service.claimEstimate("g", estimateId);
+      const row = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(run!.runId)!.body));
+      row.state = "settled-restartable";
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(row), run!.runId);
+      service.completeEstimate("g", estimateId, { schema: "budget-estimate-v1", planHash: readArchivedPlan(h.store, "g").planHash,
+        tasks: tasks.map(({ taskId }) => ({ taskId, complexity: "M", confidence: "high", work: { tokens: 1_000_000, activeMs: 14_400_000, attempts: 3, sessions: 3 },
+          handoff: { tokens: 300_000, activeMs: 1_800_000, attempts: 1, sessions: 1 }, rationale: "one handoff", assumptions: ["clean"] })),
+        goalReviewReserve: { tokens: 1_000_000, activeMs: 3_600_000, attempts: 1, sessions: 1 }, groupRationale: "multi-task" });
+      const action = suggestionActions(readControlGroup(h.store, "epoch", "g"), { kind: "all" }).find((item) => item.verb === "proposal-edit");
+      expect(action?.verb).toBe("proposal-edit");
+      if (action?.verb !== "proposal-edit") throw new Error("proposal suggestion absent");
+      expect(action.payload.operations.filter((op) => op.target.scope === "task" && op.target.allocation === "handoff" && ["attempts", "sessions"].includes(op.target.dimension))).toHaveLength(16);
+      const applied = service.editProposal(h.command("proposal-edit", action.payload));
+      expect("error" in applied ? applied.error : null).toBeNull();
+      const proposal = readBudgetProposal(h.store, "g");
+      expect(proposal.allocations.filter((item) => item.ownerKind === "task" && item.bucket === "handoff").every((item) => item.amount.attempts === 1 && item.amount.sessions === 1)).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  it("names both short dimensions on an older narrow draft and accepts an owner's limit correction", async () => {
+    const tasks: WebFixtureTask[] = Array.from({ length: 8 }, (_, index) => ({ taskId: `t${index + 1}`, tokenBudget: null }));
+    const h = await webFixture(undefined, tasks, { tokenPolicy: "optional-v1" });
+    try {
+      const service = new WebControlService(h.deps);
+      const initial = readBudgetProposal(h.store, "g");
+      const narrowed = { ...initial.groupLimit, attempts: 32, sessions: 32 };
+      expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: initial.proposalVersion, operations: [], proposedGroupLimit: narrowed })))
+        .toMatchObject({ result: { proposalVersion: initial.proposalVersion + 1 } });
+      const operations = tasks.flatMap(({ taskId }) => (["attempts", "sessions"] as const).map((dimension) => ({
+        target: { scope: "task" as const, taskId, allocation: "handoff" as const, dimension }, value: 1, provenance: "human" as const,
+      })));
+      const before = readBudgetProposal(h.store, "g");
+      const refused = service.editProposal(h.command("proposal-edit", { baseProposalVersion: before.proposalVersion, operations }));
+      // No estimate run is reserved in this new unlimited group: 8 work grants + review = 25, plus 8 handoffs exceeds 32 by one.
+      expect(refused).toMatchObject({ error: { code: "group-budget-unavailable", message: expect.stringContaining("attempts:+1") } });
+      expect((refused as { error: { message: string } }).error.message).toContain("sessions:+1");
+      expect(readBudgetProposal(h.store, "g")).toEqual(before);
+      const raised = service.editProposal(h.command("proposal-edit", { baseProposalVersion: before.proposalVersion, operations: [],
+        proposedGroupLimit: { ...narrowed, attempts: 40, sessions: 40 } }));
+      expect(raised).toMatchObject({ result: { proposalVersion: before.proposalVersion + 1 } });
+      expect(service.editProposal(h.command("proposal-edit", { baseProposalVersion: before.proposalVersion + 1, operations }))).toMatchObject({ result: {} });
+    } finally { await h.dispose(); }
+  });
+});
+
 describe("an unlimited group after apply + confirm: no per-task ceiling (§7 items 1, 3; criterion 4)", () => {
   for (const [task, name] of [[LOOP, "a loop task"], [HAND, "a hand-written task"]] as const) {
     it(`${name}: tokenBudget null, the default 3 attempts and active time, and no task binder at the claim`, async () => {
