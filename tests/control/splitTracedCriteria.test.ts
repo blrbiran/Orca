@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { expandLoopTask } from "../../src/control/loopPlans.js";
 import { readArchivedPlan } from "../../src/control/queries.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
+import { requirementDraftHash } from "../../src/control/requirementDraftHash.js";
 import { readDraft, writeDraft } from "../../src/control/requirementRecords.js";
 import type { MultiSplitOutput, SplitOutput } from "../../src/control/requirementSchemas.js";
 import { expandMultiSplitDraft, expandSplitDraft } from "../../src/control/requirementSplit.js";
@@ -97,7 +98,10 @@ describe("a traced acceptance criterion reaches the task's contract (#204)", () 
       const words = new Map(MULTI.tasks.map((task) => [task.taskId, task.successCondition]));
       const plan = { ...old, tasks: old.tasks.map((task) => ({ ...task, loop: { ...task.loop, successCondition: words.get(task.taskId)! } })) };
       writeDraft(x.store, "r", { ...draft, plan, draftHash: sha256Canonical(plan) });
-      const done = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: sha256Canonical(plan) }));
+      // Ruling (2026-11-14, multi draft hash): the stored plan-only hash is no longer accepted; the person reviews the
+      // hash the view shows, which binds the output too. The old hash is still what a pre-#204 record holds.
+      const reviewed = requirementDraftHash(plan, draft.output!);
+      const done = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: reviewed }));
       if ("error" in done) throw new Error(JSON.stringify(done));
       const archived = readArchivedPlan(x.store, "r").plan.tasks;
       // mutation: pass the criteria to the accept re-expansion unconditionally -> the contract gains a suffix its plan lacks -> red
