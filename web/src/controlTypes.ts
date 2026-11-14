@@ -496,6 +496,8 @@ export type RunViewV1 = {
   lastActivityAt?: number | null;
   /** Tester #285: phase-end -- \`used\` is the last phase end's figure, booked at \`usageAt\`; the split by kind once known. */
   usageObservation?: "realtime" | "phase-end" | "unavailable";
+  /** Codex's latest completed response while the run is under way; provisional, never part of `used`. */
+  liveUsage?: { attempt: number; phase: "plan" | "execute" | "verify"; tokens: number; observedAt: string; revision: number };
   usageAt?: number;
   usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   /** Tester #290 (follow-up J): the run's live token ceiling and the stop at it; absent on a run without them. */

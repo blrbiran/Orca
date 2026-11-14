@@ -53,7 +53,7 @@ import type { ControlRefusal, UncertainCommand } from "./controlState.js";
 import { LabelChips, SavedResultEntry, TaskDetail, expectedText, progressText } from "./TaskDetail.js";
 import { NoChangeChip } from "./NoChange.js";
 import { RunTranscript } from "./AgentTranscript.js";
-import { phaseEndNote, usageByKind } from "./usageNotes.js";
+import { liveUsageNote, phaseEndNote, usageByKind } from "./usageNotes.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { planText } from "./LoopPlanCard.js";
 import { currentLanguage, enumText } from "./i18n.js";
@@ -155,7 +155,8 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; a
     ...(run.agent === undefined ? [] : [run.agent.model === null
       ? t("control.group.liveAgentDefault", { installation: run.agent.installation })
       : t("control.group.liveAgent", { installation: run.agent.installation, model: run.agent.model })]),
-    t("control.group.liveTokens", { tokens: shortTokens(run.used.tokens) }) + ((note) => (note === null ? "" : ` (${note})`))(phaseEndNote(run)),
+    t("control.group.liveTokens", { tokens: shortTokens(run.used.tokens) }) + ((note) => (note === null ? "" : ` (${note})`))(phaseEndNote(run))
+      + ((note) => (note === null ? "" : ` · ${note}`))(liveUsageNote(run)),
     ...(run.startedAt != null ? [t("control.group.liveElapsed", { minutes: Math.max(0, Math.floor(((run.endedAt ?? now) - run.startedAt) / 60_000)) })] : []),
   ].join(" · ");
   return <>
@@ -999,7 +1000,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
               {/* Spec 2026-11-03 soft-mode approximate usage: a booked floor is said to be one, never shown as a reported figure. */}
               <td><Tokens n={run.used.tokens} />{run.usageApproximate !== undefined && <span className="badge" data-tone="warn" data-testid="usage-approximate">{run.usageApproximate.floorTokens === null ? t("control.group.usageApproximateNone") : t("control.group.usageApproximate")}</span>}
-                {phaseEndNote(run) !== null && <div className="detail-note" data-testid="usage-phase-end">{phaseEndNote(run)}</div>}</td>
+                {phaseEndNote(run) !== null && <div className="detail-note" data-testid="usage-phase-end">{phaseEndNote(run)}</div>}
+                {liveUsageNote(run) !== null && <div className="detail-note" data-testid="usage-live">{liveUsageNote(run)}</div>}</td>
               <td>{run.remaining.tokens===null ? t(run.tokenRemainingStatus==="unknown"?"control.progress.tokensUnknown":"budget.unlimited") : <Tokens n={run.remaining.tokens} />}</td>
             </tr>
             </Fragment>

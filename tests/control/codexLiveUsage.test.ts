@@ -29,6 +29,9 @@ describe("Codex's running response usage (#285)", () => {
       set(reading(runId));
       await driver.round();
       expect(t.body(runId).liveUsage).toMatchObject({ runId, phase: "execute", tokens: 125, revision: 1 });
+      // The view carries it as provisional while the run is under way; the booked figure is untouched.
+      expect(readControlGroup(t.h.store, "epoch", "g").runs.find((run) => run.runId === runId)?.liveUsage)
+        .toMatchObject({ phase: "execute", tokens: 125, attempt: 1, revision: 1 });
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE run_id=?").get(runId)).toEqual({ n: 0 });
       expect(readControlGroup(t.h.store, "epoch", "g").ledger.used.tokens).toBe(budget);
       set(undefined);

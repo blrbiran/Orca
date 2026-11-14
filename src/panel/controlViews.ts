@@ -8,6 +8,7 @@ import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.
 import { budgetAmountSchema, operatorNoteSchema } from "../control/schema.js";
 import { listFlagsInvolving } from "../control/flaggedDecisions.js";
 import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
+import { isTerminalRunState } from "../control/budget.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
@@ -1402,6 +1403,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       lastActivityAt: activity.get(runId)?.at ?? null,
       // Tester #285: how the run's agent observes usage, when its figure was last booked, and its split by kind.
       usageObservation: run.agentCapabilities.usageObservation,
+      // Codex's last completed response, shown as provisional while the run is actually in flight; `used` stays booked spend.
+      ...(run.liveUsage === undefined || run.endedAt != null || isTerminalRunState(state) || state === "blocked"
+        ? {} : { liveUsage: { attempt: run.liveUsage.attempt, phase: run.liveUsage.phase, tokens: run.liveUsage.tokens, observedAt: run.liveUsage.observedAt, revision: run.liveUsage.revision } }),
       ...((at) => at === null ? {} : { usageAt: at })(usageBookedAt(store, runId)),
       ...((split) => split === null ? {} : { usageBreakdown: split })(usageBreakdownOf(store, runId, bucket)),
       ...((detail) => detail.length === 0 ? {} : { usageDetail: detail })(runUsageDetail(store, runId)),

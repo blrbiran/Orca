@@ -2141,6 +2141,9 @@ export const runViewSchema = z
     // was last booked (epoch ms; absent before any), and its split by kind from the newest usage event carrying one.
     // Optional on the wire so older fixtures still parse; the server always gives usageObservation.
     usageObservation: z.enum(["realtime", "phase-end", "unavailable"]).optional(),
+    // Codex's response-boundary observation while the run is under way: provisional display only, never part of `used`.
+    liveUsage: z.object({ attempt: positiveSafeInteger, phase: z.enum(["plan", "execute", "verify"]), tokens: positiveSafeInteger,
+      observedAt: nonemptyString, revision: positiveSafeInteger }).strict().optional(),
     usageAt: safeInteger.optional(),
     usageBreakdown: z.object({ input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger }).strict().optional(),
     // Raw usage detail spec 2026-11-13 §2: the run's booked usage per model and phase (model null: unattributed); absent before any.

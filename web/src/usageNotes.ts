@@ -18,6 +18,13 @@ export function phaseEndNote(run: RunViewV1): string | null {
   return run.usageAt === undefined ? i18n.t("control.group.usagePhaseEndNone") : i18n.t("control.group.usagePhaseEnd", { time: clockText(run.usageAt) });
 }
 
+/** The latest completed response of a run under way; provisional and separate from booked `used`. */
+export function liveUsageNote(run: RunViewV1): string | null {
+  if (!runUnderWay(run) || run.liveUsage === undefined) return null;
+  return i18n.t("control.group.usageLive", { tokens: shortTokens(run.liveUsage.tokens), phase: run.liveUsage.phase,
+    attempt: run.liveUsage.attempt, time: clockText(Date.parse(run.liveUsage.observedAt), true) });
+}
+
 /** An ended run's usage by kind; null under way or without a breakdown. Cache write only when there is some. */
 export function usageByKind(run: RunViewV1): string | null {
   const split = run.usageBreakdown;

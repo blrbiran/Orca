@@ -9,6 +9,7 @@ import { TRANSCRIPT_STALE_MS, transcriptLive } from "../../control/transcriptLiv
 export interface UsageRun {
   runId?: string; state?: string; endedAt?: number | null; used?: { tokens: number };
   usageObservation?: string; usageAt?: number; usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  liveUsage?: { attempt: number; phase: "plan" | "execute" | "verify"; tokens: number; observedAt: string; revision: number };
 }
 
 const clock = (ms: number, seconds = false): string => `${new Date(ms).toISOString().slice(11, seconds ? 19 : 16)}Z`;
@@ -29,6 +30,8 @@ export function runUsageLines(run: UsageRun | undefined, lastTranscriptAt: numbe
   return [
     ...(live && run.usageObservation === "phase-end" && run.used !== undefined
       ? [`used: ${count(run.used.tokens)} tokens (${run.usageAt === undefined ? "no phase has ended yet" : `as of the last phase end at ${clock(run.usageAt)}`}; ${PHASE_END})`] : []),
+    ...(live && run.liveUsage !== undefined
+      ? [`observed: at least ${count(run.liveUsage.tokens)} tokens in ${run.liveUsage.phase} (attempt ${run.liveUsage.attempt}), last response at ${run.liveUsage.observedAt} (provisional: not booked; this agent stops after an observed response, so one request may pass a ceiling)`] : []),
     ...transcript,
     ...(!live && run.usageBreakdown !== undefined ? [`usage by kind: input ${count(run.usageBreakdown.input)} / output ${count(run.usageBreakdown.output)} / cacheRead ${count(run.usageBreakdown.cacheRead)}${run.usageBreakdown.cacheWrite > 0 ? ` / cacheWrite ${count(run.usageBreakdown.cacheWrite)}` : ""}`] : []),
   ];

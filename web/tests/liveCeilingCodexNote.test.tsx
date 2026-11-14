@@ -40,7 +40,7 @@ describe("the run detail's live ceiling and the codex note (#297)", () => {
     expect(box.textContent).toContain("Live ceiling: 10,000,000 tokens (pause-line, revision 2)");
     expect(box.textContent).toContain("Stopped at the live ceiling: 63,000,000 tokens used against 10,000,000 (pause-line, execute, boundary)");
     expect(box.querySelector("[data-testid=codex-ceiling-note]")?.textContent)
-      .toBe("codex runs each phase as one turn, so this ceiling is checked only when a phase ends: one execute can go past the ceiling, and past the group limit, before the run stops.");
+      .toBe("This ceiling is checked after each observed response: the request already in flight can pass the ceiling, and the group limit, before the run stops.");
   });
 
   it("gives no note for an agent that is not codex", () => {
@@ -53,6 +53,6 @@ describe("the run detail's live ceiling and the codex note (#297)", () => {
     await i18n.changeLanguage("zh");
     const box = openRun(ceilinged("my-coder"), "运行与证据");
     expect(box.querySelector("[data-testid=codex-ceiling-note]")?.textContent)
-      .toBe("codex 每个阶段只跑一轮，所以只在阶段结束时检查这个上限：一次执行阶段可能超过这个上限、也可能超过组上限，之后运行才停下。");
+      .toBe("每一次响应被观测到之后才检查这个上限：已经在途的请求可能超过这个上限、也可能超过组上限，之后运行才停下。");
   });
 });

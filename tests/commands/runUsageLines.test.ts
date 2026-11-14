@@ -9,7 +9,8 @@ import { findCommand } from "../../src/commands/registry.js";
 useFakePanels();
 
 const BOOKED = Date.UTC(2026, 10, 12, 2, 43, 0), WRITTEN = Date.UTC(2026, 10, 12, 2, 51, 7);
-const UNDER_WAY = { runId: "run-1", taskId: "t1", state: "accepted", phase: "work", endedAt: null, used: { tokens: 9544 }, usageObservation: "phase-end", usageAt: BOOKED };
+const UNDER_WAY = { runId: "run-1", taskId: "t1", state: "accepted", phase: "work", endedAt: null, used: { tokens: 9544 }, usageObservation: "phase-end", usageAt: BOOKED,
+  liveUsage: { attempt: 2, phase: "execute", tokens: 9_544_000, observedAt: "2026-11-12T02:51:07.000Z", revision: 3 } };
 const ENDED = { ...UNDER_WAY, state: "landed", endedAt: BOOKED + 1, usageBreakdown: { input: 211_395, output: 122_592, cacheRead: 6_563_840, cacheWrite: 0 } };
 
 async function show(run: Record<string, unknown>, transcripts: Record<string, unknown> | null): Promise<{ lines: string[]; json: unknown }> {
@@ -39,7 +40,9 @@ describe("run show of a run whose agent reports usage at phase end (#285)", () =
     expect(lines).toContain("used: 9,544 tokens (as of the last phase end at 02:43Z; this agent reports usage only when a phase ends)");
     // mutation: drop the transcripts read from run show's compose -> red
     expect(lines).toContain("transcript: producing output, last at 02:51:07Z");
-    expect(json).toMatchObject({ lastTranscriptAt: WRITTEN });
+    // #285: the completed response's own observation, distinct from the booked figure.
+    expect(lines).toContain("observed: at least 9,544,000 tokens in execute (attempt 2), last response at 2026-11-12T02:51:07.000Z (provisional: not booked; this agent stops after an observed response, so one request may pass a ceiling)");
+    expect(json).toMatchObject({ lastTranscriptAt: WRITTEN, run: { liveUsage: UNDER_WAY.liveUsage } });
   });
 
   it("before any phase ended, says so; a listing that cannot be read adds nothing and fails nothing", async () => {
@@ -77,6 +80,8 @@ describe("run show does not call a blocked or silent run producing output (#285,
     expect(lines.join("\n")).not.toContain("producing output");
     expect(lines).toContain("transcript: no output since 02:51:07Z (the run is blocked)");
     expect(lines.join("\n")).not.toContain("as of the last phase end");
+    // A blocked run's last observed response is not live: the run waits on a person, not on a response.
+    expect(lines.join("\n")).not.toContain("observed: at least");
   });
   it("a run under way whose transcript was last written over ten minutes ago is not producing output; ten minutes is", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: WRITTEN + 10 * 60_000 + 1 });

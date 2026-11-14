@@ -12,6 +12,7 @@ import { BudgetEditor } from "../src/BudgetEditor.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { RunTranscript } from "../src/AgentTranscript.js";
 import type { GroupViewV1, RunTranscriptsV1, RunViewV1 } from "../src/controlTypes.js";
+import { liveUsageNote } from "../src/usageNotes.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
 
 const NOW = Date.UTC(2026, 10, 12, 2, 50, 0);
@@ -42,7 +43,8 @@ const mount = (value: GroupViewV1) => render(<ControlGroupView view={value} conf
 const executing = (over: Partial<RunViewV1> = {}): GroupViewV1 => view(
   [workItem({ taskId: "a", status: "active", category: "running", currentRunId: "run-a", lineageRunIds: ["run-a"] })],
   [run({ runId: "run-a", taskId: "a", state: "running", phase: "work", used: { tokens: 9544, activeMs: 0, attempts: 1, sessions: 1 }, startedAt: NOW - 10 * 60_000,
-    endedAt: null, usageObservation: "phase-end", usageAt: BOOKED, ...over })],
+    endedAt: null, usageObservation: "phase-end", usageAt: BOOKED,
+    liveUsage: { attempt: 2, phase: "execute", tokens: 9_544_000, observedAt: new Date(WRITTEN).toISOString(), revision: 3 }, ...over })],
 );
 
 describe("a run whose agent reports usage only at phase end (#285)", () => {
@@ -55,6 +57,9 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     expect(item.textContent).toContain(`9.5K tokens (as of the last phase end at ${clock(BOOKED)}; this agent reports usage only when a phase ends)`);
     // mutation: drop the producing line from RunTranscript -> red
     expect(item.querySelector("[data-testid=transcript-producing]")?.textContent).toBe(`producing output, last at ${clock(WRITTEN, true)}`);
+    // #285: the completed response's provisional reading, kept apart from the booked 9,544.
+    expect(item.textContent).toContain("observed at least 9.5M tokens in execute (attempt 2)");
+    expect(item.textContent).toContain("provisional: not booked; the run stops only after an observed response");
   });
 
   it("says no phase has ended yet before any usage was booked; says nothing for an agent that observes usage live", async () => {
@@ -71,6 +76,14 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     // mutation: phaseEndNote ignores usageObservation -> red
     expect(panel.textContent).not.toContain("phase ends");
     expect(panel.querySelector("[data-testid=transcript-producing]")).toBeNull();
+  });
+
+  it("keeps the last observation out of a blocked or ended run", () => {
+    const value = executing();
+    const [active] = value.runs;
+    expect(liveUsageNote(active!)).toContain("observed at least 9.5M tokens");
+    expect(liveUsageNote({ ...active!, state: "blocked" })).toBeNull();
+    expect(liveUsageNote({ ...active!, state: "landed", endedAt: NOW })).toBeNull();
   });
 
   it("the runs table notes it beside the used figure, in Chinese too", async () => {
