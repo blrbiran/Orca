@@ -138,14 +138,17 @@ const isProblemRun = (run: RunViewV1): boolean => hasFailureOutcome(run) || run.
  * and its transcript, opened by itself on the latest call; with nothing running, the most recent run. `active` is the
  * region being shown: the pane stays mounted when hidden, and a hidden transcript must ask nothing.
  */
-function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element {
+function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; archived: boolean; pendingNotes: ReadonlySet<string>; unconfirmedNotes: ReadonlySet<string>; clearUnconfirmed: (taskId: string) => void; onCommand: (action: ControlAction) => void | Promise<number | null> }): JSX.Element {
   const { t } = useTranslation();
   const ticking = useClock(30_000);
+  const [showOtherNotes, setShowOtherNotes] = useState(false);
   const now = props.now ?? ticking;
   const { view } = props;
   const running = runningNow(view);
   const latest = running.length === 0 ? runsInCreationOrder(view.runs).at(-1) : undefined;
   const shown = latest === undefined ? running : [{ taskId: latest.taskId ?? latest.runId, run: latest }];
+  const shownTasks = new Set(shown.flatMap(({ run }) => run.taskId === null ? [] : [run.taskId]));
+  const noteOnlyTasks = view.workItems.filter((item) => item.status !== "completed" && !shownTasks.has(item.taskId));
   const facts = (run: RunViewV1): string => [
     t("control.group.liveFacts", { phase: enumText("runPhase", run.phase), attempt: run.providerAttemptOrdinal }),
     // Tester D19: the agent and model this run was frozen with.
@@ -166,8 +169,19 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; a
         {/* Tester follow-up G Part 5: the task's notes and the box to add one, at the bottom of its Live entry. */}
         {run.taskId !== null && <>
           <LiveNoteList notes={(view.liveNotes ?? []).filter((note) => note.taskId === run.taskId)} running={latest === undefined} />
-          <LiveNoteBox view={view} taskId={run.taskId} archived={props.archived} onCommand={props.onCommand} />
+          <LiveNoteBox view={view} taskId={run.taskId} archived={props.archived} pending={props.pendingNotes.has(`${view.summary.groupId}:${run.taskId}`)} unconfirmed={props.unconfirmedNotes.has(`${view.summary.groupId}:${run.taskId}`)} onEdit={() => props.clearUnconfirmed(run.taskId!)} onCommand={props.onCommand} />
         </>}
+      </section>;
+    })}
+    {noteOnlyTasks.length > 0 && <button type="button" aria-expanded={showOtherNotes} onClick={() => setShowOtherNotes((open) => !open)}>
+      {t("control.group.liveOtherNotes", { count: noteOnlyTasks.length })}
+    </button>}
+    {showOtherNotes && noteOnlyTasks.map((item) => {
+      const name = t("control.group.liveNotesItem", { taskId: item.taskId });
+      return <section key={item.taskId} aria-label={name}>
+        <h4>{name}</h4>
+        <LiveNoteList notes={(view.liveNotes ?? []).filter((note) => note.taskId === item.taskId)} running={false} />
+        <LiveNoteBox view={view} taskId={item.taskId} archived={props.archived} pending={props.pendingNotes.has(`${view.summary.groupId}:${item.taskId}`)} unconfirmed={props.unconfirmedNotes.has(`${view.summary.groupId}:${item.taskId}`)} onEdit={() => props.clearUnconfirmed(item.taskId)} onCommand={props.onCommand} />
       </section>;
     })}
   </>;
@@ -452,6 +466,35 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const { view, config, uncertain, drafts, onDraft, onCommand } = props;
   const { t } = useTranslation();
   const groupId = view.summary.groupId;
+  const noteCalls = useRef(new Map<string, Promise<number | null>>());
+  const [pendingNotes, setPendingNotes] = useState<ReadonlySet<string>>(() => new Set());
+  const [unconfirmedNotes, setUnconfirmedNotes] = useState<ReadonlySet<string>>(() => new Set());
+  const clearUnconfirmed = (taskId: string): void => {
+    const key = `${groupId}:${taskId}`;
+    setUnconfirmedNotes((current) => new Set([...current].filter((id) => id !== key)));
+  };
+  const sendLiveNote = (action: ControlAction): Promise<number | null> => {
+    if (action.verb !== "add-live-note") return Promise.resolve(onCommand(action)).then((revision) => revision ?? null);
+    const key = `${action.groupId}:${action.taskId}`;
+    const existing = noteCalls.current.get(key);
+    if (existing !== undefined) return existing;
+    let result: void | Promise<number | null>;
+    try { result = onCommand(action); } catch (error) { return Promise.reject(error); }
+    const pending = Promise.resolve(result).then((revision) => {
+      if (typeof revision !== "number") setUnconfirmedNotes((current) => new Set(current).add(key));
+      else setUnconfirmedNotes((current) => new Set([...current].filter((id) => id !== key)));
+      return revision ?? null;
+    }, (error: unknown) => {
+      setUnconfirmedNotes((current) => new Set(current).add(key));
+      throw error;
+    }).finally(() => {
+      noteCalls.current.delete(key);
+      setPendingNotes(new Set(noteCalls.current.keys()));
+    });
+    noteCalls.current.set(key, pending);
+    setPendingNotes(new Set(noteCalls.current.keys()));
+    return pending;
+  };
   const revision = view.summary.commandRevision;
   const stopMode = view.summary.stopMode;
   // Issue-fixes spec §3.2 (3): a panel shutdown that froze runs is left the same way as a human handoff-stop, through the
@@ -839,7 +882,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </table>
       {taskDetail}
         </>,
-        live: <LiveRegion view={view} active={props.active !== false && region === "live"} now={props.now} archived={archived} onCommand={onCommand} />,
+        live: <LiveRegion view={view} active={props.active !== false && region === "live"} now={props.now} archived={archived} pendingNotes={pendingNotes} unconfirmedNotes={unconfirmedNotes} clearUnconfirmed={clearUnconfirmed} onCommand={sendLiveNote} />,
         preparation: <>
       <section aria-label={t("control.preparation.reviewTitle")}>
         <h3>{t("control.preparation.reviewTitle")}</h3>

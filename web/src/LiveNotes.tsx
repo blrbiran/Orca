@@ -1,8 +1,9 @@
-import { useRef, useState, type JSX, type KeyboardEvent } from "react";
+import { useContext, useRef, useState, type JSX, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupViewV1, LiveNoteViewV1 } from "./controlTypes.js";
 import { utf8Bytes } from "./operatorNote.js";
+import { RegionDrafts, useRegionDraft } from "./regionDraft.js";
 
 /**
  * Tester follow-up G Part 5: the Live note box. A note joins the task's queue and reaches its agent at the next phase start
@@ -35,19 +36,41 @@ export function LiveNoteList(props: { notes: readonly LiveNoteViewV1[]; running?
  * new line, and Enter while an input method is composing (isComposing, keyCode 229, or between compositionstart and
  * compositionend) only confirms the composition -- it never sends (#243).
  */
-export function LiveNoteBox(props: { view: GroupViewV1; taskId: string; archived: boolean; onCommand: (action: ControlAction) => void }): JSX.Element {
+export function LiveNoteBox(props: { view: GroupViewV1; taskId: string; archived: boolean; pending?: boolean; unconfirmed?: boolean; onEdit?: () => void; onCommand: (action: ControlAction) => void | Promise<number | null> }): JSX.Element {
   const { t } = useTranslation();
-  const [text, setText] = useState("");
+  const draftKey = `live-note:${props.view.summary.groupId}:${props.taskId}`;
+  const drafts = useContext(RegionDrafts);
+  const [text, setText] = useRegionDraft(draftKey, () => "");
+  const [sending, setSending] = useState(false);
+  const [localUnconfirmed, setLocalUnconfirmed] = useState(false);
+  const unconfirmed = props.unconfirmed ?? localUnconfirmed;
+  const inFlight = useRef(false);
   const item = props.view.workItems.find((candidate) => candidate.taskId === props.taskId);
   const finished = item?.status === "completed";
   const reason = props.archived ? t("control.liveNotes.archived") : finished ? t("control.liveNotes.finished") : null;
   const bytes = utf8Bytes(text);
   const tooLarge = bytes > LIVE_NOTE_MAX_BYTES;
   const composing = useRef(false);
-  const canSend = reason === null && text.length > 0 && !tooLarge;
-  const send = (): void => {
-    props.onCommand({ verb: "add-live-note", groupId: props.view.summary.groupId, taskId: props.taskId, expectedRevision: props.view.summary.commandRevision, payload: { text } });
-    setText("");
+  const canSend = reason === null && text.length > 0 && !tooLarge && !sending && props.pending !== true && !unconfirmed;
+  const send = async (): Promise<void> => {
+    if (!canSend || inFlight.current) return;
+    inFlight.current = true;
+    setSending(true);
+    setLocalUnconfirmed(false);
+    const sent = text;
+    try {
+      const revision = await props.onCommand({ verb: "add-live-note", groupId: props.view.summary.groupId, taskId: props.taskId, expectedRevision: props.view.summary.commandRevision, payload: { text: sent } });
+      if (typeof revision === "number") setText((current) => {
+        const latest = drafts?.get(draftKey);
+        return typeof latest === "string" && latest !== sent ? latest : current === sent ? "" : current;
+      });
+      else setLocalUnconfirmed(true);
+    } catch {
+      setLocalUnconfirmed(true);
+    } finally {
+      inFlight.current = false;
+      setSending(false);
+    }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key !== "Enter" || event.shiftKey) return;
@@ -56,12 +79,13 @@ export function LiveNoteBox(props: { view: GroupViewV1; taskId: string; archived
     if (canSend) send();
   };
   return <div className="grid max-w-2xl gap-2" role="group" aria-label={t("control.liveNotes.title", { taskId: props.taskId })}>
-    <textarea aria-label={t("control.liveNotes.text")} placeholder={t("control.liveNotes.placeholder")} value={text} disabled={reason !== null}
-      aria-invalid={tooLarge} onChange={(event) => setText(event.currentTarget.value)} onKeyDown={onKeyDown}
+    <textarea aria-label={t("control.liveNotes.text")} placeholder={t("control.liveNotes.placeholder")} value={text} disabled={reason !== null} readOnly={reason !== null}
+      aria-invalid={tooLarge} onChange={(event) => { setText(event.currentTarget.value); setLocalUnconfirmed(false); props.onEdit?.(); }} onKeyDown={onKeyDown}
       onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} />
     <p>{t("control.liveNotes.hint")}</p>
     <p className="num">{t("control.liveNotes.bytes", { bytes, max: LIVE_NOTE_MAX_BYTES })}</p>
     {tooLarge && <p data-tone="warn" role="status">{t("control.liveNotes.tooLarge")}</p>}
+    {unconfirmed && <p data-tone="warn" role="status">{t("control.liveNotes.unconfirmed")}</p>}
     {reason !== null && <p role="note">{reason}</p>}
     <div><button type="button" disabled={!canSend} onClick={send}>{t("control.liveNotes.send")}</button></div>
   </div>;
