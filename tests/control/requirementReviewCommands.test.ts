@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { reviewWorld, verdicts, type ReviewWorld } from "./fixtures/reviewWorld.js";
+import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
+import { fixTaskAllowlist } from "../../src/control/requirementReview.js";
 
 /**
  * Tester follow-up G spec §3.5: a requirement review that did not pass waits for a person or an orchestrating agent --
@@ -67,6 +69,19 @@ describe("the requirement review's exits (tester follow-up G §3.5)", () => {
         code: "recovery-blocked", message: "recovery-blocked:review-fix:recovery-blocked:append-while-active" });
       expect(w.t.h.store.db.prepare("SELECT COUNT(*) AS n FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").get()!.n).toBe(0);
       w.t.h.store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(runId);
+    } finally { await w.t.h.dispose(); }
+  }, 240000);
+
+  // Follow-up L (dogfood g-28d9b560): `review-fix --path test/tags.test.js` opened a task whose allowlist (the other tasks'
+  // union) did not admit that new file, so the run stopped on an allowlist miss. An empty union still allows every path.
+  it("a hand fix's paths are allowed even when the tasks carry an allowlist; an empty allowlist stays empty", async () => {
+    // mutation N1: targetPaths left out of a non-empty allowlist -> red; N2: targetPaths added to an empty one -> red
+    expect(fixTaskAllowlist([["src/a.js"], ["src/a.js", "test/a.test.js"]], ["src/a.js", "test/tags.test.js"])).toEqual(["src/a.js", "test/a.test.js", "test/tags.test.js"]);
+    expect(fixTaskAllowlist([[], []], ["test/tags.test.js"])).toEqual([]);
+    const w = await notPassed([verdicts({ AC1: "met", AC2: "cannot-judge" })], (id) => (id.startsWith("review-fix-") ? { "notes.md": `${id}\n` } : { [id]: `${id}\n` }));
+    try {
+      expect(w.t.service.reviewFix(w.t.h.command("review-fix", { goal: "write notes.md", paths: ["notes.md"] }))).toMatchObject({ result: { kind: "review-fix-opened" } });
+      expect(readConfirmedTaskExecution(w.t.h.store, "g", "review-fix-1").contract.safetyPolicy.allowlistPaths).toEqual([]);
     } finally { await w.t.h.dispose(); }
   }, 240000);
 

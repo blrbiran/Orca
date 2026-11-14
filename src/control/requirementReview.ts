@@ -355,10 +355,20 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
     objective: { taskId, goal: goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"),
       successCondition: `the requirement review finds criteria ${(unmet.length > 0 ? unmet.map((c) => c.id) : criteria.map((c) => c.id)).join(", ")} met`, nonGoals: [] },
     context: { ...context, targetPaths, ...(commands.setup.length === 0 ? {} : { setupCommands: commands.setup }) },
-    safetyPolicy: { ...first.safetyPolicy, allowlistPaths: union(tasks.map((t) => t.safetyPolicy.allowlistPaths)), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
+    safetyPolicy: { ...first.safetyPolicy, allowlistPaths: fixTaskAllowlist(tasks.map((t) => t.safetyPolicy.allowlistPaths), targetPaths), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
       maxFilesTouched: Math.max(first.safetyPolicy.maxFilesTouched, targetPaths.length) },
     verification: { ...first.verification, requiredChecks: commands.checks.length > 0 ? commands.checks : first.verification.requiredChecks },
   });
+}
+
+/**
+ * Follow-up L (dogfood g-28d9b560): the fix task's allowlist. An empty union allows every path (ccloop pathPolicy) and
+ * stays empty; a non-empty one must also admit the fix task's own write set -- a file the review named or a person gave
+ * with --path ("a file the fix task may write") was otherwise an allowlist miss (debugPlan.ts makes the same rule).
+ */
+export function fixTaskAllowlist(taskAllowlists: readonly string[][], targetPaths: readonly string[]): string[] {
+  const union = [...new Set(taskAllowlists.flat())];
+  return union.length === 0 ? [] : [...new Set([...union, ...targetPaths])];
 }
 
 /** Appends the fix task in the caller's transaction (a savepoint: a refusal leaves nothing); `refused` says why it could not. */
