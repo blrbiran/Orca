@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ControlError } from "../../src/control/errors.js";
+import { readControlRecovery } from "../../src/panel/controlViews.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 /**
@@ -35,12 +36,16 @@ describe("a run blocked at C with no outcome names recovery retry --run (#267)",
     } finally { await t.h.dispose(); }
   });
 
-  it("recovery retry --group resumes it, and the run lands", async () => {
+  it("recovery list names the blocked run, then group retry resumes it and the run lands", async () => {
     const { t, driver, runId, wake } = await blockedAtC(); try {
+      expect(readControlRecovery(t.h.store, "epoch").blockedRuns).toEqual([{
+        groupId: "g", taskId: "a", runId, blockedAt: "C", reason: "control-peer-timeout", next: `orca recovery retry --run ${runId}`,
+      }]);
       wake();
       const answer = await t.service.recoveryRetry(t.h.command("recovery-retry", { scope: "group", groupId: "g" }));
       expect("error" in answer ? answer.error : answer.result).toMatchObject({ kind: "recovery-observed", resolved: true });
       expect(t.body(runId).state).toBe("accepted");
+      expect(readControlRecovery(t.h.store, "epoch").blockedRuns).toBeUndefined();
       for (let i = 0; i < 40 && t.body(runId).drive?.cleanedUp !== true; i += 1) await driver.round();
       expect({ state: t.body(runId).state, work: workStatus(t) }).toEqual({ state: "settled", work: "done" });
     } finally { await t.h.dispose(); }
