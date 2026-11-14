@@ -64,7 +64,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-14，会话 `3ffce7ec`，承 L 轮余项）—— 多目录草稿 hash、隐含路径按钮、K2 Web 回退、#229 并发判据、#170 诊断已合；g-28d9b560 的 AC4 实测为真、等人；codex 实时用量可行性已探明并写 spec，等人裁；台账 `.superpowers/sdd/2026-11-14-session-3ffce7ec/progress.md`
+### 3.最新（2026-11-14，会话 `20ff3baa`）—— #296 review-fix 来源已修；codex 去 `--ephemeral` 副作用已实测并改写设计；g-28d9b560 的付费修复已产出且独立验证通过，卡在组上限等人
+
+- **人的话**：本轮开头授权必要付费真跑、必要判据改写，并临时允许在 repin 后与全部任务完成后 push Orca／ccloop／ccmem 的 main；要求「卡住必须等人的事就继续做不必等人的部分」并写进 handoff。
+- **#296 已修**（主题行 `fix(control): a review fix inherits the task its criteria trace (#296)`）：导入计划按 taskId 排序，修复任务原先取 `plan.tasks[0]` 继承合同与 agent，于是 `a-integration` 排在 `z-core` 前时会把核心任务的修复挂到集成任务配置上。现在按已接受草稿的 `traces` 选覆盖最多未满足条目的任务、并列取作者顺序靠前者；无草稿的组回退到依赖根。判据先在旧码上红在 `expected 'codex' to be 'claude'`；新增三条（唯一来源、最多命中、无草稿回退），`requirementReviewFix` 7/7；变异把「最高命中」改成「第一个命中」后见红。门见本节末。
+- **codex 实时用量（#297／#285／#195）**：本轮用隔离 HOME／CODEX_HOME＋本地假 Responses 端点复测（0.167.0，零成本）。新证据：**失败的调用也会落盘**（端点不可用时 rollout 仍含 34,352 B 的 base instructions 与用户 prompt，然后 `turn.failed`）；成功调用额外写 `thread_history_1.sqlite*`、`logs_2.sqlite*`、`state_5.sqlite*`、`queue_1.sqlite*`、`memories_1.sqlite*`、`goals_1.sqlite*`、`thread-writer-locks/`。rollout 的 `token_count` 与 stdout `turn.completed` 字段逐项一致。设计已改写（`docs/superpowers/specs/2026-11-14-codex-live-usage-design.md`）：停止是「观测到一次响应之后」，不是硬上限；saved-result 恢复的旧 argv 含 `--ephemeral`、必须版本化；0.167.0 无 CLI 线程删除命令（上游 source 有内部 API 但未证与已装版一致）⇒ 保留策略需人裁。**未改 ccloop 代码**。
+- **g-28d9b560 付复核**：`group review-fix`（人本轮授权付费）开出 `review-fix-4`，继承了追踪 AC4 的 `cli` 任务配置（configHash 与 cli 相同）。执行阶段完成并产出提交（attempt ref 指向的树：5 文件 +112/−24），但 verify 阶段撞组上限被 `liveCeilingStop` 停成 `exhausted`：单次 572,147，组 5,749,023／5,600,000。**我独立验证了这个产物**：把 attempt 树导出后目标仓 `npm test` **22/22**，分三次独立调用 `add`→`tag`→`search`→`save` 均能看到前一次数据，AC4 满足。它没有落进 `orca/g-28d9b560`。**待人**：抬组 token 上限后重跑验证，或人用 `orca task accept-attempt` 落地这个已发布 attempt（两者都要人权限）。
+- **诚实边界**：付费修复的 rollout／cost 数字是 Orca 报的；「22/22 与 AC4 手动复现」是在导出的 attempt 树上跑的，不是 Orca verify 的结论。#296 的 `fixSourceTaskId` 用 `readDraft`，历史组缺草稿行时按无草稿回退（Ruling 已记台账）。
+- **门（现测，负载 40–50）**：`TMPDIR=/tmp npm test`（日常门，跑在 `fix/review-fix-source-296`）首轮 exit 1，41 个 suite 全部倒在 Rule 17 快照守卫——门跑的同时面板里的付费 review-fix 正在写真 `~/.orca`（多出 `archive-2d3c…`、`ceiling-run-3a7648af…`）。面板空闲后单独重跑这 41 个文件：**38 过**；`driverReconcileN`「three runs conflicting…」与 `schedulerBridge`「runs a real conflicting graph…成功」单跑各绿（deadline／30 s 超时形状，负载）；`orchestration`「admits a debug group Orca opened itself」是**既有红**（`task-run-moved:ladder-source-superseded`，未改动 main 上同样红）。`requirementReviewFix` 7/7、typecheck 0。**教训**：门不要与面板里的付费运行重叠，否则 Rule 17 守卫会把整批 suite 判红。
+- 台账：`.superpowers/sdd/2026-11-14-review-fix-source-296/progress.md`、`.superpowers/sdd/2026-11-14-codex-ephemeral-probe/`。
+
+### 3.上一轮（2026-11-14，会话 `3ffce7ec`，承 L 轮余项）—— 多目录草稿 hash、隐含路径按钮、K2 Web 回退、#229 并发判据、#170 诊断已合；g-28d9b560 的 AC4 实测为真、等人；codex 实时用量可行性已探明并写 spec，等人裁；台账 `.superpowers/sdd/2026-11-14-session-3ffce7ec/progress.md`
 
 - **人的话（原话全文在台账）**：「这一轮暂时忽略 context 大小，尽量多处理一些问题」；开头 `allow-push`；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」；g-28d9b560「按你的建议先跑一次 npm test 再决定」；#279／#283「之前轮我已经裁了，暂时不改」。
 - **已合进 main**（按主题行 `git log --grep` 取）：
@@ -308,8 +318,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.0 接手顺序（会话 `3ffce7ec` 2026-11-14 收尾）
 
-1. **等人裁 codex 实时用量**（§3.最新、spec `2026-11-14-codex-live-usage-design.md` §7）：探针已证实去掉 loop phase 的 `--ephemeral` 能读到每次响应的 `token_count`；要不要重开「#297 只做提示」只差这一句话。裁了才动 ccloop（含会话保留与清理）。
-2. **`g-28d9b560` 等人**（§3.最新）：整套 `npm test` 20/20 绿（AC5 事实上满足），但 AC4 已实测为真——每次 CLI 调用新建 store。人选：`review-accept`（接受跨调用不持久化），或再开一轮 review-fix 让它把状态落到文件（账 5.18M／5.6M，要抬上限；需求原文没要求跨调用持久化，先确认这是不是期望行为）。
+1. **等人裁 codex 实时用量**（§3.最新、spec `2026-11-14-codex-live-usage-design.md` §8）：本轮已实测「失败调用也落盘、成功调用写共享 SQLite、rollout 与 stdout 用量一致」。要人裁的是**保留策略**：找到并验证受支持的线程删除路径，还是接受残留历史行作为已知成本。裁了才动 ccloop（loop phase 去 `--ephemeral`，single call 不动）。
+2. **`g-28d9b560` 等人抬上限或 accept attempt**（§3.最新）：付费修复已产出提交（5 文件 +112/−24），verify 阶段撞组上限被停；导出该 attempt 树后目标仓 22/22、AC4 手动复现通过。人可 `orca group set-limit` 抬 token 上限后重跑，或 `orca task accept-attempt` 落地已发布 attempt。**不要**用 `review-accept`（那会把没落地的修复当作已接受）。
 3. **余项（agent 能做，不需设计）**：
    - J 轮遗留：`agent_kind` 认领时冻结、`App` 启动流程后跳转无判据、多目录组暂停线续跑仍 `multi-dir-continuation-unsupported`；
    - ccloop `savedResultRecovery.ts` 的松 `indexOf`（只影响 `execution-without-final-v1` 分支；下次 ccloop 有别的改动时一起修，判据要用 `ompVerificationOnlyRecovery` 的夹具）。
