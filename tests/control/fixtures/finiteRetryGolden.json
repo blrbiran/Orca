@@ -165,9 +165,10 @@
       }
     },
     "again": {
-      "error": {
-        "code": "group-reserve-insufficient",
-        "message": "group-reserve-insufficient:attempts:1"
+      "result": {
+        "kind": "task-retried",
+        "taskId": "a",
+        "fromRunId": "<the run retried>"
       }
     }
   }

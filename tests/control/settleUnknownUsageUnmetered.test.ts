@@ -71,7 +71,9 @@ describe("unmetered release of an unlimited run's unknown usage", () => {
       expect(x.body(next).grant.work.tokens).toBeNull();
       // Lineage counts what the provider observed (the fixture's one reported event), not the conservative charge.
       expect(x.body(next).tokenPolicy.inheritedUsage).toEqual({ tokens: 10, activeMs: 5, attempts: 1, sessions: 1 });
-      expect(x.body(next).grant.work).toEqual({ tokens: null, activeMs: 14_399_995, attempts: 2, sessions: 2 });
+      // Ruling (human, 2026-11-15, current session: 「这次批准改写所有必要的判据」): #311's per-task handoff reserve raises the
+      // default group attempts limit, so the retried run's fresh work grant carries three attempts rather than two.
+      expect(x.body(next).grant.work).toEqual({ tokens: null, activeMs: 14_399_995, attempts: 3, sessions: 2 });
       expect(readControlGroup(x.h.store, "epoch", "g").ledger.usageUnknown).toBe(false);
     } finally { await driver.stop(); await x.h.dispose(); }
   }, 30_000);

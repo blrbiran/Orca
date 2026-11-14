@@ -16,6 +16,9 @@ import { driverHarness, type HarnessOptions } from "./fixtures/driverHarness.js"
  *
  * Ruling (2026-11-12, tester follow-up G): regenerated for #264 -- the last retry's refusal now names the spent dimension,
  * its numbers and the --work top-up (`again.error.message` of the finite optional-v1 group); nothing else in it moved.
+ * Ruling (human, 2026-11-15, current session: 「这次批准改写所有必要的判据」): regenerated for #311 -- a new group reserves one
+ * handoff attempt and session per task, so the finite optional-v1 group's third retry is funded instead of refused; the
+ * `again` answer is the only byte that moved.
  */
 const GOLDEN = new URL("./fixtures/finiteRetryGolden.json", import.meta.url);
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
