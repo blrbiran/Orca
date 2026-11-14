@@ -347,3 +347,7 @@ ccloop：`tests/runtime/codex/stalledCauseAndFloor.test.ts`「throws the stall i
   「a command over its time limit is killed」、`ompVerificationOnlyRecovery`、`extractFinalObject` perf、`skillsController`、
   `parseArgs`「returns 0 for the example contract run」、`ompPhase`「keeps a stopped phase's…」——都在未改动 main clone 上同形或单跑过
   （`/private/tmp/orca-j1113/ccloop-seat{,2,3}/ab-*.log`）。都**不在 `check-known-reds` 名单**（进不进归人）。
+- Orca（L 轮，会话 `6b727312`，2026-11-14，负载 21–41；门用 pin 9c83b38 的 build）：`tests/control/executionDriverE2E.test.ts`
+  「R-F: retry-task after a ccloop failure…」得 `task-not-retryable:run-state:settled-failed`（新形状，n＝1），单跑 3/3；
+  web `memoryLayout` scroll 时序（已登记）单跑 3/3；`criteriaBaseRun`「a restart while the re-run is in flight…」`index.lock`
+  （已登记）负载 36–40 单跑 1 红 2 绿；K1 那 12 个负载文件＋`workerLostE2E`＋`schedulerBridge` 各单跑 3/3（42/42）。
