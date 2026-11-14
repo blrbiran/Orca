@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { acceptanceCommands } from "../../src/control/groupAcceptance.js";
+import { frozenWorkAgent } from "../../src/control/agentFreeze.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
+import { newDraft, writeDraft } from "../../src/control/requirementRecords.js";
+import { readArchivedContract, readWork } from "../../src/control/queries.js";
 import { git } from "./fixtures/driverHarness.js";
 import { reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
 
@@ -13,6 +16,111 @@ import { reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
 const fixFiles = (id: string): Record<string, string | null> => (id.startsWith("review-fix-") ? { a: `fixed a by ${id}\n` } : { [id]: `${id}\n` });
 
 describe("a not-met review opens a fix task in the same group (tester follow-up G §3.4)", () => {
+  it("inherits the traced task's agent, grant and policy when its id sorts after an integration task", async () => {
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a-integration", dependsOn: ["z-core"], targetPaths: ["integration"], perAttemptTimeoutMs: 60_000,
+        safetyPolicy: { allowlistPaths: ["integration-only"], denylistPaths: ["a-denied"] }, requiredChecks: ["true"] },
+      { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" }, perAttemptTimeoutMs: 45_000, tokenBudget: 50_000,
+        safetyPolicy: { allowlistPaths: ["core-only"], denylistPaths: ["z-denied"] }, requiredChecks: ["true"] },
+    ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
+    answer: () => ({ outcome: "complete", output: {
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null }], summary: "core needs work",
+    } }) });
+    try {
+      w.t.h.store.transaction(() => {
+        const row = w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
+        const body = JSON.parse(String(row.body));
+        body.requirement.acceptedDraftNo = 1;
+        w.t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+        writeDraft(w.t.h.store, "g", { ...newDraft(1, 0), state: "accepted", output: { notes: "", tasks: [
+          { taskId: "a-integration", title: "integration", labels: [], goal: "integrate", successCondition: "passes", targetPaths: ["integration"], checks: ["true"], dependsOn: ["z-core"], traces: ["AC2"] },
+          { taskId: "z-core", title: "core", labels: [], goal: "build", successCondition: "passes", targetPaths: ["core"], checks: ["true"], dependsOn: [], traces: ["AC1"] },
+        ] } });
+      });
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      const fix = readWork(w.t.h.store, "g", "review-fix-1");
+      // Mutation: selecting plan.tasks[0] inherits a-integration, despite AC1 tracing z-core.
+      expect(frozenWorkAgent(fix).agent.agent).toBe("claude");
+      expect(fix.grant.work).toEqual(readWork(w.t.h.store, "g", "z-core").grant.work);
+      const contract = readConfirmedTaskExecution(w.t.h.store, "g", "review-fix-1").contract;
+      expect(contract.executionPolicy.perAttemptTimeoutMs).toBe(45_000);
+      expect(contract.context.targetPaths).toEqual(["core"]);
+      expect(contract.verification.requiredChecks).toEqual(acceptanceCommands(w.t.h.store, "g").checks);
+      // The policy comes from the source, while the allow/deny lists stay the group's union.
+      expect(contract.safetyPolicy.allowlistPaths).toEqual(["integration-only", "core-only", "core"]);
+      expect(contract.safetyPolicy.denylistPaths).toEqual(["a-denied", "z-denied"]);
+      expect(readArchivedContract(w.t.h.store, "g", "a-integration").contract.executionPolicy.perAttemptTimeoutMs).toBe(60_000);
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
+
+  it("chooses the authored first source when two tasks trace the same unmet criterion", async () => {
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a-integration", targetPaths: ["integration"] },
+      { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" } },
+    ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
+    answer: () => ({ outcome: "complete", output: {
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null }], summary: "core needs work",
+    } }) });
+    try {
+      w.t.h.store.transaction(() => {
+        const body = JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+        body.requirement.acceptedDraftNo = 1;
+        w.t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+        writeDraft(w.t.h.store, "g", { ...newDraft(1, 0), state: "accepted", output: { notes: "", tasks: [
+          { taskId: "z-core", title: "core", labels: [], goal: "build", successCondition: "passes", targetPaths: ["core"], checks: ["true"], dependsOn: [], traces: ["AC1"] },
+          { taskId: "a-integration", title: "integration", labels: [], goal: "integrate", successCondition: "passes", targetPaths: ["integration"], checks: ["true"], dependsOn: [], traces: ["AC1", "AC2"] },
+        ] } });
+      });
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      expect(frozenWorkAgent(readWork(w.t.h.store, "g", "review-fix-1")).agent.agent).toBe("claude");
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
+
+  it("picks the task that traces more of the unmet criteria", async () => {
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a-integration", targetPaths: ["integration"] },
+      { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" } },
+    ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
+    answer: () => ({ outcome: "complete", output: {
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
+        { id: "AC2", verdict: "not-met", evidence: [{ path: "core", line: 2 }], missing: "core lacks tests" }], summary: "core needs work",
+    } }) });
+    try {
+      w.t.h.store.transaction(() => {
+        const body = JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+        body.requirement.acceptedDraftNo = 1;
+        w.t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+        writeDraft(w.t.h.store, "g", { ...newDraft(1, 0), state: "accepted", output: { notes: "", tasks: [
+          { taskId: "a-integration", title: "integration", labels: [], goal: "integrate", successCondition: "passes", targetPaths: ["integration"], checks: ["true"], dependsOn: [], traces: ["AC1"] },
+          { taskId: "z-core", title: "core", labels: [], goal: "build", successCondition: "passes", targetPaths: ["core"], checks: ["true"], dependsOn: [], traces: ["AC1", "AC2"] },
+        ] } });
+      });
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      expect(frozenWorkAgent(readWork(w.t.h.store, "g", "review-fix-1")).agent.agent).toBe("claude");
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
+
+  it("a requirement without a stored draft inherits the dependency root instead of the alphabetical first task", async () => {
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a-integration", dependsOn: ["z-core"], targetPaths: ["integration"] },
+      { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" } },
+    ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
+    answer: () => ({ outcome: "complete", output: {
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null }], summary: "core needs work",
+    } }) });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      expect(frozenWorkAgent(readWork(w.t.h.store, "g", "review-fix-1")).agent.agent).toBe("claude");
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
+
   it("a not-met round opens one fix task covering every unmet criterion, and the review runs again after it lands", async () => {
     const answers = [verdicts({ AC1: "not-met", AC2: "not-met" }), verdicts({ AC1: "met", AC2: "met" })];
     const w = await reviewWorld({ harness: { files: fixFiles }, answer: () => ({ outcome: "complete", output: answers.shift() }) });

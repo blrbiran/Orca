@@ -18,7 +18,7 @@ import { cutUtf8 } from "./noChange.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readWork } from "./queries.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
-import { readRounds } from "./requirementRecords.js";
+import { readDraft, readRounds } from "./requirementRecords.js";
 import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
 import type { SingleCallHandler, SingleCallRunRow } from "./singleCallPurposes.js";
 import { QUIET_GIT, workBranchTip } from "./workspace.js";
@@ -331,17 +331,46 @@ export function fixTaskIdOf(store: ControlStore, groupId: string, roundNo: numbe
   return id;
 }
 
+/** Choose the task the accepted draft assigned to the unmet criteria, rather than the plan's alphabetical first task (#296). */
+function fixSourceTaskId(store: ControlStore, groupId: string, round: ReviewRound): string {
+  const plan = readArchivedPlan(store, groupId);
+  const appended = new Set(plan.appendedTaskIds ?? []);
+  const tasks = plan.plan.tasks.filter((task) => !appended.has(task.taskId));
+  if (tasks.length === 0) throw new ControlError("recovery-blocked", "requirement-review-no-task");
+  const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as { requirement?: { acceptedDraftNo?: number | null } };
+  const draftNo = body.requirement?.acceptedDraftNo;
+  let draftTasks: Array<{ taskId: string; traces: string[] }> | null = null;
+  if (draftNo != null) {
+    try { draftTasks = readDraft(store, groupId, draftNo).output?.tasks ?? null; }
+    catch (error) { if (!(error instanceof ControlError) || error.code !== "work-not-found") throw error; }
+  }
+  const byId = new Map(tasks.map((task) => [task.taskId, task]));
+  const ordered = draftTasks === null || draftTasks === undefined ? tasks.map((task) => task.taskId)
+    : draftTasks.map((task) => task.taskId).filter((id) => byId.has(id));
+  const unmet = round.criteria.filter((criterion) => criterion.verdict === "not-met").map((criterion) => criterion.id);
+  const relevant = unmet.length > 0 ? unmet : round.criteria.filter((criterion) => criterion.verdict === "cannot-judge").map((criterion) => criterion.id);
+  let selected: string | undefined;
+  let best = 0;
+  for (const id of ordered) {
+    const traced = draftTasks?.find((task) => task.taskId === id)?.traces ?? [];
+    const score = relevant.filter((criterion) => traced.includes(criterion)).length;
+    if (score > best) { selected = id; best = score; }
+  }
+  if (selected !== undefined) return selected;
+  return ordered.find((id) => byId.get(id)!.dependencyTaskIds.every((dependency) => !byId.has(dependency))) ?? ordered[0] ?? tasks[0]!.taskId;
+}
+
 /**
  * Task 9: the fix task's contract -- the round's unmet findings as its goal (or the person's `goal`), the files they name
  * as its write set (the tasks' write sets when they name none), the tasks' allow/deny lists, the group's union of setup and
- * required checks; policies and verifier from the group's first task in plan order.
+ * required checks; policies and verifier from the task the requirement traced to the findings.
  */
-export function fixTaskContract(store: ControlStore, groupId: string, round: ReviewRound, criteria: ReadonlyArray<{ id: string; text: string }>, taskId: string, goal?: string, paths?: readonly string[]) {
+export function fixTaskContract(store: ControlStore, groupId: string, round: ReviewRound, criteria: ReadonlyArray<{ id: string; text: string }>, taskId: string, sourceId: string, goal?: string, paths?: readonly string[]) {
   const plan = readArchivedPlan(store, groupId);
   const appended = new Set(plan.appendedTaskIds ?? []);
   const tasks = plan.plan.tasks.filter((task) => !appended.has(task.taskId)).map((task) => readArchivedContract(store, groupId, task.taskId).contract);
-  const first = tasks[0];
-  if (first === undefined) throw new ControlError("recovery-blocked", "requirement-review-no-task");
+  const source = tasks.find((task) => task.objective.taskId === sourceId);
+  if (source === undefined) throw new ControlError("recovery-blocked", "requirement-review-no-task");
   const unmet = round.criteria.filter((c) => c.verdict === "not-met");
   const textOf = (id: string) => criteria.find((c) => c.id === id)?.text ?? id;
   const findings = unmet.map((c) => `- ${c.id} (${textOf(c.id)}): missing ${c.missing ?? "?"}${c.evidence.length === 0 ? "" : `; looked at ${c.evidence.map((e) => e.line === null ? e.path : `${e.path}:${e.line}`).join(", ")}`}`);
@@ -349,15 +378,15 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
   const union = (lists: string[][]) => [...new Set(lists.flat())];
   const targetPaths = paths !== undefined && paths.length > 0 ? [...new Set(paths)] : named.length > 0 ? named : union(tasks.map((t) => t.context.targetPaths));
   const commands = acceptanceCommands(store, groupId);
-  const { setupCommands: _setup, ...context } = first.context;
+  const { setupCommands: _setup, ...context } = source.context;
   return taskContractSchema.parse({
-    ...first,
+    ...source,
     objective: { taskId, goal: goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"),
       successCondition: `the requirement review finds criteria ${(unmet.length > 0 ? unmet.map((c) => c.id) : criteria.map((c) => c.id)).join(", ")} met`, nonGoals: [] },
     context: { ...context, targetPaths, ...(commands.setup.length === 0 ? {} : { setupCommands: commands.setup }) },
-    safetyPolicy: { ...first.safetyPolicy, allowlistPaths: fixTaskAllowlist(tasks.map((t) => t.safetyPolicy.allowlistPaths), targetPaths), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
-      maxFilesTouched: Math.max(first.safetyPolicy.maxFilesTouched, targetPaths.length) },
-    verification: { ...first.verification, requiredChecks: commands.checks.length > 0 ? commands.checks : first.verification.requiredChecks },
+    safetyPolicy: { ...source.safetyPolicy, allowlistPaths: fixTaskAllowlist(tasks.map((t) => t.safetyPolicy.allowlistPaths), targetPaths), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
+      maxFilesTouched: Math.max(source.safetyPolicy.maxFilesTouched, targetPaths.length) },
+    verification: { ...source.verification, requiredChecks: commands.checks.length > 0 ? commands.checks : source.verification.requiredChecks },
   });
 }
 
@@ -375,14 +404,12 @@ export function fixTaskAllowlist(taskAllowlists: readonly string[][], targetPath
 export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string, paths?: readonly string[]): { taskId: string } | { refused: ReviewWhy; detail: string } {
   const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
   const criteria = reviewInputsOf(store, groupId, body).criteria;
-  const plan = readArchivedPlan(store, groupId);
-  const appended = new Set(plan.appendedTaskIds ?? []);
-  const first = plan.plan.tasks.find((task) => !appended.has(task.taskId))!.taskId;
+  const sourceId = fixSourceTaskId(store, groupId, round);
   const taskId = fixTaskIdOf(store, groupId, round.roundNo);
-  const grant = (readWork(store, groupId, first) as unknown as { grant: { work: BudgetAmount; handoff: Amount } }).grant;
+  const grant = (readWork(store, groupId, sourceId) as unknown as { grant: { work: BudgetAmount; handoff: Amount } }).grant;
   store.db.exec("SAVEPOINT review_fix");
   try {
-    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, goal, paths), agentFrom: first,
+    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, sourceId, goal, paths), agentFrom: sourceId,
       // Follow-up L: the sibling task's work grant as it is -- in an expectation-model group it has no token number (null);
       // `?? 0` made it 0, which deriveContract refuses, so no fix task could open there.
       work: grant.work, handoff: grant.handoff, dependsOn: [] });
