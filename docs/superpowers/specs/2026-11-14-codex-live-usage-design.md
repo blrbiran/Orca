@@ -127,3 +127,38 @@ but it retains session content and crosses the ccloop/orca boundary. Approving �
 only. The retention choice in §4 is the point that needs a decision: supported deletion if it can be verified, or
 documented residual history rows as an accepted cost. Declining leaves codex prompt-only, and #285's codex half stays
 "no live number".
+
+## 9. Correction — installed deletion and the actual observation boundary (2026-11-14, Orca session `6a54a072`)
+
+The installed `codex-cli 0.167.0` does expose `codex delete --force <UUID>`. In an isolated
+`HOME`/`CODEX_HOME` with a local fake Responses endpoint, deletion of one of two concurrent
+successful threads removed only that thread's rollout and visible SQLite thread rows; deletion of a
+failed thread removed its rollout and rows too. The other concurrent thread remained until it was
+explicitly deleted. The isolated probe's counters, commands and exit codes are under
+`/private/tmp/codex-delete-probe.ehMn7pls/`; the measurement commands were
+`python3 -I /tmp/codex-delete-probe.ehMn7pls/probe.py` and
+`python3 -I /tmp/codex-delete-probe.ehMn7pls/finalize.py` (exit 0 on the Orca commit
+`26e5024a`, installed Codex 0.167.0). That scratch directory is temporary; no real
+provider or personal Codex home was used. This validates a supported *logical* deletion
+path, not physical erasure of SQLite free pages or WAL.
+
+The current ccloop implementation still shares one private `CODEX_HOME` across phases of an
+installation. Codex may persist a rollout before `thread.started` reaches ccloop and its UUID is
+written to the call evidence. If the worker dies in that interval, neither an exact UUID nor a
+safe ownership proof exists for deleting that rollout from the shared home. The §4 retention
+condition and §6 first criterion therefore remain incomplete for this crash window. Do not sweep
+by newest file or directory age. A per-phase private home or another supported pre-launch
+identity/cleanup mechanism needs its own measured design before claiming complete crash cleanup.
+
+The §5 statement that existing usage events suffice to show a running number was incorrect:
+`onObservedUsage` currently feeds ccloop's budget logic, while settled `usage.json` rows and Orca's
+`group.used` update only at phase settlement. The new optional `collect.liveUsage` schema
+`ccloop-live-usage-v1` carries one current Codex call's cumulative response observation. Orca
+must parse it strictly and expose it as a separate provisional value; never put it into settled
+usage events or add it to the group budget. A completed response can already have started its
+next request by the time this reading is observed, so the stop remains soft.
+
+Finally, `model_context_window` plus cumulative/last response usage cannot count the exact input
+and maximum output of the *next* request under a frozen tokenizer. This does not satisfy Orca's
+context observation contract; #195 stays `contextObservation: unavailable` until a separate
+pre-request observation is measured and implemented.
