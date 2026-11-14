@@ -30,6 +30,7 @@ import {
 import { writeCanonicalRecord } from "./snapshot.js";
 import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
 import { expandMultiSplitDraft, orderWrites, type SplitPlanFile } from "./requirementSplit.js";
+import { requirementDraftHash } from "./requirementDraftHash.js";
 import { REQUIREMENT_CALL_GRANT, REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput } from "./requirementSchemas.js";
 import { commandSuccess, readRunBody, readStopIntent, saveRunBody } from "./stopIntent.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
@@ -500,7 +501,9 @@ export async function applyRequirementDraftAccept(
         if (draft.state !== "awaiting-review" || draft.plan === null || draft.output === null) return invalid("draft-not-awaiting-review");
         // DR12: the hash names the expanded plan the person reviewed. It is checked against the bytes imported below (the
         // stored expansion, never a re-derivation), so a stored hash that no longer names those bytes is refused too.
-        if (sha256Canonical(draft.plan) !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
+        // ERRATUM (2026-11-14, multi-directory draft hash): for a multi-directory draft, the hash also names its
+        // stored output, because accept rebuilds secondary directory contracts from that output.
+        if (requirementDraftHash(draft.plan, draft.output) !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
         if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id) || dimensions.some((d) => group.reserved[d] !== 0)) invalid("call-in-flight");
         // 1. Freeze the document: rendered from the records now, stored once, named by its hash (spec §4.3, §10).
         const text = renderRequirementDocument({ groupId: id, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, id)), acceptedSplit: draft.output });

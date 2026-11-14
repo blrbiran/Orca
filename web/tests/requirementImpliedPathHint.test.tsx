@@ -33,6 +33,25 @@ describe("the split draft's implied-path note (#265)", () => {
     expect(zh?.textContent).toContain("cli 的完成条件提到了 README.md，但只有 docs 可以写它");
   });
 
+  it("does not offer a multi-directory edit that would replace the checked primary with an unchecked writer", () => {
+    const view = withEntries([{ taskId: "cli", path: "README.md", writers: ["docs"] }]);
+    view.summary.multiDir = { project: "multi", dirs: [
+      { key: "posts", kind: "dir", primary: true, delivery: "place", lastLanded: null, landed: false, failed: false },
+      { key: "alpha", kind: "repo", primary: false, delivery: "local", lastLanded: null, landed: false, failed: false },
+    ], landing: null };
+    view.drafts[0]!.output = { notes: "", tasks: [
+      { taskId: "cli", title: "cli", labels: [], goal: "g", successCondition: "README.md is documented", writes: [
+        { dir: "alpha", targetPaths: ["src/a.ts"], checks: ["node --test test/a.test.js"] },
+      ], dependsOn: [], traces: ["AC1"] },
+      { taskId: "docs", title: "docs", labels: [], goal: "g", successCondition: "README.md exists", writes: [
+        { dir: "posts", targetPaths: ["README.md"], checks: ["node --test test/docs.test.js"] },
+      ], dependsOn: [], traces: ["AC1"] },
+    ] };
+    const note = show(view).querySelector("[data-implied-path]");
+    expect(note).not.toBeNull();
+    expect(note?.querySelector("[data-add-implied-path]")).toBeNull();
+  });
+
   it("shows nothing for a draft with no entries, or one the server gave none", async () => {
     expect(show(withEntries([])).querySelector("[data-implied-path]")).toBeNull();
     cleanup();

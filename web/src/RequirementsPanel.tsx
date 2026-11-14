@@ -348,6 +348,21 @@ function Consensus(props: { view: View; round: Round; onCommand: (a: ControlActi
   );
 }
 
+function canAddImpliedPath(view: View, draft: Draft, entry: { taskId: string; path: string; writers: string[] }): boolean {
+  const dirs = view.summary.multiDir?.dirs;
+  if (dirs === undefined) return true;
+  const task = draft.output?.tasks.find((candidate) => candidate.taskId === entry.taskId);
+  const writer = draft.output?.tasks.find((candidate) => candidate.taskId === entry.writers[0]);
+  if (task === undefined || writer === undefined || !("writes" in task) || !("writes" in writer)) return false;
+  const dir = writer.writes.find((write) => write.targetPaths.some((path) => path.replace(/\/+$/, "") === entry.path || path === entry.path))?.dir ?? writer.writes[0]?.dir;
+  if (dir === undefined) return false;
+  if (task.writes.some((write) => write.dir === dir)) return true;
+  const position = (key: string): number => dirs.findIndex((member) => member.key === key);
+  const primary = Math.min(...task.writes.map((write) => position(write.dir)));
+  const added = position(dir);
+  return primary >= 0 && added >= primary;
+}
+
 function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; archived?: boolean } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { draft } = props, groupId = props.view.summary.groupId;
@@ -388,7 +403,7 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
         {/* Tester follow-up K: the person applies the hint; the server re-validates the edited split as the next draft. */}
         {mayEdit && <button type="button" className="ms-2" data-apply-parallel onClick={() => edit({ kind: "apply-parallel-candidates" })}>{t("requirements.applyParallel")}</button>}</p>}
       {(draft.impliedPathsOutsideTargets ?? []).map((entry) => <p role="note" data-implied-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.impliedPath", { task: entry.taskId, path: entry.path, writers: entry.writers.join(", ") })}
-        {mayEdit && <button type="button" className="ms-2" data-add-implied-path onClick={() => edit({ kind: "add-implied-path", taskId: entry.taskId, path: entry.path })}>{t("requirements.addImpliedPath", { task: entry.taskId, path: entry.path })}</button>}</p>)}
+        {mayEdit && canAddImpliedPath(props.view, draft, entry) && <button type="button" className="ms-2" data-add-implied-path onClick={() => edit({ kind: "add-implied-path", taskId: entry.taskId, path: entry.path })}>{t("requirements.addImpliedPath", { task: entry.taskId, path: entry.path })}</button>}</p>)}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>

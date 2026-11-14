@@ -24,9 +24,16 @@ export function needsAttention(summary: GroupSummaryV1): boolean {
   const escalating = (summary.escalation ?? []).filter((entry) => entry.state !== "exhausted").length;
   // Issue #218 (human ruling 2026-11-10): a pause the person asked for is a state, not a request for them; only a stop
   // still settling is. A paused group with a blocked task or a recovery blocker still needs them through those clauses.
+  // Tester follow-up L (K2's Web fallback): the older-summary facts the server's rule would have counted -- a
+  // requirement waiting on the person, a review that did not pass, a pause waiting for a decision.
+  const requirement = summary.requirement;
   return (summary.counts?.blocked ?? 0) - escalating > 0 || summary.recoveryBlockerCount > 0 || summary.claimBlocked || summary.state === "blocked"
     || (summary.stopState != null && summary.stopState !== "handoff-complete" && summary.stopState !== "paused")
     || summary.orchestration?.refusal?.persistent === true
+    || (requirement !== undefined && (requirement.usageUnknown || requirement.blockedRun !== null || requirement.waiting !== null
+      || requirement.reasonCode !== null || requirement.exportState === "conflict"))
+    || summary.requirementReview?.problem !== undefined
+    || (summary.card?.budgetAlerts?.waitingDecision ?? 0) > 0
     // Tester follow-up E §5 (#241): a group whose final tree failed its acceptance waits for a recheck, a waiver or a fix.
     || summary.acceptance?.result === "failed";
 }

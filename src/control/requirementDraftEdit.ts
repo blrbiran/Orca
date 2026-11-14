@@ -1,6 +1,6 @@
 import type { AdmissionGate } from "./admissionGate.js";
 import { applyWebCommand, preflightWebCommand } from "./commandLedger.js";
-import { sha256Canonical } from "./canonicalJson.js";
+import { requirementDraftHash } from "./requirementDraftHash.js";
 import { ControlError } from "./errors.js";
 import { multiDirOf } from "./multiGroup.js";
 import { evaluateSplit, type SplitEvaluation } from "./requirementCalls.js";
@@ -33,7 +33,7 @@ function reviewed(store: ControlStore, groupId: string, payload: RequirementDraf
   if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("group-stopped");
   const draft = latestDraft(store, groupId);
   if (draft === null || draft.draftNo !== payload.draftNo || draft.state !== "awaiting-review" || draft.output === null || draft.plan === null) return invalid("draft-not-awaiting-review");
-  if (sha256Canonical(draft.plan) !== payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
+  if (requirementDraftHash(draft.plan, draft.output) !== payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
   return draft as DraftBody & { output: Output; plan: Record<string, unknown> };
 }
 

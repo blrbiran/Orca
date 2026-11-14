@@ -78,6 +78,7 @@ import { liveCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.j
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { parallelCandidates } from "../control/splitParallel.js";
 import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
+import { requirementDraftHash } from "../control/requirementDraftHash.js";
 import { runUsageDetail } from "../control/usageQuery.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
 import {
@@ -1616,7 +1617,13 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
     rounds, document,
     // Tester #284: a draft code accepted (it has layers) carries the declared edges code sees no reason for -- a hint only.
     // Tester #265: and each task whose success condition names a file only another task may write -- a hint only.
-    drafts: drafts.map(({ plan: _plan, ...rest }) => rest.output !== null && rest.layers !== null ? { ...rest, parallelCandidates: parallelCandidates(rest.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(rest.output) } : rest), spendCapBlock: readSpendCapBlock(store, groupId),
+    drafts: drafts.map(({ plan, ...rest }) => {
+      // A previously stored multi-directory draft may carry the old plan-only hash. Present the new review hash, but
+      // leave the record untouched: a command still carrying the old hash is rejected and the person reviews this view.
+      const shown = plan !== null && rest.output !== null && multiDirOf(group) !== null && rest.draftHash === sha256Canonical(plan)
+        ? { ...rest, draftHash: requirementDraftHash(plan, rest.output) } : rest;
+      return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output) } : shown;
+    }), spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),
       // §3.3: stopped at the cap, not at an empty frontier (requirementCommands.ts applyRequirementAnswer).

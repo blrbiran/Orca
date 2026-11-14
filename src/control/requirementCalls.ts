@@ -7,6 +7,7 @@ import { activeChain, chainRounds, supersededForPrompt } from "./clarifyChain.js
 import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
 import { renderRequirementDocument } from "./requirementDocument.js";
+import { requirementDraftHash } from "./requirementDraftHash.js";
 import { buildManifests, withManifests } from "./requirementManifests.js";
 import { buildRepositoryOverview, dividedOverviewLimits, truncateUtf8, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
 import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
@@ -447,8 +448,9 @@ async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRu
   const validated = await validateMultiSplitDraft({ output: parsed.data, plan: expanded.plan, contracts: expanded.contracts, expandReasons: expanded.reasons, paths, commits,
     criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
   // DR12: the hash is of the expanded plan, the bytes the person reviews; a draft with a reason keeps neither.
+  // ERRATUM (2026-11-14, multi-directory draft hash): it also binds the output used to rebuild secondary contracts.
   return validated.ok
-    ? { schemaValid: true, output: parsed.data, plan: expanded.plan, draftHash: sha256Canonical(expanded.plan), ...validated }
+    ? { schemaValid: true, output: parsed.data, plan: expanded.plan, draftHash: requirementDraftHash(expanded.plan, parsed.data), ...validated }
     : { schemaValid: true, output: parsed.data, plan: null, draftHash: null, ...validated };
 }
 

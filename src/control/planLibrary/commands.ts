@@ -15,7 +15,7 @@ import { effectivePlan, workBodyOf } from "../taskAmendments.js";
 import type { ControlPlanV1 } from "../webProtocol.js";
 import { applyWebCommand, preflightWebCommand, type WebCommandContext } from "../commandLedger.js";
 import { commandAttributionFor } from "../commandClient.js";
-import { sha256Canonical } from "../canonicalJson.js";
+import { requirementDraftHash } from "../requirementDraftHash.js";
 import { ControlError } from "../errors.js";
 import { readDraft, readRequirementGroup } from "../requirementRecords.js";
 import type { ControlStore } from "../store.js";
@@ -105,7 +105,8 @@ function savedSource(store: ControlStore, source: Extract<PlanLibraryCommand, { 
   const draft = readDraft(store, source.groupId, source.draftNo);
   if ((draft.state !== "awaiting-review" && draft.state !== "accepted") || draft.plan === null) throw new ControlError("group-state-invalid", "draft-not-awaiting-review-or-accepted");
   // The same check acceptance makes (requirementCommands.ts): the hash names the stored plan the person saw.
-  if (sha256Canonical(draft.plan) !== source.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
+  // ERRATUM (2026-11-14, multi-directory draft hash): it also binds the stored output used for secondary writes.
+  if (draft.output === null || requirementDraftHash(draft.plan, draft.output) !== source.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
   const stored = draft.plan as { targetRepo: string };
   const plan = schedulerControlPlanSourceOf(stored, stored.targetRepo);
   // Tester follow-up E §7 (#250): acceptance seeds the agent picked on New requirement (the estimator override) as the

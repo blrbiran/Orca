@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { editedSplit } from "../../src/control/requirementDraftEdit.js";
 import { readDraft, writeDraft } from "../../src/control/requirementRecords.js";
 import { WebControlService } from "../../src/control/webService.js";
@@ -130,6 +131,41 @@ const multiEdit = (x: MultiHarness, service: WebControlService, change: Record<s
 const writesOf = (output: unknown, taskId: string) => (output as { tasks: Array<{ taskId: string; writes: MultiWrite[] }> }).tasks.find((t) => t.taskId === taskId)!.writes;
 
 describe("a multi-directory group's draft edit, re-validated end to end (tester follow-up L)", () => {
+  it("binds a secondary directory's target paths to the draft hash and refuses a changed stored split", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_IMPLIED }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const original = readDraft(x.store, "r", 1);
+      expect(await multiEdit(x, x.service, { kind: "add-implied-path", taskId: "cli", path: "README.md" }))
+        .toMatchObject({ result: { kind: "requirement-draft-edited" } });
+      const edited = readDraft(x.store, "r", 2);
+      // Only the non-primary alpha write changed; an old plan-only hash gives the same value for both drafts.
+      expect(edited.plan).toEqual(original.plan);
+      expect(edited.draftHash).not.toBe(original.draftHash);
+      const tampered = structuredClone(edited.output!);
+      writesOf(tampered, "cli")[1]!.targetPaths = ["src/a.ts"];
+      writeDraft(x.store, "r", { ...edited, output: tampered });
+      expect(await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 2, draftHash: edited.draftHash })))
+        .toMatchObject({ error: { code: "plan-version-conflict", message: "plan-version-conflict:draft-hash" } });
+    } finally { await x.dispose(); }
+  });
+
+  it("shows a fresh review hash for a stored multi-directory draft made under the old plan-only rule", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_IMPLIED }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const draft = readDraft(x.store, "r", 1);
+      const oldHash = sha256Canonical(draft.plan);
+      writeDraft(x.store, "r", { ...draft, draftHash: oldHash });
+      const shown = readRequirementView(x.store, "e", "r").drafts[0]!;
+      expect(shown.draftHash).not.toBe(oldHash);
+      expect(await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: oldHash })))
+        .toMatchObject({ error: { code: "plan-version-conflict" } });
+      expect(await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: shown.draftHash })))
+        .toMatchObject({ result: { kind: "requirement-draft-accepted" } });
+    } finally { await x.dispose(); }
+  });
+
   it("add-implied-path puts the path in the writer's directory, and the re-validation orders the two writers there", async () => {
     const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_IMPLIED }], startAt: "split" });
     try {
@@ -147,6 +183,7 @@ describe("a multi-directory group's draft edit, re-validated end to end (tester 
         implicitEdges: [{ from: "cli", to: "docs", conflicts: [{ a: "alpha:README.md", b: "alpha:README.md" }] }] });
       // Not asserted: draft 2's draftHash differs from draft 1's. A multi draft's hash is of the expanded plan, which holds
       // only each task's primary write, so an edit that adds a non-primary write keeps the hash (reported, tester follow-up L).
+      // ERRATUM (2026-11-14): the criterion above now asserts that secondary writes change a multi draft's hash.
       // The edited draft is accepted as any other.
       const accepted = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 2, draftHash: next.draftHash }));
       expect(accepted).not.toHaveProperty("error");

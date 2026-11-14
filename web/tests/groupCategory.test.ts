@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GROUP_FILTER_KEY, groupCategory, matchesGroupFilter, needsAttention, readGroupFilter, writeGroupFilter } from "../src/groupCategory.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
+import { requirementView } from "./fixtures/requirement.js";
 
 const zero = { idle: 0, running: 0, waiting: 0, blocked: 0, done: 0 };
 const g = (over: Partial<GroupSummaryV1> = {}): GroupSummaryV1 => ({
@@ -23,6 +24,21 @@ describe("groupCategory (spec §6.4)", () => {
     expect(groupCategory(g({ stopMode: "handoff", stopState: "handoff-complete" }))).toBe("not-started");
     // #218: mutation: put `paused` back in the stop clause -> attention, red
     expect(needsAttention(g({ stopMode: "pause", stopState: "paused" }))).toBe(false);
+  });
+  const requirement = requirementView("awaiting-review").summary.requirement!;
+  it.each([
+    ["unknown requirement usage", { state: "clarifying", requirement: { ...requirement, usageUnknown: true } }],
+    ["a blocked requirement call", { state: "clarifying", requirement: { ...requirement, blockedRun: { runId: "run1", reason: "start-unknown" } } }],
+    ["a requirement waiting on usage", { state: "clarifying", requirement: { ...requirement, waiting: "requirement-usage-unknown" } }],
+    ["an export conflict", { state: "clarifying", requirement: { ...requirement, exportState: "conflict" } }],
+    ["a failed review", { requirementReview: { state: "not-passed", why: "cannot-judge", rounds: [], autoFixRounds: 0, problem: "review-not-passed" } }],
+    ["a pause waiting for a decision", { card: { budget: { usedTokens: 1, limitTokens: 10 }, pendingDecisions: 0, firstFailure: null,
+      budgetAlerts: { overExpectation: 0, waitingDecision: 1, groupCapReached: 0 } } }],
+  ] as Array<[string, Partial<GroupSummaryV1>]>) ("an older summary flags %s", (_name, over) => {
+    expect(needsAttention(g(over))).toBe(true);
+  });
+  it("uses the server's explicit needsYou even if fallback facts disagree", () => {
+    expect(needsAttention(g({ needsYou: false, state: "clarifying", requirement: { ...requirement, usageUnknown: true } }))).toBe(false);
   });
   it("3: done when every task is done", () => expect(groupCategory(g({ completion: { done: 2, total: 2 }, counts: { ...zero, done: 2 } }))).toBe("done"));
   it("4: running when a task runs or waits, or the group runs or is in review", () => {
