@@ -5,12 +5,13 @@ import { queueStartForSlot, recordStarted } from "./orchestration.js";
 import { hasOptionalTaskPolicy, hasTokenPolicy } from "./fundedAllowance.js";
 import { hasValidUsageSettlement, type UsageSettlement } from "./usageSettlement.js";
 import { createHash } from "node:crypto";
+import { readCommittedCheckpointSync } from "./checkpoints.js";
 import { z } from "zod";
 import { rearmParkedEstimates } from "./estimateParking.js";
 import { applyWebCommand, updateRevision, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
-import { add, budgetBalance, subtract } from "./budget.js";
+import { add, budgetBalance, hasObservedUsage, readRun, subtract } from "./budget.js";
 import { ControlError } from "./errors.js";
 import { clearSpendCapBlock } from "./spendCaps.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -19,7 +20,7 @@ import { readBudgetProposal, readWork, saveWork, type BudgetProposalRecord } fro
 import { writeCanonicalRecord } from "./snapshot.js";
 import { continuationWakeBody, rearmFailedContinuation } from "./continuation.js";
 import { nextClaimableTask } from "./webDispatch.js";
-import { isTerminallyFailedRun, landedAnywhere, resumableBlockedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, landedAnywhere, repairableCeilingBlock, resumableBlockedRun, resumeBlockedDriverRun, type DriveRecord } from "./driveRecord.js";
 import { settleableSingleCallBlock, singleCallPurposeOf, SINGLE_CALL_SETTLE_ACKNOWLEDGE } from "./singleCall.js";
 import { hasRequirementBlock, latestDraft, latestRound, newDraft, queueRequirementCall, readRequirementGroup, refuseClarifying, saveRequirementGroup, writeDraft, writeRound } from "./requirementRecords.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
@@ -642,9 +643,33 @@ function clearedBlockers(store: ControlStore, groupId: string, runId: string | n
   return { codes, evidenceIds, resolved: rows.length > 0 };
 }
 
+function repairCommittedCeilingBlock(store: ControlStore, groupId: string, runId: string, run: RunBody): boolean {
+  const drive = run.drive as DriveRecord | undefined;
+  if (run.groupId !== groupId || run.phase !== "work") return false;
+  const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 1);
+  if (!repairableCeilingBlock(run as typeof run & { drive?: DriveRecord }, active)) return false;
+  const booked = readRun(store, runId);
+  if (!hasObservedUsage(store, booked) || store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(runId, booked.highWater))
+    throw new ControlError("checkpoint-identity-conflict", "usage-gap");
+  const candidate = readCommittedCheckpointSync(store, runId);
+  if (candidate.checkpointId !== run.checkpointId || candidate.runId !== runId || candidate.groupId !== groupId ||
+      candidate.workItemId !== run.workItemId || candidate.generation !== run.generation ||
+      candidate.usageHighWater !== run.highWater || candidate.result !== "partial" || candidate.terminalOutcome !== "exhausted" ||
+      candidate.stopProof?.executionId !== run.executionId)
+    throw new ControlError("checkpoint-identity-conflict", "ceiling-recovery");
+  run.state = "settled-recoverable";
+  run.drive = { ...drive, blockedAt: null, blockedReason: null };
+  saveRunBody(store, run, false);
+  return true;
+}
 function retryRun(store: ControlStore, groupId: string, runId: string, context: WebCommandContext, now: string, acknowledge?: string, settlement: { settle: SettleSingleCallUsage; evaluation?: unknown } | null = null): ObservedRecovery {
-  // Issue fixes spec §4.2(3): checked before anything is cleared, so the refusal leaves the run and its blockers as they were.
+  // A late C visit used to overwrite a committed ceiling run as blocked. Recover only from its verified immutable checkpoint.
   const target = readRunBody(store, runId);
+  if (target.groupId === groupId && repairCommittedCeilingBlock(store, groupId, runId, target))
+    return { resolved: true, blockerCodes: [], evidenceIds: [], wakeIds: [] };
+  if (target.groupId === groupId && target.state === "blocked" && Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 0) === 0)
+    throw new ControlError("recovery-blocked", "inactive-run");
+  // Issue fixes spec §4.2(3): checked before anything is cleared, so the refusal leaves the run and its blockers as they were.
   if (target.groupId === groupId && isTerminallyFailedRun(target as { state: string; drive?: DriveRecord })) throw new ControlError("run-terminal-failed");
   // Spec 2026-10-27 single-call unknown usage §9 R1: resuming a single call blocked on unknown usage would only collect the
   // same record and block it again, so its retry is a settlement, and only with the charge acknowledged; the acknowledgement

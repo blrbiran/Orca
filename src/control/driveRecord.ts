@@ -346,6 +346,14 @@ export function resumableBlockedRun(run: { state?: unknown; drive?: { blockedAt?
   return run.state === "blocked" && typeof run.drive?.blockedAt === "string" && (run.drive.blockedAt !== "C" || run.drive.outcome === null);
 }
 
+/** #310: a late C error overwrote a ceiling-settled run's body; its inactive committed checkpoint is repaired by recovery retry. */
+export function repairableCeilingBlock(run: { runId?: unknown; state?: unknown; checkpointId?: unknown; liveCeilingStop?: unknown;
+  drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown } | null }, active: number): boolean {
+  return active === 0 && typeof run.runId === "string" && run.state === "blocked" && run.drive?.blockedAt === "C" &&
+    run.drive.blockedReason === "checkpoint-id-conflict" && run.drive.outcome === "exhausted" &&
+    run.checkpointId === `ceiling-${run.runId}` && run.liveCeilingStop !== undefined;
+}
+
 /**
  * Plan 2026-11-10 follow-up B, T10: the command that re-selects a requirement's agent, named on a requirement call blocked
  * on it (estimatorCompatibility.ts blockedOnRequirementAgent); the agent and model are the person's to choose.

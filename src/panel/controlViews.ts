@@ -13,7 +13,7 @@ import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executi
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
+import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, repairableCeilingBlock, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -691,9 +691,12 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     // Tester follow-up I (seat L): a blocked run that recovery retry resumes is something a person must act on too
     // (blockedRunRows); it does not hold the group's other claims, so claimBlocked stays the blocker rows' alone.
     recoveryBlockerCount: blockers.length + (readSnapshot === undefined ? 0 : readSnapshot.runsByRowid.filter((row) => {
-      if (Number(row.active) !== 1) return false;
-      try { const run = decodedValue(readSnapshot.decodeRun(String(row.id))) as { phase?: unknown; state?: unknown; drive?: { blockedAt?: unknown; outcome?: unknown } } | undefined;
-        return run !== undefined && run !== null && run.phase === "work" && resumableBlockedRun(run); } catch { return false; }
+      // The shared snapshot must not decode every historical inactive run to find the one stale ceiling block.
+      if (Number(row.active) !== 1 && !row.body.includes('"blockedReason":"checkpoint-id-conflict"')) return false;
+      try { const run = decodedValue(readSnapshot.decodeRun(String(row.id))) as { runId?: unknown; phase?: unknown; state?: unknown; checkpointId?: unknown; liveCeilingStop?: unknown;
+        drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown } } | undefined;
+        return run !== undefined && run !== null && run.phase === "work" &&
+          ((Number(row.active) === 1 && resumableBlockedRun(run)) || repairableCeilingBlock(run, Number(row.active))); } catch { return false; }
     }).length),
     ...(completion === undefined || counts === undefined ? {} : { completion, counts }),
     goal: archived !== null ? archived.plan.goal : readRequirementGroup(store, groupId).requirement.idea,
@@ -1702,10 +1705,10 @@ function deferredWakeRows(store: ControlStore): Array<{ groupId: string; kind: s
  */
 function blockedRunRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }> {
   const out: Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }> = [];
-  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
-    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown } };
+  for (const row of store.db.prepare("SELECT id,body,active FROM runs WHERE active=1 OR (CASE WHEN json_valid(body) THEN json_extract(body,'$.drive.blockedReason')='checkpoint-id-conflict' ELSE 0 END) ORDER BY rowid").all()) {
+    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; checkpointId?: unknown; liveCeilingStop?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown } };
     if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
-    if (!resumableBlockedRun(run)) continue;
+    if (!(Number(row.active) === 1 && resumableBlockedRun(run)) && !repairableCeilingBlock(run, Number(row.active))) continue;
     out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, blockedAt: String(run.drive!.blockedAt),
       reason: typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason.slice(0, 200) : null, next: recoveryRetryCommand(run.runId) });
   }

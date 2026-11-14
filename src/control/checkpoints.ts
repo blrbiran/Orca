@@ -67,21 +67,26 @@ async function persistImmutableCheckpoint(store:ControlStore,c:Candidate):Promis
  const dir=privateDirectory(join(store.stateDir,"checkpoints",c.runId)),path=join(dir,c.checkpointId+".json");
  const bytes=Buffer.from(JSON.stringify(c));
  const temp=await writeCheckpointStaging(dir,bytes);
- // The service owns this directory. Keep the final existence check and rename in
- // one synchronous section so concurrent commits cannot replace immutable IDs.
- store.assertOwner();
- if(existsSync(path)) {
-  assertRegular(path);const previous=readFileSync(path);
-  if(previous.equals(bytes)) return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
-  if(store.db.prepare("SELECT id FROM checkpoints WHERE id=?").get(c.checkpointId)) throw new ControlError("checkpoint-id-conflict");
-  let valid=false;try{JSON.parse(previous.toString());valid=true;}catch{}
-  if(valid) throw new ControlError("checkpoint-id-conflict");
-  // Retain evidence from pre-atomic writers without treating a torn file as a
-  // committed checkpoint or allowing replacement of a different valid object.
-  renameSync(path,join(dir,".interrupted-"+randomUUID()));
+ let published=false;
+ try {
+  // The service owns this directory. Keep the final existence check and rename in
+  // one synchronous section so concurrent commits cannot replace immutable IDs.
+  store.assertOwner();
+  if(existsSync(path)) {
+   assertRegular(path);const previous=readFileSync(path);
+   if(previous.equals(bytes)) return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
+   if(store.db.prepare("SELECT id FROM checkpoints WHERE id=?").get(c.checkpointId)) throw new ControlError("checkpoint-id-conflict");
+   let valid=false;try{JSON.parse(previous.toString());valid=true;}catch{}
+   if(valid) throw new ControlError("checkpoint-id-conflict");
+   // Retain evidence from pre-atomic writers without treating a torn file as a
+   // committed checkpoint or allowing replacement of a different valid object.
+   renameSync(path,join(dir,".interrupted-"+randomUUID()));
+  }
+  renameSync(temp,path);published=true;syncDirectory(dir);
+  return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
+ } finally {
+  if(!published){try{unlinkSync(temp);}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}}
  }
- renameSync(temp,path);syncDirectory(dir);
- return {checkpointId:c.checkpointId,hash:createHash("sha256").update(bytes).digest("hex")};
 }
 export async function commitCandidate(store:ControlStore,c:Candidate,deps:CommitDependencies={}):Promise<{checkpointId:string;hash:string}> {
  c=candidateSchema.parse(c);
@@ -124,6 +129,29 @@ export async function commitCandidate(store:ControlStore,c:Candidate,deps:Commit
  });};
  const result=await (deps.admit?deps.admit(commit):commit());
  await deps.afterTransaction?.();return result;
+}
+// A file fsynced before a crash but not yet entered in the DB is evidence, not a committed checkpoint.
+// Its exact bytes may finish the original transaction after the candidate and its artifacts are checked again.
+export function readUncommittedCheckpoint(store:ControlStore,runId:string,checkpointId:string):Candidate|null {
+ if(store.db.prepare("SELECT id FROM checkpoints WHERE id=? AND run_id=?").get(checkpointId,runId))return null;
+ const path=join(store.stateDir,"checkpoints",runId,checkpointId+".json");
+ if(!existsSync(path))return null;
+ assertRegular(path);
+ let candidate:Candidate;
+ try{candidate=candidateSchema.parse(JSON.parse(readFileSync(path,"utf8")));}
+ catch{throw new ControlError("checkpoint-id-conflict","uncommitted-ceiling-invalid");}
+ if(candidate.runId!==runId||candidate.checkpointId!==checkpointId)throw new ControlError("checkpoint-identity-conflict","uncommitted-ceiling");
+ return candidate;
+}
+// Recovery retry owns a synchronous DB transaction; verify the committed file and row before repairing a stale ceiling block.
+export function readCommittedCheckpointSync(store:ControlStore,runId:string):Candidate {
+ const run=readRun(store,runId);
+ if(!run.checkpointId)throw new ControlError("checkpoint-not-committed");
+ const row=store.db.prepare("SELECT hash,body FROM checkpoints WHERE id=? AND run_id=?").get(run.checkpointId,runId);
+ if(!row)throw new ControlError("checkpoint-not-committed");
+ const path=join(store.stateDir,"checkpoints",runId,run.checkpointId+".json");assertRegular(path);const bytes=readFileSync(path);
+ if(createHash("sha256").update(bytes).digest("hex")!==row.hash||!bytes.equals(Buffer.from(String(row.body))))throw new ControlError("checkpoint-hash-mismatch");
+ return JSON.parse(bytes.toString()) as Candidate;
 }
 export async function readCommittedCheckpoint(store:ControlStore,runId:string):Promise<Candidate> {
  const run=readRun(store,runId);

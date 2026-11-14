@@ -1,6 +1,6 @@
 import { describe,it,expect } from "vitest";
 import { join } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { commitCandidate,readCommittedCheckpoint,repairAcceptedWork } from "../../src/control/checkpoints.js";
 import { writeArtifact } from "../../src/control/archive.js";
 import { publishPending } from "../../src/control/projection.js";
@@ -33,6 +33,15 @@ describe("checkpoint authority",{timeout:30000},()=>{
    const reserved=getGroup(h.store,"g1").reserved;await commitCandidate(h.store,c);
    expect(getGroup(h.store,"g1").reserved).toEqual(reserved);expect(getRun(h.store,c.runId).recoverable).toBe(false);
    expect(h.store.db.prepare("SELECT active FROM runs").get()?.active).toBe(1);
+  }finally{await h.dispose();}
+ });
+ it("refuses different bytes for an immutable checkpoint without keeping the rejected staging file",async()=>{
+  const h=await candidateCase();try{
+   await commitCandidate(h.store,h.candidate);
+   const dir=join(h.store.stateDir,"checkpoints",h.claim.runId);
+   await expect(commitCandidate(h.store,{...h.candidate,result:"partial"})).rejects.toThrow("checkpoint-id-conflict");
+   expect((await readdir(dir)).filter(name=>name.startsWith(".staging-"))).toEqual([]);
+   expect((await readCommittedCheckpoint(h.store,h.claim.runId)).result).toBe("complete");
   }finally{await h.dispose();}
  });
  it("keeps immutable older checkpoints and ignores late projection replay",async()=>{

@@ -3,21 +3,28 @@
 // waits for a top-up, which continues it; at its pause line it waits for a decision; at a person's hard cap it ends
 // exhausted as today. A lowered limit never lowers a running ceiling: the next claim is refused instead.
 import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { readGroupActivity } from "../../src/control/activity.js";
-import { readStartEnvelope } from "../../src/control/executionDriver.js";
+import { archiveAdmission, blockRun, collectInto, readStartEnvelope, stepC } from "../../src/control/executionDriver.js";
+import { commitCandidate, readCommittedCheckpoint } from "../../src/control/checkpoints.js";
+import { archiveRun } from "../../src/control/archive.js";
+import type { Candidate } from "../../src/control/types.js";
 import { readGroup, readWork } from "../../src/control/queries.js";
+import { recordUsage } from "../../src/control/usage.js";
+import { readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
-import type { StartEnvelope } from "../../src/control/executionPort.js";
+import type { ExecutionPort, StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
 
 interface Knobs { exhausted: boolean; workTokens: number; cause: "group" | "pause-line" | "task-cap"; only?: string }
-async function harness(tasks: string[], limit: number, knobs: Knobs): Promise<Harness> {
+async function harness(tasks: string[], limit: number, knobs: Knobs, wrapPort?: (port: ExecutionPort) => ExecutionPort): Promise<Harness> {
   const t = await driverHarness(tasks.map(taskId => ({ taskId })), {
-    tokenPolicy: "optional-v1", modelVersion: "followup-g",
+    tokenPolicy: "optional-v1", modelVersion: "followup-g", wrapPort,
     behaviour: (id: string) => knobs.exhausted && (knobs.only === undefined || knobs.only === id) ? "exhausted" : "stoppable",
     workTokens: () => knobs.workTokens,
     liveCeilingStop: (id: string, envelope: StartEnvelope) => knobs.exhausted && (knobs.only === undefined || knobs.only === id) && envelope.liveCeiling !== undefined
@@ -67,6 +74,189 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
       // It continues from the stopped run's checkpoint, with a fresh ceiling.
       expect(readStartEnvelope(t.h.store, t.body(second)).inputCheckpoint).not.toBeNull();
       expect(t.body(second).liveCeiling).toMatchObject({ cause: "group" });
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // #310: both C visits start while the run is accepted. The late one sees a changed result tree after the first settled.
+  it("reuses the committed ceiling checkpoint instead of blocking a late C visit", async () => {
+    let releaseSecond = () => {};
+    const waiting = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    let secondReached = () => {};
+    const reached = new Promise<void>((resolve) => { secondReached = resolve; });
+    let collects = 0;
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs, (port) => ({ ...port, collect: async (input, afterSeq) => {
+      if (++collects === 2) { secondReached(); await waiting; }
+      return port.collect(input, afterSeq);
+    } }));
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const first = stepC(t.deps, runId);
+      const second = stepC(t.deps, runId);
+      const results = Promise.allSettled([first, second]);
+      await reached;
+      expect(await first).toBe(true);
+      expect(t.body(runId).state).toBe("settled-recoverable");
+      const usedAfterFirst = readGroup(t.h.store, "g").used.tokens;
+      writeFileSync(join(t.body(runId).drive.sourceDir, "repo", "late.txt"), "different snapshot\n");
+      releaseSecond();
+      expect(await results).toEqual([{ status: "fulfilled", value: true }, { status: "fulfilled", value: true }]);
+      expect(t.body(runId).state).toBe("settled-recoverable");
+      expect(readGroup(t.h.store, "g").used.tokens).toBe(usedAfterFirst);
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM checkpoints WHERE run_id=?").get(runId)).toEqual({ n: 1 });
+      expect((await readCommittedCheckpoint(t.h.store, runId)).checkpointId).toBe(`ceiling-${runId}`);
+      expect(kinds(t, "group-cap-reached")).toHaveLength(1);
+      await driver.stop();
+    } finally { releaseSecond(); await t.h.dispose(); }
+  });
+
+  it("a late C collect error cannot reblock a run its earlier visit already settled", async () => {
+    let releaseFirst = () => {}, releaseSecond = () => {}, sawFirst = () => {}, sawSecond = () => {};
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const secondGate = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    const firstEntered = new Promise<void>((resolve) => { sawFirst = resolve; });
+    const secondEntered = new Promise<void>((resolve) => { sawSecond = resolve; });
+    let collects = 0;
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs, (port) => ({ ...port, collect: async (input, afterSeq) => {
+      const call = ++collects;
+      if (call === 1) { sawFirst(); await firstGate; }
+      if (call === 2) { sawSecond(); await secondGate; throw new Error("late collect failed"); }
+      return port.collect(input, afterSeq);
+    } }));
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const first = stepC(t.deps, runId);
+      await firstEntered;
+      const late = driver.round();
+      await secondEntered;
+      releaseFirst();
+      expect(await first).toBe(true);
+      releaseSecond();
+      await late;
+      expect(t.body(runId).state).toBe("settled-recoverable");
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM checkpoints WHERE run_id=?").get(runId)).toEqual({ n: 1 });
+      await driver.stop();
+    } finally { releaseFirst(); releaseSecond(); await t.h.dispose(); }
+  });
+
+  it("finishes a valid ceiling checkpoint written before its DB transaction", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs);
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const report = await collectInto(t.deps, t.body(runId));
+      expect(report.terminal?.outcome).toBe("exhausted");
+      const sourceDir = t.body(runId).drive.sourceDir;
+      const raw = report.candidate!;
+      const archive = await archiveRun(t.h.store, { runId, sourceDir, repoDir: join(sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(t.deps));
+      expect(archive.snapshot).not.toBeNull();
+      const checkpointId = `ceiling-${runId}`;
+      const candidate: Candidate = { ...raw, checkpointId, artifacts: [...archive.artifacts, ...raw.artifacts, raw.handoff], snapshot: archive.snapshot };
+      await expect(commitCandidate(t.h.store, candidate, { ...archiveAdmission(t.deps), afterArchive: async () => { throw new Error("crash after file"); } }))
+        .rejects.toThrow("crash after file");
+      const checkpointDir = join(t.h.store.stateDir, "checkpoints", runId);
+      expect(t.h.store.db.prepare("SELECT id FROM checkpoints WHERE run_id=?").get(runId)).toBeUndefined();
+      const original = JSON.parse(readFileSync(join(checkpointDir, `${checkpointId}.json`), "utf8")) as Candidate;
+      writeFileSync(join(sourceDir, "repo", "late.txt"), "changed after crash\n");
+      expect(await stepC(t.deps, runId)).toBe(true);
+      expect(t.body(runId).state).toBe("settled-recoverable");
+      expect((await readCommittedCheckpoint(t.h.store, runId)).snapshot).toEqual(original.snapshot);
+      expect(readdirSync(checkpointDir).filter((name) => name.startsWith(".staging-"))).toEqual([]);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("recovery retry repairs a blocked run whose ceiling checkpoint was already committed", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs);
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await settled(t, driver, runId, "settled-recoverable");
+      const committed = await readCommittedCheckpoint(t.h.store, runId);
+      const activityCount = kinds(t, "group-cap-reached").length;
+      // The old late C visit caught checkpoint-id-conflict and blockRun overwrote the settled run's body.
+      blockRun(t.deps, runId, "C", "checkpoint-id-conflict");
+      expect(t.body(runId).state).toBe("blocked");
+      expect(readControlRecovery(t.h.store, "epoch").blockedRuns).toEqual([{
+        groupId: "g", taskId: "a", runId, blockedAt: "C", reason: "checkpoint-id-conflict", next: `orca recovery retry --run ${runId}`,
+      }]);
+      expect(readGroupSummary(t.h.store, "g").recoveryBlockerCount).toBe(1);
+      const result = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect("error" in result ? result.error : result.result).toMatchObject({ kind: "recovery-observed", resolved: true });
+      expect(t.body(runId).state).toBe("settled-recoverable");
+      expect(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)).toEqual({ active: 0 });
+      expect(await readCommittedCheckpoint(t.h.store, runId)).toEqual(committed);
+      expect(kinds(t, "group-cap-reached")).toHaveLength(activityCount);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("repairs the old ceiling run after its task has already claimed a successor", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 2 * M, cause: "group" };
+    const t = await harness(["a"], 20 * M, knobs);
+    try {
+      const driver = t.driver();
+      const first = await t.claim();
+      await settled(t, driver, first, "settled-recoverable");
+      knobs.exhausted = false;
+      const next = await nextRun(t, driver);
+      expect(work(t).status).toBe("running");
+      blockRun(t.deps, first, "C", "checkpoint-id-conflict");
+      const result = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", first, { scope: "run", runId: first }));
+      expect("error" in result ? result.error : result.result).toMatchObject({ kind: "recovery-observed", resolved: true });
+      expect(t.body(first).state).toBe("settled-recoverable");
+      expect(work(t).currentRunId).toBe(next);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses repair while an out-of-order usage event remains unbooked", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs);
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await settled(t, driver, runId, "settled-recoverable");
+      blockRun(t.deps, runId, "C", "checkpoint-id-conflict");
+      const row = t.h.store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq=1").get(runId);
+      const event = JSON.parse(String(row!.body));
+      const highWater = t.body(runId).highWater;
+      expect(recordUsage(t.h.store, { ...event, eventSeq: highWater + 2 })).toMatchObject({ applied: true, highWater });
+      const result = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect("error" in result ? result.error : result.result).toMatchObject({ code: "checkpoint-identity-conflict", message: expect.stringContaining("usage-gap") });
+      expect(t.body(runId).state).toBe("blocked");
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("does not offer a normal retry for an inactive run blocked at another step", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs);
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await settled(t, driver, runId, "settled-recoverable");
+      blockRun(t.deps, runId, "D", "checkpoint-id-conflict");
+      expect(readControlRecovery(t.h.store, "epoch").blockedRuns).toBeUndefined();
+      expect(readGroupSummary(t.h.store, "g").recoveryBlockerCount).toBe(0);
+      const retry = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
+      expect("error" in retry ? retry.error : retry.result).toMatchObject({ code: "recovery-blocked", message: expect.stringContaining("inactive-run") });
+      expect(t.body(runId).state).toBe("blocked");
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

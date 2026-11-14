@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
 import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
-import { commitCandidate } from "./checkpoints.js";
+import { commitCandidate, readCommittedCheckpoint, readUncommittedCheckpoint } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
 import { liveUsageSchema, peerErrorCode, peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
@@ -1837,6 +1837,8 @@ export async function recordStepFailure(deps: ExecutionDriverDeps, context: Driv
     // in flight (the deferred note from Task 4's review: never write after an await without
     // re-reading state first).
     // Issue fixes spec §4.2(2): a settled-failed run's cleanup failure is recorded the same way.
+    // #310: a late collect error for a run already ceiling-settled cannot reopen its inactive checkpoint as blocked.
+    if (run.state === "settled-recoverable") { process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`); return "next"; }
     if (run.state === "settled" || run.state === "settled-failed") {
       write(deps, () => {
         const current = readDriverRun(deps.store, runId);
@@ -2206,23 +2208,56 @@ function workerUndetermined(deps: ExecutionDriverDeps, run: DriverRun, reason: s
  * allowance packet -- and classifyCeilingStop decides whether its task continues now, waits for a top-up, or waits for a
  * decision. An incomplete snapshot blocks the run by name instead (it could not be continued with its work).
  */
+const ceilingSettling = new WeakMap<ControlStore, Map<string, Promise<boolean>>>();
 async function settleCeilingStop(deps:ExecutionDriverDeps,runId:string,report:ExecutionReport):Promise<boolean> {
+ let pending = ceilingSettling.get(deps.store);
+ if (pending === undefined) { pending = new Map(); ceilingSettling.set(deps.store, pending); }
+ const ongoing = pending.get(runId);
+ if (ongoing !== undefined) return ongoing;
+ const settlement = settleCeilingStopOnce(deps, runId, report);
+ pending.set(runId, settlement);
+ try { return await settlement; } finally { if (pending.get(runId) === settlement) pending.delete(runId); }
+}
+async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,report:ExecutionReport):Promise<boolean> {
  const {store}=deps,run=readDriverRun(store,runId),raw=report.candidate!,stop=report.liveCeilingStop!;
+ const checkpointId=`ceiling-${runId}`;
+ if (run.checkpointId === checkpointId) {
+  const committed = await readCommittedCheckpoint(store, runId);
+  const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 1);
+  if (committed.runId !== runId || committed.groupId !== run.groupId || committed.workItemId !== run.workItemId ||
+      committed.generation !== run.generation || committed.usageHighWater !== run.highWater ||
+      hashPayload(committed.stopProof) !== hashPayload(raw.stopProof) ||
+      hashPayload(run.liveCeilingStop) !== hashPayload(stop) || active !== 0 ||
+      run.state !== "settled-recoverable" || run.drive?.outcome !== "exhausted")
+    throw new ControlError("checkpoint-identity-conflict", "ceiling-already-committed");
+  return true;
+ }
  if(openRequestOf(store,run)!==null)return false;
  const current=readRun(store,runId);
  if(current.unknown.work||current.unknown.handoff){blockRun(deps,runId,"C","usage-unknown");return true;}
- const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
- if(archive.missing.length||archive.snapshot===null){blockRun(deps,runId,"C","live-ceiling-snapshot-incomplete",{outcome:"exhausted",...(report.terminal?.stopReason?{stopReason:report.terminal.stopReason}:{})});return true;}
- await verifySnapshot(store,archive.snapshot);
- const candidate:Candidate={...raw,checkpointId:`ceiling-${runId}`,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
- await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled:()=>{
+ const onSettled=()=>{
   const settled=readDriverRun(store,runId);
   if(openRequestOf(store,settled)!==null||settled.state!=="settled")throw new ControlError("handoff-request-conflict","ceiling-yields-to-handoff");
   const work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{currentRunId?:string|null};
   if(work.currentRunId!==undefined&&work.currentRunId!==runId)throw new ControlError("work-already-active");
   settled.state="settled-recoverable";settled.drive={...settled.drive!,outcome:report.terminal!.outcome,...(report.terminal!.stopReason?{stopReason:report.terminal!.stopReason}:{})};(settled as {liveCeilingStop?:unknown}).liveCeilingStop=stop;saveDriverRun(store,settled);
   classifyCeilingStop(store,{runId,groupId:run.groupId,workItemId:run.workItemId,taskId:run.taskId},stop,(deps.now?.()??new Date()).getTime());
- }});
+ };
+ const orphan=readUncommittedCheckpoint(store,runId,checkpointId);
+ if(orphan!==null){
+  if(orphan.groupId!==run.groupId||orphan.workItemId!==run.workItemId||orphan.generation!==run.generation||
+     orphan.usageHighWater!==run.highWater||orphan.result!=="partial"||orphan.terminalOutcome!=="exhausted"||
+     orphan.snapshot===null||hashPayload(orphan.stopProof)!==hashPayload(raw.stopProof)||hashPayload(orphan.handoff)!==hashPayload(raw.handoff))
+    throw new ControlError("checkpoint-identity-conflict","uncommitted-ceiling");
+  await verifySnapshot(store,orphan.snapshot);
+  await commitCandidate(store,orphan,{...archiveAdmission(deps),onSettled});
+  return true;
+ }
+ const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
+ if(archive.missing.length||archive.snapshot===null){blockRun(deps,runId,"C","live-ceiling-snapshot-incomplete",{outcome:"exhausted",...(report.terminal?.stopReason?{stopReason:report.terminal.stopReason}:{})});return true;}
+ await verifySnapshot(store,archive.snapshot);
+ const candidate:Candidate={...raw,checkpointId,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
+ await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled});
  return true;
 }
 
