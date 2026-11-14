@@ -1636,13 +1636,36 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
   return parsed.data;
 }
 
+/* #170: delivered=0 describes the outbox row, not necessarily the handoff request. Stop/context rows can await
+ * delivery; a settled request can retain an old row, while a service row is a record rather than a delivery queue. */
+function undeliveredHandoffRows(store: ControlStore): Array<{ outboxId: string; requestId: string | null; requestState: string | null; delivery: "open-request" | "in-progress" | "finished" | "service-record" | "unknown" }> {
+  const rows = store.db.prepare("SELECT id,body FROM outbox WHERE kind='handoff-request' AND delivered=0 ORDER BY rowid").all();
+  return rows.map((row) => {
+    let body: unknown;
+    try { body = JSON.parse(String(row.body)); } catch { body = null; }
+    const data = body !== null && typeof body === "object" ? body as Record<string, unknown> : {};
+    const serviceRequest = data.request !== null && typeof data.request === "object" ? data.request as Record<string, unknown> : null;
+    const serviceRecord = serviceRequest !== null;
+    const candidate = serviceRecord ? serviceRequest.requestId : data.requestId;
+    const requestId = typeof candidate === "string" && candidate.length > 0 ? candidate : null;
+    const record = requestId === null ? undefined : store.db.prepare("SELECT state FROM handoff_requests WHERE id=?").get(requestId);
+    const requestState = typeof record?.state === "string" ? record.state : null;
+    const delivery = requestState?.startsWith("settled-") ? "finished"
+      : serviceRecord ? "service-record"
+      : requestState === "request-pending" ? "open-request"
+      : requestState === "latched" || requestState === "collecting" || requestState === "outcome-unknown" ? "in-progress" : "unknown";
+    return { outboxId: String(row.id), requestId, requestState, delivery };
+  });
+}
+
 export function readControlRecovery(store: ControlStore, epoch: string): RecoveryViewV1 {
   const terminalRuns = terminalRunRows(store);
   const deferredWakes = deferredWakeRows(store);
   const blockedRuns = blockedRunRows(store);
   const blockedCalls = blockedCallRows(store);
   const capBlocked = capBlockedRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }) };
+  const handoffOutbox = undeliveredHandoffRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
