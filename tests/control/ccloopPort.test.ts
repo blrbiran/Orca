@@ -110,6 +110,13 @@ describe("production ccloop execution port",()=>{
     expect(await h.port.accept(h.envelope)).toEqual({kind:"accepted",executionId:"execution-1",configHash:"a".repeat(64)});
     const recorded=JSON.parse(await readFile(h.record,"utf8"));expect(recorded.argv).toEqual(["control","accept","--agents",h.table]);expect(JSON.parse(recorded.stdin)).toEqual(h.envelope);
   });
+  it("accepts the optional per-call Codex observation separately from usage events (#285)",async()=>{
+    const liveUsage={schema:"ccloop-live-usage-v1",runId:"r",attempt:1,phase:"execute",callId:"call-1",threadId:"01a1da57-817e-7450-907a-f3a3f0371154",tokens:125,observedAt:"2026-11-14T22:00:00.000Z",revision:1};
+    const h=await fixture("ok",{collectExtra:{liveUsage}});
+    const report=await h.port.collect(h.envelope,0);
+    expect((report as unknown as {liveUsage?:unknown}).liveUsage).toEqual(liveUsage);
+    expect(report.events).toEqual([]);
+  });
   it("propagates exit 2 stably and refuses malformed or oversized stdout",async()=>{
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the same three refusals,
     // reached through resolveAgent, the only capabilities call left.

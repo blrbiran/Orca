@@ -79,6 +79,8 @@ export interface HarnessOptions {
   liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => import("../../../src/control/executionPort.js").ExecutionReport["liveCeilingStop"];
   /** Tester follow-up I (seat L): the evidence a terminal candidate names missing (driverPort.ts). */
   candidateMissing?: (workItemId: string) => string[];
+  /** Test-owned collect behavior must be installed before the router copies the port's methods. */
+  wrapPort?: (port: ExecutionPort) => ExecutionPort;
 }
 
 /**
@@ -116,8 +118,9 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   if (options.listModels !== undefined) fake.port.listModels = options.listModels;
   if (options.setLiveCeiling !== undefined) fake.port.setLiveCeiling = options.setLiveCeiling;
+  const port = options.wrapPort?.(fake.port) ?? fake.port;
   const deps: ExecutionDriverDeps = {
-    store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, fake.port)]), admissionGate: h.deps.admissionGate,
+    store: h.store, router: createExecutionProfileRouter([resolveProfile(snapshot, port)]), admissionGate: h.deps.admissionGate,
     roots: controlWorkspaceRoots(h.store.stateDir),
     // Without `repositories` the fixture collapses every id (a dir flow group's vault included) onto its one real
     // repository, as it always has; a test that registers extras gets strict resolution instead.

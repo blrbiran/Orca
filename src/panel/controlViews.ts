@@ -17,7 +17,7 @@ import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
-import { peerCode } from "../control/ccloopPort.js";
+import { liveUsageSchema, peerCode } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
@@ -272,6 +272,8 @@ const persistedRunSchema = z.object({
   terminalClosure: terminalClosureSchema.optional(),
   // Live transcript spec §12.3 / plan D1: the last listing collect answered, kept beside the run.
   transcripts: transcriptListingSchema.optional(),
+  // Codex's current call observation is provisional; it is never a booked usage event.
+  liveUsage: liveUsageSchema.optional(),
   // Tester follow-up G spec §2.1: a task run's live token ceiling (liveCeiling.ts), and the stop ccloop reported at it.
   liveCeiling: liveCeilingRecordSchema.optional(),
   liveCeilingStop: z.object({ revision: safeInteger.positive(), tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger, phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),

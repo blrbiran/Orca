@@ -26,7 +26,7 @@ import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
-import { peerErrorCode, peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
+import { liveUsageSchema, peerErrorCode, peerExitText, peerFailure, peerFailureLogLine } from "./ccloopPort.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { allDirsUnchanged, noChangeExplanationOf, noChangeRouteOf, recordNoChangeCompletionInTransaction } from "./noChange.js";
@@ -881,6 +881,10 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   const runId = run.runId;
   const port = portFor(deps, run);
   const report = await port.collect(readStartEnvelope(store, run), run.highWater);
+  const reading = report.liveUsage === undefined ? undefined : liveUsageSchema.safeParse(report.liveUsage);
+  if (reading !== undefined && !reading.success) throw new ControlError("control-response-invalid");
+  if (reading?.success && (reading.data.runId !== runId || run.phase !== "work" || run.mode !== undefined || run.recoveryOf !== undefined))
+    throw new ControlError("report-identity-conflict", "live-usage-run");
   const recovery=run.recoveryOf===undefined?null:recoveryOfSchema.parse(run.recoveryOf);
   const verificationOnlyRecovery=recovery!==null&&'kind' in recovery&&recovery.kind==='verification-only-v1';
   if(report.candidate!==null&&(report.candidate.verificationOnly===true)!==verificationOnlyRecovery)throw new ControlError('report-identity-conflict','verification-only-source-mismatch');
@@ -896,6 +900,32 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
     if (event.runId !== runId || event.generation !== run.generation) throw new ControlError("report-identity-conflict");
     admitted(deps, () => recordUsage(store, event, deps.now?.().getTime()));
   }
+  // A response watermark is provisional. It never enters recordUsage or the group's budget.
+  write(deps, () => {
+    const current = readDriverRun(store, runId);
+    const previous = current.liveUsage === undefined ? undefined : liveUsageSchema.parse(current.liveUsage);
+    const next = reading?.success && report.terminal === null && current.state === "accepted" ? reading.data : undefined;
+    if (next === undefined) {
+      if (previous !== undefined) { delete current.liveUsage; saveDriverRun(store, current); }
+      return;
+    }
+    if (previous !== undefined) {
+      const ranks = { plan: 0, execute: 1, verify: 2 };
+      if (next.attempt < previous.attempt || (next.attempt === previous.attempt && ranks[next.phase] < ranks[previous.phase])) return;
+      if (next.attempt === previous.attempt && next.phase === previous.phase) {
+        if (next.callId === previous.callId && next.threadId === previous.threadId) {
+          if (next.revision < previous.revision) return;
+          if (next.revision === previous.revision) {
+            if (JSON.stringify(next) !== JSON.stringify(previous)) throw new ControlError("report-identity-conflict", "live-usage-revision");
+            return;
+          }
+          if (next.tokens < previous.tokens) throw new ControlError("report-identity-conflict", "live-usage-regressed");
+        } else if (Date.parse(next.observedAt) <= Date.parse(previous.observedAt)) return;
+      }
+    }
+    current.liveUsage = next;
+    saveDriverRun(store, current);
+  });
   // Labels and progress spec §3.4 (§8 R2, R3): the latest progress, stored on a FRESH read after the usage above --
   // `run` here predates recordUsage, and saving it would roll cumulative, remaining and highWater back. saveDriverRun
   // writes (and moves changeSeq) only when the body changed. A port that answered no progress field writes nothing, and

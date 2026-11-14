@@ -45,6 +45,8 @@ export interface ExecutionReport {
  handoffFiles?:{handoff:{present:boolean;bytes:number|null};summary:{present:boolean;bytes:number|null}};
  /** Tester follow-up G Part 5 (ccloop C4): the live notes ccloop acknowledged, present iff its ack file exists. */
  liveNotes?:{delivered:Array<{id:string;phase:"plan"|"execute"|"verify";attempt:number;at:string}>};
+ /** Codex response-boundary observation: a provisional reading of one call, never a usage-ledger event. */
+ liveUsage?:{schema:"ccloop-live-usage-v1";runId:string;attempt:number;phase:"plan"|"execute"|"verify";callId:string;threadId:string;tokens:number;observedAt:string;revision:number};
  /**
   * Worker-lost recovery spec 2026-11-12 §5 (as built, ccloop half item 2): present only for a claimed loop run with no
   * candidate and no terminal whose worker is not alive -- `lost` (confirmed dead) or `undetermined`. Absent = alive or n/a.
