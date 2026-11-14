@@ -74,6 +74,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **codex 实时用量（#297／#285／#195 的共同根因）**：免费探针（隔离 HOME／CODEX_HOME＋本地假 Responses 端点，codex-cli 0.167.0）证实：去掉 `--ephemeral` 后会话文件写在 `CODEX_HOME/sessions/**/rollout-*-<thread_id>.jsonl`，**每个响应之后、下一次请求之前**追加 `token_count`（含 total／last 用量与 `model_context_window`）；8 个并发 exec 共用一个私有 CODEX_HOME 全部成功、8 个不同 thread、各自数值与 `turn.completed` 一致。代价：文件保留整个对话、`thread_history` SQLite 行、必须按 thread_id 精确取文件。设计与风险在 `docs/superpowers/specs/2026-11-14-codex-live-usage-design.md`，**§7 等人裁**（重开「#297 只做提示」这一裁定，仅限 loop phase）。
 - **g-28d9b560**：在组分支 tip 的导出树上跑目标仓整套 `npm test` = **20/20 绿**（AC5 因此事实上满足）。同时**直接复现了 AC4**：`add` 之后的下一次 `search`／`tag` 看不到前一次的数据（每次 CLI 调用新建 store）。⇒ AC4 不是判官抖动能解释的，是 CLI 跨调用不持久化的产品缺口；组未动，等人选 accept／paid review-fix。
 - **门**：`TMPDIR=/tmp ORCA_CCLOOP_BIN=<9c83b38 build> node scripts/test-affected.mjs --base=3ffce7ec`；已知红（`orchestration`「admits a debug group…」）照旧。本机负载约 20–40。
+- **push 未成（待人）**：人已在消息里给 `allow-push`，但 `~/.orca/gate/push-grants/` 里没有本会话的文件（只有更早会话的）⇒ 闸门把 ccloop／ccmem 的 docs 推送按「未授权」拒掉，没有换写法重试。两仓各有一笔只改 handoff 的提交在本地 main，下一轮确认闸门认到授权后一并推。
 
 ### 3.L（2026-11-14，会话 `6b727312`，测试者反馈 L 轮；压成结论；台账 `.superpowers/sdd/2026-11-14-tester-followup-l/progress.md`）
 
