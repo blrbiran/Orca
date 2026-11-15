@@ -591,3 +591,21 @@ The tester's `dogfood-20261114-2` reached `requirementReview.state=fixing` after
 - Once a review opened a fix task and that task is done, wait for group acceptance to record its result **for the fix's current tip**; then run the next review even if that result is `failed`. Do not review a stale tip or a tip with no acceptance record.
 - A failed acceptance remains failed and still prevents the group from becoming `done`. A passing review does not waive or reinterpret the check failure; the owner must repair the failing check or explicitly waive acceptance under the existing authority rules.
 - `tests/control/requirementReviewFix.test.ts` pins both the second review on the new tip without a waiver and the first-review gate on a failing acceptance.
+
+## 21. Correction (#314, 2026-11-15): a recorded acceptance failure opens the first review too
+
+§20's first bullet is replaced. When the project's full-suite command contains a failure that predates the group (the
+tester's README assertion), every tip records `acceptance.result="failed"`, so §20's "the first review starts only after
+acceptance passed" never fires: `requirementReview` does not exist, `review-rerun` and `review-accept` answer
+`requirement-review-not-open:none`, and only a person's `waive-acceptance` can move the group. `dogfood-20261115-1`
+reproduced this with 8/8 tasks done and every focused check green.
+
+- The first review starts once the acceptance pass has recorded its result for the current tip, whether `passed` or
+  `failed` (and, as before, when the group needs no acceptance). It does not start before that record exists: both passes
+  need the group's work runs idle, so a review that ran first would hold the acceptance off indefinitely.
+- A recorded failure is carried into the review prompt ("Group acceptance failed on this tip ..."), so the reviewer judges
+  the delivered work rather than assuming the checks passed.
+- The failure is not waived and still keeps the group out of `done`; §20's second and third bullets still hold.
+- Criteria: `tests/control/requirementReviewAcceptanceGate.test.ts` (a failing tip is reviewed and the group stays out of
+  done) and the rewritten `tests/control/requirementReviewFix.test.ts` "starts an initial review even when group
+  acceptance truly fails (#314)".

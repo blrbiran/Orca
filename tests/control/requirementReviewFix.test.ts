@@ -173,6 +173,8 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
     try {
       await w.runAll();
       await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      // #314: review no longer waits for the acceptance pass to settle, so wait for the record itself here.
+      await w.t.until(w.driver, () => group().acceptance !== undefined, 120);
       expect(group().acceptance.result).toBe("passed");
       const oldTip = git(w.t.repo, "rev-parse", "refs/heads/orca/g");
       // The configured full suite is red on the fix tip; task checks still pass.
@@ -195,7 +197,11 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
     } finally { await w.t.h.dispose(); }
   }, 300000);
 
-  it("does not start an initial review when group acceptance truly fails", async () => {
+  // Ruling: #314 (human 2026-11-15 「开始吧，按这个顺序做」). This criterion used to encode the opposite: acceptance truly
+  // failing meant no review call at all. Acceptance and review are two gates that both decide `done`, so the failing tip is
+  // reviewed and the group still stays out of done -- the deadlock the tester reported (8/8 done, acceptance failed,
+  // requirementReview absent, every command refused).
+  it("starts an initial review even when group acceptance truly fails (#314)", async () => {
     const w = await reviewWorld();
     const group = () => JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
     try {
@@ -204,10 +210,9 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
         checks: { ...settings.checks, integrationCheck: { command: "false" } } });
       await w.runAll();
       await w.t.until(w.driver, () => group().acceptance?.result === "failed", 120);
-      for (let i = 0; i < 5; i += 1) await w.driver.round();
-      // Mutation #312 guard: allow a pending review through the failed acceptance -> a review call starts.
-      expect(w.calls).toEqual([]);
-      expect(w.review()).toBeNull();
+      await w.t.until(w.driver, () => w.review() !== null, 120);
+      await w.t.until(w.driver, () => w.calls.some((call) => call.purpose === "requirement-review"), 120);
+      expect(w.calls.some((call) => call.purpose === "requirement-review")).toBe(true);
       expect(w.groupStatus()).not.toBe("done");
     } finally { await w.t.h.dispose(); }
   }, 300000);

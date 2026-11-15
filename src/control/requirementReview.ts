@@ -15,6 +15,7 @@ import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, readGroupCallContract } from "./groupSingleCall.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { cutUtf8 } from "./noChange.js";
+import { planLayers, planOrderTasks } from "./planOrder.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readWork } from "./queries.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
@@ -86,10 +87,14 @@ export function classifyReviewOutput(raw: unknown, criterionIds: readonly string
 }
 
 export interface ChangedFile { path: string; status: string; bytes: number; sha256: string; binary: boolean }
+/** #314: the accepted plan as data, so a criterion about the plan's shape is judgeable instead of always cannot-judge. */
+export interface ReviewPlanTask { taskId: string; title: string; dependsOn: string[]; targetPaths: string[]; successCondition: string; checks: string[] }
+export interface ReviewPlan { layers: string[][]; tasks: ReviewPlanTask[] }
 export function buildReviewPrompt(input: { idea: string; statement: string; criteria: ReadonlyArray<{ id: string; text: string }>; openBranches: readonly string[];
-  changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string }): string {
+  changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean; plan?: ReviewPlan | null }): string {
   return [
     "You are Orca's requirement reviewer. A group of tasks implemented the requirement below; its tasks' checks passed on the result.",
+    ...(input.acceptanceFailed === true ? ["Group acceptance failed on this tip (a project-wide check, possibly one that was already failing). Judge the criteria from the delivered work below anyway."] : []),
     "Compare what the group changed with each acceptance criterion and answer for every criterion, by its id.",
     "",
     `Requirement (as first said): ${input.idea}`,
@@ -98,6 +103,12 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     "Acceptance criteria:",
     ...input.criteria.map((c) => `- ${c.id}: ${c.text}`),
     ...(input.note === undefined ? [] : ["", `A person or agent asked this review to look at: ${input.note}`]),
+    ...(input.plan === undefined || input.plan === null ? [] : [
+      "",
+      "The accepted delivery plan (the plan itself; judge a criterion about the plan's structure from this section and one about the delivered code from the diff -- do not infer the plan from the code):",
+      `Layers (tasks in one layer may run together; every earlier layer finishes first): ${input.plan.layers.map((layer, index) => `${index + 1}: ${layer.join(", ")}`).join("; ")}`,
+      ...input.plan.tasks.map((task) => `- ${task.taskId} (${task.title}): depends on ${task.dependsOn.length === 0 ? "nothing" : task.dependsOn.join(", ")}; writes ${task.targetPaths.join(", ")}; checks ${task.checks.join(" | ")}; success: ${task.successCondition}`),
+    ]),
     "",
     "Files the group changed (status, path, bytes, sha256):",
     ...input.changedFiles.map((f) => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${f.binary ? " (binary: named only, its bytes are not shown)" : ""}`),
@@ -115,12 +126,46 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
 }
 
 /** §3.2: the requirement's words and its acceptance criteria -- the newest round of the clarification chain that has a result. */
-export function reviewInputsOf(store: ControlStore, groupId: string, body: unknown): { idea: string; statement: string; criteria: Array<{ id: string; text: string }>; openBranches: string[] } {
+export function reviewInputsOf(store: ControlStore, groupId: string, body: unknown): { idea: string; statement: string; criteria: Array<{ id: string; text: string }>; openBranches: string[]; plan: ReviewPlan | null } {
   const requirement = (body as { requirement?: { idea?: unknown; consensus?: { openBranches?: unknown } | null } }).requirement;
   const latest = chainRounds(readRounds(store, groupId)).filter((round) => round.result !== null).at(-1)?.result ?? null;
   if (latest === null || latest.acceptanceCriteria.length === 0) throw new ControlError("recovery-blocked", "requirement-review-criteria-missing");
   const openBranches = Array.isArray(requirement?.consensus?.openBranches) ? requirement!.consensus!.openBranches as string[] : latest.openBranches;
-  return { idea: typeof requirement?.idea === "string" ? requirement.idea : latest.statement, statement: latest.statement, criteria: latest.acceptanceCriteria.map((c) => ({ id: c.id, text: c.text })), openBranches };
+  return { idea: typeof requirement?.idea === "string" ? requirement.idea : latest.statement, statement: latest.statement,
+    criteria: latest.acceptanceCriteria.map((c) => ({ id: c.id, text: c.text })), openBranches, plan: reviewPlanOf(store, groupId, body) };
+}
+
+/** The accepted split's tasks as data (its draft when stored, else the archived contracts), in dependency order. */
+function reviewPlanOf(store: ControlStore, groupId: string, body: unknown): ReviewPlan | null {
+  const draftNo = (body as { requirement?: { acceptedDraftNo?: unknown } }).requirement?.acceptedDraftNo;
+  let tasks: ReviewPlanTask[] | null = null;
+  if (typeof draftNo === "number") {
+    try {
+      const authored = (readDraft(store, groupId, draftNo) as { output?: { tasks?: Array<Record<string, unknown>> } | null }).output?.tasks;
+      if (Array.isArray(authored) && authored.length > 0) tasks = authored.map((task) => ({
+        taskId: String(task.taskId), title: typeof task.title === "string" ? task.title : "",
+        dependsOn: Array.isArray(task.dependsOn) ? task.dependsOn.map(String) : [],
+        targetPaths: Array.isArray(task.targetPaths) ? task.targetPaths.map(String) : [],
+        successCondition: typeof task.successCondition === "string" ? task.successCondition : "",
+        checks: Array.isArray(task.checks) ? task.checks.map(String) : [],
+      }));
+    } catch (error) { if (!(error instanceof ControlError) || error.code !== "work-not-found") throw error; }
+  }
+  if (tasks === null) {
+    const plan = readArchivedPlan(store, groupId);
+    tasks = plan.plan.tasks.map((task) => {
+      const contract = readArchivedContract(store, groupId, task.taskId).contract;
+      const context = contract.context as { targetPaths?: string[] };
+      return { taskId: task.taskId, title: contract.objective.goal, dependsOn: [...task.dependencyTaskIds],
+        targetPaths: [...(context.targetPaths ?? [])], successCondition: contract.objective.successCondition,
+        checks: [...contract.verification.requiredChecks] };
+    });
+  }
+  if (tasks.length === 0) return null;
+  const byTask = new Map(tasks.map((task) => [task.taskId, task]));
+  const ordered = planOrderTasks(tasks.map((task) => ({ taskId: task.taskId, dependencyTaskIds: task.dependsOn })))
+    .map((task) => byTask.get(task.taskId)!);
+  return { layers: planLayers(ordered.map((task) => ({ taskId: task.taskId, dependencyTaskIds: task.dependsOn }))).map((layer) => layer.map((task) => task.taskId)), tasks: ordered };
 }
 
 /** The base the group's first work run started from (rowid order): what the review diffs against. */
@@ -188,7 +233,12 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       if (body.planHash === undefined || !reviewRequired(store, groupId, body) || isGroupArchived(store, groupId)) continue;
       if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined || !tasksDone(store, groupId)) continue;
       const review = reviewOf(body);
-      if (!acceptanceSatisfied(store, groupId, body) && review?.state !== "fixing") continue;
+      // #314 (same cause as #312): acceptance and review are two gates that both decide `done`; a failing tip must still
+      // be reviewed. The gate waits for the acceptance pass to record this tip at all -- a recorded failure opens the
+      // review too -- because both passes need the group's runs idle, so letting review run first would starve the
+      // acceptance it is meant to complement. The round carries the failure to the prompt.
+      const acceptance = acceptanceOf(body);
+      if (!acceptanceSatisfied(store, groupId, body) && !(acceptance !== null && acceptance.result === "failed" && acceptance.why === undefined)) continue;
       if (isMultiGroup(store, groupId) || isDirGroup(store, groupId) || isDirFlowGroup(store, groupId)) {
         if (review?.state === "not-run") continue;
         deps.write(() => saveReview(store, groupId, { state: "not-run", why: isMultiGroup(store, groupId) ? "multi-repo" : "dir", rounds: [], autoFixRounds: 0 }));
@@ -270,7 +320,8 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
     const changes = await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip);
     return {
-      prompt: buildReviewPrompt({ ...inputs, ...changes, ...(typeof contract?.note === "string" ? { note: contract.note } : {}) }),
+      prompt: buildReviewPrompt({ ...inputs, ...changes, ...(typeof contract?.note === "string" ? { note: contract.note } : {}),
+        acceptanceFailed: acceptanceOf(body)?.result === "failed" }),
       responseSchema: { ...requirementReviewResponseSchema }, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS,
     };
   },
@@ -347,7 +398,8 @@ function fixSourceTaskId(store: ControlStore, groupId: string, round: ReviewRoun
     catch (error) { if (!(error instanceof ControlError) || error.code !== "work-not-found") throw error; }
   }
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
-  const ordered = draftTasks === null || draftTasks === undefined ? tasks.map((task) => task.taskId)
+  const ordered = draftTasks === null || draftTasks === undefined
+    ? planOrderTasks(tasks.map((task) => ({ taskId: task.taskId, dependencyTaskIds: task.dependencyTaskIds }))).map((task) => task.taskId)
     : draftTasks.map((task) => task.taskId).filter((id) => byId.has(id));
   const unmet = round.criteria.filter((criterion) => criterion.verdict === "not-met").map((criterion) => criterion.id);
   const relevant = unmet.length > 0 ? unmet : round.criteria.filter((criterion) => criterion.verdict === "cannot-judge").map((criterion) => criterion.id);

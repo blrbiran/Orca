@@ -93,6 +93,16 @@ describe("the requirement review (tester follow-up G §3)", () => {
     const named = buildReviewPrompt({ idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false,
       changedFiles: [{ path: "img.png", status: "A", bytes: 3, sha256: "f".repeat(64), binary: true }] });
     expect(named).toContain(`- A img.png 3 ${"f".repeat(64)} (binary: named only, its bytes are not shown)`);
+    // #314: a criterion about the plan's structure is judgeable only when the accepted plan is in the prompt.
+    const planned = buildReviewPrompt({ idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false, changedFiles: [],
+      plan: { layers: [["a"], ["b"]], tasks: [
+        { taskId: "a", title: "contract", dependsOn: [], targetPaths: ["src/a.ts"], successCondition: "a exists", checks: ["true"] },
+        { taskId: "b", title: "metric", dependsOn: ["a"], targetPaths: ["src/b.ts"], successCondition: "b reads a", checks: ["node check.js"] },
+      ] } });
+    // mutation: drop the plan section from buildReviewPrompt -> these are absent.
+    expect(planned).toContain("The accepted delivery plan");
+    expect(planned).toContain("Layers (tasks in one layer may run together; every earlier layer finishes first): 1: a; 2: b");
+    expect(planned).toContain("- b (metric): depends on a; writes src/b.ts; checks node check.js; success: b reads a");
   }, 180000);
 
   it("an unfunded review is named and does not pass", async () => {
