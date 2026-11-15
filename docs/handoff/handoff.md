@@ -335,7 +335,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 5. **要先 brainstorm／写 spec 的**：#265 拆分中的隐含写路径（当前只提示精确文字和已列路径，直接按词自动扩权限会误报）；#224／#266 估算校准（同仓历史中位数只展示）；#196 plan 成本；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测（先定义精确上下文语义）。
 6. **测试者台账的本轮增量**（台账是测试者的文件，不能替其改状态）：#267／#273 的隔离配对路径 10/10、旧生产组未验；#312 的 fix 后复评代码已修，旧组的验收红与面板部署未解；#285 只合了 Orca 可选消费端，不等于 ccloop 已 repin；旧 #310/#311 本轮没有改码，其结论在 §3.最新。#229 的 20 轮只盖 archive 并发；#230 读视图阻塞而存储 running 是恢复选择；#265 仍部分解决；#279/#283 已配置的 full-suite 会跑，未配置只警示。#296 的 review-fix 来源之前已修，估算的语义排序仍是独立问题。
 7. **旧裁定的现状**：#297 的 Codex loop 阶段在 ccloop 新提交里按响应边界软停，并不承诺请求中途硬拦；当前 Orca pin 尚未采用。#235 改阶梯仍无新证据支持；#145／#160、#174 方向按现码与反馈复核；全量发版门只在要求打 tag 时跑（Rule 18）。
-8. **清理（归人，要 `--force` 或在仓库外）**：Orca 的 5 个 agent worktree（`agent-a2e071750b032b32b`、`agent-a320bfe4ef0f4d34f`、`agent-a6c19a4fdd25d2f03`、`agent-ae3982cf7aa043e52`、`agent-ae5d8fc32021c2728`；都干净、都已在 main）及其分支（删 worktree 后 `git branch -d` 即可）；`/tmp/orca-k*`、`/tmp/orca-l*`、`/private/tmp/orca-j1113`；`/private/tmp/orca-tmp-*`；ccloop 的 `.claude/worktrees/l2-run-registry`。⚠️ 删了 `/private/tmp/orca-j1113` 后，下一轮门的 `ORCA_CCLOOP_BIN` 要自己用 pin 那笔 `git clone` 再 `npm ci && npm run build`（建在会话 scratchpad）。
+8. **清理（归人）**：本会话收尾 `/usr/bin/git worktree list` 只列出 Orca 主树及 `.claude/worktrees/agent-a928a0ccb94ff7fe9`、`agent-ac902d35fb1bda971` 两个 agent worktree；`git status --porcelain -uall` 各有本轮 #312 与 `orchestration` 的未提交副本，**不要把它们当未整合代码，也不要未经核查强删**。上一轮列的 5 个 agent worktree 这次不在列表里（旧清单作废）；历史 `/tmp/orca-k*` 等仓库外候选本轮未逐项核实，不做清理判断。本轮 scratch `/tmp/orca-267273-ACu4mRCT/` 含门日志与 pin／变异 clone；如果它消失，重做配对前先按 `package.json` pin 在新的 scratch clone 构建，给 `ORCA_CCLOOP_BIN` canonical 绝对路径。
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
