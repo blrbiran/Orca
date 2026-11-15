@@ -64,13 +64,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-15，会话 `6a54a072`，观测基线 `e3a1cdd2`）—— #310／#311 已合本地 main，Codex 用量消费端待合；会话预算超限，需新会话接手
+### 3.最新（2026-11-15，会话 `1b8535c8`）—— #267／#273 配对闭环、#312 复评解锁、Codex 临时读数消费端已在本地 main
 
-- **已合本地 main，未推**：`42e16a1e` 为 #267 被阻塞的 C run 补 recovery 列表判据；`f34fe1f1` 修 #243／#226 Live 备注草稿及等待任务可见性；`e8f8489e` 接收并单调保存 #285 Codex 响应观测（只作临时读数，不入账），`b2bc7684` 给已发布设计追加 Codex 删除边界更正；`dd14646d` 修 #310 重复 ceiling 结算复用已提交 checkpoint 并恢复可修复的冲突；`12be602e` 修 #311 新组按任务预留一次估算 handoff 的 attempts／sessions；`e3a1cdd2` 按本轮人授意更新受新默认余量影响的两份 golden 与一次 unmetered 重试判据。代码变动、验证和裁定各见 `.superpowers/sdd/2026-11-14-267273/`、`2026-11-14-ceiling-310/`、`2026-11-14-311-clone/` 和 `2026-11-14-codex-live-usage-orca/` 台账。ccloop 本地 main 的 `73149bb`／`debc1d3` 做 loop 阶段响应观测与按 UUID 删除；Orca 使用独立 ccloop clone build 配对跑 #267／#273 为 9/9。ccmem 仅更新 handoff；两仓本地 handoff 均已就地滚动提交。
-- **待合的 Orca 代码**：独立 clone `.superpowers/sdd/2026-11-14-live-usage` 的 `feat/codex-live-usage-orca` 已 rebase 到本地 main `e3a1cdd2`，primary repo 已 fetch 同名分支（commit `029d98f7`，此为观测时锚点，不当作未来 HEAD）。CLI／control 11/11、Web 11/11，root 与 Web typecheck 通过；它在 CLI／Live／run detail 显示 provisional `liveUsage`，把 `used` 留给记账值，并把 Codex 停止说明改为“响应后检查，在途请求可越线”。尚未合 main；合并后需 `TMPDIR=/tmp npm test`（Rule 18）。测试 `web/tests/liveCeilingCodexNote.test.tsx` 开头说明和 `web/src/usageNotes.ts` 顶部注释仍称 Codex 只在 phase end 上报，合并前按实际观测更正。
-- **#311 日常门未绿**：观测时 commit `e3a1cdd2`，命令 `TMPDIR=/tmp npm test`，日志 `.superpowers/sdd/2026-11-14-267273/estimate-311-affected2.log`：root 6401 passed／139 skipped／3 failed，Web 2014 passed／0 failed；文档 plan/spec 两路径没有选中测试。`startForm` 与 `criteriaBaseRun` 在相同 commit 的单独命令 `./node_modules/.bin/vitest run tests/flow/startForm.test.ts tests/control/criteriaBaseRun.test.ts` 为 27/27，属于合跑时负载形状；`orchestration` 的 `task-run-moved:ladder-source-superseded` 单跑仍红，前轮在未改 main 上亦红。三份受新默认余量影响的判据，单独命令 `./node_modules/.bin/vitest run tests/control/finiteRetryGolden.test.ts tests/control/planImport.test.ts tests/control/settleUnknownUsageUnmetered.test.ts` 为 45/45。**不能称日常门通过**。
-- **剩余与等人**：#195 的精确上下文占用没有生产者，保持 `contextObservation: unavailable`；Codex `delete --force <UUID>` 支持路径在隔离 HOME 测过，但 `thread.started` 证据出现前崩溃的线程与 SQLite/WAL 物理擦除无安全保证，保留策略待人裁；ccloop 未推，故 Orca 不可 repin 到 GitHub 尚不可安装的 commit。g-28d9b560 的已发布 review-fix 产物导出树验证 22/22 和 AC4，但 run 仍 `settled-recoverable`，须人抬组上限或走适用的人权限接受路径；不要 `review-accept`。面板 7777 的旧构建待人重启。`/private/tmp/orca-296mut-2CWYvN` 在交接前只读 `ls -ld` 已报不存在，无需清理；若重现，先列目录、备份后再由人决定删除。push grant 目录没有本会话 ID 文件；虽人消息开头给过 `allow-push`，闸门条件不满足，三仓均未推。本轮 `dev checkpoint write` 读取真实会话转录被 auto 审批以来源转仓库为由拒绝，未换命令绕过；本 handoff 是替代交接，但不是机器 checkpoint。项目 Rule 6 的会话预算已超过 450k，hook 报超限；PostToolUse hook 最近一次报会话累计约 $177.76，未自行估算。
-- **后续反馈**：原请求的 #229／#230／#265／#296／#224／#266／#279／#283 尚需逐条按更新的 `orca_archived_files/issue-20261023.md` 与现码复核，旧裁定只作历史证据；#296 源选择已在上一轮修。不能据本轮工作声称整批完成。
+- **本轮做成**（主题行按 `git log --grep` 取）：`test(control): prove a blocked lost worker unlocks dependent work (#267 #273)` 串起 C 阶段超时阻塞、worker 被杀、显式 `recovery retry --run`、`worker-lost` 自动重试和下游完成；删掉本仓 worker-lost 分支的定向变异在独立 clone 红于等待结算，clone 的 `git diff` 与 `git diff --cached` 还原后各 0 B。`test(control): give debug priority a valid ladder source` 把旧 `orchestration` 假来源换成真实失败 run，仍有普通组竞争槽位；变异删优先级也见红。`fix(control): review a finished fix after a failing acceptance (#312)` 让完成的 review-fix 在**新 tip 已有验收结果**时再评审，验收失败仍挡住组 done；新增正负判据先红后绿，已发布 G 设计仅在文末追加 §20 更正。Codex 消费端由 `feat(web): show Codex response observations separately from booked usage (#285)` 接入当前 main，再由 `fix(usage): distinguish booked Codex work from response observations (#285)` 显示精确临时下界、中文阶段与上次入账值，修正过期注释和越线措辞。原分支不再是待合工作。
+- **门（本轮完整日志现读）**：在上述消费端修正**未提交、随后按相同源码字节提交**时，`TMPDIR=/tmp npm test` RC0；`test-affected` 18 个改动路径、1,059 文件被选（root 812／Web 247），root **6,422 passed／140 skipped**（785 文件通过／27 文件跳过），Web **2,017 passed／0 skipped**；内含两边 typecheck，只有追加的设计 spec 路径不选测试。`startForm`、`criteriaBaseRun`、`orchestration` 本次均通过。命令和全日志在 `/tmp/orca-267273-ACu4mRCT/daily-gate-final.log`（临时目录，可能失效）；root `npm run build` 与 Web `npm run build --workspace web` RC0。另用 `ORCA_CCLOOP_BIN=/private/tmp/orca-267273-ACu4mRCT/ccloop-pin/dist/cli.js`（独立 clone 的**当前 package pin** 构建，`dist/build-info.json` 核对）跑 `vitest run tests/control/sleepBlockedResumeE2E.test.ts tests/control/workerLostE2E.test.ts` **10/10**；日常门里这些配对用例属于 140 条跳过，不能混报为门覆盖。没有调用真实付费 provider。
+- **仍要区分的状态**：上面证明的是隔离的新组路径，未操作 `dogfood-20261112-3` 等旧生产组；#312 的 `dogfood-20261114-2` 也未在真面板重放，旧 README 全量检查失败仍须按证据修复或由人裁 waive。Orca `package.json` 仍钉 J 轮 ccloop；ccloop 的 Codex 响应观测／按 UUID 删除已有远端提交，但 `thread.started` 留证前的崩溃残留及 SQLite/WAL 物理擦除未证（Orca spec `2026-11-14-codex-live-usage-design.md` §9），**保留策略未裁，故本轮不 repin**；#195 精确上下文占用仍无生产者。面板服务本轮未重启，不能声称 7777 已装新代码。`g-28d9b560` 上轮导出树 22/22＋AC4 仍只算历史观察，未动组上限或做接受，`review-accept` 不适用。
+- **反馈与边界**：测试者台账新增 #312 已修代码；#229 只证明并发 archive 的 20 轮，不证明完整驱动；#230 存储的 running 与读视图 blocked 分离是恢复路径；#265 的隐含路径提示仍非完备语义验证；#224/#266 的历史中位数只供展示，不校准 estimate；#279/#283 仍按配置的 full-suite 命令运行、缺配置时标未跑。台账是测试者文件，本轮未替其改状态。推送／授权与下一轮顺序见 §4.0、§八，远端状态须用 `ls-remote` 现核。
 
 ### 3.上一轮补记（2026-11-14，会话 `20ff3baa`）—— #296 review-fix 来源已修；codex 去 `--ephemeral` 副作用已实测并改写设计；g-28d9b560 的付费修复已产出且独立验证通过，卡在组上限等人
 
@@ -325,20 +324,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `6a54a072` 2026-11-15 交接；旧清单在本节下方保留仍成立的部分）
+### 4.0 接手顺序（会话 `1b8535c8` 2026-11-15 交接；现状以 §3.最新与各仓 `git ls-remote` 为准）
 
-1. **先处理当前证据链**：以 `git status` 和三个仓库的 handoff 现核；Orca `main` 的 #311 日常门有 3 红（两项在同一观测 commit 单跑 27/27，`orchestration` 单跑仍红）。对待合的 `feat/codex-live-usage-orca` 做新鲜代码审查、更正两处过期注释，确认分支包含当前 main 后用 `git merge --ff-only` 合入；依 Rule 18 跑 `TMPDIR=/tmp npm test` 并读全日志。不要把它说成已经合入或门已绿。
-2. **Codex 保留与 repin**：ccloop 本地 loop phase 的 #225／#297 已实现并验证按 UUID 删除；请人裁是否接受证据出现前崩溃窗口及未证明物理擦除的残余。当前无本会话 push grant，ccloop 尚未推，Orca 暂不能按本地 commit repin；single call 仍用 `--ephemeral`。这轮未碰 #195 的 context 观测。
-3. **`g-28d9b560` 等人抬上限或适用的接受路径**：产物导出树 22/22、AC4 手动复现通过；run 当前 `settled-recoverable`，直接 `accept-attempt` 是否适用须按实际状态查 CLI，不能沿用上一轮「可直接 accept」的假设。**不要**用 `review-accept`。
+1. **先看真正卡住的现场**：#267／#273 已用当前 pin 的真实 ccloop 构建在隔离组跑到下游完成（10/10），但 `dogfood-20261112-3` 等旧组未写、未复测；先只读 `recovery list`／group/run 证据、核面板是否运行新构建，再决定受支持的 `recovery retry --run` 与未知用量结算，不把测试组的成功当生产组 done。#312 新代码可让 fix 完成后在失败验收的 tip 上复评，旧 `dogfood-20261114-2` 上轮的 README 检查红，本轮未现场重判，需单独处置。日常门与 Codex 消费端已结清（§3.最新），勿再把旧 #311 门的三红当现状。
+2. **Codex 保留与 repin**：ccloop 的 loop phase 观测和 UUID 删除已有远端提交；single call 仍用 `--ephemeral`。Orca 消费端已接入，但当前 pin 不生产 `liveUsage`。先由人裁是否接受 `thread.started` 留证前崩溃残留与 SQLite/WAL 未证物理擦除，或另设计每 phase 私有 HOME 的可证清扫；未裁前不 repin，#195 精确 context 仍无生产者。
+3. **`g-28d9b560` 等人抬上限或适用的接受路径**：产物导出树 22/22、AC4 手动复现通过；run 上轮为 `settled-recoverable`（本轮未现场重判），直接 `accept-attempt` 是否适用须按实际状态查 CLI，不能沿用上一轮「可直接 accept」的假设。**不要**用 `review-accept`。
 4. **余项（agent 能做，不需设计）**：
    - J 轮遗留：`agent_kind` 认领时冻结、`App` 启动流程后跳转无判据、多目录组暂停线续跑仍 `multi-dir-continuation-unsupported`；
    - ccloop `savedResultRecovery.ts` 的松 `indexOf`（只影响 `execution-without-final-v1` 分支；下次 ccloop 有别的改动时一起修，判据要用 `ompVerificationOnlyRecovery` 的夹具）。
-5. **要先 brainstorm／写 spec 的**：#196 plan 成本；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测（需单独定义精确上下文语义）。
-6. **测试者台账里可以改状态的**（台账是测试者的文件，不替他改，只在报告里列）：
-   - 已修可关：#278 #127 #105 #263 #262 #174 #192 #286–#294 #296 #298–#309，K 轮的 #295 #272 #284 #265 #235（措辞）#297（提示）#279／#283（①）；L 轮 #173（历史参照已做，估算校准 #224／#266 仍开）；
-   - 代码已修、还没在真 run 上看过：#273 #267（本轮配对 E2E 9/9，仅对应隔离环境）；#226／#243 的 Live 备注 UI 已修，待真人体验；#163 只涉老组可关；#60 关掉或拆开；
-   - 仍需复核：#92 #94 #108 #109／#197（按人裁）#170 #191 #193 #194 #195 #196 #224 #229 #71 #78 #81 #84。
-7. **旧裁定的现状**：#297 的 Codex loop 阶段现已按响应边界观测并软停（ccloop 本地 main），并不承诺请求中途硬拦；#279 默认跑全量、#235 改阶梯仍无新证据支持。#145／#160、#174 方向按现码与反馈复核；全量门只在发版时跑（Rule 18）。
+5. **要先 brainstorm／写 spec 的**：#265 拆分中的隐含写路径（当前只提示精确文字和已列路径，直接按词自动扩权限会误报）；#224／#266 估算校准（同仓历史中位数只展示）；#196 plan 成本；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测（先定义精确上下文语义）。
+6. **测试者台账的本轮增量**（台账是测试者的文件，不能替其改状态）：#267／#273 的隔离配对路径 10/10、旧生产组未验；#312 的 fix 后复评代码已修，旧组的验收红与面板部署未解；#285 只合了 Orca 可选消费端，不等于 ccloop 已 repin；旧 #310/#311 本轮没有改码，其结论在 §3.最新。#229 的 20 轮只盖 archive 并发；#230 读视图阻塞而存储 running 是恢复选择；#265 仍部分解决；#279/#283 已配置的 full-suite 会跑，未配置只警示。#296 的 review-fix 来源之前已修，估算的语义排序仍是独立问题。
+7. **旧裁定的现状**：#297 的 Codex loop 阶段在 ccloop 新提交里按响应边界软停，并不承诺请求中途硬拦；当前 Orca pin 尚未采用。#235 改阶梯仍无新证据支持；#145／#160、#174 方向按现码与反馈复核；全量发版门只在要求打 tag 时跑（Rule 18）。
 8. **清理（归人，要 `--force` 或在仓库外）**：Orca 的 5 个 agent worktree（`agent-a2e071750b032b32b`、`agent-a320bfe4ef0f4d34f`、`agent-a6c19a4fdd25d2f03`、`agent-ae3982cf7aa043e52`、`agent-ae5d8fc32021c2728`；都干净、都已在 main）及其分支（删 worktree 后 `git branch -d` 即可）；`/tmp/orca-k*`、`/tmp/orca-l*`、`/private/tmp/orca-j1113`；`/private/tmp/orca-tmp-*`；ccloop 的 `.claude/worktrees/l2-run-registry`。⚠️ 删了 `/private/tmp/orca-j1113` 后，下一轮门的 `ORCA_CCLOOP_BIN` 要自己用 pin 那笔 `git clone` 再 `npm ci && npm run build`（建在会话 scratchpad）。
 
 ### 4.1 人做的（agent 不提醒、不代做）
@@ -528,7 +524,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：删去已了结的条目——各轮的 push 请求（2026-11-11 `ls-remote` 现核三仓本地 main＝`origin/main`）、已做的 repin（当前 pin 是 `chore(deps): pin ccloop to the zero-usage and prompt-mode exhausted fixes`）、`~~划掉~~` 的条目、已答复的问题（UI 信息架构四问、#158／#138 方向、#162／#173 取舍、#212、profile 升 v4、#168／#179／#157、流程第一期安全裁定、soft／failover D1–D6、F5／F6、O9 claude 付费段）、已查清的 `multiDirLandingD` 间歇红与 `dev checkpoint write`「挂住」（见 §3.A）、已不存在的清理路径（`/tmp/orca158-*`、`/tmp/chk-x`、`/private/tmp/orca-{ffec7b28,0e13a9b7,b37f7ce9}`、`.claude/worktrees/tester-followup-20261108`、ccloop 的 prunable worktree，2026-11-11 现测都已不在）；同类项各并成一条。更早（会话 `a3b2a7a7`）删过的见 git 历史。
 
-1. **push**：会话 `c8b75eac` 收尾时三仓曾已推；本轮后 Orca／ccloop／ccmem 本地又有新提交，且会话 `6a54a072` 的 grant 文件不存在。先按各仓 `git status`、`git ls-remote` 和 grant 路径现核；本轮没有推送。
+1. **push／部署**：会话 `1b8535c8` 开工时 `ls-remote` 与本地 main 在三仓一致；本轮 Orca main 增加恢复判据、#312 和 Codex 消费端，ccloop／ccmem 只需滚动 handoff。人的消息本轮以 `allow-push` 开头，但本轮开工与收尾两次现核 `~/.orca/gate/push-grants/<本会话>.json` 都不存在；机械闸门条件未满足，本轮不尝试 push，也不换命令绕过。面板服务本轮未重启，旧组未做生产恢复。
 2. **看真面板**（人此前「先默认通过，之后有问题我会再找你」——不催）：G 轮新 UI——Settings → Agents 首次使用检测与安装、`--repo` 面板的「怎么换多项目」、模型不在目录时禁用提交、「按零结算并关闭」、accept-attempt 表单的 diff 统计与检查、组详情只渲染当前区域、依赖图层内排序与「N 条隐含依赖已隐藏」、无改动标记与「撤销并重跑／按无改动接受」、需求复核面板与三个出口、Problems 里的落地回归行、本组放行按钮与放行列表——都只在 jsdom 测过；F、E、D 轮的同样没在真浏览器看过（F 轮：低频功能收进 More／「⋯」、需求表单「选项」、Board 无主按钮等）。
 2d. ~~审 H 轮与 G 轮控制器与各席的可逆决定~~ 人已审（I 轮开轮「未评论的部分同意」，原话在 I 轮台账）；I 轮的可逆决定人 2026-11-13「同意」（J 轮台账）；J 轮的人 2026-11-14「同意」（K 轮台账）。K 轮待审的在 §4.0 第 2 条。
 3. **付费真跑（每一次先问）**：
