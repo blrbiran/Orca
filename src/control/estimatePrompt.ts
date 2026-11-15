@@ -1,4 +1,5 @@
 import { ControlError } from "./errors.js";
+import { planOrderTasks } from "./planOrder.js";
 import type { BudgetEstimateRequestV1 } from "./webProtocol.js";
 
 /**
@@ -169,10 +170,10 @@ export function buildEstimatePrompt(instructionVersion: string, requestCanonical
   return prompt;
 }
 
-/** Task ids of the request's plan, in plan order. */
+/** Task ids of the request's plan, in dependency order (#296), never the canonical serialization's taskId order. */
 export function estimateTaskIds(request: BudgetEstimateRequestV1): string[] {
-  const plan = JSON.parse(request.planSnapshotCanonicalJson) as { tasks: { taskId: string }[] };
-  return plan.tasks.map(task => task.taskId);
+  const plan = JSON.parse(request.planSnapshotCanonicalJson) as { tasks: { taskId: string; dependencyTaskIds?: string[] }[] };
+  return planOrderTasks(plan.tasks.map(task => ({ taskId: task.taskId, dependencyTaskIds: task.dependencyTaskIds ?? [] }))).map(task => task.taskId);
 }
 
 function deepFreeze<T>(value: T): T {

@@ -40,10 +40,14 @@ const observe = (version: string) => {
   const profile = resolveProfile(snapshot);
   return { profile, observation: { profile, observed: snapshot.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(snapshot.profile.capabilities, "v1") } };
 };
-const buildFor = (version: string, ids: string[]) => {
-  const plan = planOf(ids);
-  return buildBudgetEstimateRequest({ planHash: sha256Canonical(plan), planCanonicalJson: canonicalBytes(plan).toString("utf8"), ...observe(version), mode: "soft" });
-};
+const planWithDeps = (spec: Array<{ id: string; deps: string[] }>) => ({
+  ...planOf(spec.map((entry) => entry.id)),
+  tasks: spec.map((entry) => ({ taskId: entry.id, dependencyTaskIds: entry.deps, targetVersion: 1,
+    originalContractHash: sha256Canonical(contract(entry.id)), originalContractCanonicalJson: canonicalBytes(contract(entry.id)).toString("utf8") })),
+});
+const buildFrom = (version: string, plan: unknown) =>
+  buildBudgetEstimateRequest({ planHash: sha256Canonical(plan), planCanonicalJson: canonicalBytes(plan).toString("utf8"), ...observe(version), mode: "soft" });
+const buildFor = (version: string, ids: string[]) => buildFrom(version, planOf(ids));
 
 describe("the v2 estimate prompt and schema", () => {
   it("keeps the v1 prompt and schema byte-identical", () => {
@@ -61,6 +65,13 @@ describe("the v2 estimate prompt and schema", () => {
     expect(ESTIMATE_INSTRUCTIONS["2"]).not.toContain("planHash");
     expect(ESTIMATE_INSTRUCTIONS["2"]).not.toContain("sorted");
     expect(() => buildEstimatePrompt("2", "{}")).toThrow(expect.objectContaining({ detail: "estimate-task-ids-missing" }));
+  });
+
+  it("lists the plan's tasks in dependency order, not the canonical taskId order (#296)", () => {
+    const frozen = buildFrom("2", planWithDeps([{ id: "a-integration", deps: ["z-core"] }, { id: "z-core", deps: [] }]));
+    if (frozen.request === null) throw new Error(frozen.reasonCode ?? "blocked");
+    // mutation: return plan.tasks.map(taskId) -> ["a-integration","z-core"], red.
+    expect(estimateTaskIds(frozen.request)).toEqual(["z-core", "a-integration"]);
   });
 
   it("v2 schema keys tasks by id, requires each, adds none, and stays within the allowed keywords", () => {

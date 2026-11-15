@@ -1055,6 +1055,9 @@ function workViews(
   if (snapshot && (derivedByTask.size !== plan.tasks.length || plan.tasks.some(task => !derivedByTask.has(task.taskId)))) {
     return blocked("execution-snapshot-task-set");
   }
+  // #296: the view's workItems stay in the canonical taskId order this schema (`set-not-canonically-sorted`) pins. The Web
+  // table already orders them by the dependency layout (`ebaae764`); semantic consumers (estimate, review fix) use
+  // planOrder.ts instead of this serialization order.
   return plan.tasks.map(task => {
     const row = readSnapshot.workById.get(task.taskId);
     if (!row) return blocked(`work-item-missing:${task.taskId}`);
