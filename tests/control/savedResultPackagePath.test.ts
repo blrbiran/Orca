@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, readdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { persistRecoveryArtifact, prepareRecoverySource } from "../../src/control/savedResultRecoveryPackage.js";
+import { assertPrivateRecoveryDirectory, persistRecoveryArtifact, prepareRecoverySource } from "../../src/control/savedResultRecoveryPackage.js";
 import { openTestStore } from "./fixtures/store.js";
 
 // Issue #261: ccloop (and Orca's own assertPrivateRecoveryDirectory) accept a saved-result package only at a canonical
@@ -32,5 +32,22 @@ describe("saved-result source package path (#261)", () => {
       await rm(outer, { recursive: true, force: true });
       await h.dispose();
     }
+  });
+
+  // The direct assertion used to refuse any path whose realpath differed from its spelling, so a caller passing
+  // /var/folders/... (an alias of /private/var/folders/...) was refused even though the directory was private and ours.
+  it("accepts a parent reached through a system alias and still refuses a symlinked final component", async () => {
+    const outer = await realpath(await mkdtemp(join(tmpdir(), "orca-261-guard-")));
+    try {
+      const real = join(outer, "real");
+      await mkdir(real, { mode: 0o700 });
+      await mkdir(join(real, "pkg"), { mode: 0o700 });
+      await symlink(real, join(outer, "alias"));
+      await symlink(join(real, "pkg"), join(outer, "final"));
+      // mutation: keep `realpathSync(path) !== path` -> this throws.
+      expect(() => assertPrivateRecoveryDirectory(join(outer, "alias", "pkg"))).not.toThrow();
+      // The final component itself must be a real directory, not a link to one.
+      expect(() => assertPrivateRecoveryDirectory(join(outer, "final"))).toThrow("saved-result-package-path-invalid");
+    } finally { await rm(outer, { recursive: true, force: true }); }
   });
 });

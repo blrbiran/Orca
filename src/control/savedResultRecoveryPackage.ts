@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {constants,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,realpathSync,renameSync,rmSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {basename,dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {canonicalBytes} from './canonicalJson.js';
 import {artifactSchema} from './schema.js';
@@ -12,7 +12,14 @@ import {exhaustedCompletionSchema,executionFormatFailureSchema,ompWithoutFinalCo
 
 const digest=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
 export function assertPrivateRecoveryDirectory(path:string):void {
- const s=lstatSync(path);if(!s.isDirectory()||s.isSymbolicLink()||realpathSync(path)!==path||(s.mode&0o7777)!==0o700||s.uid!==process.getuid?.())throw Error('saved-result-package-path-invalid');
+ const entry=lstatSync(path);
+ if(!entry.isDirectory()||entry.isSymbolicLink())throw Error('saved-result-package-path-invalid');
+ // #261: compare the parent canonically and keep the final name literal, so a system alias (/var -> /private/var) is
+ // accepted while a symlinked final component -- the attack the check exists for -- is still refused.
+ const canonical=join(realpathSync(dirname(path)),basename(path));
+ if(realpathSync(path)!==canonical)throw Error('saved-result-package-path-invalid');
+ const s=lstatSync(canonical);
+ if((s.mode&0o7777)!==0o700||s.uid!==process.getuid?.())throw Error('saved-result-package-path-invalid');
 }
 export function createPrivateRecoveryDirectory(path:string):void {if(!existsSync(path))mkdirSync(path,{mode:0o700});assertPrivateRecoveryDirectory(path);}
 function durable(path:string,bytes:Buffer):void {const fd=openSync(path,'wx',0o600);try{writeFileSync(fd,bytes);fsyncSync(fd);}finally{closeSync(fd);}const parent=openSync(join(path,'..'),'r');try{fsyncSync(parent);}finally{closeSync(parent);}}
