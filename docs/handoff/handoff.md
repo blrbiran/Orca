@@ -66,7 +66,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 3.最新（2026-11-15，会话 `60e715bf`）—— 测试者 #313/#314/#315 与 #243/#291/#261/#229/#296 的代码修复；#267/#273 只写了设计稿
 
-- **状态口径（先看这条）**：本轮改动**都在工作树里、尚未提交**，基于 main `72fe8393`（三仓本地＝远端，`ls-remote` 现核）。没有 repin、没有重启面板、没有真付费 provider、没有动旧 dogfood 组。下面的计数只对 `72fe8393 + 本工作树` 成立。
+- **状态口径（先看这条）**：本轮改动已按主题拆成提交、`--ff-only` 合入**本地 main**（基线 `72fe8393`），**未推送**；三仓开工时本地＝远端（`ls-remote` 现核）。没有 repin、没有重启面板、没有真付费 provider、没有动旧 dogfood 组。`npm run build` 与 `npm run build --workspace web` 均 RC0，面板仍在跑旧进程。下面的计数只对这条本地 main 成立。
 - **反馈文档里已过期的条目**（正文最后复核早于修复）：#285（`28a0ba2a` 已让 blocked/静默 run 不再说 producing output，`runUsageLines.test.ts` 钉着）、#312（`6341c212`）、#311（`12be602e`）、#310 主体（`dd14646d`，旧行形态即 #313）、#230（`3afe1c42` 起视图与 brief 都从 run 投影；`blockedRunTaskStatus.test.ts` 三条钉着，存储 `running` 是恢复路径，本轮复核后**不改**）。#164 正文已写「不再算缺陷」。
 - **本轮改成的**（TDD，每条先见红）：
   - **#313**：`executionDriver.ts` 的 ceiling 复用分支不再对缺失的 `liveCeilingStop` 调 `hashPayload`。已提交 checkpoint 但 `onSettled` 未跑的旧行，补写 `liveCeilingStop`／`drive.outcome` 并以 `blockedAt=C + blockedReason=live-ceiling-usage-unknown` 停住，`recovery list` 给 `next=settle-usage`；不发明零用量、不推进 `settled-recoverable`。判据 `liveCeilingSettle.test.ts`「finishes a stored ceiling row…（#313）」，从 DB 旧行启动。
@@ -83,7 +83,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **#265（未落地，待人裁）**：试过在 `validateSplitDraft` 里对「goal/successCondition 点名了另一个 task 的精确路径」硬拒，结果把既有的 hint + `add-implied-path` 流程打断（`splitImpliedPaths`、`splitWriteSetSerial`、`requirementDraftEdit` 共 4 条红），因为现有夹具正是用「描述另一个 task 的文件」来演示 hint。**已回退**，本仓仍是「提示 + 人手动 `add-implied-path`」；运行时的 allowlist miss 诊断（`path-policy` + `--allow-observed-paths`）不变。下一步要定的是：硬拒、自动补进 targetPaths、还是维持 hint——三者对写集/隐式边的语义不同。
 - **门（现测）**：`TMPDIR=/tmp npm test`（日常受影响门，不是全量 `verify`）**RC1**；`test-affected` 选 1,103 个文件（root 915／Web 188）；root **7,881 passed／142 skipped／1 failed**，Web **1,664 passed／0 skipped**；两边 typecheck 均 0。唯一红是 `tests/control/driverReconcileN.test.ts`「N2: while one run … does not land until the reconciliation has …」的 30 s deadline，单跑 **5/5 绿**，属 handoff 已登记的负载形状（上一轮也红过），不是本轮代码。日志 `/tmp/orca-fixes-mytest4.log`（临时目录，可能失效）。142 条跳过含配对／真二进制用例，未在本轮重跑。
 - **诚实边界**：① #313 的修复只用夹具旧行验证，没有在 `dogfood-20261114-1` 的真实现场重放；② #314 B 改变了 review 的 prompt 输入，未用真模型验收；③ #296 改的是 `estimateTaskIds` 的输入顺序与 review fix 回退，服务端视图顺序**故意未改**；④ #229 的串行只在单进程内；⑤ 面板仍是旧构建（未 build／restart），本轮的 Web 改动没在真面板看过；⑥ 旧生产组未做任何恢复；⑦ #267/#273 的 Orca 半边只对 fake ccloop 验过，没有真 ccloop 的 blocked 旧行重放。
-- **待人（下一会话先看）**：① **Codex 会话保留/擦除裁定**——`thread.started` 留证前崩溃残留与 SQLite/WAL 物理擦除未证，未 repin；② **面板 build／restart**——本轮的 Web／服务端改动没部署，`launchctl kickstart` 需人显式授权；③ **push**——本会话消息开头有 `allow-push`，但 `~/.orca/gate/push-grants/` 仍只列出更早会话的文件，机械闸门可能不放行，推送前先现核；④ #313 的真实旧行、#314 的旧组、#267/#273 的真 ccloop 现场都要新面板才能重放；⑤ #265 的产品取舍（硬拒／自动补／维持 hint）；⑥ `g-28d9b560` 的组上限或 accept-attempt 仍未处置；⑦ 两个 agent worktree 仍在 `5c9eddbb`，含未提交副本，按旧清单不要强删。
+- **待人（下一会话先看）**：① **Codex 会话保留/擦除裁定**——`thread.started` 留证前崩溃残留与 SQLite/WAL 物理擦除未证，未 repin；② **面板 build／restart**——本轮的 Web／服务端改动没部署，`launchctl kickstart` 需人显式授权；③ **push**——本会话消息开头有 `allow-push`，但 `~/.orca/gate/push-grants/` 只有更早会话的文件；实际 `git push origin main` 被 Tier 0 闸门拒（`push is Tier 0`），按闸门要求**没有重试**。三仓本地 main 领先远端，待人放行或手推；④ #313 的真实旧行、#314 的旧组、#267/#273 的真 ccloop 现场都要新面板才能重放；⑤ #265 的产品取舍（硬拒／自动补／维持 hint）；⑥ `g-28d9b560` 的组上限或 accept-attempt 仍未处置；⑦ 两个 agent worktree 仍在 `5c9eddbb`，含未提交副本，按旧清单不要强删。
 
 ### 3.上一轮（2026-11-15，会话 `1b8535c8`）—— #267／#273 配对闭环、#312 复评解锁、Codex 临时读数消费端已在本地 main
 
