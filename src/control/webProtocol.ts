@@ -1690,7 +1690,7 @@ export const groupSummarySchema = z
     // Tester follow-up E §5 (#241): the group's acceptance on its final tip (groupAcceptanceRecord.ts); `problem` is
     // `group-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
     acceptance: z.object({
-      tip: commitShaSchema.nullable(), result: z.enum(["passed", "failed", "not-needed", "not-run", "waived"]),
+      tip: commitShaSchema.nullable(), result: z.enum(["passed", "passed-relative", "failed", "not-needed", "not-run", "waived"]),
       why: z.enum(["single-landing", "multi-repo", "dir", "work-branch-missing"]).optional(), landings: safeInteger.optional(),
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
       tail: z.string().max(2048).optional(), at: safeInteger,
@@ -1698,7 +1698,8 @@ export const groupSummarySchema = z
       problem: nonemptyString.optional(),
       // Full suite spec 2026-11-12 §4-§5 (#279): the project's full-suite command and its runs' exits (null: none set, with
       // the suggestion code detected); `warning` is `full-suite-not-set` or `full-suite-flaky:<command>`, never blocking.
-      fullSuite: z.object({ command: nonemptyString.nullable(), suggestion: nonemptyString.nullable(), exits: z.array(nonemptyString).max(2), flaky: z.boolean() }).strict().optional(),
+      fullSuite: z.object({ command: nonemptyString.nullable(), suggestion: nonemptyString.nullable(), exits: z.array(nonemptyString).max(2), flaky: z.boolean(),
+        baseline: z.object({ tip: commitShaSchema, exits: z.array(nonemptyString).max(2), tail: z.string().max(2048).optional() }).strict().optional() }).strict().optional(),
       warning: nonemptyString.optional(),
       // Tester follow-up K, item 2: present (true) only on a `passed` acceptance that ran no full suite (none adopted).
       passedWithoutFullSuite: z.literal(true).optional(),
@@ -2084,6 +2085,9 @@ export const runViewSchema = z
     // Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; omitted when none was sent.
     operatorAcceptance: z.object({ state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: nonemptyString, at: safeInteger,
       reason: z.string().nullable(), landedCommit: z.string().nullable() }).strict().optional(),
+    // Spec 2026-11-16: an owner's acceptance turned a completed-but-unsettled run into the acceptance
+    // pipeline's input; the original outcome stays in `drive.outcome`. Omitted for every other run.
+    operatorSettlement: z.object({ kind: z.literal("completed-attempt"), outcome: nonemptyString, at: safeInteger, principal: nonemptyString }).strict().optional(),
     // #227 residual: for a run the server could accept, the setup and required checks Orca will run on the merged tree, and
     // the attempt's diff against the run's base (null until read, or when it cannot be); omitted for any other run.
     attemptReview: z.object({ requiredChecks: z.array(z.string()), setupCommands: z.array(z.string()),

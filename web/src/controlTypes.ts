@@ -313,6 +313,8 @@ export type DraftViewV1 = {
   parallelCandidates?: Array<{ before: string; after: string }>;
   /** Tester #265: tasks whose success condition names a file only another task may write (a hint; only on a draft with layers). */
   impliedPathsOutsideTargets?: Array<{ taskId: string; path: string; writers: string[] }>;
+  /** Spec 2026-11-16: paths the split added to a task's targetPaths because its success condition named them. */
+  impliedPathsAdded: Array<{ taskId: string; path: string; writers: string[] }> | null;
   reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised";
   calls: RequirementCallRecordV1[];
 };
@@ -687,10 +689,10 @@ export type RequirementReviewV1 = {
   problem?: string;
 };
 export type GroupAcceptanceV1 = {
-  tip: string | null; result: "passed" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
+  tip: string | null; result: "passed" | "passed-relative" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
   /** Full suite spec 2026-11-12 §4-§5 (#279): the full-suite command and its runs' exits; `warning` never blocks. */
-  fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean }; warning?: string;
+  fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean; baseline?: { tip: string; exits: string[]; tail?: string } }; warning?: string;
   /** Tester follow-up K, item 2: true only on a `passed` acceptance that ran no full suite (none adopted). */
   passedWithoutFullSuite?: true;
 };
