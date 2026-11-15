@@ -73,10 +73,13 @@ export function applyAddLiveNote(store: ControlStore, command: AddLiveNoteComman
   const notes = liveNotesOf(groupBody(store, groupId));
   if (notes.filter((note) => note.taskId === taskId && note.state === "queued").length >= LIVE_NOTE_QUEUE_MAX) throw new ControlError("live-note-queue-full", taskId);
   saveNotes(store, groupId, [...notes, { noteId: command.commandId, taskId, text: command.payload.text, at: store.now(), by: command.actorId, state: "queued" }]);
+  // #243 follow-up: a note reaches the agent only through a prepared run's live-notes.json. With none (a blocked run, a
+  // settled one, or a task that has not started) the answer says it waits for the next run instead of implying delivery.
+  const delivery = activeSourceDir(store, groupId, taskId) === null ? "next-run" as const : "current-run" as const;
   return { status: 200, body: {
     schema: "orca-command-success-v1", commandId: command.commandId, actorId: command.actorId, verb: command.verb, target: command.target,
     commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq, effectivePayloadHash: context.effectivePayloadHash,
-    authorityCommandHash: context.authorityCommandHash, result: { kind: "live-note-queued", noteId: command.commandId, taskId },
+    authorityCommandHash: context.authorityCommandHash, result: { kind: "live-note-queued", noteId: command.commandId, taskId, delivery },
   } };
 }
 

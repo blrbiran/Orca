@@ -2568,7 +2568,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("spend-cap-cleared"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("usage-calendar-set"), revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("task-labels-set"), taskId: idSchema, labelsVersion: positiveSafeInteger }).strict(),
-  z.object({ kind: z.literal("live-note-queued"), noteId: idSchema, taskId: idSchema }).strict(),
+  // #243 follow-up: `delivery` is optional so stored results written before it still parse.
+  z.object({ kind: z.literal("live-note-queued"), noteId: idSchema, taskId: idSchema, delivery: z.enum(["current-run", "next-run"]).optional() }).strict(),
   z.object({ kind: z.literal("task-loop-set"), taskId: idSchema, loopVersion: positiveSafeInteger, proposalVersion: positiveSafeInteger }).strict(),
   // Tester follow-up G spec §2.5: the decision taken and, for continue, the task's next pause line (whole-task tokens).
   z.object({ kind: z.literal("usage-pause-decided"), taskId: idSchema, decision: z.enum(["continue", "stop"]), nextLine: safeInteger.nullable(), note: nonemptyString.optional() }).strict(),

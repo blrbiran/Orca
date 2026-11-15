@@ -2,7 +2,7 @@ import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
-import { stepA1, stepA2, write } from "../../src/control/executionDriver.js";
+import { blockRun, stepA1, stepA2, write } from "../../src/control/executionDriver.js";
 import { liveNotesOf, noteLiveNoteDeliveries, settleLiveNotes } from "../../src/control/liveNotes.js";
 import { groupHandoffsDir, readHandoffRecords, UNDELIVERED_NOTES_HEADING } from "../../src/control/taskHandoffs.js";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
@@ -37,11 +37,27 @@ describe("live notes (Part 5)", { timeout: 60_000 }, () => {
     await t.until(t.driver(), () => t.body(runId).state === "accepted");
     const sent = send(t, "the fixture lives in test/data", "agent:claude");
     if ("error" in sent) throw new Error(JSON.stringify(sent));
-    expect(sent.result).toEqual({ kind: "live-note-queued", noteId: sent.commandId, taskId: "a" });
+    expect(sent.result).toEqual({ kind: "live-note-queued", noteId: sent.commandId, taskId: "a", delivery: "current-run" });
     expect(notes(t)).toEqual([{ noteId: sent.commandId, taskId: "a", text: "the fixture lives in test/data", at: expect.any(Number), by: "agent:claude", state: "queued" }]);
     const file = fileOf(t, runId);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ schema: "orca-live-notes-v1", notes: [{ id: sent.commandId, text: "the fixture lives in test/data", at: new Date(notes(t)[0]!.at).toISOString() }] });
     expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  // #243 follow-up: the answer must not imply a blocked run will read the note. Only a prepared run has a live-notes file.
+  it("says a note waits for the next run when no prepared run can read it (#243)", async () => {
+    const t = await harness();
+    const waiting = send(t, "for the first attempt");
+    if ("error" in waiting) throw new Error(JSON.stringify(waiting));
+    expect(waiting.result).toMatchObject({ delivery: "next-run" });
+    const runId = await t.claim();
+    await t.until(t.driver(), () => t.body(runId).state === "accepted");
+    const current = send(t, "for this run");
+    expect(current).toMatchObject({ result: { delivery: "current-run" } });
+    blockRun(t.deps, runId, "C", "control-peer-timeout");
+    const blocked = send(t, "for the next attempt");
+    // mutation: answer current-run without asking activeSourceDir -> red here.
+    expect(blocked).toMatchObject({ result: { delivery: "next-run" } });
   });
 
   // mutation M-O4a: the queue check `>= 16` -> `> 16` -> the 17th note is accepted, red

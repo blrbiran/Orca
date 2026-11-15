@@ -954,7 +954,7 @@ export type CommandSuccessV1 = {
     | { kind: "group-dependency-added"; groupId: string; dependsOn: string }
     | { kind: "group-dependency-removed"; groupId: string; dependsOn: string }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
-    | { kind: "live-note-queued"; noteId: string; taskId: string }
+    | { kind: "live-note-queued"; noteId: string; taskId: string; delivery?: "current-run" | "next-run" }
     | { kind: "task-loop-set"; taskId: string; loopVersion: number; proposalVersion: number }
     | { kind: "task-continuing"; continuationIntentId: string; pendingRunId: string; claimOrdinal: number; wakeId: string }
     | { kind: "usage-pause-decided"; taskId: string; decision: "continue" | "stop"; nextLine: number | null }

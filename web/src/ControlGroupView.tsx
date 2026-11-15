@@ -169,7 +169,9 @@ function LiveRegion(props: { view: GroupViewV1; active: boolean; now?: number; a
         <RunTranscript runId={run.runId} active={props.active} follow blocked={run.state === "blocked"} />
         {/* Tester follow-up G Part 5: the task's notes and the box to add one, at the bottom of its Live entry. */}
         {run.taskId !== null && <>
-          <LiveNoteList notes={(view.liveNotes ?? []).filter((note) => note.taskId === run.taskId)} running={latest === undefined} />
+          {/* #243 follow-up: only a prepared run reads live-notes.json; a blocked or settled one does not. The view's
+              states "starting" and "running" are the prepared ones (displayRunState maps claimed/start-pending/accepted). */}
+          <LiveNoteList notes={(view.liveNotes ?? []).filter((note) => note.taskId === run.taskId)} running={run.state === "starting" || run.state === "running"} />
           <LiveNoteBox view={view} taskId={run.taskId} archived={props.archived} pending={props.pendingNotes.has(`${view.summary.groupId}:${run.taskId}`)} unconfirmed={props.unconfirmedNotes.has(`${view.summary.groupId}:${run.taskId}`)} onEdit={() => props.clearUnconfirmed(run.taskId!)} onCommand={props.onCommand} />
         </>}
       </section>;
