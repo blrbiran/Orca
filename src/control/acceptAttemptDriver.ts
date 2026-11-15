@@ -128,6 +128,15 @@ async function visit(deps: ExecutionDriverDeps, run: DriverRun, intent: Operator
     if (measured.outOfBounds.length > 0) throw new Refusal(`out-of-bounds:${measured.outOfBounds.join(",")}`.slice(0, 2048));
     const change = await classifyCriteriaChange(rebuilt, drive.base, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
     if (flagged(change)) throw new Refusal(`criteria-${change.kind}:${[...change.signals, ...change.files].join(", ")}`.slice(0, 2048));
+    // Spec 2026-11-16: an E-block's work already landed (the archive step failed after the landing).
+    // Its attempt is on the tip; do not merge it twice -- check the tip and record the acceptance there.
+    if (typeof drive.landedCommit === "string" && await isAncestor(targetRepo, drive.landedCommit, tip)) {
+      const entry: AcceptCheck = { controller: new AbortController(), old: tip, next: tip, attemptSha: drive.landedCommit, pending: [], settled: null };
+      checks.set(runId, entry);
+      void runAcceptChecks(deps, targetRepo, runId, tip, contract, entry.controller.signal)
+        .then((settled) => { entry.settled = settled; }, (error: unknown) => { entry.settled = { error }; });
+      return true;
+    }
     const merged = await mergeOnTip(deps, run, intent, targetRepo, rebuilt, tip, attemptSha);
     // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver merges again.
     if (context?.stopped) return false;
@@ -222,7 +231,7 @@ async function land(deps: ExecutionDriverDeps, run: DriverRun, intent: OperatorA
   const { store } = deps, runId = run.runId;
   const setup = outcomes.filter((o) => o.command.startsWith("setup: ")).map((o) => ({ ...o, command: o.command.slice("setup: ".length) }));
   const proofBody = {
-    runId, checksPassed: true, landing: "landed", commit: checked.next, review: "operator-reviewed",
+    runId, checksPassed: true, landing: checked.old === checked.next ? "already-landed" : "landed", commit: checked.next, review: "operator-reviewed",
     principal: intent.principal, note: intent.note, commandId: intent.commandId, attemptSha: checked.attemptSha, merged: checked.next, base: checked.old,
     snapshot: intent.snapshot, setup, checks: outcomes.filter((o) => !o.command.startsWith("setup: ")), intent: `accept:${intent.commandId}`,
   };
@@ -238,6 +247,8 @@ async function land(deps: ExecutionDriverDeps, run: DriverRun, intent: OperatorA
   });
   if (!ok) return false;
   await deps.beforeCas?.();
+  // An already-landed attempt names the tip itself: nothing to swap, only the ledger write to finish.
+  if (checked.old === checked.next) { finish(deps, runId); return true; }
   // A moved tip only: the next visit finds the tip without the staged commit, forgets it and merges again.
   if (!(await compareAndSwap(targetRepo, workBranchRef(run.groupId), checked.next, checked.old))) return true;
   deps.crash?.("accept-after-cas");

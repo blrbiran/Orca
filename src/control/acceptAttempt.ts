@@ -1,12 +1,14 @@
 import { readArtifact } from "./archive.js";
+import { add } from "./budget.js";
 import { snapshotSchema, verifySnapshot } from "./snapshot.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { settlingPersonFor } from "./commandClient.js";
 import { isDirGroup } from "./dirGroup.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
-import { groupHasReconcilingRun, readWork } from "./queries.js";
-import { commandSuccess, groupCommandTarget, readGroupBody, readRunBody, readStopIntent, saveRunBody, type RunBody } from "./stopIntent.js";
+import { groupHasReconcilingRun, readWork, saveWork } from "./queries.js";
+import { commandSuccess, groupCommandTarget, readGroupBody, readRunBody, readStopIntent, releaseCommitment, saveRunBody, setAllocationStates, type RunBody } from "./stopIntent.js";
+import { finiteCommitment } from "./tokenPolicy.js";
 import { refuseFlowChild } from "../flow/groups.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { CheckFailure } from "./checkCommand.js";
@@ -21,8 +23,9 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
  * settled, failed run after Orca re-runs the task's required checks on it. Two phases: this command checks the
  * preconditions and records the intent on the run (`operatorAcceptance`); the execution driver rebuilds the attempt from
  * the run's archive snapshot, merges it onto the group branch tip, runs the task's setup and required checks on the merged
- * tree off-round, and lands it by compare-and-swap, or refuses it by name (acceptAttemptDriver.ts). Accounting is never
- * touched: the run is already settled, and nothing here changes its usage, its grant or the group's.
+ * tree off-round, and lands it by compare-and-swap, or refuses it by name (acceptAttemptDriver.ts). A closed run's
+ * accounting is never touched: it is already settled. A completed-but-unsettled run (spec 2026-11-16) keeps its
+ * `drive.outcome`; an E-block that never settled releases the remainder it still holds, as `close-run` does.
  */
 export type AcceptAttemptCommand = Extract<RawAuthorityCommandV1, { verb: "accept-attempt" }>;
 
@@ -39,7 +42,11 @@ export interface OperatorAcceptance {
   attemptSha: string | null; landedCommit: string | null; proof: ArtifactRef | null;
 }
 
-type AcceptRun = RunBody & { drive?: DriveRecord; mode?: string; recoveryOf?: unknown; operatorAcceptance?: OperatorAcceptance };
+type AcceptRun = RunBody & {
+  drive?: DriveRecord; mode?: string; recoveryOf?: unknown; operatorAcceptance?: OperatorAcceptance;
+  operatorSettlement?: { kind: "completed-attempt"; outcome: string; at: number; principal: string };
+  remaining?: { work: Record<string, number | null>; handoff: Record<string, number | null> };
+};
 
 export function operatorAcceptanceOf(run: object): OperatorAcceptance | null {
   const value = (run as { operatorAcceptance?: unknown }).operatorAcceptance;
@@ -101,12 +108,22 @@ export function applyAcceptAttempt(deps: AcceptAttemptDeps, command: AcceptAttem
         if (recorded !== null && recorded.state !== "refused") throw new ControlError("accept-attempt-pending", recorded.state);
         const outcome = run.drive?.outcome ?? null;
         if (outcome === null) throw new ControlError("accept-attempt-run-not-terminal");
-        if (outcome === "succeeded") throw new ControlError("accept-attempt-run-succeeded");
         if (run.mode !== undefined || run.recoveryOf !== undefined || run.phase !== "work") throw new ControlError("accept-attempt-unsupported", "recovery-run");
         const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 0) === 1;
-        if (active || run.state !== "settled-failed") throw new ControlError("accept-attempt-run-not-settled", run.state);
+        // Spec 2026-11-16: a run whose work is complete but whose settlement never finished may be
+        // accepted too -- a ceiling stop during verify (settled-recoverable/exhausted) or an E-block
+        // whose attempt already landed (blocked/E/succeeded). A replay of our own conversion reads
+        // as the ordinary closed shape, so it stays admissible.
+        const converted = run.operatorSettlement?.kind === "completed-attempt";
+        const closed = !active && run.state === "settled-failed" && (outcome !== "succeeded" || converted);
+        const ceiling = run.state === "settled-recoverable" && outcome === "exhausted";
+        const eBlock = run.state === "blocked" && run.drive?.blockedAt === "E" && outcome === "succeeded";
+        if (!closed && !ceiling && !eBlock) {
+          if (outcome === "succeeded") throw new ControlError("accept-attempt-run-succeeded");
+          throw new ControlError("accept-attempt-run-not-settled", run.state);
+        }
         const newest = store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, taskId);
-        if (work.currentRunId !== runId || newest?.id !== runId || work.status !== "blocked" || work.targetVersion !== run.targetVersion)
+        if (work.currentRunId !== runId || newest?.id !== runId || (closed ? work.status !== "blocked" : work.status === "done") || work.targetVersion !== run.targetVersion)
           throw new ControlError("accept-attempt-run-not-current", work.status);
         const ladder = deps.ladderInProgress?.(store, groupId, taskId, runId) ?? null;
         if (ladder !== null) throw new ControlError("accept-attempt-debug-in-progress", ladder);
@@ -117,11 +134,24 @@ export function applyAcceptAttempt(deps: AcceptAttemptDeps, command: AcceptAttem
         // The snapshot checked before the transaction must still be the run's newest.
         const current = latestRunSnapshot(store, runId);
         if (current === null || current.artifactId !== prepared.snapshot.artifactId || current.hash !== prepared.snapshot.hash) throw new ControlError("accept-attempt-snapshot-missing", "changed");
+        const settlement = closed ? null : { kind: "completed-attempt" as const, outcome, at: store.now(), principal };
         const intent: OperatorAcceptance = {
           commandId: command.commandId, principal, note, at: store.now(), snapshot: prepared.snapshot, state: "pending",
           reason: null, failure: null, staged: null, attemptSha: null, landedCommit: null, proof: null,
         };
-        saveRunBody(store, { ...run, operatorAcceptance: intent } as RunBody);
+        if (settlement === null) {
+          saveRunBody(store, { ...run, operatorAcceptance: intent } as RunBody);
+        } else {
+          // The acceptance driver is written against a blocked, inactive run: an E-block that never
+          // settled still holds its remainder, so release it as close-run would; a ceiling settle
+          // already released its own.
+          if (eBlock) {
+            if (run.remaining !== undefined) releaseCommitment(store, groupId, add(finiteCommitment(run.remaining.work as never), run.remaining.handoff as never));
+            setAllocationStates(store, groupId, run.workItemId, "terminal");
+          }
+          if (work.status !== "blocked") { work.status = "blocked"; saveWork(store, groupId, work as never); }
+          saveRunBody(store, { ...run, state: "settled-failed", operatorAcceptance: intent, operatorSettlement: settlement } as RunBody, false);
+        }
         return commandSuccess(context, { kind: "attempt-accept-requested", runId, taskId });
       },
     }).body;

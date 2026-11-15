@@ -287,6 +287,8 @@ const persistedRunSchema = z.object({
     state: z.enum(["pending", "landed", "refused"]), note: z.string(), principal: z.string().min(1), at: safeInteger,
     reason: z.string().nullable(), landedCommit: z.string().nullable(),
   }).passthrough().optional(),
+  // Spec 2026-11-16: the marker that an owner's acceptance admitted a completed-but-unsettled run.
+  operatorSettlement: z.object({ kind: z.literal("completed-attempt"), outcome: z.string().min(1), at: safeInteger, principal: z.string().min(1) }).passthrough().optional(),
 }).strict();
 
 function blocked(detail: string): never {
