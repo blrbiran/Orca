@@ -593,7 +593,7 @@ export function startSchedulerWake(store: ControlStore, groupId: string, startRe
  * (singleCallSettlement.ts, given by webService.ts recoveryRetry so this module does not load the purposes) and what the
  * call's purpose evaluated before this transaction for a failed call. Null: such a retry is refused by name.
  */
-export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand, outputBound: number | null = null, settlement: { settle: SettleSingleCallUsage; evaluation?: unknown } | null = null): StopCommandResult {
+export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand, outputBound: number | null = null, settlement: { settle: SettleSingleCallUsage; evaluation?: unknown } | null = null, workerSettled = false): StopCommandResult {
   const { store } = deps;
   const release = deps.admissionGate?.enter();
   try {
@@ -611,7 +611,7 @@ export function applyRecoveryRetry(deps: StopDeps, command: RecoveryRetryCommand
         const now = (deps.now ?? (() => new Date()))().toISOString();
         const acknowledge = command.payload.scope === "run" ? command.payload.acknowledge : undefined;
         const observed = target.kind === "run"
-          ? retryRun(store, groupId, target.runId, context, now, acknowledge, settlement)
+          ? retryRun(store, groupId, target.runId, context, now, acknowledge, settlement, workerSettled)
           : retryGroup(store, groupId, context, outputBound, now);
         const result: CommandSuccessV1["result"] = {
           kind: "recovery-observed", resolved: observed.resolved,
@@ -662,7 +662,7 @@ function repairCommittedCeilingBlock(store: ControlStore, groupId: string, runId
   saveRunBody(store, run, false);
   return true;
 }
-function retryRun(store: ControlStore, groupId: string, runId: string, context: WebCommandContext, now: string, acknowledge?: string, settlement: { settle: SettleSingleCallUsage; evaluation?: unknown } | null = null): ObservedRecovery {
+function retryRun(store: ControlStore, groupId: string, runId: string, context: WebCommandContext, now: string, acknowledge?: string, settlement: { settle: SettleSingleCallUsage; evaluation?: unknown } | null = null, workerSettled = false): ObservedRecovery {
   // A late C visit used to overwrite a committed ceiling run as blocked. Recover only from its verified immutable checkpoint.
   const target = readRunBody(store, runId);
   if (target.groupId === groupId && repairCommittedCeilingBlock(store, groupId, runId, target))
@@ -691,6 +691,8 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   const resumedDriverRun = resumeBlockedDriverRun(store, runId);
   // Issue-fixes spec §5.2: a blocked run resumed by recovery-retry (here, in the command's transaction).
   if (resumedDriverRun) recordActivity(store, { groupId, taskId: run.taskId, runId, kind: "run-resumed", body: {} });
+  // Tester #267/#273: ccloop proved this run's worker dead before the transaction; the next collect sees its terminal.
+  if (resumedDriverRun && workerSettled) recordActivity(store, { groupId, taskId: run.taskId, runId, kind: "worker-lost", body: { reason: "settled before recovery retry" } });
   const resolved = blockers.resolved || rearm !== null || resumedDriverRun;
   const requeued = requeueUnknownHandoff(store, groupId, runId, context.rawCommand.commandId, now);
   return { resolved: resolved || requeued, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };

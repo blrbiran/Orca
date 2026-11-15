@@ -4,8 +4,8 @@ import { applyPlanLibraryCommand, type PlanLibraryCommand } from "./planLibrary/
 import { applyScheduleCommand, type ScheduleCommand } from "./schedules/commands.js";
 import { schedulesPass, type SchedulePassDeps } from "./schedules/pass.js";
 import type { FlowDeps } from "../flow/kernel.js";
-import { peerCode, peerFailure } from "./ccloopPort.js";
-import {retainSavedInterruption,readDriverRun,describeError,groupStopped} from "./executionDriver.js";
+import { peerCode, peerErrorCode, peerFailure } from "./ccloopPort.js";
+import {portFor,readStartEnvelope,retainSavedInterruption,readDriverRun,describeError,groupStopped} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
@@ -1793,8 +1793,34 @@ export class WebControlService {
   async recoveryRetry(command: RecoveryRetryCommand): Promise<WebCommandResult> {
     const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
     const outputBound = command.target.kind === "group" ? await this.retryOutputBound(command.target.groupId) : null;
+    const workerSettled = await this.settleLostWorkerBeforeRetry(command);
     const settlement = command.payload.scope === "run" ? { settle: settleSingleCallUsageInTransaction, evaluation: await this.settlementEvaluation(command) } : null;
-    return applyRecoveryRetry(this.stopDeps(), command, outputBound, settlement) as WebCommandResult;
+    return applyRecoveryRetry(this.stopDeps(), command, outputBound, settlement, workerSettled) as WebCommandResult;
+  }
+
+  /**
+   * Tester #267/#273: a driver run blocked at C with outcome=null may be a worker ccloop can prove dead. Asking
+   * ccloop to settle it before the transaction turns the next collect into a terminal instead of a repeat of the same
+   * block. An alive worker refuses (control-worker-not-lost) and the retry resumes as before; a port that cannot answer
+   * leaves the old behavior too. Any other failure is surfaced rather than reported as a resolution.
+   */
+  private async settleLostWorkerBeforeRetry(command: RecoveryRetryCommand): Promise<boolean> {
+    if (command.target.kind !== "run" || command.payload.scope !== "run") return false;
+    const row = this.store.db.prepare("SELECT body FROM runs WHERE id=?").get(command.payload.runId);
+    if (row === undefined) return false;
+    const run = JSON.parse(String(row.body)) as { phase?: unknown; state?: unknown; mode?: unknown; recoveryOf?: unknown; drive?: { blockedAt?: unknown; outcome?: unknown; prepared?: unknown } };
+    if (run.phase !== "work" || run.state !== "blocked" || run.drive?.blockedAt !== "C" || run.drive.outcome !== null
+      || run.mode !== undefined || run.recoveryOf !== undefined || run.drive.prepared !== true) return false;
+    const port = portFor({ router: this.deps.profileRouter as never }, run as never);
+    if (port.settleLostWorker === undefined) return false;
+    try {
+      await port.settleLostWorker(readStartEnvelope(this.store, run as never));
+      return true;
+    } catch (error) {
+      const code = peerErrorCode(error) ?? (error instanceof ControlError ? error.code : null);
+      if (code === "control-worker-not-lost" || code === "control-worker-lost-state-unavailable") return false;
+      throw error;
+    }
   }
   /**
    * Spec 2026-10-27 single-call unknown usage §9 R2 (review S2): a retry that settles a single call completes it as failed,

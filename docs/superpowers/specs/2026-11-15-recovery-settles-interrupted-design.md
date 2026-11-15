@@ -87,3 +87,16 @@ The decision is code (Rule 5): worker liveness and terminal presence are facts f
 - Should the automatic worker-lost retry policy (`workerLostPass`, up to 3) run from this path too, or only the manual
   command settle and leave re-dispatch to the person?
 - If ccloop cannot settle a blocked run, does the Orca half ship a named refusal now, or wait for the ccloop change?
+
+## 7. As built (2026-11-15, Orca session `60e715bf`)
+
+- `WebControlService.recoveryRetry` asks ccloop's `settle-lost-worker` before the command transaction, for a driver
+  work run that is `blocked` at C with `outcome=null` and a prepared envelope. Success is passed to the command as
+  `workerSettled`; the run resumes and the next `collect` consumes the terminal ccloop wrote. `control-worker-not-lost`
+  and `control-worker-lost-state-unavailable` keep the old resume; any other failure is surfaced instead of being
+  reported as `resolved:true` (`tests/control/recoverySettlesLostWorker.test.ts`).
+- The run therefore leaves `blocked + outcome=null`: it becomes `blocked at C` with ccloop's outcome, which
+  `recovery list` lists with `close-run` (or `settle-usage` when usage is unknown). An immediate `settled-failed` was not
+  written by the command; the existing terminal-closure path owns that.
+- Not done: automatic worker-lost retry from this path (the existing `workerLostPass` still owns auto retry), and any
+  ccloop change. The open questions in §6 remain for the owner except the trigger, which is now `recovery retry --run`.
