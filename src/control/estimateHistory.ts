@@ -3,8 +3,10 @@ import { groupRepoIdOf } from "./usageLedger.js";
 
 /**
  * Tester #173 / #224 / #266 (follow-up L; human, round K: "at confirm, use the median actual spend of this repo's past
- * tasks as a reference, computed by code, and show the estimate/history ratio"). Information only: no estimate, limit or
- * refusal reads it.
+ * tasks as a reference, computed by code, and show the estimate/history ratio"). Before confirmation it is information
+ * only. Confirmation reads it once (#224/#266): an expectation-model group stores `expectationFloorTokens`, the higher of
+ * 1M and this median, and `taskExpectation` floors an estimate-derived expectation at it. No estimate value, limit or
+ * refusal reads history.
  *
  * The sample is every task (a work item of kind `task`) of another group of the same repository (groupRepoIdOf, the
  * ledger's pick) whose status is `done` -- its work completed: landed, an accepted attempt, or accepted as no change. A

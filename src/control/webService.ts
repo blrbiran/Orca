@@ -9,7 +9,8 @@ import {portFor,readStartEnvelope,retainSavedInterruption,readDriverRun,describe
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
 import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
-import { expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
+import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
+import { repoTaskHistory } from "./estimateHistory.js";
 import { applyUsagePauseDecide, continueGroupCapStops, type UsagePauseDecideCommand } from "./usagePause.js";
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
@@ -2487,6 +2488,12 @@ export class WebControlService {
           if (integration !== null) (group as Record<string, unknown>).integration = { ...integration, frozen: true } satisfies GroupIntegration;
           proposal.state = "confirmed"; proposal.budgetMode = payload.budgetMode; proposal.contextPolicy = payload.contextPolicy; proposal.profiles = profiles; proposal.executionSnapshotHash = built.snapshotHash;
           proposal.allocations.forEach(a => { a.state = "confirmed"; }); group.status = "ready"; group.budgetMode = payload.budgetMode;
+          // #224/#266: an estimate-derived expectation is floored at this repository's historical median task spend (once,
+          // here), so a model estimate an order of magnitude low does not set a pause line the repository always crosses.
+          if (expectationModelApplies(group)) {
+            const median = repoTaskHistory(this.store, id).medianTokens;
+            if (median !== null) (group as Record<string, unknown>).expectationFloorTokens = Math.max(EXPECTATION_FLOOR_TOKENS, median);
+          }
           saveWebAuthority(this.store, group, proposal);
           // Kanban spec 2026-10-20 §3.1: confirming authorizes the start unless the person chose "Confirm only".
           recordConfirmed(this.store, id, payload.hold === true ? "hold" : "run", context.nextCommandRevision);

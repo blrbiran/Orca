@@ -19,6 +19,20 @@ export function expectationModelApplies(group: unknown): boolean {
   return isFollowupG(group) && flowBlockOf(group)?.role !== "child";
 }
 
+/**
+ * #224/#266: the floor an estimate-derived expectation uses. Confirmation stores the repository's historical median task
+ * spend on the group when it is higher than the 1M floor (repoTaskHistory, computed once there), so an estimate that is an
+ * order of magnitude below what this repository's tasks actually cost does not become the pause line's only basis. A
+ * person's token intent is not floored by history: that is their number.
+ */
+export function expectationFloorOf(store: ControlStore, groupId: string): number {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined) return EXPECTATION_FLOOR_TOKENS;
+  let value: unknown;
+  try { value = (JSON.parse(String(row.body)) as { expectationFloorTokens?: unknown }).expectationFloorTokens; } catch { return EXPECTATION_FLOOR_TOKENS; }
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? Math.max(EXPECTATION_FLOOR_TOKENS, value) : EXPECTATION_FLOOR_TOKENS;
+}
+
 export const tokenIntentSchema = z.object({
   tokens: safeInteger.positive(),
   hard: z.boolean(),
@@ -78,7 +92,7 @@ export function taskExpectation(store: ControlStore, groupId: string, work: { ta
     if (task === undefined) continue;
     if (newest === null || estimate.estimateVersion > newest.version) newest = { estimateId: estimate.estimateId, version: estimate.estimateVersion, tokens: task.work.tokens };
   }
-  return newest === null ? null : { tokens: Math.max(EXPECTATION_FLOOR_TOKENS, newest.tokens), estimateId: newest.estimateId, source: "estimate" };
+  return newest === null ? null : { tokens: Math.max(expectationFloorOf(store, groupId), newest.tokens), estimateId: newest.estimateId, source: "estimate" };
 }
 
 /**

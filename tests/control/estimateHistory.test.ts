@@ -2,9 +2,10 @@
 // tasks as a reference, computed by code, and show the estimate/history ratio"): the estimator gave 28k-190k per task where
 // the same repository's tasks used 1-5M. Before confirm the group view carries, by code, the median work tokens of the
 // repository's finished tasks and each task's estimate as a multiple of it, so a person sees the gap before confirming.
-// Information only: no estimate, limit or refusal changes.
+// Confirmation reads the median once: an expectation-model group stores it as its expectation floor (#224/#266).
 import { describe, expect, it } from "vitest";
 import { HISTORY_MIN_SAMPLE, historyRatio, medianOf, repoTaskHistory } from "../../src/control/estimateHistory.js";
+import { taskExpectation } from "../../src/control/expectationModel.js";
 import { readArchivedPlan, readEstimateRecord } from "../../src/control/queries.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { WebControlService } from "../../src/control/webService.js";
@@ -71,6 +72,22 @@ describe("this repository's history beside the estimate, before confirm (#173/#2
       expect(readControlGroup(h.store, "epoch", "g").estimateHistory).toEqual({
         medianTokens: 2 * M, sampleCount: 3, minimumSample: HISTORY_MIN_SAMPLE, tasks: [{ taskId: "c", estimateTokens: null, ratio: null }],
       });
+    } finally { await h.dispose(); }
+  });
+
+  // #224/#266: the history is not only a label before confirm. An estimate-derived expectation is floored at this
+  // repository's median task spend once, at confirmation, so a model estimate an order of magnitude low does not set a
+  // pause line the repository always crosses.
+  it("confirmation floors an estimate-derived expectation at the repository median", async () => {
+    const h = await webFixture(undefined, [TASK]);
+    try {
+      seedHistory(h.store);
+      const service = new WebControlService(h.deps);
+      await readyEstimate(h, service, "c");
+      expect(await service.confirm(h.command("confirm", { ...await h.confirmPayload(), budgetMode: "soft" }))).toMatchObject({ result: { kind: "confirmed" } });
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='c'").get()!.body));
+      // mutation: use EXPECTATION_FLOOR_TOKENS only -> the estimate's 1.5M, red.
+      expect(taskExpectation(h.store, "g", work)).toMatchObject({ tokens: 2 * M, source: "estimate" });
     } finally { await h.dispose(); }
   });
 
