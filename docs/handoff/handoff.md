@@ -74,7 +74,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **C #265 自动补路径**（spec `…-implied-write-paths-design.md`；主题行 `feat(control): a success condition's named path joins the task's write set (#265)`）：单仓 split 在展开/校验前把 successCondition 点名的、别 task 列过的路径加进本 task 的 `targetPaths`；#268 的写集相交自动把它变成串行边；draft 记 `impliedPathsAdded`，`requirement show` 打 `implied-path-added:`。多目录仍保留 hint＋手动 `add-implied-path`。判据 `splitImpliedPaths`／`splitWriteSetSerial`／`requirementDraftEdit` 全绿；`tests/control/acceptAttemptCompleted.test.ts` 为新增。
 - **门（现测）**：`TMPDIR=/tmp npm test` root **6,494 passed / 140 skipped / 0 failed**（790 文件过、27 文件跳过），web **1,664 passed / 0 skipped**；root typecheck 0、build 0、web build 0、web typecheck（`node_modules/.bin/tsc --noEmit -p web/tsconfig.json`）0。第三轮门唯一非零是 web typecheck 缺 `impliedPathsAdded` 的夹具，已修并单跑绿；第二轮的两条红（`startForm` ECONNRESET、`taskResultCollector` control-peer-timeout）单跑 39/39 绿，判负载。日志 `/tmp/orca-gate3.log`（临时目录）。
 - **诚实边界**：① A 的 `passed-relative` 只在夹具验证；`g-28d9b560` 的 acceptance 直接 green（fix 让 `npm test` 全绿），真实 base-red 组未重放；② B 的真实验证是 ceiling-stop 在 verify 的形态，E-block 只在夹具；③ C 只对单仓，多目录仍 hint；④ 旧 dogfood 组（`dogfood-20261112-3` 等）已 `id-not-found`，本会话无法重放 #267/#273/#312/#314 的旧现场；⑤ repin 采用 Codex 删线程后，残留风险仍成立。
-- **待人**：push（本会话已授权，提交后由本会话推）；#291/#296 的剩余语义判据；#225 的 codex 单 turn 硬边界；#224/#266/#196 估算校准；#92/#71/#78 等产品/UI 项。
+- **待人**：push——本会话消息开头有 `allow-push`，但 `~/.orca/gate/push-grants/` 只有更早会话的文件，`git push origin main` 被 Tier 0 拒（未重试）⇒ 三仓本地 main 领先远端，待人推。其余：#291/#296 的剩余语义判据；#225 的 codex 单 turn 硬边界；#224/#266/#196 估算校准；#92/#71/#78 等产品/UI 项。
 
 ### 3.上一轮（2026-11-15，会话 `60e715bf`）—— 测试者 #313/#314/#315 与 #243/#291/#261/#229/#296 的代码修复；#267/#273 只写了设计稿
 
@@ -362,7 +362,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 > 这个会话已做：ccloop repin 到 `1453fc5`、面板 build/restart、`g-28d9b560` 以新的 completed-attempt accept 路径落地并 done 7/7；A（验收基线）、B（完成态接受）、C（#265 自动补路径）三件代码已提交。下面第 1 条的生产旧现场已不可重放。
 
 1. **旧现场已不可重放**：`dogfood-20261112-3`、`dogfood-20261114-1/2` 等组都已 `id-not-found`；#267/#273、#312/#314 的现场只能造隔离组或依赖夹具。`g-28d9b560` 是本会话真实推进的唯一生产组，已 done。不要按旧 handoff 里的组 id 去找。
-2. **先核发布与门**：三仓 push 由本会话授权后执行；下一轮开工先 `/usr/bin/git ls-remote` 和三仓 `status --short --branch`。面板现跑 `5f974912` 的构建（pid 见 `orca status`），`~/.orca` schema 24 未动。
+2. **先核发布与门**：三仓本地 main 领先远端；本会话的 `allow-push` 未被闸门认到（`~/.orca/gate/push-grants/` 无本会话文件），push 被 Tier 0 拒且未重试 ⇒ 待人推或下次会话开头重敲 `allow-push`。下一轮开工先 `/usr/bin/git ls-remote` 和三仓 `status --short --branch`。面板现跑 `5f974912` 的构建（pid 见 `orca status`），`~/.orca` schema 24 未动。
 3. **余项（agent 能做，不需设计）**：`#291` 的 ready+null expectation 判据、`#296` 的 review-fix/estimate 顺序判据补强；`#267/#273` 的隔离夹具验收已由 `recoverySettlesLostWorker` 覆盖，不再追旧组；ccloop `savedResultRecovery.ts` 的松 `indexOf` 仍在（等 ccloop 下次有改动时一起修）。
 4. **要先 brainstorm／写 spec 的**：#225／#297 的 codex 单 turn 硬边界（`g-28d9b560` 一次 execute 越过 ceiling 223k，现裁定仍只提示）；#224／#266／#196 估算校准（历史中位数只展示，estimator 不看仓库规模）；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测；#193 transcript 写放大。
 5. **测试者台账**（测试者的文件，不能替其改状态）：#310/#311/#312/#313/#314/#315 在本会话前已修；#230 的 E-block 现有受支持接受路径；#265 单仓已自动补路径，多目录仍 hint；#279/#283 已配置的 full-suite 会跑，未配置只警示；#297 仍是只提示；#191 仍是 provider 侧。
