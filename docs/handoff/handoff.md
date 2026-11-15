@@ -64,7 +64,19 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-15，会话 `60e715bf`）—— 测试者 #313/#314/#315 与 #243/#291/#261/#229/#296 的代码修复；#267/#273 只写了设计稿
+### 3.最新（2026-11-16，会话 `5f974912`）—— ccloop repin、面板重启、`g-28d9b560` 收尾；验收基线、完成态接受、#265 自动补路径
+
+- **人的话**：本会话开头 `allow-push`；「继续，尽量将该做的工作都做完」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；遇到必须等人的事继续做不必等人的部分，最后报审并写三仓 handoff。
+- **ccloop repin**：主题行 `chore(deps): repin ccloop to the Codex loop session observations`，钉 `1453fc5`（ccloop 当前 main）。面板随后 build/restart；`orca status` 现测 pin 与 installed 都是 `1453fc5`，面板 pid `92463`。Codex loop 的会话观察与按 UUID 删线程已进入运行路径；保留风险仍是 `thread.started` 留证前崩溃残留与 SQLite/WAL 物理擦除未证。
+- **`g-28d9b560` 已 `done 7/7`（真实验证 B）**：`review-fix-4` 的 run 原为 `settled-recoverable` / `exhausted`（verify 边界被 live ceiling 停，572,147 vs 349,124），archive snapshot `missing: []`。用新路径 `orca task accept-attempt g-28d9b560 review-fix-4 --run run-3a7648af… --as-person`：命令把 run 转成 `settled-failed` + `operatorSettlement{kind:"completed-attempt", outcome:"exhausted"}`、`active=0`；driver 从 snapshot 重建 attempt、跑检查并落地。**acceptance 在 `ce389952` `passed`（10 条命令全 exit 0）**；review 第 5 轮因组已 5.75M/5.6M 无法资助（`unfunded`），用 `group review-accept --as-person` 接受。**没有付费重跑，组已 done。**
+- **A 验收基线**（spec `docs/superpowers/specs/2026-11-16-baseline-aware-group-acceptance-design.md`；主题行 `feat(control): classify a red acceptance suite against the group's base (#279 #283 #312 #314)`）：tip 的全量命令红两次时，在组 base（首个 work run 的 `drive.base`）再跑同一命令；base 也红两次 ⇒ `passed-relative`（可 done，记录 `fullSuite.baseline` 与 `baseline:` 命令），base 绿 ⇒ `failed`。只分类全量命令，不跑 base 的任务检查；`acceptanceSatisfied`、wire schema、`group show` 行同步。判据 `groupAcceptanceFullSuite` 7/7；三条 review 判据的夹具从 `false` 改成 `test ! -f a`，保持“真失败”语义。
+- **B 完成态接受**（spec `…-completed-attempt-acceptance-design.md`；主题行 `feat(control): accept an attempt whose work finished but whose settlement did not (#230)`）：`accept-attempt` 新增 `settled-recoverable/exhausted` 与 `blocked/E/succeeded` 两种形态，要求完整 snapshot；E-block 还没结算的余量按 `close-run` 释放并置 allocations terminal；`drive.landedCommit` 已在 tip 的 E-block 记 `already-landed`，不产生第二个 merge commit。判据 `acceptAttemptCompleted` 2 条＋既有 accept-attempt 25 条；`g-28d9b560` 已按此路径真实落地。
+- **C #265 自动补路径**（spec `…-implied-write-paths-design.md`；主题行 `feat(control): a success condition's named path joins the task's write set (#265)`）：单仓 split 在展开/校验前把 successCondition 点名的、别 task 列过的路径加进本 task 的 `targetPaths`；#268 的写集相交自动把它变成串行边；draft 记 `impliedPathsAdded`，`requirement show` 打 `implied-path-added:`。多目录仍保留 hint＋手动 `add-implied-path`。判据 `splitImpliedPaths`／`splitWriteSetSerial`／`requirementDraftEdit` 全绿；`tests/control/acceptAttemptCompleted.test.ts` 为新增。
+- **门（现测）**：`TMPDIR=/tmp npm test` root **6,494 passed / 140 skipped / 0 failed**（790 文件过、27 文件跳过），web **1,664 passed / 0 skipped**；root typecheck 0、build 0、web build 0、web typecheck（`node_modules/.bin/tsc --noEmit -p web/tsconfig.json`）0。第三轮门唯一非零是 web typecheck 缺 `impliedPathsAdded` 的夹具，已修并单跑绿；第二轮的两条红（`startForm` ECONNRESET、`taskResultCollector` control-peer-timeout）单跑 39/39 绿，判负载。日志 `/tmp/orca-gate3.log`（临时目录）。
+- **诚实边界**：① A 的 `passed-relative` 只在夹具验证；`g-28d9b560` 的 acceptance 直接 green（fix 让 `npm test` 全绿），真实 base-red 组未重放；② B 的真实验证是 ceiling-stop 在 verify 的形态，E-block 只在夹具；③ C 只对单仓，多目录仍 hint；④ 旧 dogfood 组（`dogfood-20261112-3` 等）已 `id-not-found`，本会话无法重放 #267/#273/#312/#314 的旧现场；⑤ repin 采用 Codex 删线程后，残留风险仍成立。
+- **待人**：push（本会话已授权，提交后由本会话推）；#291/#296 的剩余语义判据；#225 的 codex 单 turn 硬边界；#224/#266/#196 估算校准；#92/#71/#78 等产品/UI 项。
+
+### 3.上一轮（2026-11-15，会话 `60e715bf`）—— 测试者 #313/#314/#315 与 #243/#291/#261/#229/#296 的代码修复；#267/#273 只写了设计稿
 
 - **状态口径（先看这条）**：本轮改动已按主题拆成提交、`--ff-only` 合入**本地 main**（基线 `72fe8393`），**未推送**；三仓开工时本地＝远端（`ls-remote` 现核）。没有 repin、没有重启面板、没有真付费 provider、没有动旧 dogfood 组。`npm run build` 与 `npm run build --workspace web` 均 RC0，面板仍在跑旧进程。下面的计数只对这条本地 main 成立。
 - **反馈文档里已过期的条目**（正文最后复核早于修复）：#285（`28a0ba2a` 已让 blocked/静默 run 不再说 producing output，`runUsageLines.test.ts` 钉着）、#312（`6341c212`）、#311（`12be602e`）、#310 主体（`dd14646d`，旧行形态即 #313）、#230（`3afe1c42` 起视图与 brief 都从 run 投影；`blockedRunTaskStatus.test.ts` 三条钉着，存储 `running` 是恢复路径，本轮复核后**不改**）。#164 正文已写「不再算缺陷」。
@@ -345,20 +357,17 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `1b8535c8` 2026-11-15 交接；会话 `60e715bf` 同日补了代码修复；现状以 §3.最新与各仓 `git ls-remote` 为准）
+### 4.0 接手顺序（会话 `5f974912` 2026-11-16 交接；现状以 §3.最新与各仓 `git ls-remote` 为准）
 
-> 会话 `60e715bf` 已修 #313／#314／#315／#243 补充／#291／#261／#229／#296，并实现 #267/#273 的 Orca 半边与 #224/#266 的 expectation 历史 floor（见 §3.最新）；#265 试过硬拒后回退，待人裁。下面第 1–3 条的生产现场仍未动。
+> 这个会话已做：ccloop repin 到 `1453fc5`、面板 build/restart、`g-28d9b560` 以新的 completed-attempt accept 路径落地并 done 7/7；A（验收基线）、B（完成态接受）、C（#265 自动补路径）三件代码已提交。下面第 1 条的生产旧现场已不可重放。
 
-1. **先看真正卡住的现场**：#267／#273 已用当前 pin 的真实 ccloop 构建在隔离组跑到下游完成（10/10），但 `dogfood-20261112-3` 等旧组未写、未复测；先只读 `recovery list`／group/run 证据、核面板是否运行新构建，再决定受支持的 `recovery retry --run` 与未知用量结算，不把测试组的成功当生产组 done。#312 新代码可让 fix 完成后在失败验收的 tip 上复评，旧 `dogfood-20261114-2` 上轮的 README 检查红，本轮未现场重判，需单独处置。日常门与 Codex 消费端已结清（§3.最新），勿再把旧 #311 门的三红当现状。
-2. **Codex 保留与 repin**：ccloop 的 loop phase 观测和 UUID 删除已有远端提交；single call 仍用 `--ephemeral`。Orca 消费端已接入，但当前 pin 不生产 `liveUsage`。先由人裁是否接受 `thread.started` 留证前崩溃残留与 SQLite/WAL 未证物理擦除，或另设计每 phase 私有 HOME 的可证清扫；未裁前不 repin，#195 精确 context 仍无生产者。
-3. **`g-28d9b560` 等人抬上限或适用的接受路径**：产物导出树 22/22、AC4 手动复现通过；run 上轮为 `settled-recoverable`（本轮未现场重判），直接 `accept-attempt` 是否适用须按实际状态查 CLI，不能沿用上一轮「可直接 accept」的假设。**不要**用 `review-accept`。
-4. **余项（agent 能做，不需设计）**：
-   - J 轮遗留：`agent_kind` 认领时冻结、`App` 启动流程后跳转无判据、多目录组暂停线续跑仍 `multi-dir-continuation-unsupported`；
-   - ccloop `savedResultRecovery.ts` 的松 `indexOf`（只影响 `execution-without-final-v1` 分支；下次 ccloop 有别的改动时一起修，判据要用 `ompVerificationOnlyRecovery` 的夹具）。
-5. **要先 brainstorm／写 spec 的**：#265 拆分中的隐含写路径（当前只提示精确文字和已列路径，直接按词自动扩权限会误报）；#224／#266 估算校准（同仓历史中位数只展示）；#196 plan 成本；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测（先定义精确上下文语义）。
-6. **测试者台账的本轮增量**（台账是测试者的文件，不能替其改状态）：#267／#273 的隔离配对路径 10/10、旧生产组未验；#312 的 fix 后复评代码已修，旧组的验收红与面板部署未解；#285 只合了 Orca 可选消费端，不等于 ccloop 已 repin；旧 #310/#311 本轮没有改码，其结论在 §3.最新。#229 的 20 轮只盖 archive 并发；#230 读视图阻塞而存储 running 是恢复选择；#265 仍部分解决；#279/#283 已配置的 full-suite 会跑，未配置只警示。#296 的 review-fix 来源之前已修，估算的语义排序仍是独立问题。
-7. **旧裁定的现状**：#297 的 Codex loop 阶段在 ccloop 新提交里按响应边界软停，并不承诺请求中途硬拦；当前 Orca pin 尚未采用。#235 改阶梯仍无新证据支持；#145／#160、#174 方向按现码与反馈复核；全量发版门只在要求打 tag 时跑（Rule 18）。
-8. **清理（归人）**：本会话收尾 `/usr/bin/git worktree list` 只列出 Orca 主树及 `.claude/worktrees/agent-a928a0ccb94ff7fe9`、`agent-ac902d35fb1bda971` 两个 agent worktree；`git status --porcelain -uall` 各有本轮 #312 与 `orchestration` 的未提交副本，**不要把它们当未整合代码，也不要未经核查强删**。上一轮列的 5 个 agent worktree 这次不在列表里（旧清单作废）；历史 `/tmp/orca-k*` 等仓库外候选本轮未逐项核实，不做清理判断。本轮 scratch `/tmp/orca-267273-ACu4mRCT/` 含门日志与 pin／变异 clone；如果它消失，重做配对前先按 `package.json` pin 在新的 scratch clone 构建，给 `ORCA_CCLOOP_BIN` canonical 绝对路径。
+1. **旧现场已不可重放**：`dogfood-20261112-3`、`dogfood-20261114-1/2` 等组都已 `id-not-found`；#267/#273、#312/#314 的现场只能造隔离组或依赖夹具。`g-28d9b560` 是本会话真实推进的唯一生产组，已 done。不要按旧 handoff 里的组 id 去找。
+2. **先核发布与门**：三仓 push 由本会话授权后执行；下一轮开工先 `/usr/bin/git ls-remote` 和三仓 `status --short --branch`。面板现跑 `5f974912` 的构建（pid 见 `orca status`），`~/.orca` schema 24 未动。
+3. **余项（agent 能做，不需设计）**：`#291` 的 ready+null expectation 判据、`#296` 的 review-fix/estimate 顺序判据补强；`#267/#273` 的隔离夹具验收已由 `recoverySettlesLostWorker` 覆盖，不再追旧组；ccloop `savedResultRecovery.ts` 的松 `indexOf` 仍在（等 ccloop 下次有改动时一起修）。
+4. **要先 brainstorm／写 spec 的**：#225／#297 的 codex 单 turn 硬边界（`g-28d9b560` 一次 execute 越过 ceiling 223k，现裁定仍只提示）；#224／#266／#196 估算校准（历史中位数只展示，estimator 不看仓库规模）；#108 澄清→拆分重设计；#92 Board 批量操作；#195 接 context 观测；#193 transcript 写放大。
+5. **测试者台账**（测试者的文件，不能替其改状态）：#310/#311/#312/#313/#314/#315 在本会话前已修；#230 的 E-block 现有受支持接受路径；#265 单仓已自动补路径，多目录仍 hint；#279/#283 已配置的 full-suite 会跑，未配置只警示；#297 仍是只提示；#191 仍是 provider 侧。
+6. **旧裁定的现状**：`#297` 的 Codex loop 阶段按响应边界软停，不承诺请求中途硬拦；`#235` 改阶梯无新证据；全量发版门只在要求打 tag 时跑（Rule 18）。
+7. **清理（归人）**：`/usr/bin/git worktree list` 仍列出 Orca 主树与 `.claude/worktrees/agent-a928a0ccb94ff7fe9`、`agent-ac902d35fb1bda971` 两个 agent worktree（含未提交副本，不要强删）；本会话 scratch 日志在 `/tmp/orca-gate{2,3}.log`，临时目录可失。
 
 ### 4.1 人做的（agent 不提醒、不代做）
 
