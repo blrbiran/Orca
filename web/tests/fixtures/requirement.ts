@@ -56,7 +56,7 @@ export function requirementView(state: RequirementFixtureState): RequirementView
     : [round({ ...ANSWERED, closedByConsensus: state === "awaiting-review" })];
   const drafts: DraftViewV1[] = state !== "awaiting-review" ? [] : [{
     draftNo: 1, state: "awaiting-review", autoRetry: 0, waiting: null, feedback: null, output: VALID_SPLIT, draftHash: "d".repeat(64), reasons: [],
-    layers: [["exporter"], ["images"]], implicitEdges: [{ from: "exporter", to: "images", conflicts: [{ a: "src/**", b: "src/**" }] }], reasonCode: null, calls: [],
+    layers: [["exporter"], ["images"]], implicitEdges: [{ from: "exporter", to: "images", conflicts: [{ a: "src/**", b: "src/**" }] }], impliedPathsAdded: null, reasonCode: null, calls: [],
   }];
   const last = rounds.at(-1)!;
   const requirement: RequirementSummaryV1 = {

@@ -49,7 +49,7 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
     } finally { await x.dispose(); }
   });
 
-  it("add-implied-path adds the file to the task's targets, and the re-validation orders the two writers (#268)", async () => {
+  it("spec 2026-11-16: the split already added the named paths, so a manual add has nothing left to add", async () => {
     const split = { tasks: [
       task("cli", ["src/cli.js"], [], { successCondition: "src/cli.js prints the history; README.md documents the history command and CHANGELOG.md notes it." }),
       task("docs", ["README.md", "CHANGELOG.md"], []),
@@ -57,19 +57,36 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ layers: [["cli", "docs"]], implicitEdges: [] });
-      // mutation: drop the targetPaths push in editedSplit -> cli's targets unchanged, red
-      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "cli", path: "README.md" })).toMatchObject({ result: { kind: "requirement-draft-edited", nextDraftNo: 2 } });
-      const next = readDraft(x.store, "r", 2);
-      expect((next.output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md"]);
-      // The two write sets now intersect: the re-validation's implicit edge orders them (accept makes it a dependsOn).
-      expect(next).toMatchObject({ state: "awaiting-review", reasons: [], layers: [["cli"], ["docs"]], implicitEdges: [{ from: "cli", to: "docs" }] });
-      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 2)).toMatchObject({ impliedPathsOutsideTargets: [{ taskId: "cli", path: "CHANGELOG.md", writers: ["docs"] }] });
-      // An edited draft has no call of its own: its edit is judged at the overview of the draft it was edited from.
-      // mutation: judgedRun reads only the named draft's calls -> recovery-blocked, red
-      expect(await edit(x, 2, { kind: "add-implied-path", taskId: "cli", path: "CHANGELOG.md" })).toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 2, nextDraftNo: 3 } });
-      expect((readDraft(x.store, "r", 3).output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md", "CHANGELOG.md"]);
-      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 3)).toMatchObject({ impliedPathsOutsideTargets: [] });
+      const draft = readDraft(x.store, "r", 1);
+      expect(draft).toMatchObject({ state: "awaiting-review", layers: [["cli"], ["docs"]], impliedPathsAdded: [
+        { taskId: "cli", path: "README.md", writers: ["docs"] }, { taskId: "cli", path: "CHANGELOG.md", writers: ["docs"] },
+      ] });
+      expect((draft.output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md", "CHANGELOG.md"]);
+      // The two write sets now intersect, so the re-validation orders them; no manual edit is needed.
+      expect(draft.implicitEdges?.map((edge) => [edge.from, edge.to])).toEqual([["cli", "docs"]]);
+      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ impliedPathsOutsideTargets: [] });
+      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "cli", path: "README.md" }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-an-implied-path:cli:README.md" } });
+    } finally { await x.dispose(); }
+  });
+
+  it("refuses an edit that is not a listed hint, a draft the person did not read, and a stale hash -- changing nothing", async () => {
+    const split = { tasks: [
+      task("probe", ["src/report.md"], [], { labels: ["investigate"], successCondition: "src/report.md explains the report." }),
+      task("docs", ["README.md"], []),
+    ], notes: "" };
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review" });
+      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "probe", path: "src/other.md" }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-an-implied-path:probe:src/other.md" } });
+      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "probe", path: "README.md" }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-an-implied-path:probe:README.md" } });
+      const stale = await x.service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo: 1, draftHash: "0".repeat(64), edit: { kind: "apply-parallel-candidates" } }));
+      expect(stale).toMatchObject({ error: { code: "plan-version-conflict" } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", feedback: null });
+      expect(() => readDraft(x.store, "r", 2)).toThrow();
     } finally { await x.dispose(); }
   });
 
@@ -85,32 +102,6 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
     const own = editedSplit({ tasks: [multi("cli", [{ dir: "d1", targetPaths: ["src/cli.js"], checks: ["true"] }, { dir: "d2", targetPaths: ["src/x.js"], checks: [] }], "README.md lists it."), docs], notes: "" },
       { kind: "add-implied-path", taskId: "cli", path: "README.md" });
     expect((own.output.tasks[0] as { writes: unknown }).writes).toEqual([{ dir: "d1", targetPaths: ["src/cli.js"], checks: ["true"] }, { dir: "d2", targetPaths: ["src/x.js", "README.md"], checks: [] }]);
-  });
-
-  it("refuses an edit that is not a listed hint, a draft the person did not read, and a result validation refuses -- changing nothing", async () => {
-    const split = { tasks: [
-      // An investigate task writes exactly one file: adding README.md makes the split invalid.
-      task("probe", ["src/report.md"], [], { labels: ["investigate"], successCondition: "src/report.md explains README.md." }),
-      task("docs", ["README.md"], []),
-    ], notes: "" };
-    const x = await requirementHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
-    try {
-      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review" });
-      // mutation: take any hint (find(() => true)) in editedSplit -> README.md is added instead, refused otherwise, red
-      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "probe", path: "src/other.md" }))
-        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-an-implied-path:probe:src/other.md" } });
-      // mutation: drop the parallel-candidates emptiness test -> an identical draft 2, red
-      expect(await edit(x, 1, { kind: "apply-parallel-candidates" })).toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-no-parallel-candidates" } });
-      const stale = await x.service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo: 1, draftHash: "0".repeat(64), edit: { kind: "apply-parallel-candidates" } }));
-      expect(stale).toMatchObject({ error: { code: "plan-version-conflict" } });
-      // mutation: drop the `!evaluation.ok` refusal -> an invalid draft 2 written, red
-      const refused = await edit(x, 1, { kind: "add-implied-path", taskId: "probe", path: "README.md" });
-      expect(refused).toMatchObject({ error: { code: "group-state-invalid" } });
-      expect((refused as { error: { message: string } }).error.message).toMatch(/^group-state-invalid:draft-edit-invalid:expand:probe:investigate-/);
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", feedback: null });
-      expect(() => readDraft(x.store, "r", 2)).toThrow();
-    } finally { await x.dispose(); }
   });
 });
 

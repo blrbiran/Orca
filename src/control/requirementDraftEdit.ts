@@ -113,7 +113,7 @@ export async function applyRequirementDraftEdit(deps: RequirementDraftEditDeps, 
         if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id)) invalid("call-in-flight");
         writeDraft(deps.store, id, { ...readDraft(deps.store, id, draft.draftNo), state: "rejected", waiting: null, feedback: edited.note });
         writeDraft(deps.store, id, { draftNo: draft.draftNo + 1, state: "awaiting-review", autoRetry: 0, waiting: null, feedback: null, output: evaluation.output, plan: evaluation.plan as Record<string, unknown> | null,
-          draftHash: evaluation.draftHash, reasons: evaluation.reasons, layers: evaluation.layers, implicitEdges: evaluation.implicitEdges, reasonCode: null, calls: [] });
+          draftHash: evaluation.draftHash, reasons: evaluation.reasons, layers: evaluation.layers, implicitEdges: evaluation.implicitEdges, impliedPathsAdded: evaluation.impliedPathsAdded, reasonCode: null, calls: [] });
         return commandSuccess(context, { kind: "requirement-draft-edited", draftNo: draft.draftNo, nextDraftNo: draft.draftNo + 1 });
       },
     }).body;

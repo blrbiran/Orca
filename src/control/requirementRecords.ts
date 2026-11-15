@@ -167,7 +167,7 @@ export const newRound = (roundNo: number): RoundBody => ({
 });
 export const newDraft = (draftNo: number, autoRetry: number): DraftBody => ({
   draftNo, state: "drafting", autoRetry, waiting: null, feedback: null, output: null, plan: null, draftHash: null,
-  reasons: [], layers: null, implicitEdges: null, reasonCode: null, calls: [],
+  reasons: [], layers: null, implicitEdges: null, impliedPathsAdded: null, reasonCode: null, calls: [],
 });
 
 function parsedRound(groupId: string, state: unknown, body: unknown): RoundBody {

@@ -9,7 +9,7 @@ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 // dispatcher reads only dependsOn, so two tasks writing the same file ran at once. Accepting the draft now makes each
 // implicit edge a dependency, oriented as the CLI scheduler orients it (scheduler/graph.ts).
 const [exporter, images] = VALID_SPLIT.tasks;
-const PARALLEL = { ...VALID_SPLIT, tasks: [exporter!, { ...images!, dependsOn: [] }, { ...images!, taskId: "styles", targetPaths: ["src/styles.ts"], dependsOn: [] }] };
+const PARALLEL = { ...VALID_SPLIT, tasks: [exporter!, { ...images!, dependsOn: [] }, { ...images!, taskId: "styles", targetPaths: ["src/styles.ts"], successCondition: "src/styles.ts holds the styles.", dependsOn: [] }] };
 
 describe("intersecting write sets run serially after a split is accepted (#268)", () => {
   it("a pair writing the same file gets the implicit edge as a dependency; a task writing elsewhere stays free", async () => {

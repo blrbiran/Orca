@@ -27,6 +27,7 @@ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStop
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRecordFacts, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
+import { applyImpliedPaths } from "./splitImpliedPaths.js";
 import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { catalogMissText, SELECTOR_MISS_PREFIX, selectorMissOf } from "./estimatorCompatibility.js";
@@ -427,7 +428,7 @@ async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRu
   const parsed = multiSplitOutputSchema.safeParse(rawOutput);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null };
+    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null, impliedPathsAdded: null };
   }
   const overview = (run as { overview?: RunOverview | null }).overview ?? null;
   if (overview === null || !("commits" in overview)) throw new ControlError("recovery-blocked", "requirement-overview-missing");
@@ -450,8 +451,8 @@ async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRu
   // DR12: the hash is of the expanded plan, the bytes the person reviews; a draft with a reason keeps neither.
   // ERRATUM (2026-11-14, multi-directory draft hash): it also binds the output used to rebuild secondary contracts.
   return validated.ok
-    ? { schemaValid: true, output: parsed.data, plan: expanded.plan, draftHash: requirementDraftHash(expanded.plan, parsed.data), ...validated }
-    : { schemaValid: true, output: parsed.data, plan: null, draftHash: null, ...validated };
+    ? { schemaValid: true, output: parsed.data, plan: expanded.plan, draftHash: requirementDraftHash(expanded.plan, parsed.data), impliedPathsAdded: null, ...validated }
+    : { schemaValid: true, output: parsed.data, plan: null, draftHash: null, impliedPathsAdded: null, ...validated };
 }
 
 /**
@@ -466,8 +467,12 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
   const parsed = splitOutputSchema.safeParse(withoutEmptySetup(rawOutput));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null };
+    return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null, impliedPathsAdded: null };
   }
+  // Spec 2026-11-16 (#265): a path a task's success condition names is part of its authority. Add it to
+  // that task's targetPaths before expanding and validating; the graph then serialises the two writers.
+  const adjusted = applyImpliedPaths(parsed.data);
+  const output = adjusted.output;
   const overview = (run as { overview?: RunOverview | null }).overview ?? null;
   if (overview === null || !("commit" in overview)) throw new ControlError("recovery-blocked", "requirement-overview-missing");
   const rounds = chainRounds(readRounds(deps.store, run.groupId));
@@ -476,10 +481,10 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
   const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
   // Dir-requirements spec §6.3: the group's target -- a dir group's vault, so targetRepo and the path check are the vault's.
   const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
-  const plan = expandSplitDraft(parsed.data, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
-  const validated = await validateSplitDraft({ output: parsed.data, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
+  const plan = expandSplitDraft(output, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
+  const validated = await validateSplitDraft({ output, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
   // DR12: the hash is of the expanded plan, the bytes the person reviews.
-  return { schemaValid: true, output: parsed.data, plan, draftHash: sha256Canonical(plan), ...validated };
+  return { schemaValid: true, output, plan, draftHash: sha256Canonical(plan), impliedPathsAdded: adjusted.added.length === 0 ? null : adjusted.added, ...validated };
 }
 
 /** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */
@@ -487,7 +492,7 @@ function recordSplit(store: ControlStore, group: RequirementGroup, target: Requi
   const draft = readDraft(store, group.groupId, target.no);
   if (draft.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-draft-moved");
   draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure, detail) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
-  Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges });
+  Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges, impliedPathsAdded: ev.impliedPathsAdded });
   if (ev.ok) draft.state = "awaiting-review";
   else if (draft.autoRetry < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
     draft.state = "invalid";
