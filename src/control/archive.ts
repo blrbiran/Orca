@@ -74,7 +74,22 @@ function currentIdentity(path:string,id:string):FileIdentity {
  if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink!==1n)throw idConflict(id,"nlink");
  return fileIdentity(stat);
 }
+/**
+ * Tester #229: publications of one artifact id queue in this process, so two runs sharing base blobs never both observe
+ * the duplicate and then race the rename/registration. The queue is process-local; a second writer process is still
+ * outside it (the artifact row and immutable file checks remain the cross-process guard).
+ */
+const publishTails = new Map<string, Promise<void>>();
 async function publish(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
+ const prior = publishTails.get(id) ?? Promise.resolve();
+ let release!: () => void;
+ const gate = new Promise<void>((resolve) => { release = resolve; });
+ const chained = prior.then(() => gate);
+ publishTails.set(id, chained);
+ try { await prior; return await publishOnce(store, id, temp, hash, deps); }
+ finally { release(); if (publishTails.get(id) === chained) publishTails.delete(id); }
+}
+async function publishOnce(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
  idSchema.parse(id);const artifactsRoot=privateDirectory(join(store.stateDir,"artifacts")),dir=join(artifactsRoot,id),destination=join(dir,"data");
  const handle=await open(temp,"r");try {await (deps.syncFile??(file=>file.sync()))(handle);}finally{await handle.close();}
  const stagedDir=privateDirectory(join(store.stateDir,"staging",randomUUID()));

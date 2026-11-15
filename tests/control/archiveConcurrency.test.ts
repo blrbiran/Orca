@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { cp, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { archiveRun, readArtifact } from "../../src/control/archive.js";
+import { archiveRun, readArtifact, writeArtifact } from "../../src/control/archive.js";
 import { archiveCase } from "./fixtures/archive.js";
 
 // Tester #229: independent archives can publish the same base blobs under the same artifact ids.
@@ -52,4 +52,30 @@ describe("concurrent archive publication (#229)", () => {
       expect(await readdir(join(h.store.stateDir, "staging"))).toEqual([]);
     } finally { await h.dispose(); }
   }, 120_000);
+
+  // #229: the duplicate observation used to sit outside the admission gate, so two publishers of the same id could both
+  // observe and then race. Publishing one id is now serialized in-process; the hook measures that overlap directly.
+  it("serializes publications of one artifact id", async () => {
+    const h = await archiveCase();
+    try {
+      await writeArtifact(h.store, "shared-id", Buffer.from("same bytes"));
+      let inside = 0, max = 0, releaseFirst!: () => void, firstEntered!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+      const entered = new Promise<void>((resolve) => { firstEntered = resolve; });
+      const deps = { beforeDuplicateRead: async () => {
+        inside += 1; max = Math.max(max, inside);
+        if (inside === 1) { firstEntered(); await gate; }
+        inside -= 1;
+      } };
+      const first = writeArtifact(h.store, "shared-id", Buffer.from("same bytes"), deps);
+      await entered;
+      const second = writeArtifact(h.store, "shared-id", Buffer.from("same bytes"), deps);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      releaseFirst();
+      const refs = await Promise.all([first, second]);
+      // mutation: drop the per-id queue in archive.ts -> both publishers enter observeDuplicate, max becomes 2.
+      expect(max).toBe(1);
+      expect(refs[0]).toEqual(refs[1]);
+    } finally { await h.dispose(); }
+  });
 });
