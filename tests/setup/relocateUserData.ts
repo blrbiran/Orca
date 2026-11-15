@@ -39,10 +39,17 @@ process.env.ORCA_SERVICE_UNIT = "orca-panel-test";
  * a snapshot of the real ~/.orca, compared after every test file. If anything in this suite reaches
  * a person's user data, the file that did it goes red, by name, with the difference printed.
  */
-function userDataSnapshot(): string[] {
-  const root = join(homedir(), ".orca");
+/**
+ * #315: a running panel writes its own runtime files under `~/.orca/panel` (its rotating logs, its pid record and its
+ * lock) on every driver round, so a snapshot of the whole tree called a test file red for output an external process
+ * wrote. Those paths are excluded; everything the tests could reach (`control/`, `person/`, `vault/`, the service
+ * definitions and the rest of `panel/`) stays guarded. Tests that boot the panel still relocate `ORCA_PANEL_DIR`.
+ */
+const PANEL_RUNTIME_FILES = new Set(["panel.json", "panel.lock"]);
+export function userDataSnapshot(root: string = join(homedir(), ".orca")): string[] {
   if (!existsSync(root)) return [];
   const walk = (dir: string, prefix: string): string[] => readdirSync(dir).flatMap((entry) => {
+    if (prefix === "panel/" && (entry === "logs" || PANEL_RUNTIME_FILES.has(entry))) return [];
     const full = join(dir, entry);
     let stat;
     try { stat = statSync(full); } catch { return [`${prefix}${entry}:unreadable`]; }
@@ -62,6 +69,6 @@ const definitionsBefore = realServiceDefinitions();
 
 afterAll(() => {
   rmSync(relocated, { recursive: true, force: true });
-  expect(userDataSnapshot(), "this test file wrote into the real ~/.orca (CLAUDE.md Rule 17)").toEqual(userDataBefore);
+  expect(userDataSnapshot(), "the real ~/.orca changed during this test file (CLAUDE.md Rule 17): a test wrote it, or another process did. panel runtime logs, panel.json and panel.lock are excluded; the entries above are outside them").toEqual(userDataBefore);
   expect(realServiceDefinitions(), "this test file touched the real service definition (CLAUDE.md Rule 17)").toEqual(definitionsBefore);
 });
