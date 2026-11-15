@@ -582,3 +582,12 @@ Recorded by the P0 implementation seat of Orca session `c8b75eac`, on branch `j/
    it refused, as `usage-pause-group-headroom` (detail `<line><=<used>:orca group set-limit <g> --limit <a higher
    limit>`); `usage-pause-no-headroom` is left for a task with no expectation. Criterion:
    `tests/control/usagePauseDecision.test.ts` "continue after an overshoot past the next multiple".
+
+## 20. Correction (#312, 2026-11-15): review a finished fix even when the new tip fails group acceptance
+
+The tester's `dogfood-20261114-2` reached `requirementReview.state=fixing` after its fix task landed, while the new tip's configured full-suite check failed on an existing README assertion. The original §3 timing rule made `reviewRequirements` return before checking whether the fix was done, so no second review could judge the fix. This correction narrows §3 items 1 and 4; the original text remains as historical evidence.
+
+- The **first** requirement review still starts only after all tasks are done and group acceptance passed on that tip.
+- Once a review opened a fix task and that task is done, wait for group acceptance to record its result **for the fix's current tip**; then run the next review even if that result is `failed`. Do not review a stale tip or a tip with no acceptance record.
+- A failed acceptance remains failed and still prevents the group from becoming `done`. A passing review does not waive or reinterpret the check failure; the owner must repair the failing check or explicitly waive acceptance under the existing authority rules.
+- `tests/control/requirementReviewFix.test.ts` pins both the second review on the new tip without a waiver and the first-review gate on a failing acceptance.

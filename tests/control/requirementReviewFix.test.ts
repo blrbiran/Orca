@@ -4,6 +4,7 @@ import { frozenWorkAgent } from "../../src/control/agentFreeze.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { newDraft, writeDraft } from "../../src/control/requirementRecords.js";
 import { readArchivedContract, readWork } from "../../src/control/queries.js";
+import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { git } from "./fixtures/driverHarness.js";
 import { reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
 
@@ -162,6 +163,52 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       await w.runAll();
       await w.t.until(w.driver, () => w.review()?.state === "passed", 120);
       expect(git(w.t.repo, "show", "refs/heads/orca/g:a")).toBe("fixed a by review-fix-1");
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
+  it("reviews the fix on its new tip when group acceptance fails, without waiving the failure", async () => {
+    const answers = [verdicts({ AC1: "not-met", AC2: "met" }), verdicts({ AC1: "met", AC2: "met" })];
+    const w = await reviewWorld({ harness: { files: fixFiles }, answer: () => ({ outcome: "complete", output: answers.shift() }) });
+    const group = () => JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      expect(group().acceptance.result).toBe("passed");
+      const oldTip = git(w.t.repo, "rev-parse", "refs/heads/orca/g");
+      // The configured full suite is red on the fix tip; task checks still pass.
+      const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
+      writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
+        checks: { ...settings.checks, integrationCheck: { command: "false" } } });
+      await w.runAll();
+      const newTip = git(w.t.repo, "rev-parse", "refs/heads/orca/g");
+      expect(newTip).not.toBe(oldTip);
+      await w.t.until(w.driver, () => group().acceptance?.tip === newTip && group().acceptance?.result === "failed", 120);
+      expect(group().acceptance.waived).toBeUndefined();
+      // Mutation #312: put acceptanceSatisfied ahead of the fixing/roundDue exception -> this never settles round 2.
+      for (let i = 0; i < 40 && w.review()?.rounds.length !== 2; i += 1) await w.driver.round();
+      expect(w.review()?.rounds).toHaveLength(2);
+      expect(w.review()).toMatchObject({ state: "passed", rounds: [expect.objectContaining({ fixTaskId: "review-fix-1", tip: oldTip }),
+        expect.objectContaining({ roundNo: 2, tip: newTip, result: "passed" })] });
+      expect(w.calls).toHaveLength(2);
+      expect(w.groupStatus()).not.toBe("done");
+      expect(group().acceptance).toMatchObject({ result: "failed", tip: newTip });
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
+  it("does not start an initial review when group acceptance truly fails", async () => {
+    const w = await reviewWorld();
+    const group = () => JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+    try {
+      const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
+      writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
+        checks: { ...settings.checks, integrationCheck: { command: "false" } } });
+      await w.runAll();
+      await w.t.until(w.driver, () => group().acceptance?.result === "failed", 120);
+      for (let i = 0; i < 5; i += 1) await w.driver.round();
+      // Mutation #312 guard: allow a pending review through the failed acceptance -> a review call starts.
+      expect(w.calls).toEqual([]);
+      expect(w.review()).toBeNull();
+      expect(w.groupStatus()).not.toBe("done");
     } finally { await w.t.h.dispose(); }
   }, 300000);
 

@@ -32,8 +32,9 @@ import type { BudgetAmount } from "./tokenPolicy.js";
 
 /**
  * Tester follow-up G spec §3 (human: 「没有统一标准，一般会对照需求看具体实现的结果（这个结果可以是代码、文档、图片等等）」, the
- * playback 「同意」): after every task of a requirement group is done and the group acceptance passed on its tip, one
- * independent single call compares what the group changed with the requirement's acceptance criteria. Each criterion is
+ * playback 「同意」): after every task of a requirement group is done, an initial review waits for group acceptance to pass;
+ * after a fix, review waits for acceptance to check the new tip even if a check fails (#312). Each review call compares
+ * what the group changed with the requirement's acceptance criteria. Each criterion is
  * `met` / `not-met` / `cannot-judge` with evidence; the answer is classified by code (Rule 5). The group is done only when
  * the review passed (or a person or orchestrating agent accepted it); a not-met round opens a fix task in the same group
  * (Task 9); cannot-judge, an invalid answer, a failed or unfunded call stop the group in Problems.
@@ -186,8 +187,8 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
     try {
       if (body.planHash === undefined || !reviewRequired(store, groupId, body) || isGroupArchived(store, groupId)) continue;
       if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined || !tasksDone(store, groupId)) continue;
-      if (!acceptanceSatisfied(store, groupId, body)) continue;
       const review = reviewOf(body);
+      if (!acceptanceSatisfied(store, groupId, body) && review?.state !== "fixing") continue;
       if (isMultiGroup(store, groupId) || isDirGroup(store, groupId) || isDirFlowGroup(store, groupId)) {
         if (review?.state === "not-run") continue;
         deps.write(() => saveReview(store, groupId, { state: "not-run", why: isMultiGroup(store, groupId) ? "multi-repo" : "dir", rounds: [], autoFixRounds: 0 }));
@@ -203,6 +204,7 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       // A fix task moved the tip: wait for the acceptance pass to check the new tip before reviewing it.
       const accepted = acceptanceOf(body);
       if (accepted !== null && accepted.tip !== null && accepted.tip !== tip) continue;
+      if (review?.state === "fixing" && accepted?.tip !== tip) continue;
       deps.write(() => {
         const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body))) ?? { state: "pending" as const, rounds: [], autoFixRounds: 0 };
         const roundNo = current.rounds.length + 1, at = store.now();
