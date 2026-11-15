@@ -2223,11 +2223,26 @@ async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,repor
  const checkpointId=`ceiling-${runId}`;
  if (run.checkpointId === checkpointId) {
   const committed = await readCommittedCheckpoint(store, runId);
-  const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 1);
   if (committed.runId !== runId || committed.groupId !== run.groupId || committed.workItemId !== run.workItemId ||
       committed.generation !== run.generation || committed.usageHighWater !== run.highWater ||
-      hashPayload(committed.stopProof) !== hashPayload(raw.stopProof) ||
-      hashPayload(run.liveCeilingStop) !== hashPayload(stop) || active !== 0 ||
+      hashPayload(committed.stopProof) !== hashPayload(raw.stopProof))
+    throw new ControlError("checkpoint-identity-conflict", "ceiling-already-committed");
+  if (run.liveCeilingStop === undefined) {
+    // #313: an older settle committed the checkpoint before onSettled could run (work usage was not observed yet), so
+    // the body holds no ceiling stop and the run is still blocked at C. Finish that transition from the report -- the
+    // run keeps its outcome and stop, and recovery list offers settle-usage. Usage is never invented as zero here.
+    return write(deps, () => {
+      const current = readDriverRun(store, runId), terminal = report.terminal;
+      current.state = "blocked";
+      current.drive = { ...current.drive!, blockedAt: "C", blockedReason: "live-ceiling-usage-unknown",
+        outcome: terminal?.outcome ?? "exhausted", ...(terminal?.stopReason ? { stopReason: terminal.stopReason } : {}) };
+      (current as { liveCeilingStop?: unknown }).liveCeilingStop = stop;
+      saveDriverRun(store, current);
+      return true;
+    });
+  }
+  const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 1);
+  if (hashPayload(run.liveCeilingStop) !== hashPayload(stop) || active !== 0 ||
       run.state !== "settled-recoverable" || run.drive?.outcome !== "exhausted")
     throw new ControlError("checkpoint-identity-conflict", "ceiling-already-committed");
   return true;

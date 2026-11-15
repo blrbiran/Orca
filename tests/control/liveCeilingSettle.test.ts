@@ -204,6 +204,36 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
     } finally { await t.h.dispose(); }
   });
 
+  // #313: a row written by the older settle has its ceiling checkpoint committed while the body still lacks
+  // liveCeilingStop (the first settle ran before work usage was observed). Re-entering the settle must finish the
+  // transition as a named, settleable block instead of hashing undefined forever.
+  it("finishes a stored ceiling row whose committed checkpoint predates its liveCeilingStop (#313)", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs);
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      knobs.workTokens = t.body(runId).liveCeiling.tokens - 100_000;
+      await settled(t, driver, runId, "settled-recoverable");
+      const row = t.body(runId);
+      delete row.liveCeilingStop;
+      row.state = "accepted";
+      row.unknown = { ...row.unknown, work: true };
+      row.drive = { ...row.drive, blockedAt: null, blockedReason: null, outcome: null };
+      t.h.store.db.prepare("UPDATE runs SET body=?, active=1 WHERE id=?").run(JSON.stringify(row), runId);
+      // mutation: hashPayload(run.liveCeilingStop) without a guard -> control-non-json-payload.
+      expect(await stepC(t.deps, runId)).toBe(true);
+      const after = t.body(runId);
+      expect(after.liveCeilingStop).toMatchObject({ cause: "group" });
+      expect(after.state).toBe("blocked");
+      expect(after.drive).toMatchObject({ blockedAt: "C", blockedReason: "live-ceiling-usage-unknown", outcome: "exhausted" });
+      expect(readControlRecovery(t.h.store, "epoch").terminalRuns).toEqual([
+        expect.objectContaining({ runId, outcome: "exhausted", next: "settle-usage" }),
+      ]);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
   it("repairs the old ceiling run after its task has already claimed a successor", async () => {
     const knobs: Knobs = { exhausted: true, workTokens: 2 * M, cause: "group" };
     const t = await harness(["a"], 20 * M, knobs);
