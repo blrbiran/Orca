@@ -209,15 +209,24 @@ describe("running-group cap (kanban spec §3.2)", () => {
     let now = Date.parse("2026-10-21T00:00:00.000Z");
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService({ ...h.deps, now: () => new Date(now) });
+      setCap(h, service, 1);
+      await confirm(h, service, "g");
+      expect((await service.autoStart()).started).toEqual(["g"]);
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work, status: "blocked", currentRunId: "run-1" }));
+      h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-1','g','a',1,1,?)")
+        .run(JSON.stringify({ runId: "run-1", state: "blocked", drive: { blockedAt: "C", outcome: "failed" } }));
+      h.store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id='g' AND kind='start'").run();
+      h.importDeferred("ordinary");
+      await confirm(h, service, "ordinary");
       h.importDeferred("fix");
       const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='fix'").get()!.body));
       h.store.db.prepare("UPDATE groups SET body=? WHERE id='fix'").run(JSON.stringify({ ...body, systemDebug: { source: { kind: "ladder", groupId: "g", taskId: "a", runId: "run-1" }, stackOn: "g", inputHash: "a".repeat(64), settled: null } }));
-      setCap(h, service, 1);
-      await confirm(h, service, "g");
       now += 1_000;
       await confirm(h, service, "fix");
-      // mutation: groupFacts reads only body.debug -> started ["g"], red
+      // mutation: groupFacts reads only body.debug -> started ["ordinary"], red
       expect((await service.autoStart()).started).toEqual(["fix"]);
+      expect(readGroupSummary(h.store, "ordinary").orchestration!.state).toBe("waiting-slot");
     } finally { await h.dispose(); }
   });
 });
