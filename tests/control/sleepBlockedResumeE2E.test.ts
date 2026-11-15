@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { ControlError } from "../../src/control/errors.js";
 import type { ExecutionPort } from "../../src/control/executionPort.js";
+import { readControlRecovery } from "../../src/panel/controlViews.js";
 import { ccloopWorlds, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
 /**
@@ -84,6 +85,51 @@ describe.skipIf(!realBinary)("a run blocked at C with no outcome (#267)", { time
       // mutation: stepC ignores `worker: lost` -> the run waits at C for good (timeout), red
       await until(() => workRuns(runtime)[0]!.body.drive.outcome !== null, 120_000, "the resumed run to reach a terminal");
       expect({ outcome: workRuns(runtime)[0]!.body.drive.outcome, cause: workRuns(runtime)[0]!.body.drive.failureCause?.cause }).toEqual({ outcome: "failed", cause: "worker-lost" });
+      expect(await runtime.shutdown()).toBe(true);
+    } finally { stderr.mockRestore(); await w.teardown(); }
+  });
+
+  it("a blocked run whose worker died resumes through worker-lost, restarts automatically and unlocks its dependent", async () => {
+    const w = await world([
+      { taskId: "a", targetPaths: ["a.txt"] },
+      { taskId: "b", dependsOn: ["a"], targetPaths: ["b.txt"] },
+    ], {
+      a: { files: { "a.txt": "A\n" }, delayMs: { execute: 60_000 } },
+      b: { files: { "b.txt": "B\n" } },
+    }, { tokenPolicy: "optional-v1" });
+    let asleep = false;
+    const wrap = (port: ExecutionPort): ExecutionPort => new Proxy(port, { get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver);
+      if (key !== "collect" || typeof value !== "function") return typeof value === "function" ? value.bind(target) : value;
+      return async (...args: unknown[]) => { if (asleep) throw new ControlError("control-peer-timeout"); return (value as (...a: unknown[]) => unknown).apply(target, args); };
+    } });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const runtime = await w.boot(undefined, wrap); try {
+      await startGroup(runtime, w.repoId);
+      runtime.store.db.prepare("UPDATE group_orchestration SET body=json_set(body,'$.mode','run') WHERE group_id='g'").run();
+      runtime.startPump(50);
+      await until(() => workRuns(runtime).some((run) => run.task === "a" && run.body.state === "accepted") &&
+        w.scripted().some((line) => line.startsWith("execute ")), 240_000, "the first task to begin execute");
+      const first = workRuns(runtime).find((run) => run.task === "a")!;
+      asleep = true;
+      await until(() => workRuns(runtime).find((run) => run.runId === first.runId)?.body.state === "blocked", 120_000, "the first run to block at C");
+      expect(workRuns(runtime).find((run) => run.runId === first.runId)?.body.drive).toMatchObject({ blockedAt: "C", blockedReason: "control-peer-timeout", outcome: null });
+      expect(readControlRecovery(runtime.store, runtime.epoch).blockedRuns).toEqual([expect.objectContaining({ runId: first.runId, next: `orca recovery retry --run ${first.runId}` })]);
+      const pid = JSON.parse(readFileSync(join(first.body.drive.sourceDir, "control", "accepted.json"), "utf8")).worker.pid as number;
+      process.kill(pid, "SIGKILL");
+      await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, 10_000, "the worker to exit");
+      asleep = false;
+      const resumed = await runtime.service.recoveryRetry(raw(runtime, "resume-and-restart", "recovery-retry", { scope: "run", runId: first.runId }, { kind: "run", groupId: "g", runId: first.runId }));
+      expect("error" in resumed ? resumed.error : resumed.result).toMatchObject({ kind: "recovery-observed", resolved: true });
+      // If blocked-C recovery fails to expose the lost worker to stepC, neither the automatic restart nor b can run.
+      await until(() => runtime.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='worker-lost'").get(first.runId) !== undefined, 60_000, "the lost worker to be settled");
+      await until(() => runtime.store.db.prepare("SELECT json_extract(body,'$.status') AS status FROM work_items WHERE group_id='g' AND id='b'").get()?.status === "done", 240_000, "the dependent task to finish");
+      const runs = runtime.store.db.prepare("SELECT body FROM runs WHERE group_id='g' AND work_item_id='a' ORDER BY rowid").all()
+        .map((row) => JSON.parse(String(row.body)) as { drive: { outcome: string; failureCause?: { cause: string } } });
+      expect(runs).toHaveLength(2);
+      expect({ outcome: runs[0]!.drive.outcome, cause: runs[0]!.drive.failureCause?.cause }).toEqual({ outcome: "failed", cause: "worker-lost" });
+      expect(runs[1]!.drive.outcome).toBe("succeeded");
+      expect(runtime.store.db.prepare("SELECT count(*) AS n FROM activity WHERE run_id=? AND kind='worker-lost'").get(first.runId)?.n).toBe(1);
       expect(await runtime.shutdown()).toBe(true);
     } finally { stderr.mockRestore(); await w.teardown(); }
   });
