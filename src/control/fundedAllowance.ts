@@ -124,7 +124,7 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
  return chosen?{allowance:chosen.allowance,workItemId:chosen.workId,reason:"funded"}:blocked;
 }
 /** Display-only: what a claim would fund each task at the current group limit. */
-export interface FundingPreviewRow { taskId:string; authoredTokens:number|null; fundableTokens:number|null; reason:string|null; minimumTokens?:number }
+export interface FundingPreviewRow { taskId:string; authoredTokens:number|null; fundableTokens:number|null; reason:string|null; minimumTokens?:number; expectation?:boolean }
 /**
  * Issue #212: the authored work allocation is a request, not a grant. For an editable proposal the goal-review allocation
  * is pre-subtracted (confirmation will reserve it); for a confirmed proposal the stored reservation already says so, and
@@ -147,11 +147,30 @@ export function fundingPreview(store:ControlStore,groupId:string,at:number):Fund
  return allWork(store,groupId).sort((a,b)=>a.workItemId<b.workItemId?-1:a.workItemId>b.workItemId?1:0).flatMap(work=>{
   if(work.kind!=="task"||work.taskId===null)return [];
   const authored=budgetAmountSchema.parse(work.grant.work);
+  // #291: an optional-v1 task's null token number is the expectation model, not "no budget". The row says so, so a null
+  // fundableTokens is not read as a refusal when the claim would in fact be funded.
+  const expectation=expectationModelApplies(group)&&authored.tokens===null;
   const named=taskReason(work);
-  if(named!==null)return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:null,reason:named}];
+  if(named!==null)return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:null,reason:named,...(expectation?{expectation}:{})}];
   const decision=decideFundedAllowance(store,groupId,work.workItemId,at,{previewGroupId:groupId,extraReserved});
-  return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:decision.allowance?.grant.work.tokens??null,reason:decision.allowance===null?decision.reason:null,...(decision.minimumTokens===undefined?{}:{minimumTokens:decision.minimumTokens})}];
+  // The claim's generic skip reason still names the task's real state where the preview can see it (#291).
+  const reason=decision.allowance===null&&decision.reason==="task-budget-unavailable"?previewSkipReason(store,groupId,work):decision.allowance===null?decision.reason:null;
+  return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:decision.allowance?.grant.work.tokens??null,reason,...(expectation?{expectation}:{}),...(decision.minimumTokens===undefined?{}:{minimumTokens:decision.minimumTokens})}];
  });
+}
+
+/** #291 display-only: the reason a ready task's claim would still be skipped, named from the same facts the claim reads. */
+function previewSkipReason(store:ControlStore,groupId:string,work:{workItemId:string;status:string;dependsOn:string[];grant:{work:unknown};fundingReleased?:boolean}):string {
+ if(groupUsageUnknown(store,groupId))return "usage-unknown";
+ if(work.dependsOn.some((dep)=>!dependencyReady(store,groupId,dep)))return "dependencies-pending";
+ if(!["ready","continuing","draft","pending"].includes(work.status))return "not-ready";
+ const fixed=!hasOptionalTaskPolicy(store,groupId,work.workItemId),authored=budgetAmountSchema.parse(work.grant.work);
+ const observed=inheritedWorkUsage(store,groupId,work.workItemId);
+ if(observed===null)return "usage-unknown";
+ const remaining=fixed?authored:remainingBudget(withTopUp(authored,topUpSum(store,groupId,work.workItemId,null)),observed);
+ if(remaining.tokens===0||remaining.activeMs===0||remaining.attempts===0||remaining.sessions===0)return "no-remaining-grant";
+ if(work.fundingReleased===true)return "no-group-headroom";
+ return "task-budget-unavailable";
 }
 /** Null commitments have their own record; never encode them as a finite sentinel. */
 export function persistFundedAllowance(store:ControlStore,runId:string,groupId:string,workId:string,allowance:FundedAllowance):void {

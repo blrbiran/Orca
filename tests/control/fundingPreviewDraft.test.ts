@@ -46,6 +46,14 @@ describe("the funding preview names why a claim would not fund a task (#291)", (
       const reasons = () => Object.fromEntries(fundingPreview(h.store, "g", Date.now()).map((row) => [row.taskId, row.reason]));
       // mutation (no task reasons before decide) -> red here: task-budget-unavailable for both.
       expect(reasons()).toEqual({ [running]: "task-active", [done]: "task-done", [ready]: null });
+      // #291: a null token number is the expectation model, not an unfunded task.
+      expect(fundingPreview(h.store, "g", Date.now()).find((row) => row.taskId === ready)).toMatchObject({ reason: null, expectation: true, fundableTokens: null });
+      // A ready task whose dependency has not landed names that, instead of the generic task-budget-unavailable.
+      const readyBody = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(ready)!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...readyBody, dependsOn: [running] }), ready);
+      // mutation: keep the claim's generic skip reason -> red here.
+      expect(reasons()[ready]).toBe("dependencies-pending");
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify(readyBody), ready);
       h.store.db.prepare("INSERT INTO recovery_blockers(id,group_id,run_id,scope,code,body) VALUES ('blk-291','g',NULL,'group','claim-capability-unavailable',?)").run(JSON.stringify({ evidenceIds: [] }));
       // mutation (no recovery-blocked) -> red here.
       expect(reasons()).toEqual({ [running]: "recovery-blocked", [done]: "recovery-blocked", [ready]: "recovery-blocked" });
