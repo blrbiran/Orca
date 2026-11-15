@@ -253,7 +253,7 @@ export function contextHandoffLines(threshold: number | null): string[] {
 }
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
-  warning?: string; passedWithoutFullSuite?: true; fullSuite?: { suggestion: string | null } }
+  warning?: string; passedWithoutFullSuite?: true; fullSuite?: { command?: string | null; suggestion: string | null; baseline?: { tip: string; exits: string[] } } }
 
 /**
  * Tester follow-up K, item 2 (human ruling ①: Orca runs no suite a person did not set): the words for an acceptance with
@@ -281,6 +281,8 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   if (a.result === "not-run" && a.why === "work-branch-missing") return [`acceptance: not run (work-branch-missing: orca/${groupId} does not exist; checked again after a new landing)`];
   if (a.result === "not-run") return [`acceptance: not run (${a.why ?? "?"})`];
   if (a.result === "waived") return [`acceptance: waived${tip} by ${a.waived?.by ?? "?"}: ${a.waived?.note ?? ""}`];
+  // Spec 2026-11-16: the full suite was already red at the group's base, so it does not block done.
+  if (a.result === "passed-relative") return [`acceptance: passed relative to the base${a.fullSuite?.baseline === undefined ? "" : ` ${a.fullSuite.baseline.tip.slice(0, 12)}`}${tip} ${ran}: ${a.fullSuite?.command ?? "the full suite"} was already red there`];
   const last = a.commands.at(-1);
   return [
     `problem: group-acceptance-failed:${last?.command ?? "?"} (exited ${last?.exit ?? "?"} on orca/${groupId}${a.tip === null ? "" : ` at ${a.tip.slice(0, 12)}`})`,

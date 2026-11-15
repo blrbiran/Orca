@@ -180,7 +180,7 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       // The configured full suite is red on the fix tip; task checks still pass.
       const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
       writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
-        checks: { ...settings.checks, integrationCheck: { command: "false" } } });
+        checks: { ...settings.checks, integrationCheck: { command: "test ! -f a" } } });
       await w.runAll();
       const newTip = git(w.t.repo, "rev-parse", "refs/heads/orca/g");
       expect(newTip).not.toBe(oldTip);
@@ -207,7 +207,7 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
     try {
       const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
       writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
-        checks: { ...settings.checks, integrationCheck: { command: "false" } } });
+        checks: { ...settings.checks, integrationCheck: { command: "test ! -f a" } } });
       await w.runAll();
       await w.t.until(w.driver, () => group().acceptance?.result === "failed", 120);
       await w.t.until(w.driver, () => w.review() !== null, 120);

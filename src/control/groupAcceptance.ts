@@ -1,6 +1,6 @@
 import { recordActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
-import { runCheckSequence, type PostMergeOutcome } from "./checkCommand.js";
+import { runCheckSequence, type CheckFailure, type PostMergeOutcome } from "./checkCommand.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { isMultiGroup } from "./multiGroup.js";
@@ -58,7 +58,11 @@ export function saveAcceptance(store: ControlStore, groupId: string, record: Gro
  */
 export interface GroupAcceptanceCheck { controller: AbortController; tip: string; suite: string | null; settled: { outcome: AcceptanceOutcome } | { error: unknown } | null; done: Promise<void> }
 /** The union's outcome and, after it, the full suite's: each of its runs' exits (empty when it did not run). */
-export interface AcceptanceOutcome extends PostMergeOutcome { suiteExits: string[] }
+export interface AcceptanceOutcome extends PostMergeOutcome {
+  suiteExits: string[];
+  /** Spec 2026-11-16: the suite's runs at the group's base, when the tip was red. */
+  baseline?: { tip: string; exits: string[]; failure: CheckFailure | null };
+}
 
 export interface GroupAcceptanceDeps {
   store: ControlStore; roots: WorkspaceRoots; resolveRepository: (repoId: string) => string;
@@ -139,6 +143,18 @@ export function acceptanceCommands(store: ControlStore, groupId: string, which: 
   };
 }
 
+/**
+ * Spec 2026-11-16: the commit the group branched from -- the base of its first work run, before any task landed.
+ * Used only to classify a red full suite: red there too means the failure pre-dated this group.
+ */
+function groupBaseCommit(store: ControlStore, groupId: string): string | null {
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
+    const run = JSON.parse(String(row.body)) as { phase?: unknown; drive?: { base?: unknown } };
+    if (run.phase === "work" && typeof run.drive?.base === "string") return run.drive.base;
+  }
+  return null;
+}
+
 /** One round of the pass; answers whether anything was recorded. */
 export async function acceptGroups(deps: GroupAcceptanceDeps, checks: Map<string, GroupAcceptanceCheck>): Promise<boolean> {
   const { store } = deps;
@@ -195,10 +211,14 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     checks.delete(groupId);
     if ("error" in inFlight.settled) throw inFlight.settled.error;
     if (inFlight.tip !== tip) return false;
-    const { failure, commands, suiteExits } = inFlight.settled.outcome;
-    const record: GroupAcceptance = { tip, result: failure === null ? "passed" : "failed", commands, at: store.now(),
+    const { failure, commands, suiteExits, baseline } = inFlight.settled.outcome;
+    // Spec 2026-11-16: a red suite is classified against the group's base. Red there too: the failure
+    // pre-dated the group, and the acceptance passes relative to it; green there: this group broke it.
+    const baselineRed = baseline !== undefined && baseline.failure !== null;
+    const result = failure === null ? "passed" : baselineRed ? "passed-relative" : "failed";
+    const record: GroupAcceptance = { tip, result, commands, at: store.now(),
       ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }),
-      fullSuite: fullSuiteRecord(inFlight.suite, repo, suiteExits) };
+      fullSuite: fullSuiteRecord(inFlight.suite, repo, suiteExits, baseline) };
     deps.write(() => {
       saveAcceptance(store, groupId, record);
       recordActivity(store, { groupId, kind: "group-acceptance", body: { ...record } });
@@ -213,13 +233,15 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     return true;
   }
   const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId);
+  // Spec 2026-11-16: only a red suite needs the base; resolve it before the check starts.
+  const baselineTip = suite === null ? null : groupBaseCommit(store, groupId);
   // A record for an earlier tip says nothing about this one: removed before the check starts, so nothing reads it as current.
   if (recorded !== null) deps.write(() => saveAcceptance(store, groupId, null));
   // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver checks again.
   if (deps.stopped()) return false;
   const controller = new AbortController();
   const entry: GroupAcceptanceCheck = { controller, tip, suite, settled: null, done: Promise.resolve() };
-  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, setup, commands, suite, timeoutMs, controller.signal)
+  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, baselineTip, setup, commands, suite, timeoutMs, controller.signal)
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
   checks.set(groupId, entry);
   return recorded !== null;
@@ -229,28 +251,57 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
  * Full suite spec §3-§4: what the record says of the suite. Unset: the suggestion code detects in the repository's checkout
  * (never run; human: 「人采纳才用」). Set: each run's exit, and flaky when it passed only on the retry.
  */
-function fullSuiteRecord(suite: string | null, repo: string, exits: string[]): FullSuiteRecord {
-  return { command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits, flaky: exits.length === 2 && exits[1] === "0" };
+function fullSuiteRecord(suite: string | null, repo: string, exits: string[], baseline?: AcceptanceOutcome["baseline"]): FullSuiteRecord {
+  return {
+    command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits, flaky: exits.length === 2 && exits[1] === "0",
+    ...(baseline === undefined ? {} : { baseline: { tip: baseline.tip, exits: baseline.exits, ...(baseline.failure?.tail ? { tail: baseline.failure.tail } : {}) } }),
+  };
 }
 
-async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal): Promise<AcceptanceOutcome> {
+async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, baselineTip: string | null, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal): Promise<AcceptanceOutcome> {
   // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
   const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
-  return runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {
+  const outcome = await runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {
     const union = await runCheckSequence(tree, setup, checks, timeoutMs, as, signal);
     if (union.failure !== null || suite === null) return { ...union, suiteExits: [] };
     // Full suite spec §4: after a green union, the project's suite in the same tree and bound; a red run is run once more.
     const commands = [...union.commands], suiteExits: string[] = [];
     let failure: PostMergeOutcome["failure"] = null;
     for (let run = 0; run < 2; run += 1) {
-      const outcome = await runCheckSequence(tree, [], [suite], timeoutMs, as, signal);
-      commands.push(...outcome.commands);
-      suiteExits.push(outcome.commands[0]!.exit);
-      failure = outcome.failure;
+      const runOutcome = await runCheckSequence(tree, [], [suite], timeoutMs, as, signal);
+      commands.push(...runOutcome.commands);
+      suiteExits.push(runOutcome.commands[0]!.exit);
+      failure = runOutcome.failure;
       if (failure === null) break;
     }
     return { failure, commands, suiteExits };
   });
+  if (outcome.failure === null || suite === null || baselineTip === null) return outcome;
+  // Spec 2026-11-16: the tip's suite is red twice. Run the same command at the group's base; red there too
+  // means the failure pre-dated this group. A base that cannot be checked out stays a plain failure.
+  let baseline: { failure: PostMergeOutcome["failure"]; commands: PostMergeOutcome["commands"]; exits: string[] };
+  try {
+    baseline = await runOnScratchTip(deps, repo, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), (name) => isGroupAcceptancePathOf(name, groupId), baselineTip, async (tree) => {
+      const baselineCommands: PostMergeOutcome["commands"] = [], exits: string[] = [];
+      let failure: PostMergeOutcome["failure"] = null;
+      for (let run = 0; run < 2; run += 1) {
+        const runOutcome = await runCheckSequence(tree, [], [suite], timeoutMs, as, signal);
+        baselineCommands.push(...runOutcome.commands.map((command) => ({ ...command, command: `baseline: ${command.command}` })));
+        exits.push(runOutcome.commands[0]!.exit);
+        failure = runOutcome.failure;
+        if (failure === null) break;
+      }
+      return { failure, commands: baselineCommands, exits };
+    });
+  } catch {
+    return outcome;
+  }
+  // Green at the base: this group introduced the failure, so the failed tip's own commands stay the evidence.
+  if (baseline.failure === null) return outcome;
+  return {
+    failure: outcome.failure, commands: [...outcome.commands, ...baseline.commands], suiteExits: outcome.suiteExits,
+    baseline: { tip: baselineTip, exits: baseline.exits, failure: baseline.failure },
+  };
 }
 
 /**

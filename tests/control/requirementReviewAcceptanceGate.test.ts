@@ -14,7 +14,7 @@ describe("the first review round does not wait for a passing acceptance (#314)",
     try {
       const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
       writeRepositorySettingsBody(w.t.h.store, "repo", {
-        ...settings, revision: settings.revision + 1, checks: { integrationCheck: { command: "false" } },
+        ...settings, revision: settings.revision + 1, checks: { integrationCheck: { command: "test ! -f a" } },
       });
       await w.runAll();
       await w.t.until(w.driver, () => w.review() !== null, 120);

@@ -35,6 +35,10 @@ describe("group show names the group acceptance (tester follow-up E §5)", () =>
   it("a passed, not-needed or waived acceptance: one line", async () => {
     expect(await show({ tip: TIP, result: "passed", commands: [{ command: "npm test", exit: "0", ms: 2_400 }], at: 1 }))
       .toContain("acceptance: passed on cccccccccccc (1 command, 2 s)");
+    // Spec 2026-11-16: the full suite was already red at the base, so the record names both tips.
+    expect(await show({ tip: TIP, result: "passed-relative", commands: [{ command: "npm test", exit: "1", ms: 2_400 }], at: 1,
+      fullSuite: { command: "npm test", suggestion: null, exits: ["1", "0"], flaky: true, baseline: { tip: "b".repeat(40), exits: ["1"] } } }))
+      .toContain("acceptance: passed relative to the base bbbbbbbbbbbb on cccccccccccc (1 command, 2 s): npm test was already red there");
     expect(await show({ tip: TIP, result: "not-needed", why: "single-landing", commands: [], at: 1 })).toContain("acceptance: not needed (single-landing)");
     expect(await show({ tip: null, result: "not-run", why: "multi-repo", commands: [], at: 1 })).toContain("acceptance: not run (multi-repo)");
     // Tester #278: a work branch that no longer exists is named, with what checks it again.

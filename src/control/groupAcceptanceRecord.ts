@@ -6,7 +6,7 @@
 import { fullSuiteCommand } from "./fullSuite.js";
 import type { ControlStore } from "./store.js";
 
-export type GroupAcceptanceResult = "passed" | "failed" | "not-needed" | "not-run" | "waived";
+export type GroupAcceptanceResult = "passed" | "failed" | "passed-relative" | "not-needed" | "not-run" | "waived";
 export interface GroupAcceptance {
   /** The `orca/<g>` tip the record is for; null for not-run (no single tree). */
   tip: string | null;
@@ -28,9 +28,16 @@ export interface GroupAcceptance {
    */
   fullSuite?: FullSuiteRecord;
 }
-export interface FullSuiteRecord { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean }
+export interface FullSuiteRecord {
+  command: string | null; suggestion: string | null; exits: string[]; flaky: boolean;
+  /**
+   * Spec 2026-11-16: when the suite was red on the tip, the same command run at the group's base. `exits` red
+   * twice there means the failure pre-dated the group (`passed-relative`); green there means a regression.
+   */
+  baseline?: { tip: string; exits: string[]; tail?: string };
+}
 
-const SATISFIED: ReadonlySet<GroupAcceptanceResult> = new Set(["passed", "not-needed", "not-run", "waived"]);
+const SATISFIED: ReadonlySet<GroupAcceptanceResult> = new Set(["passed", "passed-relative", "not-needed", "not-run", "waived"]);
 
 export function acceptanceOf(body: unknown): GroupAcceptance | null {
   const value = (body as { acceptance?: unknown } | null)?.acceptance;
@@ -94,6 +101,7 @@ export function fullSuiteWarning(record: GroupAcceptance | null): string | null 
   // read as not set. A waived or not-run record without the field never had a suite to run, so it says nothing.
   if (suite === undefined) return record.result === "passed" || record.result === "not-needed" ? "full-suite-not-set" : null;
   if (suite.command === null) return "full-suite-not-set";
+  if (suite.baseline !== undefined) return `full-suite-pre-existing:${suite.command}`;
   return suite.flaky ? `full-suite-flaky:${suite.command}` : null;
 }
 

@@ -10,7 +10,7 @@ import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { createWebWakeHandlers } from "../../src/control/webDispatch.js";
 import { isGroupAcceptancePathOf } from "../../src/control/workspace.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
-import { driverHarness } from "./fixtures/driverHarness.js";
+import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Full suite spec 2026-11-12 (#279): a group was "done, acceptance passed" on 8 focused checks while its full suite was red
 // on a behaviour between two tasks' areas. With the project's full-suite command set (its integration-check command), the
@@ -44,6 +44,16 @@ function suite(script: string): { command: string; log: string; runs: () => stri
   return {
     log,
     command: `echo "$PWD" >> '${log}'; n=$(( $(cat '${counter}' 2>/dev/null || echo 0) + 1 )); echo $n > '${counter}'; ${script}`,
+    runs: () => existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [],
+  };
+}
+
+/** A suite that logs whether it ran in the tip tree (task a present) or the base tree, and exits as `script` says. */
+function suiteAtBase(script: string): { command: string; runs: () => string[] } {
+  const dir = mkdtempSync(join(tmpdir(), "orca-suite-"));
+  const log = join(dir, "calls"), counter = join(dir, "n");
+  return {
+    command: `echo "$(test -f a && echo tip || echo base)" >> '${log}'; n=$(( $(cat '${counter}' 2>/dev/null || echo 0) + 1 )); echo $n > '${counter}'; ${script}`,
     runs: () => existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [],
   };
 }
@@ -96,8 +106,8 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
     } finally { await t.h.dispose(); }
   });
 
-  it("red twice: the acceptance failed on the suite, and the group is not done", async () => {
-    const s = suite("false");
+  it("red twice at the tip, green at the base: the acceptance failed (this group broke it)", async () => {
+    const s = suiteAtBase("test ! -f a");
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       await t.claim(); await t.claim();
       setSuite(t, s.command);
@@ -107,10 +117,30 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       expect(record.result).toBe("failed");
       expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"]]);
       expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["1", "1"], flaky: false });
+      expect(record.fullSuite.baseline).toBeUndefined();
       expect(acceptanceProblem(record)).toBe(`group-acceptance-failed:${s.command}`);
+      // The baseline was still measured, once green at the base (so no retry there).
+      expect(s.runs()).toEqual(["tip", "tip", "base"]);
       for (let i = 0; i < 5; i += 1) await driver.round();
       expect(group(t).status).not.toBe("done");
-      expect(s.runs()).toHaveLength(2);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("red twice at the tip and at the base: passed relative to the base, and the group is done (spec 2026-11-16)", async () => {
+    const s = suiteAtBase("false");
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const base = git(t.repo, "rev-parse", "main");
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).status === "done");
+      const record = group(t).acceptance;
+      expect(record.result).toBe("passed-relative");
+      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"], [`baseline: ${s.command}`, "1"], [`baseline: ${s.command}`, "1"]]);
+      expect(record.fullSuite).toMatchObject({ command: s.command, exits: ["1", "1"], baseline: { tip: base, exits: ["1", "1"] } });
+      expect(fullSuiteWarning(record)).toBe(`full-suite-pre-existing:${s.command}`);
+      expect(acceptanceProblem(record)).toBeNull();
+      expect(s.runs()).toEqual(["tip", "tip", "base", "base"]);
     } finally { await t.h.dispose(); }
   });
 
