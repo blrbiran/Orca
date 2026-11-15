@@ -1,7 +1,7 @@
 // Tester #285: during a codex execute `run show` printed `used.tokens=9544` and an unmoving lastActivityAt for nine
 // minutes, and `group brief` a group cost of a few hundred thousand, while the run was producing output and spending
-// millions. Orca cannot see live codex usage; the CLI now says what the figure is (the last phase end's, at what time),
-// that the transcript is still being written, and, once the run has ended, its usage by kind.
+// millions. The CLI now separates a provisional Codex response reading from booked work, names when that work was
+// booked, notes recent transcript output, and, after the run ends, shows its booked usage by kind.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cli, fakePanel, useFakePanels } from "./fixtures/fakePanel.js";
 import { findCommand } from "../../src/commands/registry.js";
@@ -37,17 +37,17 @@ describe("run show of a run whose agent reports usage at phase end (#285)", () =
     vi.useFakeTimers({ toFake: ["Date"], now: WRITTEN + 7_000 });
     const { lines, json } = await show(UNDER_WAY, { lastTranscriptAt: WRITTEN });
     // mutation: drop runUsageLines from run show -> red
-    expect(lines).toContain("used: 9,544 tokens (as of the last phase end at 02:43Z; this agent reports usage only when a phase ends)");
+    expect(lines).toContain("used: 9,544 tokens (as of the last phase end at 02:43Z; booked usage updates only when a phase ends)");
     // mutation: drop the transcripts read from run show's compose -> red
     expect(lines).toContain("transcript: producing output, last at 02:51:07Z");
     // #285: the completed response's own observation, distinct from the booked figure.
-    expect(lines).toContain("observed: at least 9,544,000 tokens in execute (attempt 2), last response at 2026-11-12T02:51:07.000Z (provisional: not booked; this agent stops after an observed response, so one request may pass a ceiling)");
+    expect(lines).toContain("observed: at least 9,544,000 tokens in execute (attempt 2), last response at 2026-11-12T02:51:07.000Z (provisional: not booked; any live ceiling is checked after an observed response, so an in-flight request may pass it)");
     expect(json).toMatchObject({ lastTranscriptAt: WRITTEN, run: { liveUsage: UNDER_WAY.liveUsage } });
   });
 
   it("before any phase ended, says so; a listing that cannot be read adds nothing and fails nothing", async () => {
     const { lines, json } = await show({ ...UNDER_WAY, usageAt: undefined }, null);
-    expect(lines).toContain("used: 9,544 tokens (no phase has ended yet; this agent reports usage only when a phase ends)");
+    expect(lines).toContain("used: 9,544 tokens (no phase has ended yet; booked usage updates only when a phase ends)");
     expect(lines.some((line) => line.startsWith("transcript:"))).toBe(false);
     expect(json).not.toHaveProperty("lastTranscriptAt");
   });
@@ -55,6 +55,12 @@ describe("run show of a run whose agent reports usage at phase end (#285)", () =
   it("an agent that observes usage live gets no such line", async () => {
     // mutation: runUsageLines ignores usageObservation -> red
     expect((await show({ ...UNDER_WAY, usageObservation: "realtime" }, null)).lines.join("\n")).not.toContain("phase end");
+  });
+
+  it("keeps the booked amount visible beside a provisional Codex response reading", async () => {
+    const { lines } = await show({ ...UNDER_WAY, usageObservation: "realtime" }, null);
+    expect(lines).toContain("used: 9,544 tokens (last booked at 02:43Z; response reading is provisional)");
+    expect(lines).toContain("observed: at least 9,544,000 tokens in execute (attempt 2), last response at 2026-11-12T02:51:07.000Z (provisional: not booked; any live ceiling is checked after an observed response, so an in-flight request may pass it)");
   });
 
   it("an ended run shows its usage by kind and no producing line", async () => {
@@ -94,7 +100,7 @@ describe("run show does not call a blocked or silent run producing output (#285,
 
 describe("group brief and group show say the group's used figure lags (#285)", () => {
   const def = (argv: string[]) => { const found = findCommand(argv); if (!("def" in found)) throw new Error(argv.join(" ")); return found.def; };
-  const LINE = "budget: used is as of the last phase end at 02:43Z for 1 run under way (run-1); this agent reports usage only when a phase ends";
+  const LINE = "budget: used is as of the last phase end at 02:43Z for 1 run under way (run-1); booked usage updates only when a phase ends";
 
   it("group brief prints the brief's phaseEndUsage as a sentence", () => {
     // mutation: drop the brief row's format -> red

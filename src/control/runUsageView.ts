@@ -2,10 +2,9 @@ import { isTerminalRunState } from "./budget.js";
 import type { ControlStore } from "./store.js";
 
 /**
- * Tester #285: a codex run reports usage only when a phase ends (ccloop `usageObservation: "phase-end"`), so during a long
- * execute its `used` and the group's stay at the last phase end's figure for minutes. Orca cannot observe live usage;
- * it says what the figure is: how the run's agent observes usage, when the figure was last booked, and, once known, the
- * run's split by kind (the newest usage event's cumulative `byModel`, summed over models, as outputBoundView reads it).
+ * Tester #285: `used` and the group's total advance only as work events are booked. A Codex response may now provide
+ * a provisional observation between bookings, without changing either total. The view names when usage was last booked
+ * and, once known, its split by kind (the newest usage event's cumulative `byModel`, summed over models).
  */
 export type UsageObservation = "realtime" | "phase-end" | "unavailable";
 export interface UsageBreakdown { input: number; output: number; cacheRead: number; cacheWrite: number }

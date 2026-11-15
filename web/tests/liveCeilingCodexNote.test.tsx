@@ -2,8 +2,8 @@
 /**
  * Tester #297 (follow-up K, item 3; human: 「codex 提示就好」): the run view carries a run's live ceiling and the stop at it,
  * but only `orca run show` said so. The Web run detail now shows both, and for a codex run a note that is true of how
- * codex runs: `codex exec` runs each phase as one turn, so the ceiling is checked only when a phase ends, and one execute
- * can go past the ceiling -- and the group limit -- before the run stops. A note, never a block; other agents get none.
+ * Codex observes usage after each completed response, so an in-flight request can pass the ceiling and group limit
+ * before the run stops. A note, never a block; other agents get none.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +35,7 @@ function openRun(value: GroupViewV1, runsTab = "Runs and evidence"): HTMLElement
 }
 
 describe("the run detail's live ceiling and the codex note (#297)", () => {
-  it("shows the ceiling, the stop at it, and for codex that the ceiling is checked only when a phase ends", () => {
+  it("shows the ceiling, the stop at it, and for codex that a request can pass the response boundary", () => {
     const box = openRun(ceilinged("my-coder"));
     expect(box.textContent).toContain("Live ceiling: 10,000,000 tokens (pause-line, revision 2)");
     expect(box.textContent).toContain("Stopped at the live ceiling: 63,000,000 tokens used against 10,000,000 (pause-line, execute, boundary)");

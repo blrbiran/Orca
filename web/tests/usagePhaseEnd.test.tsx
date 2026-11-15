@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Tester #285: during a codex execute `used` and the activity row stay frozen for minutes (codex reports usage only when a
- * phase ends), so a person took the run for stuck and its cost for small. The panel now says what the figure is (Live,
- * runs table, group budget), that the run is still producing output when its transcript is being written, and, once the
- * run has ended, its usage by kind. A run whose agent observes usage live reads as before.
+ * Tester #285: `used` and the activity row can stay frozen while Codex observes response usage. The panel distinguishes
+ * that provisional reading from booked work (Live and runs table), shows recent transcript output while running, and
+ * shows booked usage by kind once the run has ended.
  */
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,19 +53,19 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     await flush();
     const item = within(screen.getByRole("tabpanel", { name: "Live" })).getByRole("region", { name: "Running: a" });
     // mutation: drop phaseEndNote from the Live facts -> red
-    expect(item.textContent).toContain(`9.5K tokens (as of the last phase end at ${clock(BOOKED)}; this agent reports usage only when a phase ends)`);
+    expect(item.textContent).toContain(`9.5K tokens (as of the last phase end at ${clock(BOOKED)}; booked usage updates only when a phase ends)`);
     // mutation: drop the producing line from RunTranscript -> red
     expect(item.querySelector("[data-testid=transcript-producing]")?.textContent).toBe(`producing output, last at ${clock(WRITTEN, true)}`);
     // #285: the completed response's provisional reading, kept apart from the booked 9,544.
-    expect(item.textContent).toContain("observed at least 9.5M tokens in execute (attempt 2)");
-    expect(item.textContent).toContain("provisional: not booked; the run stops only after an observed response");
+    expect(item.textContent).toContain("observed at least 9,544,000 tokens in execute (attempt 2)");
+    expect(item.textContent).toContain("provisional: not booked; any live ceiling is checked after an observed response, so an in-flight request may pass it");
   });
 
-  it("says no phase has ended yet before any usage was booked; says nothing for an agent that observes usage live", async () => {
+  it("says no phase has ended before booking and makes no phase-end claim for a response observer", async () => {
     mount(executing({ usageAt: undefined }));
     fireEvent.click(screen.getByRole("tab", { name: "Live" }));
     await flush();
-    expect(screen.getByRole("tabpanel", { name: "Live" }).textContent).toContain("no phase has ended yet; this agent reports usage only when a phase ends");
+    expect(screen.getByRole("tabpanel", { name: "Live" }).textContent).toContain("no phase has ended yet; booked usage updates only when a phase ends");
     cleanup();
     lastTranscriptAt = undefined;
     mount(executing({ usageObservation: "realtime" }));
@@ -78,10 +77,29 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     expect(panel.querySelector("[data-testid=transcript-producing]")).toBeNull();
   });
 
+  it("shows a realtime Codex response separately from the last booked amount", async () => {
+    mount(executing({ usageObservation: "realtime" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Live" }));
+    await flush();
+    const item = within(screen.getByRole("tabpanel", { name: "Live" })).getByRole("region", { name: "Running: a" });
+    expect(item.textContent).toContain(`9.5K tokens (last booked at ${clock(BOOKED)}; response reading is provisional)`);
+    expect(item.textContent).toContain("observed at least 9,544,000 tokens in execute (attempt 2)");
+  });
+
+  it("does not round an observed lower bound upward and names its phase in Chinese", async () => {
+    const active = executing().runs[0]!;
+    expect(liveUsageNote({ ...active, liveUsage: { ...active.liveUsage!, tokens: 9_550_000 } }))
+      .toContain("observed at least 9,550,000 tokens");
+    expect(liveUsageNote(active)).toContain("any live ceiling is checked after an observed response");
+    await i18n.changeLanguage("zh");
+    expect(liveUsageNote({ ...active, liveUsage: { ...active.liveUsage!, phase: "plan" } }))
+      .toContain("在计划阶段已观测到至少 9,544,000 token");
+  });
+
   it("keeps the last observation out of a blocked or ended run", () => {
     const value = executing();
     const [active] = value.runs;
-    expect(liveUsageNote(active!)).toContain("observed at least 9.5M tokens");
+    expect(liveUsageNote(active!)).toContain("observed at least 9,544,000 tokens");
     expect(liveUsageNote({ ...active!, state: "blocked" })).toBeNull();
     expect(liveUsageNote({ ...active!, state: "landed", endedAt: NOW })).toBeNull();
   });
@@ -91,7 +109,7 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     mount(executing());
     fireEvent.click(screen.getByRole("tab", { name: "运行与证据" }));
     // mutation: drop the runs-table note -> red
-    expect(screen.getByTestId("usage-phase-end").textContent).toBe(`截至 ${clock(BOOKED)} 上一阶段结束时；该 agent 只在阶段结束时上报用量`);
+    expect(screen.getByTestId("usage-phase-end").textContent).toBe(`截至 ${clock(BOOKED)} 上一阶段结束时；入账用量只在阶段结束时更新`);
   });
 
   it("an ended run's detail shows its usage by kind; a run under way does not", async () => {
@@ -110,7 +128,7 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
   it("the group budget says used lags while such a run is under way", () => {
     const { container } = render(<BudgetEditor view={executing()} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     // mutation: drop the phaseEnd note from the ledger line -> red
-    expect(container.textContent).toContain(`used is as of the last phase end at ${clock(BOOKED)}: a run under way reports usage only when a phase ends`);
+    expect(container.textContent).toContain(`used is as of the last phase end at ${clock(BOOKED)}: booked usage updates only when a phase ends`);
     cleanup();
     const { container: live } = render(<BudgetEditor view={executing({ usageObservation: "realtime" })} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(live.textContent).not.toContain("phase end");
