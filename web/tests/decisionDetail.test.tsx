@@ -23,6 +23,23 @@ const decision: Decision = {
 };
 
 describe("DecisionDetail (task 8 ruling K7)", () => {
+  it("shows review and correction times in the reader's local clock while preserving ISO datetime", async () => {
+    await i18n.changeLanguage("en");
+    const at = "2026-11-16T06:28:23.404Z";
+    const { container } = render(<DecisionDetail decision={decision} review={{ reviewers: [{ by: "reader", at }], mine: "reviewed",
+      corrections: [{ id: "c1", kind: WEB_CORRECTION_KINDS[0], because: "reason", by: "reader", at, state: "closed", mine: true, withdrawable: false }] }} />);
+    try {
+      const times = [...container.querySelectorAll("time")];
+      expect(times).toHaveLength(2);
+      for (const time of times) {
+        expect(time.dateTime).toBe(at);
+        expect(time.textContent).toBe(new Date(at).toLocaleString("en"));
+        expect(time.title).toBe(new Date(at).toLocaleString("en"));
+        expect(time.textContent).not.toBe(at);
+      }
+    } finally { cleanup(); }
+  });
+
   it("renders the question, the chosen option, the reasoning, and every alternative", () => {
     const html = renderToStaticMarkup(<DecisionDetail decision={decision} />);
     expect(html).toContain(decision.question);

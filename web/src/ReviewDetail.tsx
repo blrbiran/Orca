@@ -9,6 +9,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { controlGet, reviewRecordPath } from "./controlApi.js";
 import type { ReviewRecordV1 } from "./controlTypes.js";
+import { localDateTime } from "./ui/localTime.js";
 
 const short = (sha: string): string => sha.slice(0, 7);
 
@@ -64,7 +65,7 @@ export function ReviewDetail(props: { reviewGroupId: string }): JSX.Element {
           <ul data-testid="review-dismissals">
             {record.dismissals.length === 0 ? <li>{t("settings.checks.review.none")}</li>
               : record.dismissals.map((entry) => (
-                <li key={entry.decisionId}>{t("settings.checks.review.dismissal", { decisionId: entry.decisionId, by: entry.by ?? "", at: entry.at ?? "", note: entry.note ?? t("settings.checks.review.noNote") })}</li>
+                <li key={entry.decisionId}>{t("settings.checks.review.dismissal", { decisionId: entry.decisionId, by: entry.by ?? "", at: localDateTime(entry.at), note: entry.note ?? t("settings.checks.review.noNote") })}</li>
               ))}
           </ul>
           <p data-testid="review-debug">{opened.length === 0 ? t("settings.checks.review.noDebug") : t("settings.checks.review.debug", { groups: opened.join(", ") })}</p>

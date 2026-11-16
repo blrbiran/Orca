@@ -22,6 +22,7 @@ import type { PanelLanguage } from "./i18n.js";
 import { TokenInput, shortTokens } from "./TokenInput.js";
 import { Select } from "./ui/Select.js";
 import { Menu, MenuItem } from "./ui/Menu.js";
+import { localDateTime } from "./ui/localTime.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
@@ -477,7 +478,7 @@ function DocumentLead(props: { text: string }): JSX.Element {
  * heading and body as plain text nodes -- no markdown is interpreted and nothing is injected. Text before the first
  * heading stays above the sections; a document without one stays a single preformatted block.
  */
-function DocumentText(props: { text: string }): JSX.Element {
+function DocumentText(props: { text: string; contentLanguage: "en" | "zh"; consensusAt: string | null }): JSX.Element {
   const parts = props.text.split(/^## /m);
   if (parts.length === 1) return <pre>{props.text}</pre>;
   const [lead, ...sections] = parts;
@@ -487,11 +488,15 @@ function DocumentText(props: { text: string }): JSX.Element {
       {sections.map((section, index) => {
         const cut = section.indexOf("\n");
         const title = (cut === -1 ? section : section.slice(0, cut)).trim(), body = cut === -1 ? "" : section.slice(cut + 1).trim();
+        // The stored/exported document keeps its ISO evidence. Only its generated consensus line is localized in this view.
+        const language = props.contentLanguage, prefix = language === "zh" ? "- 时间：" : "- at: ";
+        const shown = props.consensusAt !== null && title === (language === "zh" ? "共识" : "Consensus")
+          ? body.split("\n").map((line) => line === `${prefix}${props.consensusAt}` ? `${prefix}${localDateTime(props.consensusAt)}` : line).join("\n") : body;
         return (
           <section key={index} aria-label={title}>
             <h5 className={documentSectionTitle}>{title}</h5>
             {/* Issue 96: the body's markdown subset is rendered; every other construct stays text. */}
-            {body !== "" && <RequirementMarkdown text={body} />}
+            {shown !== "" && <RequirementMarkdown text={shown} />}
           </section>
         );
       })}
@@ -926,7 +931,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
             requirement's real product and is open. */}
         <details className="requirement-document" open={view.requirement.consensus !== null}>
           <summary><h4 className="inline">{t("requirements.document")}</h4></summary>
-          <DocumentText text={view.document} />
+          <DocumentText text={view.document} contentLanguage={view.requirement.contentLanguage} consensusAt={view.requirement.consensus?.at ?? null} />
         </details>
         {/* Dir-requirements spec §9.3: a dir group's document stays in Orca's store, never in the folder. */}
         {view.summary.placement !== undefined

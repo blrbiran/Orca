@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { Role } from "./auth.js";
 import type { ControlAction } from "./controlApi.js";
 import type { AllowanceRequestKindV1, GroupAllowanceV1 } from "./controlTypes.js";
+import { localDateTime } from "./ui/localTime.js";
 
 const fromOf = (from: GroupAllowanceV1["from"]): string => "runId" in from ? from.runId : "pendingId" in from ? from.pendingId : from.decisionId;
 
@@ -25,7 +26,7 @@ export function GroupAllowances(props: { groupId: string; revision: number; allo
         {allowances.map((allowance) => (
           <li key={allowance.allowanceId} data-allowance={allowance.allowanceId}>
             <code>{allowance.allowanceId}</code> {what(allowance.request)}{" "}
-            <span className="detail-note">{t("control.allowances.by", { by: allowance.by, via: allowance.via, at: new Date(allowance.at).toISOString(), from: fromOf(allowance.from) })}</span>
+            <span className="detail-note">{t("control.allowances.by", { by: allowance.by, via: allowance.via, at: localDateTime(allowance.at), from: fromOf(allowance.from) })}</span>
             {allowance.revoked !== undefined
               ? <span className="badge">{t("control.allowances.revoked")}</span>
               : owner && !props.archived && (

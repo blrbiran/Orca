@@ -265,6 +265,10 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
 [data-tone="ok"] { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); background: var(--ok-subtle); }
 [data-tone="warn"] { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-subtle); }
 [data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: var(--danger-subtle); }
+/* Transcript badges put the outcome where the eye starts; the surrounding disclosure stays neutral. */
+.transcript-kind[data-tone="info"], .transcript-status[data-tone="info"] { color: var(--info); }
+.transcript-kind[data-tone="ok"], .transcript-status[data-tone="ok"] { color: var(--ok); }
+.transcript-kind[data-tone="danger"], .transcript-status[data-tone="danger"] { color: var(--danger); }
 
 /* Controls (session e236bbe4): one button, one field, from the scale tokens. A button is secondary unless it wears the
    .btn-primary utility (the one filled control per view, DESIGN.md) or .btn-quiet (index.css). Every control shows hover,

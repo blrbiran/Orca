@@ -31,6 +31,7 @@ import { UsagePause } from "./UsagePause.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import type { Role } from "./auth.js";
+import { localDateTime } from "./ui/localTime.js";
 
 /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
 export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
@@ -199,7 +200,7 @@ export function RunActivity(props: { runId: string; changeSeq: number; onLadderS
       {refusal !== null && <p className="detail-note">{t("control.activity.refused", { code: refusal })}</p>}
       {refusal === null && entries !== null && (entries.length === 0 ? <p>{t("control.activity.none")}</p> : (
         <ol>
-          {[...entries].reverse().map((entry) => <li key={entry.seq}>{new Date(entry.at).toISOString()} · {activityText(entry)}</li>)}
+          {[...entries].reverse().map((entry) => <li key={entry.seq}><time dateTime={new Date(entry.at).toISOString()} title={localDateTime(entry.at)}>{localDateTime(entry.at)}</time> · {activityText(entry)}</li>)}
         </ol>
       ))}
     </section>
@@ -317,7 +318,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
       </div>
       <p className="num">
         {t("control.task.progress", { progress: progressText(item.progress) })}
-        {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: item.progress.lastTransitionAt }) : ""}
+        {item.progress?.lastTransitionAt ? t("control.task.lastTransition", { at: localDateTime(item.progress.lastTransitionAt) }) : ""}
       </p>
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
       {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} onLadderSkipped={(runId, reason) => setLadderSkip({ runId, reason })} />}

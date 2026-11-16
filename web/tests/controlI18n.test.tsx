@@ -103,7 +103,8 @@ describe("the task control and recovery areas in Chinese", () => {
     expect(screen.getByRole("button", { name: "移除 perf" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "添加标签" })).toBeTruthy();
     for (const expected of [
-      "任务 a", "标签来自操作者 · 版本 1", "恢复计划里的标签", "进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 2026-10-01T00:00:00.000Z",
+      // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 localizes the task's transition instant.
+      "任务 a", "标签来自操作者 · 版本 1", "恢复计划里的标签", `进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 ${new Date("2026-10-01T00:00:00.000Z").toLocaleString("zh")}`,
       "a 的运行", "r1 · 工作 · 已阻塞", "列出 r1 的证据",
     ]) expect(text, expected).toContain(expected);
   });

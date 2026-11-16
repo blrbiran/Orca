@@ -5,6 +5,7 @@ import type { Role } from "./auth.js";
 import type { Amount, RunViewV1 } from "./controlTypes.js";
 import type { ControlAction } from "./controlApi.js";
 import { refusalText } from "./i18n.js";
+import { localDateTime } from "./ui/localTime.js";
 
 /** Read-only server amounts: never recompute the authoritative charge in the browser. */
 function ChargeTable({ amounts, settled }: { amounts: { work: import("./controlTypes.js").BudgetAmount; handoff: Amount }; settled: boolean }): JSX.Element {
@@ -35,15 +36,15 @@ export function UsageSettlement({ run, roles, archived, groupId, revision, onCom
     const marker = preview.settlement;
     // Spec 2026-11-06 §3.5: Orca's approximate floor is not a person's charge; it names the floor it booked.
     if (marker.method === "approximate-floor") {
-      const at = new Date(marker.at).toISOString();
+      const at = localDateTime(marker.at);
       return <div><p>{marker.floorTokens === null ? t("control.settlement.approximateReceiptNone", { at }) : t("control.settlement.approximateReceipt", { at, tokens: marker.floorTokens.toLocaleString("en-US") })}</p></div>;
     }
     // Tester follow-up F §2 (#116): a person's or agent's explicit observed floor names the floor and who booked it.
     if (marker.method === "observed-floor") {
-      return <div><p data-testid="observed-floor-receipt">{t("control.settlement.observedReceipt", { principal: marker.principal, at: new Date(marker.at).toISOString(), tokens: marker.floorTokens.toLocaleString("en-US") })}</p><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : "control.settlement.floorAfter")}</p></div>;
+      return <div><p data-testid="observed-floor-receipt">{t("control.settlement.observedReceipt", { principal: marker.principal, at: localDateTime(marker.at), tokens: marker.floorTokens.toLocaleString("en-US") })}</p><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : "control.settlement.floorAfter")}</p></div>;
     }
     const unmetered = marker.method === "owner-acknowledged-unmetered";
-    return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: new Date(marker.at).toISOString() })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
+    return <div><p>{t("control.settlement.receipt", { method: t(unmetered ? "control.settlement.methodUnmetered" : "control.settlement.method"), principal: marker.principal, at: localDateTime(marker.at) })}</p><ChargeTable amounts={marker.charged} settled /><p>{t(marker.reservationDisposition === "recovered" ? "control.settlement.afterRecovered" : unmetered ? "control.settlement.afterUnmetered" : "control.settlement.after")}</p></div>;
   }
   const owner = roles?.includes("owner") === true;
   // The server names the one acknowledgement this remainder admits; the browser never chooses between charge and release.

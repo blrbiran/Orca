@@ -87,7 +87,8 @@ describe("owner unmetered release", () => {
   });
   it("names the unmetered release in the receipt and never shows its work tokens as 0", () => {
     show(["owner"], released());
-    expect(screen.getByText("Settled by user:owner at 1970-01-01T00:00:01.234Z · released unmetered by owner")).toBeTruthy();
+    // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 uses the reader's local time in receipts.
+    expect(screen.getByText(`Settled by user:owner at ${new Date(1234).toLocaleString("en")} · released unmetered by owner`)).toBeTruthy();
     expect(screen.getByText("Released unmetered. The failure remains; retry is a separate action after dispatch resumes and still requires budget.")).toBeTruthy();
     const table = screen.getByRole("table", { name: "Conservatively charged" });
     expect(within(table).getAllByRole("row").map(row => row.textContent)).toEqual(["BucketTokensActive time (ms)AttemptsSessions", "Worknot metered92034", "Handoff5152056"]);
@@ -104,7 +105,7 @@ describe("owner unmetered release", () => {
       cleanup(); show(["owner"], released());
       // REWRITTEN (human authorisation, session 1f3cceb2, merging ui/panel-taste): the zh role word is 所有者
       // (taste refinement P2-7, pinned by zhTerms); only the word changed, the intent is the same.
-      expect(screen.getByText("user:owner 于 1970-01-01T00:00:01.234Z 结清 · 所有者不计量放行")).toBeTruthy();
+      expect(screen.getByText(`user:owner 于 ${new Date(1234).toLocaleString("zh")} 结清 · 所有者不计量放行`)).toBeTruthy();
       expect(screen.getByText("已不计量放行。失败原因保留；恢复调度后可另行重试，仍须有足够预算。")).toBeTruthy();
     } finally { await i18n.changeLanguage("en"); }
   });

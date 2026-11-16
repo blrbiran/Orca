@@ -106,8 +106,12 @@ describe("#253: a tool call and its result are one row", () => {
     // mutation: render one row per event -> 6 rows, the results apart from their calls -> red
     expect(shown).toHaveLength(4);
     expect(shown[0]!.textContent).toContain("Bash npm test · done");
-    // mutation: drop the data-tone -> a failed command looks like a finished one -> red
-    expect(shown.map((row) => row.getAttribute("data-tone"))).toEqual(["ok", null, "danger", "info"]);
+    // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #325 moves the
+    // outcome from a row background hidden by the disclosure button onto its visible kind/status badges.
+    expect(shown.map((row) => row.getAttribute("data-tone"))).toEqual([null, null, null, null]);
+    expect(shown.map((row) => row.querySelector(".transcript-kind")?.getAttribute("data-tone")))
+      .toEqual(["ok", null, "danger", "info"]);
+    expect(shown[2]!.querySelector(".transcript-status")?.getAttribute("data-tone")).toBe("danger");
     expect(shown[2]!.textContent).toContain("Bash npm run lint · failed");
     expect(shown[3]!.textContent).toContain("Bash npm run build · running");
     // Expanded, the joined row shows the call's input and the result's output.
@@ -122,7 +126,25 @@ describe("#253: a tool call and its result are one row", () => {
     expect(rows()).toHaveLength(2);
     expect(rows()[0]!.textContent).toContain("tool result");
     expect(rows()[0]!.textContent).toContain("late output");
-    expect(rows()[0]!.getAttribute("data-tone")).toBe("ok");
+    expect(rows()[0]!.querySelector(".transcript-kind")?.getAttribute("data-tone")).toBe("ok");
+  });
+});
+
+describe("#325/#326: visible tool outcomes and narrow labels", () => {
+  it("keeps successful and failed tool labels intact while wrapping only the long summary", async () => {
+    window = () => win([toolCall(0, "ok", `npm test ${"very-long-path/".repeat(60)}`), toolResult(10, "ok", "done"),
+      toolCall(20, "bad", "npm run lint"), toolResult(30, "bad", "failed", true), message(40, "a longer message summary")]);
+    await opened();
+    const shown = rows();
+    expect(shown).toHaveLength(3);
+    expect(shown[0]!.querySelector(".transcript-kind")?.classList.contains("whitespace-nowrap")).toBe(true);
+    expect(shown[1]!.querySelector(".transcript-status")?.classList.contains("whitespace-nowrap")).toBe(true);
+    expect(shown[2]!.querySelector(".transcript-kind")?.classList.contains("whitespace-nowrap")).toBe(true);
+    expect(shown[0]!.querySelector(".transcript-summary")?.classList.contains("break-words")).toBe(true);
+    expect(shown[0]!.querySelector("button")?.classList.contains("wrap-anywhere")).toBe(false);
+    expect(shown[0]!.querySelector(".transcript-kind")?.classList.contains("badge")).toBe(true);
+    expect(shown[1]!.querySelector(".transcript-kind")?.getAttribute("data-tone")).toBe("danger");
+    expect(shown[1]!.textContent).toContain("failed");
   });
 });
 

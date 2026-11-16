@@ -390,7 +390,18 @@ describe("the review detail (spec §7)", () => {
     expect(within(region).getByTestId("review-finding-f1").textContent).toContain("group g, src/a.ts:3");
     expect(within(region).getByTestId("review-dropped").textContent).toContain("f2: evidence-single-group");
     expect(within(region).getByTestId("review-dismissals").textContent).toContain("two shapes on purpose");
+    // #323: a dismissal names its local instant, not the raw UTC storage value.
+    expect(within(region).getByTestId("review-dismissals").textContent).toContain(new Date("2026-10-22T00:00:00.000Z").toLocaleString("en"));
+    expect(within(region).getByTestId("review-dismissals").textContent).not.toContain("2026-10-22T00:00:00.000Z");
     expect(within(region).getByTestId("review-debug").textContent).toContain("sysdebug-model-review-finding-1");
+  });
+
+  it("shows a missing dismissal time as a dash instead of an empty field", async () => {
+    serve((url) => url === "/api/control/checks/reviews/sysreview-x" ? { ...RECORD, dismissals: [{ ...RECORD.dismissals[0]!, at: null }] } : null);
+    render(<ReviewDetail reviewGroupId="sysreview-x" />);
+    const region = await screen.findByRole("region", { name: "Model review sysreview-x" });
+    await waitFor(() => expect(within(region).getByTestId("review-dismissals").textContent).toContain("owner"));
+    expect(within(region).getByTestId("review-dismissals").textContent).toContain("—");
   });
 
   // Spec §7: the review group shows as a system card, and the card opens the group's view -- which is where the review's

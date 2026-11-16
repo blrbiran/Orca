@@ -60,7 +60,8 @@ describe("charge observed usage beside the settle action", () => {
       settlement: { method: "observed-floor", floorTokens: 1_234, reason: "terminal:failed", charged: { work: { tokens: 1_234, activeMs: 0, attempts: 0, sessions: 0 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } }, principal: "agent:cli", at: 1234, reservationDisposition: "committed" } } as never);
     show(["owner"], settled);
     // mutation: drop the observed-floor receipt branch -> the conservative receipt, red
-    expect(screen.getByTestId("observed-floor-receipt").textContent).toBe("Settled by agent:cli at 1970-01-01T00:00:01.234Z: at least 1,234 work tokens (observed usage, approximate)");
+    // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 localizes the receipt's displayed timestamp.
+    expect(screen.getByTestId("observed-floor-receipt").textContent).toBe(`Settled by agent:cli at ${new Date(1234).toLocaleString("en")}: at least 1,234 work tokens (observed usage, approximate)`);
     cleanup();
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ schema: "orca-run-activity-v1", runId: "run-a", entries: [{ seq: 1, groupId: "g", taskId: "a", runId: "run-a", at: 1234, kind: "usage-settled", body: { method: "observed-floor", floorTokens: 1_234 } }] })));
     try {

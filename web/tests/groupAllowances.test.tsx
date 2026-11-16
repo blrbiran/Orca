@@ -51,6 +51,13 @@ describe("the group's allowance list (tester follow-up G §6.3)", () => {
     expect(onCommand).toHaveBeenCalledWith({ verb: "revoke-allowance", groupId: "g", expectedRevision: 6, payload: { allowanceId: "allow-1" } });
   });
 
+  it("shows the allowance time in the reader's local timezone", () => {
+    const at = Date.UTC(2026, 10, 16, 6, 28, 23);
+    const { container } = render(<GroupAllowances groupId="g" revision={6} allowances={[{ ...ALLOWANCES[0]!, at }]} roles={["owner"]} archived={false} onCommand={vi.fn()} />);
+    expect(container.querySelector('[data-allowance="allow-1"]')!.textContent).toContain(new Date(at).toLocaleString("en"));
+    expect(container.textContent).not.toContain(new Date(at).toISOString());
+  });
+
   it("a member sees no Revoke; an empty list shows nothing", () => {
     render(<GroupAllowances groupId="g" revision={6} allowances={ALLOWANCES} roles={["member"]} archived={false} onCommand={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();

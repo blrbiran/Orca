@@ -148,13 +148,17 @@ function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Elemen
   const [expanded, setExpanded] = useState(false);
   const tone = toolTone(props.row);
   const status = result === undefined ? null : result === null ? t("transcript.toolRunning") : result.flag?.error === true ? t("transcript.toolFailed") : t("transcript.toolOk");
-  const line = <><span className="transcript-kind">{t(`transcript.kind.${event.kind}`)}</span> {summary(event, t)}{status !== null && <> · <span className="transcript-status">{status}</span></>}</>;
+  const line = <span className="transcript-line max-w-full min-w-0 break-words text-start">
+    <span className="transcript-kind badge whitespace-nowrap" data-tone={tone}>{t(`transcript.kind.${event.kind}`)}</span>{" "}
+    <span className="transcript-summary min-w-0 max-w-full break-words">{summary(event, t)}</span>
+    {status !== null && <> · <span className="transcript-status badge whitespace-nowrap" data-tone={tone}>{status}</span></>}
+  </span>;
   const opens = expandable(event) || expandable(result);
   return (
-    <li className={`transcript-event transcript-${event.kind} min-w-0`} data-testid="transcript-event" data-tone={tone}>
+    <li className={`transcript-event transcript-${event.kind} min-w-0`} data-testid="transcript-event">
       {opens
-        ? <button type="button" className="max-w-full wrap-anywhere" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{line}</button>
-        : <span className="transcript-line wrap-anywhere">{line}</span>}
+        ? <button type="button" className="max-w-full min-w-0" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{line}</button>
+        : line}
       {opens && expanded && (
         <div className="transcript-body min-w-0">
           <EventBody runId={props.runId} call={props.call} event={event} />

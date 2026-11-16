@@ -37,6 +37,27 @@ describe("the requirement's own idea (#74)", () => {
   });
 });
 
+describe("the requirement document's consensus time (#323)", () => {
+  it.each([
+    { language: "en", title: "Consensus", prefix: "- at: ", next: "Statement" },
+    { language: "zh", title: "共识", prefix: "- 时间：", next: "陈述" },
+  ] as const)("shows the $language document's consensus date in the reader's local time without changing its stored text", async ({ language, title, prefix, next }) => {
+    await i18n.changeLanguage(language);
+    try {
+      const at = "2026-11-16T06:28:23.404Z";
+      const before = requirementView("awaiting-review");
+      const document = `# sample\n\n## ${title}\n\n- round: 1\n${prefix}${at}\n\n## ${next}\n\n- note: ${at}\n`;
+      const view = { ...before, document, requirement: { ...before.requirement, contentLanguage: language, consensus: { ...before.requirement.consensus!, at } } };
+      const root = show(view);
+      const consensus = [...root.querySelectorAll("section")].find((section) => section.getAttribute("aria-label") === title);
+      expect(consensus?.textContent).toContain(new Date(at).toLocaleString(language));
+      expect(consensus?.textContent).not.toContain(at);
+      expect(root.querySelector(`section[aria-label="${next}"]`)?.textContent).toContain(at);
+      expect(view.document).toBe(document);
+    } finally { cleanup(); await i18n.changeLanguage("en"); }
+  });
+});
+
 /** The list alone: one requirement group, its summary changed by `over`. */
 function listWith(over: Partial<GroupSummaryV1>, requirement: Partial<NonNullable<GroupSummaryV1["requirement"]>> = {}): HTMLElement {
   const view = requirementView("awaiting-answers");

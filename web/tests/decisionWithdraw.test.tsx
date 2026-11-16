@@ -50,9 +50,13 @@ describe("the detail's review state (spec §7)", () => {
     const block = container.querySelector<HTMLElement>('[data-testid="decision-reviewers"]')!;
     expect(block.getAttribute("data-tone")).toBe("ok");
     expect(block.querySelector("h3")?.textContent).toBe("Reviewed by");
+    // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 keeps ISO in datetime but localizes visible time.
     expect([...block.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
-      "me · 2026-10-18T01:00:00.000Z",
-      "other · 2026-10-18T03:00:00.000Z",
+      `me · ${new Date("2026-10-18T01:00:00.000Z").toLocaleString("en")}`,
+      `other · ${new Date("2026-10-18T03:00:00.000Z").toLocaleString("en")}`,
+    ]);
+    expect([...block.querySelectorAll("time")].map((time) => time.getAttribute("dateTime"))).toEqual([
+      "2026-10-18T01:00:00.000Z", "2026-10-18T03:00:00.000Z",
     ]);
     const withdraw = withdrawReviewButton(container)!;
     expect(withdraw.classList.contains("btn-primary")).toBe(false);
@@ -89,7 +93,7 @@ describe("the detail's review state (spec §7)", () => {
     expect(block.querySelector("h3")?.textContent).toBe("Corrections");
     expect(block.getAttribute("data-tone")).toBeNull();
     const open = rowOf(container, OTHERS_OPEN.id);
-    expect(open.textContent).toBe("wrong · because of c-others-open · other · 2026-10-18T02:00:00.000Z · open");
+    expect(open.textContent).toBe(`wrong · because of c-others-open · other · ${new Date("2026-10-18T02:00:00.000Z").toLocaleString("en")} · open`);
     expect(open.getAttribute("data-tone")).toBeNull();
     expect(open.classList.contains("correction-withdrawn")).toBe(false);
     const withdrawn = rowOf(container, MINE_WITHDRAWN.id);

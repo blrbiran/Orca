@@ -26,6 +26,7 @@ import {
 } from "../../src/control/budgetSuggestions.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../src/control/estimateInstructionAge.js";
 import { Select } from "./ui/Select.js";
+import { localDateTime } from "./ui/localTime.js";
 import type {
   BudgetAmount,
   AmountDimensionV1,
@@ -445,7 +446,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
               <li key={`${topUp.fromRunId}:${index}`}>
                 {t("budget.topUp", {
                   amount: DIMENSIONS.filter((dimension) => topUp.amount[dimension] > 0).map((dimension) => `${enumText("dimension", dimension)} ${topUp.amount[dimension]}`).join(", "),
-                  by: topUp.by, at: new Date(topUp.at).toISOString(),
+                  by: topUp.by, at: localDateTime(topUp.at),
                 })}
               </li>
             ))}
