@@ -142,13 +142,14 @@ async function claimedWith(mode: "strict" | "soft") {
 }
 
 describe("the shipped consumer answers for its own capabilities (task 10 step 4)", () => {
-  it.skipIf(!realBinary)("claims phase-end usage and soft enforcement, and the ledger opens no strict run on it", async () => {
+  it.skipIf(!realBinary)("claims response-time usage and soft enforcement, and the ledger opens no strict run on it", async () => {
     const root = await tempRoot("orca-web-real-cap-");
     const port = createCcloopExecutionPort({ binary: await realpath(realBinary!), agentsTablePath: await realTable(root), timeoutMs: 15_000 });
     const { capabilities } = await port.resolveAgent({ agent: "codex" });
 
-    // Codex's own words, taken from the binary that would run the work: eight fields, no
-    // realtime usage, no bounded enforcement, no context observation, and no request-bound proof.
+    // Ruling: the person authorized necessary criterion rewrites on 2026-11-16. The newly pinned Codex loop reports
+    // completed-response observations as realtime; a response may still exceed the ceiling, and no request-bound proof exists.
+    // The values below are taken from the binary that would run the work, not the declared profile.
     // Human authorization 2026-09-24, G1 seam A Task 5: this literal moved from the v1 seven-field
     // shape to the v2 eight-field shape ccloop main now answers.
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): capabilities protocol 3
@@ -156,7 +157,7 @@ describe("the shipped consumer answers for its own capabilities (task 10 step 4)
     // Rewritten for the every-agent requirement chain (spec 2026-10-15 §6.1; human named E6 on 2026-10-15): ccloop now reads codex's window from its catalog (the build's fake codex answers 272000 for gpt-6-sol).
     // Ruling: human named E6 in Orca session a852f96a, 2026-10-15
     expect(capabilities).toEqual({
-      usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "unavailable",
+      usageObservation: "realtime", budgetEnforcement: "soft", contextObservation: "unavailable",
       handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: 272000, requestBoundProof: null,
     });
 
