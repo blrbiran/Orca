@@ -25,10 +25,15 @@ export function normalizeLine(runtime: Runtime, bytes: Buffer): RawEvent[] {
   if (bytes.length > PARSE_LIMIT) throw new Error("normalizeLine called on an oversized line");
   let parsed: unknown;
   try { parsed = lineParser.parse(bytes.toString("utf8")); }
-  catch { return [event("unknown", { fields: { raw: { plain: decodeAll(bytes) } } })]; }
+  catch {
+    // A torn producer marker ending in a newline is metadata, never a provider event.
+    if (/^\s*\{\s*"type"\s*:\s*"ccloop\.line-observed"/.test(bytes.toString("utf8"))) return [];
+    return [event("unknown", { fields: { raw: { plain: decodeAll(bytes) } } })];
+  }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return [event("unknown", { fields: { raw: { composite: parsed } } })];
   const line = parsed as Record<string, unknown>;
   const type = str(line.type);
+  if (type === "ccloop.line-observed") return [];
   if (type === "ccloop.transcript-truncated") return [event("notice", { meta: { notice: "truncated" }, num: { atBytes: typeof line.atBytes === "number" ? line.atBytes : undefined } })];
   if (type === "ccloop.line-dropped") return [event("notice", { meta: { notice: "line-dropped" }, num: { bytes: typeof line.bytes === "number" ? line.bytes : undefined } })];
   return MAPPERS[runtime](line);

@@ -104,6 +104,36 @@ describe("T8: the transcript list", () => {
   });
 });
 
+describe("transcript observation times", () => {
+  it("shows a local clock and exact date for observed events, leaving legacy events untimed", async () => {
+    vi.useFakeTimers();
+    const observed = { ...message(0, "observed"), ccloopObservedAt: 1_700_000_000_000 };
+    answer = (url) => url.endsWith("/transcripts") ? LISTING : win([observed, message(100, "legacy")], 0, 200, true);
+    render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    const rows = screen.getAllByTestId("transcript-event");
+    const time = rows[0]!.querySelector("time")!;
+    expect(time).not.toBeNull();
+    expect(time.dateTime).toBe(new Date(1_700_000_000_000).toISOString());
+    expect(time.textContent).toBe(new Date(1_700_000_000_000).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }));
+    expect(rows[1]!.querySelector("time")).toBeNull();
+  });
+
+  it("shows distinct tool call and result times on their joined visible row", async () => {
+    vi.useFakeTimers();
+    const call: TranscriptEventV1 = { at: 0, i: 0, kind: "tool_call", meta: { id: "t", name: "Bash" }, ccloopObservedAt: 1_700_000_000_000 };
+    const result: TranscriptEventV1 = { at: 100, i: 0, kind: "tool_result", meta: { id: "t" }, ccloopObservedAt: 1_700_000_001_000 };
+    answer = (url) => url.endsWith("/transcripts") ? LISTING : win([call, result], 0, 200, true);
+    render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    const row = screen.getAllByTestId("transcript-event");
+    expect(row).toHaveLength(1);
+    expect(Array.from(row[0]!.querySelectorAll("time"), (time) => time.dateTime)).toEqual([
+      new Date(call.ccloopObservedAt!).toISOString(), new Date(result.ccloopObservedAt!).toISOString(),
+    ]);
+  });
+});
+
 describe("review 7753e97d: what one open call keeps, and its Earlier/Later", () => {
   const run = (from: number, to: number): TranscriptEventV1[] => Array.from({ length: to - from }, (_, k) => message((from + k) * 10, `event ${from + k}`));
 

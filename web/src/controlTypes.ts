@@ -1471,6 +1471,8 @@ export interface TranscriptFieldV1 { text: string; length: number; more: boolean
 /** One normalized event (spec §5.1, §10.3); `at`/`i` address it for expanding. */
 export interface TranscriptEventV1 {
   at: number; i: number;
+  /** ccloop observation of this original line in epoch milliseconds, when a matching marker exists. */
+  ccloopObservedAt?: number;
   kind: "message" | "tool_call" | "tool_result" | "file_change" | "thinking" | "result" | "notice" | "unknown";
   meta?: Record<string, string>; num?: Record<string, number>; flag?: Record<string, boolean>; fields?: Record<string, TranscriptFieldV1>;
 }

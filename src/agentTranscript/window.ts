@@ -12,7 +12,7 @@
  */
 import type { RawEvent } from "./events.js";
 import { longLineAt, STRIDE_BYTES, type LineIndex, type LongLine, type OversizedIndex } from "./lineIndex.js";
-import { normalizeLine, PARSE_LIMIT, type Runtime } from "./normalize.js";
+import { lineParser, normalizeLine, PARSE_LIMIT, type Runtime } from "./normalize.js";
 import { giveScratch, takeScratch, type RangeReader } from "./reader.js";
 import { edge, headOf, LOOK, PAGE, pageOf, redactFull, redactValue, render, slicePage, sliceHead, type FieldHead, type Page, type Redactor } from "./redact.js";
 import { TranscriptRefusal } from "./refusal.js";
@@ -30,6 +30,8 @@ const META_LIMIT = 256;
 export interface ServedEvent {
   /** The byte offset of the line the event came from, and its index among that line's events (the expand address). */
   at: number; i: number;
+  /** ccloop's observation of this physical line, in epoch milliseconds; absent on legacy/unpaired lines. */
+  ccloopObservedAt?: number;
   kind: RawEvent["kind"];
   meta?: Record<string, string>;
   num?: Record<string, number>;
@@ -103,8 +105,9 @@ function servedMeta(redactor: Redactor, meta: Record<string, string>): Record<st
 /** A composite value (a tool input, an unknown line) as served text: every decoded string redacted, then stringified. */
 export const compositeText = (redactor: Redactor, value: unknown): string => JSON.stringify(redactValue(redactor, value), null, 2) ?? "null";
 
-function serve(redactor: Redactor, at: number, i: number, raw: RawEvent): ServedEvent {
+function serve(redactor: Redactor, at: number, i: number, raw: RawEvent, observedAt?: number): ServedEvent {
   const out: ServedEvent = { at, i, kind: raw.kind };
+  if (observedAt !== undefined) out.ccloopObservedAt = observedAt;
   if (raw.meta) out.meta = servedMeta(redactor, raw.meta);
   if (raw.num) out.num = raw.num;
   if (raw.flag) out.flag = raw.flag;
@@ -117,14 +120,32 @@ function serve(redactor: Redactor, at: number, i: number, raw: RawEvent): Served
   return out;
 }
 
-function eventsOf(line: Line, options: WindowOptions): ServedEvent[] {
+type ObservedMarker = { atBytes: number; ccloopObservedAt: number | undefined };
+
+/** Only a complete marker immediately after its physical source line may supply a timestamp. */
+function markerOf(line: Line): ObservedMarker | null {
+  if ("long" in line || !line.bytes.includes('"ccloop.line-observed"')) return null;
+  let parsed: unknown;
+  try { parsed = lineParser.parse(line.bytes.toString("utf8")); } catch { return null; }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const value = parsed as Record<string, unknown>;
+  if (value.type !== "ccloop.line-observed") return null;
+  return {
+    atBytes: typeof value.atBytes === "number" && Number.isSafeInteger(value.atBytes) && value.atBytes >= 0 ? value.atBytes : -1,
+    ccloopObservedAt: typeof value.ccloopObservedAt === "number" && Number.isSafeInteger(value.ccloopObservedAt) && value.ccloopObservedAt >= 0 ? value.ccloopObservedAt : undefined,
+  };
+}
+
+const lineEnd = (line: Line): number => "long" in line ? line.long.end + 1 : line.start + line.bytes.length + 1;
+
+function eventsOf(line: Line, options: WindowOptions, observedAt?: number): ServedEvent[] {
   if ("long" in line) {
     const type = scanType(line.prefix);
-    return [{ at: line.start, i: 0, kind: "notice", meta: { notice: "oversized", ...(type === undefined ? {} : { type }) }, num: { bytes: line.long.end - line.long.start } }];
+    return [{ at: line.start, i: 0, kind: "notice", ...(observedAt === undefined ? {} : { ccloopObservedAt: observedAt }), meta: { notice: "oversized", ...(type === undefined ? {} : { type }) }, num: { bytes: line.long.end - line.long.start } }];
   }
   const raw = normalizeLine(options.runtime, line.bytes);
   const out: ServedEvent[] = [];
-  raw.forEach((event, i) => { if (event.kind !== "thinking" || options.includeThinking === true) out.push(serve(options.redactor, line.start, i, event)); });
+  raw.forEach((event, i) => { if (event.kind !== "thinking" || options.includeThinking === true) out.push(serve(options.redactor, line.start, i, event, observedAt)); });
   return out;
 }
 
@@ -151,11 +172,28 @@ export async function windowAfter(index: LineIndex, reader: RangeReader, offset:
   const budget: Budget = { events: options.maxEvents ?? WINDOW_EVENTS, bytes: options.maxBytes ?? WINDOW_BYTES, served: 0, counted: 0 };
   const events: ServedEvent[] = [];
   let end = offset;
+  let pending: { start: number; end: number; cost: number; served: ServedEvent[] } | null = null;
   for await (const line of linesIn(index, reader, offset, index.end)) {
-    const served = eventsOf(line, options);
-    if (!take(budget, cost(line), served.length, end === offset)) break;
-    events.push(...served.slice(0, budget.events - events.length));
-    end = "long" in line ? line.long.end + 1 : line.start + line.bytes.length + 1;
+    const marker = markerOf(line);
+    if (pending !== null) {
+      if (marker !== null) {
+        if (marker.atBytes === pending.start && marker.ccloopObservedAt !== undefined && pending.end === line.start) {
+          for (const event of pending.served) event.ccloopObservedAt = marker.ccloopObservedAt;
+        }
+        pending.cost += cost(line);
+        pending.end = lineEnd(line);
+      }
+      if (!take(budget, pending.cost, pending.served.length, end === offset)) break;
+      events.push(...pending.served.slice(0, budget.events - events.length));
+      end = pending.end;
+      pending = null;
+      if (marker !== null) continue;
+    }
+    pending = { start: line.start, end: lineEnd(line), cost: cost(line), served: marker === null ? eventsOf(line, options) : [] };
+  }
+  if (pending !== null && take(budget, pending.cost, pending.served.length, end === offset)) {
+    events.push(...pending.served.slice(0, budget.events - events.length));
+    end = pending.end;
   }
   return { events, start: offset, end, indexedEnd: index.end, counted: budget.counted };
 }
@@ -168,23 +206,40 @@ export async function windowBefore(index: LineIndex, reader: RangeReader, offset
   let start = offset;
   let segmentEnd = offset;
   let stopped = false;
+  let pendingMarker: { start: number; cost: number; marker: ObservedMarker } | null = null;
   while (!stopped && segmentEnd > 0) {
     let k = index.checkpoints.length - 1;
     while (k > 0 && index.checkpoints[k]!.offset >= segmentEnd) k--;
     const segmentStart = index.checkpoints[k]!.offset;
     // Each line is served as read (the chunk buffer is borrowed), then the segment is taken from its end backwards.
-    const servedLines: Array<{ start: number; cost: number; served: ServedEvent[] }> = [];
+    const servedLines: Array<{ start: number; end: number; cost: number; served: ServedEvent[]; marker: ObservedMarker | null }> = [];
     for await (const line of linesIn(index, reader, segmentStart, segmentEnd)) {
-      servedLines.push({ start: line.start, cost: cost(line), served: eventsOf(line, options) });
+      const marker = markerOf(line);
+      servedLines.push({ start: line.start, end: lineEnd(line), cost: cost(line), served: marker === null ? eventsOf(line, options) : [], marker });
     }
     for (let j = servedLines.length - 1; j >= 0; j--) {
-      const { start: lineStart, cost: lineCost, served } = servedLines[j]!;
-      if (!take(budget, lineCost, served.length, start === offset)) { stopped = true; break; }
-      chunks.push(served.length > budget.events ? served.slice(served.length - budget.events) : served);
-      start = lineStart;
+      const line = servedLines[j]!;
+      if (line.marker !== null) {
+        if (pendingMarker !== null) {
+          if (!take(budget, pendingMarker.cost, 0, start === offset)) { stopped = true; break; }
+          start = pendingMarker.start;
+        }
+        pendingMarker = { start: line.start, cost: line.cost, marker: line.marker };
+        continue;
+      }
+      const adjacent = pendingMarker?.start === line.end;
+      if (adjacent && pendingMarker?.marker.atBytes === line.start && pendingMarker.marker.ccloopObservedAt !== undefined) {
+        for (const event of line.served) event.ccloopObservedAt = pendingMarker.marker.ccloopObservedAt;
+      }
+      const lineCost = line.cost + (adjacent ? pendingMarker!.cost : 0);
+      if (!take(budget, lineCost, line.served.length, start === offset)) { stopped = true; break; }
+      chunks.push(line.served.length > budget.events ? line.served.slice(line.served.length - budget.events) : line.served);
+      start = line.start;
+      pendingMarker = null;
     }
     segmentEnd = segmentStart;
   }
+  if (!stopped && pendingMarker !== null && take(budget, pendingMarker.cost, 0, start === offset)) start = pendingMarker.start;
   return { events: chunks.reverse().flat(), start, end: offset, indexedEnd: index.end, counted: budget.counted };
 }
 

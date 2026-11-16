@@ -2,8 +2,8 @@
 /**
  * Tester #301 (regression from #281): each transcript row led with `new Date(event.at)`, but `event.at` is the byte offset
  * of the event's line in the transcript file (`src/agentTranscript/window.ts`, `ServedEvent.at`), the paging and expand
- * address -- so every row read as a time just after 1970-01-01. An event carries no time of its own, so a row shows none;
- * the call's start (`startedAt`, a real ISO time from the listing) stays on the call's row. The rows keep the list
+ * address -- so every row read as a time just after 1970-01-01. These legacy fixtures have no observation marker, so
+ * their rows show no time; the call's start (`startedAt`, a real ISO time from the listing) stays on the call's row. The rows keep the list
  * semantics with the browser's numbering hidden (#281: those numbers were a position in the 200-row window).
  *
  * Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- this file replaces the #281 criterion, whose

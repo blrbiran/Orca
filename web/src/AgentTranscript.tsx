@@ -139,8 +139,7 @@ function toolTone(row: Row): "ok" | "danger" | "info" | undefined {
 
 /**
  * One displayed row: its first line; expanded, every field's head of its event (and of the joined result).
- * Tester #301: a row shows no time. `event.at` is the byte offset of the event's line (the paging and expand address),
- * not a time, and an event carries no time of its own; the call's start (`startedAt`) is shown on the call's row instead.
+ * A row uses only ccloop's matched observation marker for its clock; `event.at` remains the byte offset used for paging.
  */
 function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Element {
   const { t } = useTranslation();
@@ -148,10 +147,11 @@ function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Elemen
   const [expanded, setExpanded] = useState(false);
   const tone = toolTone(props.row);
   const status = result === undefined ? null : result === null ? t("transcript.toolRunning") : result.flag?.error === true ? t("transcript.toolFailed") : t("transcript.toolOk");
-  const line = <span className="transcript-line max-w-full min-w-0 break-words text-start">
+const line = <span className="transcript-line max-w-full min-w-0 break-words text-start">
+    {observedTime(event.ccloopObservedAt)}
     <span className="transcript-kind badge whitespace-nowrap" data-tone={tone}>{t(`transcript.kind.${event.kind}`)}</span>{" "}
     <span className="transcript-summary min-w-0 max-w-full break-words">{summary(event, t)}</span>
-    {status !== null && <> · <span className="transcript-status badge whitespace-nowrap" data-tone={tone}>{status}</span></>}
+    {status !== null && <>{" · "}<span className="transcript-status badge whitespace-nowrap" data-tone={tone}>{status}</span>{result != null && observedTime(result.ccloopObservedAt, true)}</>}
   </span>;
   const opens = expandable(event) || expandable(result);
   return (
@@ -363,8 +363,14 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
   );
 }
 
-/** Tester #252 (spec 2026-11-12-tester-followup-f §6): a call's start as a compact local clock time; the full date on hover. */
+/** Tester #252 (spec 2026-11-12-tester-followup-f §6): a compact local clock time; the full date on hover. */
 const STARTED_CLOCK: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" };
+function observedTime(epochMs: number | undefined, afterStatus = false): JSX.Element | null {
+  if (epochMs === undefined) return null;
+  const at = new Date(epochMs);
+  if (!Number.isFinite(at.getTime())) return null;
+  return <>{afterStatus && " · "}<time className="num text-xs text-muted" dateTime={at.toISOString()} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>{afterStatus ? "" : " · "}</>;
+}
 function startedTime(startedAt: string): JSX.Element {
   const at = new Date(startedAt);
   return <time data-testid="transcript-call-started" dateTime={startedAt} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>;

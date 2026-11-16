@@ -179,6 +179,81 @@ describe("normalisation per runtime (real shapes, synthetic content)", () => {
   });
 });
 
+describe("producer observation markers", () => {
+  const marker = (atBytes: unknown, ccloopObservedAt: unknown): unknown => ({ type: "ccloop.line-observed", atBytes, ccloopObservedAt });
+
+  it("assigns one matched time to every event from a line without changing at/i or showing markers", async () => {
+    const first = jsonl([claude.write("t1", "src/x.ts", "one")]);
+    const firstMarker = jsonl([marker(0, 1_700_000_000_000)]);
+    const secondAt = first.length + firstMarker.length;
+    const second = jsonl([claude.toolResult("t1", "done")]);
+    const reader = memoryReader(Buffer.concat([first, firstMarker, second, jsonl([marker(secondAt, 1_700_000_000_500)])]));
+    const events = (await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor })).events;
+    expect(events.map(({ kind, at, i, ccloopObservedAt }) => ({ kind, at, i, ccloopObservedAt }))).toEqual([
+      { kind: "tool_call", at: 0, i: 0, ccloopObservedAt: 1_700_000_000_000 },
+      { kind: "file_change", at: 0, i: 1, ccloopObservedAt: 1_700_000_000_000 },
+      { kind: "tool_result", at: secondAt, i: 0, ccloopObservedAt: 1_700_000_000_500 },
+    ]);
+  });
+
+  it("ignores unpaired and invalid markers, including unsafe timestamps, while preserving legacy lines", async () => {
+    const legacy = jsonl([{ ...claude.text("legacy"), timestamp: "2023-11-14T22:13:20Z" }]);
+    const raw = jsonl([claude.text("real")]);
+    const at = legacy.length;
+    const lines = Buffer.concat([legacy, raw, jsonl([
+      marker(at, -1), marker(at, 1.5), marker(at, Number.MAX_SAFE_INTEGER + 1), marker(at, "1700000000000"),
+      marker(0, 1_700_000_000_000), marker(at + 1, 1_700_000_000_000),
+    ]), Buffer.from('{"type":"ccloop.line-observed","atBytes":')]);
+    const reader = memoryReader(lines);
+    const events = (await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor })).events;
+    expect(events.map(({ at, ccloopObservedAt }) => ({ at, ccloopObservedAt }))).toEqual([
+      { at: 0, ccloopObservedAt: undefined }, { at, ccloopObservedAt: undefined },
+    ]);
+  });
+
+  it("accepts zero and rejects each invalid marker even when directly adjacent", async () => {
+    for (const [atBytes, time] of [[0, 0], [0, -1], [0, 1.5], [0, Number.MAX_SAFE_INTEGER + 1], [0, "123"], [1, 123], [-1, 123], [0.5, 123]] as const) {
+      const raw = jsonl([claude.text("source")]);
+      const reader = memoryReader(Buffer.concat([raw, jsonl([marker(atBytes, time)])]));
+      const events = (await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor })).events;
+      expect(events).toHaveLength(1);
+      expect(events[0]!.ccloopObservedAt).toBe(atBytes === 0 && time === 0 ? 0 : undefined);
+    }
+  });
+
+  it("does not render a malformed complete marker line as an unknown provider event", async () => {
+    const raw = jsonl([claude.text("source")]);
+    const reader = memoryReader(Buffer.concat([raw, Buffer.from('{"type":"ccloop.line-observed","atBytes":0,}\n')]));
+    const events = (await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor })).events;
+    expect(events.map(({ kind, ccloopObservedAt }) => [kind, ccloopObservedAt])).toEqual([["message", undefined]]);
+  });
+
+  it("leaves a complete source with an incomplete marker untimed", async () => {
+    const raw = jsonl([claude.text("cap-exact")]);
+    const reader = memoryReader(Buffer.concat([raw, Buffer.from('{"type":"ccloop.line-observed","atBytes":0')]));
+    const events = (await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor })).events;
+    expect(events.map(({ kind, ccloopObservedAt }) => [kind, ccloopObservedAt])).toEqual([["message", undefined]]);
+  });
+
+  it("keeps backward and forward paging exact when a marker falls on a checkpoint", async () => {
+    const raw = jsonl([claude.text("first")]);
+    const firstMarker = jsonl([marker(0, 1_700_000_000_000)]);
+    const next = jsonl([claude.text("second")]);
+    const reader = memoryReader(Buffer.concat([raw, firstMarker, next, jsonl([marker(raw.length + firstMarker.length, 1_700_000_000_500)])]));
+    const index = await indexOf(reader);
+    index.checkpoints.splice(1, 0, { offset: raw.length, line: 1 });
+    const tail = await windowTail(index, reader, { runtime: "claude", redactor, maxEvents: 1 });
+    const before = await windowBefore(index, reader, tail.start, { runtime: "claude", redactor, maxEvents: 1 });
+    const forward = await windowAfter(index, reader, 0, { runtime: "claude", redactor, maxEvents: 1 });
+    const resumed = await windowAfter(index, reader, forward.end, { runtime: "claude", redactor, maxEvents: 1 });
+    expect(tail.events.map((event) => [event.fields?.text?.text, event.ccloopObservedAt])).toEqual([["second", 1_700_000_000_500]]);
+    expect(before.events.map((event) => [event.fields?.text?.text, event.ccloopObservedAt])).toEqual([["first", 1_700_000_000_000]]);
+    expect(forward.events.map((event) => [event.fields?.text?.text, event.ccloopObservedAt])).toEqual([["first", 1_700_000_000_000]]);
+    expect(resumed.events.map((event) => [event.fields?.text?.text, event.ccloopObservedAt])).toEqual([["second", 1_700_000_000_500]]);
+    expect(forward.end).toBeLessThanOrEqual(resumed.start);
+  });
+});
+
 describe("review 7753e97d: expand never serves thinking unless asked", () => {
   it("expanding a thinking event without include=thinking is transcript-not-found; asked, it is served", async () => {
     const reader = memoryReader(jsonl([claude.thinking("private reasoning " + prose(5000))]));
