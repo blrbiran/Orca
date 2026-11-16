@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect } from "vitest";
@@ -55,8 +55,14 @@ export function userDataSnapshot(root: string = join(homedir(), ".orca")): strin
   if (!existsSync(root)) return [];
   const walk = (dir: string, prefix: string): string[] => readdirSync(dir).flatMap((entry) => {
     if (prefix === "panel/" && (entry === "logs" || PANEL_RUNTIME_FILES.has(entry))) return [];
-    if (PANEL_ACCEPT_CLAIM.test(`${prefix}${entry}`)) return [];
     const full = join(dir, entry);
+    if (PANEL_ACCEPT_CLAIM.test(`${prefix}${entry}`)) {
+      try { if (lstatSync(full).isFile()) return []; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; // the panel removed its temporary claim
+        return [`${prefix}${entry}:unreadable`];
+      }
+    }
     let stat;
     try { stat = statSync(full); } catch { return [`${prefix}${entry}:unreadable`]; }
     return stat.isDirectory() ? walk(full, `${prefix}${entry}/`) : [`${prefix}${entry}:${stat.size}`];

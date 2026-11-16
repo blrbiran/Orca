@@ -45,5 +45,10 @@ describe("the Rule 17 user-data snapshot (#315)", () => {
     expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.lock.stale-owner:1`);
     expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.json:1`);
     expect(snapshot).toContain(`control/other.runs/${runId}/control/accepted.lock.${claimId}:1`);
+    // A test writing user data into a same-named directory must not hide all its contents behind the file exception.
+    const forgedDirectory = "accepted.lock.ffffffff-ffff-4fff-8fff-ffffffffffff";
+    mkdirSync(join(control, forgedDirectory));
+    writeFileSync(join(control, forgedDirectory, "durable.json"), "x");
+    expect(userDataSnapshot(root)).toContain(`control/panel.runs/${runId}/control/${forgedDirectory}/durable.json:1`);
   });
 });
