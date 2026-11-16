@@ -33,7 +33,7 @@ export async function advancesByAppend(repo: string, from: string, to: string): 
   return true;
 }
 
-const hasArtifact = async (repo: string, commit: string, path: string): Promise<boolean> => {
+export const historyArtifactAt = async (repo: string, commit: string, path: string): Promise<boolean> => {
   const listing = await gitChild(repo, ["--no-replace-objects", "ls-tree", "-z", commit, "--", path]);
   return listing.code === 0 && listing.stdout.split("\0")
     .some(line => /^100(?:644|755) blob [a-f0-9]+\t/.test(line) && line.endsWith(`\t${path}`));
@@ -52,7 +52,7 @@ export async function verifyHistoryChain(repo: string, chain: HistoryChain): Pro
     const parents = await parentsOf(repo, chain.targetTip);
     if (parents?.length !== 1 || parents[0] !== previous) return false;
   }
-  for (const path of chain.artifactPaths) if (!(await hasArtifact(repo, chain.targetTip, path))) return false;
+  for (const path of chain.artifactPaths) if (!(await historyArtifactAt(repo, chain.targetTip, path))) return false;
   return true;
 }
 
@@ -94,7 +94,7 @@ export async function buildHistoryChain(repo: string, groupId: string, base: str
   if (tree !== currentTree) current = (await gitOk(repo, ["--no-replace-objects", ...ORCA_IDENTITY, "commit-tree", tree, "-p", current,
     "-m", `orca: carry ${groupId} work after named merges`])).trim();
   for (const path of expectation.artifactPaths ?? [])
-    if (!(await hasArtifact(repo, current, path))) return { kind: "blocked", reason: `history-artifact-missing:${path}` };
+    if (!(await historyArtifactAt(repo, current, path))) return { kind: "blocked", reason: `history-artifact-missing:${path}` };
   const chain = historyChainSchema.parse({ version: 1, contractHash: integration.schemeHash, base, groupTip,
     merges, targetTip: current, artifactPaths: [...(expectation.artifactPaths ?? [])] });
   // Every parent is an object in the registered repository; this final commit is publishable by one target CAS.

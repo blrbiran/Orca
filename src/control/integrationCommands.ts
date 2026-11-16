@@ -2,7 +2,7 @@ import { recordActivity } from "./activity.js";
 import { FLOW_GROUP_DELIVERY_FIXED, isDirFlowGroup } from "../flow/groups.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { canonicalBytes } from "./canonicalJson.js";
-import { advancesByAppend } from "./historyIntegration.js";
+import { advancesByAppend, historyArtifactAt, verifyHistoryChain } from "./historyIntegration.js";
 import { refTip } from "./integrationGit.js";
 import { dirWorkspaceOf, type DirProjectOf } from "./dirGroup.js";
 import { multiDirOf } from "./multiGroup.js";
@@ -138,25 +138,32 @@ export function resetIntegrationForRetry(current: GroupIntegration): GroupIntegr
   return { ...current, state: "idle", reason: null, retryAfter: null, transient: 0 };
 }
 
-/** Why a history retry cannot be accepted without asking a person to repair the target. */
-function historyRetryRefusal(current: GroupIntegration): string | null {
-  if (current.pending !== null) return "history-pending-kept";
-  // A conflict before any publication has no target evidence to preserve; fixing the target and retrying is safe.
-  if (current.historyPublished === undefined) return null;
-  if (!current.reason?.startsWith("history-target-moved-after-publication")) return `history-retry-inapplicable:${current.reason ?? "none"}`;
-  return null;
-}
-
 /**
  * The target a reconciliation may record: it must merely append single-parent commits after the published
  * commit. Resolving a source conflict is also a merge target, which is refused here for a person to inspect.
  */
+export type HistoryRetryPlan = { clearPending: boolean; reconciledTargetTip: string | null };
+export async function historyRetryPlan(repo: string, current: GroupIntegration): Promise<HistoryRetryPlan> {
+  if (current.pending?.history !== undefined) {
+    if (current.scheme.delivery !== "local" || !current.scheme.historyExpectation
+      || current.pending.base !== current.pending.history.base || current.pending.new !== current.pending.history.targetTip
+      || !(await verifyHistoryChain(repo, current.pending.history)))
+      throw new ControlError("task-not-reopenable", "history-evidence-invalid");
+    const target = await refTip(repo, current.scheme.historyExpectation.targetRef);
+    if (target !== current.pending.base) throw new ControlError("task-not-reopenable", "history-pending-kept");
+    return { clearPending: true, reconciledTargetTip: null };
+  }
+  return { clearPending: false, reconciledTargetTip: await historyReconciledTarget(repo, current) };
+}
+
 export async function historyReconciledTarget(repo: string, current: GroupIntegration): Promise<string | null> {
   if (current.historyPublished === undefined || current.scheme.delivery !== "local" || !current.scheme.historyExpectation) return null;
   const target = await refTip(repo, current.scheme.historyExpectation.targetRef);
   if (target === null || target === current.historyPublished.targetTip) return null;
   if (!(await advancesByAppend(repo, current.historyPublished.targetTip, target)))
     throw new ControlError("task-not-reopenable", "history-target-diverged");
+  for (const path of current.historyPublished.artifactPaths)
+    if (!(await historyArtifactAt(repo, target, path))) throw new ControlError("task-not-reopenable", `history-artifact-missing:${path}`);
   return target;
 }
 
@@ -164,7 +171,7 @@ export async function historyReconciledTarget(repo: string, current: GroupIntegr
  * Integration spec §6.5: a blocked or conflicted integration goes back to idle and is tried again at the next round
  * (refused integration-not-blocked otherwise). The conflict record is kept: it numbers the next attempt (§7).
  */
-export function applyRetryIntegration(deps: { store: ControlStore; historyReconciledTargetTip?: string | null }, command: RetryIntegrationCommand): CommandSuccessV1 | CommandErrorBodyV1 {
+export function applyRetryIntegration(deps: { store: ControlStore; historyReconciledTargetTip?: string | null; clearHistoryPending?: boolean }, command: RetryIntegrationCommand): CommandSuccessV1 | CommandErrorBodyV1 {
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
     rawCommand: command,
     expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
@@ -177,15 +184,17 @@ export function applyRetryIntegration(deps: { store: ControlStore; historyReconc
       if (current === null || (current.state !== "blocked" && current.state !== "conflict")) throw new ControlError("integration-not-blocked");
       const history = current.scheme.delivery === "local" && current.scheme.historyExpectation !== undefined;
       if (history) {
-        const refusal = historyRetryRefusal(current);
-        if (refusal !== null) throw new ControlError("task-not-reopenable", refusal);
+        if (current.pending?.history !== undefined && deps.clearHistoryPending !== true)
+          throw new ControlError("task-not-reopenable", "history-pending-kept");
         if (current.historyPublished !== undefined && (deps.historyReconciledTargetTip ?? null) === null)
           throw new ControlError("task-not-reopenable", "history-reconciliation-required");
       }
       const retried = resetIntegrationForRetry(current);
-      group.integration = history && current.historyPublished !== undefined
-        ? { ...retried, pending: null, historyReconciledTargetTip: deps.historyReconciledTargetTip! }
-        : retried;
+      group.integration = history && deps.clearHistoryPending === true
+        ? { ...retried, pending: null }
+        : history && current.historyPublished !== undefined
+          ? { ...retried, pending: null, historyReconciledTargetTip: deps.historyReconciledTargetTip! }
+          : retried;
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
       return { status: 200, body: {
         schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,

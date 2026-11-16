@@ -1921,7 +1921,8 @@ export class WebControlService {
     const row = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(command.target.groupId);
     const integration = row === undefined ? null : readGroupIntegration(JSON.parse(String(row.body)));
     // Ordinary integration stays a synchronous command; only a published history promise needs a Git proof first.
-    if (integration?.scheme.delivery !== "local" || !integration.scheme.historyExpectation || !integration.historyPublished)
+    if (integration?.scheme.delivery !== "local" || !integration.scheme.historyExpectation
+      || (integration.historyPublished === undefined && integration.pending?.history === undefined))
       return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
     return this.retryHistoryIntegration(command, integration);
   }
@@ -1930,9 +1931,11 @@ export class WebControlService {
     integration: NonNullable<ReturnType<typeof readGroupIntegration>>): Promise<WebCommandResult> {
     const repoId = isDirGroup(this.store, command.target.groupId) || isMultiGroup(this.store, command.target.groupId) ? null : this.planRepository(command.target.groupId);
     if (repoId === null || this.deps.resolveRepository === undefined) throw new ControlError("task-not-reopenable", "history-target-unavailable");
-    const reconciled = await historyReconciledTarget(this.deps.resolveRepository(repoId), integration);
-    if (reconciled === null) throw new ControlError("task-not-reopenable", "history-reconciliation-required");
-    return this.mutate(() => applyRetryIntegration({ store: this.store, historyReconciledTargetTip: reconciled }, command)) as WebCommandResult;
+    const { historyRetryPlan } = await import("./integrationCommands.js");
+    const plan = await historyRetryPlan(this.deps.resolveRepository(repoId), integration);
+    if (!plan.clearPending && plan.reconciledTargetTip === null) throw new ControlError("task-not-reopenable", "history-reconciliation-required");
+    return this.mutate(() => applyRetryIntegration({ store: this.store, historyReconciledTargetTip: plan.reconciledTargetTip,
+      clearHistoryPending: plan.clearPending }, command)) as WebCommandResult;
   }
   /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
   recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {

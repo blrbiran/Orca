@@ -271,6 +271,36 @@ describe("literal source-branch history delivery (#328)", { timeout: 60_000 }, (
     } finally { await w.h.dispose(); }
   });
 
+  it("revokes an append-only target advance that deletes a required artifact", async () => {
+    const w = await world(); try {
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      const published = w.record().historyPublished!;
+      const { historyReconciledTarget } = await import("../../src/control/integrationCommands.js");
+      // A commit deleting MERGE-NOTES.md, still one parent on top of the verified target.
+      const env = { ...process.env, GIT_INDEX_FILE: join(w.h.root, "artifact-remove-index") };
+      execFileSync("git", ["read-tree", published.targetTip], { cwd: w.repo, env });
+      execFileSync("git", ["update-index", "--force-remove", "MERGE-NOTES.md"], { cwd: w.repo, env });
+      const removedTree = execFileSync("git", ["write-tree"], { cwd: w.repo, env, encoding: "utf8" }).trim();
+      const moved = execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", removedTree, "-p", published.targetTip, "-m", "remove notes"],
+        { cwd: w.repo, encoding: "utf8" }).trim();
+      git(w.repo, "update-ref", "refs/heads/main", moved);
+      await expect(historyReconciledTarget(w.repo, w.record())).rejects.toThrow("history-artifact-missing:MERGE-NOTES.md");
+    } finally { await w.h.dispose(); }
+  });
+
+  it("allows a pending delivery to retry after the person cleans a dirty target", async () => {
+    const w = await world(); try {
+      git(w.repo, "checkout", "-q", "main");
+      writeFileSync(join(w.repo, "person.txt"), "temporary\n");
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-worktree-dirty" });
+      expect(w.record().pending?.history).toBeDefined();
+      execFileSync("rm", ["-f", join(w.repo, "person.txt")]);
+      const { historyRetryPlan } = await import("../../src/control/integrationCommands.js");
+      expect(await historyRetryPlan(w.repo, w.record())).toEqual({ clearPending: true, reconciledTargetTip: null });
+    } finally { await w.h.dispose(); }
+  });
+
   it("refuses a corrupted pending parent chain before publishing any target commit", async () => {
     const w = await world(); try {
       await expect(integratePendingGroups({ ...w.deps, crash: at => { if (at === "after-pending") throw new Error("crash"); } })).rejects.toThrow("crash");
