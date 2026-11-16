@@ -169,6 +169,8 @@ export const zh: Translation<typeof en> = {
       add: "添加依赖",
       dependent: "组",
       prerequisite: "等待",
+      replace: "替换原前置组",
+      replaceButton: "替换",
       addButton: "添加",
     },
   },

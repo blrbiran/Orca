@@ -16,12 +16,15 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
   const live = props.groups.filter((group) => group.archived !== true);
   const [dependent, setDependent] = useState("");
   const [prerequisite, setPrerequisite] = useState("");
+  const [replaces, setReplaces] = useState("");
   const layout = layoutDependencies(live.map((group) => ({ taskId: group.groupId, dependencyTaskIds: group.dependsOn ?? [] })), { reduce: false });
   const byId = new Map(live.map((group) => [group.groupId, group]));
+  const selectedReplacement = byId.get(dependent)?.dependsOn?.includes(replaces) ? replaces : "";
   const layers = Array.from({ length: layout.layers }, (_, layer) => layout.nodes.filter((node) => node.layer === layer).map((node) => node.taskId));
-  const send = (verb: "add-group-dependency" | "remove-group-dependency", groupId: string, dependsOn: string): void => {
+  const send = (verb: "add-group-dependency" | "remove-group-dependency", groupId: string, dependsOn: string, from?: string): void => {
     const group = byId.get(groupId);
-    if (group !== undefined) props.onCommand({ verb, groupId, expectedRevision: group.commandRevision, payload: { dependsOn } });
+    if (group !== undefined) props.onCommand({ verb, groupId, expectedRevision: group.commandRevision,
+      payload: { dependsOn, ...(from === undefined ? {} : { replaces: from }) } });
   };
   return (
     <figure className="group-graph" aria-label={t("board.graph.region")}>
@@ -45,15 +48,21 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
       )}
       <div role="group" aria-label={t("board.graph.add")}>
         <label>{t("board.graph.dependent")}
-          <Select value={dependent} onValueChange={setDependent}
+          <Select value={dependent} onValueChange={(next) => { setDependent(next); setReplaces(""); }}
             options={[{ value: "", label: "" }, ...live.map((group) => ({ value: group.groupId, label: group.groupId }))]} />
         </label>
         <label>{t("board.graph.prerequisite")}
           <Select value={prerequisite} onValueChange={setPrerequisite}
             options={[{ value: "", label: "" }, ...live.filter((group) => group.groupId !== dependent).map((group) => ({ value: group.groupId, label: group.groupId }))]} />
         </label>
-        <button type="button" disabled={dependent === "" || prerequisite === "" || dependent === prerequisite}
+        <label>{t("board.graph.replace")}
+          <Select value={selectedReplacement} onValueChange={setReplaces}
+            options={[{ value: "", label: "" }, ...(byId.get(dependent)?.dependsOn ?? []).map((id) => ({ value: id, label: id }))]} />
+        </label>
+        <button type="button" disabled={dependent === "" || prerequisite === "" || dependent === prerequisite || selectedReplacement !== ""}
           onClick={() => send("add-group-dependency", dependent, prerequisite)}>{t("board.graph.addButton")}</button>
+        <button type="button" disabled={dependent === "" || prerequisite === "" || dependent === prerequisite || selectedReplacement === "" || selectedReplacement === prerequisite}
+          onClick={() => send("add-group-dependency", dependent, prerequisite, selectedReplacement)}>{t("board.graph.replaceButton")}</button>
       </div>
     </figure>
   );

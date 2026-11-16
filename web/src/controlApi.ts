@@ -506,7 +506,7 @@ export type ControlAction =
   | { verb: "allow-request"; groupId: string; expectedRevision: number; payload: { request: AllowRequestV1; scope: "one" | "group" } }
   | { verb: "revoke-allowance"; groupId: string; expectedRevision: number; payload: { allowanceId: string } }
   // Kanban spec §3.3, §9a.5: a person's edge; `groupId` is the dependent, `dependsOn` lands first.
-  | { verb: "add-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
+  | { verb: "add-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string; replaces?: string } }
   | { verb: "remove-group-dependency"; groupId: string; expectedRevision: number; payload: { dependsOn: string } }
   // Debug task plan Tasks 6, 11: a correction's debug group is opened (expected revision 0 for a new one), and a correction
   // is recorded or closed by hand on the `@corrections` scope (constant revision 0). `groupId` is "@corrections" for all

@@ -272,7 +272,7 @@ answer a stopped multi-directory landing: --retry-rest or --mark-resolved
 - `--retry-rest`: pre-check and land the directories not yet landed
 - `--mark-resolved`: record that the person landed them: they are not due again
 
-## `orca group depend <group> --on <on>`
+## `orca group depend <group> --on <on> [--replace <replace>]`
 
 make the group wait until --on <group> has landed
 
@@ -280,6 +280,7 @@ make the group wait until --on <group> has landed
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 - `--on <on>` (required): the group that must land first
+- `--replace <replace>`: replace an existing prerequisite atomically
 
 ## `orca group undepend <group> --on <on>`
 

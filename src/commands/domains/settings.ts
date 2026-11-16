@@ -58,16 +58,16 @@ function recoveryFormat(def: CommandDef): CommandDef {
   } };
 }
 
-/** The group a run belongs to: from the recovery read's blockers, else the first group whose view lists it. */
+/** Resolve the recovery list's blocked work runs and single calls before reading ordinary group views. */
 export async function groupOfRunId(c: WriteContext, runId: string): Promise<string> {
-  const blockers = ((await c.read("recovery")) as { blockers?: Array<{ groupId: string; runId: string | null }> }).blockers ?? [];
-  const blocked = blockers.find((b) => b.runId === runId);
+  const recovery = (await c.read("recovery")) as { blockers?: Array<{ groupId: string; runId: string | null }>; blockedCalls?: Array<{ groupId: string; runId: string }> };
+  const blocked = [...(recovery.blockers ?? []), ...(recovery.blockedCalls ?? [])].find((row) => row.runId === runId);
   if (blocked !== undefined) return blocked.groupId;
   for (const { groupId } of (await c.read("summary") as Summary).groups) {
     try {
       const view = await c.read(`groups/${groupId}`) as { runs: Array<{ runId: string }> };
       if (view.runs.some((r) => r.runId === runId)) return groupId;
-    } catch { /* a group whose view is refused (clarifying) cannot hold the run */ }
+    } catch { /* requirement groups are not exposed as ordinary group views */ }
   }
   throw new EntryRejection("run-not-found", `no group lists run ${JSON.stringify(runId)}`);
 }

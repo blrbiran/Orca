@@ -954,6 +954,7 @@ export type CommandSuccessV1 = {
     | { kind: "usage-calendar-set"; revision: number }
     | { kind: "orchestration-settings-set"; maxRunningGroups: number; revision: number }
     | { kind: "group-dependency-added"; groupId: string; dependsOn: string }
+    | { kind: "group-dependency-replaced"; groupId: string; from: string; to: string }
     | { kind: "group-dependency-removed"; groupId: string; dependsOn: string }
     | { kind: "task-labels-set"; taskId: string; labelsVersion: number }
     | { kind: "live-note-queued"; noteId: string; taskId: string; delivery?: "current-run" | "next-run" }

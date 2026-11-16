@@ -77,7 +77,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group waive-acceptance <group> --note <note>` — accept a group whose acceptance failed on its tip anyway (a person's act) (person token)
 - `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
 - `orca group multi-land <group> [--retry-rest] [--mark-resolved]` — answer a stopped multi-directory landing: --retry-rest or --mark-resolved (person token)
-- `orca group depend <group> --on <on>` — make the group wait until --on <group> has landed
+- `orca group depend <group> --on <on> [--replace <replace>]` — make the group wait until --on <group> has landed
 - `orca group undepend <group> --on <on>` — remove that wait
 - `orca group apply-estimate <group> [--dry-run]` — apply the newest ready estimate's suggestions to the proposal, as the panel's "Apply all" does (a loop task's sessions are never set: R10)
 - `orca group schedule <group> --cron <cron> [--token-limit <token-limit>] [--name <name>] [--disabled] [--id <id>]` — schedule this group from its archived plan: one library version pins the fires; needs a person token (person token)

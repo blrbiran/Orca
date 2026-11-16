@@ -1239,6 +1239,7 @@ export const setOrchestrationSettingsPayloadSchema = z.object({ maxRunningGroups
   criteriaReviewTokens: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional() }).strict();
 // Kanban spec §3.3, §9a.5: a person's edge between groups; the target group is the dependent, `dependsOn` must land first.
 export const groupDependencyPayloadSchema = z.object({ dependsOn: idSchema }).strict();
+export const addGroupDependencyPayloadSchema = groupDependencyPayloadSchema.extend({ replaces: idSchema.optional() });
 // Debug task plan Task 6: one recorded correction opens one debug group (spending nothing). `reopen` asks for the next
 // ordinal once the newest debug group is stopped or archived; `undoHow` is the owner's, recorded for the closing row.
 export const correctionDebugOpenPayloadSchema = z.object({
@@ -1367,7 +1368,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-orchestration-settings"), target: orchestrationCommandTargetSchema, payload: setOrchestrationSettingsPayloadSchema }).strict(),
-  z.object({ ...rawCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: addGroupDependencyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("remove-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("system-debug-open"), target: groupCommandTargetSchema, payload: systemDebugOpenPayloadSchema }).strict(),
@@ -1480,7 +1481,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-orchestration-settings"), target: orchestrationCommandTargetSchema, payload: setOrchestrationSettingsPayloadSchema }).strict(),
-  z.object({ ...effectiveCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("add-group-dependency"), target: groupCommandTargetSchema, payload: addGroupDependencyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("remove-group-dependency"), target: groupCommandTargetSchema, payload: groupDependencyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("correction-debug-open"), target: groupCommandTargetSchema, payload: correctionDebugOpenPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("system-debug-open"), target: groupCommandTargetSchema, payload: systemDebugOpenPayloadSchema }).strict(),
@@ -2557,6 +2558,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("flagged-decision-ratified"), decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("orchestration-settings-set"), maxRunningGroups: positiveSafeInteger, revision: positiveSafeInteger }).strict(),
   z.object({ kind: z.literal("group-dependency-added"), groupId: idSchema, dependsOn: idSchema }).strict(),
+  z.object({ kind: z.literal("group-dependency-replaced"), groupId: idSchema, from: idSchema, to: idSchema }).strict(),
   z.object({ kind: z.literal("group-dependency-removed"), groupId: idSchema, dependsOn: idSchema }).strict(),
   z.object({ kind: z.literal("debug-group-opened"), groupId: idSchema, correctionId: nonemptyString, created: z.boolean() }).strict(),
   z.object({ kind: z.literal("system-debug-opened"), groupId: idSchema, created: z.boolean() }).strict(),

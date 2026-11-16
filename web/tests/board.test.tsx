@@ -135,6 +135,28 @@ describe("the board tab (kanban spec §4)", () => {
       [{ verb: "add-group-dependency", groupId: "b", expectedRevision: 3, payload: { dependsOn: "a" } }],
     ]);
   });
+
+  it("lets a person replace a group prerequisite with one Web command (#330)", async () => {
+    const onCommand = vi.fn<(action: ControlAction) => void>();
+    const { rerender } = render(<BoardView groups={[g({ groupId: "a", dependsOn: ["b"] }), g({ groupId: "b" }), g({ groupId: "c" })]}
+      scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={onCommand} />);
+    fireEvent.click(screen.getByRole("button", { name: "Group graph" }));
+    await pickOption(screen.getByRole("combobox", { name: "Group" }), "a");
+    await pickOption(screen.getByRole("combobox", { name: "waits for" }), "c");
+    await pickOption(screen.getByRole("combobox", { name: "Replace prerequisite" }), "b");
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "add-group-dependency", groupId: "a", expectedRevision: 7,
+      payload: { dependsOn: "c", replaces: "b" } }]]);
+    // The command succeeded: a now waits for c. A stale replacement choice must not disable future actions.
+    onCommand.mockClear();
+    rerender(<BoardView groups={[g({ groupId: "a", dependsOn: ["c"] }), g({ groupId: "b" }), g({ groupId: "c" })]}
+      scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={onCommand} />);
+    await pickOption(screen.getByRole("combobox", { name: "waits for" }), "b");
+    expect((screen.getByRole("button", { name: "Add" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "add-group-dependency", groupId: "a", expectedRevision: 7,
+      payload: { dependsOn: "b" } }]]);
+  });
 });
 
 // Tester issue #58 (ruling 2026-10-27, session 7753e97d): a system-debug card names why Orca opened it in the reader's

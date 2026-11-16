@@ -91,6 +91,33 @@ describe("project, decision, correction, agent, usage, orchestration, recovery w
     expect(posts.map((p) => ({ path: p.path, expectedRevision: p.expectedRevision, payload: p.payload }))).toEqual([{ path, expectedRevision: revision, payload }]);
   });
 
+  it("the suggested run retry reaches a blocked requirement single call (#329)", async () => {
+    const w = await world({}, {
+      "GET recovery": { status: 200, body: {
+        schema: "orca-control-recovery-v1", blockers: [], blockedCalls: [{ groupId: "g-alpha", runId: "run-1", purpose: "split",
+          blockedAt: "C", reason: "launch-never-claimed", next: "orca recovery retry --run run-1" }],
+      } },
+      "GET groups/g-alpha": { status: 409, body: { error: { code: "group-clarifying", message: "not a task group", retryable: false } } },
+    });
+    const out = await cli(["recovery", "retry", "--run", "run-1", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.posts().map(({ path, expectedRevision, payload }) => ({ path, expectedRevision, payload })))
+      .toEqual([{ path: "recovery/retry", expectedRevision: 5, payload: { scope: "run", runId: "run-1" } }]);
+    const missing = await cli(["recovery", "retry", "--run", "run-absent", "--json"], w.dir);
+    expect(missing.json().body.error.code).toBe("run-not-found");
+    expect(w.posts()).toHaveLength(1);
+  });
+
+  it("sends one group dependency replacement with both the old and new prerequisites (#330)", async () => {
+    const w = await world({}, { "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", groups: [
+      { groupId: "g-alpha", commandRevision: 5 }, { groupId: "g-beta", commandRevision: 1 }, { groupId: "g-gamma", commandRevision: 1 },
+    ] } } });
+    const out = await cli(["group", "depend", "g-alpha", "--on", "g-gamma", "--replace", "g-beta", "--json"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(w.posts().map(({ path, expectedRevision, payload }) => ({ path, expectedRevision, payload })))
+      .toEqual([{ path: "groups/g-alpha/dependencies/add", expectedRevision: 5, payload: { dependsOn: "g-gamma", replaces: "g-beta" } }]);
+  });
+
   // Ruling (2026-11-12, tester follow-up F): #116 「要改」 admits charge-observed-floor beside charge-remaining-grant on a
   // single call's retry, so the title no longer says "only as charge-remaining-grant"; the refused cases are unchanged.
   it("--acknowledge goes only with --run and only as charge-remaining-grant or charge-observed-floor, refused before anything is sent (tester #103)", async () => {

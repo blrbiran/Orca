@@ -150,8 +150,10 @@ export function applyAddGroupDependency(deps: { store: ControlStore }, command: 
     expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const store = deps.store, dependent = command.target.groupId, prerequisite = command.payload.dependsOn;
+      const replacement = command.payload.replaces;
       const group = groupBody(store, dependent);
       if (group === null) throw new ControlError("group-not-found");
+      if (replacement !== undefined && !store.db.prepare("SELECT 1 FROM group_edges WHERE from_group=? AND to_group=?").get(replacement, dependent)) throw new ControlError("no-op-command");
       if (prerequisite === dependent) throw new ControlError("group-edge-self");
       const before = groupBody(store, prerequisite);
       if (before === null) throw new ControlError("group-edge-prerequisite-not-found", prerequisite);
@@ -164,11 +166,15 @@ export function applyAddGroupDependency(deps: { store: ControlStore }, command: 
       if (dependentStarted(store, dependent, group)) throw new ControlError("group-edge-dependent-started");
       // A cycle: the prerequisite already (transitively) waits on the dependent.
       if (reaches(store, prerequisite, dependent)) throw new ControlError("group-edge-cycle");
-      const stacked = [...prerequisitesOf(store, dependent), prerequisite].filter((id) => { const body = groupBody(store, id); return body !== null && !deliversLocally(body); });
+      const stacked = [...prerequisitesOf(store, dependent).filter((id) => id !== replacement), prerequisite].filter((id) => { const body = groupBody(store, id); return body !== null && !deliversLocally(body); });
       if (stacked.length > 1) throw new ControlError("group-edge-stack-ambiguous", stacked.join(","));
+      // Both writes live in applyWebCommand's transaction; a refused validation never exposes an unguarded group.
+      if (replacement !== undefined) store.db.prepare("DELETE FROM group_edges WHERE from_group=? AND to_group=?").run(replacement, dependent);
       store.db.prepare("INSERT INTO group_edges(from_group,to_group,body) VALUES (?,?,?)")
         .run(prerequisite, dependent, JSON.stringify({ by: context.rawCommand.actorId, commandId: context.rawCommand.commandId, at: store.now() }));
-      return success(context, { kind: "group-dependency-added", groupId: dependent, dependsOn: prerequisite });
+      return success(context, replacement === undefined
+        ? { kind: "group-dependency-added", groupId: dependent, dependsOn: prerequisite }
+        : { kind: "group-dependency-replaced", groupId: dependent, from: replacement, to: prerequisite });
     },
   }).body;
 }
@@ -179,8 +185,11 @@ export function applyRemoveGroupDependency(deps: { store: ControlStore }, comman
     expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const store = deps.store, dependent = command.target.groupId, prerequisite = command.payload.dependsOn;
-      if (groupBody(store, dependent) === null) throw new ControlError("group-not-found");
-      if (Number(store.db.prepare("DELETE FROM group_edges WHERE from_group=? AND to_group=?").run(prerequisite, dependent).changes) === 0) throw new ControlError("no-op-command");
+      const group = groupBody(store, dependent);
+      if (group === null) throw new ControlError("group-not-found");
+      if (!store.db.prepare("SELECT 1 FROM group_edges WHERE from_group=? AND to_group=?").get(prerequisite, dependent)) throw new ControlError("no-op-command");
+      if (dependentStarted(store, dependent, group)) throw new ControlError("group-edge-dependent-started");
+      store.db.prepare("DELETE FROM group_edges WHERE from_group=? AND to_group=?").run(prerequisite, dependent);
       return success(context, { kind: "group-dependency-removed", groupId: dependent, dependsOn: prerequisite });
     },
   }).body;

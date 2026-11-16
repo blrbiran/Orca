@@ -315,6 +315,8 @@ export const en = {
       add: "Add a dependency",
       dependent: "Group",
       prerequisite: "waits for",
+      replace: "Replace prerequisite",
+      replaceButton: "Replace",
       addButton: "Add",
     },
   },

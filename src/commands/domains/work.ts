@@ -566,14 +566,17 @@ export const WORK_ROWS: CommandDef[] = [
   ...(["depend", "undepend"] as const).map((action) => verb({
     domain: "group", action, summary: action === "depend" ? "make the group wait until --on <group> has landed" : "remove that wait",
     verb: action === "depend" ? "add-group-dependency" : "remove-group-dependency", positionals: [GROUP],
-    flags: [{ name: "on", type: "string", required: true, summary: "the group that must land first" }],
+    flags: [{ name: "on", type: "string", required: true, summary: "the group that must land first" },
+      ...(action === "depend" ? [{ name: "replace", type: "string" as const, summary: "replace an existing prerequisite atomically" }] : [])],
     route: (c) => `groups/${group(c)}/dependencies/${action === "depend" ? "add" : "remove"}`,
     hint: (error) => action === "depend" && error.code === "group-edge-dependent-started"
       ? "the dependent group already started; dependencies must be set before it starts. Inspect it with orca group show <group>; use a new draft group for a different dependency order"
       : undefined,
     payload: async (c) => {
       const summary = await c.read("summary") as { groups: Array<{ groupId: string }> };
-      return { dependsOn: resolveId("group", str(c, "on")!, summary.groups.map((g) => g.groupId)) };
+      const choices = summary.groups.map((g) => g.groupId), replaces = action === "depend" ? str(c, "replace") : undefined;
+      return { dependsOn: resolveId("group", str(c, "on")!, choices),
+        ...(replaces === undefined ? {} : { replaces: resolveId("group", replaces, choices) }) };
     },
   })),
 

@@ -148,6 +148,43 @@ describe("edges between groups (kanban spec §3.3-§3.4)", () => {
     } finally { await h.dispose(); }
   });
 
+  it("replaces a waiting group's prerequisite in one command without a no-dependency interval (#330)", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p"); h.importDeferred("q");
+      expect(code(edge(h, service, "add-group-dependency", "g", "p"))).toBeNull();
+      await confirm(h, service, "g");
+      const replace = (from: string, to: string) => service.addGroupDependency(h.rawCommand(`replace-${++sequence}`, revisionOf(h, "g"),
+        "add-group-dependency", { kind: "group", groupId: "g" }, { dependsOn: to, replaces: from }) as never);
+      expect(replace("p", "q")).toMatchObject({ result: { kind: "group-dependency-replaced", groupId: "g", from: "p", to: "q" } });
+      expect(readGroupSummary(h.store, "g").dependsOn).toEqual(["q"]);
+      expect(waitingPrerequisites(h.store, "g")).toEqual(["q"]);
+      // p waits for g; replacing g's prerequisite q with p would form a cycle.
+      expect(code(edge(h, service, "add-group-dependency", "p", "g"))).toBeNull();
+      const before = revisionOf(h, "g");
+      expect(code(replace("q", "p"))).toBe("group-edge-cycle");
+      expect(readGroupSummary(h.store, "g").dependsOn).toEqual(["q"]);
+      expect(revisionOf(h, "g")).toBe(before);
+    } finally { await h.dispose(); }
+  });
+
+  it("does not drop a prerequisite after start is queued but before a run exists (#330)", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      expect(code(edge(h, service, "add-group-dependency", "g", "p"))).toBeNull();
+      await confirm(h, service, "g");
+      finishTasks(h, "p");
+      expect(await service.start(h.rawCommand(`start-g-${++sequence}`, revisionOf(h, "g"), "start", { kind: "group", groupId: "g" }, {}) as never))
+        .toMatchObject({ result: { kind: "scheduled", operation: "start" } });
+      expect(h.store.db.prepare("SELECT id FROM runs WHERE group_id='g'").all()).toEqual([]);
+      const before = revisionOf(h, "g");
+      expect(code(edge(h, service, "remove-group-dependency", "g", "p"))).toBe("group-edge-dependent-started");
+      expect(readGroupSummary(h.store, "g").dependsOn).toEqual(["p"]);
+      expect(revisionOf(h, "g")).toBe(before);
+    } finally { await h.dispose(); }
+  });
+
   // Issue #133: an explicit start and a resume honour the edges with the automatic start's "done", so a dependent never
   // runs on a base without its prerequisite's work.
   it("refuses a person's start of a dependent whose prerequisite is not done, naming it; starts once it is done", async () => {
