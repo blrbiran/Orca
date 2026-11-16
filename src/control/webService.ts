@@ -113,7 +113,7 @@ import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } f
 import { applyAddGroupDependency, applyRemoveGroupDependency, prerequisiteDone, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
 import { readWithdrawals, withdrawnIds } from "../corrections/withdrawals.js";
 import { isGroupArchived } from "./archivedMark.js";
-import { checkScheme, preflightScheme, readGroupIntegration, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
+import { checkScheme, preflightScheme, readGroupIntegration, validateHistoryTasks, REPOSITORY_CHECK, suggestedTarget, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { applySpendCommand, type SpendCommand } from "./spendCommands.js";
 import { applySetAgentPreferences, type SetAgentPreferencesCommand } from "./agentPreferences.js";
 import { applyAgentUpdate, hasPendingAgentUpdate, pendingAgentUpdateCommand, readAgentUpdateRevision, reconcilePendingAgentUpdates, type ApplyAgentUpdateCommand } from "./agentUpdates.js";
@@ -2459,6 +2459,8 @@ export class WebControlService {
           const integration = readGroupIntegration(group);
           if (integration === null ? payload.integrationHash !== undefined : payload.integrationHash !== integration.schemeHash) throw new ControlError("integration-unapproved");
           if (integration !== null && preflight !== null) throw new ControlError("integration-preflight-failed", preflight);
+          if (integration?.scheme.delivery === "local" && integration.scheme.historyExpectation)
+            validateHistoryTasks(integration.scheme.historyExpectation, plan.plan.tasks);
           const skills = tasks.flatMap((task): Array<{ taskId: string; profile: string | null; names: string[] }> => {
             const declared = task.loop?.skills;
             if (declared === undefined) return [];

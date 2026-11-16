@@ -155,6 +155,8 @@ export const durableCommandErrorStatuses = {
   "handoff-request-conflict": 409,
   // Integration spec §3.2-§3.4, §6.5, §7: the integration refusals (none retryable).
   "integration-busy": 409,
+  "integration-history-frozen": 409,
+  "integration-history-invalid": 409,
   "integration-no-checks": 409,
   "integration-not-blocked": 409,
   "integration-preflight-failed": 409,

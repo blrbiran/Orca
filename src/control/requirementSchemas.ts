@@ -1,6 +1,7 @@
 import type { BudgetAmount } from "./tokenPolicy.js";
 import { z } from "zod";
 import { setupCommandsSchema } from "./loopPlans.js";
+import { historyExpectationSchema } from "./historyExpectation.js";
 import { amountSchema, canonicalTimestampSchema, idSchema, safeInteger } from "./schema.js";
 import type { Amount } from "./types.js";
 
@@ -96,7 +97,7 @@ export const splitTaskSchema = z.object({
   // multi-directory task below does not have it (spec §5.4).
   setup: setupCommandsSchema.optional(),
 }).strict();
-export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string() }).strict();
+export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string(), historyExpectation: historyExpectationSchema.optional() }).strict();
 /**
  * Multi-directory projects spec §6.1: one task's writes as the model names them, per directory (`dir`, `targetPaths`,
  * `checks`). A non-primary entry may have no checks; the primary's checks are checked by validation (O5).

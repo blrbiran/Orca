@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { readDraft, readRequirementGroup, readRound, writeDraft, writeRound } from "../../src/control/requirementRecords.js";
-import { SPLIT_JSON_SCHEMA } from "../../src/control/requirementSplit.js";
+import { SPLIT_JSON_SCHEMA_V6 } from "../../src/control/requirementSplit.js";
 import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { INVALID_SPLIT, ISSUE_88_SPLIT, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -19,7 +19,8 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
       expect(draft.plan).toMatchObject({ workBranch: "orca/r", targetRepo: x.repo });
       expect(draft.draftHash).toBe(sha256Canonical(draft.plan));
       const sent = x.fake.calls.accept[0]!;
-      expect(sent).toMatchObject({ claim: { workItemId: "draft-1" }, work: { kind: "single-call", responseSchema: SPLIT_JSON_SCHEMA, maxOutputTokens: 64_000 } });
+      // Ruling: 2026-11-17 #328, human approved necessary criterion rewrites; new single-repo calls carry V6's optional history proposal.
+      expect(sent).toMatchObject({ claim: { workItemId: "draft-1" }, work: { kind: "single-call", responseSchema: SPLIT_JSON_SCHEMA_V6, maxOutputTokens: 64_000 } });
       expect(sent.work.kind === "single-call" && sent.work.prompt).toContain("<<<ORCA-DATA requirement-document ");
       expect(x.group()).toMatchObject({ used: { tokens: 777 }, reserved: { tokens: 0 } });
     } finally { await x.dispose(); }

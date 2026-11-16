@@ -32,3 +32,9 @@ No structured history expectation exists in current split output or integration 
 - A task-trigger group merge with a group tip as second parent fails the literal-history gate even if its final file tree matches.
 - A direct merge of the exact frozen source tip passes; reordered tips, wrong parent, lost source ref, changed target tip, or missing `MERGE-NOTES.md` fail without marking the group done.
 - A pending history decision is visible in Web and CLI; `done` and dependent starts remain blocked until the history evidence is verified.
+
+## Correction 1 — source branch scope and split version (2026-11-17)
+
+Version 1 requires each named source ref to exist in the registered repository when its mapped task lands. Orca binds that ref's commit SHA then, and a later ref move never silently changes the bound commit. An absent ref blocks the delivery with a named recovery path. A task agent's attempt worktree cannot be treated as a branch producer: the current ccloop contract owns Git publication, and its OMP execute prompt explicitly forbids `git branch` and `git commit`. Supporting run-created named branches requires a separate producer contract and validation; it is not implied by this version. The reported eleven-branch case used existing source branches.
+
+Single-repository split instruction version 6 may propose the structured expectation; version 5's instruction and JSON schema remain byte-identical for already-frozen calls. The proposal is visible before confirmation and becomes active only when the integration scheme hash is explicitly approved. History source tasks declare dependency edges in the requested merge order even if their file write sets are disjoint. An ordinary split or a group without a history expectation keeps the prior tree-only integration path.

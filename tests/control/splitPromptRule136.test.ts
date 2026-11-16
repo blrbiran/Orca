@@ -6,7 +6,8 @@ import { buildSplitPrompt, NO_VERIFY_ONLY_RULE } from "../../src/control/require
 // single-repository instruction now forbids verify-only tasks, "file was changed" checks and commit/base-sha checks, in
 // words written out here, so dropping the rule from the prompt the model reads turns this red.
 const instruction = (() => {
-  const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [] });
+  // Ruling: 2026-11-17 #328, assert the old V5 instruction remains available byte-for-byte.
+  const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [], instructionVersion: 5 });
   return prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
 })();
 

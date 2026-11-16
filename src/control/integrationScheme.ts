@@ -4,14 +4,30 @@ import { reconcileRecordSchema } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
 import { safeInteger } from "./schema.js";
 import type { ControlStore } from "./store.js";
-import { integrationSchemeSchema } from "./webProtocol.js";
+import { historyExpectationSchema, integrationSchemeSchema } from "./webProtocol.js";
 import { ChildSpawnFailed, ChildTimeout, runChild } from "./integrationGit.js";
 import { readRepositorySettingsBody } from "./workspaceSettings.js";
 
 /** Integration spec §3: what happens to a group's work once it lands on `orca/<g>`. The schema is the protocol's. */
 export { integrationSchemeSchema };
 export type IntegrationScheme = z.infer<typeof integrationSchemeSchema>;
+export type HistoryExpectation = z.infer<typeof historyExpectationSchema>;
 export type Trigger = Extract<IntegrationScheme, { trigger: unknown }>["trigger"];
+
+/** The declared order must also be the plan's dependency order, or tasks could land in the wrong order. */
+export function validateHistoryTasks(expectation: HistoryExpectation, tasks: ReadonlyArray<{ taskId: string; dependencyTaskIds: readonly string[] }>): void {
+  const byId = new Map(tasks.map(task => [task.taskId, task]));
+  for (const { taskId } of expectation.sourceRefs) if (!byId.has(taskId)) throw new ControlError("integration-history-invalid", `task:${taskId}`);
+  const dependsOn = (taskId: string, before: string, seen = new Set<string>()): boolean => {
+    if (seen.has(taskId)) return false;
+    seen.add(taskId);
+    return (byId.get(taskId)?.dependencyTaskIds ?? []).some(id => id === before || dependsOn(id, before, seen));
+  };
+  for (let i = 1; i < expectation.sourceRefs.length; i++) {
+    const previous = expectation.sourceRefs[i - 1]!.taskId, current = expectation.sourceRefs[i]!.taskId;
+    if (!dependsOn(current, previous)) throw new ControlError("integration-history-invalid", `order:${previous}:${current}`);
+  }
+}
 export type Method = Extract<IntegrationScheme, { method: unknown }>["method"];
 
 /** Integration spec §3.1: the repository default; absent is keep (ruling R5), at the settings body's revision. */

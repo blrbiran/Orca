@@ -12,6 +12,8 @@ import { FLOW_LOCKABLE_PATHS, FLOW_SETTING_FIELDS, flowsLayerSchema, globalFlows
 import { WORK_ITEM_CATEGORIES } from "./workItemCategory.js";
 import { CORRECTION_KINDS } from "../corrections/schema.js";
 import { pathPolicyMissesSchema } from "./pathPolicyMisses.js";
+import { historyExpectationSchema } from "./historyExpectation.js";
+export { historyExpectationSchema } from "./historyExpectation.js";
 import { DECISION_IMPORTANCES } from "../ledger/types.js";
 // Agent selection spec §12 I10 (plan-review P18): the selection/context/partial schemas are T7's, defined once
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
@@ -1000,10 +1002,13 @@ const integrationTriggerSchema = z.enum(["task", "group"]);
 const integrationMethodSchema = z.enum(["merge", "squash"]);
 export const integrationSchemeSchema = z.discriminatedUnion("delivery", [
   z.object({ delivery: z.literal("keep") }).strict(),
-  z.object({ delivery: z.literal("local"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string() }).strict(),
+  z.object({ delivery: z.literal("local"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string(), historyExpectation: historyExpectationSchema.optional() }).strict(),
   z.object({ delivery: z.literal("push-target"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string(), remote: z.string() }).strict(),
   z.object({ delivery: z.enum(["push-branch", "github-pr"]), trigger: integrationTriggerSchema, target: z.string(), remote: z.string() }).strict(),
-]);
+]).superRefine((scheme, ctx) => {
+  if (scheme.delivery === "local" && scheme.historyExpectation && (scheme.trigger !== "group" || scheme.method !== "merge" || scheme.historyExpectation.targetRef !== `refs/heads/${scheme.target}`))
+    ctx.addIssue({ code: "custom", message: "history-scheme-invalid", path: ["historyExpectation"] });
+});
 export const setIntegrationSchemePayloadSchema = z.object({ integration: integrationSchemeSchema }).strict();
 // Kanban spec 2026-10-20 §7 layer 1: the repository's integration check -- on/off and an optional command run instead
 // of the landed groups' own required checks (some suites are slow, the human said).

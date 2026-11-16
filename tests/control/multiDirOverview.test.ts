@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V5, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V5, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V6, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -229,7 +229,8 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
       idea: "A fixed idea.", contentLanguage: "en", overview: FIXED_OVERVIEW, earlier: [], retryReason: null,
       limits: { roundNo: 1, classification: null, roundCap: 3 },
     }))).toBe(PINNED.clarifyPrompt);
-    expect(sha(buildSplitPrompt({ document: "A fixed requirement document.", overview: FIXED_OVERVIEW, earlierDrafts: [] }))).toBe(PINNED.splitPrompt);
+    // Ruling: 2026-11-17 #328, the pinned V5 prompt stays byte-identical; new calls opt into V6 for named history.
+    expect(sha(buildSplitPrompt({ document: "A fixed requirement document.", overview: FIXED_OVERVIEW, earlierDrafts: [], instructionVersion: 5 }))).toBe(PINNED.splitPrompt);
     expect(sha256Canonical(SPLIT_JSON_SCHEMA)).toBe(PINNED.splitSchema);
   });
 
@@ -252,10 +253,11 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
     try {
       await split.until(() => split.fake.calls.accept.length > 0);
       const envelope = split.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
-      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA);
+      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V6);
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a single-repository group is sent the single instruction.
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 5.")).toBe(true);
+      // Ruling: 2026-11-17 #328, new single-repository calls advertise the structured history proposal.
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 6.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");

@@ -31,7 +31,7 @@ import { writeCanonicalRecord } from "./snapshot.js";
 import { schedulerControlPlanSourceOf } from "../scheduler/planFile.js";
 import { expandMultiSplitDraft, orderWrites, type SplitPlanFile } from "./requirementSplit.js";
 import { requirementDraftHash } from "./requirementDraftHash.js";
-import { REQUIREMENT_CALL_GRANT, REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput } from "./requirementSchemas.js";
+import { REQUIREMENT_CALL_GRANT, REQUIREMENT_LIMIT_DEFAULT, type MultiSplitOutput, type SplitOutput } from "./requirementSchemas.js";
 import { commandSuccess, readRunBody, readStopIntent, saveRunBody } from "./stopIntent.js";
 import { interruptRequirementCall } from "./requirementCalls.js";
 import type { ControlStore } from "./store.js";
@@ -580,7 +580,11 @@ export async function applyRequirementDraftAccept(
         const unlimited = hasTokenPolicy(deps.store, id) && (group.limit as { tokens: number | null }).tokens === null;
         const { estimateId, preflight } = writeImportedPlan(importDeps, { groupId: id, repoId: group.requirement.repoId, planId, plan, actorId: command.actorId, commandId: command.commandId, at: now.getTime(),
           estimatorProfileId: defaults.estimatorProfileId, estimatorProfileHash: defaults.estimatorProfileHash, estimateMode: defaults.estimateMode,
-          ...(multi === null ? {} : { integration: null }) },
+          ...(multi !== null ? { integration: null } : (draft.output as SplitOutput).historyExpectation === undefined ? {} : {
+            integration: { delivery: "local", trigger: "group", method: "merge",
+              target: (draft.output as SplitOutput).historyExpectation!.targetRef.slice("refs/heads/".length),
+              historyExpectation: (draft.output as SplitOutput).historyExpectation! } as const,
+          }) },
           { existingBody: { ...group }, used: group.used, usageUnknown: group.ledger.usageUnknown, traces: Object.fromEntries(draft.output.tasks.map((task) => [task.taskId, task.traces])),
             ...(writes === undefined ? {} : { writes }) }, { estimate: unlimited ? "deferred" : "preflight" });
         // Tester round 2 spec §6.2.1 (ruling H3): the agent the person picked on New requirement (the estimator override)

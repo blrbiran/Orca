@@ -257,10 +257,47 @@ describe("the group's copy of the scheme (integration spec §3.1)", () => {
     }
   });
 
+  it("copies an explicit named-history split proposal to an unfrozen scheme the owner must approve", async () => {
+    const proposed = { ...VALID_SPLIT, historyExpectation: { version: 1, targetRef: "refs/heads/main", directSecondParent: true,
+      sourceRefs: [{ taskId: "exporter", ref: "refs/heads/feature/a" }, { taskId: "images", ref: "refs/heads/feature/b" }], artifactPaths: ["MERGE-NOTES.md"] } };
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: proposed }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      expect(await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! })))
+        .toMatchObject({ result: { kind: "requirement-draft-accepted" } });
+      expect(readGroupIntegration(groupBody(x.store, "r"))).toMatchObject({ frozen: false,
+        scheme: { delivery: "local", trigger: "group", method: "merge", target: "main", historyExpectation: proposed.historyExpectation } });
+    } finally { await x.dispose(); }
+  });
+
   it("newGroupIntegration is null for keep; a stored record that does not parse blocks the group by name", () => {
     expect(newGroupIntegration({ delivery: "keep" })).toBeNull();
     expect(readGroupIntegration({ groupId: "g" })).toBeNull();
     expect(() => readGroupIntegration({ integration: { ...newGroupIntegration(PB)!, state: "pushing" } })).toThrow("recovery-blocked:group-integration-invalid");
+  });
+});
+
+describe("named source history approval (#328)", () => {
+  const history = (taskId: string): IntegrationScheme => ({ delivery: "local", trigger: "group", method: "merge", target: "main",
+    historyExpectation: { version: 1, targetRef: "refs/heads/main", directSecondParent: true,
+      sourceRefs: [{ taskId, ref: "refs/heads/feature/source" }], artifactPaths: ["MERGE-NOTES.md"] } });
+
+  it("refuses confirmation if a named source is not mapped to a task in the approved plan", async () => {
+    const h = await groupOver(history("missing")); try {
+      const payload = { ...(await h.confirmPayload()), integrationHash: schemeHash(history("missing")) };
+      expect(await h.service.confirm(h.command("confirm", payload))).toMatchObject({ error: { code: "integration-history-invalid" } });
+      expect(readBudgetProposal(h.store, "g").state).toBe("editable");
+    } finally { await h.dispose(); }
+  });
+
+  it("freezes a confirmed history promise so changing the scheme cannot discard its ordered sources", async () => {
+    const scheme = history("a"), h = await groupOver(scheme); try {
+      const payload = { ...(await h.confirmPayload()), integrationHash: schemeHash(scheme) };
+      expect(await h.service.confirm(h.command("confirm", payload))).toMatchObject({ result: { kind: "confirmed" } });
+      expect(readGroupIntegration(groupBody(h.store))?.scheme).toEqual(scheme);
+      expect(await h.setGroup({ delivery: "keep" })).toMatchObject({ error: { code: "integration-history-frozen" } });
+      expect(readGroupIntegration(groupBody(h.store))?.scheme).toEqual(scheme);
+    } finally { await h.dispose(); }
   });
 });
 

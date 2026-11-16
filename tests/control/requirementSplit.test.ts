@@ -124,7 +124,8 @@ describe("the split instruction names Orca's own files in the target (version 2)
   const exportDir = documentPathOf("2026-10-27", "x", 1).replace(/[^/]+$/, "");
   for (const multi of [false, true]) {
     it(multi ? "several directories: in the primary directory" : "one repository", () => {
-      const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], ...(multi ? { multi: true } : {}) });
+      // Ruling: 2026-11-17 #328, pin the historical V5 instruction explicitly; new single-repo calls use V6.
+      const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], instructionVersion: 5, ...(multi ? { multi: true } : {}) });
       const instruction = prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); these lines are unchanged in version 3, so the criterion now pins that version 3 kept them.
       expect(instruction.split("\n", 1)[0]).toMatch(/instruction version 5\.$/);

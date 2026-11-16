@@ -10,7 +10,8 @@ import type { DraftBody } from "../../src/control/requirementSchemas.js";
 // with what it means beside its code.
 const overview = { canonicalJson: "{}", hash: "b".repeat(64) };
 const instructionOf = (multi: boolean): string => {
-  const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], ...(multi ? { multi: true } : {}) });
+  // Ruling: 2026-11-17 #328, verify old V5's inherited rules independently of new V6 calls.
+  const prompt = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], instructionVersion: 5, ...(multi ? { multi: true } : {}) });
   return prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
 };
 

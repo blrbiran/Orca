@@ -133,6 +133,12 @@ const SPLIT_INSTRUCTION_V5 = [
   "No other key at any level. Every string is non-empty except notes.",
 ].join("\n");
 
+/** Version 6 proposes a literal Git-history promise as structured, reviewable data; old prompt bytes stay available. */
+export const SPLIT_INSTRUCTION_V6 = SPLIT_INSTRUCTION_V5
+  .replace(SPLIT_PROMPT_HEAD, "Orca requirement split, instruction version 6.")
+  .replace("## The answer", "If the agreed requirement explicitly asks for named branches to be merged into a local target with real merge parents, propose historyExpectation. List each pre-existing source branch with the task that carries it; use full refs/heads/ names and name any required final files. Each named source task after the first must depend on the previous source task, even when their file writes do not overlap, because the required Git history has that order. Do not ask a task agent to create or merge Git branches: Orca owns Git history delivery, and missing source refs block the group by name. Otherwise omit the key. The person must approve this delivery separately before execution.\n\n## The answer")
+  .replace("  \"notes\": anything the person should know about this split", "  \"historyExpectation\": optional { \"version\": 1, \"targetRef\": \"refs/heads/<target>\", \"directSecondParent\": true, \"sourceRefs\": [ { \"taskId\": a task id, \"ref\": \"refs/heads/<source>\" } ], \"artifactPaths\": optional list of final files },\n  \"notes\": anything the person should know about this split");
+
 const str = { type: "string" }, strings = { type: "array", items: str };
 /**
  * Multi-directory projects spec §6.4: the instruction for a project of several directories. A task names the
@@ -191,6 +197,15 @@ export const SPLIT_JSON_SCHEMA: Readonly<Record<string, unknown>> = deepFreeze({
       required: ["taskId", "title", "labels", "goal", "successCondition", "targetPaths", "checks", "dependsOn", "traces"],
       properties: { taskId: str, title: str, labels: strings, loopPlan: str, goal: str, successCondition: str, targetPaths: strings, checks: strings, dependsOn: strings, traces: strings, setup: strings } } },
   },
+});
+export const SPLIT_JSON_SCHEMA_V6: Readonly<Record<string, unknown>> = deepFreeze({
+  ...SPLIT_JSON_SCHEMA,
+  properties: { ...(SPLIT_JSON_SCHEMA.properties as object), historyExpectation: {
+    type: "object", additionalProperties: false, required: ["version", "targetRef", "directSecondParent", "sourceRefs"],
+    properties: { version: { type: "integer", enum: [1] }, targetRef: str, directSecondParent: { type: "boolean", enum: [true] },
+      sourceRefs: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "ref"], properties: { taskId: str, ref: str } } },
+      artifactPaths: strings },
+  } },
 });
 
 /** Multi-directory projects spec §6.1/§6.4: a task's `writes` entries replace `targetPaths` and `checks`. */
@@ -646,7 +661,7 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  * Multi-directory projects spec §6.4: `multi` uses the multi instruction and fences the composed overview as
  * `project-overview`; absent, the bytes are the single-repository ones.
  */
-export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean }): string {
+export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 }): string {
   const nonce = input.overview.hash.slice(0, 16);
   const sent = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0);
   // Review I2 (session a9f9d6de): the block revises the latest draft that has tasks -- its tasks and the person's feedback
@@ -654,7 +669,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
   const latest = withTasks ?? sent.at(-1);
   const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : SPLIT_INSTRUCTION_V5;
+  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : SPLIT_INSTRUCTION_V6;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
     draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback,

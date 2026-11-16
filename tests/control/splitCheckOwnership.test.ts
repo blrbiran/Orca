@@ -4,7 +4,8 @@ import { buildSplitPrompt } from "../../src/control/requirementSplit.js";
 // #168: a documentation-only task was assigned a repository-wide test that already failed in unrelated source.
 // The task could finish its document but had no writable path to repair that failure, so it exhausted its grant.
 const instructionOf = (multi: boolean): string => {
-  const prompt = buildSplitPrompt({ document: "Document how math.js increments a value.", overview: { canonicalJson: "{}", hash: "a".repeat(64) }, earlierDrafts: [], ...(multi ? { multi: true } : {}) });
+  // Ruling: 2026-11-17 #328, inspect the historical V5 rule here; V6 is covered by historyContract.
+  const prompt = buildSplitPrompt({ document: "Document how math.js increments a value.", overview: { canonicalJson: "{}", hash: "a".repeat(64) }, earlierDrafts: [], instructionVersion: 5, ...(multi ? { multi: true } : {}) });
   return prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
 };
 

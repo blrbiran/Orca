@@ -6,7 +6,8 @@ import { buildSplitPrompt, CHECK_SOURCE_RULE, NO_LOCKFILE_RULE } from "../../src
 // and asserted contents of files it was never shown. The single-repository instruction now states both rules, in words
 // written out here, so dropping either from the prompt the model reads turns this red.
 const instruction = (() => {
-  const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [] });
+  // Ruling: 2026-11-17 #328, this criterion pins the historical V5 rule as new calls move to V6.
+  const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [], instructionVersion: 5 });
   return prompt.slice(0, prompt.indexOf("\n\n<<<ORCA-DATA requirement-document "));
 })();
 

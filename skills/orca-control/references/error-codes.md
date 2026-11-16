@@ -201,6 +201,8 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `hard-cap-needs-tokens` | 422 |
 | `identity-space-exhausted` | 422 |
 | `integration-busy` | 409 |
+| `integration-history-frozen` | 409 |
+| `integration-history-invalid` | 409 |
 | `integration-invalid` | 400 |
 | `integration-no-checks` | 409 |
 | `integration-not-blocked` | 409 |

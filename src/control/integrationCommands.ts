@@ -104,6 +104,8 @@ export function applySetGroupIntegration(
       const scheme = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
       if (canonicalBytes(current?.scheme ?? { delivery: "keep" }).equals(canonicalBytes(scheme))) throw new ControlError("no-op-command");
       const frozen = (group.proposal as { state?: unknown } | undefined)?.state === "confirmed";
+      if (frozen && (current?.scheme.delivery === "local" && current.scheme.historyExpectation || scheme.delivery === "local" && scheme.historyExpectation))
+        throw new ControlError("integration-history-frozen");
       if (scheme.delivery === "keep") delete group.integration;
       else if (current === null) group.integration = { ...newGroupIntegration(scheme)!, frozen };
       else {
