@@ -28,6 +28,33 @@ describe("the funding preview of a group not yet confirmed (tester follow-up I, 
 // names why a claim would not fund it: the task is running (task-active) or done (task-done), the group is stopped
 // (group-stopped) or has a recovery blocker (recovery-blocked). Display only: the claim is unchanged (ruling #212).
 describe("the funding preview names why a claim would not fund a task (#291)", () => {
+  it("marks a finite non-hard task amount as an expectation, not a hard task cap", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a", tokenBudget: 600_000 }],
+      { tokenPolicy: "optional-v1", modelVersion: "followup-g" });
+    try {
+      // A normal new G group stores null in the allocation even when its contract says 600k. A stripped/imported
+      // optional-policy allocation can retain a finite authored amount; exercise that persisted shape explicitly.
+      h.store.db.prepare("UPDATE work_items SET body=json_set(body,'$.grant.work.tokens',600000) WHERE group_id='g' AND id='a'").run();
+      h.store.db.prepare("UPDATE token_policies SET tokens=600000 WHERE group_id='g' AND work_item_id='a'").run();
+      const row = fundingPreview(h.store, "g", Date.now())[0]!;
+      expect(row.authoredTokens).toBe(600_000);
+      expect(row.expectation).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  it("names a person's hard task cap even when its authored allocation is null", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a", tokenBudget: null }],
+      { tokenPolicy: "optional-v1", modelVersion: "followup-g" });
+    try {
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify({ ...work,
+        tokenIntent: { tokens: 400_000, hard: true, provenance: "human", estimateId: null } }));
+      expect(fundingPreview(h.store, "g", Date.now())[0]).toMatchObject({
+        authoredTokens: null, reason: null, taskCapTokens: 400_000,
+      });
+    } finally { await h.dispose(); }
+  });
+
   it("task-active, task-done, group-stopped and recovery-blocked instead of task-budget-unavailable", async () => {
     const { WebControlService } = await import("../../src/control/webService.js");
     const { deliverScheduledStart } = await import("../../src/control/webDispatch.js");

@@ -41,6 +41,30 @@ describe("the grant a claim would fund is shown (#212)", () => {
     expect((await cli(["proposal", "show", "g-alpha"], w.dir)).stdout).toContain("task t1: authored 600000; a claim now funds nothing (group-budget-unavailable)");
   });
 
+  it("names an expectation and its claim-time share without promising an unlimited run or a hard task cap (#291)", async () => {
+    const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
+      { taskId: "t1", authoredTokens: null, fundableTokens: null, reason: null, expectation: true },
+      { taskId: "t2", authoredTokens: 600000, fundableTokens: 159529, reason: null, expectation: true },
+      { taskId: "t3", authoredTokens: 600000, fundableTokens: null, reason: "task-active", expectation: true },
+      { taskId: "t4", authoredTokens: 600000, fundableTokens: null, reason: "task-done", expectation: true },
+    ] } } });
+    const out = (await cli(["proposal", "show", "g-alpha"], w.dir)).stdout;
+    expect(out).toContain("task t1: authored token expectation unset; claim-time share unspecified; run ceiling follows any group limit or pause line");
+    expect(out).toContain("task t2: authored token expectation 600000; claim-time share 159529; run ceiling follows any group limit or pause line");
+    expect(out).toContain("task t3: already running (claim not applicable)");
+    expect(out).toContain("task t4: already done (claim not applicable)");
+    expect(out).not.toContain("a claim now funds unlimited");
+  });
+
+  it("states a person's hard task cap instead of calling the null allocation unlimited (#291 review)", async () => {
+    const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
+      { taskId: "t1", authoredTokens: null, fundableTokens: null, reason: null, taskCapTokens: 400000 },
+    ] } } });
+    const out = (await cli(["proposal", "show", "g-alpha"], w.dir)).stdout;
+    expect(out).toContain("task t1: hard task cap 400000 total; claim-time share unspecified; the run uses the remaining cap");
+    expect(out).not.toContain("a claim now funds unlimited");
+  });
+
   it("a funded claim with no token amount reads unlimited, and a task waiting for its dependencies says so (tester follow-up I)", async () => {
     const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
       { taskId: "t1", authoredTokens: null, fundableTokens: null, reason: null },

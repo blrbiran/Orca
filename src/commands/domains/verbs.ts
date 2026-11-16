@@ -209,14 +209,28 @@ export function budgetStateLines(groupId: string, source: { workItems?: Array<{ 
 const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
 /** Issue #212: the authored work allocation is a request; a claim funds what the group limit leaves after handoffs. */
 export function fundingLines(preview: unknown): string[] {
-  const rows = (preview as { rows?: Array<{ taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null }> } | null)?.rows ?? [];
+  const rows = (preview as { rows?: Array<{ taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null; expectation?: boolean; taskCapTokens?: number }> } | null)?.rows ?? [];
   if (rows.length === 0) return [];
   const tokens = (n: number | null): string => n === null ? "unlimited" : String(n);
   return ["funding at the current group limit (the authored allocations are requests, not grants):",
     // Tester follow-up I (seat K): a funded claim with no token amount (no group token limit) is funded unlimited, not
     // "nothing"; a task waiting for its dependencies is named so, not as a missing budget.
-    ...rows.map((row) => `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.reason === "dependencies-pending" ? "nothing yet (it waits for its dependencies)"
-      : row.reason !== null ? `nothing (${row.reason})` : tokens(row.fundableTokens)}`)];
+    ...rows.map((row) => {
+      if (row.reason === "task-active") return `  task ${row.taskId}: already running (claim not applicable)`;
+      if (row.reason === "task-done") return `  task ${row.taskId}: already done (claim not applicable)`;
+      if (row.taskCapTokens !== undefined) return row.reason === null
+        ? `  task ${row.taskId}: hard task cap ${row.taskCapTokens} total; claim-time share ${row.fundableTokens === null ? "unspecified" : row.fundableTokens}; the run uses the remaining cap`
+        : `  task ${row.taskId}: hard task cap ${row.taskCapTokens} total; claim unavailable (${row.reason})`;
+      if (row.expectation === true) {
+        const intent = row.authoredTokens === null ? "unset" : String(row.authoredTokens);
+        const prefix = `  task ${row.taskId}: authored token expectation ${intent}`;
+        return row.reason === "dependencies-pending" ? `${prefix}; claim waits for its dependencies`
+          : row.reason !== null ? `${prefix}; claim unavailable (${row.reason})`
+          : `${prefix}; claim-time share ${row.fundableTokens === null ? "unspecified" : row.fundableTokens}; run ceiling follows any group limit or pause line`;
+      }
+      return `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.reason === "dependencies-pending" ? "nothing yet (it waits for its dependencies)"
+        : row.reason !== null ? `nothing (${row.reason})` : tokens(row.fundableTokens)}`;
+    })];
 }
 /** The group view's `estimateHistory` (src/control/estimateHistory.ts), absent on a confirmed proposal or an older panel. */
 export interface EstimateHistory { medianTokens: number | null; sampleCount: number; minimumSample: number; tasks: Array<{ taskId: string; estimateTokens: number | null; ratio: number | null }> }
