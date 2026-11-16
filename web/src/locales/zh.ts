@@ -11,6 +11,8 @@ export const zh: Translation<typeof en> = {
   results: {
   "groupRegion": "任务组结果",
   "taskRegion": "任务结果 · {{taskId}}",
+  "runEvidence_one": "{{count}} 次运行结果",
+  "runEvidence_other": "{{count}} 次运行结果",
   "currentRegion": "当前结果 · {{runId}}",
   "attemptRegion": "已保存尝试 {{attempt}} · {{runId}}",
   "agentExplanation": "Agent 说明",
@@ -94,7 +96,7 @@ export const zh: Translation<typeof en> = {
     "not-produced": "尚未产出"
   }
 },
-  detail: { regions: "任务组详情", progress: "进度", live: "实时", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", tasksBlocked: "这个组有任务被阻塞；打开「问题」查看原因。", hint: { problem: "{{n}} 项待查看", live: "{{n}} 项正在运行" } },
+  detail: { regions: "任务组详情", progress: "进度", live: "实时", preparation: "准备", problem: "问题", results: "结果", runs: "运行与证据", technical: "技术详情", resultsMissing: "工作已完成，但缺少结果说明。", resultsNotProduced: "此处尚未产出结果说明。", resultsEvidence: "已有运行证据仍可查看。任务完成、目标评审与 Git 交付是独立的事实。", runLinks_one: "运行入口（{{count}}）", runLinks_other: "运行入口（{{count}}）", openRun: "查看运行操作与证据 · {{runId}}", goalReview: "任务组正在评审目标；任务完成不代表目标已被接受。", tasksBlocked: "这个组有任务被阻塞；打开「问题」查看原因。", hint: { problem: "{{n}} 项待查看", live: "{{n}} 项正在运行" } },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "键盘快捷键", title: "Orca 用到的按键", decisions: "j / k：下一条 / 上一条 · a：同意 · c：纠正 —— 在决策页、焦点在页面上时", retry: "r：重试打开的任务的运行 —— 在任务组里、提供“重试任务”时", arrows: "方向键：在区域标签和菜单项之间移动", close: "关闭" },
   nav: { overview: "概览", sections: "分区", more: "更多", decisions: "决策", chains: "链（高级）", tasks: "任务控制", board: "看板", requirements: "需求", memory: "记忆", metrics: "指标", settings: "设置", globalSettings: "全局设置", projectSettings: "项目设置", back: "← 返回{{label}}", routeMissing: "没有找到 {{id}}，显示{{section}}。", otherProject: "{{id}} 属于项目 {{project}}。", switchProject: "切换到 {{project}}" },
@@ -978,6 +980,8 @@ export const zh: Translation<typeof en> = {
       push: "push：等人做（本面板没有这个按钮）",
       noRuns: "还没有任务 run 建过工作区。",
       runsRegion: "各 run 与落地提交",
+      runCommitEvidence_one: "运行提交证据（{{count}} 次）",
+      runCommitEvidence_other: "运行提交证据（{{count}} 次）",
       th: { task: "任务", run: "run", mode: "工作区", base: "起点", landed: "落地提交" },
       notLanded: "未落地",
     },
@@ -1019,6 +1023,7 @@ export const zh: Translation<typeof en> = {
     notChosen: "未选择",
     frozenAtConfirmation: "确认时已冻结",
     softNote: " · 宽松：超支事后结算，不会被阻止",
+    softCeilingWarning: "正在进行的请求可能在下一次用量观测前超过有限 token 上限；Codex 可能直到整个阶段结束才停。",
     contextUnavailable: "上下文交接未生效：已安装的 agent 都不报告上下文用量。阈值可不填，填了也不会起作用。",
     handoffBlocked: "profile {{profileId}}：交接控制 {{control}} · 交接执行 {{execution}} · 绑定到它的工作不会被调度（claim-capability-unavailable）",
     th: { owner: "归属", bucket: "桶", state: "状态", suggestion: "建议" },
@@ -1324,6 +1329,8 @@ export const zh: Translation<typeof en> = {
     consensusConfirm: "仍然达成共识",
     consensusCancel: "继续讨论",
     draft: "拆分草案 {{n}}",
+    draftTasks_one: "{{count}} 个任务",
+    draftTasks_other: "{{count}} 个任务",
     taskMore: "路径、标签、做法、对应标准",
     columns: { id: "任务", title: "标题", labels: "标签", loopPlan: "做法", targetPaths: "目标路径", checks: "检查", dependsOn: "依赖", traces: "对应标准" },
     layer: "第 {{n}} 层：{{tasks}}",

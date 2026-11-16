@@ -131,8 +131,23 @@ describe("a run whose agent reports usage only at phase end (#285)", () => {
     expect(container.textContent).toContain(`used is as of the last phase end at ${clock(BOOKED)}: booked usage updates only when a phase ends`);
     cleanup();
     const { container: live } = render(<BudgetEditor view={executing({ usageObservation: "realtime" })} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    expect(live.textContent).not.toContain("phase end");
+    // Ruling: human 2026-11-16 「这次批准改写所有必要的判据」. A soft-ceiling warning may say Codex stops after a phase;
+    // the earlier assertion still forbids calling a response observer's booked usage a phase-end observation.
+    expect(live.textContent).not.toContain("booked usage updates only when a phase ends");
   });
+});
+
+it("warns at a finite soft group's budget editor that a Codex phase can cross its ceiling (#225)", () => {
+  const finite = view([]);
+  finite.proposal = { ...finite.proposal, state: "editable" };
+  const warning = "A running provider request can exceed a finite token limit before the next observation; Codex may not stop until a phase ends.";
+  const shown = render(<BudgetEditor view={finite} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  expect(shown.container.textContent).toContain(warning);
+  cleanup();
+  const unlimited = structuredClone(finite);
+  unlimited.ledger.groupLimit.tokens = null;
+  const unbounded = render(<BudgetEditor view={unlimited} config={config} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+  expect(unbounded.container.textContent).not.toContain(warning);
 });
 
 // Tester #285 (follow-up J): a blocked run's transcript, or one silent for over TRANSCRIPT_STALE_MS, says when its output

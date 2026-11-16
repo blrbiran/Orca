@@ -43,6 +43,20 @@ describe("the Git section (spec B3)", () => {
     ]);
   });
 
+  it("keeps a long run commit table behind a disclosure while integration status remains visible (#319)", () => {
+    const facts = { workspaceMode: "worktree" as const, base: "1".repeat(40), landedCommit: "2".repeat(40) };
+    show(view([workItem({})], [
+      run({ runId: "run-a", taskId: "a", git: facts }), run({ runId: "run-b", taskId: "b", git: facts }),
+      run({ runId: "run-c", taskId: "c", git: facts }),
+    ]));
+    const git = section();
+    expect(git.textContent).toContain("Work branch orca/g");
+    const disclosure = within(git).queryByText("Run commit evidence (3)")?.closest("details");
+    expect(disclosure?.open).toBe(false);
+    fireEvent.click(disclosure!.querySelector("summary")!);
+    expect(within(disclosure as HTMLElement).getByRole("table", { name: "Runs and their landings" })).toBeTruthy();
+  });
+
   it("says so when no task run has a workspace yet", () => {
     show(view([workItem({})], [run({ git: null })]));
     expect(section().textContent).toContain("No task run has a workspace yet.");

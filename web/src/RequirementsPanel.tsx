@@ -363,7 +363,7 @@ function canAddImpliedPath(view: View, draft: Draft, entry: { taskId: string; pa
   return primary >= 0 && added >= primary;
 }
 
-function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; archived?: boolean } & EditableDrafts): JSX.Element {
+function DraftReview(props: { view: View; draft: Draft; current: boolean; onCommand: OnCommand; archived?: boolean } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { draft } = props, groupId = props.view.summary.groupId;
   const owner = ownerOf(props.view);
@@ -378,7 +378,8 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
     props.onCommand({ verb: "requirement-draft-edit", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash!, edit: change } });
   return (
     <section aria-label={t("requirements.draft", { n: draft.draftNo })}>
-      <h4>{t("requirements.draft", { n: draft.draftNo })} · {enumText("draftState", draft.state)}</h4>
+      <details open={props.current}>
+        <summary><h4 className="inline">{t("requirements.draft", { n: draft.draftNo })} · {enumText("draftState", draft.state)}{draft.output === null ? "" : ` · ${t("requirements.draftTasks", { count: draft.output.tasks.length })}`}</h4></summary>
       {draft.output !== null && (
         // Tester #31: four columns to review the split by (task, title, depends on, checks); the rest of a task folds
         // under its title, so eight columns no longer crowd out the ones that decide the review.
@@ -426,6 +427,7 @@ function DraftReview(props: { view: View; draft: Draft; onCommand: OnCommand; ar
           } })}>{t("requirements.saveSplit")}</MenuItem>
         </Menu></div>
       )}
+      </details>
     </section>
   );
 }
@@ -918,7 +920,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
         {!archived && view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
       </section>
       <div id={overviewRegionId("requirement", groupId, "draft")} tabIndex={-1} data-overview-region="draft">
-      {view.drafts.map((d) => <DraftReview key={d.draftNo} view={view} draft={d} onCommand={props.onCommand} archived={archived} {...editable} />)}
+      {[...view.drafts].sort((a, b) => b.draftNo - a.draftNo).map((d, index) => <DraftReview key={d.draftNo} view={view} draft={d} current={index === 0} onCommand={props.onCommand} archived={archived} {...editable} />)}
       <section aria-label={t("requirements.document")}>
         {/* Tester #32: while clarifying the document is only the idea's stub, so it folds; from consensus on it is the
             requirement's real product and is open. */}

@@ -341,6 +341,8 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         {t("budget.modeLine", { mode: view.proposal.budgetMode === null ? t("budget.notChosen") : enumText("budgetMode", view.proposal.budgetMode), enforcement: observedEnforcement })}
         {view.proposal.budgetMode === "soft" ? t("budget.softNote") : ""}
       </p>
+      {!unlimitedGroup && (mode === "soft" || view.proposal.budgetMode === "soft") &&
+        <p role="note" data-tone="warn">{t("budget.softCeilingWarning")}</p>}
       {defaults === null && view.proposal.state === "editable" && <fieldset>
         <legend>{t("budget.executionProfiles")}</legend>
         <label>{t("budget.budgetMode")}<Select value={manualMode} onValueChange={setManualMode}

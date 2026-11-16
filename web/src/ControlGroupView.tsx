@@ -943,10 +943,6 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </div>)}
 </>,
         results: <>
-      <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
-      <GroupHandoffs view={view} />
-      <p>{t("detail.resultsEvidence")}</p>
-      {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
       {/* Dir-requirements spec §9.3: a dir group's region is its folder placement, not the scheme picker (§7: its delivery is fixed). */}
       {view.summary.multiDir !== undefined ? (
@@ -962,8 +958,14 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
           )}
         </>
       )}
-
       </div>
+      <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+      <GroupHandoffs view={view} />
+      <p>{t("detail.resultsEvidence")}</p>
+      {view.runs.length > 0 && <details data-run-links open={view.runs.length <= 1}>
+        <summary>{t("detail.runLinks", { count: view.runs.length })}</summary>
+        {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
+      </details>}
       {taskDetail}
 </>,
         runs: <>

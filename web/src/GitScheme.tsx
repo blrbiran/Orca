@@ -75,6 +75,8 @@ export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWork
       {runs.length === 0
         ? <p>{t("control.git.noRuns")}</p>
         : (
+          <details open={runs.length <= 2}>
+            <summary>{t("control.git.runCommitEvidence", { count: runs.length })}</summary>
           <table aria-label={t("control.git.runsRegion")}>
             <thead>
               <tr><th>{t("control.git.th.task")}</th><th>{t("control.git.th.run")}</th><th>{t("control.git.th.mode")}</th><th>{t("control.git.th.base")}</th><th>{t("control.git.th.landed")}</th></tr>
@@ -91,6 +93,7 @@ export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWork
               ))}
             </tbody>
           </table>
+          </details>
         )}
     </section>
   );

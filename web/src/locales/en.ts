@@ -156,6 +156,8 @@ export const en = {
   results: {
   "groupRegion": "Group results",
   "taskRegion": "Task results · {{taskId}}",
+  "runEvidence_one": "{{count}} run result",
+  "runEvidence_other": "{{count}} run results",
   "currentRegion": "Current result · {{runId}}",
   "attemptRegion": "Saved attempt {{attempt}} · {{runId}}",
   "agentExplanation": "Agent explanation",
@@ -239,7 +241,7 @@ export const en = {
     "not-produced": "not-produced"
   }
 },
-  detail: { regions: "Group detail", progress: "Progress", live: "Live", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", tasksBlocked: "Some of this group's tasks are blocked; open Problems to see why.", hint: { problem: "{{n}} to look at", live: "{{n}} running now" } },
+  detail: { regions: "Group detail", progress: "Progress", live: "Live", preparation: "Preparation", problem: "Problems", results: "Results", runs: "Runs and evidence", technical: "Technical details", resultsMissing: "Work is completed; its explanation is missing.", resultsNotProduced: "A result explanation has not been produced here yet.", resultsEvidence: "Existing run evidence remains available. Task completion, goal review and Git delivery are separate facts.", runLinks_one: "Run links ({{count}})", runLinks_other: "Run links ({{count}})", openRun: "Open run controls and evidence · {{runId}}", goalReview: "The group is in goal review; task completion does not establish goal acceptance.", tasksBlocked: "Some of this group's tasks are blocked; open Problems to see why.", hint: { problem: "{{n}} to look at", live: "{{n}} running now" } },
   // Tester round 2 §10.2 (H12): the list of keys the sidebar button opens.
   shortcuts: { open: "Keyboard shortcuts", title: "Keys Orca uses", decisions: "j / k: next / previous row · a: agree · c: correct — on the Decisions page, with focus on the page", retry: "r: retry the open task's run — in a group, where Retry task is offered", arrows: "Arrow keys: move between region tabs and menu items", close: "Close" },
   nav: { overview: "Overview", sections: "Sections", more: "More", decisions: "Decisions", chains: "Continuous improvement (advanced)", tasks: "Task control", board: "Board", requirements: "Requirements", memory: "Memory", metrics: "Metrics", settings: "Settings", globalSettings: "Global settings", projectSettings: "Project settings", back: "← Back to {{label}}", routeMissing: "{{id}} was not found; showing {{section}}.", otherProject: "{{id}} belongs to project {{project}}.", switchProject: "Switch to {{project}}" },
@@ -1138,6 +1140,8 @@ export const en = {
       push: "Push: waiting on a person (this panel has no button for it)",
       noRuns: "No task run has a workspace yet.",
       runsRegion: "Runs and their landings",
+      runCommitEvidence_one: "Run commit evidence ({{count}})",
+      runCommitEvidence_other: "Run commit evidence ({{count}})",
       th: { task: "task", run: "run", mode: "workspace", base: "started from", landed: "landed as" },
       notLanded: "not landed",
     },
@@ -1179,6 +1183,7 @@ export const en = {
     notChosen: "not chosen",
     frozenAtConfirmation: "frozen at confirmation",
     softNote: " · soft: an overrun is settled after the fact, not prevented",
+    softCeilingWarning: "A running provider request can exceed a finite token limit before the next observation; Codex may not stop until a phase ends.",
     contextUnavailable: "Context hand-off is not active: no installed agent reports context usage. The threshold is optional and nothing acts on it.",
     handoffBlocked: "profile {{profileId}}: handoff control {{control}} · handoff execution {{execution}} · work bound to it is not dispatched (claim-capability-unavailable)",
     th: { owner: "owner", bucket: "bucket", state: "state", suggestion: "suggestion" },
@@ -1493,6 +1498,8 @@ export const en = {
     consensusConfirm: "Agree anyway",
     consensusCancel: "Keep discussing",
     draft: "Split draft {{n}}",
+    draftTasks_one: "{{count}} task",
+    draftTasks_other: "{{count}} tasks",
     taskMore: "Paths, labels, loop plan, traces",
     columns: { id: "Task", title: "Title", labels: "Labels", loopPlan: "Loop plan", targetPaths: "Target paths", checks: "Checks", dependsOn: "Depends on", traces: "Traces" },
     layer: "Layer {{n}}: {{tasks}}",

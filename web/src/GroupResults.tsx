@@ -21,10 +21,13 @@ export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string
    <h4>{t("results.goalReview")}</h4>
    {value.review.runs.length===0?<p>{t("results.reviewNotRun")}</p>:<ul>{value.review.runs.map(run=><li key={run.runId}>{run.runId} · {enumText("runState",run.state)} · {run.outcome == null ? t("results.unknown") : enumText("progressStep",run.outcome)}</li>)}</ul>}
    <h4>{t("results.delivery")}</h4><p>{value.delivery===null?t("results.deliveryUnavailable"):t("results.deliveryStatus",{state:t(`control.integration.state.${value.delivery.state}`),commit:value.delivery.integratedCommit ?? t("common.none")})}</p>
-   {value.tasks.map(task=><section key={task.taskId} aria-label={t("results.taskRegion",{taskId:task.taskId})}>
+   {value.tasks.map((task,index)=><section key={task.taskId} aria-label={t("results.taskRegion",{taskId:task.taskId})}>
     <h4>{task.taskId}</h4><p>{t("results.taskStatus",{taskId:task.taskId,status:enumText("workStatus",shownWorkStatus(task))})} · {t(`results.availability.${task.availability}`)}</p>
     {task.pendingRunId!==null && <p>{t("results.pendingRun",{runId:task.pendingRunId})}</p>}
-    {task.runs.map(run=><SavedRunResult key={run.runId} value={run} current={run.runId===task.currentRunId} active={props.active} identity={identity}/>)}
+    <details data-task-evidence={task.taskId} open={index===0 || shownWorkStatus(task)==="blocked" || task.runs.some(run=>run.attempts.some(attempt=>attempt.verification==="failed"))}>
+     <summary>{t("results.runEvidence",{count:task.runs.length})}</summary>
+     {task.runs.map(run=><SavedRunResult key={run.runId} value={run} current={run.runId===task.currentRunId} active={props.active} identity={identity}/>)}
+    </details>
    </section>)}
   </>}
  </section>;

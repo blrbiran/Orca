@@ -5,7 +5,7 @@
  * a generated id (#75, #78), token figures are short and the in-flight grant says what it is (#79), the document reads as
  * sections (#77), and a refused agent selection or ccloop failure explains ccloop's code with its detail (#73).
  */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import i18n from "../src/i18n.js";
 import { RequirementsPanel } from "../src/RequirementsPanel.js";
@@ -209,6 +209,24 @@ describe("the split draft's table (tester #31)", () => {
     expect(more.open).toBe(false);
     expect([...more.querySelectorAll("dt")].map((dt) => dt.textContent)).toEqual(["Target paths", "Labels", "Traces"]);
     expect([...more.querySelectorAll("dd")].map((dd) => dd.textContent)).toEqual(["src/export.ts, answer.txt", "feature", "AC1"]);
+  });
+
+  it("shows the latest split draft first and folds an accepted older draft without losing its table (#324)", () => {
+    const base = requirementView("awaiting-review"), first = base.drafts[0]!;
+    const old = { ...first, state: "accepted" as const, draftNo: 1 };
+    const latest = { ...first, state: "awaiting-review" as const, draftNo: 2 };
+    const container = show({ ...base, requirement: { ...base.requirement, acceptedDraftNo: 1 }, drafts: [old, latest] });
+    const drafts = [...container.querySelectorAll<HTMLElement>('section[aria-label^="Split draft"]')];
+    expect(drafts.map((draft) => draft.getAttribute("aria-label"))).toEqual(["Split draft 2", "Split draft 1"]);
+    expect(drafts.map((draft) => draft.querySelector("details")?.open)).toEqual([true, false]);
+    expect(drafts[1]!.querySelector("summary")?.textContent).toContain("accepted");
+    expect(drafts[1]!.querySelector("summary")?.textContent).toContain("2 tasks");
+    fireEvent.click(drafts[1]!.querySelector("summary")!);
+    expect(drafts[1]!.querySelector("details")?.open).toBe(true);
+    expect(within(drafts[1]!).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Task", "Title", "Depends on", "Checks"]);
+    cleanup();
+    const one = show(base);
+    expect(one.querySelector<HTMLDetailsElement>('section[aria-label="Split draft 1"] details')?.open).toBe(true);
   });
 });
 

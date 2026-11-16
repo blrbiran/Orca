@@ -5,7 +5,7 @@ import i18n from "../src/i18n.js";
 import {GroupResults} from "../src/GroupResults.js";
 import {TaskResults} from "../src/TaskResults.js";
 import {ControlGroupView} from "../src/ControlGroupView.js";
-import {config,view,workItem} from "./fixtures/board.js";
+import {config,run,view,workItem} from "./fixtures/board.js";
 import {savedGroup,savedRun} from "./fixtures/results.js";
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it("group coverage, unfinished tasks, goal review and delivery are independent",async()=>{
@@ -13,6 +13,51 @@ it("group coverage, unfinished tasks, goal review and delivery are independent",
  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));const v=view([]);v.summary.state="done";render(<ControlGroupView view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
  expect((await screen.findByRole("region",{name:"Group results"})).textContent).toContain("2 tasks");expect(screen.getByText(/unfinished.*ready/)).toBeTruthy();expect(screen.getByText("Goal review has not run.")).toBeTruthy();expect(screen.getByText("Git delivery is unavailable.")).toBeTruthy();
 });
+it("puts the Git delivery state before long Results evidence (#319)",()=>{
+ const data=savedGroup();vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));
+ const v=view([]);v.summary.state="done";
+ render(<ControlGroupView view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ const git=screen.getByRole("region",{name:"Git"}), results=screen.getByRole("region",{name:"Group results"});
+ expect(git.compareDocumentPosition(results)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("folds a long list of run links without losing the open action (#319)",()=>{
+ const data=savedGroup();vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));
+ const group=view([], [
+  run({runId:"run-1",taskId:"a"}),run({runId:"run-2",taskId:"b"}),run({runId:"run-3",taskId:"c"}),
+ ]);group.summary.state="done";
+ render(<ControlGroupView view={group} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
+ const details=screen.queryByText("Run links (3)")?.closest("details");
+ expect(details?.open).toBe(false);
+ fireEvent.click(details!.querySelector("summary")!);
+ expect(within(details as HTMLElement).getAllByRole("button")).toHaveLength(3);
+});
+
+it("summarizes later task results while keeping their evidence expandable (#319)",async()=>{
+ const data=savedGroup();data.tasks.push({...data.tasks[0]!,taskId:"b",currentRunId:null,pendingRunId:null,lineageRunIds:[],availability:"not-produced",runs:[]});
+ data.coverage.total=2;data.coverage.notProduced=1;
+ vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));
+ render(<GroupResults view={view([])} active scope="many-tasks"/>);
+ const first=await screen.findByRole("region",{name:"Task results · a"}), next=screen.getByRole("region",{name:"Task results · b"});
+ expect(first.querySelector<HTMLDetailsElement>("details[data-task-evidence]")?.open).toBe(true);
+ expect(next.querySelector<HTMLDetailsElement>("details[data-task-evidence]")?.open).toBe(false);
+ fireEvent.click(next.querySelector("summary")!);
+ expect(next.querySelector<HTMLDetailsElement>("details[data-task-evidence]")?.open).toBe(true);
+});
+
+it("keeps a later task's failed verification visible instead of folding it away (#319 review)",async()=>{
+ const data=savedGroup(), source=savedRun();
+ const failed=savedRun({runId:"run-b",taskId:"b",run:{...source.run,runId:"run-b",taskId:"b"},
+  attempts:[{...source.attempts[0]!,verification:"failed"}]});
+ data.tasks.push({...data.tasks[0]!,taskId:"b",status:"completed",currentRunId:"run-b",lineageRunIds:["run-b"],runs:[failed]});
+ data.coverage.total=2;data.coverage.available=2;
+ vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));
+ render(<GroupResults view={view([])} active scope="failed-later"/>);
+ const later=await screen.findByRole("region",{name:"Task results · b"});
+ expect(later.querySelector<HTMLDetailsElement>("details[data-task-evidence]")?.open).toBe(true);
+ expect(within(later).getAllByText(/Verification: failed/).length).toBeGreaterThan(0);
+});
+
 it.each(["failed","not-run","in-progress","unavailable"] as const)("actual %s verification keeps Agent claims attributed",async(verification)=>{
  const data=savedRun();data.attempts[0]!.verification=verification;data.attempts[0]!.execution="partial";
  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(savedGroup(data)))));const v=view([]);v.summary.state="done";render(<ControlGroupView view={v} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
