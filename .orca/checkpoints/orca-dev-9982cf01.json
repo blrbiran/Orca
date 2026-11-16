@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "runId": "orca-dev-9982cf01",
+  "runtime": "claude-code",
+  "sessionRef": "9982cf01-9dc7-4574-ab6e-dccb0dd508df",
+  "writtenAt": "2026-11-16T16:46:19.327Z",
+  "head": "02f2d01f8bfd0f5a9a8bd63022f6a618cc4ad747",
+  "level": {
+    "kind": "reading",
+    "level": 334381,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Finish isolated #328 plan at docs/superpowers/plans/2026-11-17-history-delivery-implementation.md on feat/history-delivery-328; currently Task 1 schema red-green complete, more contract authoring remains.",
+    "Wait for independent UI #323/#325/#326 implementation agent and inspect/review before merging.",
+    "After #328, implement #333 then #322/#321 and #317/#320; daily gates only, finish three bounded handoffs and short executive summary."
+  ],
+  "open": [
+    "#328 full producer/driver/acceptance not implemented; implementation ledger in .superpowers/sdd/2026-11-17-history-delivery-implementation/progress.md",
+    "Service deployed at old main 02f2d01f and pinned ccloop ee5c0d7; build/status logs /private/tmp/orca-session-e5eqoe3r/"
+  ],
+  "awaitingHuman": [],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca/.claude/worktrees/history-delivery-328 && ./node_modules/.bin/vitest run tests/control/historyContract.test.ts",
+      "exitCode": 0,
+      "commit": "02f2d01f8bfd0f5a9a8bd63022f6a618cc4ad747",
+      "observedAt": "2026-11-16T16:46:14.868Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9982cf01-wMLGeT/1.txt"
+    },
+    {
+      "command": "/usr/bin/git -C /Users/biran/code/skills/orca/Orca ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "02f2d01f8bfd0f5a9a8bd63022f6a618cc4ad747",
+      "observedAt": "2026-11-16T16:46:19.272Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9982cf01-wMLGeT/2.txt"
+    }
+  ]
+}
