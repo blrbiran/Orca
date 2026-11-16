@@ -17,6 +17,56 @@ import { reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
 const fixFiles = (id: string): Record<string, string | null> => (id.startsWith("review-fix-") ? { a: `fixed a by ${id}\n` } : { [id]: `${id}\n` });
 
 describe("a not-met review opens a fix task in the same group (tester follow-up G §3.4)", () => {
+  it("stops before an automatic fix when the reviewer reports a conflict with a person's no-repair instruction (#322)", async () => {
+    const command = "test ! -f base.txt";
+    const w = await reviewWorld({ answer: () => ({ outcome: "complete", output: {
+      ...verdicts({ AC1: "not-met", AC2: "met" }),
+      checkConflict: { criterionId: "AC1", requiredCheck: command,
+        because: "The person forbids repairing an existing failing test, but this check requires that repair." },
+    } }) });
+    const group = () => JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+    try {
+      const body = group();
+      body.requirement.idea = "Deliver only new files; do not repair a pre-existing failing test.";
+      w.t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+      const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
+      writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
+        checks: { ...settings.checks, integrationCheck: { command } } });
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing" || w.review()?.state === "not-passed", 120);
+      expect(group().acceptance).toMatchObject({ result: "passed-relative", fullSuite: { command, baseline: { exits: ["1", "1"] } } });
+      expect(w.calls[0]?.prompt).toContain("do not repair a pre-existing failing test");
+      expect(w.calls[0]?.prompt).toContain("failed at the group's base");
+      expect(w.calls[0]?.prompt).toContain("Tip failure:");
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "cannot-judge", autoFixRounds: 0,
+        rounds: [expect.objectContaining({ result: "not-met", summary: expect.stringContaining("check conflict") })] });
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
+      expect(group().requirement.idea).toContain("do not repair");
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
+  it("binds a reported check conflict to the acceptance command even when settings change during review (#322)", async () => {
+    const command = "test ! -f base.txt";
+    let w!: Awaited<ReturnType<typeof reviewWorld>>;
+    w = await reviewWorld({ answer: () => {
+      const settings = readRepositorySettingsBody(w.t.h.store, "repo")!;
+      writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
+        checks: { ...settings.checks, integrationCheck: { command: "true" } } });
+      return { outcome: "complete", output: { ...verdicts({ AC1: "not-met", AC2: "met" }),
+        checkConflict: { criterionId: "AC1", requiredCheck: command, because: "a human instruction forbids repairing the old failure" } } };
+    } });
+    try {
+      const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
+      writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
+        checks: { ...settings.checks, integrationCheck: { command } } });
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "not-passed" || w.review()?.state === "fixing", 120);
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "cannot-judge", autoFixRounds: 0,
+        rounds: [expect.objectContaining({ result: "not-met", summary: expect.stringContaining("check conflict") })] });
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
   it("inherits the traced task's agent, grant and policy when its id sorts after an integration task", async () => {
     const w = await reviewWorld({ tasks: [
       { taskId: "a-integration", dependsOn: ["z-core"], targetPaths: ["integration"], perAttemptTimeoutMs: 60_000,

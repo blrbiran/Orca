@@ -56,19 +56,25 @@ export const requirementReviewResponseSchema: Readonly<Record<string, unknown>> 
         evidence: { type: "array", items: { type: "object", additionalProperties: false, required: ["path", "line"], properties: { path: { type: "string" }, line: { type: ["integer", "null"] } } } },
         missing: { type: ["string", "null"] } } } },
     summary: { type: "string" },
+    // Optional: the reviewer names a person's constraint that a required check would contradict. The controller stops
+    // automatic repair and leaves both the instruction and the failing check visible instead of inventing an exception.
+    checkConflict: { type: "object", additionalProperties: false, required: ["criterionId", "requiredCheck", "because"],
+      properties: { criterionId: { type: "string" }, requiredCheck: { type: "string" }, because: { type: "string" } } },
   },
 });
 const outputSchema = z.object({
   criteria: z.array(z.object({ id: z.string().min(1), verdict: z.enum(["met", "not-met", "cannot-judge"]),
     evidence: z.array(z.object({ path: z.string().min(1), line: z.number().int().nonnegative().nullable() }).strict()), missing: z.string().nullable() }).strict()),
   summary: z.string(),
+  checkConflict: z.object({ criterionId: z.string().min(1), requiredCheck: z.string().min(1), because: z.string().min(1) }).strict().optional(),
 }).strict();
 
 /**
  * Code, not the model: invalid when the ids are not exactly the consensus criteria (missing, extra, repeated), a `met` or
  * `not-met` names no evidence, or a `not-met` says nothing is missing. Any cannot-judge makes the round cannot-judge (§3.5).
  */
-export function classifyReviewOutput(raw: unknown, criterionIds: readonly string[]): { result: "passed" | "not-met" | "cannot-judge"; criteria: CriterionVerdict[]; summary: string } | { result: "invalid"; reason: string } {
+export function classifyReviewOutput(raw: unknown, criterionIds: readonly string[]): { result: "passed" | "not-met" | "cannot-judge"; criteria: CriterionVerdict[]; summary: string;
+  checkConflict?: { criterionId: string; requiredCheck: string; because: string } } | { result: "invalid"; reason: string } {
   const parsed = outputSchema.safeParse(raw);
   if (!parsed.success) return { result: "invalid", reason: `schema:${parsed.error.issues[0]?.path.join(".") ?? ""}` };
   const ids = parsed.data.criteria.map((c) => c.id);
@@ -83,7 +89,10 @@ export function classifyReviewOutput(raw: unknown, criterionIds: readonly string
   }
   const criteria = criterionIds.map((id) => parsed.data.criteria.find((c) => c.id === id)!);
   const result = criteria.some((c) => c.verdict === "cannot-judge") ? "cannot-judge" : criteria.some((c) => c.verdict === "not-met") ? "not-met" : "passed";
-  return { result, criteria, summary: parsed.data.summary };
+  if (parsed.data.checkConflict !== undefined && !criteria.some((c) => c.id === parsed.data.checkConflict!.criterionId && c.verdict === "not-met"))
+    return { result: "invalid", reason: "check-conflict-criterion" };
+  return { result, criteria, summary: parsed.data.summary,
+    ...(parsed.data.checkConflict === undefined ? {} : { checkConflict: parsed.data.checkConflict }) };
 }
 
 export interface ChangedFile { path: string; status: string; bytes: number; sha256: string; binary: boolean }
@@ -91,10 +100,13 @@ export interface ChangedFile { path: string; status: string; bytes: number; sha2
 export interface ReviewPlanTask { taskId: string; title: string; dependsOn: string[]; targetPaths: string[]; successCondition: string; checks: string[] }
 export interface ReviewPlan { layers: string[][]; tasks: ReviewPlanTask[] }
 export function buildReviewPrompt(input: { idea: string; statement: string; criteria: ReadonlyArray<{ id: string; text: string }>; openBranches: readonly string[];
-  changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean; plan?: ReviewPlan | null }): string {
+  changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean;
+  acceptanceBaseline?: { command: string; tail?: string; tipTail?: string }; plan?: ReviewPlan | null }): string {
   return [
     "You are Orca's requirement reviewer. A group of tasks implemented the requirement below; its tasks' checks passed on the result.",
     ...(input.acceptanceFailed === true ? ["Group acceptance failed on this tip (a project-wide check, possibly one that was already failing). Judge the criteria from the delivered work below anyway."] : []),
+    ...(input.acceptanceBaseline === undefined ? [] : [`Project-wide check ${JSON.stringify(input.acceptanceBaseline.command)} failed at the group's base and on this tip. This alone does not prove the failures are the same. Base failure: ${input.acceptanceBaseline.tail ?? "(no output)"}. Tip failure: ${input.acceptanceBaseline.tipTail ?? "(no output)"}.`]),
+    "Treat the person's explicit restrictions in the original requirement as binding, even if a check cannot pass without violating them. Never silently repair a forbidden pre-existing failure just to turn a check green.",
     "Compare what the group changed with each acceptance criterion and answer for every criterion, by its id.",
     "",
     `Requirement (as first said): ${input.idea}`,
@@ -121,6 +133,7 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     "- verdict met: name the evidence (file path and line, or the artefact path). missing is null.",
     "- verdict not-met: name the evidence you looked at and say in `missing` what is still needed.",
     "- verdict cannot-judge: when what is shown is not enough (for example a criterion that hinges on a binary file you cannot see).",
+    "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",
   ].join("\n");
 }
@@ -319,16 +332,29 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const contract = readGroupCallContract(deps.store, run.groupId, run.workItemId);
     const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
     const changes = await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip);
+    const acceptance = acceptanceOf(body);
+    const baseline = acceptance?.result === "passed-relative" ? acceptance.fullSuite?.baseline : undefined;
     return {
       prompt: buildReviewPrompt({ ...inputs, ...changes, ...(typeof contract?.note === "string" ? { note: contract.note } : {}),
-        acceptanceFailed: acceptanceOf(body)?.result === "failed" }),
+        acceptanceFailed: acceptance?.result === "failed",
+        ...(baseline === undefined || acceptance?.fullSuite?.command === null || acceptance?.fullSuite?.command === undefined ? {} :
+          { acceptanceBaseline: { command: acceptance.fullSuite.command, ...(baseline.tail === undefined ? {} : { tail: cutUtf8(baseline.tail, 2_000) }),
+            ...(acceptance.tail === undefined ? {} : { tipTail: cutUtf8(acceptance.tail, 2_000) }) } }) }),
       responseSchema: { ...requirementReviewResponseSchema }, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS,
     };
   },
   async evaluate(deps, run, rawOutput, failure = null) {
     if (failure !== null) return { classified: null, failure } satisfies ReviewSettled;
     const body = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(run.groupId)!.body));
-    return { classified: classifyReviewOutput(rawOutput, reviewInputsOf(deps.store, run.groupId, body).criteria.map((c) => c.id)), failure: null } satisfies ReviewSettled;
+    const classified = classifyReviewOutput(rawOutput, reviewInputsOf(deps.store, run.groupId, body).criteria.map((c) => c.id));
+    if (classified.result !== "invalid" && classified.checkConflict !== undefined) {
+      const named = classified.checkConflict.requiredCheck;
+      const accepted = acceptanceOf(body);
+      const suite = accepted?.tip === reviewIdentity(run).tip ? accepted.fullSuite?.command : null;
+      if (!acceptanceCommands(deps.store, run.groupId).checks.includes(named) && suite !== named)
+        return { classified: { result: "invalid", reason: "check-conflict-unknown-check" }, failure: null } satisfies ReviewSettled;
+    }
+    return { classified, failure: null } satisfies ReviewSettled;
   },
   classify: classifyReviewOutput,
   complete(deps, runRow, settled, commitTerminal, failure = null) {
@@ -347,13 +373,16 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(runRow.groupId)!.body));
     const current = reviewOf(body) ?? { state: "reviewing" as const, rounds: [], autoFixRounds: 0 };
     const result: ReviewRoundResult = failed !== null || answer === null ? "failed" : answer.result;
+    const conflict = answer !== null && answer.result !== "invalid" && result === "not-met" ? answer.checkConflict : undefined;
     const round: ReviewRound = { roundNo, tip, runId: runRow.runId, at: store.now(), result,
       criteria: answer !== null && answer.result !== "invalid" ? answer.criteria : [],
-      summary: failed !== null ? `review call failed: ${failed}` : answer === null ? "no answer" : answer.result === "invalid" ? `answer invalid: ${answer.reason}` : answer.summary,
+      summary: failed !== null ? `review call failed: ${failed}` : answer === null ? "no answer" : answer.result === "invalid" ? `answer invalid: ${answer.reason}`
+        : conflict === undefined ? answer.summary : `check conflict reported for ${conflict.criterionId}: ${cutUtf8(conflict.requiredCheck, 200)}; ${cutUtf8(conflict.because, 500)}. No automatic fix; review the person's restriction and the check.`,
       ...(current.rerun === undefined ? {} : { note: current.rerun.note }) };
     const { rerun: _rerun, why: _why, ...rest } = current;
     let next: RequirementReview = { ...rest, rounds: [...current.rounds, round], state: "passed" };
-    if (result !== "passed") next = settleNotPassed(store, runRow.groupId, next, round);
+    if (result !== "passed") next = conflict === undefined ? settleNotPassed(store, runRow.groupId, next, round)
+      : { ...next, state: "not-passed", why: "cannot-judge" };
     saveReview(store, runRow.groupId, next);
     recordActivity(store, { groupId: runRow.groupId, kind: "requirement-review", body: { roundNo, result, tip, state: next.state, ...(round.fixTaskId === undefined ? {} : { action: "fix-opened", taskId: round.fixTaskId }) } });
   },
