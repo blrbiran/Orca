@@ -19,6 +19,21 @@ const show = (groupView: GroupViewV1, ws?: RepositoryWorkspaceV1 | null) =>
 const section = () => screen.getByRole("region", { name: "Git" });
 
 describe("the Git section (spec B3)", () => {
+  it("shows a named-source history proof and its ordered source tips (#328)", () => {
+    const base = view([workItem({})]);
+    const scheme = { delivery: "local" as const, trigger: "group" as const, method: "merge" as const, target: "main",
+      historyExpectation: { version: 1 as const, targetRef: "refs/heads/main", directSecondParent: true as const,
+        sourceRefs: [{ taskId: "a", ref: "refs/heads/orca/dogfood-a" }] } };
+    show({ ...base, integration: { scheme, schemeHash: "a".repeat(64), frozen: true, state: "idle", reason: null,
+      lastIntegrated: "b".repeat(40), integratedCommit: "c".repeat(40), pr: null,
+      history: { state: "verified", targetTip: "c".repeat(40), evidenceHash: "d".repeat(64), reason: null,
+        sourceRefs: [{ taskId: "a", ref: "refs/heads/orca/dogfood-a", sourceSha: "e".repeat(40), mergeSha: "b".repeat(40) }] } } });
+    const text = section().textContent ?? "";
+    expect(text).toContain("Named source history");
+    expect(text).toContain("verified on the target");
+    expect(text).toContain("a: refs/heads/orca/dogfood-a -> eeeeeeeeeeee");
+    expect(text).toContain("History evidence: dddddddddddd");
+  });
   it("names the work branch and shows merge into main and push as waiting on a person, with no button for either", () => {
     show(view([workItem({})]));
     const text = section().textContent ?? "";

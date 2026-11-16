@@ -30,9 +30,29 @@ function IntegrationState(props: { groupId: string; revision: number; integratio
   return (
     <>
       <li>{integrationSentence(integration.scheme, groupId)}</li>
+      {integration.scheme.delivery === "local" && integration.scheme.historyExpectation !== undefined && (
+        <li>{t("control.integration.history.contract", { target: integration.scheme.historyExpectation.targetRef,
+          refs: integration.scheme.historyExpectation.sourceRefs.map(source => `${source.taskId}:${source.ref}`).join(", ") })}</li>
+      )}
       <li>{t(integration.frozen ? "control.integration.approved" : "control.integration.unapproved")}</li>
       <li>{t("control.integration.stateLine", { state: t(`control.integration.state.${integration.state}`) })}</li>
       {integration.reason !== null && <li>{t("control.integration.reasonLine", { reason: integrationReasonText(integration.reason) })}</li>}
+      {integration.history !== undefined && (
+        <li>
+          <strong>{t("control.integration.history.title")}</strong>
+          <ul aria-label={t("control.integration.history.title")}>
+            <li>{String(t(`control.integration.history.state.${integration.history.state}` as never))}</li>
+            {integration.history.targetTip !== null && <li>{t("control.integration.history.target", { commit: short(integration.history.targetTip) })}</li>}
+            {integration.history.reason !== null && <li>{t("control.integration.history.reason", { reason: integrationReasonText(integration.history.reason) })}</li>}
+            <li>{t("control.integration.history.sources")}</li>
+            {integration.history.sourceRefs.map(source => (
+              <li key={source.taskId}>{t("control.integration.history.source", { taskId: source.taskId, ref: source.ref,
+                commit: source.sourceSha === null ? t("control.integration.notYet") : short(source.sourceSha) })}</li>
+            ))}
+            {integration.history.evidenceHash !== null && <li>{t("control.integration.history.evidence", { hash: short(integration.history.evidenceHash) })}</li>}
+          </ul>
+        </li>
+      )}
       <li>{t("control.integration.lastIntegrated", { commit: commit(integration.lastIntegrated) })}</li>
       <li>{t("control.integration.integratedCommit", { commit: commit(integration.integratedCommit) })}</li>
       {pr !== null && <li>{PR_URL.test(pr.url) ? <a href={pr.url}>{prLabel}</a> : prLabel}</li>}

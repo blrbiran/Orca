@@ -983,12 +983,16 @@ export type RepositoryWorkspaceV1 = { schema: "orca-repository-workspace-v1"; re
 // Integration spec §3: mirrors of src/control/webProtocol.ts integrationSchemeSchema and repositoryIntegrationSchema.
 export type IntegrationSchemeV1 =
   | { delivery: "keep" }
-  | { delivery: "local"; trigger: "task" | "group"; method: "merge" | "squash"; target: string }
+  | { delivery: "local"; trigger: "task" | "group"; method: "merge" | "squash"; target: string;
+      historyExpectation?: { version: 1; targetRef: string; directSecondParent: true;
+        sourceRefs: Array<{ taskId: string; ref: string }>; artifactPaths?: string[] } }
   | { delivery: "push-target"; trigger: "task" | "group"; method: "merge" | "squash"; target: string; remote: string }
   | { delivery: "push-branch" | "github-pr"; trigger: "task" | "group"; target: string; remote: string };
 export type GroupIntegrationViewV1 = {
   scheme: IntegrationSchemeV1; schemeHash: string; frozen: boolean; state: "idle" | "blocked" | "conflict" | "resolving"; reason: string | null;
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
+  history?: { state: "pending" | "verified" | "blocked"; targetTip: string | null; evidenceHash: string | null; reason: string | null;
+    sourceRefs: Array<{ taskId: string; ref: string; sourceSha: string | null; mergeSha: string | null }> };
 };
 /** `suggestedTarget` (controller ruling, Task 7): origin's HEAD branch, else the current branch, else null; never stored. */
 export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };

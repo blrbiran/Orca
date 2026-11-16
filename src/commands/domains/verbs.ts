@@ -453,7 +453,9 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
-    ...allowanceLines(b?.summary?.allowances)]);
+    ...allowanceLines(b?.summary?.allowances),
+    ...((h) => h === undefined ? [] : [`named-source history: ${h.state}${h.targetTip ? `, target ${h.targetTip}` : ""}${h.reason ? ` (${h.reason})` : ""}`,
+      ...h.sourceRefs.map((source) => `  ${source.taskId}: ${source.ref} -> ${source.sourceSha ?? "not bound"}`)])((b as { integration?: { history?: { state: string; targetTip: string | null; reason: string | null; sourceRefs: Array<{ taskId: string; ref: string; sourceSha: string | null }> } } } | null)?.integration?.history)]);
 }
 
 /** `orca proposal show`'s body: the proposal part of the group view and the revision it was read at. */
