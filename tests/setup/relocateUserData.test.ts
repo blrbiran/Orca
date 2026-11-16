@@ -29,4 +29,21 @@ describe("the Rule 17 user-data snapshot (#315)", () => {
     writeFileSync(join(root, "control", "written-by-test"), "x");
     expect(userDataSnapshot(root)).not.toEqual(before);
   });
+
+  it("ignores only the panel run's temporary accept-claim file, preserving durable control evidence", () => {
+    const runId = "run-11111111-2222-4333-8444-555555555555";
+    const claimId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    const control = join(root, "control", "panel.runs", runId, "control");
+    const other = join(root, "control", "other.runs", runId, "control");
+    mkdirSync(control, { recursive: true });
+    mkdirSync(other, { recursive: true });
+    for (const file of [`accepted.lock.${claimId}`, "accepted.lock", "accepted.lock.stale-owner", "accepted.json"]) writeFileSync(join(control, file), "x");
+    writeFileSync(join(other, `accepted.lock.${claimId}`), "x");
+    const snapshot = userDataSnapshot(root);
+    expect(snapshot).not.toContain(`control/panel.runs/${runId}/control/accepted.lock.${claimId}:1`);
+    expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.lock:1`);
+    expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.lock.stale-owner:1`);
+    expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.json:1`);
+    expect(snapshot).toContain(`control/other.runs/${runId}/control/accepted.lock.${claimId}:1`);
+  });
 });

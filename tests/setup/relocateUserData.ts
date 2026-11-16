@@ -42,14 +42,20 @@ process.env.ORCA_SERVICE_UNIT = "orca-panel-test";
 /**
  * #315: a running panel writes its own runtime files under `~/.orca/panel` (its rotating logs, its pid record and its
  * lock) on every driver round, so a snapshot of the whole tree called a test file red for output an external process
- * wrote. Those paths are excluded; everything the tests could reach (`control/`, `person/`, `vault/`, the service
- * definitions and the rest of `panel/`) stays guarded. Tests that boot the panel still relocate `ORCA_PANEL_DIR`.
+ * wrote. Those paths and the panel's transient per-run accept claim are excluded; durable `control/`, `person/`,
+ * `vault/`, the service definitions and the rest of `panel/` stay guarded. Tests that boot the panel still relocate
+ * `ORCA_PANEL_DIR`.
  */
 const PANEL_RUNTIME_FILES = new Set(["panel.json", "panel.lock"]);
+// ccloop's accept lock creates this short-lived claim file while the real panel is serving a run.
+// Keep the durable lock, accepted.json and every other control file in the Rule 17 snapshot.
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const PANEL_ACCEPT_CLAIM = new RegExp(`^control/panel\\.runs/run-${UUID}/control/accepted\\.lock\\.${UUID}$`);
 export function userDataSnapshot(root: string = join(homedir(), ".orca")): string[] {
   if (!existsSync(root)) return [];
   const walk = (dir: string, prefix: string): string[] => readdirSync(dir).flatMap((entry) => {
     if (prefix === "panel/" && (entry === "logs" || PANEL_RUNTIME_FILES.has(entry))) return [];
+    if (PANEL_ACCEPT_CLAIM.test(`${prefix}${entry}`)) return [];
     const full = join(dir, entry);
     let stat;
     try { stat = statSync(full); } catch { return [`${prefix}${entry}:unreadable`]; }
