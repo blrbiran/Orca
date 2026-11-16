@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import type { LastFailure, RunFailureCause } from "../../../src/control/driveRecord.js";
 import type { PathPolicyMissV1 } from "../../../src/control/pathPolicyMisses.js";
+import { schemeHash, type IntegrationScheme } from "../../../src/control/integrationScheme.js";
 import type { ToolRulesReport } from "../../../src/control/toolRules.js";
 import { writeFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -23,6 +24,8 @@ export const git = (cwd: string, ...args: string[]): string =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd, encoding: "utf8" }).trim();
 
 export interface HarnessOptions {
+  /** The group's delivery promise when confirmation freezes the plan. */
+  integration?: IntegrationScheme;
   budgetMode?: "soft" | "strict";
   tokenPolicy?:WebFixtureOptions["tokenPolicy"];
   /** Tester follow-up G spec §11 (web.ts). */
@@ -89,15 +92,18 @@ export interface HarnessOptions {
  */
 export async function driverHarness(tasks: readonly WebFixtureTask[], options: HarnessOptions = {}) {
   const snapshot = profileSnapshot();
-  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, ...(options.modelVersion !== undefined ? { modelVersion: options.modelVersion } : {}), killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
+  const h = await webFixture(snapshot, tasks, { tokenPolicy:options.tokenPolicy, ...(options.modelVersion !== undefined ? { modelVersion: options.modelVersion } : {}), killGraceMs: options.killGraceMs, planAgents: options.planAgents, ...(options.integration ? { integration: options.integration } : {}), ...(options.requiredChecks ? { requiredChecks: options.requiredChecks } : {}), ...(options.distinctConfigHash ? { distinctConfigHash: true } : {}), ...(options.storeNow ? { storeNow: options.storeNow } : {}) });
   const repo = await realpath(join(h.root, "repo"));
   git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "base.txt"), "base\n");
   git(repo, "add", "base.txt");
   git(repo, "commit", "-qm", "base");
   const repositories: Record<string, string> = { repo, ...(options.repositories === undefined ? {} : await options.repositories(h.root)) };
-  const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId in repositories, ...(options.syncskill ? { syncskill: options.syncskill } : {}) });
-  const confirmed = await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: options.budgetMode ?? "soft" }));
+  const service = new WebControlService({ ...h.deps, knownRepository: (repoId: string) => repoId in repositories,
+    resolveRepository: (repoId: string) => { const path = repositories[repoId]; if (path === undefined) throw new Error(`unknown repository ${repoId}`); return path; },
+    ...(options.syncskill ? { syncskill: options.syncskill } : {}) });
+  const confirmed = await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), budgetMode: options.budgetMode ?? "soft",
+    ...(options.integration && options.integration.delivery !== "keep" ? { integrationHash: schemeHash(options.integration) } : {}) }));
   if ("error" in confirmed) throw new Error(`confirm refused: ${JSON.stringify(confirmed.error)}`);
   const fake = fakeCcloopPort({
     capabilities: snapshot.profile.capabilities, behaviour: options.behaviour ?? (() => "succeed"),

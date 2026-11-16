@@ -4,6 +4,8 @@ import { ControlError } from "./errors.js";
 import { readWork, saveWork } from "./queries.js";
 import { readSystemDebugMark } from "./systemDebug.js";
 import { readTaskResultState } from "./taskResultStore.js";
+import { historySourceObservationSchema } from "./historyExpectation.js";
+import { recordHistoryBinding } from "./historySource.js";
 import { resultExplanationContentSchema } from "./webProtocol.js";
 import type { ControlStore } from "./store.js";
 
@@ -84,6 +86,11 @@ export function recordNoChangeCompletionInTransaction(store: ControlStore, input
   const work = readWork(store, input.groupId, input.taskId) as unknown as NoChangeWork;
   const ordinal = (work.noChangeCount ?? 0) + 1;
   const completion: NoChangeCompletion = { runId: input.runId, ordinal, decidedBy: input.decidedBy, at: store.now(), why: input.note ?? input.judge?.finding ?? input.explanation };
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=? AND group_id=?").get(input.runId, input.groupId);
+  const drive = row === undefined ? null : (JSON.parse(String(row.body)) as { drive?: { historySource?: unknown; historyNoChangeTip?: unknown } }).drive;
+  const observed = drive?.historySource === undefined ? undefined : historySourceObservationSchema.parse(drive.historySource);
+  recordHistoryBinding(store, input.groupId, input.taskId, input.runId,
+    typeof drive?.historyNoChangeTip === "string" ? drive.historyNoChangeTip : null, observed, true);
   work.noChangeCompletion = completion;
   work.noChangeCount = ordinal;
   saveWork(store, input.groupId, work as never);

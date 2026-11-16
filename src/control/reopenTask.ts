@@ -7,6 +7,7 @@ import { dimensions } from "./commands.js";
 import { landedAnywhere, type DriveRecord } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
 import { hasOptionalTaskPolicy } from "./fundedAllowance.js";
+import { readGroupIntegration } from "./integrationScheme.js";
 import { readBudgetProposal, readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import { retryFundingOf } from "./retryTask.js";
 import { commandSuccess, groupCommandTarget, readGroupBody, readStopIntent, reserveCommitment, setAllocationStates } from "./stopIntent.js";
@@ -81,6 +82,12 @@ export function reopenNoChangeTaskInTransaction(store: ControlStore, input: { gr
   if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("stop-mode-conflict");
   const eligibility = reopenEligibility(store, groupId, taskId, runId);
   if (eligibility !== "completed" && eligibility !== "blocked") throw new ControlError("task-not-reopenable", eligibility);
+  const integration = readGroupIntegration(group);
+  const isHistorySource = integration?.scheme.delivery === "local" && integration.scheme.historyExpectation?.sourceRefs.some(source => source.taskId === taskId);
+  const withdrawnBinding = isHistorySource && eligibility === "completed"
+    ? integration?.historyBindings?.find(binding => binding.taskId === taskId && binding.runId === runId) : undefined;
+  if (isHistorySource && eligibility === "completed" && withdrawnBinding === undefined)
+    throw new ControlError("recovery-blocked", "history-source-binding-missing");
   // §1.5: a finite group with no token remainder cannot fund the re-run.
   const ledger = readGroup(store, groupId) as unknown as { limit: Record<string, number | null>; used: Amount; reserved: Amount };
   if (ledger.limit.tokens != null && ledger.limit.tokens - ledger.used.tokens - ledger.reserved.tokens <= 0) throw new ControlError("group-budget-unavailable", "tokens");
@@ -129,7 +136,13 @@ export function reopenNoChangeTaskInTransaction(store: ControlStore, input: { gr
   saveWork(store, groupId, work as never);
   setAllocationStates(store, groupId, taskId, "confirmed");
   const resumed = readGroup(store, groupId);
-  if (resumed.status === "done" || resumed.status === "review") { resumed.status = "running"; saveGroup(store, resumed); }
+  if (withdrawnBinding !== undefined && integration !== null) Object.assign(resumed, { integration: { ...integration,
+    historyBindings: (integration.historyBindings ?? []).filter(binding => binding.taskId !== taskId),
+    historyWithdrawnBindings: [...(integration.historyWithdrawnBindings ?? []), { binding: withdrawnBinding,
+      withdrawal: { commandId: input.commandId, by: input.by, at: store.now() } }] } });
+  const changedStatus = resumed.status === "done" || resumed.status === "review";
+  if (changedStatus) resumed.status = "running";
+  if (changedStatus || withdrawnBinding !== undefined) saveGroup(store, resumed);
   // The judge's own re-run (by `system`) is recorded by its verdict row (no-change-judged); a person's or an agent's here.
   if (input.by !== "system") recordActivity(store, { groupId, taskId, runId, kind: "no-change-revoked",
     body: { runId, note: input.note, by: input.by, withdrawn: eligibility === "completed", ...(freshStart === null ? {} : { freshStart }) } });

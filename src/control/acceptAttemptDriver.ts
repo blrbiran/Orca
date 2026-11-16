@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { recordActivity } from "./activity.js";
+import { observeHistorySource, recordHistoryBinding } from "./historySource.js";
 import { landingSubject, landingTrailers, taskGoalOf } from "./landingMessage.js";
 import { readArtifact, within, writeArtifact } from "./archive.js";
 import { operatorAcceptanceOf, type OperatorAcceptance, type StagedAcceptance } from "./acceptAttempt.js";
@@ -94,6 +95,14 @@ async function visit(deps: ExecutionDriverDeps, run: DriverRun, intent: Operator
   if (drive.base === null) throw new Refusal("base-missing");
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, groupId)); } catch { throw new Refusal("repository-path"); }
+  const source = await observeHistorySource(store, targetRepo, groupId, taskId, runId, drive.historySource);
+  if (source.missing !== null) throw new Refusal(`history-source-missing:${source.missing}`);
+  if (source.observation !== null && drive.historySource === undefined) write(deps, () => {
+    const current = readDriverRun(store, runId);
+    if (operatorAcceptanceOf(current)?.state !== "pending") throw new ControlError("recovery-blocked", "history-source-accept-moved");
+    current.drive = { ...current.drive!, historySource: source.observation! };
+    saveDriverRun(store, current);
+  });
   const ref = workBranchRef(groupId);
   const tip = await revParse(targetRepo, ref);
   // A landing staged before its swap: the swap happened if the tip holds it (a death after the swap); finish it once.
@@ -266,6 +275,9 @@ function finish(deps: ExecutionDriverDeps, runId: string): void {
     store.db.prepare("INSERT INTO outbox VALUES (?, 'acceptance', ?, 1) ON CONFLICT(id) DO NOTHING").run(`acceptance:${runId}`, JSON.stringify({ runId, accepted: true, source: staged.proof }));
     insertPendingDecisions(store, current.groupId, runId, staged.pending);
     current.operatorAcceptance = { ...live, state: "landed", staged: null, attemptSha: staged.attemptSha, landedCommit: staged.next, proof: staged.proof };
+    // E-block: D already bound the original landed commit. A later sibling may have moved the group tip.
+    recordHistoryBinding(store, current.groupId, current.taskId, runId,
+      current.drive?.landedCommit ?? staged.next, current.drive?.historySource);
     saveDriverRun(store, current);
     completeAcceptedAttempt(store, runId);
     recordActivity(store, { groupId: current.groupId, taskId: current.taskId, runId, kind: "attempt-accepted", body: { commandId: live.commandId, principal: live.principal, attemptSha: staged.attemptSha, commit: staged.next } });

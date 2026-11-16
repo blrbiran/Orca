@@ -22,13 +22,22 @@ describe("a named-source history promise (#328)", () => {
     expect(schemeHash(integrationSchemeSchema.parse(named))).not.toBe(schemeHash(integrationSchemeSchema.parse({ ...named, historyExpectation: { ...history, sourceRefs: [...history.sourceRefs].reverse() } })));
   });
 
+  it("accepts a named Orca source branch while keeping the target outside Orca's work namespace", () => {
+    const namedSource = { ...named, historyExpectation: { ...history,
+      sourceRefs: [{ taskId: "merge-01", ref: "refs/heads/orca/dogfood-20261112-4" }] } };
+    expect(integrationSchemeSchema.safeParse(namedSource).success).toBe(true);
+    expect(integrationSchemeSchema.safeParse({ ...namedSource, target: "orca/g",
+      historyExpectation: { ...namedSource.historyExpectation, targetRef: "refs/heads/orca/g" } }).success).toBe(false);
+  });
+
   it("refuses a history promise that would deliver by another strategy", () => {
     for (const variant of [
       { ...named, trigger: "task" }, { ...named, method: "squash" },
       { ...named, delivery: "push-target", remote: "origin" },
       { ...named, historyExpectation: { ...history, targetRef: "refs/heads/other" } },
       { ...named, historyExpectation: { ...history, sourceRefs: [history.sourceRefs[0], history.sourceRefs[0]] } },
-      { ...named, historyExpectation: { ...history, sourceRefs: [{ taskId: "merge-01", ref: "refs/heads/orca/g" }] } },
+      // Ruling: 2026-11-17 #328, the reported source branches themselves use orca/; reject malformed refs, not that namespace.
+      { ...named, historyExpectation: { ...history, sourceRefs: [{ taskId: "merge-01", ref: "refs/heads/a..b" }] } },
     ]) expect(integrationSchemeSchema.safeParse(variant).success, JSON.stringify(variant)).toBe(false);
   });
 

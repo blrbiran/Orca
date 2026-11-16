@@ -6,6 +6,7 @@ import { pendingEntrySchema } from "./runLedger.js";
 import { toolRulesReportSchema } from "./toolRules.js";
 import type { ControlStore } from "./store.js";
 import { pathPolicyMissesSchema } from "./pathPolicyMisses.js";
+import { historySourceObservationSchema } from "./historyExpectation.js";
 
 /**
  * Execution driver spec §2.2. The five run states only the driver writes. Its `running` is the
@@ -156,6 +157,10 @@ export const driveRecordSchema = z.object({
   relaunches: safeInteger.optional(),
   outcome: z.string().min(1).nullable(),
   attemptSha: commitSchema.nullable(),
+  /** Git ref observation pinned before a named-source landing; absent from ordinary runs. */
+  historySource: historySourceObservationSchema.optional(),
+  /** Group tip after a no-change run's own ledger was committed, usable by its later judge or person decision. */
+  historyNoChangeTip: commitSchema.optional(),
   landedCommit: commitSchema.nullable(),
   reconcile: reconcileRecordSchema.nullable(),
   blockedAt: driveStepSchema.nullable(),

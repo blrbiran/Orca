@@ -60,6 +60,7 @@ import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { abortPostMergeChecks, recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
 import { acceptPending, stepAcceptAttempt, type AcceptCheck } from "./acceptAttemptDriver.js";
+import { observeHistorySource } from "./historySource.js";
 import type { GroupAcceptanceCheck } from "./groupAcceptance.js";
 import type { LandingWatchCheck } from "./landingWatch.js";
 import { readDebugMark } from "./debugChecks.js";
@@ -1513,9 +1514,33 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     const route = proved === null || isFlowChildGroup(store, run.groupId) ? "none" : noChangeRouteOf(taskContract!, readGroup(store, run.groupId));
     const noChange = route === "complete" ? proved : null;
     const noChangeDecidedBy = taskContract?.verification.verifierType === "agent" ? "agent-verifier" as const : "command-checks" as const;
+    let noChangeHistoryRepo: string | null = null;
+    if (proved !== null && route !== "none" && run.taskId !== null) {
+      const repo = deps.resolveRepository(groupRepoId(store, run.groupId));
+      const source = await observeHistorySource(store, repo, run.groupId, run.taskId, runId, drive.historySource);
+      if (source.missing !== null) { blockRun(deps, runId, "E", `history-source-missing:${source.missing}`); return true; }
+      if (source.observation !== null) {
+        noChangeHistoryRepo = repo;
+        if (drive.historySource === undefined) write(deps, () => {
+          const current = readDriverRun(store, runId);
+          if (current.state !== "landed") throw new ControlError("recovery-blocked", "history-source-run-moved");
+          current.drive = { ...current.drive!, historySource: source.observation! };
+          saveDriverRun(store, current);
+        });
+      }
+    }
     if (!landed && drive.ledgerCommit === null) {
       const recorded = await recordEmptyResultDecisions(deps, runId);
       if (recorded !== "settle") return recorded === "blocked";
+    }
+    if (noChangeHistoryRepo !== null) {
+      const tip = await revParse(noChangeHistoryRepo, workBranchRef(run.groupId));
+      write(deps, () => {
+        const current = readDriverRun(store, runId);
+        if (current.state !== "landed") throw new ControlError("recovery-blocked", "history-source-run-moved");
+        current.drive = { ...current.drive!, historyNoChangeTip: current.drive?.historyNoChangeTip ?? tip };
+        saveDriverRun(store, current);
+      });
     }
     const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
     mark("archive");

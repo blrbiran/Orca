@@ -5,6 +5,7 @@ import { ControlError } from "./errors.js";
 import { safeInteger } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import { historyExpectationSchema, integrationSchemeSchema } from "./webProtocol.js";
+import { historyBindingSchema } from "./historyExpectation.js";
 import { ChildSpawnFailed, ChildTimeout, runChild } from "./integrationGit.js";
 import { readRepositorySettingsBody } from "./workspaceSettings.js";
 
@@ -181,6 +182,11 @@ const commit = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 /** §4: the group's integration record, in the group body only for a non-keep scheme. */
 const groupIntegrationSchema = z.object({
   scheme: integrationSchemeSchema, schemeHash: z.string().regex(/^[a-f0-9]{64}$/), frozen: z.boolean(),
+  /** Bound source identities; absent on every ordinary integration. */
+  historyBindings: z.array(historyBindingSchema).optional(),
+  /** Reopening a no-change source withdraws its active binding without deleting the historical proof. */
+  historyWithdrawnBindings: z.array(z.object({ binding: historyBindingSchema,
+    withdrawal: z.object({ commandId: z.string().min(1), by: z.string().min(1), at: safeInteger }).strict() }).strict()).optional(),
   lastIntegrated: commit.nullable(), integratedCommit: commit.nullable(),
   state: z.enum(["idle", "blocked", "conflict", "resolving"]), reason: z.string().nullable(),
   pending: z.object({ schemeHash: z.string().regex(/^[a-f0-9]{64}$/), tip: commit, base: commit, new: commit }).strict().nullable(),

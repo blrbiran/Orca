@@ -36,6 +36,7 @@ import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveD
 import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, postMergeCheckPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
 import { runCheckSequence, type CheckFailure, type PostMergeOutcome } from "./checkCommand.js";
 import { recordActivity } from "./activity.js";
+import { observeHistorySource, recordHistoryBinding } from "./historySource.js";
 import { landingSubject, landingTrailers, taskGoalOf } from "./landingMessage.js";
 import type { PostMergeCheckRecord, ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
@@ -81,6 +82,7 @@ export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommi
       ...(landedDirs === null ? {} : { landedDirs }),
       ...(postMergeCheck === null ? {} : { postMergeCheck }),
     };
+    recordHistoryBinding(deps.store, run.groupId, run.taskId, runId, landedCommit, run.drive.historySource);
     saveDriverRun(deps.store, run);
   });
 }
@@ -357,6 +359,16 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "D", "repository-path"); return true; }
   const old = await revParse(targetRepo, workBranchRef(run.groupId));
+  if (run.taskId !== null) {
+    const source = await observeHistorySource(store, targetRepo, run.groupId, run.taskId, runId, drive.historySource);
+    if (source.missing !== null) { blockRun(deps, runId, "D", `history-source-missing:${source.missing}`); return true; }
+    if (source.observation !== null && drive.historySource === undefined) write(deps, () => {
+      const current = readDriverRun(store, runId);
+      if (current.state !== "collected" || current.drive?.attemptSha !== drive.attemptSha) throw new ControlError("recovery-blocked", "history-source-run-moved");
+      current.drive = { ...current.drive, historySource: source.observation! };
+      saveDriverRun(store, current);
+    });
+  }
   const already = await findLanding(targetRepo, drive.base!, old, drive.attemptSha!);
   if (already !== null) { markLanded(deps, runId, already); return true; }
   // Ruling R2 (#241): a merge whose check was started in an earlier round lands, or blocks, on that check's answer.
@@ -1030,6 +1042,7 @@ async function finishReconcile(
         flagDecision(store, { ...reconcileFlag, groupId: current.groupId, runId, source: "reconcile", by: ORCHESTRATION_ACTOR, at: new Date(store.now()).toISOString() });
       }
       current.drive = { ...current.drive!, landedCommit: merged, reconcile: { ...current.drive!.reconcile!, outcome: loop.status, attemptSha } };
+      recordHistoryBinding(store, current.groupId, current.taskId, runId, merged, current.drive.historySource);
     }
     saveDriverRun(store, current);
     return true;
