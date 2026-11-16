@@ -155,6 +155,25 @@ describe("a named source is bound at its mapped task landing (#328)", () => {
     } finally { await t.h.dispose(); }
   });
 
+  it("refuses reopening a source after its exact parent reached the target branch", { timeout: 60_000 }, async () => {
+    const scheme: IntegrationScheme = { delivery: "local", trigger: "group", method: "merge", target: "main",
+      historyExpectation: { version: 1, targetRef: "refs/heads/main", directSecondParent: true,
+        sourceRefs: [{ taskId: "a", ref: "refs/heads/feature/source" }] } };
+    const t = await driverHarness([{ taskId: "a", verifierType: "agent" }], { integration: scheme, files: () => ({}) });
+    try {
+      const base = git(t.repo, "rev-parse", "main");
+      const source = git(t.repo, "commit-tree", `${base}^{tree}`, "-p", base, "-m", "distinct source");
+      git(t.repo, "update-ref", "refs/heads/feature/source", source);
+      git(t.repo, "checkout", "-q", "-b", "other"); // the fixture's untracked plan cannot make checked-out main dirty
+      const runId = await t.claim(), driver = t.driver();
+      for (let i = 0; i < 120 && record(t.h.store).historyPublished === undefined; i++) await driver.round();
+      expect(record(t.h.store).historyPublished, JSON.stringify({ integration: record(t.h.store), run: t.body(runId).state })).toBeDefined();
+      const answer = t.service.reopenTask(t.h.command("reopen-task", { taskId: "a", runId, note: "recheck" }));
+      expect(answer).toMatchObject({ error: { code: "task-not-reopenable", message: expect.stringContaining("history-delivery-started") } });
+      expect(record(t.h.store).historyBindings).toMatchObject([{ runId, sourceSha: source }]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("blocks a missing source before moving the group branch or calling its task done", async () => {
     const t = await driverHarness([{ taskId: "a" }], { integration: HISTORY }); try {
       const runId = await t.claim(), driver = t.driver();

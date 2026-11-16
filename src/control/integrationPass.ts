@@ -21,6 +21,7 @@ import { readDebugMark } from "./debugChecks.js";
 import type { DebugInputV1 } from "./debugInput.js";
 import { integrationTargetRef } from "./ledgerAtRef.js";
 import { readCanonicalRecord } from "./snapshot.js";
+import { buildHistoryChain, verifyHistoryChain, type HistoryChain } from "./historyIntegration.js";
 import { githubRepoOf, readGroupIntegration, remoteUrl, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readGroup, saveGroup } from "./queries.js";
 import { removeOwnPath, workBranchRef, type WorkspaceRoots } from "./workspace.js";
@@ -214,6 +215,10 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
   if (remoteKey !== null && unreachable.has(remoteKey)) return null;
   const tip = await refTip(repo, workBranchRef(groupId));
   if (tip === null) return null;
+  if (scheme.delivery === "local" && scheme.historyExpectation) {
+    if (!groupComplete(deps.store, groupId)) return null;
+    return integrateHistory(deps, repo, groupId, integration, scheme, tip);
+  }
   // Nothing new landed: only a `github-pr` group can still be due. With no PR recorded (a group switched to `github-pr`
   // after integrating under another scheme, or whose PR target changed) it pushes and opens one (ruling, fix round 1
   // R1); with a draft PR and the group complete it only marks it ready (spec §5).
@@ -371,8 +376,8 @@ export interface Delivery { readBase(): Promise<string>; publish(next: string, b
 /**
  * spec §6.1 steps 3-4: write-ahead, publish; a base that moved in between clears the record and answers "moved".
  */
-async function writeAheadAndPublish(deps: IntegrationDeps, groupId: string, integration: GroupIntegration, tip: string, base: string, next: string, delivery: Delivery): Promise<Outcome | "moved"> {
-  if (!recordPending(deps, groupId, integration.schemeHash, { schemeHash: integration.schemeHash, tip, base, new: next })) return { kind: "dropped" };
+async function writeAheadAndPublish(deps: IntegrationDeps, groupId: string, integration: GroupIntegration, tip: string, base: string, next: string, delivery: Delivery, history?: HistoryChain): Promise<Outcome | "moved"> {
+  if (!recordPending(deps, groupId, integration.schemeHash, { schemeHash: integration.schemeHash, tip, base, new: next, ...(history === undefined ? {} : { history }) })) return { kind: "dropped" };
   crash(deps, "after-pending");
   await deps.beforePublish?.();
   const published = await delivery.publish(next, base);
@@ -428,6 +433,49 @@ async function integrateLocal(deps: IntegrationDeps, repo: string, groupId: stri
     if (current !== null && (current === pending.new || await isAncestor(repo, pending.new, current))) return { kind: "done", tip: pending.tip, integrated: pending.new };
   }
   return computeAndPublish(deps, repo, groupId, integration, scheme.method, tip, localDelivery(repo, scheme));
+}
+
+/** An exact-parent group is one target CAS, even when it names many source branches. */
+async function integrateHistory(deps: IntegrationDeps, repo: string, groupId: string, integration: GroupIntegration,
+  scheme: Extract<Scheme, { delivery: "local" }>, tip: string): Promise<Outcome | null> {
+  const delivery = localDelivery(repo, scheme);
+  const published = integration.historyPublished;
+  if (published !== undefined) {
+    if (published.groupTip !== tip) return { kind: "blocked", reason: "history-group-tip-moved-after-publication" };
+    const current = await delivery.readBase();
+    return current === published.targetTip ? null : { kind: "blocked", reason: "history-target-moved-after-publication" };
+  }
+  const bindingsMatch = (chain: HistoryChain): boolean => chain.contractHash === integration.schemeHash && chain.groupTip === tip
+    && chain.merges.length === (integration.historyBindings?.length ?? 0)
+    && chain.merges.every(merge => integration.historyBindings?.some(binding => binding.taskId === merge.taskId
+      && binding.runId === merge.runId && binding.sourceRef === merge.sourceRef && binding.sourceSha === merge.sourceSha));
+  const pending = reentry(integration);
+  if (pending !== null) {
+    if (pending.history === undefined || pending.tip !== tip || pending.base !== pending.history.base
+      || pending.new !== pending.history.targetTip || !(await verifyHistoryChain(repo, pending.history)))
+      return { kind: "blocked", reason: "history-pending-invalid" };
+    const current = await delivery.readBase();
+    if (current === pending.new) return bindingsMatch(pending.history) ? { kind: "done", tip, integrated: pending.new }
+      : { kind: "blocked", reason: "history-source-moved-after-publication" };
+    if (await isAncestor(repo, pending.new, current)) return { kind: "blocked", reason: "history-target-moved-after-publication" };
+    if (current === pending.base && bindingsMatch(pending.history)) {
+      const answer = await delivery.publish(pending.new, pending.base);
+      if (answer === "ok") { crash(deps, "after-publish"); return { kind: "done", tip, integrated: pending.new }; }
+      if (answer !== "moved") return answer;
+    } else if (current !== pending.base && !(await isAncestor(repo, pending.base, current))) {
+      return { kind: "blocked", reason: "history-target-diverged" };
+    }
+    if (!recordPending(deps, groupId, integration.schemeHash, null)) return { kind: "dropped" };
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const base = await delivery.readBase();
+    const built = await buildHistoryChain(repo, groupId, base, tip, integration);
+    if (built.kind === "blocked") return built;
+    if (!(await verifyHistoryChain(repo, built.chain))) return { kind: "blocked", reason: "history-generated-chain-invalid" };
+    const result = await writeAheadAndPublish(deps, groupId, integration, tip, base, built.chain.targetTip, delivery, built.chain);
+    if (result !== "moved") return result;
+  }
+  return { kind: "blocked", reason: "history-target-moved" };
 }
 
 /** The worktree of the target repository that has `ref` checked out, if any. */
@@ -528,12 +576,18 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
     switch (outcome.kind) {
       case "done":
         // A success ends any conflict: the record and its resolution go (and the pass then removes its copies, spec §7).
+        if (current.pending?.history && (current.pending.history.targetTip !== outcome.integrated || current.pending.history.groupTip !== outcome.tip))
+          throw new ControlError("recovery-blocked", "history-pending-invalid");
         next = { ...current, lastIntegrated: outcome.tip, integratedCommit: outcome.integrated, pending: null, state: "idle", reason: null, retryAfter: null, transient: 0,
-          conflict: null, resolution: null, ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
+          conflict: null, resolution: null, ...(current.pending?.history === undefined ? {} : { historyPublished: current.pending.history }),
+          ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
         break;
       case "blocked":
         // A finished resolution's record goes with it (fix round 1, F1): it must not outlive a retry or the next conflict.
-        next = { ...current, state: "blocked", reason: outcome.reason, pending: null, retryAfter: null, transient: 0, resolution: null };
+        next = { ...current, state: "blocked", reason: outcome.reason,
+          // A history CAS may already have published its whole chain; never discard its sole re-entry evidence on a block.
+          pending: current.pending?.history ? current.pending : null,
+          retryAfter: null, transient: 0, resolution: null };
         break;
       case "conflict": {
         // spec §7: recorded with its materialised copy, and nothing is dispatched until an owner approves.

@@ -6,6 +6,7 @@ import { safeInteger } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import { historyExpectationSchema, integrationSchemeSchema } from "./webProtocol.js";
 import { historyBindingSchema } from "./historyExpectation.js";
+import { historyChainSchema } from "./historyIntegration.js";
 import { ChildSpawnFailed, ChildTimeout, runChild } from "./integrationGit.js";
 import { readRepositorySettingsBody } from "./workspaceSettings.js";
 
@@ -187,9 +188,12 @@ const groupIntegrationSchema = z.object({
   /** Reopening a no-change source withdraws its active binding without deleting the historical proof. */
   historyWithdrawnBindings: z.array(z.object({ binding: historyBindingSchema,
     withdrawal: z.object({ commandId: z.string().min(1), by: z.string().min(1), at: safeInteger }).strict() }).strict()).optional(),
+  /** One fully published chain; it is still checked against the actual target ref at acceptance. */
+  historyPublished: historyChainSchema.optional(),
   lastIntegrated: commit.nullable(), integratedCommit: commit.nullable(),
   state: z.enum(["idle", "blocked", "conflict", "resolving"]), reason: z.string().nullable(),
-  pending: z.object({ schemeHash: z.string().regex(/^[a-f0-9]{64}$/), tip: commit, base: commit, new: commit }).strict().nullable(),
+  pending: z.object({ schemeHash: z.string().regex(/^[a-f0-9]{64}$/), tip: commit, base: commit, new: commit,
+    history: historyChainSchema.optional() }).strict().nullable(),
   conflict: z.object({ attempt: safeInteger, key: z.string(), base: commit, tip: commit, paths: z.array(z.string()) }).strict().nullable(),
   resolution: reconcileRecordSchema.nullable(),
   pr: z.object({ url: z.string(), number: safeInteger, ready: z.boolean() }).strict().nullable(),

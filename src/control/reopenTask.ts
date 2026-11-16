@@ -84,6 +84,8 @@ export function reopenNoChangeTaskInTransaction(store: ControlStore, input: { gr
   if (eligibility !== "completed" && eligibility !== "blocked") throw new ControlError("task-not-reopenable", eligibility);
   const integration = readGroupIntegration(group);
   const isHistorySource = integration?.scheme.delivery === "local" && integration.scheme.historyExpectation?.sourceRefs.some(source => source.taskId === taskId);
+  if (isHistorySource && (integration?.historyPublished !== undefined || integration?.pending?.history !== undefined))
+    throw new ControlError("task-not-reopenable", "history-delivery-started");
   const withdrawnBinding = isHistorySource && eligibility === "completed"
     ? integration?.historyBindings?.find(binding => binding.taskId === taskId && binding.runId === runId) : undefined;
   if (isHistorySource && eligibility === "completed" && withdrawnBinding === undefined)
