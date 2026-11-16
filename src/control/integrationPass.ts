@@ -443,7 +443,8 @@ async function integrateHistory(deps: IntegrationDeps, repo: string, groupId: st
   if (published !== undefined) {
     if (published.groupTip !== tip) return { kind: "blocked", reason: "history-group-tip-moved-after-publication" };
     const current = await delivery.readBase();
-    return current === published.targetTip ? null : { kind: "blocked", reason: "history-target-moved-after-publication" };
+    if (current === (integration.historyReconciledTargetTip ?? published.targetTip)) return null;
+    return { kind: "blocked", reason: "history-target-moved-after-publication" };
   }
   const bindingsMatch = (chain: HistoryChain): boolean => chain.contractHash === integration.schemeHash && chain.groupTip === tip
     && chain.merges.length === (integration.historyBindings?.length ?? 0)

@@ -1,6 +1,7 @@
 import { recordActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { prerequisiteDone } from "./groupEdges.js";
+import { historySatisfied } from "./historyAcceptance.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -29,6 +30,8 @@ export function markGroupsDone(store: ControlStore): string[] {
     store.db.exec("SAVEPOINT group_done");
     try {
       if (isGroupArchived(store, groupId)) continue;
+      // A system verdict never substitutes for a literal target-parent history proof.
+      if (!historySatisfied(store, groupId)) continue;
       if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) continue;
       if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined) continue;
       const cause = verdictRecorded(body) ? "verdict" : prerequisiteDone(store, groupId) ? "delivered" : null;

@@ -66,6 +66,7 @@ import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRu
 import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
 import { attemptReviewOf, type AttemptReview } from "./attemptReview.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
+import { historyAcceptanceRecordSchema, historySatisfied } from "../control/historyAcceptance.js";
 import { readSchedule } from "../control/schedules/store.js";
 import { archivedMarkOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
@@ -1456,11 +1457,23 @@ function handoffViews(store: ControlStore, groupId: string, snapshot: GroupReadS
   });
 }
 
-function integrationView(body: unknown): { integration?: NonNullable<GroupViewV1["integration"]> } {
+function integrationView(store: ControlStore, groupId: string, body: unknown): { integration?: NonNullable<GroupViewV1["integration"]> } {
   const integration = readGroupIntegration(body);
   if (integration === null) return {};
   const { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } = integration;
-  return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } };
+  if (scheme.delivery !== "local" || !scheme.historyExpectation)
+    return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } };
+  const accepted = historySatisfied(store, groupId);
+  const proof = historyAcceptanceRecordSchema.safeParse((body as { historyAcceptance?: unknown }).historyAcceptance);
+  const historyState: "pending" | "verified" | "blocked" = state === "blocked" ? "blocked" : accepted ? "verified" : "pending";
+  const sourceRefs = scheme.historyExpectation.sourceRefs.map(({ taskId, ref }) => {
+    const binding = integration.historyBindings?.find(entry => entry.taskId === taskId && entry.sourceRef === ref);
+    const merge = integration.historyPublished?.merges.find(entry => entry.taskId === taskId && entry.sourceSha === binding?.sourceSha);
+    return { taskId, ref, sourceSha: binding?.sourceSha ?? null, mergeSha: merge?.commit ?? null };
+  });
+  return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr,
+    history: { state: historyState, targetTip: integration.historyReconciledTargetTip ?? integration.historyPublished?.targetTip ?? null,
+      evidenceHash: accepted && proof.success ? proof.data.hash : null, reason, sourceRefs } } };
 }
 
 export function readControlGroup(store: ControlStore, epoch: string, groupId: string): GroupViewV1 {
@@ -1513,7 +1526,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Issue-fixes spec §5.2 Reads: the newest 50 rows of the group.
     activity: readGroupActivity(store, groupId, 50),
     // Integration spec §4: only for a non-keep scheme, so a keep group's view is what it was.
-    ...integrationView(body),
+    ...integrationView(store, groupId, body),
     // Tester round 2 spec §7.3: one indexed read of the current version's automatic-confirm row.
     autoConfirm: autoConfirmView(store, body as unknown as Record<string, unknown>, proposal.proposalVersion),
     // Tester follow-up G Parts 4.7, 5: each key only when non-empty, so every other group's view is unchanged.

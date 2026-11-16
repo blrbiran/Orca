@@ -3,11 +3,17 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { integratePendingGroups, type IntegrationDeps } from "../../src/control/integrationPass.js";
+import { prerequisiteDone } from "../../src/control/groupEdges.js";
+import { markGroupsDone } from "../../src/control/groupDone.js";
+import { historySatisfied } from "../../src/control/historyAcceptance.js";
+import { insertPendingDecisions, settlePendingDecision } from "../../src/control/pendingDecisions.js";
+import { pendingIdOf } from "../../src/control/runLedger.js";
 import { applyRetryIntegration } from "../../src/control/integrationCommands.js";
 import { newGroupIntegration, readGroupIntegration, schemeHash, type IntegrationScheme } from "../../src/control/integrationScheme.js";
 import { historySourcePinRef } from "../../src/control/historySource.js";
 import { controlWorkspaceRoots, unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { webFixture } from "./fixtures/web.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
 
 const git = (repo: string, ...args: string[]): string => execFileSync("git",
   ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args],
@@ -82,6 +88,103 @@ describe("literal source-branch history delivery (#328)", { timeout: 60_000 }, (
       expect(git(w.repo, "show", `${target}:MERGE-NOTES.md`)).toBe("two ordered merges");
       expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: w.groupTip,
         historyPublished: { groupTip: w.groupTip, targetTip: target } });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("does not mark a group done or release dependents before target history is accepted", async () => {
+    const w = await world(); try {
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(prerequisiteDone(w.h.store, "g")).toBe(false);
+      expect(w.h.store.transaction(() => markGroupsDone(w.h.store))).toEqual([]);
+      expect(JSON.parse(String(w.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).status).toBe("review");
+    } finally { await w.h.dispose(); }
+  });
+
+  it("accepts the actual target chain before marking the group done", async () => {
+    const w = await world(); try {
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      const { refreshHistoryAcceptance } = await import("../../src/control/historyAcceptance.js");
+      expect(await refreshHistoryAcceptance({ store: w.h.store, repoPathOf: () => w.repo, now: () => 1_000_000,
+        write: action => w.h.store.transaction(action) })).toEqual(["g"]);
+      expect(historySatisfied(w.h.store, "g")).toBe(true);
+      expect(prerequisiteDone(w.h.store, "g")).toBe(true);
+      expect(w.h.store.transaction(() => markGroupsDone(w.h.store))).toEqual(["g"]);
+      const body = JSON.parse(String(w.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      expect(body.historyAcceptance).toMatchObject({ groupTip: w.groupTip, targetTip: git(w.repo, "rev-parse", "main") });
+      expect(readControlGroup(w.h.store, "epoch", "g").integration?.history).toMatchObject({
+        state: "verified", targetTip: body.historyAcceptance.targetTip, evidenceHash: body.historyAcceptance.hash,
+        sourceRefs: [{ taskId: "a", sourceSha: w.sourceA }, { taskId: "b", sourceSha: w.sourceB }],
+      });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("waits for unresolved human decisions but accepts a settled decision's historical row", async () => {
+    const w = await world(); try {
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      const pendingId = pendingIdOf("run-a", 0);
+      w.h.store.transaction(() => {
+        w.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-a','g','a',1,0,?)")
+          .run(JSON.stringify({ runId: "run-a", groupId: "g", taskId: "a", state: "settled", drive: { landedCommit: w.groupTip } }));
+        insertPendingDecisions(w.h.store, "g", "run-a", [{ pendingId, ledgerRun: "run-a", entryIndex: 0,
+          entry: { kind: "review", question: "merge these?" }, reason: "human-review", at: "2026-11-17T00:00:00.000Z", evidence: ["group g"] }]);
+      });
+      const { refreshHistoryAcceptance } = await import("../../src/control/historyAcceptance.js");
+      const check = () => refreshHistoryAcceptance({ store: w.h.store, repoPathOf: () => w.repo,
+        now: () => 1_000_000, write: action => w.h.store.transaction(action) });
+      expect(await check()).toEqual([]);
+      expect(historySatisfied(w.h.store, "g")).toBe(false);
+      settlePendingDecision(w.h.store, pendingId, { state: "approved", approvedId: "run-a/agent-0" });
+      expect(await check()).toEqual(["g"]);
+      expect(historySatisfied(w.h.store, "g")).toBe(true);
+    } finally { await w.h.dispose(); }
+  });
+
+  it("revokes a previously done group's history proof when the target moves", async () => {
+    const w = await world(); try {
+      const { refreshHistoryAcceptance } = await import("../../src/control/historyAcceptance.js");
+      const proof = () => refreshHistoryAcceptance({ store: w.h.store, repoPathOf: () => w.repo,
+        now: () => 1_000_000, write: action => w.h.store.transaction(action) });
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(await proof()).toEqual(["g"]);
+      expect(w.h.store.transaction(() => markGroupsDone(w.h.store))).toEqual(["g"]);
+      const first = w.record().historyPublished!.targetTip;
+      w.commitOn("refs/heads/main", first, { "operator.txt": "later\n" });
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(await proof()).toEqual(["g"]);
+      const group = JSON.parse(String(w.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      expect(group.status).toBe("review");
+      expect(group).not.toHaveProperty("historyAcceptance");
+      expect(historySatisfied(w.h.store, "g")).toBe(false);
+      expect(prerequisiteDone(w.h.store, "g")).toBe(false);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "history-target-moved-after-publication" });
+      expect(readControlGroup(w.h.store, "epoch", "g").integration?.history).toMatchObject({ state: "blocked",
+        reason: "history-target-moved-after-publication", evidenceHash: null, targetTip: first });
+    } finally { await w.h.dispose(); }
+  });
+
+  it("revalidates an appended target commit only after an explicit retry, without replaying merges", async () => {
+    const w = await world(); try {
+      const { refreshHistoryAcceptance } = await import("../../src/control/historyAcceptance.js");
+      const check = () => refreshHistoryAcceptance({ store: w.h.store, repoPathOf: () => w.repo,
+        now: () => 1_000_000, write: action => w.h.store.transaction(action) });
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(await check()).toEqual(["g"]);
+      expect(w.h.store.transaction(() => markGroupsDone(w.h.store))).toEqual(["g"]);
+      const original = w.record().historyPublished!.targetTip;
+      const moved = w.commitOn("refs/heads/main", original, { "operator.txt": "later\n" });
+      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(await check()).toEqual(["g"]);
+      expect(w.record().state).toBe("blocked");
+      const { historyReconciledTarget } = await import("../../src/control/integrationCommands.js");
+      const reconciled = await historyReconciledTarget(w.repo, w.record());
+      expect(reconciled).toBe(moved);
+      expect(applyRetryIntegration({ store: w.h.store, historyReconciledTargetTip: reconciled }, w.h.command("retry-integration", {}) as never)).toHaveProperty("result");
+      await integratePendingGroups(w.deps);
+      expect(w.record()).toMatchObject({ state: "idle", historyPublished: { targetTip: original }, historyReconciledTargetTip: moved });
+      expect(await check()).toEqual(["g"]);
+      expect(historySatisfied(w.h.store, "g")).toBe(true);
+      expect(w.h.store.transaction(() => markGroupsDone(w.h.store))).toEqual(["g"]);
+      expect(git(w.repo, "rev-parse", "main")).toBe(moved);
     } finally { await w.h.dispose(); }
   });
 
@@ -190,8 +293,9 @@ describe("literal source-branch history delivery (#328)", { timeout: 60_000 }, (
       expect(await integratePendingGroups(w.deps)).toBe(true);
       expect(w.record()).toMatchObject({ state: "blocked", reason: "history-pending-invalid",
         pending: { new: publishedTip, history: { groupTip: w.groupTip } } });
-      expect(applyRetryIntegration({ store: w.h.store }, w.h.command("retry-integration", {}) as never)).toHaveProperty("result");
-      expect(await integratePendingGroups(w.deps)).toBe(true);
+      expect(applyRetryIntegration({ store: w.h.store }, w.h.command("retry-integration", {}) as never))
+        .toMatchObject({ error: { code: "task-not-reopenable", message: "task-not-reopenable:history-pending-kept" } });
+      expect(w.record()).toMatchObject({ state: "blocked", pending: { new: publishedTip } });
       expect(git(w.repo, "rev-parse", "main")).toBe(publishedTip);
       expect(w.record().historyPublished).toBeUndefined();
     } finally { await w.h.dispose(); }

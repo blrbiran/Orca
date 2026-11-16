@@ -2046,6 +2046,12 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // A named-source delivery is a different claim from group-tree acceptance: prove its actual target parents before done.
+    try {
+      const { refreshHistoryAcceptance } = await import("./historyAcceptance.js");
+      if ((await refreshHistoryAcceptance({ store: deps.store, repoPathOf: (repoId) => deps.resolveRepository(repoId),
+        now: () => (deps.now?.() ?? new Date()).getTime(), write: (action) => write(deps, action) })).length > 0) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Multi-directory projects spec §9.1: the multi landing, right after integration (its git side effects are the driver's).
     try {
       if (await landMultiDirGroups({

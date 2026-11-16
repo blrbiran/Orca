@@ -6,6 +6,7 @@ import { multiDirOf } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
+import { historySatisfied } from "./historyAcceptance.js";
 import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { reviewSatisfied } from "./requirementReviewRecord.js";
 import { readGroupOrchestration } from "./orchestration.js";
@@ -78,6 +79,7 @@ function multiLandingDone(group: Record<string, unknown>): boolean {
 export function prerequisiteDone(store: ControlStore, groupId: string): boolean {
   const group = groupBody(store, groupId);
   if (group === null || !tasksAllDone(store, groupId)) return false;
+  if (!historySatisfied(store, groupId)) return false;
   // Tester follow-up E §5 (#241): done also needs the group accepted on its final tip (groupAcceptance.ts), so neither the
   // done pass nor a dependent group moves on a group whose final tree failed its tasks' checks.
   if (!acceptanceSatisfied(store, groupId, group)) return false;

@@ -2248,6 +2248,10 @@ const groupIntegrationViewSchema = z
     reason: z.string().nullable(),
     lastIntegrated: commitShaSchema.nullable(),
     integratedCommit: commitShaSchema.nullable(),
+    history: z.object({ state: z.enum(["pending", "verified", "blocked"]), targetTip: commitShaSchema.nullable(),
+      evidenceHash: hashSchema.nullable(), reason: z.string().nullable(),
+      sourceRefs: z.array(z.object({ taskId: idSchema, ref: z.string().min(1), sourceSha: commitShaSchema.nullable(),
+        mergeSha: commitShaSchema.nullable() }).strict()) }).strict().optional(),
     pr: z.object({ url: z.string(), number: safeInteger, ready: z.boolean() }).strict().nullable(),
   })
   .strict();

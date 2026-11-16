@@ -188,8 +188,9 @@ const groupIntegrationSchema = z.object({
   /** Reopening a no-change source withdraws its active binding without deleting the historical proof. */
   historyWithdrawnBindings: z.array(z.object({ binding: historyBindingSchema,
     withdrawal: z.object({ commandId: z.string().min(1), by: z.string().min(1), at: safeInteger }).strict() }).strict()).optional(),
-  /** One fully published chain; it is still checked against the actual target ref at acceptance. */
+  /** One fully published chain; a later target may advance, but only append-only and recorded separately. */
   historyPublished: historyChainSchema.optional(),
+  historyReconciledTargetTip: commit.optional(),
   lastIntegrated: commit.nullable(), integratedCommit: commit.nullable(),
   state: z.enum(["idle", "blocked", "conflict", "resolving"]), reason: z.string().nullable(),
   pending: z.object({ schemeHash: z.string().regex(/^[a-f0-9]{64}$/), tip: commit, base: commit, new: commit,

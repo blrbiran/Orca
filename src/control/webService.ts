@@ -62,7 +62,7 @@ import { applyReviewAccept, applyReviewFix, applyReviewRerun, type ReviewAcceptC
 import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
 import { applyAllowRequest, applyRevokeAllowance, type AllowRequestCommand, type RevokeAllowanceCommand } from "./allowanceCommands.js";
 import { activeAllowances, applyDecisionAllowances, pathsCovered, type GroupAllowance } from "./groupAllowances.js";
-import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, historyReconciledTarget, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
 import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
@@ -1917,8 +1917,22 @@ export class WebControlService {
     } finally { release?.(); }
   }
   /** Integration spec §6.5: a blocked or conflicted integration back to idle (no git child; the next round retries it). */
-  retryIntegration(command: RetryIntegrationCommand): WebCommandResult {
-    return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
+  retryIntegration(command: RetryIntegrationCommand): WebCommandResult | Promise<WebCommandResult> {
+    const row = this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(command.target.groupId);
+    const integration = row === undefined ? null : readGroupIntegration(JSON.parse(String(row.body)));
+    // Ordinary integration stays a synchronous command; only a published history promise needs a Git proof first.
+    if (integration?.scheme.delivery !== "local" || !integration.scheme.historyExpectation || !integration.historyPublished)
+      return this.mutate(() => applyRetryIntegration({ store: this.store }, command)) as WebCommandResult;
+    return this.retryHistoryIntegration(command, integration);
+  }
+
+  private async retryHistoryIntegration(command: RetryIntegrationCommand,
+    integration: NonNullable<ReturnType<typeof readGroupIntegration>>): Promise<WebCommandResult> {
+    const repoId = isDirGroup(this.store, command.target.groupId) || isMultiGroup(this.store, command.target.groupId) ? null : this.planRepository(command.target.groupId);
+    if (repoId === null || this.deps.resolveRepository === undefined) throw new ControlError("task-not-reopenable", "history-target-unavailable");
+    const reconciled = await historyReconciledTarget(this.deps.resolveRepository(repoId), integration);
+    if (reconciled === null) throw new ControlError("task-not-reopenable", "history-reconciliation-required");
+    return this.mutate(() => applyRetryIntegration({ store: this.store, historyReconciledTargetTip: reconciled }, command)) as WebCommandResult;
   }
   /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
   recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {

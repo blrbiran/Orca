@@ -21,6 +21,18 @@ const parentsOf = async (repo: string, commit: string): Promise<string[] | null>
   return answer.code !== 0 ? null : answer.stdout.split("\n\n")[0]!.split("\n")
     .filter(line => line.startsWith("parent ")).map(line => line.slice("parent ".length));
 };
+/** Whether `from` is reachable by first-parent steps of single-parent commits until `to` (append-only target advance). */
+export async function advancesByAppend(repo: string, from: string, to: string): Promise<boolean> {
+  let current = to;
+  for (let steps = 0; current !== from; steps++) {
+    if (steps > 10_000) return false;
+    const parents = await parentsOf(repo, current);
+    if (parents?.length !== 1) return false;
+    current = parents[0]!;
+  }
+  return true;
+}
+
 const hasArtifact = async (repo: string, commit: string, path: string): Promise<boolean> => {
   const listing = await gitChild(repo, ["--no-replace-objects", "ls-tree", "-z", commit, "--", path]);
   return listing.code === 0 && listing.stdout.split("\0")

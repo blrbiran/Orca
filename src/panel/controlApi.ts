@@ -1060,7 +1060,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "schedule-set": case "schedule-enable": case "schedule-remove": case "schedule-resume": case "schedule-from-group": service.scheduleCommand(command); break;
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
-          case "retry-integration": service.retryIntegration(command); break;
+          case "retry-integration": await service.retryIntegration(command); break;
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;
           case "recheck-acceptance": service.recheckAcceptance(command); break;
           case "waive-acceptance": service.waiveAcceptance(command); break;
