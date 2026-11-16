@@ -36,3 +36,7 @@ Recommendation: ship option 1's truthful status now; offer option 2 as a later e
 - Can a completed execute stopped before verify reach the supported verify-only or owner acceptance path without repaying the execute? #316's array-log compatibility is a separate result-decoding fix.
 
 This proposal adds no budget policy change to the current patch. The next implementation unit is the preflight/run-copy correction with regression tests, followed by a separate measured calibration iteration.
+
+## Implementation note — 2026-11-16, Orca feedback follow-up
+
+The display-only copy correction is now implemented for a finite group: `BudgetEditor` shows a warning before the Web confirmation button when the effective mode is soft, and `proposal show` / `group show` show it even if every task has an explicitly finite authored amount. `group confirm` also prints the warning, but its output appears **after** the command has applied; that output is not a pre-confirm consent step. The warning distinguishes a request already in flight from a group funding ceiling and names Codex's whole-phase stop boundary. This changes no grant, stop threshold or booking policy. Codex still has `requestBoundProof:null`; a numerical hard spending guarantee is not implemented. Estimate calibration and exact same-repository phase/failed-attempt samples remain outstanding.

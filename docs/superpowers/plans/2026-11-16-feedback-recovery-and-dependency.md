@@ -54,7 +54,7 @@
 
 - [x] Watch a queued start with no run accept deletion under old code, then refuse it without losing the edge or revision.
 - [x] Watch replacement fail at stack ambiguity after schema admission, then replace the exact edge atomically; cover cycle refusal, CLI payload, Web action and stale selection after success.
-- [ ] Independent clone mutations removing the removal guard, exclusion from stack calculation, and old-edge deletion; record each behavior RED and the restored clone's zero diff bytes. This check is running separately.
+- [x] Independent clone mutations removing the removal guard, exclusion from stack calculation, and old-edge deletion; each named behavior went RED and the restored clone has zero worktree/index diff bytes. The mutation runner's M2/M3 log labels were swapped in its report; inspect their actual log assertions.
 
 ### Task 4: Contradictory human constraint and check (#322)
 
