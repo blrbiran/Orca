@@ -64,6 +64,15 @@ describe("repairEstimateOutput: one code per defect", () => {
     expect(r).toEqual({ ok: true, output: answer(["a", "b"]), repairs: ["tasks-reordered"] });
     expect(judged(r, ["a", "b"])).toBe(true);
   });
+  it("uses dependency order to judge an answer but keeps stored estimate tasks canonical (#296)", () => {
+    const dependencyOrder = ["z-core", "a-integration"];
+    const canonical = answer(["a-integration", "z-core"]);
+    const inPlanOrder = repairEstimateOutput(answer(dependencyOrder), ctx(dependencyOrder));
+    expect(inPlanOrder).toEqual({ ok: true, output: canonical, repairs: [] });
+    expect(judged(inPlanOrder, ["a-integration", "z-core"])).toBe(true);
+    const reversed = repairEstimateOutput(canonical, ctx(dependencyOrder));
+    expect(reversed).toEqual({ ok: true, output: canonical, repairs: ["tasks-reordered"] });
+  });
   it("an already-valid v1 answer needs no repair", () => {
     const raw = answer(["a", "b"]);
     const r = repairEstimateOutput(raw, ctx(["a", "b"]));

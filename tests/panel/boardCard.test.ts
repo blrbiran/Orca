@@ -20,6 +20,18 @@ describe("a board card's facts (kanban spec §4)", () => {
     } finally { await h.dispose(); }
   });
 
+  it("names the failed prerequisite before its alphabetically earlier dependent task (#296)", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a-integration", dependsOn: ["z-core"] }, { taskId: "z-core" }]); try {
+      for (const [taskId, runId] of [["a-integration", "ra"], ["z-core", "rz"]]) {
+        const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!.body));
+        h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...work, status: "blocked", currentRunId: runId }), taskId);
+        h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,'g',?,1,0,?)")
+          .run(runId, taskId, JSON.stringify({ failureCode: `failure-${taskId}` }));
+      }
+      expect(readGroupSummary(h.store, "g").card!.firstFailure).toEqual({ taskId: "z-core", cause: "failure-z-core" });
+    } finally { await h.dispose(); }
+  });
+
   // Issue #153: a blocked task whose run fields name no cause (or that has no run) still gives the card a cause.
   it("falls back to task-blocked for a blocked task whose run names no cause, and to nothing for one not blocked", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b" }]); try {

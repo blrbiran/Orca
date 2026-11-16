@@ -129,10 +129,10 @@ function repair(raw: unknown, ctx: RepairContext): RepairResult {
       }
     }
     for (const id of duplicated) repairs.push(`duplicate-task-dropped:${id}`);
-    // 7. Plan order. `kept` is already in plan order; compare it with the order the entries came in.
+    // 7. Judge the answer against dependency order; stored estimates still require canonical taskId order.
     const arrivalOrder = known.filter(e => kept.includes(e)).map(e => e.taskId);
     if (!sameStrings(arrivalOrder, kept.map(e => e.taskId))) repairs.push("tasks-reordered");
-    tasks = kept;
+    tasks = kept.sort((a, b) => (a.taskId as string) < (b.taskId as string) ? -1 : (a.taskId as string) > (b.taskId as string) ? 1 : 0);
     // Top-level fields: judged on the repaired shell with no tasks.
     const shell = budgetEstimateSchema.safeParse({ ...top, tasks: [] });
     if (!shell.success) for (const path of issuePaths(shell.error.issues)) problems.add(`field-invalid:${path}`);

@@ -15,6 +15,7 @@ import { problemsFromRefusal, repairEstimateOutput } from "./estimateRepair.js";
 import { decideEstimateRetry, estimateRetryId, retryPromptRequired, writeEstimateRetry } from "./estimateRetry.js";
 import { classifyEstimateOutput, estimateGrantFor, readEstimateContract, residual, sumAmounts } from "./estimator.js";
 import { hasTokenPolicy, saveTokenPolicy } from "./fundedAllowance.js";
+import { planOrderTasks } from "./planOrder.js";
 import { mirrorWebAuthority, type Body } from "./proposalReopen.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord, type BudgetProposalRecord } from "./queries.js";
@@ -152,13 +153,14 @@ export function completeEstimateInTransaction(
   // canonical JSON (a lone surrogate, a negative zero) cannot be hashed, so it is an invalid answer too.
   // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
   // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
-  const taskIds = plan.plan.tasks.map(t => t.taskId), contract = readEstimateContract(deps.store, id, estimateId);
+  const canonicalTaskIds = plan.plan.tasks.map(t => t.taskId);
+  const taskIds = planOrderTasks(plan.plan.tasks).map(t => t.taskId), contract = readEstimateContract(deps.store, id, estimateId);
   let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
   if (rawOutput !== null) {
     const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: contract.instructionVersion });
     if (repaired.ok) { repairs = repaired.repairs; judged = repaired.output; } else repairProblems = repaired.problems;
   }
-  const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, taskIds);
+  const classified = repairProblems !== null ? { ok: false as const, reasonCode: "estimate-output-invalid" } : classify(judged, plan.planHash, canonicalTaskIds);
   let output: BudgetEstimateV1 | null = null, outputHash: string | null = null, notCanonical = false;
   let reasonCode: string | null = classified.ok ? null
     : classified.reasonCode === "estimate-call-failed" && callFailure !== null ? `estimate-call-failed:${callFailure}` : classified.reasonCode;

@@ -12,7 +12,7 @@ import { deliverSchedulerWakes } from "../../../src/control/dispatch.js";
 import { controlWorkspaceRoots } from "../../../src/control/workspace.js";
 import type { ArtifactRef, Candidate } from "../../../src/control/types.js";
 import type { ExecutionProfileSnapshotV1 } from "../../../src/control/webProtocol.js";
-import { profileSnapshot, webFixture } from "./web.js";
+import { profileSnapshot, webFixture, type WebFixtureTask } from "./web.js";
 
 // Single-call estimate spec §6.1-§6.4: an estimate run is the driver's, runs as one ccloop single call, and settles
 // into its estimate. The synthetic ccloop below answers only single calls (a loop envelope is a test failure).
@@ -96,11 +96,11 @@ export function singleCallPort(options: SingleCallOptions, planHash: () => strin
  * An imported group whose estimate is claimed (a `starting` estimate run), a driver over a synthetic single-call
  * ccloop, and an estimator-only profile -- so a driver that resolves the run's port as a task profile is refused.
  */
-export async function estimateHarness(options: SingleCallOptions = {}) {
+export async function estimateHarness(options: SingleCallOptions = {}, tasks?: readonly WebFixtureTask[]) {
   const snapshot: ExecutionProfileSnapshotV1 = profileSnapshot();
   snapshot.profile.allowedWorkKinds = ["budget-estimate"];
   snapshot.profile.workMaxOutputTokens = null;
-  const h = await webFixture(snapshot);
+  const h = await webFixture(snapshot, tasks);
   const service = new WebControlService(h.deps);
   const run = await service.claimEstimate("g", h.estimateId);
   if (run === null) throw new Error("the estimate was not claimed");

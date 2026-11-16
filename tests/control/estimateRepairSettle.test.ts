@@ -33,6 +33,21 @@ describe("repair in the estimate settlement (estimate usable-answer spec §4.2)"
     } finally { await x.h.dispose(); }
   });
 
+  it("settles a prerequisite-first answer without a repair while preserving canonical storage (#296)", async () => {
+    const x = await estimateHarness({ output: (planHash) => {
+      const base = estimateOutput(planHash), task = base.tasks[0]!;
+      return { ...base, tasks: [{ ...task, taskId: "z-core" }, { ...task, taskId: "a-integration" }] };
+    } }, [{ taskId: "a-integration", dependsOn: ["z-core"] }, { taskId: "z-core" }]);
+    try {
+      await x.rounds(() => x.estimate().state !== "running");
+      expect(x.fake.calls.accept[0]?.work).toMatchObject({ kind: "single-call" });
+      const outcome = x.estimate();
+      expect(outcome.state).toBe("ready");
+      expect(outcome.repairs).toEqual([]);
+      expect(outcome.output?.tasks.map((task) => task.taskId)).toEqual(["a-integration", "z-core"]);
+    } finally { await x.h.dispose(); }
+  });
+
   it("records an empty repair list on a valid answer", async () => {
     const x = await settle(estimateOutput); try {
       expect(x.estimate()).toMatchObject({ state: "ready", reasonCode: null, repairs: [] });

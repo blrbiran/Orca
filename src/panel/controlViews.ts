@@ -8,6 +8,7 @@ import { tokenPolicySchema, tokenRemainingStatus } from "../control/tokenPolicy.
 import { budgetAmountSchema, operatorNoteSchema } from "../control/schema.js";
 import { listFlagsInvolving } from "../control/flaggedDecisions.js";
 import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from "./groupReadSnapshot.js";
+import { planOrderTasks } from "../control/planOrder.js";
 import { isTerminalRunState } from "../control/budget.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
 import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
@@ -710,7 +711,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(archived !== null && overGrantUnblocked(body.status, readSnapshot!) ? { overGrant: true } : {}),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
-    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, archived.plan.tasks.map((task) => task.taskId), readSnapshot!, archived.planHash) }),
+    ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, planOrderTasks(archived.plan.tasks).map((task) => task.taskId), readSnapshot!, archived.planHash) }),
     ...(orchestration === null ? {} : { orchestration }),
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
     ...(escalation.length === 0 ? {} : { escalation }),
