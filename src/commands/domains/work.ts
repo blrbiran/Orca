@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -770,7 +770,7 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
   const funding = await c.read(`groups/${group(c)}/funding-preview`);
   confirmHistory = (view as { estimateHistory?: EstimateHistory }).estimateHistory;
-  confirmNote = [...unestimatedLines(group(c), view, { afterConfirm: true }), ...fundingLines(funding), ...historyLines(confirmHistory)];
+  confirmNote = [...unestimatedLines(group(c), view, { afterConfirm: true }), ...softCeilingLines(view), ...fundingLines(funding), ...historyLines(confirmHistory)];
   confirmFunding = funding;
   const defaults = (await config(c)).defaults;
   const preview = await c.read(`groups/${group(c)}/agent-preview`) as AgentPreview;

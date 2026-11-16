@@ -124,6 +124,27 @@ describe("the unestimated lines follow the proposal and estimate state (F23)", (
     }
   });
 
+  it("warns before confirmation that a finite Codex run can overshoot its soft ceiling (#225)", async () => {
+    const w = await unestimated();
+    ready(w);
+    (w.state.view as Record<string, unknown>).expectationModel = true;
+    for (const args of [["proposal", "show", "g-alpha"], ["group", "confirm", "g-alpha"]]) {
+      const out = (await cli(args, w.dir)).stdout;
+      expect(out).toContain("soft stop: a Codex execute phase can exceed the group's remaining token limit before usage is observed");
+    }
+  });
+
+  it("shows the soft ceiling warning before confirmation even with an explicit finite task amount (#225 review)", async () => {
+    const w = await unestimated();
+    (w.state.view.allocations[0]!.amount as { tokens: number | null }).tokens = 500;
+    (w.state.view.proposal as { budgetMode: "soft" | "strict" | null }).budgetMode = "soft";
+    for (const args of [["proposal", "show", "g-alpha"], ["group", "show", "g-alpha"], ["group", "confirm", "g-alpha"]]) {
+      const out = (await cli(args, w.dir)).stdout;
+      expect(out, args.join(" ")).toContain("soft stop: a Codex execute phase can exceed the group's remaining token limit before usage is observed");
+      expect(out).not.toContain("task t1: tokens: unlimited");
+    }
+  });
+
   it("an estimate for another plan, or one not ready, leaves the line as not estimated", async () => {
     for (const change of [{ state: "queued" }, { output: { schema: "budget-estimate-v1", planHash: "f".repeat(64), tasks: [], goalReviewReserve: null } }]) {
       const w = await unestimated();

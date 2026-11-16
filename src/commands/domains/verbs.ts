@@ -111,12 +111,18 @@ export function instructionLines(view: ConfigView, profileId: string | null | un
 export interface UnestimatedSource {
   allocations?: GroupView["allocations"];
   plan?: { planHash: string };
-  proposal?: { state?: string; proposalVersion?: number };
+  proposal?: { state?: string; proposalVersion?: number; budgetMode?: "strict" | "soft" | null };
   summary?: { state?: string; archived?: boolean };
   estimates?: SuggestionView["estimates"];
   ledger?: { groupLimit: { tokens: number | null } };
   /** Tester follow-up G §11: present (true) on a group of the expectation model, where task tokens are expectations. */
   expectationModel?: true;
+}
+
+/** Display-only: a finite token number cannot stop a provider request that has already begun. */
+export function softCeilingLines(source: UnestimatedSource): string[] {
+  return typeof source.ledger?.groupLimit.tokens === "number" && (source.proposal?.budgetMode === "soft" || source.expectationModel === true)
+    ? ["soft stop: a Codex execute phase can exceed the group's remaining token limit before usage is observed"] : [];
 }
 
 /**
@@ -309,7 +315,7 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
 /** Tester follow-up G spec §3.3: the requirement review as the group summary sends it. */
 export interface ReviewView {
   state: string; why?: string; problem?: string; autoFixRounds?: number;
-  rounds: Array<{ roundNo: number; tip: string; result: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>; fixTaskId?: string }>;
+  rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>; fixTaskId?: string }>;
   accepted?: { by: string; note: string };
 }
 
@@ -326,6 +332,7 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
   if (review.state !== "not-passed") return [`review: ${review.state}${review.why === undefined ? "" : ` (${review.why})`}`];
   return [
     `problem: ${review.problem ?? `requirement-review-not-passed:${review.why ?? "?"}`}`,
+    ...(last?.summary ? [`review: ${last.summary}`] : []),
     ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
     `next: orca group review-fix ${groupId} --goal '<what to fix>'`,
     `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
@@ -437,6 +444,7 @@ export function formatWithUnestimated(body: unknown): string {
     ...workerLostLines(runs.filter((run) => current.has(run.runId))),
     ...(typeof groupId === "string" ? noChangeLines(groupId, (b as { workItems?: NoChangeItem[] } | null)?.workItems ?? [], runs.filter((run) => current.has(run.runId))) : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
+    ...(b === null ? [] : softCeilingLines(b)),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     // Tester #285: the group's used figure lags while a run whose agent reports at phase end is under way.
     ...((note) => phaseEndBudgetLines(note.runIds, note.asOf))(phaseEndOfRuns(runs as UsageRun[])),

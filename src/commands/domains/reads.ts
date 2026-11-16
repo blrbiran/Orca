@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { acceptanceLines, contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -445,7 +445,7 @@ export const READ_ROWS: CommandDef[] = [
     // Tester #173/#224/#266 (follow-up L): the view's estimateHistory as lines and, only-add, as --json's `estimateHistory`.
     compose: ([view, funding]) => {
       const v = view as Parameters<typeof proposalDocument>[0], history = (view as { estimateHistory?: EstimateHistory }).estimateHistory;
-      proposalNote = [...unestimatedLines(v.summary.groupId, v), ...fundingLines(funding), ...historyLines(history), ...contextHandoffLines(v.proposal.contextPolicy.handoffAtContextTokens)];
+      proposalNote = [...unestimatedLines(v.summary.groupId, v), ...softCeilingLines(v), ...fundingLines(funding), ...historyLines(history), ...contextHandoffLines(v.proposal.contextPolicy.handoffAtContextTokens)];
       const body = withFunding(proposalDocument(v), funding) as Record<string, unknown>;
       return history === undefined ? body : { ...body, estimateHistory: history };
     },
