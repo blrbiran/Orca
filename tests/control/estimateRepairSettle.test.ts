@@ -37,7 +37,7 @@ describe("repair in the estimate settlement (estimate usable-answer spec §4.2)"
     const x = await estimateHarness({ output: (planHash) => {
       const base = estimateOutput(planHash), task = base.tasks[0]!;
       return { ...base, tasks: [{ ...task, taskId: "z-core" }, { ...task, taskId: "a-integration" }] };
-    } }, [{ taskId: "a-integration", dependsOn: ["z-core"] }, { taskId: "z-core" }]);
+    } }, [{ taskId: "a-integration", dependsOn: ["z-core"] }, { taskId: "z-core" }], "4");
     try {
       await x.rounds(() => x.estimate().state !== "running");
       expect(x.fake.calls.accept[0]?.work).toMatchObject({ kind: "single-call" });
@@ -45,6 +45,18 @@ describe("repair in the estimate settlement (estimate usable-answer spec §4.2)"
       expect(outcome.state).toBe("ready");
       expect(outcome.repairs).toEqual([]);
       expect(outcome.output?.tasks.map((task) => task.taskId)).toEqual(["a-integration", "z-core"]);
+    } finally { await x.h.dispose(); }
+  });
+
+  it("keeps a v1 answer in the archived plan's canonical order without claiming to reorder it (#296 review)", async () => {
+    const x = await estimateHarness({ output: (planHash) => {
+      const base = estimateOutput(planHash), task = base.tasks[0]!;
+      return { ...base, tasks: [{ ...task, taskId: "a-integration" }, { ...task, taskId: "z-core" }] };
+    } }, [{ taskId: "a-integration", dependsOn: ["z-core"] }, { taskId: "z-core" }]);
+    try {
+      await x.rounds(() => x.estimate().state !== "running");
+      expect(x.estimate()).toMatchObject({ state: "ready", repairs: [] });
+      expect(x.estimate().output?.tasks.map((task) => task.taskId)).toEqual(["a-integration", "z-core"]);
     } finally { await x.h.dispose(); }
   });
 

@@ -154,7 +154,9 @@ export function completeEstimateInTransaction(
   // Estimate usable-answer spec §4.2: repair runs on every non-null answer before the classifier, which then judges
   // the repaired value and stays the single judge. A null answer is a failed call and never reaches repair.
   const canonicalTaskIds = plan.plan.tasks.map(t => t.taskId);
-  const taskIds = planOrderTasks(plan.plan.tasks).map(t => t.taskId), contract = readEstimateContract(deps.store, id, estimateId);
+  const contract = readEstimateContract(deps.store, id, estimateId);
+  // v1 explicitly asks for the archived plan array's order; keyed v2 and later prompts use dependency order.
+  const taskIds = contract.instructionVersion === "1" ? canonicalTaskIds : planOrderTasks(plan.plan.tasks).map(t => t.taskId);
   let repairs: string[] = [], repairProblems: string[] | null = null, judged: unknown = rawOutput;
   if (rawOutput !== null) {
     const repaired = repairEstimateOutput(rawOutput, { planHash: plan.planHash, taskIds, instructionVersion: contract.instructionVersion });

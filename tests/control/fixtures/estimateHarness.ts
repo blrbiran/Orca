@@ -96,8 +96,9 @@ export function singleCallPort(options: SingleCallOptions, planHash: () => strin
  * An imported group whose estimate is claimed (a `starting` estimate run), a driver over a synthetic single-call
  * ccloop, and an estimator-only profile -- so a driver that resolves the run's port as a task profile is refused.
  */
-export async function estimateHarness(options: SingleCallOptions = {}, tasks?: readonly WebFixtureTask[]) {
+export async function estimateHarness(options: SingleCallOptions = {}, tasks?: readonly WebFixtureTask[], instructionVersion: "1" | "4" = "1") {
   const snapshot: ExecutionProfileSnapshotV1 = profileSnapshot();
+  snapshot.profile.estimatorPreflight!.instructionVersion = instructionVersion;
   snapshot.profile.allowedWorkKinds = ["budget-estimate"];
   snapshot.profile.workMaxOutputTokens = null;
   const h = await webFixture(snapshot, tasks);
