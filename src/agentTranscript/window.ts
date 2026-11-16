@@ -5,7 +5,7 @@
  *   served (deltas, omitted `thinking`); an oversized line counts as its scanned 4 KiB prefix; the first line is always
  *   served; a window stopped by a bound returns its continuation offset.
  * - A tail window walks back from the end checkpoint by checkpoint, so it reads at most the last stride plus its lines;
- *   a follow read (`after`) reads only bytes after its offset.
+ *   a follow read (`after`) reads from its offset, re-reading the preceding source only when its marker arrives alone.
  * - Every served string passes redaction (`redact.ts`): heads of decoded fields by span (C3), composite values whole.
  * - Expanding a line of 1 MiB or less re-parses that line and pages the decoded field; an oversized line is paged as
  *   decoded text from its decoder checkpoints (C6, review N1).
@@ -41,7 +41,7 @@ export interface ServedEvent {
 
 export interface TranscriptWindow {
   events: ServedEvent[];
-  /** The served lines are [start, end); `start` continues backwards, `end` forwards (and is the next follow offset). */
+  /** The scanned lines are [start, end); a follow may also revise an earlier event when its marker arrives later. */
   start: number; end: number;
   /** The indexed size: nothing at or past it (a partial last line) was served. */
   indexedEnd: number;
@@ -137,6 +137,8 @@ function markerOf(line: Line): ObservedMarker | null {
 }
 
 const lineEnd = (line: Line): number => "long" in line ? line.long.end + 1 : line.start + line.bytes.length + 1;
+const observable = (events: ServedEvent[]): boolean => events.length > 0 && events.every((event) =>
+  event.kind !== "unknown" && !["oversized", "truncated", "line-dropped"].includes(event.meta?.notice ?? ""));
 
 function eventsOf(line: Line, options: WindowOptions, observedAt?: number): ServedEvent[] {
   if ("long" in line) {
@@ -147,6 +149,20 @@ function eventsOf(line: Line, options: WindowOptions, observedAt?: number): Serv
   const out: ServedEvent[] = [];
   raw.forEach((event, i) => { if (event.kind !== "thinking" || options.includeThinking === true) out.push(serve(options.redactor, line.start, i, event, observedAt)); });
   return out;
+}
+
+/** A marker arriving after the previous follow window revises only its adjacent, known provider line. */
+async function revisitMarker(reader: RangeReader, markerStart: number, marker: ObservedMarker, options: WindowOptions): Promise<{ served: ServedEvent[]; cost: number }> {
+  const at = marker.atBytes;
+  const length = markerStart - at;
+  if (marker.ccloopObservedAt === undefined || at < 0 || length < 2 || length > PARSE_LIMIT + 1) return { served: [], cost: 0 };
+  if (at > 0 && (await reader.read(at - 1, 1))[0] !== 10) return { served: [], cost: 0 };
+  const bytes = await reader.read(at, length);
+  if (bytes.length !== length || bytes[length - 1] !== 10 || bytes.indexOf(10) !== length - 1) return { served: [], cost: bytes.length };
+  const served = eventsOf({ start: at, bytes: bytes.subarray(0, -1) }, options);
+  if (!observable(served)) return { served: [], cost: bytes.length };
+  for (const event of served) event.ccloopObservedAt = marker.ccloopObservedAt;
+  return { served, cost: bytes.length };
 }
 
 /** Does a line start at `offset`? (0, or the byte before it is `\n`, and it is before the indexed end.) */
@@ -177,7 +193,7 @@ export async function windowAfter(index: LineIndex, reader: RangeReader, offset:
     const marker = markerOf(line);
     if (pending !== null) {
       if (marker !== null) {
-        if (marker.atBytes === pending.start && marker.ccloopObservedAt !== undefined && pending.end === line.start) {
+        if (marker.atBytes === pending.start && marker.ccloopObservedAt !== undefined && pending.end === line.start && observable(pending.served)) {
           for (const event of pending.served) event.ccloopObservedAt = marker.ccloopObservedAt;
         }
         pending.cost += cost(line);
@@ -189,7 +205,8 @@ export async function windowAfter(index: LineIndex, reader: RangeReader, offset:
       pending = null;
       if (marker !== null) continue;
     }
-    pending = { start: line.start, end: lineEnd(line), cost: cost(line), served: marker === null ? eventsOf(line, options) : [] };
+    const revision = marker === null ? null : await revisitMarker(reader, line.start, marker, options);
+    pending = { start: line.start, end: lineEnd(line), cost: cost(line) + (revision?.cost ?? 0), served: revision?.served ?? eventsOf(line, options) };
   }
   if (pending !== null && take(budget, pending.cost, pending.served.length, end === offset)) {
     events.push(...pending.served.slice(0, budget.events - events.length));
@@ -228,7 +245,7 @@ export async function windowBefore(index: LineIndex, reader: RangeReader, offset
         continue;
       }
       const adjacent = pendingMarker?.start === line.end;
-      if (adjacent && pendingMarker?.marker.atBytes === line.start && pendingMarker.marker.ccloopObservedAt !== undefined) {
+      if (adjacent && pendingMarker?.marker.atBytes === line.start && pendingMarker.marker.ccloopObservedAt !== undefined && observable(line.served)) {
         for (const event of line.served) event.ccloopObservedAt = pendingMarker.marker.ccloopObservedAt;
       }
       const lineCost = line.cost + (adjacent ? pendingMarker!.cost : 0);

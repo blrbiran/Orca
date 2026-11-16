@@ -226,7 +226,11 @@ export function mergeWindow(before: Loaded | null, window: TranscriptWindowV1, p
   const base = { final: window.final, source: window.source, latest };
   if (before === null || place === "tail") return { ...base, events: shown, start: window.start, end: window.end };
   if (place === "after") {
-    let events = [...before.events, ...shown];
+    // A marker can arrive after its source line was already shown. Its event keeps the same at/i: replace it in place.
+    const replacements = new Map(shown.map((event) => [keyOf(event), event]));
+    const loadedKeys = new Set(before.events.map(keyOf));
+    let events = [...before.events.map((event) => replacements.get(keyOf(event)) ?? event),
+      ...shown.filter((event) => event.at >= before.end && !loadedKeys.has(keyOf(event)))];
     let start = before.start;
     if (events.length > MAX_KEPT) {
       const cut = events[events.length - MAX_KEPT]!.at;

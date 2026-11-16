@@ -119,6 +119,20 @@ describe("transcript observation times", () => {
     expect(rows[1]!.querySelector("time")).toBeNull();
   });
 
+  it("updates the existing visible row when a late marker revises the same at/i on follow", async () => {
+    vi.useFakeTimers();
+    const original = message(0, "live");
+    answer = (url) => url.endsWith("/transcripts") ? LISTING : url.includes("tail=1")
+      ? win([original], 0, 100) : win([{ ...original, ccloopObservedAt: 1_700_000_000_000 }], 100, 200);
+    render(<RunTranscript runId={RUN} active />);
+    await openCall();
+    expect(screen.getAllByTestId("transcript-event")).toHaveLength(1);
+    expect(screen.getByTestId("transcript-event").querySelector("time")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getAllByTestId("transcript-event")).toHaveLength(1);
+    expect(screen.getByTestId("transcript-event").querySelector("time")?.dateTime).toBe(new Date(1_700_000_000_000).toISOString());
+  });
+
   it("shows distinct tool call and result times on their joined visible row", async () => {
     vi.useFakeTimers();
     const call: TranscriptEventV1 = { at: 0, i: 0, kind: "tool_call", meta: { id: "t", name: "Bash" }, ccloopObservedAt: 1_700_000_000_000 };

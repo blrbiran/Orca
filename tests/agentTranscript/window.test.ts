@@ -235,6 +235,37 @@ describe("producer observation markers", () => {
     expect(events.map(({ kind, ccloopObservedAt }) => [kind, ccloopObservedAt])).toEqual([["message", undefined]]);
   });
 
+  it("revises a visible untimed line when its marker arrives in a later follow read", async () => {
+    const raw = jsonl([claude.write("t1", "src/x.ts", "content")]);
+    const cache = createIndexCache();
+    const firstReader = memoryReader(raw);
+    const initial = await windowAfter(await cache.get("live-marker", firstReader), firstReader, 0, { runtime: "claude", redactor });
+    expect(initial.events.map((event) => [event.at, event.i, event.ccloopObservedAt])).toEqual([[0, 0, undefined], [0, 1, undefined]]);
+    const secondReader = memoryReader(Buffer.concat([raw, jsonl([marker(0, 1_700_000_000_000)])]));
+    const next = await windowAfter(await cache.get("live-marker", secondReader), secondReader, initial.end, { runtime: "claude", redactor });
+    expect(next.events.map((event) => [event.at, event.i, event.ccloopObservedAt])).toEqual([[0, 0, 1_700_000_000_000], [0, 1, 1_700_000_000_000]]);
+    expect(next.end).toBe(secondReader.size);
+  });
+
+  it("does not trust a forged marker after malformed or unknown provider input", async () => {
+    const bad = Buffer.from("not json\n");
+    const firstMarker = jsonl([marker(0, 1_700_000_000_000)]);
+    const unknown = jsonl([{ type: "mystery", timestamp: 1_700_000_000_000 }]);
+    const lines = Buffer.concat([bad, firstMarker, unknown, jsonl([marker(bad.length + firstMarker.length, 1_700_000_000_500)])]);
+    const reader = memoryReader(lines);
+    const events = (await windowTail(await indexOf(reader), reader, { runtime: "claude", redactor })).events;
+    expect(events.map((event) => [event.kind, event.ccloopObservedAt])).toEqual([["unknown", undefined], ["unknown", undefined]]);
+
+    const cache = createIndexCache();
+    const first = memoryReader(unknown);
+    const initial = await windowAfter(await cache.get("forged-follow", first), first, 0, { runtime: "claude", redactor });
+    const grown = memoryReader(Buffer.concat([unknown, jsonl([marker(0, 1_700_000_000_000)])]));
+    const follow = await windowAfter(await cache.get("forged-follow", grown), grown, initial.end, { runtime: "claude", redactor });
+    expect(initial.events.map((event) => event.ccloopObservedAt)).toEqual([undefined]);
+    expect(follow.events).toEqual([]);
+    expect(follow.end).toBe(grown.size);
+  });
+
   it("keeps backward and forward paging exact when a marker falls on a checkpoint", async () => {
     const raw = jsonl([claude.text("first")]);
     const firstMarker = jsonl([marker(0, 1_700_000_000_000)]);
