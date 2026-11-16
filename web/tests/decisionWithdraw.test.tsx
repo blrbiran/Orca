@@ -16,6 +16,7 @@ import { enErrors } from "../src/locales/en.js";
 import { zhErrors } from "../src/locales/zh.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 import { pickOption } from "./selectControl.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 
 const DECISION: Decision = { id: "run/1", question: "q-1", chose: "c-1", because: "b-1", alternatives: [] };
 type Correction = DecisionReviewState["corrections"][number];
@@ -52,8 +53,8 @@ describe("the detail's review state (spec §7)", () => {
     expect(block.querySelector("h3")?.textContent).toBe("Reviewed by");
     // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 keeps ISO in datetime but localizes visible time.
     expect([...block.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
-      `me · ${new Date("2026-10-18T01:00:00.000Z").toLocaleString("en")}`,
-      `other · ${new Date("2026-10-18T03:00:00.000Z").toLocaleString("en")}`,
+      `me · ${expectedLocalTime("2026-10-18T01:00:00.000Z", "en")}`,
+      `other · ${expectedLocalTime("2026-10-18T03:00:00.000Z", "en")}`,
     ]);
     expect([...block.querySelectorAll("time")].map((time) => time.getAttribute("dateTime"))).toEqual([
       "2026-10-18T01:00:00.000Z", "2026-10-18T03:00:00.000Z",
@@ -93,7 +94,7 @@ describe("the detail's review state (spec §7)", () => {
     expect(block.querySelector("h3")?.textContent).toBe("Corrections");
     expect(block.getAttribute("data-tone")).toBeNull();
     const open = rowOf(container, OTHERS_OPEN.id);
-    expect(open.textContent).toBe(`wrong · because of c-others-open · other · ${new Date("2026-10-18T02:00:00.000Z").toLocaleString("en")} · open`);
+    expect(open.textContent).toBe(`wrong · because of c-others-open · other · ${expectedLocalTime("2026-10-18T02:00:00.000Z", "en")} · open`);
     expect(open.getAttribute("data-tone")).toBeNull();
     expect(open.classList.contains("correction-withdrawn")).toBe(false);
     const withdrawn = rowOf(container, MINE_WITHDRAWN.id);

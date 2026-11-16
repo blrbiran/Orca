@@ -9,6 +9,7 @@ import { AllowRequestButtons } from "../src/AllowRequestButtons.js";
 import { GroupAllowances } from "../src/GroupAllowances.js";
 import i18n from "../src/i18n.js";
 import type { GroupAllowanceV1 } from "../src/controlTypes.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 const ALLOWANCES: GroupAllowanceV1[] = [
@@ -54,8 +55,9 @@ describe("the group's allowance list (tester follow-up G §6.3)", () => {
   it("shows the allowance time in the reader's local timezone", () => {
     const at = Date.UTC(2026, 10, 16, 6, 28, 23);
     const { container } = render(<GroupAllowances groupId="g" revision={6} allowances={[{ ...ALLOWANCES[0]!, at }]} roles={["owner"]} archived={false} onCommand={vi.fn()} />);
-    expect(container.querySelector('[data-allowance="allow-1"]')!.textContent).toContain(new Date(at).toLocaleString("en"));
+    expect(container.querySelector('[data-allowance="allow-1"]')!.textContent).toContain(expectedLocalTime(at, "en"));
     expect(container.textContent).not.toContain(new Date(at).toISOString());
+    expect(container.querySelector('[data-allowance="allow-1"] .detail-note')?.getAttribute("title")).toBe(new Date(at).toISOString());
   });
 
   it("a member sees no Revoke; an empty list shows nothing", () => {

@@ -136,7 +136,7 @@ export function DecisionDetail({
           <ul className="reviewers m-0 pl-4.5">
             {review.reviewers.map((r) => (
               <li key={r.by}>
-                {r.by} · <time dateTime={r.at} title={localDateTime(r.at)}>{localDateTime(r.at)}</time>
+                {r.by} · <time dateTime={r.at} title={r.at}>{localDateTime(r.at)}</time>
               </li>
             ))}
           </ul>
@@ -158,7 +158,7 @@ export function DecisionDetail({
                 className={c.state === "withdrawn" ? withdrawnItem : undefined}
                 data-tone={c.state === "closed" ? "ok" : undefined}
               >
-                {enumText("correctionKind", c.kind)} · {c.because} · {c.by} · <time dateTime={c.at} title={localDateTime(c.at)}>{localDateTime(c.at)}</time> ·{" "}
+                {enumText("correctionKind", c.kind)} · {c.because} · {c.by} · <time dateTime={c.at} title={c.at}>{localDateTime(c.at)}</time> ·{" "}
                 <span className="correction-state">{t(`decisions.correctionState.${c.state}`)}</span>
                 {c.withdrawable && (
                   <button type="button" onClick={() => onWithdrawCorrection?.(c.id)} disabled={withdrawing?.corrections.has(c.id) === true}>

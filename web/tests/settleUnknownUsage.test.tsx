@@ -7,6 +7,7 @@ import { ControlGroupView } from "../src/ControlGroupView.js";
 import { controlCommandPath, commandEnvelope } from "../src/controlApi.js";
 import { config, run, view } from "./usageRecoveryFixture.js";
 import { workItem } from "./fixtures/board.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 afterEach(cleanup);
 const remaining = { work: { tokens: 91, activeMs: 920, attempts: 3, sessions: 4 }, handoff: { tokens: 51, activeMs: 520, attempts: 5, sessions: 6 } };
 const failed = () => run({ state: "blocked", outcome: "failed", stopReason: "Error: codex-event-error", unknownUsageSettlement: { generation: 7, highWater: 2, remaining, allowed: true, refusalReason: null, acknowledge: "charge-remaining-grant" as const } });
@@ -88,7 +89,7 @@ describe("owner unmetered release", () => {
   it("names the unmetered release in the receipt and never shows its work tokens as 0", () => {
     show(["owner"], released());
     // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 uses the reader's local time in receipts.
-    expect(screen.getByText(`Settled by user:owner at ${new Date(1234).toLocaleString("en")} · released unmetered by owner`)).toBeTruthy();
+    expect(screen.getByText(`Settled by user:owner at ${expectedLocalTime(1234, "en")} · released unmetered by owner`)).toBeTruthy();
     expect(screen.getByText("Released unmetered. The failure remains; retry is a separate action after dispatch resumes and still requires budget.")).toBeTruthy();
     const table = screen.getByRole("table", { name: "Conservatively charged" });
     expect(within(table).getAllByRole("row").map(row => row.textContent)).toEqual(["BucketTokensActive time (ms)AttemptsSessions", "Worknot metered92034", "Handoff5152056"]);
@@ -105,7 +106,7 @@ describe("owner unmetered release", () => {
       cleanup(); show(["owner"], released());
       // REWRITTEN (human authorisation, session 1f3cceb2, merging ui/panel-taste): the zh role word is 所有者
       // (taste refinement P2-7, pinned by zhTerms); only the word changed, the intent is the same.
-      expect(screen.getByText(`user:owner 于 ${new Date(1234).toLocaleString("zh")} 结清 · 所有者不计量放行`)).toBeTruthy();
+      expect(screen.getByText(`user:owner 于 ${expectedLocalTime(1234, "zh")} 结清 · 所有者不计量放行`)).toBeTruthy();
       expect(screen.getByText("已不计量放行。失败原因保留；恢复调度后可另行重试，仍须有足够预算。")).toBeTruthy();
     } finally { await i18n.changeLanguage("en"); }
   });

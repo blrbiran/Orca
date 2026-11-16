@@ -20,6 +20,7 @@ import { ProjectSettings } from "../src/ProjectSettings.js";
 import { ReviewDetail } from "../src/ReviewDetail.js";
 import "../src/i18n.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 import { optionsOf } from "./selectControl.js";
 
 afterEach(cleanup);
@@ -391,8 +392,9 @@ describe("the review detail (spec §7)", () => {
     expect(within(region).getByTestId("review-dropped").textContent).toContain("f2: evidence-single-group");
     expect(within(region).getByTestId("review-dismissals").textContent).toContain("two shapes on purpose");
     // #323: a dismissal names its local instant, not the raw UTC storage value.
-    expect(within(region).getByTestId("review-dismissals").textContent).toContain(new Date("2026-10-22T00:00:00.000Z").toLocaleString("en"));
+    expect(within(region).getByTestId("review-dismissals").textContent).toContain(expectedLocalTime("2026-10-22T00:00:00.000Z", "en"));
     expect(within(region).getByTestId("review-dismissals").textContent).not.toContain("2026-10-22T00:00:00.000Z");
+    expect(within(region).getByTestId("review-dismissals").querySelector("li")?.getAttribute("title")).toBe("2026-10-22T00:00:00.000Z");
     expect(within(region).getByTestId("review-debug").textContent).toContain("sysdebug-model-review-finding-1");
   });
 

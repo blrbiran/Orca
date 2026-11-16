@@ -8,6 +8,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BudgetEditor } from "../src/BudgetEditor.js";
 import type { Amount, CapabilityViewV1, ControlConfigV1, GroupViewV1 } from "../src/controlTypes.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: tokens * 10, attempts: 1, sessions: 1 });
 const human = { provenance: "human", estimateId: null } as const;
@@ -39,10 +40,12 @@ afterEach(cleanup);
 
 describe("the budget editor lists a task's top-ups (T14)", () => {
   it("shows the amount, who and when, and nothing for a task without one", () => {
-    const shown = render(<BudgetEditor view={view} config={config(DURABLE)} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "";
+    const rendered = render(<BudgetEditor view={view} config={config(DURABLE)} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container;
+    const shown = rendered.textContent ?? "";
     // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): the same top-up is shown at the reader's local time (#323).
-    expect(shown).toContain(`+attempts 2, by user:u-owner, at ${new Date(Date.UTC(2026, 10, 6, 9)).toLocaleString("en")}`);
+    expect(shown).toContain(`+attempts 2, by user:u-owner, at ${expectedLocalTime(Date.UTC(2026, 10, 6, 9), "en")}`);
     expect(shown).not.toContain("2026-11-06T09:00:00.000Z");
+    expect(rendered.querySelector(".budget-top-ups li")?.getAttribute("title")).toBe("2026-11-06T09:00:00.000Z");
     cleanup();
     const none = { ...view, workItems: view.workItems.map(({ topUps: _topUps, ...item }) => item) };
     expect(render(<BudgetEditor view={none} config={config(DURABLE)} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />).container.textContent ?? "").not.toContain("by user:u-owner");

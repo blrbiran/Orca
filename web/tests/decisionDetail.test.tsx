@@ -9,6 +9,7 @@ import i18n from "../src/i18n.js";
 import { WEB_CORRECTION_KINDS } from "../src/types.js";
 import type { DecisionListRow, MetricsReport, PanelCoverage } from "../src/types.js";
 import { optionsOf } from "./selectControl.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 
 /**
  * task 8 ruling K7. Every field is a distinct literal, so no assertion can
@@ -23,6 +24,29 @@ const decision: Decision = {
 };
 
 describe("DecisionDetail (task 8 ruling K7)", () => {
+  it("distinguishes the repeated hour during a DST fallback and exposes each source instant", async () => {
+    const priorZone = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    await i18n.changeLanguage("en");
+    try {
+      const first = "2026-11-01T05:30:00.000Z", second = "2026-11-01T06:30:00.000Z";
+      const { container } = render(<DecisionDetail decision={decision} review={{ reviewers: [{ by: "first", at: first }, { by: "second", at: second }], mine: "none", corrections: [] }} />);
+      const times = [...container.querySelectorAll("time")];
+      expect(times.map((time) => time.dateTime)).toEqual([first, second]);
+      expect(times.map((time) => time.textContent)).toEqual(["11/1/2026, 1:30:00 AM (UTC-04:00)", "11/1/2026, 1:30:00 AM (UTC-05:00)"]);
+      expect(times.map((time) => time.title)).toEqual([first, second]);
+      cleanup();
+      await i18n.changeLanguage("zh");
+      const chinese = render(<DecisionDetail decision={decision} review={{ reviewers: [{ by: "first", at: first }, { by: "second", at: second }], mine: "none", corrections: [] }} />);
+      expect([...chinese.container.querySelectorAll("time")].map((time) => time.textContent))
+        .toEqual(["2026/11/1 01:30:00 (UTC-04:00)", "2026/11/1 01:30:00 (UTC-05:00)"]);
+    } finally {
+      cleanup();
+      await i18n.changeLanguage("en");
+      if (priorZone === undefined) delete process.env.TZ; else process.env.TZ = priorZone;
+    }
+  });
+
   it("shows review and correction times in the reader's local clock while preserving ISO datetime", async () => {
     await i18n.changeLanguage("en");
     const at = "2026-11-16T06:28:23.404Z";
@@ -33,8 +57,8 @@ describe("DecisionDetail (task 8 ruling K7)", () => {
       expect(times).toHaveLength(2);
       for (const time of times) {
         expect(time.dateTime).toBe(at);
-        expect(time.textContent).toBe(new Date(at).toLocaleString("en"));
-        expect(time.title).toBe(new Date(at).toLocaleString("en"));
+        expect(time.textContent).toBe(expectedLocalTime(at, "en"));
+        expect(time.title).toBe(at);
         expect(time.textContent).not.toBe(at);
       }
     } finally { cleanup(); }

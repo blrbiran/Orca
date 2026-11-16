@@ -493,7 +493,7 @@ function DocumentText(props: { text: string; contentLanguage: "en" | "zh"; conse
         const shown = props.consensusAt !== null && title === (language === "zh" ? "共识" : "Consensus")
           ? body.split("\n").map((line) => line === `${prefix}${props.consensusAt}` ? `${prefix}${localDateTime(props.consensusAt)}` : line).join("\n") : body;
         return (
-          <section key={index} aria-label={title}>
+          <section key={index} aria-label={title} title={title === (language === "zh" ? "共识" : "Consensus") ? props.consensusAt ?? undefined : undefined}>
             <h5 className={documentSectionTitle}>{title}</h5>
             {/* Issue 96: the body's markdown subset is rendered; every other construct stays text. */}
             {shown !== "" && <RequirementMarkdown text={shown} />}

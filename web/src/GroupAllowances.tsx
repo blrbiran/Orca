@@ -26,7 +26,7 @@ export function GroupAllowances(props: { groupId: string; revision: number; allo
         {allowances.map((allowance) => (
           <li key={allowance.allowanceId} data-allowance={allowance.allowanceId}>
             <code>{allowance.allowanceId}</code> {what(allowance.request)}{" "}
-            <span className="detail-note">{t("control.allowances.by", { by: allowance.by, via: allowance.via, at: localDateTime(allowance.at), from: fromOf(allowance.from) })}</span>
+            <span className="detail-note" title={new Date(allowance.at).toISOString()}>{t("control.allowances.by", { by: allowance.by, via: allowance.via, at: localDateTime(allowance.at), from: fromOf(allowance.from) })}</span>
             {allowance.revoked !== undefined
               ? <span className="badge">{t("control.allowances.revoked")}</span>
               : owner && !props.archived && (

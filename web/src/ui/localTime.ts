@@ -4,5 +4,8 @@ import { currentLanguage } from "../i18n.js";
 export function localDateTime(at: string | number | null | undefined): string {
   if (at === null || at === undefined) return "—";
   const date = new Date(at);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(currentLanguage());
+  if (Number.isNaN(date.getTime())) return "—";
+  const offset = -date.getTimezoneOffset(), minutes = Math.abs(offset);
+  const hours = String(Math.floor(minutes / 60)).padStart(2, "0"), remainder = String(minutes % 60).padStart(2, "0");
+  return `${date.toLocaleString(currentLanguage())} (UTC${offset >= 0 ? "+" : "-"}${hours}:${remainder})`;
 }

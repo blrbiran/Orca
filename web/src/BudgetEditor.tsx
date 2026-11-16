@@ -443,7 +443,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
           <p className="my-[6px]">{t("budget.topUps", { taskId: item.taskId })}</p>
           <ul>
             {item.topUps!.map((topUp, index) => (
-              <li key={`${topUp.fromRunId}:${index}`}>
+              <li key={`${topUp.fromRunId}:${index}`} title={new Date(topUp.at).toISOString()}>
                 {t("budget.topUp", {
                   amount: DIMENSIONS.filter((dimension) => topUp.amount[dimension] > 0).map((dimension) => `${enumText("dimension", dimension)} ${topUp.amount[dimension]}`).join(", "),
                   by: topUp.by, at: localDateTime(topUp.at),

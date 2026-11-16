@@ -6,6 +6,7 @@ import { TaskDetail } from "../src/TaskDetail.js";
 import { fetchRunActivity } from "../src/controlApi.js";
 import i18n from "../src/i18n.js";
 import { run, view, workItem } from "./fixtures/board.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 
 // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 changes the activity-row time assertions from UTC ISO to the reader's local clock.
 const AT = Date.UTC(2026, 9, 8, 10, 5, 0);
@@ -44,8 +45,9 @@ describe("the task detail's run activity (spec §6.5)", () => {
       progress: { runId: "run-a", step: "execute", attempt: null, tokens: null, lastTransitionAt: at } });
     const { container } = render(<TaskDetail view={view([item], [run({})])} item={item} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} archived={false} />);
     const progress = container.querySelector("p.num")!;
-    expect(progress.textContent).toContain(new Date(at).toLocaleString("en"));
+    expect(progress.textContent).toContain(expectedLocalTime(at, "en"));
     expect(progress.textContent).not.toContain(at);
+    expect(progress.querySelector("[title]")?.getAttribute("title")).toBe(at);
   });
 
   it.each([
@@ -73,11 +75,12 @@ describe("the task detail's run activity (spec §6.5)", () => {
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
     const lines = await within(region).findAllByRole("listitem");
     const text = lines.map((line) => line.textContent ?? "");
-    expect(text[1]).toBe(`${new Date(AT).toLocaleString(i18n.language)} · phase · execute · attempt 2`);
-    expect(text[0]).toBe(`${new Date(AT - 60_000).toLocaleString(i18n.language)} · started`);
-    expect(text[3]).toBe(`${new Date(AT + 1000).toLocaleString(i18n.language)} · settled · settled`);
+    expect(text[1]).toBe(`${expectedLocalTime(AT, i18n.language)} · phase · execute · attempt 2`);
+    expect(text[0]).toBe(`${expectedLocalTime(AT - 60_000, i18n.language)} · started`);
+    expect(text[3]).toBe(`${expectedLocalTime(AT + 1000, i18n.language)} · settled · settled`);
     expect(text).toHaveLength(4);
     expect(lines[0]!.querySelector("time")?.getAttribute("dateTime")).toBe(new Date(AT - 60_000).toISOString());
+    expect(lines[0]!.querySelector("time")?.getAttribute("title")).toBe(new Date(AT - 60_000).toISOString());
     expect(text.join(" ")).not.toContain(new Date(AT).toISOString());
     expect(urls).toEqual(["/api/control/runs/run-a/activity"]);
     const runsHeading = screen.getByRole("heading", { name: "Runs of a" });
@@ -89,7 +92,7 @@ describe("the task detail's run activity (spec §6.5)", () => {
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
     const lines = await within(region).findAllByRole("listitem");
     const blocked = lines[2]?.textContent ?? "";
-    expect(blocked.startsWith(`${new Date(AT + 500).toLocaleString(i18n.language)} · blocked · `)).toBe(true);
+    expect(blocked.startsWith(`${expectedLocalTime(AT + 500, i18n.language)} · blocked · `)).toBe(true);
     expect(blocked).not.toContain("Error: ");
   });
 
@@ -108,7 +111,7 @@ describe("the task detail's run activity (spec §6.5)", () => {
       // mutation: render the bare kind (no reason) -> the sentence is missing, red
       // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: final-review fix wave minor 5 -- the sentence
       // already says "not retried", so the kind word is no longer put before it (mutation M5-1: keep the kind -> red).
-      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toLocaleString(i18n.language)} · ${sentence}`]);
+      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${expectedLocalTime(AT + 2000, i18n.language)} · ${sentence}`]);
     } finally { await i18n.changeLanguage("en"); }
   });
 
@@ -119,7 +122,7 @@ describe("the task detail's run activity (spec §6.5)", () => {
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
     const lines = await within(region).findAllByRole("listitem");
     // Mutation I4-M3 (the row leaves the command out) -> red.
-    expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toLocaleString(i18n.language)} · Not retried automatically: the check could not run. · npm test`]);
+    expect(lines.map((line) => line.textContent ?? "")).toEqual([`${expectedLocalTime(AT + 2000, i18n.language)} · Not retried automatically: the check could not run. · npm test`]);
   });
 
   // Tester follow-up B T2 (#234): a run left out because the fresh grant is below one attempt's cost says so, with both figures.
@@ -134,7 +137,7 @@ describe("the task detail's run activity (spec §6.5)", () => {
       const region = await screen.findByRole("region", { name: language === "en" ? "Recent activity of run-a" : "run-a 的近期活动" });
       const lines = await within(region).findAllByRole("listitem");
       // Mutation: drop the figures -> the " · the next run would get ..." tail is missing, red.
-      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toLocaleString(i18n.language)} · ${sentence}`]);
+      expect(lines.map((line) => line.textContent ?? "")).toEqual([`${expectedLocalTime(AT + 2000, i18n.language)} · ${sentence}`]);
     } finally { await i18n.changeLanguage("en"); }
   });
 
@@ -145,7 +148,7 @@ describe("the task detail's run activity (spec §6.5)", () => {
     const region = await screen.findByRole("region", { name: "Recent activity of run-a" });
     const lines = await within(region).findAllByRole("listitem");
     // Mutation S3-M2 (command for every reason) -> " · npm test" appended, red.
-    expect(lines.map((line) => line.textContent ?? "")).toEqual([`${new Date(AT + 2000).toLocaleString(i18n.language)} · Not retried automatically: setup failed.`]);
+    expect(lines.map((line) => line.textContent ?? "")).toEqual([`${expectedLocalTime(AT + 2000, i18n.language)} · Not retried automatically: setup failed.`]);
   });
 
   // Final-review fix wave (minor 1): once the ladder left the run out, its reason line no longer says Orca escalates it.

@@ -3,7 +3,7 @@
  * Panel i18n spec §3.3, §3.5, §5: the task control and recovery areas in Chinese -- the control summary and its alerts,
  * the import form, the group list, one group (heading, stop, work items, runs, handoff requests, estimates, dispatch
  * buttons), a task's detail with its progress and label draft, recovery blockers, the workspace mode; every enum value
- * in words. Ids, hashes, codes and dates stay as sent.
+ * in words. Ids, hashes and codes stay as sent; visible dates use the reader's local time and offset.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,7 @@ import { EvidenceList, TaskDetail, progressText } from "../src/TaskDetail.js";
 import type { MetricsReport } from "../src/types.js";
 import type { Amount, ControlConfigV1, ControlSummaryV1, GroupViewV1, RecoveryViewV1, RepositoryWorkspaceV1, RunViewV1, WorkItemViewV1 } from "../src/controlTypes.js";
 import { openImportMenu } from "./fixtures/newMenu.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 
 const amount = (tokens: number): Amount => ({ tokens, activeMs: 1_000, attempts: 3, sessions: 3 });
 const capability = { usageObservation: "phase-end", budgetEnforcement: "soft", contextObservation: "realtime", handoffControl: "durable", handoffExecution: "mechanical-in-run-v1", contextWindowTokens: null, requestBoundProof: null } as const;
@@ -104,7 +105,7 @@ describe("the task control and recovery areas in Chinese", () => {
     expect(screen.getByRole("combobox", { name: "添加标签" })).toBeTruthy();
     for (const expected of [
       // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 localizes the task's transition instant.
-      "任务 a", "标签来自操作者 · 版本 1", "恢复计划里的标签", `进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 ${new Date("2026-10-01T00:00:00.000Z").toLocaleString("zh")}`,
+      "任务 a", "标签来自操作者 · 版本 1", "恢复计划里的标签", `进度：等人处理 · 尝试次数未知 · token 5 / 0 · 上次变化 ${expectedLocalTime("2026-10-01T00:00:00.000Z", "zh")}`,
       "a 的运行", "r1 · 工作 · 已阻塞", "列出 r1 的证据",
     ]) expect(text, expected).toContain(expected);
   });

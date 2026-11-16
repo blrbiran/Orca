@@ -10,6 +10,7 @@ import { ChargeRetry } from "../src/ChargeRetry.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import { RunActivity } from "../src/TaskDetail.js";
 import { config, run, view } from "./usageRecoveryFixture.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 afterEach(cleanup);
 
 const remaining = { work: { tokens: 91_000, activeMs: 920, attempts: 3, sessions: 4 }, handoff: { tokens: 51, activeMs: 520, attempts: 5, sessions: 6 } };
@@ -61,7 +62,8 @@ describe("charge observed usage beside the settle action", () => {
     show(["owner"], settled);
     // mutation: drop the observed-floor receipt branch -> the conservative receipt, red
     // Ruling (2026-11-17, human: "这次批准改写所有必要的判据"): #323 localizes the receipt's displayed timestamp.
-    expect(screen.getByTestId("observed-floor-receipt").textContent).toBe(`Settled by agent:cli at ${new Date(1234).toLocaleString("en")}: at least 1,234 work tokens (observed usage, approximate)`);
+    expect(screen.getByTestId("observed-floor-receipt").textContent).toBe(`Settled by agent:cli at ${expectedLocalTime(1234, "en")}: at least 1,234 work tokens (observed usage, approximate)`);
+    expect(screen.getByTestId("observed-floor-receipt").closest("[title]")?.getAttribute("title")).toBe(new Date(1234).toISOString());
     cleanup();
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ schema: "orca-run-activity-v1", runId: "run-a", entries: [{ seq: 1, groupId: "g", taskId: "a", runId: "run-a", at: 1234, kind: "usage-settled", body: { method: "observed-floor", floorTokens: 1_234 } }] })));
     try {

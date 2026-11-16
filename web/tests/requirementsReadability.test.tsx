@@ -13,6 +13,7 @@ import type { ControlRefusal } from "../src/controlState.js";
 import type { ControlSummaryV1, GroupSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
 import type { RequirementFixtureState } from "./fixtures/requirement.js";
+import { expectedLocalTime } from "./fixtures/localTime.js";
 
 afterEach(cleanup);
 const show = (view: RequirementViewV1, refusal: ControlRefusal | null = null, summary: ControlSummaryV1 = summaryWith(view)): HTMLElement =>
@@ -50,8 +51,9 @@ describe("the requirement document's consensus time (#323)", () => {
       const view = { ...before, document, requirement: { ...before.requirement, contentLanguage: language, consensus: { ...before.requirement.consensus!, at } } };
       const root = show(view);
       const consensus = [...root.querySelectorAll("section")].find((section) => section.getAttribute("aria-label") === title);
-      expect(consensus?.textContent).toContain(new Date(at).toLocaleString(language));
+      expect(consensus?.textContent).toContain(expectedLocalTime(at, language));
       expect(consensus?.textContent).not.toContain(at);
+      expect(consensus?.getAttribute("title")).toBe(at);
       expect(root.querySelector(`section[aria-label="${next}"]`)?.textContent).toContain(at);
       expect(view.document).toBe(document);
     } finally { cleanup(); await i18n.changeLanguage("en"); }
