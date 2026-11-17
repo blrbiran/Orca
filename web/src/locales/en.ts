@@ -1515,6 +1515,7 @@ export const en = {
     columns: { id: "Task", title: "Title", labels: "Labels", loopPlan: "Loop plan", targetPaths: "Target paths", checks: "Checks", dependsOn: "Depends on", traces: "Traces" },
     layer: "Layer {{n}}: {{tasks}}",
     implicitEdge: "{{from}} before {{to}}: {{paths}}",
+    overlapSerialized: "{{a}} and {{b}} run one after the other only because their target paths overlap ({{paths}}); nothing in the plan says one needs the other. Narrow a broad path to the files each task writes (orca requirement narrow-path) and they can run together, or send feedback.",
     parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and the later task neither writes, checks nor mentions a file the earlier one writes. If the later tasks do not need the earlier ones' output, drop the edges (Orca re-checks the split as the next draft), or send feedback.",
     impliedPath: "{{task}}'s success condition names {{path}}, which only {{writers}} may write (implied-path-outside-targets); its run would stop on an allowlist miss. Add the file to {{task}}'s target paths (Orca re-checks the split as the next draft), or send feedback to move that change to {{writers}}.",
     applyParallel: "Drop these edges",

@@ -79,7 +79,7 @@ import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenInte
 import { estimateHistoryView } from "../control/estimateHistory.js";
 import { liveCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
-import { parallelCandidates } from "../control/splitParallel.js";
+import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
 import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
 import { runUsageDetail } from "../control/usageQuery.js";
@@ -1650,7 +1650,8 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       // leave the record untouched: a command still carrying the old hash is rejected and the person reviews this view.
       const shown = plan !== null && rest.output !== null && multiDirOf(group) !== null && rest.draftHash === sha256Canonical(plan)
         ? { ...rest, draftHash: requirementDraftHash(plan, rest.output) } : rest;
-      return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output) } : shown;
+      return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output),
+        overlapSerialized: overlapSerialized(shown.output) } : shown;
     }), spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),

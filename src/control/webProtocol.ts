@@ -1131,6 +1131,8 @@ export const requirementDraftEditPayloadSchema = z.object({
   edit: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("apply-parallel-candidates") }).strict(),
     z.object({ kind: z.literal("add-implied-path"), taskId: nonemptyString, path: nonemptyString }).strict(),
+    // Tester #335: one claim replaced by paths inside it (requirementDraftEdit.ts narrowedSplit).
+    z.object({ kind: z.literal("narrow-target-path"), taskId: nonemptyString, path: nonemptyString, to: z.array(nonemptyString).min(1).max(16) }).strict(),
   ]),
 }).strict();
 // Clarify caps spec 2026-10-21 §3.1, §3.3: the person grants one more round after the latest one, or sets the class.
@@ -1832,7 +1834,9 @@ export const requirementViewSchema = z.object({
   // Tester #284: optional -- only a draft with layers has it, and older fixtures carry none.
   // Tester #265: optional on the same terms.
   drafts: z.array(draftBodySchema.omit({ plan: true }).extend({ parallelCandidates: z.array(z.object({ before: nonemptyString, after: nonemptyString }).strict()).optional(),
-    impliedPathsOutsideTargets: z.array(z.object({ taskId: nonemptyString, path: nonemptyString, writers: z.array(nonemptyString).min(1) }).strict()).optional() })),
+    impliedPathsOutsideTargets: z.array(z.object({ taskId: nonemptyString, path: nonemptyString, writers: z.array(nonemptyString).min(1) }).strict()).optional(),
+    // Tester #335: optional on the same terms as the two hints above.
+    overlapSerialized: z.array(z.object({ a: nonemptyString, b: nonemptyString, paths: z.array(nonemptyString).min(1) }).strict()).optional() })),
   document: z.string(),
   spendCapBlock: spendCapBlockSchema.nullable().optional(),
   // Clarify caps spec 2026-10-21 §3.6: code's caps for this requirement, and when the current drafting step was asked for

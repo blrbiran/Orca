@@ -10,6 +10,8 @@ import type { SplitPlanFile } from "./requirementSplit.js";
 import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurposes.js";
 import { impliedPathsOutsideTargets } from "./splitImpliedPaths.js";
 import { parallelCandidates } from "./splitParallel.js";
+import { contains } from "../scheduler/pathTrie.js";
+import { normalizeClaim } from "../scheduler/writeSet.js";
 import { commandSuccess, readRunBody, readStopIntent } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { CommandLookupV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -52,6 +54,7 @@ export function editedSplit(output: Output, edit: Edit): { output: Output; note:
     for (const task of tasks) task.dependsOn = task.dependsOn.filter((before) => !pairs.some((pair) => pair.after === task.taskId && pair.before === before));
     return { output: copy, note: `person edit: dropped dependsOn ${pairs.map((pair) => `${pair.before} -> ${pair.after}`).join(", ")} (parallel candidates)` };
   }
+  if (edit.kind === "narrow-target-path") return narrowedSplit(copy, edit);
   const entry = impliedPathsOutsideTargets(output).find((hint) => hint.taskId === edit.taskId && hint.path === edit.path);
   if (entry === undefined) return invalid(`draft-edit-not-an-implied-path:${edit.taskId}:${edit.path}`);
   const task = tasks.find((candidate) => candidate.taskId === edit.taskId)!;
@@ -63,6 +66,25 @@ export function editedSplit(output: Output, edit: Edit): { output: Output; note:
     else own.targetPaths.push(entry.path);
   } else task.targetPaths.push(entry.path);
   return { output: copy, note: `person edit: added ${entry.path} to ${edit.taskId}'s target paths (implied path)` };
+}
+
+/**
+ * Tester #335: one claim of a task replaced, in place, by paths inside it (each contained in the claim, compared as
+ * write sets compare: pathTrie.contains on normalized claims). Never a wider or a different path, so the edit can only
+ * remove overlap; the split is re-validated afterwards (a check that still reads outside, an implied path, a real
+ * overlap that still orders the pair). In a multi split, the write that declares the claim.
+ */
+function narrowedSplit(copy: Output, edit: Extract<Edit, { kind: "narrow-target-path" }>): { output: Output; note: string } {
+  const task = (copy.tasks as Array<Output["tasks"][number]>).find((candidate) => candidate.taskId === edit.taskId);
+  const writes: Array<{ targetPaths: string[] }> = task === undefined ? [] : "writes" in task ? task.writes : [task];
+  const write = writes.find((candidate) => candidate.targetPaths.includes(edit.path));
+  if (write === undefined) return invalid(`draft-edit-not-a-target-path:${edit.taskId}:${edit.path}`);
+  const outer = normalizeClaim(edit.path).normalized;
+  const wider = edit.to.find((path) => path === edit.path || !contains(outer, normalizeClaim(path).normalized));
+  if (wider !== undefined) return invalid(`draft-edit-not-narrower:${edit.taskId}:${edit.path}:${wider}`);
+  const at = write.targetPaths.indexOf(edit.path);
+  write.targetPaths.splice(at, 1, ...edit.to.filter((path) => !write.targetPaths.includes(path)));
+  return { output: copy, note: `person edit: narrowed ${edit.taskId}'s target path ${edit.path} to ${edit.to.join(", ")}` };
 }
 
 /**

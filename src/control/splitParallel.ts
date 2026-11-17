@@ -5,6 +5,8 @@ import type { MultiSplitOutput, SplitOutput } from "./requirementSchemas.js";
 
 /** Tester #284: two tasks a declared `dependsOn` edge orders though, as far as code can tell, they could run at once. */
 export interface ParallelCandidate { before: string; after: string }
+/** Tester #335: two tasks no declared dependency orders, which run one after the other because a broad claim overlaps. */
+export interface OverlapSerialized { a: string; b: string; paths: string[] }
 
 type Write = { dir: string; targetPaths: readonly string[]; checks: readonly string[] };
 const writesOf = (task: SplitOutput["tasks"][number] | MultiSplitOutput["tasks"][number]): readonly Write[] =>
@@ -47,22 +49,51 @@ const mentions = (text: string, name: string): boolean => new RegExp(`(?<![\\w-]
  * `before`'s output in any other way, so this is a hint for a person or an orchestrating agent to send feedback on; it
  * never refuses a draft. In task order, then dependency order.
  */
+/** Whether `from` is an ancestor of `to` through the declared `dependsOn` edges (`skipDirect`: not by the edge from -> to). */
+function declaredReach(byId: ReadonlyMap<string, { dependsOn: readonly string[] }>, from: string, to: string, skipDirect: boolean): boolean {
+  const seen = new Set<string>(), stack = (byId.get(to)?.dependsOn ?? []).filter((id) => !skipDirect || id !== from);
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (id === from) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    stack.push(...(byId.get(id)?.dependsOn ?? []));
+  }
+  return false;
+}
+
+/**
+ * Tester #335 (Rule 5: code judges, and only hints): each pair of tasks no declared dependency orders (either way, through
+ * any path) whose write sets intersect where at least one side claims more than the one file both name -- a directory
+ * (`src/**`, `src/report`) containing the other's claim. The write-set rule (#268) orders such a pair, so an authored
+ * diamond can run as a chain while every edge is implicit (apply-parallel cannot drop one); the person can narrow a claim
+ * (requirement-draft-edit narrow-target-path). Two tasks naming the same file are not listed: they must take turns. `paths`
+ * names each overlapping pair of claims as declared, `<a's> ∩ <b's>`. In task order.
+ */
+export function overlapSerialized(output: SplitOutput | MultiSplitOutput): OverlapSerialized[] {
+  const tasks = output.tasks as ReadonlyArray<SplitOutput["tasks"][number] | MultiSplitOutput["tasks"][number]>;
+  const byId = new Map(tasks.map((task) => [task.taskId, task]));
+  const claims = tasks.map((task) => qualifiedWriteSetOf(writesOf(task)));
+  const out: OverlapSerialized[] = [];
+  for (let i = 0; i < tasks.length; i += 1) for (let j = i + 1; j < tasks.length; j += 1) {
+    const a = tasks[i]!.taskId, b = tasks[j]!.taskId;
+    if (declaredReach(byId, a, b, false) || declaredReach(byId, b, a, false)) continue;
+    const conflicts = intersect(claims[i]!, claims[j]!);
+    const broad = conflicts.filter((c) => !(c.kind === "equal" && !c.a.declared.endsWith("**") && c.a.declared === c.b.declared));
+    if (broad.length === 0) continue;
+    // A one-repository claim is qualified `:<path>`; a multi-directory one keeps its `<dir>:` (writeSet.ts).
+    const shown = (declared: string): string => (declared.startsWith(":") ? declared.slice(1) : declared);
+    out.push({ a, b, paths: [...new Set(broad.map((c) => `${shown(c.a.declared)} ∩ ${shown(c.b.declared)}`))] });
+  }
+  return out;
+}
+
 export function parallelCandidates(output: SplitOutput | MultiSplitOutput): ParallelCandidate[] {
   const tasks = output.tasks as ReadonlyArray<SplitOutput["tasks"][number] | MultiSplitOutput["tasks"][number]>;
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
   const claims = new Map(tasks.map((task) => [task.taskId, qualifiedWriteSetOf(writesOf(task))]));
   // Whether `from` is an ancestor of `to` without the direct edge from -> to.
-  const reachesOtherwise = (from: string, to: string): boolean => {
-    const seen = new Set<string>(), stack = (byId.get(to)?.dependsOn ?? []).filter((id) => id !== from);
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (id === from) return true;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      stack.push(...(byId.get(id)?.dependsOn ?? []));
-    }
-    return false;
-  };
+  const reachesOtherwise = (from: string, to: string): boolean => declaredReach(byId, from, to, true);
   const out: ParallelCandidate[] = [];
   for (const after of tasks) for (const before of new Set(after.dependsOn)) {
     const written = claims.get(before);

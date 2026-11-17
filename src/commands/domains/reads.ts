@@ -61,13 +61,15 @@ async function groupOfRun(context: WriteContext, runId: string): Promise<string>
  * (controlViews.ts readRequirementView) are spelled out after the body; --json is the body as served.
  */
 function requirementShow(body: unknown): string {
-  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; impliedPathsAdded?: ImpliedPathAddition[] | null }>;
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }> }>;
   const lines = drafts.flatMap((draft) => [
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file the earlier writes is written, checked or mentioned by the later; orca requirement apply-parallel drops the edges, or send feedback): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
     // Tester #265: a hint, one line each; tester follow-up K: `orca requirement add-implied-path` gives the task the file,
     // or feedback moves the change to its writer.
     ...(draft.impliedPathsOutsideTargets ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathLine(entry)} (orca requirement add-implied-path <group> --task ${entry.taskId} --path ${entry.path})`),
+    // Tester #335: a pair no dependency orders, serialised only by an overlapping broad claim; narrow-path frees it.
+    ...(draft.overlapSerialized ?? []).map((entry) => `draft ${draft.draftNo} ${entry.a} and ${entry.b} run one after the other only because their target paths overlap (${entry.paths.join(", ")}); orca requirement narrow-path <group> --task <task> --path <path> --to <file> lets them run together`),
     ...(draft.impliedPathsAdded ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathAddedLine(entry)}`),
   ]);
   return [text(body), ...lines].join("\n");

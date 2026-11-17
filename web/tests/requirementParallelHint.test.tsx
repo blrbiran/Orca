@@ -32,6 +32,20 @@ describe("the split draft's parallel note (#284)", () => {
     expect(zh?.textContent).toContain("这些任务可以并行：exporter ∥ images。");
   });
 
+  it("names a pair a broad target path serialises, in English and in Chinese (#335)", async () => {
+    const overlap = (): RequirementViewV1 => {
+      const view = requirementView("awaiting-review");
+      return { ...view, drafts: view.drafts.map((draft) => ({ ...draft, overlapSerialized: [{ a: "velocity", b: "cycle", paths: ["src/** ∩ src/**"] }] })) };
+    };
+    await i18n.changeLanguage("en");
+    // mutation: drop the overlap note from DraftReview -> no such element, red
+    expect(show(overlap()).querySelector("[data-overlap-serialized]")?.textContent)
+      .toContain("velocity and cycle run one after the other only because their target paths overlap (src/** ∩ src/**)");
+    cleanup();
+    await i18n.changeLanguage("zh");
+    expect(show(overlap()).querySelector("[data-overlap-serialized]")?.textContent).toContain("velocity 和 cycle 只是因为目标路径重叠（src/** ∩ src/**）");
+  });
+
   it("shows nothing for a draft with no candidates, or one the server gave none", async () => {
     await i18n.changeLanguage("en");
     expect(show(withCandidates([])).querySelector("[data-parallel-candidates]")).toBeNull();

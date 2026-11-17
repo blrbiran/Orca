@@ -112,6 +112,22 @@ add a path the current draft lists as implied to that task's target paths; the r
 orca requirement add-implied-path g1 --task cli --path README.md
 ```
 
+## `orca requirement narrow-path <group> --task <task> --path <path> --to <to>`
+
+replace one of a task's target paths in the current draft with paths inside it; the result is the next draft
+
+- What it does: sends control verb `requirement-draft-edit`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--task <task>` (required): the task whose target path is narrowed
+- `--path <path>` (required): the target path as the draft lists it (for example src/**)
+- `--to <to>` (required) (repeatable): a path inside it the task writes (repeatable)
+
+```
+orca requirement show g1   # lists 'run one after the other only because their target paths overlap'
+orca requirement narrow-path g1 --task velocity --path 'src/**' --to src/report/velocity.js
+```
+
 ## `orca requirement classify <group> --scope <scope> --clarity <clarity>`
 
 set the requirement's class (it sets the clarification caps)
