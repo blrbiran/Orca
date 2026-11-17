@@ -289,6 +289,7 @@ import { orderByLayout } from "./dependencyLayout.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
 import { GroupDependencies } from "./GroupDependencies.js";
 import type { GroupSummaryV1 } from "./controlTypes.js";
+import { CostOutlierRows, groupTaskCosts } from "./TaskCost.js";
 import { RegionDrafts } from "./regionDraft.js";
 import { ReviewDetail } from "./ReviewDetail.js";
 import type { GroupDecisionsViewV1 } from "./controlTypes.js";
@@ -750,11 +751,15 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </div>
   </>);
 
+  // Tester #321 part C: each task's cost over its runs against the group median; flagged ones are Problems rows. A notice only.
+  const costs = groupTaskCosts(view, props.now ?? Date.now());
+  const costOutliers = costs.filter((cost) => cost.reasons.length > 0);
   // Tester #293: the open task's detail belongs to the regions that list tasks (Progress, Results). Outside them it is not
   // rendered -- it followed the person to every tab, and under Live it was a second transcript of a task Live already
   // follows. Only the selected region is rendered, so at most one copy exists.
   const taskDetail = openItem === undefined ? null : (
-    <TaskDetail key={openItem.taskId} active={props.active !== false} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} onClose={() => toggleTask(openItem.taskId)} />
+    <TaskDetail key={openItem.taskId} active={props.active !== false} view={view} item={openItem} roles={props.roles} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={workspaceMode} archived={archived} decisions={decisions} decisionsFailed={decisionsFailed} onCorrectDecision={props.onCorrectDecision} resultsActive={props.active !== false && region === "results"} resultsScope={props.resultsScope ?? ""} onClose={() => toggleTask(openItem.taskId)}
+      cost={costs.find((cost) => cost.taskId === openItem.taskId)} />
   );
 
   return (
@@ -978,6 +983,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <p>{item.taskId}</p>
         <UsagePause groupId={groupId} revision={revision} item={item} onCommand={onCommand} archived={archived} />
       </div>)}
+      {/* Tester #321 part C: a task costing a multiple of the group median, or running long; nothing is paused by it. */}
+      <CostOutlierRows costs={costOutliers} />
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />

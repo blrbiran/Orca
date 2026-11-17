@@ -32,6 +32,8 @@ import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import type { Role } from "./auth.js";
 import { localDateTime } from "./ui/localTime.js";
+import { TaskCostLine } from "./TaskCost.js";
+import type { TaskCost } from "../../src/control/taskCost.js";
 
 /** A system label and a custom one look different (spec §4.2); the class is the whole difference. */
 export function LabelChips(props: { labels: string[] | undefined }): JSX.Element {
@@ -47,6 +49,9 @@ export function LabelChips(props: { labels: string[] | undefined }): JSX.Element
   );
 }
 
+/** Tester #321 part C: the steps of a run still in progress, whose last attempt may yet fail. */
+const IN_PROGRESS_STEPS: ReadonlySet<WorkItemProgressV1["step"]> = new Set(["plan", "execute", "verify"]);
+
 /**
  * Spec §4.1/§4.2 (§8 R11, R18): step · attempt n/max · tokens. Unknown usage says "unknown", never a percentage; a known
  * number is annotated, because ccloop reports usage only when a phase ends (panel i18n spec §3.3: in the reader's language).
@@ -56,7 +61,9 @@ export function progressText(progress: WorkItemProgressV1 | null | undefined): s
   const step = progress.step === null ? i18n.t("control.progress.notReported") : enumText("progressStep", progress.step);
   const attempt = progress.attempt === null
     ? i18n.t("control.progress.attemptUnknown")
-    : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max });
+    : i18n.t("control.progress.attempt", { current: progress.attempt.current, max: progress.attempt.max })
+      // Tester #321 part C: on its last attempt, while a step is in progress, a run says that one more failure ends it.
+      + (progress.attempt.current >= progress.attempt.max && IN_PROGRESS_STEPS.has(progress.step) ? i18n.t("control.taskCost.lastAttempt") : "");
   const tokens = progress.tokens === null
     ? i18n.t("control.progress.tokensUnknown")
     : progress.tokens.grant===null?i18n.t("control.progress.tokensUnlimited",{used:shortTokens(progress.tokens.used)})
@@ -231,6 +238,8 @@ export interface TaskDetailProps {
   onCorrectDecision?: (projectKey: string, decisionId: string, origin?: { groupId: string; taskId: string | null; runId: string }) => void;
   /** Tester #293: the open task's visible close control; absent, none is shown. */
   onClose?: () => void;
+  /** Tester #321 part C: the task's cost over its runs against the group median (TaskCost.tsx); absent, no line. */
+  cost?: TaskCost;
 }
 
 export function TaskDetail(props: TaskDetailProps): JSX.Element {
@@ -320,6 +329,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
         {t("control.task.progress", { progress: progressText(item.progress) })}
         {item.progress?.lastTransitionAt ? <span title={item.progress.lastTransitionAt}>{t("control.task.lastTransition", { at: localDateTime(item.progress.lastTransitionAt) })}</span> : ""}
       </p>
+      <TaskCostLine cost={props.cost} />
       <LoopPlanCard view={view} item={item} drafts={drafts} onDraft={onDraft} onCommand={onCommand} workspaceMode={props.workspaceMode} archived={archived} />
       {item.currentRunId !== null && <RunActivity key={item.currentRunId} runId={item.currentRunId} changeSeq={view.changeSeq} onLadderSkipped={(runId, reason) => setLadderSkip({ runId, reason })} />}
       <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} />

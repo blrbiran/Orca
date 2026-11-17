@@ -12,7 +12,8 @@ import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
 import { REPEATED_FAILURE_STOP } from "../../control/repeatedFailureStop.js";
 import { impliedPathAddedLine, impliedPathLine, type ImpliedPathAddition, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
-import { phaseEndBudgetLines, runUsageLines, type UsageRun } from "./usageLines.js";
+import { phaseEndBudgetLines, runUsageLines, taskCostLine, type UsageRun } from "./usageLines.js";
+import { viewTaskCost, type TaskCost } from "../../control/taskCost.js";
 import { runUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
@@ -460,9 +461,12 @@ export const READ_ROWS: CommandDef[] = [
     // Tester #285: the brief names the runs under way whose agent reports usage only at phase end (controlApi.ts).
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
       const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
+      const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
       return [text(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
-        ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : [])].join("\n"); } }),
+        ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
+        // Tester #321 part C: each task costing a multiple of the group median, or running long, in words.
+        ...costs.map(taskCostLine)].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
     format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
@@ -484,13 +488,16 @@ export const READ_ROWS: CommandDef[] = [
   read({ domain: "task", action: "show", summary: "one task of a group and its runs", positionals: [GROUP, TASK], paths: (c) => [`groups/${ids(c, "group")}`],
     compose: ([view], c) => {
       const v = view as GroupView;
-      return { schema: "orca-task-show-v1", groupId: v.summary.groupId, revision: v.summary.commandRevision, task: v.workItems.find((w) => w.taskId === ids(c, "task")), runs: v.runs.filter((r) => r.taskId === ids(c, "task")) };
+      // Tester #321 part C: the task's cost over all its runs against the group median (only-add; absent without runs).
+      const cost = viewTaskCost(v.runs as Parameters<typeof viewTaskCost>[0], ids(c, "task"), Date.now());
+      return { schema: "orca-task-show-v1", groupId: v.summary.groupId, revision: v.summary.commandRevision, task: v.workItems.find((w) => w.taskId === ids(c, "task")), runs: v.runs.filter((r) => r.taskId === ids(c, "task")),
+        ...(cost === null ? {} : { cost }) };
     },
     // Tester follow-up F §4 (empty-result): the task's current run, when its attempt changed nothing, in words.
     format: (body) => {
-      const b = body as { groupId?: string; task?: NoChangeItem; runs?: EmptyResultRun[] };
+      const b = body as { groupId?: string; task?: NoChangeItem; runs?: EmptyResultRun[]; cost?: TaskCost };
       const current = (b.runs ?? []).filter((run) => run.runId === b.task?.currentRunId);
-      const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current)];
+      const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current), ...(b.cost === undefined ? [] : [taskCostLine(b.cost)])];
       return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } }),
   // Tester follow-up G Part 4.7: a task's handoffs -- every run's version, or one run's summary and handoff with --run.

@@ -117,7 +117,9 @@ describe("labels and progress in the work item table (spec §4.2)", () => {
   it("says unknown when the run's usage is unknown -- never a percentage -- and notes that usage arrives at phase end", () => {
     expect(progressText({ runId: "r", step: "execute", attempt: { current: 1, max: 3 }, tokens: null, lastTransitionAt: null })).toBe("execute · attempt 1/3 · tokens unknown");
     expect(progressText({ runId: "r", step: null, attempt: null, tokens: { used: 0, grant: 200 }, lastTransitionAt: null })).toBe("not reported yet · attempt unknown · tokens 0% (reported at phase end)");
-    expect(progressText({ runId: "r", step: "verify", attempt: { current: 2, max: 2 }, tokens: { used: 50, grant: 200 }, lastTransitionAt: null })).toBe("verify · attempt 2/2 · tokens 25% (reported at phase end)");
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    // #321 C: a run in progress on its last attempt (2/2) now says so after the attempt.
+    expect(progressText({ runId: "r", step: "verify", attempt: { current: 2, max: 2 }, tokens: { used: 50, grant: 200 }, lastTransitionAt: null })).toBe("verify · attempt 2/2 (the last: one more failure ends this run) · tokens 25% (reported at phase end)");
     expect(progressText(null)).toBe("no run");
     render(<Stateful view={view([workItem({ progress: { runId: "run-a", step: "execute", attempt: { current: 1, max: 3 }, tokens: null, lastTransitionAt: null } })])} onCommand={vi.fn()} />);
     expect(screen.getByText("execute · attempt 1/3 · tokens unknown")).toBeTruthy();

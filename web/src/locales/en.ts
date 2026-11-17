@@ -712,6 +712,21 @@ export const en = {
       tokensPercent: "tokens {{percent}}% (reported at phase end)",
       line: "{{step}} · {{attempt}} · {{tokens}}",
     },
+    // Tester #321 part C: a task's cost over all its runs against the group median (src/control/taskCost.ts); a notice only.
+    taskCost: {
+      own_one: "{{count}} run · {{minutes}} min · {{tokens}} tokens",
+      own_other: "{{count}} runs · {{minutes}} min · {{tokens}} tokens",
+      soFar: " so far",
+      median: "group median over {{n}} finished other tasks: {{tokens}} tokens · {{minutes}} min",
+      tooFew: "{{n}} finished other tasks to compare with; {{needed}} are needed for a median",
+      line: "Cost: {{own}} ({{against}})",
+      flagged: "{{taskId}} costs more than its group ({{reasons}}): {{own}}. A notice only: nothing was paused or stopped.",
+      reasonTokens: "{{times}}× the median tokens",
+      reasonTime: "{{times}}× the median time",
+      reasonLong: "over {{minutes}} minutes",
+      reasonJoin: " and ",
+      lastAttempt: " (the last: one more failure ends this run)",
+    },
     // Tester follow-up G spec §2.3-§2.5: a task's budget state in a group whose task amounts are expectations.
     budgetState: {
       hardCap: "Hard cap {{tokens}} tokens (set by a person; no pause line)",

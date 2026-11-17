@@ -5,6 +5,7 @@
  */
 import { isTerminalRunState } from "../../control/budget.js";
 import { TRANSCRIPT_STALE_MS, transcriptLive } from "../../control/transcriptLiveness.js";
+import { COST_LONG_RUNNING_MS, COST_MIN_COMPARABLE_TASKS, type CostReason, type TaskCost } from "../../control/taskCost.js";
 
 export interface UsageRun {
   runId?: string; state?: string; endedAt?: number | null; used?: { tokens: number };
@@ -43,6 +44,26 @@ export function runUsageLines(run: UsageRun | undefined, lastTranscriptAt: numbe
 export function phaseEndBudgetLines(runIds: readonly string[], asOf: number | null): string[] {
   if (runIds.length === 0) return [];
   return [`budget: used is as of the last phase end${asOf === null ? "" : ` at ${clock(asOf)}`} for ${runIds.length} run${runIds.length === 1 ? "" : "s"} under way (${runIds.join(", ")}); ${PHASE_END}`];
+}
+
+const minutes = (ms: number): string => `${Math.round(ms / 60_000)} min`;
+const COST_REASON_WORDS: Record<CostReason, (cost: TaskCost) => string> = {
+  "tokens-multiple": (cost) => `${cost.tokensMultiple!.toFixed(1)}x the median tokens`,
+  "time-multiple": (cost) => `${cost.timeMultiple!.toFixed(1)}x the median time`,
+  "long-running": () => `over ${minutes(COST_LONG_RUNNING_MS)}`,
+};
+
+/**
+ * Tester #321 part C: one task's cost over all its runs against the group median (taskCost.ts), for `group brief` (each
+ * flagged task) and `task show` (the task). A flagged task says so, and that nothing was paused: the line is a notice.
+ */
+export function taskCostLine(cost: TaskCost): string {
+  const own = `${cost.runs} run${cost.runs === 1 ? "" : "s"}, ${minutes(cost.ms)}, ${count(cost.tokens)} tokens${cost.underWay ? " so far" : ""}`;
+  const against = cost.medianTokens === null || cost.medianMs === null
+    ? `${cost.comparable} finished other task${cost.comparable === 1 ? "" : "s"} to compare with, ${COST_MIN_COMPARABLE_TASKS} needed for a median`
+    : `group median over ${cost.comparable} finished other tasks: ${count(Math.round(cost.medianTokens))} tokens, ${minutes(cost.medianMs)}`;
+  const flagged = cost.reasons.map((reason) => COST_REASON_WORDS[reason](cost));
+  return `cost: task ${cost.taskId}: ${own}; ${against}${flagged.length === 0 ? "" : `; flagged: ${flagged.join(", ")} (a notice: nothing was paused or stopped)`}`;
 }
 
 /** The group view's runs under way whose agent reports at phase end, and the newest time any of them booked usage. */

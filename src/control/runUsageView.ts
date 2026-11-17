@@ -1,5 +1,6 @@
 import { isTerminalRunState } from "./budget.js";
 import type { ControlStore } from "./store.js";
+import { costOutliers, type CostRun, type TaskCost } from "./taskCost.js";
 
 /**
  * Tester #285: `used` and the group's total advance only as work events are booked. A Codex response may now provide
@@ -47,4 +48,19 @@ export function phaseEndUsageOf(store: ControlStore, groupId: string): { runIds:
   if (runIds.length === 0) return null;
   const times = runIds.map((runId) => usageBookedAt(store, runId)).filter((at): at is number => at !== null);
   return { runIds, asOf: times.length === 0 ? null : Math.max(...times) };
+}
+
+/**
+ * Tester #321 part C: `orca group brief`'s `costOutliers` -- the tasks whose runs together cost a multiple of the group
+ * median, or ran past the long-running line (taskCost.ts); null when none is. Read from the stored runs, each in its own
+ * bucket like the view's `used`. Display only.
+ */
+export function costOutliersOf(store: ControlStore, groupId: string, now: number): TaskCost[] | null {
+  const runs = store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId).map((row): CostRun => {
+    const body = JSON.parse(String(row.body)) as Parameters<typeof runUnderWay>[0] & { taskId: string | null; phase: string; startedAt?: number; cumulative: Record<"work" | "handoff", { tokens: number; activeMs: number }> };
+    const used = body.cumulative[body.phase === "handoff" ? "handoff" : "work"];
+    return { taskId: body.taskId, tokens: used.tokens, activeMs: used.activeMs, startedAt: body.startedAt ?? null, endedAt: body.endedAt ?? null, underWay: runUnderWay(body) };
+  });
+  const outliers = costOutliers(runs, now);
+  return outliers.length === 0 ? null : outliers;
 }

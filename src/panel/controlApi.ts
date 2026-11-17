@@ -50,7 +50,7 @@ import { controlErrorCatalog, sendControlError, sendMappedControlError } from ".
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
 import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
-import { phaseEndUsageOf } from "../control/runUsageView.js";
+import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -296,7 +296,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try { const summary = readGroupSummary(deps.store, groupId), phaseEndUsage = phaseEndUsageOf(deps.store, groupId);
       // Tester follow-up K, item 2: the acceptance's warning (no full suite adopted, or a flaky one) as the brief's own key.
       const warnings = summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning];
-      res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }) }); }
+      // Tester #321 part C: the tasks costing a multiple of the group median, or running long (absent when none); display only.
+      const costOutliers = costOutliersOf(deps.store, groupId, deps.store.now());
+      res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
+        ...(costOutliers === null ? {} : { costOutliers }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");
