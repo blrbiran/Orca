@@ -237,6 +237,53 @@ describe("an abandoned start-pending run ccloop already accepted (Correction 3, 
   });
 });
 
+describe("an abandoned run moved to accepted by the other writers (Correction 3, finding 2)", { timeout: 240_000 }, () => {
+  it("stepB's own recorded execution: a start-pending run with an execution id is accepted with its ceiling lowered", async () => {
+    const { t, sent } = await world({ honour: true });
+    try {
+      const runId = await t.claim();
+      expect(stepA1(t.deps, runId)).toBe(true);
+      expect(await stepA2(t.deps, runId)).toBe(true);
+      await t.fake.port.accept(readStartEnvelope(t.h.store, t.body(runId)));
+      // The execution recorded while the run is still start-pending (as a crash between the two writes would leave it).
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...t.body(runId), executionId: `execution-${runId}` }), runId);
+      expect(abandon(t, runId)).toMatchObject({ result: { stop: "not-started" } });
+      const driver = t.driver();
+      // mutation: drop the ceiling lowering from stepB's recorded-execution path -> MAX stays, never stops, red (until times out)
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(sent).toEqual([{ protocol: 1, revision: 2, tokens: 0, cause: "group" }]);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("step H's inspection: an abandoned run whose accept answered unknown, then frozen by stop-handoff, is accepted with its ceiling lowered", async () => {
+    const knobs = { lost: true, stopped: false };
+    const sent: LiveCeilingWire[] = [];
+    const box: { t?: T; runId?: string; requestId?: string } = {};
+    const t = await driverHarness([{ taskId: "a" }], {
+      tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true,
+      behaviour: () => (knobs.lost ? "lost-accept" : knobs.stopped ? "exhausted" : "stoppable-silent"),
+      setLiveCeiling: async (_input, ceiling) => { sent.push(ceiling); if (ceiling.tokens <= 10) knobs.stopped = true; return { revision: ceiling.revision, tokens: ceiling.tokens }; },
+      liveCeilingStop: () => (knobs.stopped ? { revision: sent.at(-1)!.revision, tokens: sent.at(-1)!.tokens, cause: "group", observedTokens: 10, phase: "execute", at: "mid-call" } : undefined),
+      // The person abandons and stops the group while the accept is in flight; ccloop then answers in doubt.
+      delayAccept: async () => { if (box.requestId === undefined) { abandon(box.t!, box.runId!); [box.requestId] = await stop(box.t!); } },
+      wrapPort: (port) => ({ ...port, accept: async (envelope) => { const answer = await port.accept(envelope); knobs.lost = false; return answer; } }),
+    });
+    box.t = t;
+    try {
+      box.runId = await t.claim();
+      const runId = box.runId;
+      const driver = t.driver();
+      await t.until(driver, () => box.requestId !== undefined && t.body(runId).state !== "start-pending");
+      // mutation: drop the ceiling lowering from inspectUnderStop -> MAX stays, never stops, red (until times out)
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(sent).toEqual([{ protocol: 1, revision: 2, tokens: 0, cause: "group" }]);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect([requestBody(t, box.requestId!).state, requestBody(t, box.requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
+    } finally { await t.h.dispose(); }
+  });
+});
+
 describe("an abandoned run whose usage is unknown at its terminal (Correction 2.3)", { timeout: 240_000 }, () => {
   it("is blocked at C as a failed run is; settle-usage then close-run end it", async () => {
     const { t, knobs } = await world({ final: "failed-usage-unknown" });
