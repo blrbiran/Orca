@@ -140,6 +140,8 @@ function toolTone(row: Row): "ok" | "danger" | "info" | undefined {
 /**
  * One displayed row: its first line; expanded, every field's head of its event (and of the joined result).
  * A row uses only ccloop's matched observation marker for its clock; `event.at` remains the byte offset used for paging.
+ * A row shows one time, its first line's: a joined tool row leads with the call's time, and the result's is not shown
+ * (human report 2026-11-18: no second time after "done").
  */
 function EventRow(props: { runId: string; call: CallKey; row: Row }): JSX.Element {
   const { t } = useTranslation();
@@ -151,7 +153,7 @@ const line = <span className="transcript-line max-w-full min-w-0 break-words tex
     {observedTime(event.ccloopObservedAt)}
     <span className="transcript-kind badge whitespace-nowrap" data-tone={tone}>{t(`transcript.kind.${event.kind}`)}</span>{" "}
     <span className="transcript-summary min-w-0 max-w-full break-words">{summary(event, t)}</span>
-    {status !== null && <>{" · "}<span className="transcript-status badge whitespace-nowrap" data-tone={tone}>{status}</span>{result != null && observedTime(result.ccloopObservedAt, true)}</>}
+    {status !== null && <>{" · "}<span className="transcript-status badge whitespace-nowrap" data-tone={tone}>{status}</span></>}
   </span>;
   const opens = expandable(event) || expandable(result);
   return (
@@ -369,11 +371,11 @@ function CallView(props: { runId: string; call: TranscriptCallV1; active: boolea
 
 /** Tester #252 (spec 2026-11-12-tester-followup-f §6): a compact local clock time; the full date on hover. */
 const STARTED_CLOCK: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" };
-function observedTime(epochMs: number | undefined, afterStatus = false): JSX.Element | null {
+function observedTime(epochMs: number | undefined): JSX.Element | null {
   if (epochMs === undefined) return null;
   const at = new Date(epochMs);
   if (!Number.isFinite(at.getTime())) return null;
-  return <>{afterStatus && " · "}<time className="num text-xs text-muted" dateTime={at.toISOString()} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>{afterStatus ? "" : " · "}</>;
+  return <><time className="num text-xs text-muted" dateTime={at.toISOString()} title={at.toLocaleString(currentLanguage())}>{at.toLocaleTimeString(currentLanguage(), STARTED_CLOCK)}</time>{" · "}</>;
 }
 function startedTime(startedAt: string): JSX.Element {
   const at = new Date(startedAt);

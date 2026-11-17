@@ -133,7 +133,11 @@ describe("transcript observation times", () => {
     expect(screen.getByTestId("transcript-event").querySelector("time")?.dateTime).toBe(new Date(1_700_000_000_000).toISOString());
   });
 
-  it("shows distinct tool call and result times on their joined visible row", async () => {
+  // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+  // Human report (2026-11-18): a tool row showed one time before "tool" and another after "done"; only the leading one is
+  // kept. A row reads as one item, so it carries one time: that of its first line (the call), even when the joined result
+  // was observed later. This replaces the earlier criterion that both times appear on the joined row.
+  it("shows only the tool call's time on its joined visible row, none after the status", async () => {
     vi.useFakeTimers();
     const call: TranscriptEventV1 = { at: 0, i: 0, kind: "tool_call", meta: { id: "t", name: "Bash" }, ccloopObservedAt: 1_700_000_000_000 };
     const result: TranscriptEventV1 = { at: 100, i: 0, kind: "tool_result", meta: { id: "t" }, ccloopObservedAt: 1_700_000_001_000 };
@@ -142,9 +146,11 @@ describe("transcript observation times", () => {
     await openCall();
     const row = screen.getAllByTestId("transcript-event");
     expect(row).toHaveLength(1);
-    expect(Array.from(row[0]!.querySelectorAll("time"), (time) => time.dateTime)).toEqual([
-      new Date(call.ccloopObservedAt!).toISOString(), new Date(result.ccloopObservedAt!).toISOString(),
-    ]);
+    // mutation: restore the result's observedTime after the status -> two <time>s, red
+    expect(Array.from(row[0]!.querySelectorAll("time"), (time) => time.dateTime)).toEqual([new Date(call.ccloopObservedAt!).toISOString()]);
+    const clock = (ms: number): string => new Date(ms).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+    // The time leads the row and the row ends at the status: nothing (no " · <time>") after "done".
+    expect(row[0]!.textContent).toBe(`${clock(call.ccloopObservedAt!)} · tool Bash  · done`);
   });
 });
 
