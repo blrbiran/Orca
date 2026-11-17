@@ -6,7 +6,7 @@ import { isGroupArchived } from "./archivedMark.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
-import { isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, resumableBlockedRun, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
 import { validTerminalClosure } from "./terminalRunClosure.js";
 import { groupStopped } from "./executionDriver.js";
 import { ControlError } from "./errors.js";
@@ -312,6 +312,27 @@ export function anyTaskFailed(store: ControlStore, groupId: string): boolean {
   return tasksOf(store, groupId).some((entry) => { const run = runBody(store, entry.work.currentRunId); return run !== null && isTerminallyFailedRun(run); });
 }
 
+/** Tester #332: the settled state (and escalation reason) of a ladder whose debug run ended but cannot complete its task. */
+export const DEBUG_SETTLE_FAILED = "debug-settle-failed";
+
+/**
+ * Tester #332: a task's current run that ended without failing (its outcome is known and it is not terminally failed) yet
+ * cannot complete the task on its own -- blocked at a later step (a settle that failed), or settled with the task not done
+ * (a partial or empty result). Neither done nor failed, such a debug group was settled by no pass. `resumable`: a
+ * run-scoped recovery retry resumes it (resumableBlockedRun). A no-change result its goal judge still decides is not stuck.
+ */
+export function stuckDebugRun(store: ControlStore, groupId: string): { runId: string; resumable: boolean; detail: string } | null {
+  for (const { work } of tasksOf(store, groupId)) {
+    if (work.status === "done" || work.status === "completed") continue;
+    const run = runBody(store, work.currentRunId);
+    const drive = run?.drive;
+    if (run === null || drive === undefined || drive.outcome == null || isTerminallyFailedRun(run) || drive.noChangeJudge?.state === "pending") continue;
+    if (run.state === "blocked") return { runId: run.runId, resumable: resumableBlockedRun(run), detail: `${run.runId} blocked at ${String(drive.blockedAt)}: ${drive.blockedReason ?? "no reason recorded"}` };
+    if (run.state.startsWith("settled")) return { runId: run.runId, resumable: false, detail: `${run.runId} ${run.state} with its task ${String(work.status)}${drive.blockedReason ? `: ${drive.blockedReason}` : ""}` };
+  }
+  return null;
+}
+
 /**
  * §3.1: a ladder candidate -- a group Orca orchestrates (an orchestration record in mode `run`: a "Confirm only" group is
  * the person's to drive, so Orca adds no run to it), not itself a debug group, with a failed task and no ladder yet.
@@ -543,7 +564,10 @@ export function escalationsOf(store: ControlStore, groupId: string): Array<{ tas
     if (allTasksDone(store, groupId) || tasksOf(store, groupId).find((entry) => entry.id === taskId)?.work.status === "done") continue;
     if (mark.settled?.state === "superseded") continue;
     if (mark.settled === null) {
-      out.push(anyTaskFailed(store, debugGroupId) ? { taskId, debugGroupId, state: "exhausted", reason: "debug-task-failed" } : { taskId, debugGroupId, state: "debugging", reason: null });
+      // Tester #332: a debug run stuck short of done (its settle failed) is the person's now -- named, not "debugging".
+      out.push(anyTaskFailed(store, debugGroupId) ? { taskId, debugGroupId, state: "exhausted", reason: "debug-task-failed" }
+        : stuckDebugRun(store, debugGroupId) !== null ? { taskId, debugGroupId, state: "exhausted", reason: DEBUG_SETTLE_FAILED }
+        : { taskId, debugGroupId, state: "debugging", reason: null });
     } else if (mark.settled.state === "folded") {
       // The rerun is the task's next run; the same failed run still current means the retry has not been claimed yet.
       out.push(failed !== null && failed.runId !== (mark.source as GroupSource).runId ? { taskId, debugGroupId, state: "exhausted", reason: "rerun-failed" } : { taskId, debugGroupId, state: "rerunning", reason: null });

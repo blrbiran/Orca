@@ -72,7 +72,7 @@ import { applyCloseRun, type CloseRunCommand } from "./terminalRunClosure.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
 import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor, type CorrectionDebugOpenCommand } from "./debugGroup.js";
-import { readSystemDebugMark, writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
+import { DEBUG_SETTLE_FAILED, readSystemDebugMark, stuckDebugRun, writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
 import { claimQuotaProbeInTransaction, probeStateOf, quotaProbeWorkItemId } from "./quotaProbeCall.js";
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource, workerLostCandidates, workerLostCommandId, WORKER_LOST_RESTARTS } from "./systemDebug.js";
@@ -135,7 +135,7 @@ import type { CommandLookupV1, CommandSuccessV1, EffectiveProposalEditPayload, R
 import type { AdmissionGate } from "./admissionGate.js";
 import { budgetBalance, isTerminalRunState } from "./budget.js";
 import { reopenProposalBodies, type Body } from "./proposalReopen.js";
-import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, recoveryRetryCommand, type DriveRecord } from "./driveRecord.js";
 import { hasRequirementBlock, latestDraft, latestRound, readRequirementGroup, refuseClarifying, setRequirementLimit } from "./requirementRecords.js";
 import { insertSingleCallRun } from "./singleCallLedger.js";
 import { applyRequirementDraftEdit, type RequirementDraftEditCommand } from "./requirementDraftEdit.js";
@@ -585,7 +585,11 @@ function foldingLadders(store: ControlStore): Set<string> {
   return set;
 }
 
-/** A confirmed ladder owns the source run until it folds or settles; a draft ladder remains supersedable. */
+/**
+ * A confirmed ladder owns the source run until it folds or settles; a draft ladder remains supersedable. Answers the
+ * ladder's id for the refusal's detail -- with, when its debug run is stuck where a recovery retry resumes it (tester
+ * #332), that command: the ladder holds the task until then, so the refusal names what moves it.
+ */
 function confirmedLadderFor(store: ControlStore, groupId: string, taskId: string, runId: string): string | null {
   const debugGroupId = systemDebugGroupId({ kind: "ladder", groupId, taskId, runId: null });
   if (foldingLadders(store).has(debugGroupId)) return debugGroupId;
@@ -594,7 +598,9 @@ function confirmedLadderFor(store: ControlStore, groupId: string, taskId: string
   const mark = readSystemDebugMark(JSON.parse(String(row.body)));
   if (mark?.source.kind !== "ladder" || mark.source.groupId !== groupId || mark.source.taskId !== taskId
     || mark.source.runId !== runId || mark.settled !== null) return null;
-  return readBudgetProposal(store, debugGroupId).state === "confirmed" ? debugGroupId : null;
+  if (readBudgetProposal(store, debugGroupId).state !== "confirmed") return null;
+  const stuck = stuckDebugRun(store, debugGroupId);
+  return stuck?.resumable === true ? `${debugGroupId}; stuck: ${recoveryRetryCommand(stuck.runId)}` : debugGroupId;
 }
 
 /** Worker-lost recovery spec §5.4: a task's fourth run in a row that lost its worker is not restarted (a run recovery blocker). */
@@ -1285,6 +1291,13 @@ export class WebControlService {
       }
       if (mark.settled !== null || isGroupArchived(this.store, groupId)) continue;
       if (anyTaskFailed(this.store, groupId)) { settleSystemDebug(this.store, groupId, "debug-failed", null); out.settled.push(groupId); continue; }
+      // Tester #332: a ladder's debug run that ended without failing but can never complete its task (settled partial or
+      // empty, or blocked where no recovery resumes it) ends the ladder by name, releasing the original task to the person.
+      // One a run-scoped recovery retry can still resume stays the ladder's (escalationsOf names it stuck meanwhile).
+      if (mark.source.kind === "ladder") {
+        const stuck = stuckDebugRun(this.store, groupId);
+        if (stuck !== null && !stuck.resumable) { settleSystemDebug(this.store, groupId, DEBUG_SETTLE_FAILED, stuck.detail); out.settled.push(groupId); continue; }
+      }
       // §3: a person retried (or otherwise moved) the original task since: the ladder steps aside -- an unconfirmed debug
       // group is never started, a running one is not folded back.
       const superseded = mark.source.kind === "ladder" && terminallyFailedRun(this.store, mark.source.groupId, mark.source.taskId!)?.runId !== mark.source.runId;

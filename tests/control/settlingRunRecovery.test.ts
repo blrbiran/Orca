@@ -28,7 +28,9 @@ describe("a landed run still settling (#332)", () => {
       const archived = t.service.archiveGroup(t.h.command("archive-group", {})) as { error?: { code: string; message: string } };
       // mutation: drop the landed branch in activeRunRef -> no next for the run, red
       expect(archived.error?.code).toBe("archive-run-active");
-      expect(archived.error?.message).toContain(`${runId} landed (wait: it landed and is settling; orca run show ${runId})`);
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+      // #332 follow-up: the next is the executable command (this archive again once settled), not only "wait".
+      expect(archived.error?.message).toContain(`${runId} landed (orca group archive g once it has settled (orca run show ${runId}))`);
     } finally { release(); await t.h.dispose(); }
   }, 120000);
 });

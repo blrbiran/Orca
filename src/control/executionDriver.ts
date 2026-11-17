@@ -1599,6 +1599,9 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
       saveDriverRun(store, current);
     });
     settledJustNow = true;
+    // Tester #332: the settle just decided the task (done or blocked); what follows from it is the pump's -- a system debug
+    // group's fold or settle (systemDebugPass) -- so the pump is told now rather than at whatever pass comes next.
+    deps.kickPump?.();
   }
   const settled = readDriverRun(store, runId);
   if (settled.state !== "settled" || settled.drive === undefined) return settledJustNow;
