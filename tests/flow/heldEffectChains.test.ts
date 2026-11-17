@@ -6,13 +6,15 @@
  * chain (skip the effect step, skip the holding defer, fill the effect step) is named; the property enumerates every
  * sequence of length 3 over the template's two steps (6 commands: 216 sequences, each its own run; every prefix -- so
  * every shorter sequence -- is checked on the way). Length 4 is the same test with ORCA_PROPERTY_LENGTH=4 (too slow for
- * every `npm test`; run once for fix round 2, its log is in the report).
+ * every `npm test`; run once for fix round 2, its log is in the report). Since 2026-11-17 (test pruning) length 3 runs in
+ * the release gate and daily runs enumerate length 2 (see the property below).
  */
 import { describe, expect, it } from "vitest";
 import { childGroupIdOf } from "../../src/flow/kinds/work.js";
 import { marksOf } from "../../src/flow/marks.js";
 import { acceptMessage } from "../../src/flow/messages.js";
 import { listEffects, listExecutions, listMessages } from "../../src/flow/store.js";
+import { releaseOnly } from "../helpers/releaseGate.js";
 import { fakeChildPort } from "./fixtures/childPort.js";
 import { flowWorld } from "./fixtures/flowWorld.js";
 
@@ -81,9 +83,13 @@ describe("a held effect stays held through any chain of marks without the person
   // The criterion is length 3 (6^3 = 216 sequences, every shorter one checked as a prefix). Length 4 (1296) takes about
   // half an hour on one worker and is run on demand with ORCA_PROPERTY_LENGTH=4 (fix round 2 report: its log). Each world
   // holds at most CHUNK runs (every kernel pass walks a world's running runs); WORKERS worlds run side by side.
-  const LENGTH = Number(process.env.ORCA_PROPERTY_LENGTH ?? 3);
+  // Ruling: human 2026-11-17 (test pruning) -- length 3 took ~300 s of every selection, so it runs in the release gate
+  // (ORCA_RELEASE_GATE=1) or on demand (ORCA_PROPERTY_LENGTH set); daily runs enumerate length 2 (36 sequences) instead.
+  // The named 3-step re-review chain above stays daily.
+  const onDemand = process.env.ORCA_PROPERTY_LENGTH !== undefined;
+  const RELEASE_LENGTH = Number(process.env.ORCA_PROPERTY_LENGTH ?? 3);
   const CHUNK = 18, WORKERS = 4;
-  it(`every sequence of up to ${LENGTH} open marks from a non-person (skip, defer without proceed, fill over each step) leaves push held`, { timeout: 3_600_000 }, async () => {
+  const property = (LENGTH: number) => async (): Promise<void> => {
     const sequences: Cmd[][] = [];
     const grow = (prefix: Cmd[]): void => { if (prefix.length === LENGTH) { sequences.push(prefix); return; } for (const c of ALL) grow([...prefix, c]); };
     grow([]);
@@ -114,5 +120,9 @@ describe("a held effect stays held through any chain of marks without the person
     await Promise.all(Array.from({ length: WORKERS }, worker));
     expect(checked).toBe(sequences.length);
     expect(broken).toEqual([]);
-  });
+  };
+  const title = (length: number) => `every sequence of up to ${length} open marks from a non-person (skip, defer without proceed, fill over each step) leaves push held`;
+  it.skipIf(releaseOnly || onDemand)(title(2), { timeout: 3_600_000 }, property(2));
+  // Release-only; the daily cover is the length-2 case above plus the named 3-step chain (test 1).
+  it.runIf(releaseOnly || onDemand)(title(RELEASE_LENGTH), { timeout: 3_600_000 }, property(RELEASE_LENGTH));
 });
