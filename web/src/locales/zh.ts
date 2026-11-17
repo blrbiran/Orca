@@ -692,7 +692,7 @@ export const zh: Translation<typeof en> = {
     },
     review: {
       heading: "需求复核",
-      state: { pending: "已请求复核", reviewing: "复核中", passed: "复核通过", fixing: "已为复核开了修复任务", "not-passed": "复核未通过", accepted: "已按现状接受", "not-run": "未复核（没有单一代码树）" },
+      state: { pending: "已请求复核", reviewing: "复核中", passed: "复核通过", fixing: "已为复核开了修复任务", "not-passed": "复核未通过", accepted: "已按现状接受", "not-run": "未复核（Orca 暂时还不能复核文件夹或多仓库的任务组）" },
       verdict: { met: "满足", "not-met": "未满足", "cannot-judge": "无法判断" },
       criteria: "验收标准",
       acceptedBy: "由 {{by}} 接受：{{note}}",

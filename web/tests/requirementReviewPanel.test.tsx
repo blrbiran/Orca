@@ -92,4 +92,18 @@ describe("the requirement review panel (tester follow-up G §3.3)", () => {
     await i18n.changeLanguage("zh");
     expect(show(notPassed).panel.textContent).toContain("复核未通过");
   });
+
+  // Tester #337: the review Orca does not run on a folder or multi-repository group is named in words a person without git
+  // knows, not "no single tree". What counts as satisfied is unchanged (a not-run review still lets the group finish).
+  it("a review not run on a folder or multi-repository group says why in plain words (#337)", async () => {
+    const notRun: RequirementReviewV1 = { state: "not-run", why: "dir", rounds: [], autoFixRounds: 0 };
+    const en = show(notRun).panel.textContent;
+    expect(en).toContain("not reviewed (Orca cannot review folder or multi-repository groups yet)");
+    expect(en).not.toContain("tree");
+    cleanup();
+    await i18n.changeLanguage("zh");
+    const zh = show(notRun).panel.textContent;
+    expect(zh).toContain("未复核（Orca 暂时还不能复核文件夹或多仓库的任务组）");
+    expect(zh).not.toContain("代码树");
+  });
 });

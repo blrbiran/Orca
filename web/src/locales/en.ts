@@ -843,7 +843,7 @@ export const en = {
     // Tester follow-up G spec §3.3, §3.5: a requirement group's review and its exits.
     review: {
       heading: "Requirement review",
-      state: { pending: "review requested", reviewing: "reviewing", passed: "review passed", fixing: "a fix task is open for the review", "not-passed": "review not passed", accepted: "accepted as it is", "not-run": "review not run (no single tree)" },
+      state: { pending: "review requested", reviewing: "reviewing", passed: "review passed", fixing: "a fix task is open for the review", "not-passed": "review not passed", accepted: "accepted as it is", "not-run": "not reviewed (Orca cannot review folder or multi-repository groups yet)" },
       verdict: { met: "met", "not-met": "not met", "cannot-judge": "cannot judge" },
       criteria: "Acceptance criteria",
       acceptedBy: "Accepted by {{by}}: {{note}}",
