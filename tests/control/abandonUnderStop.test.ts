@@ -364,6 +364,23 @@ describe("an abandoned run ccloop answers with a handoff checkpoint (Correction 
     } finally { await t.h.dispose(); }
   });
 
+  it("a blocked success (closeBlocked) is not settled abandoned: a success is never abandoned (Correction 2.2)", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true,
+      behaviour: () => "succeed", files: () => ({ a: "a\n", "outside.txt": "x\n" }) });
+    try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      expect([t.body(runId).drive.outcome, t.body(runId).drive.blockedReason]).toEqual(["succeeded", "out-of-bounds:outside.txt"]);
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...t.body(runId), abandon: { by: "user:owner", note: NOTE, at: Date.now() } }), runId);
+      const [requestId] = await stop(t);
+      await t.until(driver, () => active(t, runId) === 0);
+      // mutation: settle any collected outcome abandoned in closeBlocked (succeeded too) -> settled-failed / abandoned, red
+      expect(t.body(runId).operatorSettlement).toBeUndefined();
+      expect(requestBody(t, requestId!).failureCode).not.toBe("run-abandoned");
+    } finally { await t.h.dispose(); }
+  });
+
   it("usage unknown: stays unrecoverable (usage-unsettled), and settle-usage refuses `recovered`, so it is never continued", async () => {
     const t = await stoppable("stoppable-usage-unknown");
     try {
