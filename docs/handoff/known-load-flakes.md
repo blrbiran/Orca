@@ -353,3 +353,8 @@ ccloop：`tests/runtime/codex/stalledCauseAndFloor.test.ts`「throws the stall i
   「R-F: retry-task after a ccloop failure…」得 `task-not-retryable:run-state:settled-failed`（新形状，n＝1），单跑 3/3；
   web `memoryLayout` scroll 时序（已登记）单跑 3/3；`criteriaBaseRun`「a restart while the re-run is in flight…」`index.lock`
   （已登记）负载 36–40 单跑 1 红 2 绿；K1 那 12 个负载文件＋`workerLostE2E`＋`schedulerBridge` 各单跑 3/3（42/42）。
+- Orca（会话 `0e0846ae`，2026-11-17 晚，交付尾分支的日常门，负载结尾 94）：`tests/panel/security.test.ts`「refuses a missing --by
+  through the REAL process」「refuses an unconfirmed external bind…」各 5 s 超时（**新登记**，真进程启动受负载拖慢）；
+  `startForm`、`schedulerBridge`「…: success」30 s、`workerLostE2E`「a worker that died after writing a successful
+  candidate…」242 s 同形。四个文件负载降到 18 后同时单跑 36/36（`acceptAttemptLanding`／`executionDriverE2E` 含 R-F 另在负载
+  2.6–8.7 各两次 35/35）。R-F 的 `task-not-retryable` 两次之后本轮没再见。
