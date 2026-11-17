@@ -55,6 +55,25 @@ function recoveryList(body: unknown): string {
   }
   return lines.join("\n");
 }
+/**
+ * Tester #348 review: a run the read schema cannot decode, on a whole line (the compact line cut it off). The brief's
+ * entries name their task (`taskId` null: the run is on no task); a task's own entries leave it out.
+ */
+type UnreadableRunEntry = { runId: string; taskId?: string | null; reason: string };
+function unreadableRunLines(entries: unknown): string[] {
+  if (!Array.isArray(entries)) return [];
+  return (entries as UnreadableRunEntry[]).map(({ runId, taskId, reason }) =>
+    `run ${runId}${taskId === undefined ? "" : taskId === null ? " (no task)" : ` (task ${taskId})`} is unreadable: ${reason}`);
+}
+
+/** Tester #348 review: a quota probe's verdict on a whole line in `run show`; nothing for any other run. */
+type ProbeVerdictView = { verdict: string; cause: string | null; detail: string | null; errorCode: string | null };
+function probeVerdictLines(run: { purpose?: string; probeVerdict?: ProbeVerdictView } | undefined): string[] {
+  const v = run?.probeVerdict;
+  if (v === undefined) return [];
+  return [`verdict: ${v.verdict} (${run?.purpose ?? "quota-probe"})${v.cause === null ? "" : `, cause ${v.cause}`}${v.errorCode === null ? "" : `, error ${v.errorCode}`}${v.detail === null ? "" : `, detail: ${v.detail}`}`];
+}
+
 /** `orca proposal show`'s unestimated-default lines, read in compose from the group view (Dogfood run 3 F23). */
 let proposalNote: string[] = [];
 
@@ -468,7 +487,9 @@ export const READ_ROWS: CommandDef[] = [
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
         // Tester #321 part C: each task costing a multiple of the group median, or running long, in words.
-        ...costs.map(taskCostLine)].join("\n"); } }),
+        ...costs.map(taskCostLine),
+        // Tester #348 review: each run the read schema cannot decode, with its task.
+        ...unreadableRunLines(field(body, "unreadableRuns"))].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
     format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
@@ -499,7 +520,9 @@ export const READ_ROWS: CommandDef[] = [
     format: (body) => {
       const b = body as { groupId?: string; task?: NoChangeItem; runs?: EmptyResultRun[]; cost?: TaskCost };
       const current = (b.runs ?? []).filter((run) => run.runId === b.task?.currentRunId);
-      const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current), ...(b.cost === undefined ? [] : [taskCostLine(b.cost)])];
+      const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current), ...(b.cost === undefined ? [] : [taskCostLine(b.cost)]),
+        // Tester #348 review: this task's runs the read schema cannot decode.
+        ...unreadableRunLines((b.task as { unreadableRuns?: unknown } | undefined)?.unreadableRuns)];
       return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } }),
   // Tester follow-up G Part 4.7: a task's handoffs -- every run's version, or one run's summary and handoff with --run.
@@ -548,6 +571,8 @@ export const READ_ROWS: CommandDef[] = [
       const cause = b.run?.failureCause ?? null;
       const why = [
         ...(b.run?.state === undefined ? [] : [`state: ${b.run.state}`]),
+        // Tester #348 review: a quota probe's verdict (the compact line above cuts off before it).
+        ...probeVerdictLines(b.run as { purpose?: string; probeVerdict?: ProbeVerdictView } | undefined),
         // Tester D19: the agent and model this run was frozen with, not the installation's default.
         ...(b.run?.agent === undefined ? [] : [`agent: ${b.run.agent.installation}, model ${b.run.agent.model ?? "(the agent's default)"}`]),
         ...runUsageLines(b.run as UsageRun | undefined, (body as { lastTranscriptAt?: number }).lastTranscriptAt),
