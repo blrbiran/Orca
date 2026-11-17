@@ -57,7 +57,11 @@ export function validateRetryGrantSource(store: ControlStore, groupId: string, s
     }
     if (bySource.size !== amendments.length || amendments.some(record => !derivedAtRun.has(record.sourceRunId))
       || historicalHash !== work.derivedContractHash) bad("amendment-current");
-    if (Number(rows[index]!.active) !== 0 || source.state !== "settled-failed" || source.drive?.outcome == null || source.drive.outcome === "succeeded"
+    // Stuck-runs spec 2026-11-17 S3: a held run a handoff stopped mid-work has no outcome; its proved stop is its request's
+    // recoverable settle with the checkpoint it recorded (retryTask.ts), and that is a retry source too.
+    const stoppedHeld = source.drive?.outcome === null && typeof source.checkpointId === "string"
+      && latestRequestForRun(store, groupId, String(sourceId))?.state === "settled-recoverable";
+    if (Number(rows[index]!.active) !== 0 || source.state !== "settled-failed" || (source.drive?.outcome == null && !stoppedHeld) || source.drive.outcome === "succeeded"
       || source.unknown.work || source.unknown.handoff || !settlementSame(work.grant, source.grant)) bad("source-state");
     if (source.usageSettlement !== undefined && !hasValidUsageSettlement(store, source)) bad("settlement");
     for (const bucket of ["work", "handoff"] as const) {

@@ -243,7 +243,13 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const held = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
           && allocations.length === 2 && allocations.every(a => a.state === "held" && settlementSame(a.amount, run.remaining[a.bucket as "work" | "handoff"]))
           && settlementSame(work.grant, run.remaining);
-        const released = !live && run.state === "settled-failed" && work.status === "blocked" && run.recoverable === false
+        // Stuck-runs spec 2026-11-17 S3 (#344 supplement): in a token-policy group a handoff's recoverable settle (stopIntent.ts
+        // terminaliseRun) already released the run's remainder and marked the allocations held without amounts, so `held`'s
+        // amount checks never hold there; the release itself is the proof. Such a retry must not release a second time.
+        const heldReleased = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
+          && hasOptionalTaskPolicy(store, groupId, taskId) && (work as { fundingReleased?: unknown }).fundingReleased === true
+          && allocations.length === 2 && allocations.every(a => a.state === "held");
+        const released =!live && run.state === "settled-failed" && work.status === "blocked" && run.recoverable === false
           && allocations.length === 2 && allocations.every(a => a.state === "terminal") && settlementSame(work.grant, run.grant)
           && (run.usageSettlement as { reservationDisposition?: string } | undefined)?.reservationDisposition === "released" && hasValidUsageSettlement(store, run);
         // Terminal-closure spec 2026-11-07: an explicit closure released this run's remainder already. A malformed marker
@@ -258,7 +264,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const closed = !live && run.state === "settled-failed" && run.recoverable === false && run.terminalClosure !== undefined
           && validTerminalClosure(store, run as never) && work.status === "blocked" && allocations.length === 2
           && allocations.every(a => a.state === "terminal") && closedGrantMatches;
-        if ((!live || run.state !== "blocked") && !held && !released && !closed) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
+        if ((!live || run.state !== "blocked") && !held && !heldReleased && !released && !closed) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
         const drive = run.drive as DriveRecord | undefined;
         // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at another step is resumed in place by recovery-retry
         // (its block is not a ccloop failure); the refusal names that command.
@@ -266,7 +272,9 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           drive?.blockedAt == null ? `blocked-at:${drive?.blockedAt ?? "none"}` : `blocked-at:${drive.blockedAt}:${recoveryRetryCommand(runId)}`);
         // A codex-skills-* failure sets an outcome too (review C3), so it is retryable like any other ccloop failure.
         // Tester #267: blocked at C before ccloop stated any outcome (its collect failed), recovery-retry collects it again.
-        if (drive.outcome === null || drive.outcome === "succeeded") throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}${live && drive.outcome === null ? `:${recoveryRetryCommand(runId)}` : ""}`);
+        // Stuck-runs spec S3: a held run was stopped by a handoff, often mid-work with no outcome; its retry is a fresh run
+        // and its checkpoint is left unused (task continue is the other way out), so its outcome is not asked.
+        if (!held && !heldReleased && (drive.outcome === null || drive.outcome === "succeeded")) throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}${live && drive.outcome === null ? `:${recoveryRetryCommand(runId)}` : ""}`);
         const observed = command.payload.allowObservedPaths === true ? drive.pathPolicyMisses : null;
         if (command.payload.allowanceId !== undefined && command.payload.allowObservedPaths !== true) throw new ControlError("observed-paths-invalid", "allowance-id-needs-observed-paths");
         if (command.payload.allowObservedPaths === true) {
@@ -289,11 +297,11 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // The new run is claimed at the task's current grant (after a continuation, the continuation's), so the net new
         // reservation is grant - remainder in each dimension; it must fit the group's unallocated reserve.
         // Controller ruling 2026-10-09: new inactive M3 admissions also require every historical group run's usage to be known.
-        if ((held || released) && groupUsageUnknown(store, groupId)) {
+        if ((held || heldReleased || released) && groupUsageUnknown(store, groupId)) {
           const pending = store.db.prepare("SELECT 1 FROM usage_events e JOIN runs r ON r.id=e.run_id WHERE r.group_id=? AND e.seq>json_extract(r.body,'$.highWater') LIMIT 1").get(groupId);
           throw new ControlError("task-not-retryable", pending ? "usage-pending" : "usage-unknown");
         }
-        if ((held || released) ? work.pendingRunId !== null : work.pendingRunId != null) throw new ControlError("task-not-retryable", "continuation-pending");
+        if ((held || heldReleased || released) ? work.pendingRunId !== null : work.pendingRunId != null) throw new ControlError("task-not-retryable", "continuation-pending");
         if (work.continuation != null) {
           const registration = registrationOf(work.continuation);
           const identity = registration && continuationIdentity(groupId, registration.resumeRevision, taskId, registration.predecessorRunId);
@@ -303,7 +311,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
             throw new ControlError("task-not-retryable", "continuation-identity");
           }
         }
-        if (held) {
+        if (held || heldReleased) {
           if (request?.state !== "settled-recoverable") throw new ControlError("task-not-retryable", "handoff-settlement");
           releasedSettlementCheckpoint(store, run as never);
         }
@@ -335,7 +343,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           let left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,authored,inherited,left));
           const personAuthority=incoming===null?false:authorizeWorkTopUp(store,groupId,command.commandId,incoming,'retry-top-up');
-          if(!released && !closed){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
+          if(!released && !closed){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);if(!heldReleased)releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
           let freshStart:Amount|null=null;
           if(want!==null){
             // Never more than the group's own non-token limits leave the claim (decideFundedAllowance, fundingReleased), read

@@ -367,6 +367,91 @@ describe("after retry-task: cleanup, a new run, success (spec §4.2(2), §4.4)",
   }, 30000);
 });
 
+/**
+ * Stuck-runs spec 2026-11-17 S3 (#344 supplement): a run a handoff stopped mid-work settles `settled-recoverable` with its
+ * task `held` and no outcome. task retry refused it -- `outcome:none` always, and `run-state:settled-recoverable` in a
+ * token-policy group, whose settle releases the remainder and marks the allocations held without amounts -- so only the
+ * Web's Continue or archiving the group got out. Retry now starts a fresh run (the checkpoint unused), booking the
+ * commitment once: the token-policy settle already gave the remainder back, the legacy one parked it.
+ */
+describe("retry-task on a held task (stuck-runs S3)", () => {
+  const ledger = (t: Harness) => readWebGroup(t.h.store, "g").ledger;
+  const allocations = (t: Harness) => readBudgetProposal(t.h.store, "g").allocations.filter((a) => a.ownerKind === "task" && a.ownerId === "a");
+  const sum = (pair: { work: Record<Dimension, number | null>; handoff: Record<Dimension, number> }) =>
+    Object.fromEntries(DIMENSIONS.map((d) => [d, (pair.work[d] ?? 0) + pair.handoff[d]])) as Record<Dimension, number>;
+  /** Task a runs until a handoff stops it mid-work; the stop is then lifted with nothing continued. */
+  async function heldRun(options: { tokenPolicy?: "optional-v1" } = {}) {
+    let behaviour: "stoppable" | "succeed" = "stoppable";
+    const t = await driverHarness([{ taskId: "a" }], { ...options, behaviour: () => behaviour });
+    const limit = ledger(t).groupLimit;
+    const raised = t.service.setLimit(t.h.command("set-limit", { limit: Object.fromEntries(DIMENSIONS.map((d) => [d, limit[d] === null ? null : limit[d]! * 5])) } as never));
+    if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
+    const runId = await t.claim();
+    const driver = t.driver();
+    await t.until(driver, () => t.body(runId).state === "accepted");
+    expect(await t.service.handoffStop(t.h.command("handoff-stop", {}))).not.toHaveProperty("error");
+    await t.until(driver, () => t.body(runId).state === "settled-recoverable");
+    expect(await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [] }))).not.toHaveProperty("error");
+    expect(work(t, "a").status).toBe("held");
+    expect(t.body(runId).drive.outcome).toBeNull();
+    return { t, runId, driver, succeed: () => { behaviour = "succeed"; } };
+  }
+  /** The fresh run: a new claim from the group branch, no checkpoint, that ccloop then finishes. */
+  async function freshRunFinishes(t: Harness, driver: ReturnType<Harness["driver"]>, runId: string): Promise<string> {
+    const next = await claimAgain(t, driver);
+    expect(next).not.toBe(runId);
+    await t.until(driver, () => work(t, "a").status === "done");
+    const sent = t.fake.calls.accept.find((e) => e.claim.runId === next)!;
+    expect(sent.inputCheckpoint).toBeNull();
+    expect(t.body(next).continuationIntentId ?? null).toBeNull();
+    return next;
+  }
+
+  it("token policy: retries a held run whose remainder the settle already released, and books nothing twice", async () => {
+    const { t, runId, driver, succeed } = await heldRun({ tokenPolicy: "optional-v1" });
+    try {
+      expect(work(t, "a").fundingReleased).toBe(true);
+      expect(allocations(t).map((a) => a.state)).toEqual(["held", "held"]);
+      const before = ledger(t);
+      expect(retry(t)).not.toHaveProperty("error");
+      // The handoff's settle released the remainder; the retry releases and reserves nothing.
+      expect(ledger(t).committedRemaining).toEqual(before.committedRemaining);
+      expect(ledger(t).used).toEqual(before.used);
+      expect(t.body(runId)).toMatchObject({ state: "settled-failed", recoverable: false });
+      expect(active(t, runId)).toBe(0);
+      expect(work(t, "a")).toMatchObject({ status: "ready", fundingReleased: true, currentRunId: runId });
+      expect(allocations(t).map((a) => a.state)).toEqual(["confirmed", "confirmed"]);
+      expect(() => view(t)).not.toThrow();
+      succeed();
+      const next = await claimAgain(t, driver);
+      // The new claim reserves its own grant once, on top of what the retry left.
+      for (const d of DIMENSIONS) expect(ledger(t).committedRemaining[d]).toBe(before.committedRemaining[d] + sum(t.body(next).grant)[d]);
+      await t.until(driver, () => work(t, "a").status === "done");
+      expect(t.fake.calls.accept.find((e) => e.claim.runId === next)!.inputCheckpoint).toBeNull();
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  it("legacy: retries a held run with no outcome, releasing its parked remainder once and re-granting its claim grant", async () => {
+    const { t, runId, driver, succeed } = await heldRun();
+    try {
+      const held = t.body(runId);
+      expect(allocations(t).map((a) => a.state)).toEqual(["held", "held"]);
+      const before = ledger(t);
+      expect(retry(t)).not.toHaveProperty("error");
+      const net = netOf(held);
+      for (const d of DIMENSIONS) expect(ledger(t).committedRemaining[d]).toBe(before.committedRemaining[d] + net[d]);
+      expect(ledger(t).used).toEqual(before.used);
+      expect(t.body(runId)).toMatchObject({ state: "settled-failed", recoverable: false });
+      expect(work(t, "a")).toMatchObject({ status: "ready", grant: held.grant, retryGrantSourceRunId: runId });
+      // The run with no outcome is a valid retry source wherever the commitment is checked (dispatch, the panel).
+      expect(() => view(t)).not.toThrow();
+      succeed();
+      const next = await freshRunFinishes(t, driver, runId);
+      expect(t.body(next).grant).toEqual(held.grant);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+});
+
 // Session 3cfc2e73, issue #150: a finished task answered task-not-retryable:run-state:settled-recoverable, which reads as
 // a broken run. It now answers work-already-done -- after CLI v2 §14 R2's stale-run guard, which keeps its place first.
 describe("retry on a finished task (#150)", () => {
