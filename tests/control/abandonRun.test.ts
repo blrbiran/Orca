@@ -19,7 +19,11 @@ const OWNER = { client: "web", principal: "user:owner" };
 const NOTE = "the criterion is about the frozen plan, not the files";
 const MAX = Number.MAX_SAFE_INTEGER;
 
-/** A ccloop that runs silently until a live ceiling at or below what the run used arrives, then stops it `exhausted`. */
+/**
+ * A ccloop that runs silently until a live ceiling at or below what the run used arrives, then stops it `exhausted`.
+ * `honour` models the ccloop re-check proposed in stuck-runs Correction 3 (a ceiling write re-evaluated at once), not
+ * today's ccloop, which compares only when its next usage observation arrives (or at a phase boundary).
+ */
 async function world(options: { honour: boolean }) {
   const knobs = { stopped: false, honour: options.honour, succeed: false };
   const sent: LiveCeilingWire[] = [];

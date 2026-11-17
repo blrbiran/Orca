@@ -13,7 +13,7 @@ import {
   ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, readStopIntent, saveHandoffRequest,
   settleAbandonedRunInTransaction, settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, settleNeverStartedRunInTransaction, type HandoffRequestBody,
 } from "./stopIntent.js";
-import { abandonOf, abandonSettlementOf, lowerAbandonedCeiling } from "./abandonRun.js";
+import { abandonOf, abandonSettlementOf, lowerAbandonedCeiling, RUN_ABANDONED } from "./abandonRun.js";
 import { readWorkspaceSetting } from "./workspaceSettings.js";
 import { isSingleCallRun, isWebWorkRun } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
@@ -374,7 +374,7 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
   if (report.terminal !== null && report.candidate?.stopProof && run.state === "accepted") return stepC(deps, run.runId, context);
   if (report.candidate?.stopProof) {
     deps.crash?.("H-after-candidate");
-    return settleHandoffCheckpoint(deps, run.runId, request.requestId, report);
+    return await settleAbandonedUnderStop(deps, run, report) ?? settleHandoffCheckpoint(deps, run.runId, request.requestId, report);
   }
   // Worker-lost recovery spec, as-built Orca half item 9: a stop whose run lost its worker cannot be answered by that worker.
   // ccloop settles the run as worker-lost (a failed terminal with a stop proof); the next round takes it through C, and
@@ -382,6 +382,39 @@ async function deliverAndCollect(deps: ExecutionDriverDeps, run: DriverRun, requ
   if (report.terminal === null && report.candidate === null && report.worker?.state === "lost" && run.mode === undefined && run.recoveryOf === undefined
     && await settleLostWorker(deps, run, report.worker.reason, true)) return true;
   return (await settleIfPastGrace(deps, run, request)) || report.events.length > 0;
+}
+
+/**
+ * Correction 3, re-review (controller's ruling 2026-11-18: abandon wins): a run a person abandoned never becomes a
+ * continuable checkpoint through its handoff. ccloop's stop-proof checkpoint with no terminal (deliverAndCollect), or a
+ * blocked run's collected failure (closeBlocked), settles it as every abandoned run is settled: its evidence archived, its
+ * workspace removed (nothing is kept for accept-attempt or continue), `settled-failed` with the person's settlement, the
+ * task `blocked` `run-abandoned`, its request closed `run-abandoned` (settleAbandonedRunInTransaction). With no terminal
+ * the drive's outcome is `stopped` (ccloop stopped it at the request), so `task retry` admits it as any failed outcome.
+ *
+ * Usage unknown: answers null and the caller settles the checkpoint as before -- unrecoverable, `usage-unsettled`, so not
+ * continuable -- and settle-usage refuses `recovered` for a run carrying `abandon` (settleUnknownUsage.ts). It is not blocked
+ * at C first, as the abandoned terminal is: a blocked run with no outcome is collected again by closeBlocked and would come
+ * back here every round. Null too for a run that is not an abandoned plain task run.
+ */
+async function settleAbandonedUnderStop(deps: ExecutionDriverDeps, run: DriverRun, report: ExecutionReport): Promise<boolean | null> {
+  const { store } = deps;
+  if (abandonOf(run) === null || run.mode !== undefined || run.recoveryOf !== undefined || run.taskId === null || run.drive === undefined) return null;
+  const booked = readRun(store, run.runId);
+  if (booked.unknown.work || booked.unknown.handoff || store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, booked.highWater)) return null;
+  const drive = run.drive;
+  await archiveRun(store, { runId: run.runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+  const cleanupError = await removeNeverStartedWorkspace(deps, run);
+  return write(deps, () => {
+    const current = readDriverRun(store, run.runId);
+    const request = abandonOf(current);
+    if (current.state !== run.state || current.drive === undefined || request === null) return false;
+    // Nothing is left for stepCleanupFailed: the evidence is archived and the workspace went above.
+    current.drive = { ...current.drive, outcome: current.drive.outcome ?? "stopped", blockedAt: "C", blockedReason: RUN_ABANDONED, cleanedUp: true, cleanupError };
+    saveDriverRun(store, current);
+    settleAbandonedRunInTransaction(store, current.groupId, run.runId, abandonSettlementOf(request));
+    return true;
+  });
 }
 
 /** The last collect failure named for each blocked run under a stop, so a failure that repeats every round is named once. */
@@ -467,7 +500,10 @@ async function closeBlocked(deps: ExecutionDriverDeps, run: DriverRun, request: 
   // swap; if it throws, the change is on orca/<g> but the run is blocked with no `landedCommit`. Ask the branch.
   if ((at === "D" || at === "R") && await landedUnrecorded(deps, run)) return false;
   if (drive.outcome !== null || at === "D" || at === "R" || at === "E") {
-    return settleHandoffCheckpoint(deps, run.runId, request.requestId, await savedReport(deps.store, run.runId));
+    const report = await savedReport(deps.store, run.runId);
+    // A success (D/R/E, or a succeeded outcome) is never settled abandoned: it lands (Correction 2.2).
+    const abandoned = drive.outcome !== null && drive.outcome !== "succeeded" ? await settleAbandonedUnderStop(deps, run, report) : null;
+    return abandoned ?? settleHandoffCheckpoint(deps, run.runId, request.requestId, report);
   }
   if (at === "A1" || at === "A2" || (at === "B" && (drive.blockedReason ?? "").startsWith("accept-refused"))) return restartRun(deps, run.runId, request.requestId);
   if (run.executionId === null) return inspectUnderStop(deps, run, request);

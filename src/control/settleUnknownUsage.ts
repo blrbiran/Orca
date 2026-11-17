@@ -90,6 +90,10 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
   if (!run.unknown.work && !run.unknown.handoff) throw new ControlError("run-usage-not-unknown");
   const stop = readStopIntent(store, run.groupId);
   if (stoppedWorking(run)) {
+    // Stuck-runs Correction 3, re-review (controller's ruling 2026-11-18: abandon wins): a run a person abandoned is never
+    // made continuable; `recovered` is the only disposition this branch has, so it is refused (driverHandoff.ts
+    // settleAbandonedUnderStop). Settling it as abandoned instead would change this branch's reservation arithmetic.
+    if ((run as { abandon?: unknown }).abandon !== undefined) throw new ControlError("run-usage-not-settleable", "abandoned");
     // Spec 2026-10-14-handoff-stop-unknown-usage-design.md §3.1: stopped while working, so there is no failure to settle;
     // its usage alone kept the handoff from settling recoverable, and the run goes back to recoverable once it is settled.
     // Its partial checkpoint is checked with the evidence (settlementProof, releasedSettlementCheckpoint).
