@@ -288,6 +288,32 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
     } finally { await w.teardown(); }
   });
 
+  // Off-plan writes spec W3 (#346, plan Task 4): a multi run's record compares its first written directory -- the one its
+  // own contract is rooted at -- against that contract's targetPaths, and is written with the landing.
+  it("records the first written directory's off-plan writes with the landing", async () => {
+    const w = await multiWorld();
+    await contractRootedAtAlpha(w);
+    const path = join(w.root, "contracts", "a.json");
+    const contract = JSON.parse(await readFile(path, "utf8")) as { context: { targetPaths: string[] }; safetyPolicy: { allowlistPaths: string[] } };
+    contract.context.targetPaths = ["src/a.ts"];
+    contract.safetyPolicy.allowlistPaths = ["**"];
+    await writeFile(path, JSON.stringify(contract));
+    g(w.repo, "update-ref", "refs/heads/orca/g", g(w.repo, "rev-parse", "HEAD"));
+    const runtime = await w.boot();
+    const runId = await collect(w, runtime, ["alpha"], () => ({ "src/a.ts": "export const a = 1;\n", "notes.md": "n\n" }))
+      .catch(async (error) => { w.die(runtime); await w.teardown(); throw error; });
+    try {
+      await injectDecision(runtime, runId);
+      await driveUntil(runtime, () => {
+        if (state(runtime, runId) === "blocked") throw new Error(`blocked: ${String(driveOf(runtime, runId).blockedAt)} ${String(driveOf(runtime, runId).blockedReason)}`);
+        return LANDED.includes(state(runtime, runId)!);
+      }, 120_000, "landing");
+      const rows = runtime.store.db.prepare("SELECT run_id, body FROM activity WHERE group_id='g' AND kind='off-plan-write'").all();
+      // mutation: pass no record from stepDMulti's markLanded -> no row, red
+      expect(rows.map((row) => [row.run_id, JSON.parse(String(row.body))])).toEqual([[runId, { taskId: "a", runId, paths: ["notes.md"], count: 1 }]]);
+    } finally { await w.teardown(); }
+  });
+
   // Review of H7 (Orca session 7753e97d) blocker: with no decision there is no ledger, so no primary commit; the run's
   // work is on alpha's branch all the same. Judged by `landedCommit` alone it settled as an empty result: no acceptance,
   // and its task `blocked` though its change landed.

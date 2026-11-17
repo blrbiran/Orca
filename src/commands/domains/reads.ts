@@ -11,6 +11,7 @@ import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
 import { REPEATED_FAILURE_STOP } from "../../control/repeatedFailureStop.js";
+import { offPlanWriteText, type OffPlanWrite } from "../../control/offPlanWrites.js";
 import { goalPathLine, impliedPathAddedLine, impliedPathLine, type GoalPathOutsideTargets, type ImpliedPathAddition, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
 import { phaseEndBudgetLines, runUsageLines, taskCostLine, type UsageRun } from "./usageLines.js";
 import { viewTaskCost, type TaskCost } from "../../control/taskCost.js";
@@ -289,6 +290,11 @@ export function postMergeCheckLines(check: PostMergeCheckView | undefined): stri
  * Name them, what each changed against the attempt's base, and the read-only git to look at it, so a person can take
  * the work by hand.
  */
+/** Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths, in one line; none without a record. */
+function offPlanWriteLines(run: { offPlanWrites?: OffPlanWrite }): string[] {
+  return run.offPlanWrites === undefined ? [] : [`off-plan writes: ${offPlanWriteText(run.offPlanWrites)}`];
+}
+
 /** Tester #274: the field ccloop's strict execute shape refused (runDiagnosis.ts formatField), as run show and run results print it. */
 function formatFieldLine(field: string): string {
   return `the agent's answer did not fit the execute format; refused: ${field}`;
@@ -518,11 +524,11 @@ export const READ_ROWS: CommandDef[] = [
     },
     // Tester follow-up F §4 (empty-result): the task's current run, when its attempt changed nothing, in words.
     format: (body) => {
-      const b = body as { groupId?: string; task?: NoChangeItem; runs?: EmptyResultRun[]; cost?: TaskCost };
+      const b = body as { groupId?: string; task?: NoChangeItem; runs?: Array<EmptyResultRun & { offPlanWrites?: OffPlanWrite }>; cost?: TaskCost };
       const current = (b.runs ?? []).filter((run) => run.runId === b.task?.currentRunId);
       const lines = [...emptyResultLines(current), ...noChangeLines(b.groupId ?? "?", b.task === undefined ? [] : [b.task], current), ...(b.cost === undefined ? [] : [taskCostLine(b.cost)]),
         // Tester #348 review: this task's runs the read schema cannot decode.
-        ...unreadableRunLines((b.task as { unreadableRuns?: unknown } | undefined)?.unreadableRuns)];
+        ...unreadableRunLines((b.task as { unreadableRuns?: unknown } | undefined)?.unreadableRuns), ...current.flatMap(offPlanWriteLines)];
       return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`;
     } }),
   // Tester follow-up G Part 4.7: a task's handoffs -- every run's version, or one run's summary and handoff with --run.
@@ -566,7 +572,7 @@ export const READ_ROWS: CommandDef[] = [
       };
     },
     format: (body) => {
-      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; phase?: string; outcome?: string | null; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null }; formatField?: string }; postMergeCheck?: PostMergeCheckView; catalogMiss?: string } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
+      const b = body as { groupId: string; run: { runId?: string; taskId?: string | null; state?: string; phase?: string; outcome?: string | null; agent?: { installation: string; model: string | null }; stopReason?: string | null; pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>; offPlanWrites?: OffPlanWrite; failureCause?: { cause: string; phase: string | null; retries: number; detail: string | null } | null; diagnosis?: { formatFailureWork?: FormatFailureWork; failureCause?: { detail: string | null }; formatField?: string }; postMergeCheck?: PostMergeCheckView; catalogMiss?: string } | undefined; activity: { entries: Array<{ kind: string; at: number; body: unknown }> }; evidence: { count: number } };
       // Issue #140: why a run stopped is what a person opens run show for; it gets whole lines, not the 160-char line.
       const cause = b.run?.failureCause ?? null;
       const why = [
@@ -594,6 +600,8 @@ export const READ_ROWS: CommandDef[] = [
         // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode.
         ...(rejectsOutputSchema([cause?.detail, b.run?.diagnosis?.failureCause?.detail, b.run?.stopReason])
           ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),
+        // Off-plan writes spec W3 (#346): beside the path misses, what a landed run changed outside its targetPaths.
+        ...(b.run === undefined ? [] : offPlanWriteLines(b.run)),
         ...(b.run?.pathPolicyMisses?.length ? ["observed path misses:", ...b.run.pathPolicyMisses.map((miss) => `  ${miss.repoKey === null ? "" : `${miss.repoKey}:`}${miss.path}`), ...(b.run.taskId ? [`To allow only these paths: orca task retry ${b.groupId} ${b.run.taskId} --allow-observed-paths`] : [])] : []),
         // Tester #274: the field ccloop's strict execute shape refused in the agent's answer.
         ...(b.run?.diagnosis?.formatField === undefined ? [] : [formatFieldLine(b.run.diagnosis.formatField)]),

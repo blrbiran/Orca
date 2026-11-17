@@ -483,6 +483,8 @@ export type RunViewV1 = {
   outcome?: string | null;
   /** Git-observed allowlist misses, available only from a ccloop peer that reports typed evidence. */
   pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>;
+  /** Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths (at most 64) and their count. */
+  offPlanWrites?: { paths: string[]; count: number };
   /** Failure-cause spec 2026-10-21 §5: ccloop's run-level cause; optional so literal fixtures need no edit. */
   failureCause?: { cause: string; phase: "plan" | "execute" | "verify" | "setup" | null; retries: number; detail: string | null } | null;
   /** Quota failover spec §3 (session 3cfc2e73): the current run failed with quota, was not switched, and its installation rests. */
@@ -768,6 +770,7 @@ export const WEB_ACTIVITY_KINDS = [
   "worker-lost",
   "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
   "run-abandon-requested",
+  "off-plan-write",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };

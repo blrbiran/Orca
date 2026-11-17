@@ -36,6 +36,7 @@ import { blockRun, describeError, groupRepoId, readDriverRun, savedReport, saveD
 import { QUIET_GIT, compareAndSwap, conflictPathOf, extraLandingPathOf, incomingRefOf, landingPathOf, postMergeCheckPathOf, reconcileRunsDirOf, removeOwnPath, revParse, workBranchRef } from "./workspace.js";
 import { runCheckSequence, type CheckFailure, type PostMergeOutcome } from "./checkCommand.js";
 import { recordActivity } from "./activity.js";
+import { landingOffPlanWrite, recordOffPlanWrite, type OffPlanWriteBody } from "./offPlanWrites.js";
 import { observeHistorySource, recordHistoryBinding } from "./historySource.js";
 import { landingSubject, landingTrailers, taskGoalOf } from "./landingMessage.js";
 import type { PostMergeCheckRecord, ReconcileRecord } from "./driveRecord.js";
@@ -63,12 +64,14 @@ export async function findLanding(targetRepo: string, base: string, tip: string,
   return hit[0]!;
 }
 
-export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommit: string | null, landedDirs: Record<string, string> | null = null, postMergeCheck: PostMergeCheckRecord | null = null): void {
+export function markLanded(deps: ExecutionDriverDeps, runId: string, landedCommit: string | null, landedDirs: Record<string, string> | null = null, postMergeCheck: PostMergeCheckRecord | null = null, offPlan: OffPlanWriteBody | null = null): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
     if (run.state !== "collected" && run.state !== "reconciling") return;
     // Tester follow-up E §4 (#245): a passed check writes its activity row with the landing; not-needed writes the field only.
     if (postMergeCheck?.result === "passed") recordActivity(deps.store, { groupId: run.groupId, taskId: run.taskId, runId, kind: "post-merge-check", body: postMergeCheck });
+    // Off-plan writes spec W3 (#346): with the landing, so a row exists exactly when the landing was recorded.
+    if (offPlan !== null) recordOffPlanWrite(deps.store, run.groupId, offPlan);
     run.state = "landed";
     landedWithPending(deps.store, run);
     // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move. A multi run's primary is
@@ -370,7 +373,8 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
     });
   }
   const already = await findLanding(targetRepo, drive.base!, old, drive.attemptSha!);
-  if (already !== null) { markLanded(deps, runId, already); return true; }
+  // The attempt is an ancestor of the tip here, so its objects are in targetRepo.
+  if (already !== null) { markLanded(deps, runId, already, null, null, await landingOffPlanWrite(store, run, targetRepo, drive.base, drive.attemptSha)); return true; }
   // Ruling R2 (#241): a merge whose check was started in an earlier round lands, or blocks, on that check's answer.
   const checks = postMergeChecksOf(context);
   const checked = checks.get(runId);
@@ -383,20 +387,25 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
       const record: PostMergeCheckRecord = { result: failure === null ? "passed" : "failed", attemptSha: drive.attemptSha!, mergedSha: checked.next, oldTip: old, commands,
         ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }) };
       if (failure !== null) { blockOnPostMergeCheck(deps, runId, postMergeBlockReason(runId, run.groupId, old, failure), record); return true; }
+      // Read before the swap: the earlier round's fetch keeps the attempt reachable in targetRepo (its incoming ref).
+      const offPlan = await landingOffPlanWrite(store, run, targetRepo, drive.base, drive.attemptSha);
       await deps.beforeCas?.();
       // A moved tip only (as below): the next round merges onto the new tip and checks that tree.
       if (!(await compareAndSwap(targetRepo, workBranchRef(run.groupId), checked.next, old))) return false;
       deps.crash?.("D-after-cas");
-      markLanded(deps, runId, checked.next, null, record);
+      markLanded(deps, runId, checked.next, null, record, offPlan);
       return true;
     }
     // The tip moved while the check ran: the tree it checked will never land. Merge onto the new tip, and check that.
   }
   // Tester follow-up E §4 (#245): why this landing's merge needed no post-merge check, recorded with the landing.
   let notNeeded: PostMergeCheckRecord["why"] | null = null;
+  let offPlan: OffPlanWriteBody | null = null;
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, old, async (landing) => {
     // Into the target's shared refs: the incoming ref is how the attempt stays reachable until settle.
     await git(landing, [...QUIET_GIT, "fetch", "--no-tags", join(drive.sourceDir, "repo"), `+${drive.attemptSha}:${incomingRefOf(runId)}`]);
+    // Off-plan writes spec W3: the run's own range, the attempt against its base (`git diff <base> <attemptSha>`).
+    offPlan = await landingOffPlanWrite(store, run, landing, drive.base, drive.attemptSha);
     try {
       await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "merge", "--no-ff", "--no-commit", incomingRefOf(runId)]);
     } catch {
@@ -444,7 +453,7 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
   if (landed.kind === "moved") return false;
   deps.crash?.("D-after-cas");
   markLanded(deps, runId, landed.commit, null, notNeeded === null ? null
-    : { result: "not-needed", why: notNeeded, attemptSha: drive.attemptSha!, mergedSha: landed.commit, oldTip: old, commands: [] });
+    : { result: "not-needed", why: notNeeded, attemptSha: drive.attemptSha!, mergedSha: landed.commit, oldTip: old, commands: [] }, offPlan);
   return true;
 }
 
@@ -594,6 +603,10 @@ async function stepDMulti(deps: ExecutionDriverDeps, runId: string, run: DriverR
     saveDriverRun(store, current);
     return true;
   })) return false;
+  // Off-plan writes spec W3: the task's own contract is its first written directory's, so only that directory's range is
+  // compared (landingOffPlanWrite); its attempt is in that repository (fetched by produceMultiMerge, or already landed).
+  const first = dirs[0]!;
+  const offPlan = await landingOffPlanWrite(store, run, first.targetRepo, first.base, first.attemptSha);
   for (const [index, entry] of produced.entries()) {
     await deps.beforeCas?.();
     // A moved tip ends the round; the next round finds the dirs already swapped and produces only the rest.
@@ -602,7 +615,7 @@ async function stepDMulti(deps: ExecutionDriverDeps, runId: string, run: DriverR
     // The single-repository path's crash hook, after this run's first swap.
     if (index === 0) deps.crash?.("D-after-cas");
   }
-  markLanded(deps, runId, landedDirs[primaryKey] ?? null, landedDirs);
+  markLanded(deps, runId, landedDirs[primaryKey] ?? null, landedDirs, null, offPlan);
   return true;
 }
 
@@ -1019,6 +1032,9 @@ async function finishReconcile(
   }
   const merged = await rebuildMergeCommit(record.copyPath, record.old, incomingRefOf(runId), tree, `${landingSubject(taskGoalOf(deps.store, run), "land", runId, ` (reconciled with ${(record.otherTaskIds ?? [record.otherTaskId]).join(", ")})`)}\n\n${landingTrailers(run)}`);
   await git(record.copyPath, [...QUIET_GIT, "update-ref", `refs/orca/merged/${runId}`, merged]);
+  // Off-plan writes spec W3: the run's own attempt against its base (not the reconciliation's), reachable in targetRepo
+  // through the incoming ref D fetched before the conflict.
+  const offPlan = await landingOffPlanWrite(store, run, targetRepo, run.drive!.base, run.drive!.attemptSha);
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, record.old, async (landing) => {
     // A bare sha is fetchable because refs/orca/merged/<runId> advertises it in the copy.
     await git(landing, [...QUIET_GIT, "fetch", "--no-tags", record.copyPath, merged]);
@@ -1036,6 +1052,7 @@ async function finishReconcile(
     } else {
       current.state = "landed";
       landedWithPending(store, current);
+      if (offPlan !== null) recordOffPlanWrite(store, current.groupId, offPlan);
       // Dir-requirements spec §6.5: a dir group's landed tip, in the write that records the move.
       recordLandedTip(store, current.groupId, merged);
       if (reconcileFlag !== null) {

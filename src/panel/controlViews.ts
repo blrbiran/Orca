@@ -63,6 +63,7 @@ import { taskContractSchema } from "../scheduler/planFile.js";
 import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
+import { readOffPlanWritesByRun, type OffPlanWriteBody } from "../control/offPlanWrites.js";
 import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
 import { attemptReviewOf, type AttemptReview } from "./attemptReview.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
@@ -1349,8 +1350,15 @@ function outputBoundView(store: ControlStore, groupId: string, run: { runId: str
   return output > bound ? { outputBound: bound, outputBoundExceededBy: output - bound } : { outputBound: bound };
 }
 
+/** The task view's run line and `task show` / `run show` read a run's off-plan record here; omitted when it has none. */
+function offPlanWritesView(record: OffPlanWriteBody | undefined): { offPlanWrites?: { paths: string[]; count: number } } {
+  return record === undefined ? {} : { offPlanWrites: { paths: record.paths, count: record.count } };
+}
+
 function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
   const activity = readLatestRunActivityByGroup(store, groupId);
+  // Off-plan writes spec W3 (#346): the landed runs' records, one read for the group.
+  const offPlan = readOffPlanWritesByRun(store, groupId);
   // Feedback #59: the set stays in id order (the wire's canonical order); each run also carries its creation position,
   // the 1-based place of its row in the snapshot's rowid order -- total, and stable because runs are never deleted.
   const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
@@ -1476,6 +1484,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       ...(run.drive?.pathPolicyMisses === undefined ? {} : { pathPolicyMisses: run.drive.pathPolicyMisses }),
+      ...offPlanWritesView(offPlan.get(runId)),
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
       failureCause: run.drive?.failureCause ?? null,
       ...(quotaRest === undefined ? {} : { quotaRest }),

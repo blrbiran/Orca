@@ -53,7 +53,9 @@ export function loopSummaryLines(plan: LoopPlanViewV1): string[] {
   return [
     i18n.t("loopPlan.summary.goal", { goal: inputs.goal }),
     i18n.t("loopPlan.summary.doneWhen", { condition: inputs.successCondition }),
-    i18n.t("loopPlan.summary.onlyChanges", { paths: inputs.targetPaths.join(separator) }),
+    // Off-plan writes spec W2 (#346): from version 4 (loopPlans.ts offPlanWrites) a plan has no allowlist, so its
+    // targetPaths are what the task is expected to change, not the only files it may.
+    i18n.t(plan.planVersion >= 4 ? "loopPlan.summary.expectedChanges" : "loopPlan.summary.onlyChanges", { paths: inputs.targetPaths.join(separator) }),
     ...(inputs.protectedPaths.length > 0 ? [i18n.t("loopPlan.summary.mustNotChange", { paths: inputs.protectedPaths.join(separator) })] : []),
     plan.maxFiles === Number.MAX_SAFE_INTEGER ? i18n.t("loopPlan.summary.noFileLimit") : i18n.t("loopPlan.summary.files", { count: plan.maxFiles }),
     i18n.t("loopPlan.summary.checks", { count: inputs.checks.length + documentChecksOf(plan) }),

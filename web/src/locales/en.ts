@@ -115,6 +115,7 @@ const activityKind = {
   "worker-lost": "worker lost",
   "group-cap-reached": "group cap reached", "usage-paused": "paused over its expectation", "usage-pause-decided": "pause decided", "usage-over-expectation": "over its expectation",
   "run-abandon-requested": "abandon requested",
+  "off-plan-write": "off-plan writes",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -696,6 +697,8 @@ export const en = {
       runsOf: "Runs of {{taskId}}",
       retryKey: "Key: r",
       runNumber: "Run {{n}} of this task",
+      offPlanWrites: "Off-plan writes: {{paths}}",
+      offPlanWritesMore: " (+{{n}} more)",
     },
     progress: {
       noRun: "no run",
@@ -1397,6 +1400,7 @@ export const en = {
       goal: "Goal: {{goal}}",
       doneWhen: "Done when: {{condition}}",
       onlyChanges: "Only changes: {{paths}}",
+      expectedChanges: "Expected to change: {{paths}} (other files may change when the work needs them)",
       mustNotChange: "Must not change: {{paths}} (reported by the agent, not checked in git)",
       files_one: "At most {{count}} file changed (reported by the agent)",
       files_other: "At most {{count}} files changed (reported by the agent)",

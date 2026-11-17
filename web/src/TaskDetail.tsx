@@ -31,6 +31,7 @@ import { UsagePause } from "./UsagePause.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { UnreadableRuns } from "./UnreadableRuns.js";
+import { OffPlanWrites } from "./OffPlanWrites.js";
 import type { Role } from "./auth.js";
 import { localDateTime } from "./ui/localTime.js";
 import { TaskCostLine } from "./TaskCost.js";
@@ -344,6 +345,7 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} ladderSkipped={ladderSkip?.runId === run.runId ? ladderSkip.reason ?? undefined : undefined} /> <EvidenceList runId={run.runId} />
+              <OffPlanWrites run={run} />
               <RunTranscript runId={run.runId} active={props.active !== false} autoOpen={run.runId === item.currentRunId} blocked={run.state === "blocked"} />
               {/* Flow engine spec §13.3 (W-COR): a finished run may be corrected as a whole, in one sentence. */}
               {run.phase === "work" && run.outcome === "succeeded" && <CorrectRunButton repoId={view.summary.repoId} runId={run.runId} />}

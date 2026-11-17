@@ -2066,6 +2066,8 @@ export const activityKindSchema = z.enum([
   "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
   // Stuck-runs spec 2026-11-17 S2: a person asked to end a run's attempt now.
   "run-abandon-requested",
+  // Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths.
+  "off-plan-write",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2148,6 +2150,8 @@ export const runViewSchema = z
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
     pathPolicyMisses: pathPolicyMissesSchema.optional(),
+    // Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths (at most 64) and their count.
+    offPlanWrites: z.object({ paths: z.array(nonemptyString).max(64), count: positiveSafeInteger }).strict().optional(),
     outcome: nonemptyString.nullable().optional(),
     // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (driveRecord.ts runFailureCauseSchema); optional like stopReason.
     failureCause: runFailureCauseSchema.nullable().optional(),

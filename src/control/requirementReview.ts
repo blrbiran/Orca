@@ -35,6 +35,7 @@ import { git, gitPrefix } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
+import { offPlanFactLines } from "./offPlanWrites.js";
 import type { Amount } from "./types.js";
 import type { BudgetAmount } from "./tokenPolicy.js";
 
@@ -414,10 +415,11 @@ async function deliverySettled(repo: string, body: unknown, tip: string): Promis
 /**
  * Delivery tail spec D4: what Orca recorded beyond the diff, as lines -- in words that assume no language or test framework:
  * the acceptance on the reviewed tip (each command, its exit and time), the delivery (scheme, and delivered / not yet /
- * failed / backing off), and the acceptance on the delivered commit. Only what is known is said.
+ * failed / backing off), and the acceptance on the delivered commit. Only what is known is said. Off-plan writes spec W3
+ * (#346): first, one line per task whose landing changed paths outside its targetPaths.
  */
-async function reviewFacts(repo: string, body: unknown, tip: string): Promise<string[]> {
-  const lines: string[] = [];
+export async function reviewFacts(repo: string, body: unknown, tip: string, store: ControlStore, groupId: string): Promise<string[]> {
+  const lines: string[] = offPlanFactLines(store, groupId);
   const short = (commit: string): string => commit.slice(0, 12);
   const commandLines = (commands: ReadonlyArray<{ command: string; exit: string; ms: number }>) =>
     commands.map((c) => `  - \`${cutUtf8(c.command, 300)}\` -> exit ${c.exit} (${c.ms} ms)`);
@@ -506,7 +508,7 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const contract = readGroupCallContract(deps.store, run.groupId, run.workItemId);
     const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
     const changes = await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip);
-    const facts = await reviewFacts(repo, body, tip);
+    const facts = await reviewFacts(repo, body, tip, deps.store, run.groupId);
     const acceptance = acceptanceOf(body);
     const baseline = acceptance?.result === "passed-relative" ? acceptance.fullSuite?.baseline : undefined;
     return {
