@@ -306,6 +306,12 @@ export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord;
 export const WORKER_LOST_CAUSE = "worker-lost";
 /** Tester follow-up J (#299): ccloop 9c83b38's cause for a provider that does not serve the run's model (a 404); not retryable. */
 export const MODEL_UNAVAILABLE_CAUSE = "model-unavailable";
+/**
+ * Tester #347: ccloop's cause for an execute call that ended its turn after a message that is not an answer while no tool,
+ * command or file change was observed (the agent said what it would do and stopped). Retried like any failure; the next
+ * run is told so (priorFailures.ts).
+ */
+export const NARRATION_ONLY_CAUSE = "narration-only";
 /** #299: what a person does about it -- Orca never switches an agent a person or plan chose (failover ruling D2). */
 export function modelUnavailableCommand(groupId: string, taskId: string): string {
   return `orca task retry ${groupId} ${taskId} --agent <installation>`;

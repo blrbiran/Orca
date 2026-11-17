@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { readArtifact } from "./archive.js";
-import { isTerminallyFailedRun, type DriveRecord } from "./driveRecord.js";
+import { isTerminallyFailedRun, NARRATION_ONLY_CAUSE, type DriveRecord } from "./driveRecord.js";
 import { PRIOR_FAILURE_BOUNDS, priorFailureSchema, type PriorFailure } from "./schema.js";
 import { readCanonicalRecord } from "./snapshot.js";
 import { readTaskResultState } from "./taskResultStore.js";
@@ -80,6 +80,13 @@ async function storedEvidence(store: ControlStore, runId: string, last: NonNulla
   return evidence.length === 0 ? null : evidence;
 }
 
+/**
+ * Tester #347: the evidence entry an earlier run that ended as ccloop's `narration-only` contributes, so the next attempt's
+ * prompt says plainly what went wrong (ccloop renders priorFailures' evidence into the plan and execute prompts). Orca's own
+ * words, never the agent's; within PRIOR_FAILURE_BOUNDS.evidenceEntry.
+ */
+export const NARRATION_ONLY_EVIDENCE = "The previous attempt ended its turn after a short message, without doing the task: it used no tool, ran no command, changed no file and gave no answer. This attempt must do the task itself: make the changes, run the checks, then end with the final answer.";
+
 /** One earlier failed run, as ccloop's PriorFailureV1 (§2.1), pre-cut to its bounds. */
 export async function priorFailureOf(store: ControlStore, run: { runId: string; drive?: DriveRecord }): Promise<PriorFailure> {
   const drive = run.drive;
@@ -95,6 +102,8 @@ export async function priorFailureOf(store: ControlStore, run: { runId: string; 
       evidence: await storedEvidence(store, run.runId, last),
     };
   if (cause !== null) entry.failureCause = cause;
+  // Tester #347: the hint goes first; any stored evidence follows, within the entry count.
+  if (cause === NARRATION_ONLY_CAUSE) entry.evidence = [NARRATION_ONLY_EVIDENCE, ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   return priorFailureSchema.parse(entry);
 }
 
