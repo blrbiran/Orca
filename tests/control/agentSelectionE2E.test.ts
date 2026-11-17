@@ -11,6 +11,7 @@ import { readArchivedPlan } from "../../src/control/queries.js";
 import { readStopIntent } from "../../src/control/stopIntent.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { readControlGroup, readSelectionPreview } from "../../src/panel/controlViews.js";
+import { releaseOnly } from "../helpers/releaseGate.js";
 import { ccloopWorlds, noBlocked, PARALLEL_STOP_HOLD_MS, parallelStopPremise, raw, realBinary, until, workRuns, type RunRow, type ScriptEntry, type Task, type World } from "./fixtures/ccloopWorld.js";
 
 /**
@@ -270,7 +271,11 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
     } finally { await w.teardown(); }
   });
 
-  it("C3: under fake claude, three parallel runs stopped mid-execute all continue, and both reconciliations run with the reconcile slot's own model", async () => {
+  // Ruling: human 2026-11-17 (test pruning) -- release-only (205 s, a registered load flake). It is handoffE2E's H2 under
+  // fake claude; daily cover: handoffE2E.test.ts "H2: three parallel runs stopped mid-execute all continue ..." (the
+  // parallel stop and continuation), M1 above (the reconcile slot's own model reaches its CLI) and CH above (a claude run
+  // stopped and continued with its frozen selection).
+  it.runIf(releaseOnly)("C3: under fake claude, three parallel runs stopped mid-execute all continue, and both reconciliations run with the reconcile slot's own model", async () => {
     const own = (id: string): ScriptEntry => ({ files: { "shared.txt": `${id.toUpperCase()}\n`, [`${id}.txt`]: `${id.toUpperCase()}\n` }, delayMs: { execute: PARALLEL_STOP_HOLD_MS } });
     const script: Record<string, ScriptEntry> = {
       a: own("a"), b: own("b"), d: own("d"),
@@ -309,7 +314,10 @@ describe.skipIf(!realBinary)("agent selection against real ccloop (spec §9 crit
   // Orca claude stream usage (2026-09-27), spec §5.2 O1: the goal of that round. Under fake claude an execute cut at the
   // handoff request's deadline (not waited out: the phase sleeps 120 s) reports the usage it streamed, so the run is not
   // usage-unknown, its checkpoint is continuable and the continuation lands -- as handoffE2E's deadline case under codex.
-  it("D1: under fake claude, an execute cut at the handoff deadline reports its streamed usage and its continuation lands", async () => {
+  // Ruling: human 2026-11-17 (test pruning) -- release-only (62 s). Daily cover: handoffE2ERecovery.test.ts "deadline: a
+  // phase aborted at the request's deadline still leaves a recoverable checkpoint, and its continuation lands" (the same
+  // assertions under fake codex); the claude adapter's stream usage itself is ccloop's.
+  it.runIf(releaseOnly)("D1: under fake claude, an execute cut at the handoff deadline reports its streamed usage and its continuation lands", async () => {
     const w = await world([{ taskId: "a", targetPaths: ["a1.txt", "a2.txt"] }], {}, { claudeScript: {
       a: { files: { "a1.txt": "A1\n" }, delayMs: { execute: 120_000 }, usageBeforeDelay: true },
       "a#continuation": { files: { "a1.txt": "A1\n", "a2.txt": "A2\n" } },
