@@ -258,7 +258,13 @@ function fullSuiteRecord(suite: string | null, repo: string, exits: string[], ba
   };
 }
 
-async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, baselineTip: string | null, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal): Promise<AcceptanceOutcome> {
+/** Delivery tail D3: the next scratch path of `groupId`'s acceptance checks (shared counter, so no two checks share one). */
+export function nextAcceptancePath(roots: WorkspaceRoots, groupId: string): string {
+  return groupAcceptancePathOf(roots, groupId, ++checkSeq);
+}
+
+/** Also D3's runner (deliveredAcceptance.ts): `baselineTip` null skips the base comparison. */
+export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, baselineTip: string | null, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal): Promise<AcceptanceOutcome> {
   // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
   const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
   const outcome = await runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {

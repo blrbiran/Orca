@@ -2037,12 +2037,6 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
         write: (action) => write(deps, action), stopped: () => context.stopped,
       }, context.landingWatches ?? (context.landingWatches = new Map()))) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
-    // Tester follow-up G spec §3: a requirement group accepted on its tip is reviewed against its acceptance criteria before
-    // it can be done. Loaded on first use, not imported (the import-cycle rule, as the acceptance pass).
-    try {
-      const { reviewRequirements } = await import("./requirementReview.js");
-      if (await reviewRequirements({ store: deps.store, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate, write: (action) => write(deps, action) })) progressed = true;
-    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
@@ -2051,6 +2045,24 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       const { refreshHistoryAcceptance } = await import("./historyAcceptance.js");
       if ((await refreshHistoryAcceptance({ store: deps.store, repoPathOf: (repoId) => deps.resolveRepository(repoId),
         now: () => (deps.now?.() ?? new Date()).getTime(), write: (action) => write(deps, action) })).length > 0) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Delivery tail spec 2026-11-17 D3 (human ruling 3): a local delivery whose tree differs from the accepted tip's is
+    // checked on the delivered commit, off the round. Loaded on first use, not imported (the import-cycle rule).
+    try {
+      const { acceptDeliveries } = await import("./deliveredAcceptance.js");
+      if (await acceptDeliveries({
+        store: deps.store, roots: deps.roots, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate,
+        ...(deps.dispatchedPersonDir === undefined ? {} : { dispatchedPersonDir: deps.dispatchedPersonDir }),
+        write: (action) => write(deps, action), stopped: () => context.stopped,
+      }, context.acceptanceChecks ?? (context.acceptanceChecks = new Map()))) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Tester follow-up G spec §3: a requirement group accepted on its tip is reviewed against its acceptance criteria before
+    // it can be done. Delivery tail Correction 1.7: after the integration and the delivered acceptance, so a criterion about
+    // the delivery is judged once it can be true (the review pass also waits for the delivery by its records, D2).
+    // Loaded on first use, not imported (the import-cycle rule, as the acceptance pass).
+    try {
+      const { reviewRequirements } = await import("./requirementReview.js");
+      if (await reviewRequirements({ store: deps.store, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate, write: (action) => write(deps, action) })) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Multi-directory projects spec §9.1: the multi landing, right after integration (its git side effects are the driver's).
     try {

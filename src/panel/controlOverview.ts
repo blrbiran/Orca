@@ -7,6 +7,7 @@ import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { fullSuiteCommand } from "../control/fullSuite.js";
+import { deliveredAcceptanceProblem } from "../control/groupAcceptanceRecord.js";
 import { hasRequirementBlock } from "../control/requirementRecords.js";
 import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
 import { BUSY_WORK, decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
@@ -128,6 +129,9 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     if (summary.acceptance?.result === "failed") add("task-attention", groupId, repoId, summary.acceptance.problem ?? "group-acceptance-failed", groupDestination("problem"), "acceptance-failed");
     // Tester #334/#336: a requirement review that did not pass (cannot-judge, a failed or unprepared call, rounds used up)
     // holds the group short of done until a person accepts it, reruns it or opens a fix -- theirs, like a failed acceptance.
+    // Delivery tail spec D3: a failed acceptance on the delivered commit is the person's too (waive or recheck).
+    const deliveredProblem = deliveredAcceptanceProblem(body);
+    if (deliveredProblem !== null) add("task-attention", groupId, repoId, deliveredProblem, groupDestination("problem"), "delivered-acceptance-failed");
     const reviewProblemCode = summary.requirementReview?.problem;
     if (reviewProblemCode !== undefined) add("task-attention", groupId, repoId, reviewProblemCode, groupDestination("problem"), "requirement-review-not-passed");
     for (const work of workItems) {

@@ -7,7 +7,7 @@ import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { historySatisfied } from "./historyAcceptance.js";
-import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
+import { acceptanceSatisfied, deliveredAcceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { reviewSatisfied } from "./requirementReviewRecord.js";
 import { readGroupOrchestration } from "./orchestration.js";
 import type { ControlStore } from "./store.js";
@@ -85,6 +85,8 @@ export function prerequisiteDone(store: ControlStore, groupId: string): boolean 
   if (!acceptanceSatisfied(store, groupId, group)) return false;
   // Tester follow-up G spec §3.6: a requirement group is done only once its requirement review passed (or was accepted).
   if (!reviewSatisfied(store, groupId, group)) return false;
+  // Delivery tail spec D3: a local delivery's tree that differs from the accepted tip's must pass the same checks too.
+  if (!deliveredAcceptanceSatisfied(group)) return false;
   if (dirWorkspaceOf(group) !== null) return dirPlacementCaughtUp(group);
   if (multiDirOf(group) !== null) return multiLandingDone(group);
   if (!deliversLocally(group)) return true;

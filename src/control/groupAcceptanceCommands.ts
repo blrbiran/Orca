@@ -2,7 +2,7 @@ import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { settlingPersonFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
-import { acceptanceOf, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, deliveredAcceptanceOf, deliveredAcceptanceProblem, type DeliveredAcceptance, type GroupAcceptance } from "./groupAcceptanceRecord.js";
 import { commandSuccess } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -19,13 +19,19 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 export type RecheckAcceptanceCommand = Extract<RawAuthorityCommandV1, { verb: "recheck-acceptance" }>;
 export type WaiveAcceptanceCommand = Extract<RawAuthorityCommandV1, { verb: "waive-acceptance" }>;
 
-function failedRecord(store: ControlStore, groupId: string): { body: Record<string, unknown>; record: GroupAcceptance & { tip: string } } {
+/**
+ * The failed record the verb acts on: the tip's acceptance, else (delivery tail spec D3) the acceptance on the delivered
+ * commit when that is the one that failed. `field` names which.
+ */
+function failedRecord(store: ControlStore, groupId: string): { body: Record<string, unknown>; field: "acceptance" | "deliveredAcceptance"; record: (GroupAcceptance | DeliveredAcceptance) & { tip: string } } {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (row === undefined) throw new ControlError("group-not-found");
   const body = JSON.parse(String(row.body)) as Record<string, unknown>;
   const record = acceptanceOf(body);
-  if (record === null || record.result !== "failed" || record.tip === null) throw new ControlError("group-acceptance-not-failed", record?.result ?? "none");
-  return { body, record: record as GroupAcceptance & { tip: string } };
+  if (record !== null && record.result === "failed" && record.tip !== null) return { body, field: "acceptance", record: record as GroupAcceptance & { tip: string } };
+  const delivered = deliveredAcceptanceOf(body);
+  if (deliveredAcceptanceProblem(body) !== null && delivered !== null) return { body, field: "deliveredAcceptance", record: delivered };
+  throw new ControlError("group-acceptance-not-failed", record?.result ?? "none");
 }
 
 function saveBody(store: ControlStore, groupId: string, body: Record<string, unknown>): void {
@@ -37,8 +43,8 @@ export function applyRecheckAcceptance(deps: { store: ControlStore }, command: R
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const groupId = command.target.groupId;
-      const { body, record } = failedRecord(deps.store, groupId);
-      delete body.acceptance;
+      const { body, field, record } = failedRecord(deps.store, groupId);
+      delete body[field];
       saveBody(deps.store, groupId, body);
       return commandSuccess(context, { kind: "acceptance-recheck-requested", groupId, tip: record.tip });
     },
@@ -50,13 +56,13 @@ export function applyWaiveAcceptance(deps: { store: ControlStore }, command: Wai
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const groupId = command.target.groupId;
-      const { body, record } = failedRecord(deps.store, groupId);
+      const { body, field, record } = failedRecord(deps.store, groupId);
       const by = settlingPersonFor(command.commandId);
       if (by === null) throw new ControlError("group-acceptance-person-required");
       const at = deps.store.now();
-      const waived: GroupAcceptance = { ...record, result: "waived", waived: { by, note: command.payload.note, at } };
-      saveBody(deps.store, groupId, { ...body, acceptance: waived });
-      recordActivity(deps.store, { groupId, kind: "group-acceptance", body: { ...waived } });
+      const waived = { ...record, result: "waived" as const, waived: { by, note: command.payload.note, at } };
+      saveBody(deps.store, groupId, { ...body, [field]: waived });
+      recordActivity(deps.store, { groupId, kind: field === "acceptance" ? "group-acceptance" : "delivered-acceptance", body: { ...waived } });
       return commandSuccess(context, { kind: "acceptance-waived", groupId, tip: record.tip });
     },
   }).body;

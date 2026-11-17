@@ -114,3 +114,60 @@ export function failedCommandOf(record: GroupAcceptance): string {
 export function acceptanceProblem(record: GroupAcceptance | null): string | null {
   return record?.result === "failed" ? `group-acceptance-failed:${failedCommandOf(record)}` : null;
 }
+
+/**
+ * Delivery tail spec 2026-11-17 D3 (human ruling 3; Correction 1.2, 1.3, 1.6): the acceptance on the commit a `local`
+ * delivery made, kept on the group body as `deliveredAcceptance`, keyed by the tip delivered and the commit it became.
+ * `not-needed` with `same-tree` (the delivered tree is the accepted tip's) or `already-in-target` (the target held the tip:
+ * no new commit was made for it); `waived` carries a person's waiver -- theirs, or the tip's carried over (Correction 1.6).
+ */
+export interface DeliveredAcceptance {
+  tip: string; commit: string;
+  result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived";
+  why?: "same-tree" | "already-in-target";
+  commands: Array<{ command: string; exit: string; ms: number }>;
+  tail?: string; at: number;
+  waived?: { by: string; note: string; at: number };
+}
+
+export function deliveredAcceptanceOf(body: unknown): DeliveredAcceptance | null {
+  const value = (body as { deliveredAcceptance?: unknown } | null)?.deliveredAcceptance;
+  return value === undefined || value === null || typeof value !== "object" ? null : value as DeliveredAcceptance;
+}
+
+/**
+ * What D3 checks for this body, read without the integration schema (this module stays a leaf): a frozen, idle `local`
+ * delivery with no history promise and nothing pending, delivered as `lastIntegrated` -> `commit`. `madeForTip` is false
+ * when no new commit was made for that tip (Correction 1.3). Null when D3 does not apply.
+ */
+export function deliveredAcceptanceTarget(body: unknown): { tip: string; commit: string; madeForTip: boolean } | null {
+  const integration = (body as { integration?: unknown } | null)?.integration as {
+    scheme?: { delivery?: unknown; historyExpectation?: unknown }; frozen?: unknown; state?: unknown; pending?: unknown;
+    lastIntegrated?: unknown; integratedCommit?: unknown; integratedFor?: unknown } | undefined;
+  if (integration === undefined || integration === null || typeof integration !== "object") return null;
+  if (integration.scheme?.delivery !== "local" || integration.scheme.historyExpectation !== undefined || integration.frozen !== true) return null;
+  if (integration.state !== "idle" || (integration.pending !== null && integration.pending !== undefined) || typeof integration.lastIntegrated !== "string") return null;
+  const madeForTip = typeof integration.integratedCommit === "string" && integration.integratedFor === integration.lastIntegrated;
+  return { tip: integration.lastIntegrated, commit: madeForTip ? integration.integratedCommit as string : integration.lastIntegrated, madeForTip };
+}
+
+const DELIVERED_SATISFIED: ReadonlySet<DeliveredAcceptance["result"]> = new Set(["passed", "passed-relative", "not-needed", "waived"]);
+
+/**
+ * The done gate's half for D3 (DB only): true where D3 does not apply; else the record for the current delivery must be
+ * satisfied. A group already `done` without a current record stays satisfied (it was done before this record existed).
+ */
+export function deliveredAcceptanceSatisfied(body: unknown): boolean {
+  const target = deliveredAcceptanceTarget(body);
+  if (target === null) return true;
+  const record = deliveredAcceptanceOf(body);
+  if (record === null || record.tip !== target.tip || record.commit !== target.commit) return (body as { status?: unknown }).status === "done";
+  return DELIVERED_SATISFIED.has(record.result);
+}
+
+/** The problem a failed delivered acceptance shows (Overview, `group show`); null otherwise. */
+export function deliveredAcceptanceProblem(body: unknown): string | null {
+  const record = deliveredAcceptanceOf(body), target = deliveredAcceptanceTarget(body);
+  if (record === null || target === null || record.result !== "failed" || record.tip !== target.tip || record.commit !== target.commit) return null;
+  return `delivered-acceptance-failed:${record.commands.at(-1)?.command ?? "?"}`;
+}
