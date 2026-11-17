@@ -1046,9 +1046,10 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     }
   }
   deps.crash?.("C-after-handoff");
-  // Stuck-runs spec 2026-11-17 S2: a run a person abandoned settles abandoned whatever its terminal says -- before the
-  // allowance and ceiling paths, which would keep its work and continue it (abandonRun.ts).
-  if (run.mode === undefined && run.recoveryOf === undefined && abandonOf(run) !== null) return settleAbandonedTerminal(deps, runId, report);
+  // Stuck-runs spec 2026-11-17 S2: a run a person abandoned settles abandoned -- before the allowance and ceiling paths,
+  // which would keep its work and continue it (abandonRun.ts). A run that succeeded anyway (it finished before ccloop saw
+  // the ceiling) lands as any success does: abandon ends an attempt that cannot succeed, not finished, paid-for work.
+  if (run.mode === undefined && run.recoveryOf === undefined && abandonOf(run) !== null && outcome !== "succeeded") return settleAbandonedTerminal(deps, runId, report);
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&report.terminal.waitingCause==="token-allowance")throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if(report.terminal.waitingCause==="token-allowance")return settleTokenAllowance(deps,runId,report);
   // Tester follow-up G spec §2.1/§2.5 (plan O4): a stop at the group cap or the pause line keeps its work and continues or waits;
@@ -2170,8 +2171,8 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
 /**
  * Stuck-runs spec 2026-11-17 S2: the terminal of a run a person abandoned (abandonRun.ts). Its usage is booked as collected;
  * it is settled `settled-failed` with the person's settlement, its unused grant released and its task `blocked`
- * (`run-abandoned`), whatever the outcome -- even a success: the person judged the attempt worthless (ruling 2026-11-17:
- * no work kept for accept-attempt). Its workspace is archived and removed by stepCleanupFailed as any failed run's is.
+ * (`run-abandoned`), whatever failure it ended on (no work is kept for accept-attempt, ruling 2026-11-17). A success is
+ * not routed here: it lands (stepC above). Its workspace is archived and removed by stepCleanupFailed as any failed run's is.
  * A handoff request still open owns the run (step H); a run whose usage is unknown is blocked as a failed run is, so
  * settle-usage and close-run end it.
  */

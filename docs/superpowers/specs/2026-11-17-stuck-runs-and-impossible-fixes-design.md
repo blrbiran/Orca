@@ -156,3 +156,15 @@ recommendation: no -- "abandon" means the person judged the attempt worthless; k
 4. **S5's field and limits.** The cap is carried by the fix task's work grant `tokens` (`deriveContract` writes it into
    `executionPolicy.tokenBudget`). In a group whose remaining finite token reserve is below the cap, an automatic fix now
    stops `unfunded` instead of opening uncapped. The review prompt has no version marker; none was invented.
+
+## Correction 2 (same session, after the S2 build; wins over the sections above)
+
+1. **S2.4 is not S1's settle.** A run abandoned before it reached the provider is proved never-started as S1 does it, but
+   settled abandoned (`settled-failed`, task `blocked` `run-abandoned`, drive outcome `not-started`), not
+   `settled-restartable` / `ready`: S1's settle would redispatch it at once, contradicting S2.3.
+2. **A run that succeeds after an abandon request lands** as any success does (controller's call, overriding the
+   builder's "settles abandoned whatever its terminal"): abandon ends an attempt that cannot succeed; finished, paid-for
+   work is kept. Every other terminal of an abandoned run settles abandoned.
+3. **Untested by a run** (read from the code only): a run whose usage is unknown at its abandoned terminal is blocked as a
+   failed run is, so `settle-usage` / `close-run` end it. The criterion's observed tokens are 0 (the fake ccloop books
+   usage only at its terminal), so the ceiling write is checked for its revision and source, not a non-zero amount.

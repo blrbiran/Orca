@@ -21,11 +21,11 @@ const MAX = Number.MAX_SAFE_INTEGER;
 
 /** A ccloop that runs silently until a live ceiling at or below what the run used arrives, then stops it `exhausted`. */
 async function world(options: { honour: boolean }) {
-  const knobs = { stopped: false, honour: options.honour };
+  const knobs = { stopped: false, honour: options.honour, succeed: false };
   const sent: LiveCeilingWire[] = [];
   const t = await driverHarness([{ taskId: "a" }], {
     tokenPolicy: "optional-v1", modelVersion: "followup-g",
-    behaviour: () => (knobs.stopped ? "exhausted" : "stoppable-silent"),
+    behaviour: () => (knobs.succeed ? "succeed" : knobs.stopped ? "exhausted" : "stoppable-silent"),
     stopReason: () => (knobs.stopped ? "live token ceiling reached" : null),
     setLiveCeiling: async (_input, ceiling) => {
       sent.push(ceiling);
@@ -93,6 +93,24 @@ describe("run abandon on an accepted run (spec S2, acceptance 2)", { timeout: 24
       const retried = t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }));
       expect(retried).toMatchObject({ result: { kind: "task-retried", taskId: "a", fromRunId: runId } });
       expect(readWork(t.h.store, "g", "a").status).toBe("ready");
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Controller, same session (overrides the builder's reading of S2.3): abandon is for an attempt that cannot succeed;
+  // one that finished successfully before ccloop saw the ceiling lands as any success does -- its work is paid for.
+  it("a run that succeeds after the abandon request lands as a success, not abandoned", async () => {
+    const { t, knobs } = await world({ honour: false });
+    try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      expect(abandon(t, runId)).toMatchObject({ result: { kind: "run-abandon-requested", runId } });
+      knobs.succeed = true;
+      await t.until(driver, () => readWork(t.h.store, "g", "a").status === "done" || t.body(runId).state === "settled-failed", 120);
+      // mutation: settle every terminal of an abandoned run as abandoned -> settled-failed / blocked, red
+      expect(readWork(t.h.store, "g", "a").status).toBe("done");
+      expect(t.body(runId).operatorSettlement).toBeUndefined();
       await driver.stop();
     } finally { await t.h.dispose(); }
   });
