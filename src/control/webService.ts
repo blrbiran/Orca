@@ -22,7 +22,7 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, estimateGrantFor, withEstimateGrant, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, singleCallOutputBound } from "./estimator.js";
-import { deriveContract, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
+import { deriveContract, offPlanEntryOf, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { isDirGroup, type DirProjectOf } from "./dirGroup.js";
@@ -358,8 +358,9 @@ export function applyObservedPathAmendment(store: ControlStore, groupId: string,
   const workAllocation = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
   const handoffAllocation = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
   if (workAllocation === undefined || handoffAllocation === undefined) throw new ControlError("recovery-blocked", "observed-path-allocations");
+  // Off-plan writes spec W2: the task keeps its frozen siblings (replaceTaskInSnapshot below copies its entry as it is).
   const derived = deriveContract({ ...beforeTask, originalContractHash: originalHash, originalContractCanonicalJson: originalJson,
-    work: workAllocation.amount, handoff: amountSchema.parse(handoffAllocation.amount) }, proposal.proposalVersion);
+    work: workAllocation.amount, handoff: amountSchema.parse(handoffAllocation.amount) }, proposal.proposalVersion, offPlanEntryOf(snapshot, taskId));
   const frozenSkill = snapshot.skills?.find(entry => entry.taskId === taskId);
   const rebuilt = replaceTaskInSnapshot(snapshot, taskId, derived.derivedContractHash,
     { work: workAllocation, handoff: handoffAllocation }, frozenSkill === undefined ? null : { profile: frozenSkill.profile, names: [...frozenSkill.names] });
@@ -2782,14 +2783,15 @@ export class WebControlService {
             // so it does not move; only this task's contract is re-derived, at the same derivationVersion.
             for (const d of dimensions) if(d!=="tokens"||!hasTokenPolicy(this.store,id))group.ledger.committedRemaining[d] += next[d]! - before[d]!;
             setReserve(proposal, residual(proposal.groupLimit, group.used, group.ledger.committedRemaining));
-            const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: amountSchema.parse(handoff.amount) }, proposal.proposalVersion);
+            // Off-plan writes spec W2: the changed task keeps the siblings frozen at confirm (its entry is copied as it is below).
+            const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
+            const derived = deriveContract({ taskId, originalContractHash: expanded.hash, originalContractCanonicalJson: expanded.canonicalJson, work: next, handoff: amountSchema.parse(handoff.amount) }, proposal.proposalVersion, offPlanEntryOf(frozen, taskId));
             writeCanonicalRecord(this.store, id, derived.derivedContractHash, derived.canonicalJson);
             work.derivedContractHash = derived.derivedContractHash;
             work.grant = { ...(work.grant as Record<string, unknown>), work: next };
             this.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id=?").run(JSON.stringify(work), id, taskId);
             // Step 7: copy the confirmed snapshot, replacing only this task's derived contract and its two allocations,
             // and point the proposal (and, through saveWebAuthority, the group's mirror) at it. Old snapshots are kept.
-            const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
             const bare = ({ state: _state, ...rest }: BudgetProposalRecord["allocations"][number]) => rest;
             // Spec §10.5, H3: an unchanged declaration keeps its frozen entry as it is (readConfirmedTaskExecution below checks
             // it agrees); a changed one is frozen as confirm freezes it -- names as declared, a profile as syncskill answered it.

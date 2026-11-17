@@ -38,6 +38,17 @@ function claimsByDirectory(contract: TaskContract): Map<Directory, ClaimedPath[]
   return out;
 }
 
+/**
+ * A task's write set as one list for buildGraph (plan Task 3: the implicit write-set edges that order a confirmed plan),
+ * each claim prefixed by its directory as a single NUL-led segment, the way qualifiedWriteSetOf prefixes a split's: two
+ * claims intersect only within one directory, and the same relative path in two directories never does.
+ */
+export function directoryQualifiedWriteSetOf(contract: TaskContract): ClaimedPath[] {
+  return [...claimsByDirectory(contract)].flatMap(([directory, claims]) => claims.map((claim) => ({
+    normalized: `\0${encodeURIComponent(directory)}/${claim.normalized}`, declared: claim.declared,
+  })));
+}
+
 /** How a task names each directory it may write: `null` for its primary, its own key for each extra. */
 function keysByDirectory(contract: TaskContract): Map<Directory, string | null> {
   const out = new Map<Directory, string | null>([[directoryOf(contract.context.repoPath), null]]);

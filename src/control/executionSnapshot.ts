@@ -16,13 +16,17 @@ import {
   type ProfileBindingV1,
 } from "./webProtocol.js";
 import type { Amount } from "./types.js";
+import type { z } from "zod";
+import { buildGraph } from "../scheduler/graph.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
+import { directoryQualifiedWriteSetOf, parallelClaimsOf, type SiblingClaims } from "./parallelClaims.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "./queries.js";
 import type { ControlStore } from "./store.js";
 import { readCanonicalRecord } from "./snapshot.js";
 import { effectivePlanTask, workBodyOf } from "./taskAmendments.js";
 
 type ExecutionAllocation = ExecutionSnapshotV1["allocations"][number];
+type TaskContract = z.infer<typeof taskContractSchema>;
 export interface EstimateAllocation {
   ownerKind: "estimate";
   ownerId: string;
@@ -182,7 +186,38 @@ export function derivedPhaseTimeoutMs(originalMs: number, activeMs: number): num
   return Math.min(originalMs, activeMs, MAX_TIMER_MS);
 }
 
-export function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number): {
+/** Off-plan writes spec W2: the constraint line naming the siblings' claims, before the claims and the closing period. */
+const OFF_PLAN_SIBLINGS_CONSTRAINT = "Other tasks of this group change these paths at the same time; do not modify them: ";
+
+function sortedUnique(values: readonly string[]): string[] {
+  return [...new Set(values)].sort(compare);
+}
+
+/**
+ * Off-plan writes spec W2 (plan Task 3): the frozen siblings' claims denied in the contract -- the primary repository's
+ * (`repoKey: null`) in safetyPolicy.denylistPaths, an extra repository's in that entry's own denylistPaths -- and named
+ * in one constraint line, an extra repository's as `<key>:<path>`. A repository with no claim is left as it is, and a
+ * contract with no claim at all is returned unchanged, so its derivation keeps the bytes it had before siblings existed.
+ * Shared with the panel's snapshot check (controlViews.ts validateExecutionSnapshot), which re-derives every contract.
+ */
+export function denySiblingClaims(contract: TaskContract, siblings: readonly SiblingClaims[]): TaskContract {
+  const claims = siblings.flatMap(sibling => sibling.claims);
+  if (claims.length === 0) return contract;
+  const next = structuredClone(contract);
+  const extraKeys = new Set((next.context.additionalRepos ?? []).map(repo => repo.key));
+  if (claims.some(claim => claim.repoKey !== null && !extraKeys.has(claim.repoKey))) throw new ControlError("execution-policy-unrepresentable");
+  const primary = claims.filter(claim => claim.repoKey === null).map(claim => claim.path);
+  if (primary.length > 0) next.safetyPolicy.denylistPaths = sortedUnique([...next.safetyPolicy.denylistPaths, ...primary]);
+  for (const repo of next.context.additionalRepos ?? []) {
+    const own = claims.filter(claim => claim.repoKey === repo.key).map(claim => claim.path);
+    if (own.length > 0) repo.denylistPaths = sortedUnique([...(repo.denylistPaths ?? []), ...own]);
+  }
+  const named = sortedUnique(claims.map(claim => claim.repoKey === null ? claim.path : `${claim.repoKey}:${claim.path}`));
+  next.context.constraints = [...next.context.constraints, `${OFF_PLAN_SIBLINGS_CONSTRAINT}${named.join(", ")}.`];
+  return next;
+}
+
+export function deriveContract(task: ConfirmedProposal["tasks"][number], proposalVersion: number, siblings: readonly SiblingClaims[] = []): {
   canonicalJson: string; contractCanonicalJson: string; derivedContractHash: string;
 } {
   budgetAmountSchema.parse(task.work);
@@ -197,7 +232,7 @@ export function deriveContract(task: ConfirmedProposal["tasks"][number], proposa
       throw new ControlError("recovery-blocked");
     }
     if (value.objective.taskId !== task.taskId) throw new ControlError("execution-policy-unrepresentable");
-    original = structuredClone(value) as Record<string, unknown>;
+    original = structuredClone(denySiblingClaims(value, siblings)) as Record<string, unknown>;
   } catch (error) {
     if (error instanceof ControlError) throw error;
     throw new ControlError("execution-policy-unrepresentable");
@@ -232,14 +267,47 @@ export function deriveContract(task: ConfirmedProposal["tasks"][number], proposa
   return { canonicalJson, contractCanonicalJson, derivedContractHash: sha256Canonical(record) };
 }
 
+/**
+ * Off-plan writes spec W1/W2 (plan Task 3): each v4 task's parallel siblings, with the claims of theirs that lie in its
+ * own directories, from the confirmed plan and each task's contract as confirmed. The order is dependsOn together with
+ * the implicit write-set edges buildGraph derives (the graph `layers` is built from), so a pair ordered only through an
+ * implicit edge is not parallel. A sibling with no such claim is not frozen, and a task left with none has no entry.
+ */
+function frozenOffPlan(plan: ControlPlanV1, tasks: ConfirmedProposal["tasks"]): Map<string, SiblingClaims[]> {
+  const contracts = new Map<string, TaskContract>();
+  for (const task of tasks) {
+    try { contracts.set(task.taskId, taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson))); }
+    // deriveContract refuses an unreadable contract with its own code; nothing is frozen for a plan it refuses.
+    catch { return new Map(); }
+  }
+  const graph = buildGraph({ targetRepo: "", ccloopBin: "", runsDir: "", workBranch: "", policy: "local-merge", ledgerMode: "in-repo",
+    tasks: plan.tasks.map(task => ({ taskId: task.taskId, contract: task.taskId, dependsOn: [...task.dependencyTaskIds] })) },
+  new Map(), new Map(plan.tasks.map(task => [task.taskId, directoryQualifiedWriteSetOf(contracts.get(task.taskId)!)])));
+  const dependencies = new Map(plan.tasks.map(task => [task.taskId, [...task.dependencyTaskIds]]));
+  for (const edge of graph.implicit) dependencies.get(edge.to)!.push(edge.from);
+  const out = new Map<string, SiblingClaims[]>();
+  const claims = parallelClaimsOf(plan.tasks.map(task => ({ taskId: task.taskId, dependencyTaskIds: dependencies.get(task.taskId)!, contract: contracts.get(task.taskId)! })));
+  for (const [taskId, siblings] of claims) {
+    const kept = siblings.filter(sibling => sibling.claims.length > 0);
+    if (kept.length > 0) out.set(taskId, kept);
+  }
+  return out;
+}
+
+/** A task's frozen siblings (off-plan writes spec W2), `[]` when the snapshot has no entry for it. */
+export function offPlanEntryOf(snapshot: ExecutionSnapshotV1, taskId: string): SiblingClaims[] {
+  return structuredClone(snapshot.offPlan?.find(entry => entry.taskId === taskId)?.siblings ?? []);
+}
+
 export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExecutionSnapshot {
   const plan = verifyPlanAuthority(input);
   verifyTaskSet(input, plan);
+  const offPlan = frozenOffPlan(plan, input.tasks);
   const taskIds = new Set<string>();
   const derivedContracts = input.tasks.map(task => {
     if (taskIds.has(task.taskId)) throw new ControlError("duplicate-task-id");
     taskIds.add(task.taskId);
-    const derived = deriveContract(task, input.proposalVersion);
+    const derived = deriveContract(task, input.proposalVersion, offPlan.get(task.taskId) ?? []);
     return { taskId: task.taskId, ...derived };
   }).sort((left, right) => compare(left.taskId, right.taskId));
 
@@ -271,6 +339,8 @@ export function prepareExecutionSnapshot(input: ConfirmedProposal): PreparedExec
     agents: { tasks: agentTasks, reconcile: input.agents.reconcile },
     // Omitted rather than empty (spec §10.5), so a group without skills keeps its snapshot bytes.
     ...(input.skills === undefined || input.skills.length === 0 ? {} : { skills: [...input.skills].sort((left, right) => compare(left.taskId, right.taskId)) }),
+    // Off-plan writes spec W2: omitted rather than empty, so a group with no v4 task keeps its snapshot bytes.
+    ...(offPlan.size === 0 ? {} : { offPlan: [...offPlan].map(([taskId, siblings]) => ({ taskId, siblings })).sort((left, right) => compare(left.taskId, right.taskId)) }),
   });
   const canonicalJson = canonicalBytes(snapshot).toString("utf8");
   return { snapshot, canonicalJson, snapshotHash: sha256Canonical(snapshot), derivedContracts };
@@ -290,6 +360,7 @@ export function replaceTaskInSnapshot(
   snapshot: ExecutionSnapshotV1, taskId: string, derivedContractHash: string,
   allocations: { work: ExecutionAllocation; handoff: ExecutionAllocation },
   skills: { profile: string | null; names: string[] } | null,
+  siblings?: readonly SiblingClaims[],
 ): { snapshot: ExecutionSnapshotV1; canonicalJson: string; snapshotHash: string } {
   const next = structuredClone(snapshot);
   const ref = next.derivedContracts.find(entry => entry.taskId === taskId);
@@ -305,6 +376,14 @@ export function replaceTaskInSnapshot(
   const entries = [...(next.skills ?? []).filter(entry => entry.taskId !== taskId), ...(skills === null ? [] : [{ taskId, profile: skills.profile, names: [...skills.names] }])]
     .sort((left, right) => compare(left.taskId, right.taskId));
   if (entries.length === 0) delete next.skills; else next.skills = entries;
+  // Off-plan writes spec W2: given, this task's frozen siblings are replaced (a sibling with no claim is not frozen), or
+  // its entry removed when none is left; omitted, every entry is copied as it is.
+  if (siblings !== undefined) {
+    const kept = siblings.filter(sibling => sibling.claims.length > 0).map(sibling => structuredClone(sibling));
+    const offPlan = [...(next.offPlan ?? []).filter(entry => entry.taskId !== taskId), ...(kept.length === 0 ? [] : [{ taskId, siblings: kept }])]
+      .sort((left, right) => compare(left.taskId, right.taskId));
+    if (offPlan.length === 0) delete next.offPlan; else next.offPlan = offPlan;
+  }
   const parsed = executionSnapshotSchema.parse(next);
   return { snapshot: parsed, canonicalJson: canonicalBytes(parsed).toString("utf8"), snapshotHash: sha256Canonical(parsed) };
 }
@@ -344,7 +423,8 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
     const work = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "work");
     const handoff = snapshot.allocations.find(a => a.ownerKind === "task" && a.ownerId === taskId && a.bucket === "handoff");
     if (!task || !ref || !work || !handoff) throw new ControlError("recovery-blocked");
-    const expected = deriveContract({ ...task, work: work.amount, handoff: amountSchema.parse(handoff.amount) }, proposal.proposalVersion);
+    // Off-plan writes spec W2: the task's frozen siblings are part of its derivation.
+    const expected = deriveContract({ ...task, work: work.amount, handoff: amountSchema.parse(handoff.amount) }, proposal.proposalVersion, offPlanEntryOf(snapshot, taskId));
     const canonicalJson = readCanonicalRecord(store, ref.derivedContractHash);
     if (canonicalJson !== expected.canonicalJson || ref.derivedContractHash !== expected.derivedContractHash) throw new ControlError("recovery-blocked");
     // Agent selection spec §6.4 step 4 (§12 I3): the snapshot is the authority for the frozen selection; the work item must agree.

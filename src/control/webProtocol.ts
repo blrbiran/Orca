@@ -521,6 +521,15 @@ export const executionSnapshotSchema = z
     // Syncskill integration spec §10.5: each task's frozen skill set (profile null for a task that named its skills).
     // Optional and never empty: a group without skills has no key, so its snapshot bytes and hash are unchanged.
     skills: z.array(z.object({ taskId: idSchema, profile: nonemptyString.nullable(), names: z.array(nonemptyString).min(1) }).strict()).min(1).optional(),
+    // Off-plan writes spec W2 (plan Task 3): each v4 task's parallel siblings' claims, frozen at confirm and denied in its
+    // derived contract. `repoKey` is the receiving task's (null: its primary). Optional and never empty, as `skills` is.
+    offPlan: z.array(z.object({
+      taskId: idSchema,
+      siblings: z.array(z.object({
+        siblingId: idSchema,
+        claims: z.array(z.object({ repoKey: nonemptyString.nullable(), path: z.string() }).strict()).min(1),
+      }).strict()).min(1),
+    }).strict()).min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -529,6 +538,14 @@ export const executionSnapshotSchema = z
       requireSortedUnique(value.skills, (entry) => entry.taskId, ctx, ["skills"]);
       const contracted = new Set(value.derivedContracts.map((contract) => contract.taskId));
       value.skills.forEach((entry, index) => { if (!contracted.has(entry.taskId)) issue(ctx, ["skills", index, "taskId"], "skills-task-unknown"); });
+    }
+    if (value.offPlan !== undefined) {
+      requireSortedUnique(value.offPlan, (entry) => entry.taskId, ctx, ["offPlan"]);
+      const contracted = new Set(value.derivedContracts.map((contract) => contract.taskId));
+      value.offPlan.forEach((entry, index) => {
+        if (!contracted.has(entry.taskId)) issue(ctx, ["offPlan", index, "taskId"], "off-plan-task-unknown");
+        requireSortedUnique(entry.siblings, (sibling) => sibling.siblingId, ctx, ["offPlan", index, "siblings"]);
+      });
     }
     requireSortedUnique(value.agents.tasks, (task) => task.taskId, ctx, ["agents", "tasks"]);
     if (value.agents.tasks.map((task) => task.taskId).join("\0") !== value.derivedContracts.map((contract) => contract.taskId).join("\0")) {

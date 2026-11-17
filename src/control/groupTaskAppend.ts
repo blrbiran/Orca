@@ -48,7 +48,8 @@ export function appendConfirmedTaskInTransaction(store: ControlStore, groupId: s
   const originalContractCanonicalJson = canonicalBytes(contract).toString("utf8"), originalContractHash = sha256Canonical(contract);
   writeCanonicalRecord(store, groupId, originalContractHash, originalContractCanonicalJson);
   const entry = { taskId: input.taskId, dependencyTaskIds: [...new Set(input.dependsOn)].sort(compare), targetVersion: 1, originalContractHash, originalContractCanonicalJson };
-  const derived = deriveContract({ ...entry, work: input.work, handoff: input.handoff } as never, proposal.proposalVersion);
+  // Off-plan writes spec W2: a task added after confirm has no frozen siblings (a review fix runs after every work task).
+  const derived = deriveContract({ ...entry, work: input.work, handoff: input.handoff } as never, proposal.proposalVersion, []);
   writeCanonicalRecord(store, groupId, derived.derivedContractHash, derived.canonicalJson);
   // The snapshot: this task's entries added, every other entry byte for byte.
   const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));

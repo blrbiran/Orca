@@ -11,7 +11,7 @@ import { readGroupSnapshot, type GroupReadSnapshot, type StoredJsonResult } from
 import { planOrderTasks } from "../control/planOrder.js";
 import { isTerminalRunState } from "../control/budget.js";
 import { validateRetryGrantSource } from "../control/retryGrant.js";
-import { derivedPhaseTimeoutMs, frozenAllocationShape } from "../control/executionSnapshot.js";
+import { denySiblingClaims, derivedPhaseTimeoutMs, frozenAllocationShape, offPlanEntryOf } from "../control/executionSnapshot.js";
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
@@ -999,7 +999,8 @@ function validateExecutionSnapshot(
       || canonicalBytes(record.data.confirmedGrant.handoff).compare(canonicalBytes(handoff.amount)) !== 0) {
       return blocked("derived-contract-cross-record");
     }
-    const expectedContract = structuredClone(original.data);
+    // Off-plan writes spec W2: a v4 task's frozen siblings are denied in its contract, as deriveContract denies them.
+    const expectedContract = denySiblingClaims(structuredClone(original.data), offPlanEntryOf(parsed.data, ref.taskId));
     expectedContract.executionPolicy = {
       ...expectedContract.executionPolicy,
       tokenBudget: work.amount.tokens,
