@@ -254,6 +254,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/requirement/set-agent` | requirement-set-agent | `{"agent":{"model":"tokenswitch/mode-x"}}` |
 | `POST groups/<groupId>/integration` | set-group-integration | `{"integration":{"delivery":"keep"}}` |
 | `POST groups/<groupId>/integration/retry` | retry-integration | `{}` |
+| `POST groups/<groupId>/integration/now` | integrate-now | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
 | `POST groups/<groupId>/acceptance/recheck` | recheck-acceptance | `{}` |
 | `POST groups/<groupId>/review/accept` | review-accept | `{"note":"AC2 is out of scope after all"}` |

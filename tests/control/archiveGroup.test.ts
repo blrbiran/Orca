@@ -243,6 +243,7 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "recovery-retry": { call: (s, c) => s.recoveryRetry(c), target: "group", payload: { scope: "group", groupId: "g" } },
   "set-group-integration": { call: (s, c) => s.setGroupIntegration(c), target: "group", payload: { integration: { delivery: "keep" } } },
   "retry-integration": { call: (s, c) => s.retryIntegration(c), target: "group", payload: {} },
+  "integrate-now": { call: (s, c) => s.integrateNow(c), target: "group", payload: {} },
   "resolve-integration-conflict": { call: (s, c) => s.resolveIntegrationConflict(c), target: "group", payload: {} },
   // Tester follow-up E §5 (#241): the group acceptance's recheck (any) and waiver (a person) are group-targeted too.
   "recheck-acceptance": { call: (s, c) => s.recheckAcceptance(c), target: "group", payload: {} },

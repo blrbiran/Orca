@@ -60,6 +60,7 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "flow-plan-step": flowPlanStepPayloadSchema,
   "set-criteria-review": setCriteriaReviewPayloadSchema,
   "retry-integration": emptyPayloadSchema,
+  "integrate-now": emptyPayloadSchema,
   "resolve-integration-conflict": emptyPayloadSchema,
   "archive-group": emptyPayloadSchema, "unarchive-group": emptyPayloadSchema,
   "verify-saved-result": verifySavedResultPayloadSchema, "close-run": closeRunPayloadSchema,

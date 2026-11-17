@@ -161,7 +161,9 @@ const DELIVERED_SATISFIED: ReadonlySet<DeliveredAcceptance["result"]> = new Set(
  */
 export function deliveredAcceptanceSatisfied(body: unknown): boolean {
   const target = deliveredAcceptanceTarget(body);
-  if (target === null) return true;
+  // Only a delivery whose commit D3 would check waits for its record: one made before integratedFor existed, or one
+  // where the target already held the tip, never runs a command (it is recorded not-needed), so done does not wait a round.
+  if (target === null || !target.madeForTip) return true;
   const record = deliveredAcceptanceOf(body);
   // Review 2026-11-17 finding 3: an archived group is never checked (the pass skips it); it does not hold its dependents.
   const archived = (body as { archived?: unknown } | null)?.archived != null;
