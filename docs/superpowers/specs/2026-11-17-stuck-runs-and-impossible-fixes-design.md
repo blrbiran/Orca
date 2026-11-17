@@ -206,3 +206,15 @@ File:line references were read at that commit (`/usr/bin/git show <commit>:<file
    d. S1 on a continuation run gives the task back `held` to the predecessor it continued (existing `terminaliseRun`
       behaviour, `stopIntent.ts:1098`), not `ready`. So resume does not dispatch it again: the person continues it
       again, and `recovery list` `heldTasks[]` shows it.
+4. **Re-review fix: an abandoned attempt never becomes continuable through its handoff** (controller's ruling,
+   2026-11-18; the gap predates Correction 3 but contradicts point 1). A run that carries `abandon` and that ccloop answers
+   with a stop-proof checkpoint and no terminal, or that is blocked with a collected failure (not a success), was settled
+   as a handoff checkpoint: `settled-recoverable`, task `held`, continuable on resume. With its usage known it now settles
+   as every abandoned run does (`driverHandoff.ts` `settleAbandonedUnderStop`): evidence archived, workspace removed,
+   `settled-failed` / `abandoned`, task `blocked` `run-abandoned`, its request closed `run-abandoned`. With no terminal its
+   drive outcome is `stopped`, so `task retry` admits it. With its usage unknown it is settled as before, unrecoverable with
+   `usage-unsettled` (not blocked at C first, as the ruling asked: a blocked run with no outcome is collected again by
+   `closeBlocked` and would loop), and `settle-usage` refuses `recovered` for a run carrying `abandon`
+   (`run-usage-not-settleable:abandoned`), Orca's own approximate settlement included. Settling it as abandoned there
+   instead would change that branch's reservation arithmetic, so it was not done. **Limit:** such a run then has no way
+   out short of archiving the group (no settle-usage disposition, no `task retry`).
