@@ -48,7 +48,8 @@ describe("a ladder whose debug run stopped at its live ceiling keeps debugging (
       t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id=? AND id='debug'").run(JSON.stringify(work), LADDER);
       const pass = await service.systemDebugPass();
       const mark = readSystemDebugMark(JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(LADDER)!.body)));
-      // mutation: widen the settled branch of stuckDebugRun back to startsWith("settled") -> debug-settle-failed, red
+      // mutation: restore 86dd952c's settled branch (startsWith("settled"), no exclusions) -> debug-settle-failed, red.
+      // Each exclusion alone is covered by the partial-result test in ladderSettleFold.test.ts.
       expect(pass.settled).toEqual([]);
       expect(mark?.settled).toBeNull();
       expect(escalationsOf(t.h.store, "g")).toEqual([{ taskId: "a", debugGroupId: LADDER, state: "debugging", reason: null }]);
