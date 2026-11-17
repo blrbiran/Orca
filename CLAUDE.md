@@ -156,7 +156,7 @@ Orca 会写**用户全局数据**（第一处是 `~/.orca/`，由 `orca correct`
 
 ## Rule 18 — Test scope（跑哪些测试）
 人裁（会话 `f3a75a90`、`3831d12f`；2026-11-17 晚「测试精简点头同意」；spec `docs/superpowers/specs/2026-10-20-test-scope-and-release-gate-design.md` §11）。
-- **每个 patch set：`npm test`（quick 档）。** 由代码按改动选（`scripts/test-affected.mjs`）：镜像目录、直接 import 者、目录表测试；
+- **每个 patch set：`npm test`（quick 档）。** 由代码按改动选（`scripts/test-affected.mjs`）：镜像目录（超过 60 个测试的只取同名测试，spec §12）、直接 import 者、目录表测试；
   ≥30 s 的文件与真 ccloop E2E **推迟并逐个打印**。它**不是合入门**。
 - **每批合入 `main` 跑一次 `npm run test:wide`**（今天的选法，不推迟）。**同一棵树绿过不再重跑**（树哈希戳，`--force` 才重跑）。
 - **红了只重跑失败文件**：`npm test -- --rerun-failed`，报告里照它的标签写「重跑，不是门」。

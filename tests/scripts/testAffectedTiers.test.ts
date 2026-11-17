@@ -148,6 +148,85 @@ describe("the quick tier (npm test, per patch set)", () => {
   });
 });
 
+// A large mirror directory (human ruling 2026-11-18, 「同意」, session 4389b15f): tests/control holds ~470 test files, and
+// one changed src/control file selected all of them in the quick tier (374-494 files, 408-508 s per run, measured
+// 2026-11-18), queueing ten agents behind the machine-wide lock. Above 60 test files the quick tier selects, from that
+// directory, only the tests named after the changed module; direct importers anywhere are selected as before. tests/big
+// below has 61 fillers plus the files that should be picked; tests/c (4 files) is a small directory.
+const FILLERS = Object.fromEntries(Array.from({ length: 61 }, (_, i) => [`tests/big/filler${String(i).padStart(2, "0")}.test.ts`, T("")]));
+const BIG: Record<string, string> = {
+  ...FILLERS,
+  "src/big/fooBar.ts": "export const f = 1;\n",
+  "tests/big/fooBar.test.ts": T(""),
+  "tests/big/nested/fooBarEdge.test.ts": T(""),
+  "tests/big/user.test.ts": T(`import { f } from "../../src/big/fooBar.js";\nvoid f;`),
+  "tests/big/fixtures/unnamed.json": "{}\n",
+  "src/c/thing.ts": "export const t = 1;\n",
+};
+const BIG_PICKED = ["root tests/big/fooBar.test.ts", "root tests/big/nested/fooBarEdge.test.ts", "root tests/big/user.test.ts"];
+
+describe("a large mirror directory in the quick tier", () => {
+  it("a changed module in a directory of more than 60 tests selects its name matches and direct importers, not the directory", () => {
+    const { repo, run } = tierRepo(CACHE, BIG);
+    write(repo, "src/big/fooBar.ts", "export const f = 2;\n");
+    commit(repo);
+    const r = run(["--dry-run", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: select the whole mirror for a large directory too -> the 61 fillers are selected rows.
+    expect(rows(r.out, "selected")).toEqual(BIG_PICKED);
+    // mutation: drop the name filter (or match nothing) -> fooBar.test.ts loses its name-match reason.
+    expect(r.out).toContain("  root tests/big/fooBar.test.ts <- src/big/fooBar.ts (name match in tests/big/: 64 tests > 60, not the whole mirror)\n");
+    expect(r.out).toContain("  root tests/big/user.test.ts <- src/big/fooBar.ts (imported directly)\n");
+  });
+
+  it("a deleted module in a large directory selects its name matches and the tests that still import it", () => {
+    const { repo, run } = tierRepo(CACHE, BIG);
+    rmSync(join(repo, "src/big/fooBar.ts"));
+    commit(repo);
+    const r = run(["--dry-run", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: do not feed the gone path to the direct-importer scan -> user.test.ts (its broken importer) is missing.
+    expect(rows(r.out, "selected")).toEqual(BIG_PICKED);
+  });
+
+  it("a data file in a large directory that no test names falls back to that directory, not to the whole suite", () => {
+    const { repo, run } = tierRepo(CACHE, BIG);
+    write(repo, "tests/big/fixtures/unnamed.json", "{ \"changed\": true }\n");
+    commit(repo);
+    const r = run(["--dry-run", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: drop the mirror fallback for narrowed data -> the whole-suite fallback selects tests/a and tests/c too.
+    const picked = rows(r.out, "selected");
+    expect(picked.length, r.out).toBe(64);
+    expect(picked.every((row) => row.startsWith("root tests/big/")), r.out).toBe(true);
+    expect(r.out).toContain("no test names tests/big/fixtures/unnamed.json; selecting its mirror directory tests/big/");
+  });
+
+  it("a small mirror directory is still selected whole", () => {
+    const { repo, run } = tierRepo(CACHE, BIG);
+    write(repo, "src/c/thing.ts", "export const t = 2;\n");
+    commit(repo);
+    const r = run(["--dry-run", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: narrow every mirror directory -> nothing in tests/c is named "thing", so nothing is selected or deferred.
+    expect(rows(r.out, "selected")).toEqual(["root tests/c/plain.test.ts", "root tests/c/typeOnly.test.ts"]);
+    expect(rows(r.out, "deferred")).toEqual(["root tests/c/heavy.test.ts", "root tests/c/world.test.ts"]);
+    expect(r.out).toContain("  root tests/c/plain.test.ts <- src/c/thing.ts (mirror tests/c/)\n");
+  });
+
+  it("the wide tier still selects a large mirror directory whole", () => {
+    const { repo, run } = tierRepo(CACHE, BIG);
+    write(repo, "src/big/fooBar.ts", "export const f = 2;\n");
+    commit(repo);
+    const r = run(["--dry-run", "--wide", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: narrow in the wide tier too -> 3 rows instead of 64.
+    const picked = rows(r.out, "selected");
+    expect(picked.length, r.out).toBe(64);
+    expect(picked.every((row) => row.startsWith("root tests/big/")), r.out).toBe(true);
+  });
+});
+
 describe("the wide tier's green stamp (never gate an identical tree twice)", () => {
   it("a green wide run on a clean tree stamps it; the next wide run on that tree runs nothing; --force runs it", () => {
     const { repo, run, calls } = tierRepo();

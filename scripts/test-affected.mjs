@@ -12,7 +12,8 @@
 // runs it. A data file under tests/ or web/tests/ selects the tests and helpers that name it, else the whole suite.
 //
 // Tiers (spec 2026-10-20 §11, human ruling session 2026-11-17 evening, 「测试精简点头同意」; CLAUDE.md Rule 18):
-//   (default) the QUICK tier, per patch set: changed test files, the mirror directory, tests that import a changed file
+//   (default) the QUICK tier, per patch set: changed test files, the mirror directory (above MIRROR_MAX test files, only
+//             its tests named after the changed module; spec §12), tests that import a changed file
 //             directly (distance 1, type-only imports dropped), and the catalogue tables when errors.ts or a locale
 //             changes. Files whose recorded duration (vitest's results cache) is >= 30 s, and tests that run the real
 //             ccloop, are deferred -- printed with their reason -- unless the file itself changed. A suite with no
@@ -445,11 +446,31 @@ function ccloopPinOnly() {
 const PIN_FILES = new Set(["package.json", "package-lock.json"]);
 const pinOnly = changed.some((p) => PIN_FILES.has(p)) && ccloopPinOnly();
 
+// The tier is known before the rules run: a large mirror directory is narrowed in a quick root suite only.
+const durations = { root: wide ? null : recordedDurations("root"), web: wide ? null : recordedDurations("web") };
+const quick = { root: durations.root !== null, web: durations.web !== null };
+
 // [file whose importers to find, the changed path it stands for]
 const relatedRoot = [];
 const relatedWeb = [];
 const dataFiles = [];
 let webTypecheck = false;
+
+// A large mirror directory in the quick tier (spec 2026-10-20 §12; human ruling 2026-11-18, 「同意」, session 4389b15f):
+// one src/control change selected tests/control whole, 374-494 files and 408-508 s per run, while the whole wide tier
+// is 799 files. Above MIRROR_MAX test files the mirror selects only the tests named after the changed module (its
+// basename as a file-name prefix, anywhere in the directory); the direct importers, changed tests, data and catalogue
+// rows still apply. A gone module also selects the tests that still import it. The wide tier selects the whole mirror.
+const MIRROR_MAX = 60;
+const narrowed = new Map(); // changed path -> the large mirror directory it did not select whole
+function selectMirror(p, dir, label) {
+  const tests = listTests(dir, ROOT_TEST);
+  if (!quick.root || tests.length <= MIRROR_MAX) return select("root", tests, `${p} (${label}${dir})`, p);
+  narrowed.set(p, dir);
+  const stem = p.slice(p.lastIndexOf("/") + 1).replace(/(\.test)?\.[^.]+$/, "");
+  const named = stem ? tests.filter((f) => f.slice(f.lastIndexOf("/") + 1).startsWith(stem)) : [];
+  select("root", named, `${p} (name match in ${dir}: ${tests.length} tests > ${MIRROR_MAX}, not the whole mirror)`, p);
+}
 for (const p of changed) {
   if (p.startsWith("web/") || p === "src/control/webProtocol.ts") webTypecheck = true;
   const present = existsSync(join(root, p));
@@ -462,12 +483,14 @@ for (const p of changed) {
   else if (/^(src|tests|scripts)\//.test(p)) {
     const dir = mirror(p);
     if (p.startsWith("tests/") && !CODE.test(p)) dataFiles.push(["root", p]);
-    // A deleted or renamed-away module has no importers left in the graph: its mirror directory only.
-    if (!present) { if (dir) select("root", listTests(dir, ROOT_TEST), `${p} (gone: mirror ${dir})`, p); }
-    else if (ROOT_TEST.test(p)) select("root", [p], `${p} (changed test)`, p);
+    // A deleted or renamed-away module has no importers left in the graph: its mirror directory only (narrowed: above).
+    if (!present) {
+      if (dir) selectMirror(p, dir, "gone: mirror ");
+      if (narrowed.has(p)) relatedRoot.push([p, p]); // quick tier only: the text scan still finds its importers
+    } else if (ROOT_TEST.test(p)) select("root", [p], `${p} (changed test)`, p);
     else {
       relatedRoot.push([p, p]);
-      if (dir) select("root", listTests(dir, ROOT_TEST), `${p} (mirror ${dir})`, p);
+      if (dir) selectMirror(p, dir, "mirror ");
     }
   } else if (/^web\/(src|tests)\//.test(p)) {
     // Data read as text: a web/tests fixture, or a web/src non-code file such as styles.css (tests read it by name).
@@ -528,9 +551,6 @@ function recordedDurations(suite) {
   }
   return durations.size ? durations : null;
 }
-const durations = { root: wide ? null : recordedDurations("root"), web: wide ? null : recordedDurations("web") };
-const quick = { root: durations.root !== null, web: durations.web !== null };
-
 // Type-only imports cannot break at run time (the typecheck covers them), so they do not make a direct importer.
 const TYPE_ONLY = /\b(?:import|export)\s+type\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s*from\s*["'`][^"'`]+["'`]/g;
 function directImporters(suite, pairs) {
@@ -567,6 +587,11 @@ for (const p of changed.filter((p) => CATALOGUE_SOURCES.test(p))) {
 const fallback = [];
 for (const [suite, p] of dataFiles) {
   if (selecting.has(p)) continue;
+  if (narrowed.has(p)) { // what the whole mirror selected before the narrowing, not the whole suite
+    fallback.push(`test-affected: no test names ${p}; selecting its mirror directory ${narrowed.get(p)}`);
+    select(suite, listTests(narrowed.get(p), ROOT_TEST), `${p} (data no test names: mirror ${narrowed.get(p)})`, p);
+    continue;
+  }
   fallback.push(`test-affected: no test names ${p}; selecting the whole ${suite} suite`);
   select(suite, suite === "web" ? listTests("web/tests", WEB_TEST) : listTests("tests", ROOT_TEST), `${p} (data no test names: whole ${suite} suite)`, p);
 }
