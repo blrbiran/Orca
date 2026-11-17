@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { binaryFacts, JPEG_SCAN_MAX_BYTES, ZIP_DIRECTORY_MAX_BYTES } from "../../src/control/binaryFacts.js";
+import { binaryFacts, JPEG_SCAN_MAX_BYTES, ZIP_DIRECTORY_MAX_BYTES, ZIP_TAIL_MAX_BYTES } from "../../src/control/binaryFacts.js";
 
 /**
  * Tester #337 (prompt half): a criterion about a binary deliverable ("the logo is 512x512", "a Word document") is judgeable
@@ -85,6 +85,9 @@ describe("binary facts for the requirement review (#337)", () => {
     const names = ["word/document.xml", ...Array.from({ length: Math.ceil(ZIP_DIRECTORY_MAX_BYTES / 60_000) + 1 }, (_, i) => long(i))];
     // mutation: drop the directory-size check -> reads it and says docx, red
     expect(binaryFacts(zip(names))).toBe("ZIP archive");
+    // An end record further from the end than the largest ZIP comment allows. mutation: search the whole blob -> docx, red
+    expect(binaryFacts(Buffer.concat([zip(["word/document.xml"]), Buffer.alloc(ZIP_TAIL_MAX_BYTES)]))).toBe("ZIP archive");
+    expect(binaryFacts(Buffer.concat([zip(["word/document.xml"]), Buffer.alloc(ZIP_TAIL_MAX_BYTES - 22)]))).toBe("ZIP archive: a Word document (docx)");
   });
 
   it("names only the type when a header is malformed or cut, never a size read from the wrong bytes", () => {

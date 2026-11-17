@@ -104,7 +104,7 @@ export function classifyReviewOutput(raw: unknown, criterionIds: readonly string
     ...(parsed.data.checkConflict === undefined ? {} : { checkConflict: parsed.data.checkConflict }) };
 }
 
-/** `kind`: for a binary file, what Orca read from its header (#337: type, image size); absent when not recognised. */
+/** `kind`: what Orca read from the file's header (#337: type, image size), shown for a binary file; absent when not recognised. */
 export interface ChangedFile { path: string; status: string; bytes: number; sha256: string; binary: boolean; kind?: string }
 /** #314: the accepted plan as data, so a criterion about the plan's shape is judgeable instead of always cannot-judge. */
 export interface ReviewPlanTask { taskId: string; title: string; dependsOn: string[]; targetPaths: string[]; successCondition: string; checks: string[] }
@@ -475,7 +475,7 @@ async function groupChanges(repo: string, base: string, tip: string): Promise<{ 
     const path = rest.join("\t"), st = status.get(path) ?? "M", binary = added === "-";
     if (st === "D") { changedFiles.push({ path, status: st, bytes: 0, sha256: "-", binary }); continue; }
     const content = execFileSync("git", [...QUIET_GIT, "cat-file", "blob", `${tip}:${path}`], { cwd: repo, maxBuffer: REVIEW_GIT_LIST_MAX_BYTES });
-    const kind = binary ? binaryFacts(content) : null;
+    const kind = binaryFacts(content);
     changedFiles.push({ path, status: st, bytes: content.length, sha256: sha256(content), binary, ...(kind === null ? {} : { kind }) });
   }
   // #334: the prompt shows REVIEW_DIFF_MAX_BYTES of the diff, so only that much (and a character's worth more, to tell
