@@ -292,3 +292,47 @@ Human ruling (verbatim, on the controller's proposal to change the gate policy i
   `budget.ts` / `commands.ts`), so `store.ts → migrations.ts → proposalReopen.ts` no longer enters the control import cycle;
   `tests/control/importEachModule.test.ts` imports every `src/` module in a fresh registry and fails on an import error or
   an export that is `undefined` at import time.
+
+## 12. Correction (2026-11-18, ruling in session `4389b15f`; built by a subagent on branch `worktree-agent-a1cc978fc2e73f67c`, commit `c7a79188`) — the quick tier narrows a large mirror directory
+
+Human ruling (verbatim, on the controller's proposal): 「同意」. §11's quick-tier mirror row is kept verbatim above; this
+section changes it for large directories. The wide tier is unchanged.
+
+- **Problem (measured 2026-11-18, controller).** §4.1's mirror maps a changed `src/control/**` file to all of
+  `tests/control/`. Agents' quick runs that day selected 374, 494 and 476 root files (408–508 s each, under load), against
+  799 files / 472 s for the whole wide tier; behind the machine-wide lock, ten agents queued for over an hour.
+- **Rule.** In a quick root suite, a mirror directory holding **more than 60** test files (`MIRROR_MAX`) is not selected
+  whole. From it the quick tier takes only the test files whose file name starts with the changed path's basename
+  (`src/control/fooBar.ts` → `tests/control/**/fooBar*.test.ts`), labelled `(name match in <dir>: <n> tests > 60, not the
+  whole mirror)`. Changed tests, direct importers anywhere, catalogue tables, text readers and data-file rows apply as
+  before. A gone path in such a directory also selects the tests that still import it (the direct-import scan reads
+  import text, so it finds them). A data file in such a directory that no test names selects that mirror directory
+  (what the whole mirror selected before), not the whole suite. A mirror directory of 60 or fewer test files, the wide
+  tier, and a suite with no results cache (wide fallback) select exactly what they did before.
+- **Threshold.** Test files per `tests/<dir>/` at `20d534de` (`find tests/<dir> -name '*.test.ts' -type f | wc -l`):
+  control 471, panel 123, flow 84, commands 72, scheduler 57, then corrections 18 and less. Sums of recorded durations
+  (results cache, same tree): control 9899 s, flow 1380 s, panel 941 s, scheduler 213 s with no file ≥ 30 s. 60 sits in
+  the gap between scheduler and commands: the four largest directories are narrowed, and scheduler, a light suite, stays
+  whole.
+- **Measured** (`node <script> --dry-run --base <sha>^` at each commit, in a `git clone --local` copy; old = the script
+  at `20d534de`, new = at `c7a79188`; root files selected / deferred; the clone had no web results cache, so web rows
+  are the wide fallback and the same in both):
+
+  | commit | root selected old → new | deferred old → new |
+  |---|---|---|
+  | `723bbce7` | 299 → 41 | 183 → 58 |
+  | `78893f7b` (41 paths) | 496 → 232 | 209 → 173 |
+  | `635f0133` | 287 → 1 | 185 → 6 |
+  | `a162c449` | 377 → 51 | 195 → 32 |
+  | `4353fa23` | 468 → 92 | 206 → 130 |
+  | `2a5256ba` | 292 → 33 | 183 → 15 |
+
+- **Accepted gaps** (each surfaces at the batch's `npm run test:wide`, which still selects the whole mirror): a test in
+  the large directory that reaches the changed module only through another module or a helper (distance ≥ 2) and is
+  not named after it; a test that exercises it through a spawned process or a fixture file only; a test named after the
+  module with a different prefix (for `src/control/budget.ts`, `loopBudgetOwner.test.ts` is not taken by name;
+  `budget.test.ts` and `budgetSuggestionsShared.test.ts` are).
+- **Criteria** (`tests/scripts/testAffectedTiers.test.ts`, "a large mirror directory in the quick tier"): narrowed module,
+  gone module, unnamed data file, small directory unchanged, wide tier unchanged. Each new branch was mutated in a
+  `git clone --local` copy and seen red: whole mirror for large directories (3 red), no name match (2), no gone-path
+  importer scan (1), no data mirror fallback (1), narrowing in the wide tier (1), narrowing small directories (1).
