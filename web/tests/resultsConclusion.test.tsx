@@ -158,6 +158,23 @@ describe("the conclusion card (#319 proposal 1)", () => {
     expect(within(line("artifact") as HTMLElement).queryByRole("button", { name: "Copy tip commit" })).toBeNull();
   });
 
+  it("sends no command from any of its buttons (they navigate or copy; an archived group may show them)", () => {
+    const value = done(); value.summary.acceptance!.result = "failed";
+    value.integration = integration({ delivery: "local", trigger: "group", method: "merge", target: "main" }, { state: "conflict" });
+    const decisions: GroupDecisionsViewV1 = { schema: "orca-group-decisions-v1", groupId: "g", projectKey: null, pendingCount: 1, tasks: [
+      { taskId: "a", runs: [{ runId: "run-a", settled: false, reported: "array", decisions: [], unlanded: [],
+        pending: [{ pendingId: "p1", reason: "r", question: "q?", chose: null, undoHow: null, state: "pending" }] }] }] };
+    const onCommand = vi.fn();
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={value} decisions={decisions} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    const names = within(card()).getAllByRole("button").map((button) => button.textContent);
+    expect(names).toEqual(["Open Problems", "Go to integration", "Open task a", "Copy branch name", "Copy tip commit"]);
+    // Open Problems switches to the Problems tab, and only the selected region is rendered, so it is clicked last.
+    for (const name of [...names.slice(1), names[0]!]) fireEvent.click(within(card()).getByRole("button", { name: name! }));
+    expect(screen.getByRole("tab", { selected: true }).textContent).toMatch(/^Problems/);
+    // mutation: any card button also sends a command (e.g. onOpenProblems calls onCommand) -> red
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   it("wraps its values and stacks to one column on a narrow screen (≤760px, no sideways scroll)", () => {
     show(done());
     // mutation: drop min-w-0 / wrap-anywhere, or the max-md single column -> red

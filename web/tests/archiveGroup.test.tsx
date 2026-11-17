@@ -25,7 +25,11 @@ const allRegionActions = (): string[] => {
   }
   // Ruling (2026-11-13, tester follow-up J): 「这次批准改写所有必要的判据」 -- #293: the open task's detail has a Close control, which
   // moves on the page and sends nothing, so it is not an action an archived group must refuse.
-  return [...buttons].map(button => button.getAttribute("aria-label") ?? button.textContent ?? "").filter(name => !/^Close task /.test(name));
+  // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+  // #319: the Results conclusion card's buttons move on the page or copy text and send nothing (ResultsConclusion has no
+  // onCommand; resultsConclusion.test.tsx pins that none sends a command), so, like Close, they are no action to refuse.
+  return [...buttons].map(button => button.getAttribute("aria-label") ?? button.textContent ?? "")
+    .filter(name => !/^Close task /.test(name) && !/^(Open Problems|Go to integration|Open task .+|Copy branch name|Copy tip commit)$/.test(name));
 };
 const archived = (base: GroupViewV1): GroupViewV1 => ({ ...base, summary: { ...base.summary, state: "ready", archived: true } });
 
