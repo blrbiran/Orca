@@ -10,12 +10,28 @@
 // reaches changed code only through a spawned process outside the mirror directory, or reads a changed file outside
 // tests/ and web/tests/ as text not in TEXT_READERS, is not selected (accepted, spec §4.1) -- the release gate still
 // runs it. A data file under tests/ or web/tests/ selects the tests and helpers that name it, else the whole suite.
+//
+// Tiers (spec 2026-10-20 §11, human ruling session 2026-11-17 evening, 「测试精简点头同意」; CLAUDE.md Rule 18):
+//   (default) the QUICK tier, per patch set: changed test files, the mirror directory, tests that import a changed file
+//             directly (distance 1, type-only imports dropped), and the catalogue tables when errors.ts or a locale
+//             changes. Files whose recorded duration (vitest's results cache) is >= 30 s, and tests that run the real
+//             ccloop, are deferred -- printed with their reason -- unless the file itself changed. A suite with no
+//             results cache falls back to the wide selection, said out loud. It is not the merge gate.
+//   --wide    the WIDE tier (`npm run test:wide`), once per merge batch into main: the selection above this comment
+//             describes, unchanged (transitive importers through vitest's `related`, nothing deferred). Green on a clean
+//             tree stamps `git rev-parse HEAD^{tree}` under <git-common-dir>/orca-gate/green/; a wide run on a stamped
+//             tree prints that and exits 0 without running, unless --force.
+//   --rerun-failed  re-runs only the failed files of the last run's JSON report (<git-dir>/orca-gate/last-run.json),
+//             labelled as a re-run, not a gate.
+// Every run (not --dry-run) holds a machine-wide lock (<os tmpdir>/orca-gate.lock, or ORCA_GATE_LOCK), prints `uptime`
+// at start and end, and builds web/dist first when a selected test serves the panel and web/dist is missing or stale.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const ROOT_TEST = /^tests\/.+\.test\.ts$/;
 const WEB_TEST = /^web\/tests\/.+\.test\.tsx?$/;
@@ -29,6 +45,16 @@ const WEB_CONFIG = new Set(["web/package.json", "web/vite.config.ts", "web/tscon
 // Text read by tests, which no module graph can see. A short explicit table; anything else read as text is a known gap.
 const TEXT_READERS = [["skills/", "tests/entry/"], [".decisions/", "tests/ledger/validateFile.test.ts"], ["flows/", "tests/flow/"]];
 const CODE = /\.[cm]?[jt]sx?$/;
+// A file's relative imports (static and dynamic), each as the repo paths it may name (`.js` written for a `.ts` source).
+const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'`](\.{1,2}\/[^"'`]+)["'`]/g;
+function directImports(file, text) {
+  const out = [];
+  for (const [, spec] of text.matchAll(RELATIVE_IMPORT)) {
+    const target = relative(root, join(root, file, "..", spec));
+    out.push(target, ...[".ts", ".tsx"].map((ext) => target.replace(/\.[cm]?js$/, ext)));
+  }
+  return out;
+}
 
 function fail(message) {
   console.error(`test-affected: ${message}`);
@@ -50,6 +76,9 @@ function git(args) {
 // --- arguments --------------------------------------------------------------------------------------------------
 let base;
 let dryRun = false;
+let wide = false;
+let force = false;
+let rerunFailed = false;
 const vitestArgs = [];
 {
   const argv = process.argv.slice(2);
@@ -62,8 +91,12 @@ const vitestArgs = [];
       base = a === "--base" ? argv[++i] : a.slice("--base=".length);
       if (!base) fail("--base needs a ref");
     } else if (a === "--dry-run") dryRun = true;
+    else if (a === "--wide") wide = true;
+    else if (a === "--force") force = true;
+    else if (a === "--rerun-failed") rerunFailed = true;
     else vitestArgs.push(a);
   }
+  if (rerunFailed && (wide || dryRun || base !== undefined)) fail("--rerun-failed takes no --wide, --dry-run or --base: it re-runs the last report's failed files");
 }
 
 // vitest's own parser decides which arguments are filters, so every option's value (`--maxConcurrency 3`,
@@ -79,6 +112,198 @@ if (await namesPathOrFilter(vitestArgs)) {
   const r = spawnSync(vitestBin, ["run", ...vitestArgs], { cwd: root, stdio: "inherit" });
   if (r.error) console.error(r.error);
   process.exit(r.status ?? 1);
+}
+
+// --- gate machinery: report, stamp, lock, load, web/dist ------------------------------------------------------------
+// The report is per worktree (two worktrees must not read each other's failures); the green stamp is per repository (a
+// tree gated in a branch worktree is the same tree on main after `merge --ff-only`).
+const gitDir = resolve(root, git(["rev-parse", "--git-dir"]).trim());
+const reportDir = join(gitDir, "orca-gate");
+const lastRunPath = join(reportDir, "last-run.json");
+const stampDir = join(resolve(root, git(["rev-parse", "--git-common-dir"]).trim()), "orca-gate", "green");
+const lockPath = process.env.ORCA_GATE_LOCK || join(tmpdir(), "orca-gate.lock");
+const treeClean = () => git(["status", "--porcelain", "--untracked-files=all"]).length === 0;
+const headTree = () => git(["rev-parse", "HEAD^{tree}"]).trim();
+
+function uptime(when) {
+  const r = spawnSync("uptime", { encoding: "utf8" });
+  console.log(`test-affected: load at ${when}: ${r.status === 0 ? r.stdout.trim() : "uptime unavailable"}`);
+}
+
+// One gate at a time on the machine: parallel gates multiplied the load flakes (docs/handoff/known-load-flakes.md).
+// The lock is a file holding the owner's pid; a lock whose pid is dead is stale and taken over. The temp dir is the
+// default because a test of this script runs inside a gate with its own scoped TMPDIR (tests/setup/scopeTmpdir.ts):
+// a fixed path would make that nested run wait on its own parent forever.
+function lockHolder() {
+  try { return JSON.parse(readFileSync(lockPath, "utf8")); } catch { return null; }
+}
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+}
+function releaseLock() {
+  if (lockHolder()?.pid === process.pid) rmSync(lockPath, { force: true });
+}
+async function acquireLock() {
+  let announced = false;
+  for (;;) {
+    try {
+      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, root, at: new Date().toISOString() }) + "\n", { flag: "wx", mode: 0o600 });
+      break;
+    } catch (error) {
+      if (error.code !== "EEXIST") fail(`cannot create the gate lock ${lockPath}: ${error.message}`);
+    }
+    const holder = lockHolder();
+    let age = 0;
+    try { age = Date.now() - statSync(lockPath).mtimeMs; } catch { continue; } // released between the two calls
+    // An unparsable lock younger than 5 s is one being written right now, not a stale one.
+    if (holder === null ? age > 5000 : !Number.isInteger(holder.pid) || !alive(holder.pid)) {
+      console.log(`test-affected: removing a stale gate lock ${lockPath} (${holder === null ? "unreadable" : `pid ${holder.pid} is not running`})`);
+      rmSync(lockPath, { force: true });
+      continue;
+    }
+    if (!announced && holder !== null) {
+      console.log(`test-affected: waiting: another gate holds the machine-wide lock ${lockPath} (pid ${holder.pid}, ${holder.root}, since ${holder.at})`);
+      announced = true;
+    }
+    await sleep(2000);
+  }
+  if (announced) console.log("test-affected: the gate lock is free; running");
+  process.on("exit", releaseLock);
+  for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]]) process.on(signal, () => process.exit(code));
+}
+
+// A selected test that serves the panel reads web/dist (src/panel/staticFiles.ts refuses with panel-dist-missing when it
+// is absent): 138 false reds in one re-run from a new worktree (survey 2026-11-17 §6). Such a test is under tests/panel/
+// or web/tests/, or names the panel server entry points, or directly imports a helper that does.
+const SERVES_PANEL = /\b(?:createPanelServer|startPanelFromArgs|loadStaticFiles)\b|panel\/server\.js/;
+function servesPanel(files) {
+  const texts = new Map(listTests("tests", CODE).map((f) => [f, readFileSync(join(root, f), "utf8")]));
+  const helpers = new Set([...texts].filter(([f, text]) => !ROOT_TEST.test(f) && SERVES_PANEL.test(text)).map(([f]) => f));
+  return files.find((f) => /^(tests\/panel|web\/tests)\//.test(f) ||
+    (texts.has(f) && (SERVES_PANEL.test(texts.get(f)) || directImports(f, texts.get(f)).some((t) => helpers.has(t)))));
+}
+function newestMtime(dir) {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (entry.isFile()) newest = Math.max(newest, statSync(join(entry.parentPath, entry.name)).mtimeMs);
+  }
+  return newest;
+}
+function ensureWebDist(files) {
+  const needing = servesPanel(files);
+  if (!needing) return 0;
+  const index = join(root, "web", "dist", "index.html");
+  const src = join(root, "web", "src");
+  const why = !existsSync(index) ? "web/dist is missing" : existsSync(src) && statSync(index).mtimeMs < newestMtime(src) ? "web/dist is older than web/src" : null;
+  if (why === null) return 0;
+  let webPkg = {};
+  try { webPkg = JSON.parse(readFileSync(join(root, "web", "package.json"), "utf8")); } catch { /* no web workspace */ }
+  if (!webPkg.scripts?.build) {
+    console.log(`test-affected: ${why} and ${needing} serves the panel, but web/package.json has no build script; not building`);
+    return 0;
+  }
+  console.log(`test-affected: ${why} and ${needing} serves the panel: running npm run build --workspace web first`);
+  const r = spawnSync("npm", ["run", "build", "--workspace", "web"], { cwd: root, stdio: "inherit" });
+  if (r.error) console.error(r.error);
+  return r.status ?? 1;
+}
+
+const skipped = [];
+const userReporter = vitestArgs.some((a) => a === "--reporter" || a.startsWith("--reporter="));
+// vitest's JSON result goes to a known path under the git dir, kept after the run: it is what --rerun-failed reads.
+function runVitest(suite, cwd, files) {
+  const result = join(reportDir, `last-run.${suite}.json`);
+  rmSync(result, { force: true });
+  const reporters = [...(userReporter ? [] : ["--reporter=default"]), "--reporter=json", `--outputFile.json=${result}`];
+  const r = spawnSync(vitestBin, ["run", ...files, ...vitestArgs, ...reporters], { cwd, stdio: "inherit" });
+  if (r.error) console.error(r.error);
+  const status = r.status ?? 1;
+  if (!existsSync(result)) {
+    // Without the result the skips cannot be reported, so the run cannot count as green (Rule 12).
+    console.error(`test-affected: vitest wrote no JSON result in ${relative(root, cwd) || "."}; skips unknown`);
+    return status || 1;
+  }
+  for (const file of JSON.parse(readFileSync(result, "utf8")).testResults ?? []) {
+    const n = (file.assertionResults ?? []).filter((t) => t.status === "skipped" || t.status === "todo").length;
+    if (n) skipped.push([relative(root, file.name), n]);
+  }
+  return status;
+}
+
+// Runs typechecks and the two suites under the lock, writes last-run.json, returns the exit status.
+async function runSelection(kind, rootFiles, webFiles, typechecks) {
+  mkdirSync(reportDir, { recursive: true, mode: 0o700 });
+  await acquireLock();
+  uptime("start");
+  const statuses = [];
+  const built = ensureWebDist([...rootFiles, ...webFiles]);
+  if (built !== 0) {
+    console.error("test-affected: npm run build --workspace web failed; not running the tests (they would fail on panel-dist-missing)");
+    statuses.push(built);
+  } else {
+    // Type-only imports are invisible to the module graph; the typecheck always runs, even when nothing is selected.
+    for (const [cmd, args] of typechecks) {
+      const r = spawnSync(cmd, args, { cwd: root, stdio: "inherit" });
+      if (r.error) console.error(r.error);
+      statuses.push(r.status ?? 1);
+    }
+  }
+  const typecheckStatus = statuses.find((s) => s !== 0) ?? 0;
+  const suites = {};
+  if (built === 0) {
+    if (rootFiles.length) suites.root = { files: rootFiles, status: runVitest("root", root, rootFiles) };
+    if (webFiles.length) suites.web = { files: webFiles, status: runVitest("web", join(root, "web"), webFiles.map((f) => relative("web", f))) };
+  }
+  for (const s of Object.values(suites)) statuses.push(s.status);
+  const status = statuses.find((s) => s !== 0) ?? 0;
+  writeFileSync(lastRunPath, JSON.stringify({ kind, at: new Date().toISOString(), head: git(["rev-parse", "HEAD"]).trim(), base: base ?? null, status, typecheckStatus, suites }, null, 2) + "\n");
+  if (rootFiles.length + webFiles.length) {
+    // A skip is reported, not hidden: this is how a missing ORCA_CCLOOP_BIN / ORCA_AGENTS_TABLE shows up.
+    console.log(`test-affected: ${skipped.reduce((sum, [, n]) => sum + n, 0)} skipped tests`);
+    for (const [file, n] of skipped) console.log(`  ${file}: ${n} skipped`);
+  }
+  console.log(`test-affected: JSON report: ${lastRunPath} (vitest results beside it: last-run.root.json, last-run.web.json)`);
+  uptime("end");
+  return status;
+}
+
+// --- --rerun-failed ----------------------------------------------------------------------------------------------
+if (rerunFailed) {
+  if (!existsSync(lastRunPath)) fail(`--rerun-failed: no report of a last run at ${lastRunPath}; run npm test or npm run test:wide first`);
+  const last = JSON.parse(readFileSync(lastRunPath, "utf8"));
+  const failed = { root: [], web: [] };
+  for (const [suite, entry] of Object.entries(last.suites ?? {})) {
+    if (entry.status === 0) continue;
+    const result = join(reportDir, `last-run.${suite}.json`);
+    if (!existsSync(result)) fail(`--rerun-failed: the last run's ${suite} suite failed but left no vitest JSON at ${result}; cannot tell which files failed`);
+    const reported = JSON.parse(readFileSync(result, "utf8")).testResults ?? [];
+    const seen = new Set(reported.map((t) => relative(root, t.name)));
+    failed[suite].push(...reported.filter((t) => t.status === "failed").map((t) => relative(root, t.name)));
+    // A file the run selected but vitest never reported (a worker crash) failed as far as anyone can tell.
+    failed[suite].push(...entry.files.filter((f) => !seen.has(f)));
+  }
+  console.log(`test-affected: --rerun-failed: a re-run of failed files, not a gate (last run: ${last.kind}, ${last.at}, HEAD ${last.head})`);
+  if (last.typecheckStatus !== 0) console.log("test-affected: the last run's typecheck failed; a re-run does not repeat it: run npm run typecheck");
+  const files = { root: [...new Set(failed.root)].sort(), web: [...new Set(failed.web)].sort() };
+  for (const suite of ["root", "web"]) for (const f of files[suite]) console.log(`  rerun ${suite} ${f}`);
+  console.log(`test-affected: ${files.root.length + files.web.length} failed files to re-run (${files.root.length} root, ${files.web.length} web)`);
+  if (files.root.length + files.web.length === 0) process.exit(last.typecheckStatus === 0 ? 0 : 1);
+  const status = await runSelection("rerun-failed", files.root, files.web, []);
+  console.log(`test-affected: that was a re-run of failed files, not a gate (exit ${status})`);
+  process.exit(status);
+}
+
+// --- the green stamp ---------------------------------------------------------------------------------------------
+// Checked before any selection work: an identical tree is never gated twice (session 2026-11-17 evening ruling).
+const startClean = !dryRun && wide && treeClean();
+const startTree = startClean ? headTree() : null;
+if (startTree && existsSync(join(stampDir, startTree))) {
+  const stamp = readFileSync(join(stampDir, startTree), "utf8").trim();
+  if (!force) {
+    console.log(`test-affected: tree ${startTree} was already gated green by a wide run (${stamp}); not running it again. --force runs it anyway`);
+    process.exit(0);
+  }
+  console.log(`test-affected: tree ${startTree} was already gated green (${stamp}); --force: running it again`);
 }
 
 // --- changed paths ----------------------------------------------------------------------------------------------
@@ -169,15 +394,6 @@ function namedBy(suite, p) {
 // realBinary, the scheduler sandbox). Naming ccloop selected ~500 files: shared fixtures carry a fake `ccloopBin` field and
 // the module graph is transitive, so every importer of web.ts or driverHarness.ts ran on a repin.
 const READS_REAL_CCLOOP = /(?<!delete\s+)\bprocess\.env\.ORCA_CCLOOP_BIN\b(?!\s*=(?!=))/;
-const RELATIVE_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["'`](\.{1,2}\/[^"'`]+)["'`]/g;
-function directImports(file, text) {
-  const out = [];
-  for (const [, spec] of text.matchAll(RELATIVE_IMPORT)) {
-    const target = relative(root, join(root, file, "..", spec));
-    out.push(target, ...[".ts", ".tsx"].map((ext) => target.replace(/\.[cm]?js$/, ext)));
-  }
-  return out;
-}
 const realCcloop = new Map();
 function realCcloopTests(suite) {
   if (!realCcloop.has(suite)) {
@@ -288,8 +504,61 @@ async function related(projectRoot, suite, pairs) {
     await ctx.close();
   }
 }
-await related(root, "root", relatedRoot);
-await related(join(root, "web"), "web", relatedWeb);
+
+// --- quick tier: direct importers, catalogue tables, deferral ---------------------------------------------------
+// vitest's results cache (node_modules/.vite/vitest/<hash>/results.json: [["<project>:<path>", { duration }]]) is the
+// only record of what a file costs. A suite without one cannot tell heavy files from light ones: it is selected wide.
+const SLOW_MS = 30_000;
+function recordedDurations(suite) {
+  const dir = join(root, ...(suite === "web" ? ["web"] : []), "node_modules", ".vite", "vitest");
+  const durations = new Map();
+  if (!existsSync(dir)) return null;
+  for (const hash of readdirSync(dir)) {
+    const file = join(dir, hash, "results.json");
+    if (!existsSync(file)) continue;
+    let results;
+    try { results = JSON.parse(readFileSync(file, "utf8")).results ?? []; } catch { continue; }
+    for (const [key, value] of Array.isArray(results) ? results : Object.entries(results)) {
+      const path = (suite === "web" ? "web/" : "") + key.slice(key.indexOf(":") + 1);
+      if (typeof value?.duration === "number") durations.set(path, Math.max(durations.get(path) ?? 0, value.duration));
+    }
+  }
+  return durations.size ? durations : null;
+}
+const durations = { root: wide ? null : recordedDurations("root"), web: wide ? null : recordedDurations("web") };
+const quick = { root: durations.root !== null, web: durations.web !== null };
+
+// Type-only imports cannot break at run time (the typecheck covers them), so they do not make a direct importer.
+const TYPE_ONLY = /\b(?:import|export)\s+type\s+(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s*from\s*["'`][^"'`]+["'`]/g;
+function directImporters(suite, pairs) {
+  if (pairs.length === 0) return;
+  const [dir, pattern] = suite === "web" ? ["web/tests", WEB_TEST] : ["tests", ROOT_TEST];
+  const imports = listTests(dir, pattern).map((f) => {
+    const out = new Set(directImports(f, readFileSync(join(root, f), "utf8").replace(TYPE_ONLY, "")));
+    for (const t of [...out]) for (const ext of [".ts", ".tsx", "/index.ts", "/index.tsx"]) out.add(t + ext);
+    return [f, out];
+  });
+  for (const [file, p] of pairs) {
+    const files = imports.filter(([, out]) => out.has(file)).map(([f]) => f);
+    select(suite, files, file === p ? `${p} (imported directly)` : `${p} (named by ${file}, imported directly)`, p);
+  }
+}
+
+// The catalogue tables a code or a translation joins: an added error code or locale key is checked here, and #328 ②
+// (refusalCoverage, distance 2 from errors.ts) is what a direct-importer selection alone misses.
+const CATALOGUE_SOURCES = /^(src\/control\/errors\.ts|web\/src\/locales\/[^/]+\.ts)$/;
+const CATALOGUE_TESTS = [
+  ["root", "tests/panel/refusalCoverage.test.ts"], ["root", "tests/control/errorClassification.test.ts"],
+  ["root", "tests/metrics/noteCodes.test.ts"], ["root", "tests/entry/skill.test.ts"], ["web", "web/tests/i18nKeys.test.ts"],
+];
+
+for (const [suite, pairs, projectRoot] of [["root", relatedRoot, root], ["web", relatedWeb, join(root, "web")]]) {
+  if (quick[suite]) directImporters(suite, pairs);
+  else await related(projectRoot, suite, pairs);
+}
+for (const p of changed.filter((p) => CATALOGUE_SOURCES.test(p))) {
+  for (const [suite, f] of CATALOGUE_TESTS) if (quick[suite] && existsSync(join(root, f))) select(suite, [f], `${p} (catalogue table)`, p);
+}
 // A data file nothing names or imports may still be read by a test (a directory listing, a computed name): the whole
 // suite, said out loud, rather than nothing (Rule 12).
 const fallback = [];
@@ -299,9 +568,48 @@ for (const [suite, p] of dataFiles) {
   select(suite, suite === "web" ? listTests("web/tests", WEB_TEST) : listTests("tests", ROOT_TEST), `${p} (data no test names: whole ${suite} suite)`, p);
 }
 
+// The real-ccloop E2E files: tests that import a ccloop world (tests/control/fixtures/ccloopWorld.ts, or a world built on
+// it such as tests/flow/fixtures/flowCcloopWorld.ts) directly. Not the pin rule's "reads ORCA_CCLOOP_BIN": that also
+// takes in tests/scheduler/ through sandbox.ts, a light suite (verify:scheduler measured 23.8 s, spec §1).
+const CCLOOP_WORLD = /(^|\/)(ccloopWorld|flowCcloopWorld)\.ts$/;
+function ccloopWorldTests(suite) {
+  const [dir, pattern] = suite === "web" ? ["web/tests", WEB_TEST] : ["tests", ROOT_TEST];
+  const rows = [];
+  for (const f of listTests(dir, pattern)) {
+    const world = directImports(f, readFileSync(join(root, f), "utf8")).find((t) => CCLOOP_WORLD.test(t) && existsSync(join(root, t))); // a quoted fixture is not an import
+    if (world) rows.push([f, `imports ${world}`]);
+  }
+  return rows;
+}
+
+// Deferred: in a quick suite, a selected file that is slow on record or runs the real ccloop, unless it changed itself.
+const deferred = [];
+const unknownCost = { root: 0, web: 0 };
+for (const suite of ["root", "web"]) {
+  if (!quick[suite]) continue;
+  const real = new Map(ccloopWorldTests(suite));
+  for (const file of [...selection[suite].keys()]) {
+    if (changed.includes(file)) continue;
+    const ms = durations[suite].get(file);
+    if (ms === undefined) unknownCost[suite] += 1;
+    const why = real.has(file) ? `runs the real ccloop (${real.get(file)})` : ms !== undefined && ms >= SLOW_MS ? `recorded ${(ms / 1000).toFixed(1)} s >= ${SLOW_MS / 1000} s` : null;
+    if (why === null) continue;
+    deferred.push([suite, file, why, selection[suite].get(file)]);
+    selection[suite].delete(file);
+  }
+}
+
 // --- report the selection ---------------------------------------------------------------------------------------
 const rootFiles = [...selection.root.keys()].sort();
 const webFiles = [...selection.web.keys()].sort();
+const tier = wide ? "wide" : quick.root || quick.web ? "quick" : "quick-fallback-wide";
+if (wide) console.log("test-affected: WIDE tier (npm run test:wide): the merge gate, run once per merge batch into main");
+else {
+  console.log("test-affected: QUICK tier (npm test): per patch set; this is NOT the merge gate -- run npm run test:wide once per merge batch into main");
+  for (const suite of ["root", "web"]) {
+    if (!quick[suite]) console.log(`test-affected: no vitest results cache for the ${suite} suite (${suite === "web" ? "web/" : ""}node_modules/.vite/vitest/*/results.json): its selection falls back to the wide one`);
+  }
+}
 console.log(`test-affected: ${changed.length} changed paths against ${base} (committed since the merge base, staged, unstaged, untracked)`);
 if (pinOnly) {
   console.log("test-affected: package.json and package-lock.json differ only in the ccloop pin: they select only the tests " +
@@ -311,55 +619,31 @@ for (const [suite, files] of [["root", rootFiles], ["web", webFiles]]) {
   for (const file of files) console.log(`  ${suite} ${file} <- ${selection[suite].get(file).join("; ")}`);
 }
 for (const line of fallback) console.log(line);
+for (const [suite, file, why, reasons] of deferred.sort((a, b) => a[1].localeCompare(b[1]))) {
+  console.log(`  deferred ${suite} ${file}: ${why} <- ${reasons.join("; ")}`);
+}
 const idle = changed.filter((p) => !selecting.has(p));
 if (idle.length) console.log(`test-affected: changed paths that select no test: ${idle.join(", ")}`);
 const empty = rootFiles.length + webFiles.length === 0;
 if (empty) console.log(`test-affected: 0 test files selected (no changes against ${base} select any)`);
 else console.log(`test-affected: ${rootFiles.length + webFiles.length} test files selected (${rootFiles.length} root, ${webFiles.length} web)`);
+if (!wide) {
+  console.log(`test-affected: ${deferred.length} test files deferred to the wide tier (listed above as "deferred"; npm run test:wide runs them)`);
+  const unknown = unknownCost.root + unknownCost.web;
+  if (unknown) console.log(`test-affected: ${unknown} selected files have no recorded duration in the results cache: run, cost unknown`);
+}
 const typechecks = [["npm", ["run", "typecheck"]]];
 if (webTypecheck) typechecks.push([join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", "web/tsconfig.json"]]);
 console.log(`test-affected: typecheck: ${typechecks.map(([cmd, args]) => [cmd === "npm" ? cmd : relative(root, cmd), ...args].join(" ")).join(" ; ")}`);
 if (dryRun) process.exit(0);
 
 // --- run --------------------------------------------------------------------------------------------------------
-// Type-only imports are invisible to the module graph; the typecheck always runs, even when nothing is selected.
-const statuses = [];
-for (const [cmd, args] of typechecks) {
-  const r = spawnSync(cmd, args, { cwd: root, stdio: "inherit" });
-  if (r.error) console.error(r.error);
-  statuses.push(r.status ?? 1);
-}
-
-const skipped = [];
-const userReporter = vitestArgs.some((a) => a === "--reporter" || a.startsWith("--reporter="));
-function runVitest(cwd, files) {
-  const scratch = mkdtempSync(join(tmpdir(), "test-affected-"));
-  const result = join(scratch, "result.json");
-  try {
-    const reporters = [...(userReporter ? [] : ["--reporter=default"]), "--reporter=json", `--outputFile.json=${result}`];
-    const r = spawnSync(vitestBin, ["run", ...files, ...vitestArgs, ...reporters], { cwd, stdio: "inherit" });
-    if (r.error) console.error(r.error);
-    let status = r.status ?? 1;
-    if (!existsSync(result)) {
-      // Without the result the skips cannot be reported, so the run cannot count as green (Rule 12).
-      console.error(`test-affected: vitest wrote no JSON result in ${relative(root, cwd) || "."}; skips unknown`);
-      return status || 1;
-    }
-    for (const file of JSON.parse(readFileSync(result, "utf8")).testResults ?? []) {
-      const n = (file.assertionResults ?? []).filter((t) => t.status === "skipped" || t.status === "todo").length;
-      if (n) skipped.push([relative(root, file.name), n]);
-    }
-    return status;
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
-if (rootFiles.length) statuses.push(runVitest(root, rootFiles));
-if (webFiles.length) statuses.push(runVitest(join(root, "web"), webFiles.map((f) => relative("web", f))));
-
-if (!empty) {
-  // A skip is reported, not hidden: this is how a missing ORCA_CCLOOP_BIN / ORCA_AGENTS_TABLE shows up.
-  console.log(`test-affected: ${skipped.reduce((sum, [, n]) => sum + n, 0)} skipped tests`);
-  for (const [file, n] of skipped) console.log(`  ${file}: ${n} skipped`);
-}
-process.exit(statuses.find((s) => s !== 0) ?? 0);
+const status = await runSelection(tier, rootFiles, webFiles, typechecks);
+if (!wide) console.log(`test-affected: that was the quick tier (exit ${status}), not the merge gate; ${deferred.length} files were deferred to npm run test:wide`);
+// The stamp is the tree the run started on, and only if the worktree was clean then and is still that tree and clean now.
+if (wide && status === 0 && startTree && treeClean() && headTree() === startTree) {
+  mkdirSync(stampDir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(stampDir, startTree), `${new Date().toISOString()} head ${git(["rev-parse", "HEAD"]).trim()} base ${base}\n`);
+  console.log(`test-affected: wide run green on a clean tree: stamped ${startTree}; a wide run on this tree will not run again`);
+} else if (wide && status === 0) console.log("test-affected: wide run green, but the worktree was not clean (or changed during the run): no stamp");
+process.exit(status);

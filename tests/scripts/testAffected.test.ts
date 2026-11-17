@@ -115,8 +115,11 @@ function affected(repo: string, args: string[], env: Record<string, string> = {}
 // "  root tests/a/x.test.ts <- reason; reason" => "root tests/a/x.test.ts"
 const selected = (out: string) => out.split("\n").filter((l) => /^ {2}(root|web) \S+ <- /.test(l)).map((l) => l.trim().split(" <- ")[0]).sort();
 
+// The rows below are the WIDE tier's (`npm run test:wide`, spec 2026-10-20 §11): the template links the real node_modules,
+// whose vitest results cache would otherwise switch the default run to the quick tier. The quick tier's rows are in
+// testAffectedTiers.test.ts.
 function dry(repo: string, args: string[] = ["--base", "main"]) {
-  const r = affected(repo, ["--dry-run", ...args]);
+  const r = affected(repo, ["--dry-run", "--wide", ...args]);
   expect(r.code, r.out).toBe(0);
   return { ...r, files: selected(r.out) };
 }
