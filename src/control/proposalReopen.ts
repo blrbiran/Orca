@@ -1,4 +1,6 @@
-import { budgetBalance } from "./budget.js";
+// The leaf, not budget.ts: migrations.ts imports this module, and budget.ts would pull every ControlStore user into the
+// src/control import cycle (survey 2026-11-17 item 11).
+import { budgetBalance } from "./budgetBalance.js";
 import type { BudgetAmount } from "./tokenPolicy.js";
 import type { Amount } from "./types.js";
 

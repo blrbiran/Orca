@@ -59,20 +59,9 @@ export function subtract(a:Amount,b:Amount):Amount {
   }
   return result;
 }
-export function budgetBalance(limit:Amount,used:Amount,committed:Amount):{reserve:Amount;deficit:Amount};
-export function budgetBalance(limit:BudgetAmount,used:Amount,committed:Amount):{reserve:BudgetAmount;deficit:Amount};
-export function budgetBalance(limit:BudgetAmount,used:Amount,committed:Amount):{reserve:BudgetAmount;deficit:Amount} {
-  budgetAmountSchema.parse(limit);[used,committed].forEach(value=>amountSchema.parse(value));
-  const reserve:BudgetAmount=zero(),deficit=zero();
-  for(const d of dimensions){
-    if(d==="tokens"&&limit.tokens===null){reserve.tokens=null;continue;}
-    const occupied=BigInt(used[d])+BigInt(committed[d]),ceiling=BigInt(limit[d]!);
-    const available=ceiling>occupied?ceiling-occupied:0n,breach=occupied>ceiling?occupied-ceiling:0n;
-    if(available>BigInt(Number.MAX_SAFE_INTEGER)||breach>BigInt(Number.MAX_SAFE_INTEGER))throw new ControlError("numeric-overflow");
-    reserve[d]=Number(available);deficit[d]=Number(breach);
-  }
-  return {reserve,deficit};
-}
+// Moved to the leaf budgetBalance.ts (survey 2026-11-17 item 11); re-exported so callers keep importing it from here.
+import { budgetBalance } from "./budgetBalance.js";
+export { budgetBalance };
 export function isTerminalRunState(state:string):boolean {
   return state==="settled" || ["failed-before-provider","settled-recoverable","settled-restartable","settled-unrecoverable","settled-failed"].includes(state);
 }

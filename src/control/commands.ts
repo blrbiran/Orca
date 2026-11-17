@@ -9,8 +9,9 @@ import { budgetAmountSchema, amountSchema, commandSchema, groupSchema, idSchema,
 import { allWork, getGroup, readGroup, saveGroup, type GroupRecord } from "./queries.js";
 import { controlGraph } from "./graph.js";
 import { recordProjectionChange } from "./projectionJournal.js";
-export const dimensions = ["tokens","activeMs","attempts","sessions"] as const;
-export function zero():Amount {return {tokens:0,activeMs:0,attempts:0,sessions:0};}
+import { dimensions, zero } from "./budgetBalance.js";
+// Defined in the leaf budgetBalance.ts (survey 2026-11-17 item 11); re-exported for the existing callers.
+export { dimensions, zero };
 export function canonical(value:unknown):string {
   if(value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
   if(typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
