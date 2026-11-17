@@ -87,12 +87,15 @@ describe("abandon wins over an open handoff request (Correction 3, finding 1)", 
       knobs.stopped = true;
       // mutation: drop the open-request close from settleAbandonedTerminal (yield to the request again) -> active stays 1, red
       await t.until(driver, () => active(t, runId) === 0);
+      // mutation: close the request with settleHandoffRequestInTransaction (a second terminaliseRun), or release the run's
+      // remainder a second time -> the settle's transaction fails, the run is blocked at C and the handoff settles it
+      // settled-recoverable / held, red here
       expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
       expect(t.body(runId).operatorSettlement).toEqual({ kind: "abandoned", by: "user:owner", note: NOTE, at: t.body(runId).abandon.at });
       expect([requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
       // mutation: count a run-abandoned request as partial in deriveFrozenStopState -> handoff-partial, resume refused, red
       expect(groupStopState(t.h.store, "g")).toBe("handoff-complete");
-      // mutation: close the request with settleHandoffRequestInTransaction (a second terminaliseRun) -> reserve released twice, red
+      // mutation: release 1 activeMs more when the request closes -> committed + used differs from a plain abandon, red
       expect(books(t)).toEqual(expected);
       // The stop lifts (nothing to continue), and still nothing is dispatched for the abandoned task until a person's task retry.
       expect(await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [] }) as never)).not.toHaveProperty("error");
@@ -116,9 +119,9 @@ describe("abandon wins over an open handoff request (Correction 3, finding 1)", 
       expect(readControlRecovery(t.h.store, "e").unresolvedRuns?.[0]?.next[0]).toBe(`orca run abandon g --run ${runId} --note <why>`);
       expect(abandon(t, runId)).toMatchObject({ result: { stop: "live-ceiling" } });
       knobs.stopped = true;
-      // mutation: settle only an OPEN_STATES request (not outcome-unknown) -> active stays 1, red
       await t.until(driver, () => active(t, runId) === 0);
       expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      // mutation: close only an OPEN_STATES request (not outcome-unknown) -> it stays outcome-unknown, red
       expect([requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
       expect(readControlRecovery(t.h.store, "e").unresolvedRuns).toBeUndefined();
       await driver.stop();
