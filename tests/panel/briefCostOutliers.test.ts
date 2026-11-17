@@ -8,7 +8,8 @@ import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 
 const MIN = 60_000;
 const body = (taskId: string, tokens: number) => JSON.stringify({
-  taskId, phase: "work", state: "settled", failureCode: null, startedAt: 1, endedAt: 2,
+  // Landed with known usage: a finished peer, which is what a median is taken over (review ruling 2026-11-18).
+  taskId, phase: "work", state: "landed", failureCode: null, startedAt: 1, endedAt: 2, unknown: { work: false, handoff: false },
   cumulative: { work: { tokens, activeMs: 5 * MIN, attempts: 1, sessions: 1 }, handoff: { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 } },
 });
 

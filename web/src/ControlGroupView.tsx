@@ -983,7 +983,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <p>{item.taskId}</p>
         <UsagePause groupId={groupId} revision={revision} item={item} onCommand={onCommand} archived={archived} />
       </div>)}
-      {/* Tester #321 part C: a task costing a multiple of the group median, or running long; nothing is paused by it. */}
+      {/* Tester #321 part C: a task costing a multiple of the group median, or running long; nothing is paused by it. Listed
+          here, not counted as a problem (review ruling 2026-11-18, as GroupAllowances above). */}
       <CostOutlierRows costs={costOutliers} />
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>

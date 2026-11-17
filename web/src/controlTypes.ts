@@ -510,6 +510,8 @@ export type RunViewV1 = {
   /** Codex's latest completed response while the run is under way; provisional, never part of `used`. */
   liveUsage?: { attempt: number; phase: "plan" | "execute" | "verify"; tokens: number; observedAt: string; revision: number };
   usageAt?: number;
+  /** Tester #321 part C: the run's usage is unknown, so `used` is not a figure (not even 0); absent otherwise. */
+  usageUnknown?: true;
   usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   /** Tester #290 (follow-up J): the run's live token ceiling and the stop at it; absent on a run without them. */
   liveCeiling?: { revision: number; tokens: number; cause: "group" | "pause-line" | "task-cap"; deliveredRevision: number };

@@ -1444,6 +1444,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(run.liveUsage === undefined || run.endedAt != null || isTerminalRunState(state) || state === "blocked"
         ? {} : { liveUsage: { attempt: run.liveUsage.attempt, phase: run.liveUsage.phase, tokens: run.liveUsage.tokens, observedAt: run.liveUsage.observedAt, revision: run.liveUsage.revision } }),
       ...((at) => at === null ? {} : { usageAt: at })(usageBookedAt(store, runId)),
+      // Tester #321 part C (review ruling 2026-11-18): unknown usage is not 0; the cost notice leaves such a run out of medians.
+      ...(run.unknown[bucket] ? { usageUnknown: true as const } : {}),
       ...((split) => split === null ? {} : { usageBreakdown: split })(usageBreakdownOf(store, runId, bucket)),
       ...((detail) => detail.length === 0 ? {} : { usageDetail: detail })(runUsageDetail(store, runId)),
       createdOrdinal: createdOrdinal.get(runId)!,

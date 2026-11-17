@@ -58,10 +58,11 @@ const COST_REASON_WORDS: Record<CostReason, (cost: TaskCost) => string> = {
  * flagged task) and `task show` (the task). A flagged task says so, and that nothing was paused: the line is a notice.
  */
 export function taskCostLine(cost: TaskCost): string {
-  const own = `${cost.runs} run${cost.runs === 1 ? "" : "s"}, ${minutes(cost.ms)}, ${count(cost.tokens)} tokens${cost.underWay ? " so far" : ""}`;
+  // Unknown usage is not 0 (review ruling 2026-11-18): it is said to be unknown.
+  const own = `${cost.runs} run${cost.runs === 1 ? "" : "s"}, ${minutes(cost.ms)}, ${cost.tokens === null ? "tokens unknown" : `${count(cost.tokens)} tokens`}${cost.underWay ? " so far" : ""}`;
   const against = cost.medianTokens === null || cost.medianMs === null
-    ? `${cost.comparable} finished other task${cost.comparable === 1 ? "" : "s"} to compare with, ${COST_MIN_COMPARABLE_TASKS} needed for a median`
-    : `group median over ${cost.comparable} finished other tasks: ${count(Math.round(cost.medianTokens))} tokens, ${minutes(cost.medianMs)}`;
+    ? `${cost.comparable} finished task${cost.comparable === 1 ? "" : "s"} to compare with, ${COST_MIN_COMPARABLE_TASKS} needed for a median`
+    : `group median over ${cost.comparable} finished tasks: ${count(Math.round(cost.medianTokens))} tokens, ${minutes(cost.medianMs)}`;
   const flagged = cost.reasons.map((reason) => COST_REASON_WORDS[reason](cost));
   return `cost: task ${cost.taskId}: ${own}; ${against}${flagged.length === 0 ? "" : `; flagged: ${flagged.join(", ")} (a notice: nothing was paused or stopped)`}`;
 }

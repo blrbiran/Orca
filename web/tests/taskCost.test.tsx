@@ -32,10 +32,11 @@ const mount = (value: GroupViewV1) => render(<ControlGroupView view={value} conf
 const problemsTab = (): HTMLElement => screen.getByRole("tab", { name: "Problems" });
 
 describe("a task costing a multiple of its group (#321 C)", () => {
-  it("is a Problems row, counted on the tab, and says it stopped nothing", async () => {
+  it("is a Problems row, listed but not counted on the tab (as GroupAllowances), and says it stopped nothing", async () => {
     mount(group(4_000_000));
-    // mutation: drop `+ costOutliers.length` from the Problems hint -> no "1 to look at" -> red
-    expect(problemsTab().textContent).toContain("1 to look at");
+    // Review ruling 2026-11-18 (Rule 7, the existing convention): a notice is listed in Problems, not counted as a problem.
+    // mutation: add `+ costOutliers.length` to the Problems hint -> "1 to look at" -> red
+    expect(problemsTab().textContent).not.toContain("to look at");
     await act(async () => { fireEvent.click(problemsTab()); });
     const panel = screen.getByRole("tabpanel", { name: "Problems" });
     // mutation: drop <CostOutlierRows> from the Problems region -> no row -> red
@@ -55,7 +56,7 @@ describe("a task costing a multiple of its group (#321 C)", () => {
     mount(group(4_000_000));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "x" })); });
     // mutation: drop the `cost` prop ControlGroupView passes to TaskDetail -> no line -> red
-    expect(screen.getByTestId("task-cost-x").textContent).toBe("Cost: 2 runs · 10 min · 4M tokens (group median over 3 finished other tasks: 1M tokens · 5 min)");
+    expect(screen.getByTestId("task-cost-x").textContent).toBe("Cost: 2 runs · 10 min · 4M tokens (group median over 3 finished tasks: 1M tokens · 5 min)");
     expect(screen.getByTestId("task-cost-flagged-x").textContent).toContain("4.0× the median tokens");
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "a" })); });
     expect(screen.getByTestId("task-cost-a").textContent).toContain("1 run · 5 min · 1M tokens");
@@ -69,7 +70,32 @@ describe("a task costing a multiple of its group (#321 C)", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "r" })); });
     // mutation: drop the tooFew branch of costLineText -> a null median is read as one -> red
     // mutation: drop the soFar suffix -> red
-    expect(screen.getByTestId("task-cost-r").textContent).toBe("Cost: 1 run · 3 min · 500K tokens so far (1 finished other tasks to compare with; 3 are needed for a median)");
+    // mutation: drop tooFew_one (en plural) -> "1 finished tasks" -> red
+    expect(screen.getByTestId("task-cost-r").textContent).toBe("Cost: 1 run · 3 min · 500K tokens so far (1 finished task to compare with; 3 are needed for a median)");
+  });
+
+  it("says a task with no median that ran past 30 minutes has run long, not that it costs more than its group", async () => {
+    const long = view(["a", "x"].map((taskId) => workItem({ taskId, status: "completed", category: "done", currentRunId: `run-${taskId}` })),
+      [landed("run-a", "a", 1_000_000, 5), landed("run-x", "x", 1_000_000, 31)]);
+    mount(long);
+    await act(async () => { fireEvent.click(problemsTab()); });
+    // mutation: drop the long-running branch of flaggedText -> "costs more than its group ()" -> red
+    expect(screen.getByRole("tabpanel", { name: "Problems" }).querySelector('[data-cost-task-id="x"]')?.textContent)
+      .toBe("x has run over 30 minutes: 1 run · 31 min · 1M tokens. A notice only: nothing was paused or stopped.");
+  });
+
+  it("says unknown usage is unknown, and lists no row for a landing wait (the reviewer's probe)", async () => {
+    // Four tasks collected (waiting to land), 5 minutes booked, started 40 minutes ago: none is under way, none long.
+    const collected = view(["a", "b", "c", "d"].map((taskId) => workItem({ taskId, status: "active", currentRunId: `run-${taskId}` })),
+      ["a", "b", "c", "d"].map((taskId) => run({ runId: `run-${taskId}`, taskId, state: "collected", startedAt: NOW - 40 * MIN,
+        used: { tokens: 0, activeMs: 5 * MIN, attempts: 1, sessions: 1 }, ...(taskId === "a" ? { usageUnknown: true as const } : {}) })));
+    mount(collected);
+    await act(async () => { fireEvent.click(problemsTab()); });
+    expect(screen.getByRole("tabpanel", { name: "Problems" }).querySelector("[data-cost-task-id]")).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Progress" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "a" })); });
+    // mutation: drop the `cost.tokens === null` branch of ownText -> red
+    expect(screen.getByTestId("task-cost-a").textContent).toBe("Cost: 1 run · 5 min · tokens unknown (0 finished tasks to compare with; 3 are needed for a median)");
   });
 
   it("speaks Chinese", async () => {

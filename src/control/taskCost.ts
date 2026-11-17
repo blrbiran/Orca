@@ -29,14 +29,29 @@ export const COST_LONG_RUNNING_MS = 30 * 60_000;
  */
 export const COST_MIN_COMPARABLE_TASKS = 3;
 
-/** One run as the cost reads it; `underWay` is the caller's own "running now" (each surface has its own run shape). */
+/**
+ * The states in which a run's agent still spends: the view's `starting` and `running`, and the stored states displayed as
+ * them (controlViews.ts displayRunState: claimed, starting, start-pending -> starting; accepted -> running). Every other
+ * run -- collected, reconciling, unknown, blocked, settled -- counts its booked active time, so a landing wait does not
+ * make a task look long-running. Review ruling 2026-11-18: one predicate for the panel, `task show` and `group brief`.
+ */
+const UNDER_WAY_STATES: ReadonlySet<string> = new Set(["starting", "running", "claimed", "start-pending", "accepted"]);
+export const costUnderWay = (run: { state: string; endedAt?: number | null }): boolean => run.endedAt == null && UNDER_WAY_STATES.has(run.state);
+
+/** A run that finished its task: it landed, or ccloop's outcome was success. Only such tasks are compared with. */
+export const costFinished = (run: { state: string; outcome?: string | null }): boolean => run.state === "landed" || run.outcome === "succeeded";
+
+/** One run as the cost reads it, from either surface's run shape (the view's, or the stored body for `group brief`). */
 export interface CostRun {
   taskId: string | null;
   tokens: number;
+  /** False when the run's usage is unknown (`run.unknown`): its `tokens` is then not a figure, not even 0. */
+  usageKnown: boolean;
   activeMs: number;
   startedAt: number | null;
   endedAt: number | null;
   underWay: boolean;
+  finished: boolean;
 }
 
 export type CostReason = "tokens-multiple" | "time-multiple" | "long-running";
@@ -44,11 +59,12 @@ export type CostReason = "tokens-multiple" | "time-multiple" | "long-running";
 export interface TaskCost {
   taskId: string;
   runs: number;
-  tokens: number;
+  /** Null when the usage of any of its runs is unknown. */
+  tokens: number | null;
   ms: number;
   /** A run of the task is under way, so its figures still grow and it is not a comparable task for the others. */
   underWay: boolean;
-  /** The other tasks of the group with runs, none under way: what the medians are taken over. */
+  /** The group's other finished tasks (a run landed or succeeded) with known, non-zero usage: what the medians are over. */
   comparable: number;
   /** Null when fewer than COST_MIN_COMPARABLE_TASKS tasks are comparable. */
   medianTokens: number | null;
@@ -60,11 +76,14 @@ export interface TaskCost {
   reasons: CostReason[];
 }
 
-/** The panel's run view (and `group show`'s runs) as a cost run; "running now" is the Live region's starting/running. */
-export function costRunOfView(run: { taskId: string | null; state: string; startedAt?: number | null; endedAt?: number | null; used: { tokens: number; activeMs: number } }): CostRun {
+/** The view's run shape `costRunOfView` reads (the panel's runs, and `group show`'s). */
+export type CostViewRun = { taskId: string | null; state: string; outcome?: string | null; usageUnknown?: true; startedAt?: number | null; endedAt?: number | null; used: { tokens: number; activeMs: number } };
+
+/** The panel's run view (and `group show`'s runs) as a cost run. */
+export function costRunOfView(run: CostViewRun): CostRun {
   return {
-    taskId: run.taskId, tokens: run.used.tokens, activeMs: run.used.activeMs, startedAt: run.startedAt ?? null, endedAt: run.endedAt ?? null,
-    underWay: run.endedAt == null && (run.state === "starting" || run.state === "running"),
+    taskId: run.taskId, tokens: run.used.tokens, usageKnown: run.usageUnknown !== true, activeMs: run.used.activeMs,
+    startedAt: run.startedAt ?? null, endedAt: run.endedAt ?? null, underWay: costUnderWay(run), finished: costFinished(run),
   };
 }
 
@@ -87,19 +106,24 @@ function median(values: readonly number[]): number {
 
 /** Every task that had a run, in the order its first run appears, with its cost and how it compares. */
 export function taskCosts(runs: readonly CostRun[], now: number): TaskCost[] {
-  const totals = new Map<string, { runs: number; tokens: number; ms: number; underWay: boolean }>();
+  const totals = new Map<string, { runs: number; tokens: number | null; ms: number; underWay: boolean; finished: boolean }>();
   for (const run of runs) {
     if (run.taskId === null) continue;
-    const total = totals.get(run.taskId) ?? { runs: 0, tokens: 0, ms: 0, underWay: false };
-    totals.set(run.taskId, { runs: total.runs + 1, tokens: total.tokens + run.tokens, ms: total.ms + runMs(run, now), underWay: total.underWay || run.underWay });
+    const total = totals.get(run.taskId) ?? { runs: 0, tokens: 0, ms: 0, underWay: false, finished: false };
+    totals.set(run.taskId, { runs: total.runs + 1, tokens: total.tokens === null || !run.usageKnown ? null : total.tokens + run.tokens,
+      ms: total.ms + runMs(run, now), underWay: total.underWay || run.underWay, finished: total.finished || run.finished });
   }
-  return [...totals].map(([taskId, total]) => {
-    // A task is compared with the others, never with itself: in a small group its own figure would pull the median up.
-    const others = [...totals].filter(([other, entry]) => other !== taskId && !entry.underWay).map(([, entry]) => entry);
+  return [...totals].map(([taskId, { finished: _finished, ...total }]) => {
+    // A task is compared with its finished peers, never with itself: in a small group its own figure would pull the median
+    // up. A peer still under way, unfinished, or whose usage is unknown or 0 is not a figure to compare with (review
+    // ruling 2026-11-18: peers of 0, 0, 2M, 2M gave a 1M median).
+    const others = [...totals].filter(([other, entry]) => other !== taskId && !entry.underWay && entry.finished && entry.tokens !== null && entry.tokens > 0)
+      .map(([, entry]) => ({ tokens: entry.tokens!, ms: entry.ms }));
     const enough = others.length >= COST_MIN_COMPARABLE_TASKS;
     const medianTokens = enough ? median(others.map((entry) => entry.tokens)) : null;
     const medianMs = enough ? median(others.map((entry) => entry.ms)) : null;
-    const tokensMultiple = medianTokens === null || medianTokens === 0 ? null : total.tokens / medianTokens;
+    // A peer's tokens are > 0, so a token median is never 0; a time median can be (peers with no time booked or known).
+    const tokensMultiple = medianTokens === null || total.tokens === null ? null : total.tokens / medianTokens;
     const timeMultiple = medianMs === null || medianMs === 0 ? null : total.ms / medianMs;
     const reasons: CostReason[] = [
       ...(tokensMultiple !== null && tokensMultiple >= COST_OUTLIER_MULTIPLE ? ["tokens-multiple" as const] : []),
@@ -114,9 +138,9 @@ export function taskCosts(runs: readonly CostRun[], now: number): TaskCost[] {
  * One task's cost from a group view's runs (`orca task show`); null when the task had no run, or when a run carries no
  * `used` (a partial view): a median over runs whose usage is missing would be a wrong figure, not a smaller one.
  */
-export function viewTaskCost(runs: ReadonlyArray<Parameters<typeof costRunOfView>[0] | { used?: undefined }>, taskId: string, now: number): TaskCost | null {
+export function viewTaskCost(runs: ReadonlyArray<CostViewRun | { used?: undefined }>, taskId: string, now: number): TaskCost | null {
   if (runs.some((run) => run.used === undefined)) return null;
-  return taskCosts((runs as Array<Parameters<typeof costRunOfView>[0]>).map(costRunOfView), now).find((cost) => cost.taskId === taskId) ?? null;
+  return taskCosts((runs as CostViewRun[]).map(costRunOfView), now).find((cost) => cost.taskId === taskId) ?? null;
 }
 
 /** The tasks flagged: the Problems rows, and `group brief`'s `costOutliers`. */

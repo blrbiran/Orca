@@ -2194,6 +2194,8 @@ export const runViewSchema = z
     liveUsage: z.object({ attempt: positiveSafeInteger, phase: z.enum(["plan", "execute", "verify"]), tokens: positiveSafeInteger,
       observedAt: nonemptyString, revision: positiveSafeInteger }).strict().optional(),
     usageAt: safeInteger.optional(),
+    // Tester #321 part C (review ruling 2026-11-18): the run's usage in its bucket is unknown, so `used` is not a figure; absent otherwise.
+    usageUnknown: z.literal(true).optional(),
     usageBreakdown: z.object({ input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger }).strict().optional(),
     // Raw usage detail spec 2026-11-13 §2: the run's booked usage per model and phase (model null: unattributed); absent before any.
     usageDetail: z.array(z.object({ model: nonemptyString.nullable(), phase: nonemptyString.nullable(), tokens: safeInteger,

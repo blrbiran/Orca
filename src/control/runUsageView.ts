@@ -1,6 +1,6 @@
 import { isTerminalRunState } from "./budget.js";
 import type { ControlStore } from "./store.js";
-import { costOutliers, type CostRun, type TaskCost } from "./taskCost.js";
+import { costFinished, costOutliers, costUnderWay, type CostRun, type TaskCost } from "./taskCost.js";
 
 /**
  * Tester #285: `used` and the group's total advance only as work events are booked. A Codex response may now provide
@@ -53,13 +53,18 @@ export function phaseEndUsageOf(store: ControlStore, groupId: string): { runIds:
 /**
  * Tester #321 part C: `orca group brief`'s `costOutliers` -- the tasks whose runs together cost a multiple of the group
  * median, or ran past the long-running line (taskCost.ts); null when none is. Read from the stored runs, each in its own
- * bucket like the view's `used`. Display only.
+ * bucket like the view's `used`. "Under way" and "finished" are taskCost.ts's predicates, as the panel's and `task show`'s
+ * are, so the three surfaces agree (review ruling 2026-11-18). Display only.
  */
 export function costOutliersOf(store: ControlStore, groupId: string, now: number): TaskCost[] | null {
   const runs = store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId).map((row): CostRun => {
-    const body = JSON.parse(String(row.body)) as Parameters<typeof runUnderWay>[0] & { taskId: string | null; phase: string; startedAt?: number; cumulative: Record<"work" | "handoff", { tokens: number; activeMs: number }> };
-    const used = body.cumulative[body.phase === "handoff" ? "handoff" : "work"];
-    return { taskId: body.taskId, tokens: used.tokens, activeMs: used.activeMs, startedAt: body.startedAt ?? null, endedAt: body.endedAt ?? null, underWay: runUnderWay(body) };
+    const body = JSON.parse(String(row.body)) as { taskId: string | null; phase: string; state: string; startedAt?: number; endedAt?: number;
+      drive?: { outcome?: string | null }; unknown?: Record<"work" | "handoff", boolean>; cumulative: Record<"work" | "handoff", { tokens: number; activeMs: number }> };
+    const bucket = body.phase === "handoff" ? "handoff" : "work", used = body.cumulative[bucket];
+    // A body without `unknown` (none is written so today: budget.ts sets it at claim) reads as known.
+    return { taskId: body.taskId, tokens: used.tokens, usageKnown: body.unknown?.[bucket] !== true, activeMs: used.activeMs,
+      startedAt: body.startedAt ?? null, endedAt: body.endedAt ?? null, underWay: costUnderWay(body),
+      finished: costFinished({ state: body.state, outcome: body.drive?.outcome }) };
   });
   const outliers = costOutliers(runs, now);
   return outliers.length === 0 ? null : outliers;

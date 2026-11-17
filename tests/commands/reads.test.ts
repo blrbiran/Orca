@@ -150,6 +150,19 @@ describe("composed reads (spec §14 R6; proposal, task and project views)", () =
       workspace: RAW["repositories/repo-1/workspace"], integration: RAW["repositories/repo-1/integration"],
     });
   });
+
+  // Tester #321 part C (review minor c): runs that carry `used`, as a server's do, add the task's `cost` to task show's
+  // --json; the composition is otherwise the one above. A view whose runs carry no `used` (above) gets none.
+  it("task show adds the task's cost when the group's runs carry their usage", async () => {
+    const used = (tokens: number) => ({ tokens, activeMs: 60_000, attempts: 1, sessions: 1 });
+    const runs = [{ ...GROUP.runs[0], used: used(5) }, { ...GROUP.runs[1], used: used(7) }];
+    const p = await fakePanel({ "GET summary": { status: 200, body: RAW.summary }, "GET groups/g-alpha": { status: 200, body: { ...GROUP, runs } } });
+    // mutation: drop `...(cost === null ? {} : { cost })` from task show's compose -> red
+    expect((await cli(["task", "show", "g-alpha", "t1", "--json"], p.dir)).json().body).toEqual({
+      schema: "orca-task-show-v1", groupId: "g-alpha", revision: 5, task: GROUP.workItems[0], runs: [runs[0]],
+      cost: { taskId: "t1", runs: 1, tokens: 5, ms: 60_000, underWay: false, comparable: 0, medianTokens: null, medianMs: null, tokensMultiple: null, timeMultiple: null, reasons: [] },
+    });
+  });
 });
 
 describe("command show scopes (spec §14 R7)", () => {
