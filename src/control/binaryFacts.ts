@@ -1,7 +1,7 @@
 /**
  * Tester #337 (prompt half): cheap, deterministic facts about a changed binary file for the requirement reviewer, read from
  * the blob bytes the review already holds for its sha256. Code answers (Rule 5): the file type from its magic bytes and,
- * for an image whose header gives them, its pixel size. Nothing is extracted from the content (no PDF page count: without
+ * for an image whose header gives them, its stored pixel size (EXIF rotation is not read). Nothing is extracted from the content (no PDF page count: without
  * a PDF parser it cannot be counted reliably -- object streams and incremental updates defeat a text scan).
  *
  * Bounded: the type reads the first bytes; a JPEG frame header is searched for in the first JPEG_SCAN_MAX_BYTES; a ZIP's
@@ -15,6 +15,9 @@ export const ZIP_TAIL_MAX_BYTES = 22 + 0xffff;
 
 const startsWith = (bytes: Buffer, magic: readonly number[]): boolean => bytes.length >= magic.length && magic.every((b, i) => bytes[i] === b);
 const ascii = (text: string): number[] => [...text].map((c) => c.charCodeAt(0));
+/** The stored pixel size after the type, or the type only when a dimension is 0 or above `max` (not a real size). */
+const sized = (type: string, width: number, height: number, max = 0xffff): string =>
+  width === 0 || height === 0 || width > max || height > max ? type : `${type}, ${width}x${height} pixels`;
 
 /** A short phrase ("PNG image, 640x480 pixels"), or null when the type is not one recognised here. */
 export function binaryFacts(bytes: Buffer): string | null {
@@ -23,17 +26,17 @@ export function binaryFacts(bytes: Buffer): string | null {
     return `PDF document${version === undefined ? "" : ` (version ${version})`}; its page count is not read`;
   }
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
-    // The first chunk of a valid PNG is IHDR: width and height, big-endian, at 16 and 20.
+    // The first chunk of a valid PNG is IHDR: width and height, big-endian, at 16 and 20, each at most 2^31 - 1.
     const ihdr = bytes.length >= 24 && bytes.subarray(12, 16).toString("latin1") === "IHDR";
-    return ihdr ? `PNG image, ${bytes.readUInt32BE(16)}x${bytes.readUInt32BE(20)} pixels` : "PNG image";
+    return ihdr ? sized("PNG image", bytes.readUInt32BE(16), bytes.readUInt32BE(20), 0x7fffffff) : "PNG image";
   }
   if (startsWith(bytes, ascii("GIF87a")) || startsWith(bytes, ascii("GIF89a"))) {
     // The logical screen size, little-endian, right after the signature.
-    return bytes.length >= 10 ? `GIF image, ${bytes.readUInt16LE(6)}x${bytes.readUInt16LE(8)} pixels` : "GIF image";
+    return bytes.length >= 10 ? sized("GIF image", bytes.readUInt16LE(6), bytes.readUInt16LE(8)) : "GIF image";
   }
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) {
     const size = jpegSize(bytes);
-    return size === null ? "JPEG image" : `JPEG image, ${size.width}x${size.height} pixels`;
+    return size === null ? "JPEG image" : sized("JPEG image", size.width, size.height);
   }
   if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04]) || startsWith(bytes, [0x50, 0x4b, 0x05, 0x06])) return zipKind(bytes);
   return null;
@@ -62,13 +65,18 @@ function jpegSize(bytes: Buffer): { width: number; height: number } | null {
   return null;
 }
 
-/** A ZIP archive, named as the office format its entries make it when they say so. */
+/**
+ * A ZIP archive, named as the office format its entries make it when they say so: an Office file has
+ * `[Content_Types].xml` at its root (an archive that only holds a `word/` folder is not one), an OpenDocument file a
+ * `mimetype` entry beside `content.xml`.
+ */
 function zipKind(bytes: Buffer): string {
   const names = zipEntryNames(bytes);
   if (names === null) return "ZIP archive";
-  if (names.some((name) => name.startsWith("word/"))) return "ZIP archive: a Word document (docx)";
-  if (names.some((name) => name.startsWith("xl/"))) return "ZIP archive: an Excel workbook (xlsx)";
-  if (names.some((name) => name.startsWith("ppt/"))) return "ZIP archive: a PowerPoint presentation (pptx)";
+  const office = names.includes("[Content_Types].xml");
+  if (office && names.some((name) => name.startsWith("word/"))) return "ZIP archive: a Word document (docx)";
+  if (office && names.some((name) => name.startsWith("xl/"))) return "ZIP archive: an Excel workbook (xlsx)";
+  if (office && names.some((name) => name.startsWith("ppt/"))) return "ZIP archive: a PowerPoint presentation (pptx)";
   if (names.includes("mimetype") && names.includes("content.xml")) return "ZIP archive: an OpenDocument file";
   return "ZIP archive";
 }

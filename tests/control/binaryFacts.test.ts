@@ -80,14 +80,25 @@ describe("binary facts for the requirement review (#337)", () => {
     expect(binaryFacts(zip(["src/a.txt"]))).toBe("ZIP archive");
   });
 
+  // Review of #337: an archive that merely holds a word/ (xl/, ppt/) folder is not an Office document; an Office file
+  // always has [Content_Types].xml at its root, an OpenDocument file a mimetype entry.
+  it("names an Office or OpenDocument file only when its marker entry is there", () => {
+    // mutation: drop the [Content_Types].xml requirement (any of the three) -> docx / xlsx / pptx, red
+    expect(binaryFacts(zip(["project/", "word/list.txt"]))).toBe("ZIP archive");
+    expect(binaryFacts(zip(["xl/notes.txt"]))).toBe("ZIP archive");
+    expect(binaryFacts(zip(["ppt/old.txt"]))).toBe("ZIP archive");
+    // mutation: drop the mimetype half of the OpenDocument check -> "an OpenDocument file", red
+    expect(binaryFacts(zip(["content.xml", "styles.xml"]))).toBe("ZIP archive");
+  });
+
   it("does not read a ZIP central directory larger than the bound", () => {
     const long = (i: number) => `${String(i).padStart(4, "0")}${"x".repeat(60_000)}`;
-    const names = ["word/document.xml", ...Array.from({ length: Math.ceil(ZIP_DIRECTORY_MAX_BYTES / 60_000) + 1 }, (_, i) => long(i))];
+    const names = ["[Content_Types].xml", "word/document.xml", ...Array.from({ length: Math.ceil(ZIP_DIRECTORY_MAX_BYTES / 60_000) + 1 }, (_, i) => long(i))];
     // mutation: drop the directory-size check -> reads it and says docx, red
     expect(binaryFacts(zip(names))).toBe("ZIP archive");
     // An end record further from the end than the largest ZIP comment allows. mutation: search the whole blob -> docx, red
-    expect(binaryFacts(Buffer.concat([zip(["word/document.xml"]), Buffer.alloc(ZIP_TAIL_MAX_BYTES)]))).toBe("ZIP archive");
-    expect(binaryFacts(Buffer.concat([zip(["word/document.xml"]), Buffer.alloc(ZIP_TAIL_MAX_BYTES - 22)]))).toBe("ZIP archive: a Word document (docx)");
+    expect(binaryFacts(Buffer.concat([zip(["[Content_Types].xml", "word/document.xml"]), Buffer.alloc(ZIP_TAIL_MAX_BYTES)]))).toBe("ZIP archive");
+    expect(binaryFacts(Buffer.concat([zip(["[Content_Types].xml", "word/document.xml"]), Buffer.alloc(ZIP_TAIL_MAX_BYTES - 22)]))).toBe("ZIP archive: a Word document (docx)");
   });
 
   it("names only the type when a header is malformed or cut, never a size read from the wrong bytes", () => {
@@ -109,7 +120,8 @@ describe("binary facts for the requirement review (#337)", () => {
     expect(binaryFacts(zip([]))).toBe("ZIP archive");
     // mutation: drop the no-end-record check -> reads at a negative offset (throws), red
     expect(binaryFacts(Buffer.from([0x50, 0x4b, 0x03, 0x04]))).toBe("ZIP archive");
-    const docx = () => zip(["word/document.xml"]);
+    const docx = () => zip(["[Content_Types].xml", "word/document.xml"]);
+    expect(binaryFacts(docx())).toBe("ZIP archive: a Word document (docx)");
     const endOf = (b: Buffer) => b.length - 22;
     // A ZIP64-style directory offset (0xFFFFFFFF). mutation: drop the offset check -> reads past the blob (throws), red
     const far = docx(); far.writeUInt32LE(0xffffffff, endOf(far) + 16);
@@ -117,13 +129,36 @@ describe("binary facts for the requirement review (#337)", () => {
     // mutation: drop the entry-signature check -> the name is read anyway, docx, red
     const badSignature = docx(); badSignature.writeUInt32LE(0, badSignature.readUInt32LE(endOf(badSignature) + 16));
     expect(binaryFacts(badSignature)).toBe("ZIP archive");
-    // mutation: drop the name-length check -> the name runs into the end record and still starts word/, docx, red
-    const longName = docx(); longName.writeUInt16LE(40, longName.readUInt32LE(endOf(longName) + 16) + 28);
+    // The last entry's name length overruns the directory. mutation: drop the name-length check -> the name runs into the
+    // end record and still starts word/, docx, red
+    const longName = docx(); longName.writeUInt16LE(40, longName.readUInt32LE(endOf(longName) + 16) + 46 + "[Content_Types].xml".length + 28);
     expect(binaryFacts(longName)).toBe("ZIP archive");
-    // Two entries claimed, the first's extra field pointing far past the blob. mutation: drop the entry-header bound ->
-    // reads the second header out of range (throws), red
-    const outside = docx(); outside.writeUInt16LE(2, endOf(outside) + 10); outside.writeUInt16LE(60_000, outside.readUInt32LE(endOf(outside) + 16) + 30);
+    // The first entry's extra field points far past the blob. mutation: drop the entry-header bound -> reads the second
+    // header out of range (throws), red
+    const outside = docx(); outside.writeUInt16LE(60_000, outside.readUInt32LE(endOf(outside) + 16) + 30);
     expect(binaryFacts(outside)).toBe("ZIP archive");
+  });
+
+  // Review of #337: a size is named only when it is a real one.
+  it("names only the type for a zero or out-of-range dimension, and for a chunk that is not IHDR", () => {
+    // mutation: drop the zero check -> "800x0" / "0x480" / "0x32", red
+    expect(binaryFacts(jpeg(sof(0xc0, 800, 0)))).toBe("JPEG image");
+    expect(binaryFacts(png(0, 480))).toBe("PNG image");
+    expect(binaryFacts(Buffer.concat([Buffer.from("GIF89a"), Buffer.from([0, 0, 0x20, 0])]))).toBe("GIF image");
+    // mutation: drop the PNG 2^31 bound -> "4294967295x480", red (the PNG specification caps both at 2^31 - 1)
+    expect(binaryFacts(png(0xffffffff, 480))).toBe("PNG image");
+    expect(binaryFacts(png(1, 0x80000000))).toBe("PNG image");
+    expect(binaryFacts(png(0x7fffffff, 1))).toBe("PNG image, 2147483647x1 pixels");
+    // mutation: drop the === "IHDR" comparison -> reads an IHDX chunk's bytes as the size, red
+    const ihdx = png(640, 480); ihdx.write("IHDX", 12, "latin1");
+    expect(binaryFacts(ihdx)).toBe("PNG image");
+  });
+
+  it("does not read a JPG (C8) or DAC (CC) segment as the frame header", () => {
+    const lookalike = (marker: number) => segment(marker, Buffer.concat([Buffer.from([8]), u16be(111), u16be(222), Buffer.from([3])]));
+    // mutation: drop marker !== 0xc8 (or !== 0xcc) -> "222x111", red
+    expect(binaryFacts(jpeg(lookalike(0xc8), sof(0xc0, 640, 480)))).toBe("JPEG image, 640x480 pixels");
+    expect(binaryFacts(jpeg(lookalike(0xcc), sof(0xc0, 640, 480)))).toBe("JPEG image, 640x480 pixels");
   });
 
   it("says nothing about a type it does not recognise", () => {

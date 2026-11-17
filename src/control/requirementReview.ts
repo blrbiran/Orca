@@ -116,6 +116,8 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     "You are Orca's requirement reviewer. A group of tasks implemented the requirement below; its tasks' checks passed on the result.",
     // Delivery tail D4 (#336, #337 prompt half): evidence is not only the diff.
     "Evidence may be a file's content, a file's metadata (path, size, hash), a command's recorded result, or a delivery Orca recorded -- each section below says which.",
+    // Review of #337: metadata is evidence only of itself -- a PDF's hash does not show what the PDF says.
+    "A file's listed metadata (size, hash, type, stored pixel size) shows only those facts, never what its unshown content says.",
     ...(input.acceptanceFailed === true ? ["Group acceptance failed on this tip (a project-wide check, possibly one that was already failing). Judge the criteria from the delivered work below anyway."] : []),
     ...(input.acceptanceBaseline === undefined ? [] : [`Project-wide check ${JSON.stringify(input.acceptanceBaseline.command)} failed at the group's base and on this tip. This alone does not prove the failures are the same. Base failure: ${input.acceptanceBaseline.tail ?? "(no output)"}. Tip failure: ${input.acceptanceBaseline.tipTail ?? "(no output)"}.`]),
     "Treat the person's explicit restrictions in the original requirement as binding, even if a check cannot pass without violating them. Never silently repair a forbidden pre-existing failure just to turn a check green.",
@@ -135,8 +137,8 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     ]),
     ...(input.facts === undefined || input.facts.length === 0 ? [] : ["", "What Orca recorded beyond the diff:", ...input.facts]),
     "",
-    // #337: a binary file's type and image size, read by Orca from its header, are facts the reviewer may cite by path.
-    "Files the group changed (status, path, bytes, sha256; for a binary file, its type and image size when Orca could read them from its header):",
+    // #337: a binary file's type and stored pixel size, read by Orca from its header, are facts the reviewer may cite by path.
+    "Files the group changed (status, path, bytes, sha256; for a binary file, its type and stored pixel size (EXIF rotation is not read) when Orca could read them from its header):",
     ...input.changedFiles.map((f) => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${!f.binary ? "" : f.kind === undefined ? " (binary: named only, its bytes are not shown)" : ` (binary: ${f.kind}; its other bytes are not shown)`}`),
     "",
     "The group's diff against its base:",
@@ -146,7 +148,7 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     // Tester #343 (spec 2026-11-17 S5): the review prompt carries no version marker (the contract's schema id
     // `orca-requirement-review-contract-v1` names the call's contract, not this text); this is the change that added fixableBy.
     "Answer with a JSON object {\"criteria\": [{\"id\", \"verdict\", \"evidence\", \"missing\", \"fixableBy\"}], \"summary\"}.",
-    "- verdict met: name the evidence (file path and line; or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or image size; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null} -- a command and its exit as recorded there). missing is null.",
+    "- verdict met: name the evidence (file path and line; or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or stored pixel size, never what its unshown content says; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null} -- a command and its exit as recorded there). missing is null.",
     "- verdict not-met: name the evidence you looked at, in the same forms, and say in `missing` what is still needed.",
     "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would. Do not guess what a file's unshown content says.",
     "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
@@ -461,7 +463,10 @@ const reviewIdentity = (run: SingleCallRunRow): { roundNo: number; tip: string }
 
 const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 
-/** §3.2 bounded: the changed files (binary ones named by path, bytes and sha256) and the text diff cut at the bound. */
+/**
+ * §3.2 bounded: the changed files (path, status, bytes and sha256 each; for #337 also what binaryFacts reads from the
+ * header, which the prompt shows for a binary file) and the text diff cut at the bound.
+ */
 async function groupChanges(repo: string, base: string, tip: string): Promise<{ changedFiles: ChangedFile[]; diff: string; truncated: boolean }> {
   // #334: the file lists grow with the number of files (a 12-task merge group changed 2,449), not with their size; they
   // get the same room as the blobs below instead of Node's default 1 MiB.

@@ -241,3 +241,13 @@ extracted, dir / multi-directory groups stay `not-run`).
    content says." The JSON schema is unchanged.
 4. **Web**: the review state `not-run` reads "not reviewed (Orca cannot review folder or multi-repository groups yet)" /
    「未复核（Orca 暂时还不能复核文件夹或多仓库的任务组）」. What counts as satisfied is unchanged.
+
+### Correction 5 (2026-11-18, same builder, after the independent branch review of #337; wins over Correction 4)
+
+1. **Office labels need their marker entry**: docx / xlsx / pptx only when `[Content_Types].xml` is at the archive's
+   root as well as `word/` / `xl/` / `ppt/` entries (an archive that merely holds such a folder is "ZIP archive").
+2. **A size is named only when it is real**: an image whose width or height is 0, or a PNG dimension of 2^31 or more
+   (above the PNG limit), is named by its type only. The size is the **stored** pixel size; EXIF rotation is not read,
+   and the prompt says so.
+3. **Metadata shows only itself**: the prompt's evidence framing and its `met` form both say a file's listed metadata
+   (size, hash, type, stored pixel size) shows only those facts, never what its unshown content says.
