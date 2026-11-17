@@ -255,3 +255,40 @@ every transitive importer of a helper naming it) is replaced; §9's pin-only sha
 - Measured on the repin commit `09497063` (ccloop `26b3127`) with `--base=09497063^ --dry-run`: 503 test files (502 root,
   1 web) under §9's rule, 102 (102 root, 0 web) under this one. Measured with this section's commit's script in a
   `git clone --local` checked out at `09497063`.
+
+## 11. Correction (2026-11-17, session 2026-11-17 evening, survey items 1–5, 11; tester #338) — a quick tier per patch set, the wide selection once per merge batch
+
+Human ruling (verbatim, on the controller's proposal to change the gate policy in the survey's items 1 and 3):
+「测试精简点头同意」. Evidence: `.superpowers/sdd/2026-11-17-test-suite-pruning-survey/report.md` ("Do next session" table).
+§4.1 and §§7–10 are kept verbatim; they now describe the **wide** tier. Built by a subagent of that session on the branch
+`worktree-agent-a02458e8406a6ec8f`.
+
+- **Quick tier = `npm test`** (per patch set; it is not the merge gate, and says so). Selects changed test files, the mirror
+  directory (§4.1), the test files that import a changed file **directly** (distance 1, relative static or dynamic
+  imports; type-only imports dropped) instead of vitest's transitive `related`, and the catalogue tables when
+  `src/control/errors.ts` or `web/src/locales/*.ts` changes (`tests/panel/refusalCoverage`, `tests/control/errorClassification`,
+  `tests/metrics/noteCodes`, `tests/entry/skill`, `web/tests/i18nKeys`). Config, data-file and text-reader rows are §4.1's.
+  Then **deferred**, each printed as `  deferred <suite> <file>: <why> <- <reasons>`: a file whose vitest results-cache
+  duration is ≥ 30 s, and a test importing a ccloop world (`ccloopWorld.ts`, `flowCcloopWorld.ts`) directly — unless the
+  file itself changed. A suite with no results cache (`node_modules/.vite/vitest/*/results.json`) gets the wide
+  selection, said out loud; a file absent from the cache runs and is counted as "cost unknown".
+- **Wide tier = `npm run test:wide`** (`test-affected.mjs --wide`): §4.1's selection unchanged, nothing deferred. Run once
+  per merge batch into `main`. Green on a clean worktree stamps `git rev-parse HEAD^{tree}` under
+  `<git-common-dir>/orca-gate/green/`; a wide run on a stamped tree exits 0 without running (`--force` runs it).
+- **`--rerun-failed`** re-runs only the failed files of the last run's report (`<git-dir>/orca-gate/last-run.json` plus
+  vitest's JSON beside it; every run writes and prints it), labelled "a re-run of failed files, not a gate"; it does
+  not repeat the typecheck and says so when the last typecheck failed.
+- Every run (not `--dry-run`, not pass-through) holds a machine-wide lock (`<os tmpdir>/orca-gate.lock`, pid inside,
+  stale when the pid is dead; `ORCA_GATE_LOCK` overrides), printing that it waits; prints `uptime` at start and end; and
+  runs `npm run build --workspace web` first when a selected test serves the panel (under `tests/panel/` or `web/tests/`,
+  or naming `createPanelServer`/`startPanelFromArgs`/`loadStaticFiles`, or directly importing a helper that does) and
+  `web/dist/index.html` is missing or older than the newest file under `web/src`.
+- Accepted gaps: a regression reachable only at distance ≥ 2, or only in a deferred file, surfaces at the batch's wide run
+  (the risk the survey names, #328 ④). Agents whose `TMPDIR` differs do not share the lock.
+- #338: `vitest.config.ts` sets `hookTimeout: 60_000`; the Rule 17 snapshot (`tests/setup/relocateUserData.ts`) records
+  `control/<key>.runs/`, `control/<key>.workspaces/` and `control/<key>/{artifacts,checkpoints,projections}/` by
+  top-level entry (name, kind, mtime) instead of file by file; #315's accept-claim exclusion is subsumed by that.
+- Survey item 11: `budgetBalance`, `dimensions` and `zero` moved to the leaf `src/control/budgetBalance.ts` (re-exported by
+  `budget.ts` / `commands.ts`), so `store.ts → migrations.ts → proposalReopen.ts` no longer enters the control import cycle;
+  `tests/control/importEachModule.test.ts` imports every `src/` module in a fresh registry and fails on an import error or
+  an export that is `undefined` at import time.
