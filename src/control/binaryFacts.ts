@@ -47,11 +47,11 @@ function jpegSize(bytes: Buffer): { width: number; height: number } | null {
     if (bytes[at] !== 0xff) return null;
     const marker = bytes[at + 1]!;
     if (marker === 0xff) { at += 1; continue; } // fill byte
-    // Markers without a length: TEM and RST0..RST7; SOI again would be malformed, EOI ends the image.
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { at += 2; continue; }
-    if (marker === 0xd8 || marker === 0xd9 || marker === 0xda) return null; // the frame header comes before the scan
+    // Before the frame header only length-carrying segments are expected: a marker without a length (TEM, RST0..RST7,
+    // SOI, EOI) or the scan (SOS) there means the size is not where it should be -- the type only, never a guess.
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xda)) return null;
+    // A length below 2 lands the walk on its own length bytes (0x00 / 0x01, not 0xFF), which returns null above.
     const length = bytes.readUInt16BE(at + 2);
-    if (length < 2) return null;
     // SOF0..SOF15, except DHT (C4), JPG (C8) and DAC (CC): precision (1 byte), height, width (2 bytes each, big-endian).
     if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
       if (at + 9 > end) return null;

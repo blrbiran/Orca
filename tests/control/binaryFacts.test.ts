@@ -87,6 +87,42 @@ describe("binary facts for the requirement review (#337)", () => {
     expect(binaryFacts(zip(names))).toBe("ZIP archive");
   });
 
+  it("names only the type when a header is malformed or cut, never a size read from the wrong bytes", () => {
+    const frame = sof(0xc0, 8, 4);
+    // mutation: drop the PDF version's absent case -> "(version undefined)", red
+    expect(binaryFacts(Buffer.from("%PDF-x"))).toBe("PDF document; its page count is not read");
+    // mutation: drop the fill-byte step -> 0xFF read as a marker with a huge length, "JPEG image", red
+    expect(binaryFacts(jpeg(Buffer.from([0xff]), frame))).toBe("JPEG image, 8x4 pixels");
+    // mutation: drop the not-0xFF check -> the walk resyncs on the next 0xFF and reads the frame, red
+    expect(binaryFacts(jpeg(segment(0xe0, Buffer.alloc(4)), Buffer.from([0x00]), frame))).toBe("JPEG image");
+    // mutation: drop (or narrow) the no-length-marker check -> its next bytes read as a length that lands on the frame, red
+    for (const marker of [0x01, 0xd0, 0xda]) expect(binaryFacts(jpeg(Buffer.from([0xff, marker, 0x00, 0x02]), frame))).toBe("JPEG image");
+    // mutation: drop the frame-header bound -> reads past a cut header (throws), red
+    expect(binaryFacts(Buffer.concat([Buffer.from([0xff, 0xd8]), frame.subarray(0, 6)]))).toBe("JPEG image");
+  });
+
+  it("names only a ZIP when its directory is missing, misplaced or inconsistent", () => {
+    // mutation: drop the empty-archive signature -> null, red
+    expect(binaryFacts(zip([]))).toBe("ZIP archive");
+    // mutation: drop the no-end-record check -> reads at a negative offset (throws), red
+    expect(binaryFacts(Buffer.from([0x50, 0x4b, 0x03, 0x04]))).toBe("ZIP archive");
+    const docx = () => zip(["word/document.xml"]);
+    const endOf = (b: Buffer) => b.length - 22;
+    // A ZIP64-style directory offset (0xFFFFFFFF). mutation: drop the offset check -> reads past the blob (throws), red
+    const far = docx(); far.writeUInt32LE(0xffffffff, endOf(far) + 16);
+    expect(binaryFacts(far)).toBe("ZIP archive");
+    // mutation: drop the entry-signature check -> the name is read anyway, docx, red
+    const badSignature = docx(); badSignature.writeUInt32LE(0, badSignature.readUInt32LE(endOf(badSignature) + 16));
+    expect(binaryFacts(badSignature)).toBe("ZIP archive");
+    // mutation: drop the name-length check -> the name runs into the end record and still starts word/, docx, red
+    const longName = docx(); longName.writeUInt16LE(40, longName.readUInt32LE(endOf(longName) + 16) + 28);
+    expect(binaryFacts(longName)).toBe("ZIP archive");
+    // Two entries claimed, the first's extra field pointing far past the blob. mutation: drop the entry-header bound ->
+    // reads the second header out of range (throws), red
+    const outside = docx(); outside.writeUInt16LE(2, endOf(outside) + 10); outside.writeUInt16LE(60_000, outside.readUInt32LE(endOf(outside) + 16) + 30);
+    expect(binaryFacts(outside)).toBe("ZIP archive");
+  });
+
   it("says nothing about a type it does not recognise", () => {
     expect(binaryFacts(Buffer.from("\u0000PNG-BYTES-SECRET"))).toBeNull();
     expect(binaryFacts(Buffer.alloc(0))).toBeNull();
