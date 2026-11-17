@@ -168,3 +168,41 @@ recommendation: no -- "abandon" means the person judged the attempt worthless; k
 3. **Untested by a run** (read from the code only): a run whose usage is unknown at its abandoned terminal is blocked as a
    failed run is, so `settle-usage` / `close-run` end it. The criterion's observed tokens are 0 (the fake ccloop books
    usage only at its terminal), so the ceiling write is checked for its revision and source, not a non-zero amount.
+
+## Correction 3 (review 2026-11-18, Orca session 4389b15f)
+
+An independent review of the S1-S5 build found the faults below; the fixes are on the worktree branch's commit
+`fix(abandon): abandon wins over an open handoff request; ...` (criteria `tests/control/abandonUnderStop.test.ts`).
+File:line references were read at that commit (`/usr/bin/git show <commit>:<file>`). These win over the sections above.
+
+1. **Abandon wins over an open handoff request** (controller's decision). A person's abandon is the final word on that
+   run. When an abandoned run reaches a terminal (or is proved never started) while it owns a handoff request in any
+   adoptable state, `outcome-unknown` included, the request is closed `settled-unrecoverable` with failure code
+   `run-abandoned` (the existing state for "not continued"; no new state), in the same transaction that settles the run
+   as every abandoned run is settled (`settled-failed`, `operatorSettlement: abandoned`, task `blocked`
+   `run-abandoned`). Only the request row is written for it: the run's accounting is `terminaliseRun`'s, once, so
+   nothing is released or booked twice. A request closed `run-abandoned` does not make the group's stop
+   `handoff-partial`: the person chose to drop that attempt, and `resume-from-handoff` refuses a partial stop. Before
+   this, such a run stayed `accepted`, `active=1` for ever: the abandoned settle yielded to the request and step H sent
+   the terminal back to it. That included the route S2 itself names (`stop-handoff` past its grace, `handoff-unresolved`,
+   `run abandon`). Correction 2.2 still holds: a run that succeeds after an abandon lands. An abandoned run under a
+   request is named `abandon-unresolved` after the grace on step H's path too. Recovery rows offer no step that would be
+   refused: a run already abandoned is not offered `run abandon`, and a group already under a handoff or shutdown stop
+   is not offered `stop-handoff`.
+2. **An abandoned start-pending run found accepted is stopped by its ceiling.** A run abandoned while `start-pending`
+   whose envelope ccloop had in fact accepted moved to `accepted` (the never-started inspection, or stepB's accept
+   answering after the abandon) with its watch-only ceiling untouched, so nothing stopped it. Every write that moves a
+   run carrying `abandon` to `accepted` now lowers its live ceiling to its observed work tokens, through the same writer
+   `run abandon` uses (`abandonRun.ts` `lowerAbandonedCeiling`).
+3. **Documentation gaps the reviewer found** (facts, nothing changed for them):
+   a. Since S5 an automatic fix task has a finite token grant (its cap), so it carries no live ceiling, and
+      `run abandon` on it can only end `abandon-unresolved` unless it ends first. The case #344 was raised for (an
+      impossible auto fix burning tokens) is bounded only by S5's cap, not by abandon.
+   b. The watch-only ceiling exists only for protocol-4 task runs that are not recoveries and whose work grant has no
+      token number (`webDispatch.ts:444`, `watchOnly`). That is narrower than S2's "every run whose work grant has no
+      token number".
+   c. S5's "at least 1M" is clamped to the source task's grant when that grant has a token number
+      (`requirementReview.ts:657-660`, `autoFixTokenCeiling`), so the cap can be below 1M.
+   d. S1 on a continuation run gives the task back `held` to the predecessor it continued (existing `terminaliseRun`
+      behaviour, `stopIntent.ts:1098`), not `ready`. So resume does not dispatch it again: the person continues it
+      again, and `recovery list` `heldTasks[]` shows it.
