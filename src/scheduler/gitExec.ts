@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -40,6 +40,7 @@ async function runGit(repo: string, args: string[], options: GitOptions, encodin
     encoding,
     ...(options.env === undefined ? {} : { env: { ...process.env, ...options.env } }),
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs, killSignal: "SIGKILL" as const }),
+    ...(options.maxBuffer === undefined ? {} : { maxBuffer: options.maxBuffer }),
   });
   // A child that exits before reading all of it fails through `pending`; the pipe's EPIPE is that same failure.
   if (options.input !== undefined) { pending.child.stdin?.on("error", () => undefined); pending.child.stdin?.end(options.input); }
@@ -53,6 +54,36 @@ export interface GitOptions {
   timeoutMs?: number;
   /** Written to the child's stdin, which is then closed. */
   input?: string | Buffer;
+  /** Bytes of stdout the child may write before the call fails (Node's default is 1 MiB; #334). */
+  maxBuffer?: number;
+}
+
+/**
+ * Tester #334: at most `limit` bytes of a git child's stdout, for output read only to be cut (a review's diff). The child
+ * is killed once more than `limit` bytes arrived, so a diff of any size is neither held in memory nor a failed call;
+ * `truncated` says whether anything was left unread. A child that fails on its own is an error, as with `git`.
+ */
+export function gitPrefix(repo: string, args: string[], limit: number): Promise<{ stdout: Buffer; truncated: boolean }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
+    const chunks: Buffer[] = [];
+    let size = 0, truncated = false, stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (truncated) return;
+      if (size + chunk.length > limit) {
+        chunks.push(chunk.subarray(0, limit - size)); size = limit; truncated = true;
+        child.kill("SIGKILL");
+        return;
+      }
+      chunks.push(chunk); size += chunk.length;
+    });
+    child.stderr.on("data", (chunk: Buffer) => { if (stderr.length < 4096) stderr += chunk.toString("utf8"); });
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (truncated || code === 0) { resolve({ stdout: Buffer.concat(chunks), truncated }); return; }
+      reject(new Error(`git ${args.join(" ")} exited ${code ?? signal}: ${stderr.trim()}`));
+    });
+  });
 }
 
 /**

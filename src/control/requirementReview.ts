@@ -12,7 +12,9 @@ import { acceptanceCommands, clearGroupFailure, logGroupFailureOnce, recordWorkB
 import { acceptanceOf, acceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
 import { readArchivedContract, readArchivedPlan } from "./queries.js";
-import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, readGroupCallContract } from "./groupSingleCall.js";
+import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
+import { saveRun } from "./budget.js";
+import { closeSingleCall } from "./singleCallLedger.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { cutUtf8 } from "./noChange.js";
 import { planLayers, planOrderTasks } from "./planOrder.js";
@@ -24,7 +26,7 @@ import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview
 import type { SingleCallHandler, SingleCallRunRow } from "./singleCallPurposes.js";
 import { QUIET_GIT, workBranchTip } from "./workspace.js";
 import { isDirFlowGroup } from "../flow/groups.js";
-import { git } from "../scheduler/gitExec.js";
+import { git, gitPrefix } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
@@ -244,8 +246,11 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
     let threw = false;
     try {
       if (body.planHash === undefined || !reviewRequired(store, groupId, body) || isGroupArchived(store, groupId)) continue;
-      if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined || !tasksDone(store, groupId)) continue;
+      if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) continue;
       const review = reviewOf(body);
+      // #334: before the tasks-done gate, which the blocked review run itself (active) would hold shut.
+      if (review?.state === "reviewing" && closeUnpreparedReview(deps, groupId, review)) { moved = true; continue; }
+      if (!tasksDone(store, groupId)) continue;
       // #314 (same cause as #312): acceptance and review are two gates that both decide `done`; a failing tip must still
       // be reviewed. The gate waits for the acceptance pass to record this tip at all -- a recorded failure opens the
       // review too -- because both passes need the group's runs idle, so letting review run first would starve the
@@ -295,6 +300,46 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
   return moved;
 }
 
+/** The run row a review call left blocked before ccloop was given it (A2: its prompt was never built), or null. */
+type UnpreparedRun = { runId: string; groupId: string; requirementReview?: { tip?: unknown }; state: string; failureCode?: string | null;
+  unknown: { work: boolean; handoff: boolean }; remaining: { work: Amount; handoff: Amount }; executionId?: string | null;
+  drive?: { blockedAt?: string | null; blockedReason?: string | null; prepared?: boolean } };
+function unpreparedReviewRun(store: ControlStore, groupId: string, roundNo: number): UnpreparedRun | null {
+  const row = store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, workItemOf(roundNo));
+  if (row === undefined) return null;
+  const run = JSON.parse(String(row.body)) as UnpreparedRun;
+  return run.state === "blocked" && run.drive?.blockedAt === "A2" && run.drive.prepared !== true && (run.executionId ?? null) === null ? run : null;
+}
+
+/**
+ * Tester #334: a review call that failed while its prompt was being built (A2) was never handed to ccloop, so it spent
+ * nothing. Retrying it reruns the same preparation, and while it stays blocked and active it holds the review in
+ * `reviewing` (no person's exit answers) and the group's runs busy (no later round, no integration). It is closed here
+ * as never having reached a provider -- its whole grant back to the group, the run inactive -- and the round settles
+ * `failed` with the preparation's error, so the review is `not-passed` and accept / rerun / fix answer.
+ */
+function closeUnpreparedReview(deps: ReviewPassDeps, groupId: string, review: RequirementReview): boolean {
+  const { store } = deps;
+  const roundNo = review.rounds.length + 1;
+  if (unpreparedReviewRun(store, groupId, roundNo) === null) return false;
+  return deps.write(() => {
+    const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)));
+    const run = current?.state === "reviewing" && current.rounds.length + 1 === roundNo ? unpreparedReviewRun(store, groupId, roundNo) : null;
+    if (current === null || run === null) return false;
+    const reason = run.drive?.blockedReason ?? "unknown";
+    saveRun(store, { ...run, state: "failed-before-provider", failureCode: "requirement-review-prepare-failed", unknown: { work: false, handoff: false } } as never);
+    interruptGroupSingleCall(store, run as never);
+    closeSingleCall(store, run.runId, { id: `single-call-result:${groupId}:${run.runId}`, kind: "single-call-result", body: { groupId, runId: run.runId } });
+    const tip = typeof run.requirementReview?.tip === "string" ? run.requirementReview.tip : "";
+    const round: ReviewRound = { roundNo, tip, runId: run.runId, at: store.now(), result: "failed", criteria: [],
+      summary: `review could not be prepared: ${cutUtf8(reason, 500)}`, ...(current.rerun === undefined ? {} : { note: current.rerun.note }) };
+    const { rerun: _rerun, why: _why, ...rest } = current;
+    saveReview(store, groupId, { ...rest, rounds: [...current.rounds, round], state: "not-passed", why: "failed" });
+    recordActivity(store, { groupId, kind: "requirement-review", body: { roundNo, result: "failed", tip, state: "not-passed" } });
+    return true;
+  });
+}
+
 const reviewIdentity = (run: SingleCallRunRow): { roundNo: number; tip: string } => {
   const r = run.requirementReview as { roundNo?: unknown; tip?: unknown } | undefined;
   if (typeof r?.roundNo !== "number" || typeof r.tip !== "string") throw new ControlError("recovery-blocked", "requirement-review-identity");
@@ -305,21 +350,30 @@ const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).dig
 
 /** §3.2 bounded: the changed files (binary ones named by path, bytes and sha256) and the text diff cut at the bound. */
 async function groupChanges(repo: string, base: string, tip: string): Promise<{ changedFiles: ChangedFile[]; diff: string; truncated: boolean }> {
-  const numstat = (await git(repo, [...QUIET_GIT, "diff", "--numstat", "-z", "--no-renames", `${base}..${tip}`])).split("\0").filter((s) => s.length > 0);
-  const status = new Map((await git(repo, [...QUIET_GIT, "diff", "--name-status", "--no-renames", `${base}..${tip}`])).split("\n").filter((l) => l.length > 0)
+  // #334: the file lists grow with the number of files (a 12-task merge group changed 2,449), not with their size; they
+  // get the same room as the blobs below instead of Node's default 1 MiB.
+  const listed = { maxBuffer: REVIEW_GIT_LIST_MAX_BYTES };
+  const numstat = (await git(repo, [...QUIET_GIT, "diff", "--numstat", "-z", "--no-renames", `${base}..${tip}`], listed)).split("\0").filter((s) => s.length > 0);
+  const status = new Map((await git(repo, [...QUIET_GIT, "diff", "--name-status", "--no-renames", `${base}..${tip}`], listed)).split("\n").filter((l) => l.length > 0)
     .map((line) => { const [s, ...p] = line.split("\t"); return [p.join("\t"), s!] as const; }));
   const changedFiles: ChangedFile[] = [];
   for (const entry of numstat) {
     const [added, , ...rest] = entry.split("\t");
     const path = rest.join("\t"), st = status.get(path) ?? "M", binary = added === "-";
     if (st === "D") { changedFiles.push({ path, status: st, bytes: 0, sha256: "-", binary }); continue; }
-    const content = execFileSync("git", [...QUIET_GIT, "cat-file", "blob", `${tip}:${path}`], { cwd: repo, maxBuffer: 256 * 1024 * 1024 });
+    const content = execFileSync("git", [...QUIET_GIT, "cat-file", "blob", `${tip}:${path}`], { cwd: repo, maxBuffer: REVIEW_GIT_LIST_MAX_BYTES });
     changedFiles.push({ path, status: st, bytes: content.length, sha256: sha256(content), binary });
   }
-  const full = await git(repo, [...QUIET_GIT, "diff", "--no-color", "--no-renames", `${base}..${tip}`]);
-  const truncated = Buffer.byteLength(full, "utf8") > REVIEW_DIFF_MAX_BYTES;
-  return { changedFiles, diff: truncated ? cutUtf8(full, REVIEW_DIFF_MAX_BYTES) : full, truncated };
+  // #334: the prompt shows REVIEW_DIFF_MAX_BYTES of the diff, so only that much (and a character's worth more, to tell
+  // a cut from an exact fit) is read; the whole diff was read before and a 2.4 MiB one failed every review call.
+  const read = await gitPrefix(repo, [...QUIET_GIT, "diff", "--no-color", "--no-renames", `${base}..${tip}`], REVIEW_DIFF_MAX_BYTES + 4);
+  const text = read.stdout.toString("utf8");
+  const truncated = read.truncated || Buffer.byteLength(text, "utf8") > REVIEW_DIFF_MAX_BYTES;
+  return { changedFiles, diff: truncated ? cutUtf8(text, REVIEW_DIFF_MAX_BYTES) : text, truncated };
 }
+
+/** #334: room for the changed-file lists and one blob read (the cat-file bound this file always gave). */
+const REVIEW_GIT_LIST_MAX_BYTES = 256 * 1024 * 1024;
 
 interface ReviewSettled { classified: ReturnType<typeof classifyReviewOutput> | null; failure: string | null }
 

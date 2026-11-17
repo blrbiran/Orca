@@ -126,6 +126,10 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     // has none adopted -- a warning (not in PROBLEM_KINDS), so the group is not "needs you" for it.
     if (summary.acceptance?.warning === "full-suite-not-set" && !projectHasFullSuite(store, repoId)) add("acceptance-warning", groupId, repoId, "full-suite-not-set", groupDestination("problem"), "full-suite-not-set");
     if (summary.acceptance?.result === "failed") add("task-attention", groupId, repoId, summary.acceptance.problem ?? "group-acceptance-failed", groupDestination("problem"), "acceptance-failed");
+    // Tester #334/#336: a requirement review that did not pass (cannot-judge, a failed or unprepared call, rounds used up)
+    // holds the group short of done until a person accepts it, reruns it or opens a fix -- theirs, like a failed acceptance.
+    const reviewProblemCode = summary.requirementReview?.problem;
+    if (reviewProblemCode !== undefined) add("task-attention", groupId, repoId, reviewProblemCode, groupDestination("problem"), "requirement-review-not-passed");
     for (const work of workItems) {
       const run = work.currentRunId == null ? undefined : runById.get(work.currentRunId);
       if (work.status === "blocked" || work.status === "held" || run?.state === "blocked") {
