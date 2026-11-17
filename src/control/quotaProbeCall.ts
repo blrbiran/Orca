@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
 import { frozenWorkAgent } from "./agentFreeze.js";
 import { add, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
@@ -13,6 +14,7 @@ import { claimCapBlocking } from "./spendCaps.js";
 import { writeCanonicalRecord } from "./snapshot.js";
 import type { ControlStore } from "./store.js";
 import type { Amount } from "./types.js";
+import { probeVerdictSchema } from "./webProtocol.js";
 
 /**
  * Quota rest probe spec 2026-11-06 §2 (human: 「可以先跑一个测试限额是否恢复的小探针run，再决定正式run是否跑」): one small
@@ -41,7 +43,11 @@ export function quotaProbeWorkItemId(installation: string, restRunId: string): s
  * anything else, including a record with no typed cause (a ccloop before the field: the probe cannot tell quota from any
  * other failure, so the task stays with the person).
  */
-export interface ProbeVerdict { verdict: "back" | "quota" | "failed" | "aborted"; cause: string | null; detail: string | null; errorCode: string | null }
+export { probeVerdictSchema };
+export type ProbeVerdict = z.infer<typeof probeVerdictSchema>;
+
+/** §2 Run identity, as claimQuotaProbeInTransaction writes it on the probe's run (tester #348: the run read schema reads it). */
+export const quotaProbeIdentitySchema = z.object({ installation: z.string().min(1), restRunId: z.string().min(1), forTaskId: z.string().min(1) }).strict();
 
 export function probeVerdictOf(facts: { outcome: "complete" | "aborted" | "failed"; failureCause: { cause: string; detail: string | null } | null }, failure: string | null): ProbeVerdict {
   const cause = facts.failureCause?.cause ?? null, detail = facts.failureCause?.detail ?? null;

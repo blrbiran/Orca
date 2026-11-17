@@ -49,7 +49,7 @@ import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
-import { QUOTA_PROBE_MAX_OUTPUT_TOKENS } from "../control/quotaProbeCall.js";
+import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
 import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
 import { reviewOf, reviewProblem } from "../control/requirementReviewRecord.js";
 import { CLARIFY_CAPS } from "../control/requirementSchemas.js";
@@ -251,6 +251,10 @@ const persistedRunSchema = z.object({
   noChangeJudge: z.object({ taskId: idSchema, workRunId: idSchema }).strict().optional(),
   // ...and the verdict the goal judge's completion writes on its own run (noChangeJudge.ts completeInTransaction).
   judgeVerdict: z.object({ verdict: z.string().min(1), finding: z.string().nullable(), failure: z.string().nullable() }).strict().optional(),
+  // Tester #348: a quota probe's identity (claimQuotaProbeInTransaction) and the verdict its completion or block writes
+  // (quotaProbeCall.ts verdictFields), as written.
+  quotaProbe: quotaProbeIdentitySchema.optional(),
+  probeVerdict: probeVerdictSchema.optional(),
   claimOrdinal: safeInteger.positive().nullable(),
   // Quota failover spec 2026-11-03 §8: the task's switch count at this claim (agentSwitch.ts).
   agentEpoch: safeInteger.positive().optional(),
@@ -1388,6 +1392,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
     return {
       runId,...(run.recoveryOf?{recoveryOf:run.recoveryOf,savedResultOrdinaryRetry:validSavedNoDispatch(store,run)}:{}), taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
       ...(run.purpose === undefined ? {} : { purpose: run.purpose }),
+      // Tester #348: a quota probe's verdict, for `run show`; omitted for every other run (and a probe not yet answered).
+      ...(run.probeVerdict === undefined ? {} : { probeVerdict: run.probeVerdict }),
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal, profile, ...runAgentView(run),
       ...(run.tokenPolicy?{tokenRemainingStatus:tokenRemainingStatus(run.grant[bucket].tokens,run.unknown[bucket])}:{}),
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,

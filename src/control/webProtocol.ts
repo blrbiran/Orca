@@ -2051,6 +2051,14 @@ export const activityEntrySchema = z
   })
   .strict();
 
+/**
+ * Quota rest probe spec 2026-11-06 §2: what a probe call's run keeps of its outcome (quotaProbeCall.ts probeVerdictOf).
+ * Defined here, on the wire, so the run view and the run read schema share the probe's own shape (tester #348).
+ */
+export const probeVerdictSchema = z.object({
+  verdict: z.enum(["back", "quota", "failed", "aborted"]), cause: z.string().nullable(), detail: z.string().nullable(), errorCode: z.string().nullable(),
+}).strict();
+
 export const runViewSchema = z
   .object({
     runId: idSchema,
@@ -2079,6 +2087,8 @@ export const runViewSchema = z
     // Quota rest probe spec 2026-11-06: a group's probe call (quotaProbeCall.ts) shows among its runs.
     // Tester follow-up G spec §10.1: a group's goal judge call (noChangeJudge.ts).
     purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge", "requirement-review"]).optional(),
+    // Tester #348: a quota probe's verdict (quotaProbeCall.ts), for `run show`; absent on every other run.
+    probeVerdict: probeVerdictSchema.optional(),
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
     profile: profileBindingSchema,
