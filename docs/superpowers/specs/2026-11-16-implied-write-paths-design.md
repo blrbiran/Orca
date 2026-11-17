@@ -70,3 +70,42 @@ unchanged.
 Mutations: drop the `targetPaths` push → the target list and the serial edge are missing (red); drop
 the validation of the adjusted draft → an `investigate` addition is accepted instead of invalid (red);
 add the path without re-running the graph → no implicit edge (red).
+
+## Correction 1 -- goal paths (#345)
+
+**Recorded:** 2026-11-18, worktree branch `worktree-agent-a747e9a40fc2316b1` (on top of `263f2f7a`), by the
+#345 implementer (Claude Opus 5.5 subagent). **Authority:** controller design, session `4389b15f`, and its
+review rulings on that branch. The text above is kept as written; this section overrides it where they differ.
+
+- **Non-goal overturned for goal paths.** "No path inference beyond whole-token names of paths some task
+  already lists" (Non-goals, first bullet) no longer holds for a task's `goal`. `goalPathsOutsideTargets`
+  (`src/control/splitImpliedPaths.ts`) reads each single-repository task's goal for whole-token concrete
+  paths -- a directory part, an extension that is all lower or all upper case and starts with a letter, no
+  empty/`.`/`..` segment, not preceded by a word character, `.`, `/`, `-` or `:` -- that no task's
+  targetPaths cover (exactly, under a listed directory, or by a `<dir>/**` or `**` glob). Success
+  conditions are still read only as above.
+- **What is added.** After the #265 step, `evaluateSplit` asks the base commit (`creatableAt`, one
+  non-recursive `git ls-tree` per distinct parent, at most 64 paths) which of those paths are new files in
+  a directory the commit has; a parent counts as a directory only when it lists entries under it, so a
+  submodule (gitlink) parent does not. Such a path is added to the task's `targetPaths` **only when exactly
+  one task's goal names it**; when several goals name it, nobody gets it and each keeps a hint (deciding
+  which of them creates it would be a guess, and giving it to all would serialise them).
+- **Record.** `impliedPathsAdded` entries may now be `{taskId, path, writers: [], source: "goal"}`; an
+  entry without `source` is a success-condition addition as before (`writers` non-empty). `requirement
+  show` prints `implied-path-added: <task> now writes <path> (its goal names it, the base commit does not
+  have it, and no task listed it)`.
+- **What is not added.** A goal path the base commit already has (a goal often names a file it only
+  reads), a new file under a directory the base lacks (validation would refuse it as `path:`), and a path
+  several goals name are shown as `goalPathsOutsideTargets` in the requirement view, as a
+  `goal-path-outside-targets` line in `requirement show`, and as a panel note. They never refuse a draft.
+- **The field case is not fixed by this.** In the #345 report `board-cli`'s goal never names
+  `src/board/cli.js` ("Change src/cli.js to register board ..."), and its siblings' `src/**` targets cover
+  that path, so the goal scan sees nothing there. That case is covered by #346 (off-plan writes) instead.
+- **Known limits, left as they are:** (a) the goal step runs after the #265 step and on its output, so
+  the two do not inform each other beyond that order; (b) `creatableAt`'s root-parent branch is not
+  reachable from the goal scan, whose paths always have a directory part; (c) every uncovered goal path
+  becomes a hint, so a goal that names many files it only reads yields as many hint lines; (d) a
+  mixed-case extension (`.Rmd`) is not recognised; (e) a goal that names a file only to say it must not be
+  created, or a typo'd path, is added if it is new and named by one task alone.
+
+Tests: `tests/control/splitImpliedPathsGoal.test.ts`, `web/tests/requirementGoalPathHint.test.tsx`.

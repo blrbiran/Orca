@@ -319,8 +319,8 @@ export async function overviewPathExists(repo: string, commit: string, entry: st
  * Tester #345: of exact `paths`, the ones a task would create at `commit` -- no entry there, and a parent that is a
  * directory there (the root counts): overviewPathExists's "new file in an existing directory", told apart from an
  * existing file. One non-recursive `git ls-tree` per distinct parent lists its entries: the path is new when it is not
- * one of them, and the parent is a directory when it has any (git keeps no empty tree; a blob or a missing parent lists
- * nothing). A single ls-tree for every path and parent cannot be used: a pathspec under another one makes git list the
+ * one of them, and the parent is a directory when it has an entry under it (git keeps no empty tree; a blob or a missing
+ * parent lists nothing, a submodule's gitlink lists itself). A single ls-tree for every path and parent cannot be used: a pathspec under another one makes git list the
  * outer directory's entries instead of the directory itself. A failed read creates none of that parent's paths.
  */
 export async function creatableAt(repo: string, commit: string, paths: readonly string[]): Promise<Set<string>> {
@@ -330,7 +330,9 @@ export async function creatableAt(repo: string, commit: string, paths: readonly 
     let listing: string;
     try { listing = await run(repo, ["ls-tree", "-z", "--name-only", commit, ...(parent === "" ? [] : ["--", `${parent}/`])]); } catch { continue; }
     const entries = new Set(listing.split("\0").filter((entry) => entry !== ""));
-    if (parent !== "" && entries.size === 0) continue;
+    // #345 review: the parent is a directory only when it lists entries under it; a submodule (gitlink) or file
+    // parent lists itself or nothing.
+    if (parent !== "" && ![...entries].some((entry) => entry.startsWith(`${parent}/`))) continue;
     for (const path of paths) if (parentOf(path) === parent && !entries.has(path)) out.add(path);
   }
   return out;

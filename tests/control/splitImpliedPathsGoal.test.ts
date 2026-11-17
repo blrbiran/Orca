@@ -58,6 +58,16 @@ describe("a goal naming a file no task may write (#345)", () => {
     ]);
   });
 
+  it("review fix: a node: specifier is not a path, and an extension is all lower or all upper case", () => {
+    const goal = "Import node:fs/promises.js, then write src/board.Then add src/board/cli.js and docs/README.MD.";
+    // mutation: drop `:` from the lookbehind -> fs/promises.js listed, red
+    // mutation: accept a mixed-case extension -> src/board.Then listed, red
+    // mutation: drop the all-upper-case branch -> docs/README.MD not listed, red
+    expect(goalPathsOutsideTargets({ tasks: [task("cli", ["src/cli.js"], goal)], notes: "" })).toEqual([
+      { taskId: "cli", path: "src/board/cli.js" }, { taskId: "cli", path: "docs/README.MD" },
+    ]);
+  });
+
   it("a path named twice is listed once per task; each task naming it is listed; a multi-directory draft has none", () => {
     // mutation: drop the per-task Set -> board-cli listed twice, red
     expect(goalPathsOutsideTargets({ tasks: [
@@ -102,13 +112,35 @@ describe("a goal naming a file no task may write (#345)", () => {
     } finally { rmSync(repo, { recursive: true, force: true }); }
   });
 
-  it("applyGoalPaths adds only what creatable holds, to every task naming it, and returns the same draft otherwise", () => {
+  it("review fix: creatableAt does not take a submodule (gitlink) parent for a directory", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "orca-345-"));
+    try {
+      const g = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd: repo, encoding: "utf8" }).trim();
+      g("init", "-q", "-b", "main");
+      mkdirSync(join(repo, "vendor"), { recursive: true });
+      writeFileSync(join(repo, "vendor", "keep.js"), "export {};\n");
+      g("add", "-A"); g("commit", "-qm", "base");
+      // A gitlink entry (mode 160000) at vendor/lib, as a submodule leaves in the tree.
+      g("update-index", "--add", "--cacheinfo", `160000,${g("rev-parse", "HEAD")},vendor/lib`);
+      g("commit", "-qm", "submodule");
+      const commit = g("rev-parse", "HEAD");
+      // `ls-tree -- vendor/lib/` prints the gitlink itself, so a parent with entries is not yet a directory.
+      // mutation: count a parent with any entry as a directory -> vendor/lib/new.js creatable, red
+      expect([...await creatableAt(repo, commit, ["vendor/lib/new.js", "vendor/new.js"])]).toEqual(["vendor/new.js"]);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+
+  it("applyGoalPaths adds only what creatable holds and exactly one task's goal names, and returns the same draft otherwise", () => {
     // mutation: drop the creatable filter -> src/old.ts added too, red
-    const split = { tasks: [task("a", ["src/a.ts"], "Write src/new.ts; read src/old.ts."), task("b", ["src/b.ts"], "Import src/new.ts.")], notes: "" };
-    const applied = applyGoalPaths(split, new Set(["src/new.ts"]));
-    expect(applied.added).toEqual([{ taskId: "a", path: "src/new.ts", writers: [], source: "goal" }, { taskId: "b", path: "src/new.ts", writers: [], source: "goal" }]);
-    expect(applied.output.tasks.map((t) => t.targetPaths)).toEqual([["src/a.ts", "src/new.ts"], ["src/b.ts", "src/new.ts"]]);
-    expect(goalPathsOutsideTargets(applied.output)).toEqual([{ taskId: "a", path: "src/old.ts" }]);
+    // mutation: drop the one-task rule -> a and b both get src/shared.ts (and run serially on a guess), red
+    const split = { tasks: [task("a", ["src/a.ts"], "Write src/new.ts and src/shared.ts; read src/old.ts."), task("b", ["src/b.ts"], "Import src/shared.ts.")], notes: "" };
+    const applied = applyGoalPaths(split, new Set(["src/new.ts", "src/shared.ts"]));
+    expect(applied.added).toEqual([{ taskId: "a", path: "src/new.ts", writers: [], source: "goal" }]);
+    expect(applied.output.tasks.map((t) => t.targetPaths)).toEqual([["src/a.ts", "src/new.ts"], ["src/b.ts"]]);
+    // Two goals name src/shared.ts: neither is given it; each keeps a hint.
+    expect(goalPathsOutsideTargets(applied.output)).toEqual([
+      { taskId: "a", path: "src/shared.ts" }, { taskId: "a", path: "src/old.ts" }, { taskId: "b", path: "src/shared.ts" },
+    ]);
     expect(split.tasks[0]!.targetPaths).toEqual(["src/a.ts"]);
     const none = applyGoalPaths(split, new Set());
     expect(none.output).toBe(split);

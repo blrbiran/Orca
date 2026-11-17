@@ -84,8 +84,10 @@ export const goalPathLine = (entry: GoalPathOutsideTargets): string =>
  * Tester #345: a concrete file path in prose -- at least one directory part and an extension that starts with a letter
  * (`src/board/cli.js`, not `Node.js`, `e.g.` or `1.0/2.5`). Its boundaries are `mentions`'s: not inside a longer path or
  * word, and a sentence's closing `.` is not part of it, so a URL's path (`https://x.org/a.js`) never starts a token.
+ * #345 review: nor does a `scheme:` or `node:` specifier's (`node:fs/promises.js`), and the extension is all lower or
+ * all upper case, so a missing space in prose (`src/board.Then`) is not a path; a mixed-case one (`.Rmd`) is missed.
  */
-const GOAL_PATH = /(?<![\w./-])(?:[\w@.-]+\/)+[\w@.-]*\.[A-Za-z][A-Za-z0-9]*(?!\.?[\w/-])/g;
+const GOAL_PATH = /(?<![\w./:-])(?:[\w@.-]+\/)+[\w@.-]*\.(?:[a-z][a-z0-9]*|[A-Z][A-Z0-9]*)(?!\.?[\w/-])/g;
 /** PATH_SHAPES: an exact path has no empty, `.` or `..` segment. */
 const exactShape = (path: string): boolean => path.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
 /** As `covers`, and a target path's glob shapes (PATH_SHAPES): `**` covers every path, `<dir>/**` every path under `<dir>`. */
@@ -124,11 +126,16 @@ export const goalPathsToProbe = (entries: readonly GoalPathOutsideTargets[]): st
  * (requirementOverview.ts creatableAt) -- is added to that task's targetPaths and recorded with `source: "goal"`.
  * A path the base commit already has is not added: a goal often names a file it only reads, and widening a write set
  * serialises tasks that could run in parallel. It stays a hint (goalPathsOutsideTargets in the requirement view), as
- * does a new file under a directory the commit lacks (validation would refuse that target path: `path:`). Every task
- * whose goal names the path gets it, judged on the draft as given. Returns the same object when nothing is added.
+ * does a new file under a directory the commit lacks (validation would refuse that target path: `path:`). #345 review
+ * ruling: a path is added only when exactly one task's goal names it; when several do, which of them creates it is a
+ * guess, and giving it to all serialises them, so each keeps a hint. Judged on the draft as given. Returns the same
+ * object when nothing is added.
  */
 export function applyGoalPaths(output: SplitOutput, creatable: ReadonlySet<string>): { output: SplitOutput; added: ImpliedPathAddition[] } {
-  const hints = goalPathsOutsideTargets(output).filter((hint) => creatable.has(hint.path));
+  const all = goalPathsOutsideTargets(output);
+  const naming = new Map<string, number>();
+  for (const hint of all) naming.set(hint.path, (naming.get(hint.path) ?? 0) + 1);
+  const hints = all.filter((hint) => naming.get(hint.path) === 1 && creatable.has(hint.path));
   if (hints.length === 0) return { output, added: [] };
   const copy = structuredClone(output);
   for (const hint of hints) copy.tasks.find((task) => task.taskId === hint.taskId)!.targetPaths.push(hint.path);
