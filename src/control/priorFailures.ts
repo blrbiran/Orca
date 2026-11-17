@@ -81,11 +81,19 @@ async function storedEvidence(store: ControlStore, runId: string, last: NonNulla
 }
 
 /**
- * Tester #347: the evidence entry an earlier run that ended as ccloop's `narration-only` contributes, so the next attempt's
- * prompt says plainly what went wrong (ccloop renders priorFailures' evidence into the plan and execute prompts). Orca's own
- * words, never the agent's; within PRIOR_FAILURE_BOUNDS.evidenceEntry.
+ * Tester #347: the evidence entry an earlier run that ended as ccloop's `narration-only` contributes. ccloop renders
+ * priorFailures' evidence into the plan and execute prompts as data, not instructions, so this is one factual sentence
+ * about what that attempt did -- no imperative. The byte count comes from ccloop's own fixed detail (failureCause.ts
+ * executeAnswerCause: `... after a <N>-byte final message ...` or `... without a final answer ...`); a detail in neither
+ * form gives the sentence without a count. Orca's words, never the agent's; within PRIOR_FAILURE_BOUNDS.evidenceEntry.
  */
-export const NARRATION_ONLY_EVIDENCE = "The previous attempt ended its turn after a short message, without doing the task: it used no tool, ran no command, changed no file and gave no answer. This attempt must do the task itself: make the changes, run the checks, then end with the final answer.";
+export function narrationOnlyEvidence(detail: string | null | undefined): string {
+  const observed = "and no tool use, command or file change was observed.";
+  const bytes = typeof detail === "string" ? /\bafter a (\d+)-byte final message\b/.exec(detail)?.[1] : undefined;
+  if (bytes !== undefined) return `The previous attempt ended its turn after a ${bytes}-byte message that was not the answer, ${observed}`;
+  if (typeof detail === "string" && /\bwithout a final answer\b/.test(detail)) return `The previous attempt ended its turn without a final message, ${observed}`;
+  return `The previous attempt ended its turn after a message that was not the answer, ${observed}`;
+}
 
 /** One earlier failed run, as ccloop's PriorFailureV1 (§2.1), pre-cut to its bounds. */
 export async function priorFailureOf(store: ControlStore, run: { runId: string; drive?: DriveRecord }): Promise<PriorFailure> {
@@ -103,7 +111,7 @@ export async function priorFailureOf(store: ControlStore, run: { runId: string; 
     };
   if (cause !== null) entry.failureCause = cause;
   // Tester #347: the hint goes first; any stored evidence follows, within the entry count.
-  if (cause === NARRATION_ONLY_CAUSE) entry.evidence = [NARRATION_ONLY_EVIDENCE, ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
+  if (cause === NARRATION_ONLY_CAUSE) entry.evidence = [narrationOnlyEvidence(drive?.failureCause?.detail), ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   return priorFailureSchema.parse(entry);
 }
 

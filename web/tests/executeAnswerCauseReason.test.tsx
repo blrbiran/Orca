@@ -13,11 +13,12 @@ const stopped = (cause: string) => run({ runId: "run-n", state: "blocked", outco
 // Tester #347: the panel words ccloop's three execute-answer causes (they read as "unknown" before), in English and
 // Chinese; a cause it does not know still reads as unknown.
 describe("a run whose execute answer ccloop could not take (#347)", () => {
-  it("names narration-only and says the next run is told", async () => {
+  it("names narration-only and says the next retry is told", async () => {
     // mutation N4 (narration-only missing from KNOWN_FAILURE_CAUSES) -> "the cause is unknown", red here.
-    expect(text(renderToStaticMarkup(<RunReason run={stopped("narration-only")} />))).toContain("Why it stopped: the agent ended its turn after a short message without doing the task. Retry the task; the next run is told that the previous attempt stopped without working.");
+    expect(text(renderToStaticMarkup(<RunReason run={stopped("narration-only")} />))).toContain("Why it stopped: the agent ended its turn after a short message without doing the task. Retry the task; the next retry of this task is told that the previous attempt stopped without working.");
     await i18n.changeLanguage("zh");
     expect(text(renderToStaticMarkup(<RunReason run={stopped("narration-only")} />))).toContain("agent 只说了一句话就结束了这一轮，没有执行任务");
+    expect(text(renderToStaticMarkup(<RunReason run={stopped("narration-only")} />))).toContain("这个任务的下一次重试会被告知");
   });
 
   it("names execution-not-json and execution-shape", async () => {

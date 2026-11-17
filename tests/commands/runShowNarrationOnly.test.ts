@@ -31,7 +31,7 @@ describe("run show names a narration-only run (#347)", () => {
     // mutation N3 (no narration-only hint line) -> -1, red here.
     const hint = lines.findIndex((line) => line.startsWith("hint: the agent ended its turn after a short message without doing the task"));
     expect(hint).toBeGreaterThan(cause);
-    expect(lines[hint]).toContain("A later run of this task is told so");
+    expect(lines[hint]).toContain("The next retry of this task is told so.");
   });
 
   it("prints no such hint for the sibling causes", async () => {

@@ -3,11 +3,12 @@
 // the task silently and the agent could open with the same sentence again. Here:
 // - the cause is accepted and stored as ccloop states it, the group's first failure names it, and the ladder still
 //   re-dispatches it (another try is the way on: it is not an exemption like auth or quota);
-// - the re-dispatched run's envelope tells the agent plainly that the previous attempt stopped without working, through
-//   the existing priorFailures evidence (ccloop renders it into the plan and execute prompts; its schema is unchanged);
+// - the re-dispatched run's envelope states what the previous attempt did, through the existing priorFailures evidence
+//   (ccloop renders it into the plan and execute prompts as data from checks, not instructions; its schema is
+//   unchanged), so it is one factual sentence with the byte count ccloop measured, and no imperative (review follow-up);
 // - the two sibling causes (a final message that is not JSON, JSON of the wrong shape) carry no such sentence.
 import { describe, expect, it } from "vitest";
-import { NARRATION_ONLY_EVIDENCE, priorFailureOf } from "../../src/control/priorFailures.js";
+import { narrationOnlyEvidence, priorFailureOf } from "../../src/control/priorFailures.js";
 import { PRIOR_FAILURE_BOUNDS, priorFailureSchema } from "../../src/control/schema.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
@@ -23,14 +24,31 @@ describe("priorFailureOf: what a narration-only run tells the next run (#347)", 
   // No lastFailure: the store is not read.
   const store = {} as never;
 
-  it("names the cause and says plainly that the previous attempt did not do the task", async () => {
+  it("names the cause and states what the previous attempt did, with ccloop's byte count", async () => {
     const entry = await priorFailureOf(store, { runId: "run-1", drive: { failureCause: NARRATION } as never });
     // mutation N1 (no narration-only branch in priorFailureOf) -> evidence null, red here.
-    expect(entry).toEqual({ runId: "run-1", rejectCategory: "run-failed:narration-only", failingCommand: null, evidence: [NARRATION_ONLY_EVIDENCE], failureCause: "narration-only" });
-    expect(NARRATION_ONLY_EVIDENCE).toContain("without doing the task");
-    expect(NARRATION_ONLY_EVIDENCE).toContain("This attempt must do the task");
-    expect(Buffer.byteLength(NARRATION_ONLY_EVIDENCE, "utf8")).toBeLessThanOrEqual(PRIOR_FAILURE_BOUNDS.evidenceEntry);
+    expect(entry).toEqual({ runId: "run-1", rejectCategory: "run-failed:narration-only", failingCommand: null, failureCause: "narration-only",
+      evidence: ["The previous attempt ended its turn after a 98-byte message that was not the answer, and no tool use, command or file change was observed."] });
     expect(priorFailureSchema.safeParse(entry).success).toBe(true);
+  });
+
+  it("is one factual sentence in every form ccloop's detail takes, never an instruction", () => {
+    const forms = [
+      narrationOnlyEvidence(NARRATION.detail),
+      narrationOnlyEvidence("the call ended without a final answer; no tool, command or file change was observed"),
+      narrationOnlyEvidence(null),
+      narrationOnlyEvidence("a detail in some other form"),
+    ];
+    // mutation N5 (the byte count not taken from the detail) -> red here.
+    expect(forms[0]).toContain("98-byte message");
+    expect(forms[1]).toBe("The previous attempt ended its turn without a final message, and no tool use, command or file change was observed.");
+    expect(forms[2]).toBe("The previous attempt ended its turn after a message that was not the answer, and no tool use, command or file change was observed.");
+    expect(forms[3]).toBe(forms[2]);
+    for (const sentence of forms) {
+      expect(sentence.match(/\./g)).toHaveLength(1); // one sentence
+      expect(sentence).not.toMatch(/\b(must|should|do the task|make the changes|run the checks|this attempt)\b/i);
+      expect(Buffer.byteLength(sentence, "utf8")).toBeLessThanOrEqual(PRIOR_FAILURE_BOUNDS.evidenceEntry);
+    }
   });
 
   it("adds nothing for the other execute-answer causes", async () => {
@@ -66,7 +84,7 @@ describe("a narration-only run, collected and re-dispatched (#347)", { timeout: 
       const work = (JSON.parse(readCanonicalRecord(t.h.store, t.body(delivered.runId).drive.envelopeHash)) as { work: Record<string, unknown> }).work;
       // mutation N1 -> evidence null, red here.
       expect(work.priorFailures).toEqual([
-        { runId: first, rejectCategory: "run-failed:narration-only", failingCommand: null, evidence: [NARRATION_ONLY_EVIDENCE], failureCause: "narration-only" },
+        { runId: first, rejectCategory: "run-failed:narration-only", failingCommand: null, evidence: [narrationOnlyEvidence(NARRATION.detail)], failureCause: "narration-only" },
       ]);
     } finally { await t.h.dispose(); }
   });

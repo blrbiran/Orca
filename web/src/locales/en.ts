@@ -1001,7 +1001,7 @@ export const en = {
         "required-check-failed": "Read the failing check's output below; Orca escalates it automatically when the group is orchestrated.",
         "verifier-rejected": "Read the verifier's reason below; Orca escalates it automatically when the group is orchestrated.",
         "budget-exhausted": "Raise the task's budget, or split it, then retry.", "tool-rule-violated": "Read the tool-rule report and the evidence below, then fix the step's tools or the task, and retry.", "setup-failed": "A setup command could not finish; see its output, fix the command or the repository, then retry.", "worker-lost": "Orca starts the task again by itself, without using up its attempts (at most three times in a row).", "model-unavailable": "Orca does not retry it or switch the model by itself. Retry the task on another agent or model (task retry --agent), or change the model in the agent preferences or the group's agent selection.",
-        "narration-only": "Retry the task; the next run is told that the previous attempt stopped without working.", "execution-not-json": "Read the agent's final message in the evidence below, then retry the task.", "execution-shape": "Retry the task; the refused field is named when ccloop reported one.",
+        "narration-only": "Retry the task; the next retry of this task is told that the previous attempt stopped without working.", "execution-not-json": "Read the agent's final message in the evidence below, then retry the task.", "execution-shape": "Retry the task; the refused field is named when ccloop reported one.",
         unknown: "Review the evidence below, then retry the task.",
       },
     },

@@ -556,7 +556,7 @@ export const READ_ROWS: CommandDef[] = [
         // Tester follow-up J (#299): a provider 404 on the model is not retried and the model is never switched by Orca.
         ...(cause?.cause !== MODEL_UNAVAILABLE_CAUSE ? [] : [`hint: the provider does not serve model ${b.run?.agent?.model ?? "(the agent's default)"} for ${b.run?.agent?.installation ?? "this agent"}; Orca does not retry it or switch the model. Choose another agent or model: ${b.run?.taskId ? `orca task retry ${b.groupId} ${b.run.taskId} --agent <installation>, ` : ""}orca agent set-preferences (the operator's model), or orca proposal set-agent / orca requirement set-agent (this group's selection).`]),
         // Tester #347: the agent stopped after a short message without working; not a format problem of a finished answer.
-        ...(cause?.cause !== NARRATION_ONLY_CAUSE ? [] : ["hint: the agent ended its turn after a short message without doing the task (no tool, command or file change, no answer). A later run of this task is told so in its prompt."]),
+        ...(cause?.cause !== NARRATION_ONLY_CAUSE ? [] : ["hint: the agent ended its turn after a short message without doing the task (no tool, command or file change, no answer). The next retry of this task is told so."]),
         // #122: a provider's 400 about the response format has one way out, ccloop's opt-in prompt mode.
         ...(rejectsOutputSchema([cause?.detail, b.run?.diagnosis?.failureCause?.detail, b.run?.stopReason])
           ? [`hint: the provider refused the structured-output request (--output-schema). Set "structuredOutput": "prompt" on the codex installation ${b.run?.agent?.installation ?? "the run used"} in the agents table; ccloop never chooses it on its own.`] : []),
