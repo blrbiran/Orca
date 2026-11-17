@@ -30,25 +30,19 @@ describe("the Rule 17 user-data snapshot (#315)", () => {
     expect(userDataSnapshot(root)).not.toEqual(before);
   });
 
-  it("ignores only the panel run's temporary accept-claim file, preserving durable control evidence", () => {
+  // #338 replaced this criterion (it pinned files deep inside control/panel.runs/<run>/control/): run directories are now
+  // recorded by their top-level entries only, which also hides #315's accept-claim file. What stays pinned: a run that a
+  // test creates still shows, and a write inside an existing run (the panel's own run state) does not.
+  it("a run directory is compared by its top-level entries: a new run shows, the panel's writes inside a run do not", () => {
     const runId = "run-11111111-2222-4333-8444-555555555555";
     const claimId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     const control = join(root, "control", "panel.runs", runId, "control");
-    const other = join(root, "control", "other.runs", runId, "control");
     mkdirSync(control, { recursive: true });
-    mkdirSync(other, { recursive: true });
-    for (const file of [`accepted.lock.${claimId}`, "accepted.lock", "accepted.lock.stale-owner", "accepted.json"]) writeFileSync(join(control, file), "x");
-    writeFileSync(join(other, `accepted.lock.${claimId}`), "x");
-    const snapshot = userDataSnapshot(root);
-    expect(snapshot).not.toContain(`control/panel.runs/${runId}/control/accepted.lock.${claimId}:1`);
-    expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.lock:1`);
-    expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.lock.stale-owner:1`);
-    expect(snapshot).toContain(`control/panel.runs/${runId}/control/accepted.json:1`);
-    expect(snapshot).toContain(`control/other.runs/${runId}/control/accepted.lock.${claimId}:1`);
-    // A test writing user data into a same-named directory must not hide all its contents behind the file exception.
-    const forgedDirectory = "accepted.lock.ffffffff-ffff-4fff-8fff-ffffffffffff";
-    mkdirSync(join(control, forgedDirectory));
-    writeFileSync(join(control, forgedDirectory, "durable.json"), "x");
-    expect(userDataSnapshot(root)).toContain(`control/panel.runs/${runId}/control/${forgedDirectory}/durable.json:1`);
+    const before = userDataSnapshot(root);
+    expect(before.some((line) => line.startsWith(`control/panel.runs/${runId}:dir:`))).toBe(true);
+    for (const file of [`accepted.lock.${claimId}`, "accepted.json"]) writeFileSync(join(control, file), "x");
+    expect(userDataSnapshot(root)).toEqual(before);
+    mkdirSync(join(root, "control", "panel.runs", "run-from-a-test"));
+    expect(userDataSnapshot(root)).not.toEqual(before);
   });
 });

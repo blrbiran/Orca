@@ -47,25 +47,37 @@ process.env.ORCA_SERVICE_UNIT = "orca-panel-test";
  * `ORCA_PANEL_DIR`.
  */
 const PANEL_RUNTIME_FILES = new Set(["panel.json", "panel.lock"]);
-// ccloop's accept lock creates this short-lived claim file while the real panel is serving a run.
-// Keep the durable lock, accepted.json and every other control file in the Rule 17 snapshot.
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const PANEL_ACCEPT_CLAIM = new RegExp(`^control/panel\\.runs/run-${UUID}/control/accepted\\.lock\\.${UUID}$`);
+/**
+ * #338 (tester): on a 4.6 GB / 410k-file ~/.orca one file-by-file snapshot took ~12 s, run twice per test file, and
+ * the 10 s hook default failed every file. Nearly all of those files are run state a running panel keeps writing: each
+ * store's `<key>.runs/` and `<key>.workspaces/` (src/control/workspace.ts) and its `artifacts/`, `checkpoints/` and
+ * `projections/` (archive.ts, checkpoints.ts, projection.ts). For those directories only the top-level entries are
+ * recorded (name, kind, mtime): a test that creates, removes or rewrites a run, workspace, artifact or checkpoint entry
+ * still shows; a write deeper inside an existing one does not. Everything else (control.sqlite, control/ records,
+ * person/, vault/, the rest of panel/, the service definitions) stays guarded file by file. This also covers #315's
+ * accept-claim file: it lives under `control/panel.runs/run-<id>/control/`, below the recorded level.
+ */
+const RUNTIME_DIR = /^control\/[^/]+\.(runs|workspaces)$|^control\/[^/]+\/(artifacts|checkpoints|projections)$/;
+function topLevel(dir: string, rel: string): string[] {
+  return readdirSync(dir).map((entry) => {
+    try {
+      const s = lstatSync(join(dir, entry));
+      return `${rel}/${entry}:${s.isDirectory() ? "dir" : s.isSymbolicLink() ? "link" : "file"}:${s.mtimeMs}`;
+    } catch { return `${rel}/${entry}:unreadable`; }
+  });
+}
 export function userDataSnapshot(root: string = join(homedir(), ".orca")): string[] {
   if (!existsSync(root)) return [];
   const walk = (dir: string, prefix: string): string[] => readdirSync(dir).flatMap((entry) => {
     if (prefix === "panel/" && (entry === "logs" || PANEL_RUNTIME_FILES.has(entry))) return [];
     const full = join(dir, entry);
-    if (PANEL_ACCEPT_CLAIM.test(`${prefix}${entry}`)) {
-      try { if (lstatSync(full).isFile()) return []; }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; // the panel removed its temporary claim
-        return [`${prefix}${entry}:unreadable`];
-      }
-    }
     let stat;
     try { stat = statSync(full); } catch { return [`${prefix}${entry}:unreadable`]; }
-    return stat.isDirectory() ? walk(full, `${prefix}${entry}/`) : [`${prefix}${entry}:${stat.size}`];
+    if (!stat.isDirectory()) return [`${prefix}${entry}:${stat.size}`];
+    if (RUNTIME_DIR.test(`${prefix}${entry}`)) {
+      try { return topLevel(full, `${prefix}${entry}`); } catch { return [`${prefix}${entry}:unreadable`]; }
+    }
+    return walk(full, `${prefix}${entry}/`);
   });
   try { return walk(root, "").sort(); } catch { return ["<unreadable>"]; }
 }
@@ -81,6 +93,6 @@ const definitionsBefore = realServiceDefinitions();
 
 afterAll(() => {
   rmSync(relocated, { recursive: true, force: true });
-  expect(userDataSnapshot(), "the real ~/.orca changed during this test file (CLAUDE.md Rule 17): a test wrote it, or another process did. panel runtime logs, panel.json and panel.lock are excluded; the entries above are outside them").toEqual(userDataBefore);
+  expect(userDataSnapshot(), "the real ~/.orca changed during this test file (CLAUDE.md Rule 17): a test wrote it, or another process did. panel runtime logs, panel.json and panel.lock are excluded, and run-state directories (<key>.runs, <key>.workspaces, artifacts, checkpoints, projections) are compared by their top-level entries only (#338)").toEqual(userDataBefore);
   expect(realServiceDefinitions(), "this test file touched the real service definition (CLAUDE.md Rule 17)").toEqual(definitionsBefore);
 });
