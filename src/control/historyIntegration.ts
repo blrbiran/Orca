@@ -1,18 +1,10 @@
-import { z } from "zod";
+import { historyChainSchema, type HistoryChain } from "./historyExpectation.js";
 import { historySourcePinRef } from "./historySource.js";
 import { conflictedNames, gitChild, gitOk, oneLine } from "./integrationGit.js";
 import type { GroupIntegration } from "./integrationScheme.js";
 import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 
-const sha = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
-const hash = z.string().regex(/^[a-f0-9]{64}$/);
-export const historyChainSchema = z.object({
-  version: z.literal(1), contractHash: hash, base: sha, groupTip: sha,
-  merges: z.array(z.object({ taskId: z.string().min(1), runId: z.string().min(1), sourceRef: z.string().min(1), sourceSha: sha,
-    previous: sha, commit: sha }).strict()).min(1),
-  targetTip: sha, artifactPaths: z.array(z.string().min(1)),
-}).strict();
-export type HistoryChain = z.infer<typeof historyChainSchema>;
+export { historyChainSchema, type HistoryChain };
 export type HistoryBuild = { kind: "built"; chain: HistoryChain }
   | { kind: "blocked"; reason: string };
 

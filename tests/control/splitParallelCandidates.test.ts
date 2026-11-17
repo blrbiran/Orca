@@ -91,13 +91,15 @@ describe("the split's parallel candidates (#284)", () => {
     expect(out).not.toContain("draft 1 layers");
   });
 
-  it("the instruction tells the model to partition first and chain only on real need, in version 5", () => {
+  // Ruling: 「这次批准改写所有必要的判据」 (human, session 9982cf01, 2026-11-17): #328 made the single-repository split
+  // instruction version 6 (V5 plus the optional historyExpectation); the parallel rule must still ride the current call.
+  it("the instruction tells the model to partition first and chain only on real need, in version 6", () => {
     const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [] });
     const multi = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [], multi: true });
     const rule = "- First partition the work into independent branches by deliverable and target paths; then add a `dependsOn` edge only where a task truly needs another's output (it reads or builds on files the other writes). Never chain tasks to be safe: independent tasks run in parallel.";
     // mutation: drop PARALLEL_RULE from either instruction -> red
     expect(prompt).toContain(rule);
     expect(multi).toContain(rule);
-    expect(prompt.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 5.");
+    expect(prompt.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 6.");
   });
 });

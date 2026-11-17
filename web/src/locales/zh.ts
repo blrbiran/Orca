@@ -2460,6 +2460,8 @@ export const zhErrors: Record<string, string> = {
   "identity-space-exhausted": "身份编号已用尽：{{message}}",
   // Integration spec §3.2-§3.4, §8: the integration refusals.
   "integration-busy": "这个组的集成冲突正在由 agent 解决，等它完成后再试。",
+  "integration-history-frozen": "这个组按指定分支交付 Git 历史的要求已随计划确认，确认后不能再增加、修改或移除。",
+  "integration-history-invalid": "按指定分支交付 Git 历史的要求与计划不符（任务不存在，或某个来源任务没有依赖前一个来源任务）：{{message}}",
   "integration-invalid": "集成方式没通过检查（分支名、远端名、远端是否存在、是否 GitHub 仓库）：{{message}}",
   "integration-no-checks": "这个任务没有可跑的检查，不能交给 agent 解决集成冲突。",
   "integration-not-blocked": "这个组的集成没有卡住，不需要处理。",

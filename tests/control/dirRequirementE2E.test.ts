@@ -39,7 +39,9 @@ import { normalizeControlPlan } from "../../src/control/planImport.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { CLARIFY_PROMPT_HEAD } from "../../src/control/requirementClarify.js";
 import { readDraft, readRequirementGroup, readRound } from "../../src/control/requirementRecords.js";
-import { SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
+// Ruling: 「这次批准改写所有必要的判据」 (human, session 9982cf01, 2026-11-17): #328 made a new single-directory split call
+// send instruction version 6, so the fake claude queue must match that head or no draft ever arrives.
+import { SPLIT_PROMPT_HEAD_V6 as SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { controlWorkspaceRoots } from "../../src/control/workspace.js";
 import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";

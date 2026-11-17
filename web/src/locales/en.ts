@@ -2574,6 +2574,8 @@ export const enErrors: Record<string, string> = {
   "identity-space-exhausted": "No identity numbers are left: {{detail}}",
   // Integration spec §3.2-§3.4, §8: the integration refusals.
   "integration-busy": "An agent is resolving this group's integration conflict right now. Try again when it has finished.",
+  "integration-history-frozen": "This group's named-branch history delivery was approved with the plan, so it cannot be added, changed or removed after confirmation.",
+  "integration-history-invalid": "The named-branch history delivery does not match the plan (an unknown task, or a source task that does not depend on the one before it): {{detail}}",
   "integration-invalid": "The integration settings failed a check (branch name, remote name, whether the remote exists, whether it is a GitHub repository): {{detail}}",
   "integration-no-checks": "This task has no checks to run, so its integration conflict cannot be given to an agent.",
   "integration-not-blocked": "This group's integration is not stuck; there is nothing to resolve.",

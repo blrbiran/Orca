@@ -133,9 +133,11 @@ const SPLIT_INSTRUCTION_V5 = [
   "No other key at any level. Every string is non-empty except notes.",
 ].join("\n");
 
+/** The single-directory head a new split call sends since #328 (version 6); SPLIT_PROMPT_HEAD stays version 5's. */
+export const SPLIT_PROMPT_HEAD_V6 = "Orca requirement split, instruction version 6.";
 /** Version 6 proposes a literal Git-history promise as structured, reviewable data; old prompt bytes stay available. */
 export const SPLIT_INSTRUCTION_V6 = SPLIT_INSTRUCTION_V5
-  .replace(SPLIT_PROMPT_HEAD, "Orca requirement split, instruction version 6.")
+  .replace(SPLIT_PROMPT_HEAD, SPLIT_PROMPT_HEAD_V6)
   .replace("## The answer", "If the agreed requirement explicitly asks for named branches to be merged into a local target with real merge parents, propose historyExpectation. List each pre-existing source branch with the task that carries it; use full refs/heads/ names and name any required final files. Each named source task after the first must depend on the previous source task, even when their file writes do not overlap, because the required Git history has that order. Do not ask a task agent to create or merge Git branches: Orca owns Git history delivery, and missing source refs block the group by name. Otherwise omit the key. The person must approve this delivery separately before execution.\n\n## The answer")
   .replace("  \"notes\": anything the person should know about this split", "  \"historyExpectation\": optional { \"version\": 1, \"targetRef\": \"refs/heads/<target>\", \"directSecondParent\": true, \"sourceRefs\": [ { \"taskId\": a task id, \"ref\": \"refs/heads/<source>\" } ], \"artifactPaths\": optional list of final files },\n  \"notes\": anything the person should know about this split");
 

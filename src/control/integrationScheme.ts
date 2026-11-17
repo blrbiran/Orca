@@ -5,8 +5,7 @@ import { ControlError } from "./errors.js";
 import { safeInteger } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import { historyExpectationSchema, integrationSchemeSchema } from "./webProtocol.js";
-import { historyBindingSchema } from "./historyExpectation.js";
-import { historyChainSchema } from "./historyIntegration.js";
+import { historyBindingSchema, historyChainSchema } from "./historyExpectation.js";
 import { ChildSpawnFailed, ChildTimeout, runChild } from "./integrationGit.js";
 import { readRepositorySettingsBody } from "./workspaceSettings.js";
 

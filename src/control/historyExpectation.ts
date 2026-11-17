@@ -27,3 +27,15 @@ export const historySourceObservationSchema = z.object({ taskId: idSchema, sourc
 export type HistorySourceObservation = z.infer<typeof historySourceObservationSchema>;
 export const historyBindingSchema = historySourceObservationSchema.extend({ runId: idSchema, landedCommit: commit, noChange: z.literal(true).optional() }).strict();
 export type HistoryBinding = z.infer<typeof historyBindingSchema>;
+
+/**
+ * One built named-source parent chain. It lives in this leaf module because integrationScheme.ts embeds it and
+ * historyIntegration.ts imports integrationScheme.ts through historySource.ts; defining it there was an import cycle.
+ */
+export const historyChainSchema = z.object({
+  version: z.literal(1), contractHash: z.string().regex(/^[a-f0-9]{64}$/), base: commit, groupTip: commit,
+  merges: z.array(z.object({ taskId: z.string().min(1), runId: z.string().min(1), sourceRef: z.string().min(1), sourceSha: commit,
+    previous: commit, commit }).strict()).min(1),
+  targetTip: commit, artifactPaths: z.array(z.string().min(1)),
+}).strict();
+export type HistoryChain = z.infer<typeof historyChainSchema>;
