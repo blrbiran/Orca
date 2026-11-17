@@ -25,8 +25,7 @@ import { QUIET_GIT, compareAndSwap, incomingRefOf, landingPathOf, removeOwnPath,
 import type { ArtifactRef } from "./types.js";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
-import { harvest } from "../scheduler/harvest.js";
-import { writeSetOf } from "../scheduler/writeSet.js";
+import { boundedHarvest, primaryHarvestBound } from "./harvestBound.js";
 import type { CcloopOutcome } from "../scheduler/ccloopRunner.js";
 
 /**
@@ -132,7 +131,8 @@ async function visit(deps: ExecutionDriverDeps, run: DriverRun, intent: Operator
   await removeOwnPath(targetRepo, deps.roots, rebuilt);
   try {
     const attemptSha = await restoreSnapshotAttempt(store, intent.snapshot, rebuilt, intent.at);
-    const measured = await harvest({ runId, workdir: drive.sourceDir, outcome: drive.outcome as CcloopOutcome, attemptSha }, drive.base, writeSetOf(contract), rebuilt);
+    // Off-plan writes #346 (Task 4b ruling): the same bound as C -- a v4 contract's denylist, a v≤3 one's write set.
+    const measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: drive.outcome as CcloopOutcome, attemptSha }, drive.base, primaryHarvestBound(contract), rebuilt);
     if (measured.empty) throw new Refusal("empty-attempt");
     if (measured.outOfBounds.length > 0) throw new Refusal(`out-of-bounds:${measured.outOfBounds.join(",")}`.slice(0, 2048));
     const change = await classifyCriteriaChange(rebuilt, drive.base, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);

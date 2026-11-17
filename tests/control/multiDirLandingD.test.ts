@@ -294,9 +294,10 @@ describe.skipIf(!realBinary)("landing a multi run (§8.1)", { timeout: 420_000 }
     const w = await multiWorld();
     await contractRootedAtAlpha(w);
     const path = join(w.root, "contracts", "a.json");
+    // v4-shaped: the world's contract has an empty allowlist, so notes.md lands for real (Task 4b).
     const contract = JSON.parse(await readFile(path, "utf8")) as { context: { targetPaths: string[] }; safetyPolicy: { allowlistPaths: string[] } };
     contract.context.targetPaths = ["src/a.ts"];
-    contract.safetyPolicy.allowlistPaths = ["**"];
+    expect(contract.safetyPolicy.allowlistPaths).toEqual([]);
     await writeFile(path, JSON.stringify(contract));
     g(w.repo, "update-ref", "refs/heads/orca/g", g(w.repo, "rev-parse", "HEAD"));
     const runtime = await w.boot();

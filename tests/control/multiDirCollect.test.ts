@@ -50,6 +50,14 @@ async function multiWorld(): Promise<World> {
   return w;
 }
 
+/** The extra directory's contract entry with `allowlistPaths` set (`[]` is v4: bounded by its denylist, #346 Task 4b). */
+async function extraAllowlist(w: World, allowlistPaths: string[]): Promise<void> {
+  const contractPath = join(w.root, "contracts", "a.json");
+  const contract = JSON.parse(await readFile(contractPath, "utf8")) as { context: { additionalRepos: Array<Record<string, unknown>> } };
+  contract.context.additionalRepos[0]!.allowlistPaths = allowlistPaths;
+  await writeFile(contractPath, JSON.stringify(contract));
+}
+
 /** The frozen list and the split's writes, written after confirmation and before start. */
 function freeze(w: World, runtime: ControlRuntime): void {
   const group = JSON.parse(String(runtime.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
@@ -106,19 +114,43 @@ describe.skipIf(!realBinary)("collecting a multi run (§7.2)", { timeout: 420_00
     } finally { await w.teardown(); }
   });
 
-  it("blocks an extra directory's out-of-bounds write by its key", async () => {
+  // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」) --
+  // #346 Task 4b. This criterion was `out-of-bounds:alpha:other.txt` from Orca's C, reachable only because the extra's empty
+  // allowlist was no allowlist to ccloop yet a targetPaths fence to Orca. Under the ruling an empty allowlist is v4 (bounded
+  // by its denylist, so the write is collected: next criterion), and an extra with an allowlist is stopped by ccloop first,
+  // with the same path named. Orca's own extra bound is now a second line behind ccloop, driven directly in
+  // harvestBound.test.ts (extraHarvestBound, boundedHarvest).
+  it("stops an extra directory's write outside its allowlist, naming the path by its key", async () => {
     const w = await multiWorld();
+    await extraAllowlist(w, ["src/**"]);
     const { runtime, runId } = await runToCollection(w, (sourceDir) => ({
       "shared.txt": "A\n", [join(sourceDir, "run", "dirs", "attempt-1", "alpha", "other.txt")]: "outside\n",
     })).catch(async (error) => { await w.teardown(); throw error; });
     try {
       expect(state(runtime, runId)).toBe("blocked");
       expect(driveOf(runtime, runId).blockedAt).toBe("C");
-      expect(driveOf(runtime, runId).blockedReason).toBe("out-of-bounds:alpha:other.txt");
-      // Both commits were made before the bounds were read; the blocked run keeps them as evidence.
-      const dirs = driveOf(runtime, runId).dirs;
-      expect(dirs.map((dir: { attemptSha: string }) => dir.attemptSha)).toEqual([expect.stringMatching(/^[0-9a-f]{40}$/), expect.stringMatching(/^[0-9a-f]{40}$/)]);
-      expect(driveOf(runtime, runId).attemptSha).toBe(dirs[0].attemptSha);
+      expect(driveOf(runtime, runId).blockedReason).toBe("terminal:blocked_waiting_human");
+      expect(driveOf(runtime, runId).pathPolicyMisses).toEqual([{ repoKey: "alpha", path: "other.txt" }]);
+    } finally { await w.teardown(); }
+  });
+
+  // #346 Task 4b: a v4 extra directory (an empty allowlist) is bounded by its denylist, so a write outside its targetPaths
+  // is collected, not blocked.
+  it("collects a v4 extra directory's write outside its targetPaths", async () => {
+    const w = await multiWorld();
+    // The primary's own denylist names `other.txt` (it writes no such file): the extra's write is judged by the extra's
+    // bound (an empty denylist), never the primary's.
+    const contractPath = join(w.root, "contracts", "a.json");
+    const contract = JSON.parse(await readFile(contractPath, "utf8")) as { safetyPolicy: { denylistPaths: string[] } };
+    contract.safetyPolicy.denylistPaths = ["other.txt"];
+    await writeFile(contractPath, JSON.stringify(contract));
+    const { runtime, runId } = await runToCollection(w, (sourceDir) => ({
+      "shared.txt": "A\n", [join(sourceDir, "run", "dirs", "attempt-1", "alpha", "other.txt")]: "outside\n",
+    })).catch(async (error) => { await w.teardown(); throw error; });
+    try {
+      // mutation: the extra keeps the targetPaths bound, or reads the primary's bound -> blocked `out-of-bounds:alpha:other.txt`, red
+      expect(driveOf(runtime, runId).blockedReason ?? null).toBe(null);
+      expect(state(runtime, runId)).toBe("collected");
     } finally { await w.teardown(); }
   });
 

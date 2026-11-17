@@ -72,8 +72,8 @@ import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdi
 import { reportedDebugOf } from "./reportedDecisions.js";
 import { noteAbandonUnresolved, openRequestOf, settleAbandonedUnstarted, settlePausedUnstarted, singleCallCommitTerminal, stepH, visitOrder } from "./driverHandoff.js";
 import { settleAbandonedRunInTransaction } from "./stopIntent.js";
-import { harvest, type Reconciliation } from "../scheduler/harvest.js";
-import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
+import { type Reconciliation } from "../scheduler/harvest.js";
+import { boundedHarvest, extraHarvestBound, primaryHarvestBound } from "./harvestBound.js";
 import { taskWrites } from "./requirementRecords.js";
 import { ingestRunHandoff, prepareRunHandoff } from "./taskHandoffs.js";
 import { noteLiveNoteDeliveries, settleLiveNotes, writeRunLiveNotes } from "./liveNotes.js";
@@ -1094,7 +1094,8 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   let measured: Reconciliation;
   if (multiDirs === null) {
     attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));
-    measured = await harvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, writeSetOf(contract));
+    // Off-plan writes #346 (Task 4b ruling): a v4 contract is bounded by its denylist, a v≤3 one by its write set.
+    measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, primaryHarvestBound(contract));
     if (measured.outOfBounds.length > 0) {
       blockRun(deps, runId, "C", `out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
       return true;
@@ -1104,8 +1105,8 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
       const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
       const dirSha = await commitAttempt(resultRepo);
       dirAttempts.push(dirSha);
-      const declared = index === 0 ? writeSetOf(contract) : extraClaimsOf(contract, dir.key);
-      const result = await harvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha: dirSha }, dir.base, declared, resultRepo);
+      const bound = index === 0 ? primaryHarvestBound(contract) : extraHarvestBound(contract, dir.key);
+      const result = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha: dirSha }, dir.base, bound, resultRepo);
       dirReconciliations.push({ key: dir.key, outOfBounds: result.outOfBounds, empty: result.empty });
     }
     attemptSha = dirAttempts[0]!;
@@ -1218,15 +1219,6 @@ function cleanupRepoIdOf(store: ControlStore, run: DriverRun): string {
   const first = (writes ?? []).slice().sort((left, right) =>
     (order.get(left.dir) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.dir) ?? Number.MAX_SAFE_INTEGER))[0];
   return dirTargetRepoId(store, run.groupId, first?.dir ?? multi.dirs[0]!.key);
-}
-
-/** Multi-directory projects spec §7.2: an extra directory's claims are its contract entry's targetPaths ∪ allowlistPaths. */
-function extraClaimsOf(contract: unknown, key: string): ClaimedPath[] {
-  const context = (contract as { context?: { additionalRepos?: Array<{ key?: string; targetPaths?: unknown; allowlistPaths?: unknown }> } } | null | undefined)?.context;
-  const entry = context?.additionalRepos?.find((candidate) => candidate.key === key);
-  if (entry === undefined) throw new ControlError("multi-dir-invalid", `contract:${key}`);
-  const paths = (value: unknown): string[] => Array.isArray(value) ? value.filter((path): path is string => typeof path === "string") : [];
-  return [...paths(entry.targetPaths), ...paths(entry.allowlistPaths)].map(normalizeClaim);
 }
 
 function debugChecksOf(context: DriverContext | undefined): Map<string, DebugCheck> {

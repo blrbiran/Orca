@@ -4,8 +4,8 @@
  * `landed` -- so a row exists exactly when the landing was recorded, and a replayed landing writes none again. The record
  * is information only: it never blocks or fails a landing. The run view carries it, and the requirement review is told.
  *
- * Off-plan files only reach a landing when the task's write set (targetPaths ∪ allowlistPaths) covers them, so these
- * tasks declare `targetPaths` narrow and `allowlistPaths: ["**"]`; the recorded paths are those outside `targetPaths`.
+ * These tasks are v4-shaped (the fixture's contract has an empty allowlist), so Orca's harvest is bounded by the denylist
+ * (Task 4b) and a write outside targetPaths lands for real.
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,7 +18,6 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness, git, type HarnessOptions } from "./fixtures/driverHarness.js";
 
 const LANDED = ["landed", "settled"];
-const WIDE = { allowlistPaths: ["**"] };
 const offPlanRows = (t: Awaited<ReturnType<typeof driverHarness>>) => t.h.store.db
   .prepare("SELECT task_id, run_id, body FROM activity WHERE group_id='g' AND kind='off-plan-write' ORDER BY seq").all()
   .map((row) => ({ taskId: row.task_id, runId: row.run_id, body: JSON.parse(String(row.body)) as { taskId: string; runId: string; paths: string[]; count: number } }));
@@ -67,7 +66,7 @@ describe("offPlanWriteOf: the record of one attempt, read from git", () => {
 
 describe("a landing records its off-plan writes with the landing (D)", () => {
   it("70 off-plan files: one row with the first 64 sorted paths and count 70; the run view and the review facts say so", async () => {
-    const t = await driverHarness([{ taskId: "a", targetPaths: ["src/a.ts"], safetyPolicy: WIDE }], { files: () => ({ "src/a.ts": "a\n", ...extras(70) }) }); try {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["src/a.ts"] }], { files: () => ({ "src/a.ts": "a\n", ...extras(70) }) }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
       const paths = Object.keys(extras(64));
@@ -84,7 +83,7 @@ describe("a landing records its off-plan writes with the landing (D)", () => {
   }, 30_000);
 
   it("a landing with no off-plan path records no row, and the review facts carry no such line", async () => {
-    const t = await driverHarness([{ taskId: "a", targetPaths: ["src/**"], safetyPolicy: WIDE }], { files: () => ({ "src/a.ts": "a\n", "src/b/c.ts": "c\n" }) }); try {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["src/**"] }], { files: () => ({ "src/a.ts": "a\n", "src/b/c.ts": "c\n" }) }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
       // mutation: record a row with an empty list -> one row, red
@@ -96,7 +95,7 @@ describe("a landing records its off-plan writes with the landing (D)", () => {
   }, 30_000);
 
   it("a landing found after a death past the swap is recorded once, by the recovery (findLanding)", async () => {
-    const t = await driverHarness([{ taskId: "a", targetPaths: ["a"], safetyPolicy: WIDE }], { files: () => ({ a: "a\n", "notes.md": "n\n" }) }); try {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["a"] }], { files: () => ({ a: "a\n", "notes.md": "n\n" }) }); try {
       const runId = await t.claim();
       const crashing = createExecutionDriver({ ...t.deps, crash: (point) => { if (point === "D-after-cas") throw new DriverCrash(point); } });
       await t.until(crashing, () => crashing.crashed === "D-after-cas");
@@ -112,7 +111,7 @@ describe("a landing records its off-plan writes with the landing (D)", () => {
   it("a landing that waited for its post-merge check records it too", async () => {
     // b lands after a moved the tip, so b's merged tree is one no check ran on: it lands through the post-merge check.
     const files: HarnessOptions["files"] = (id) => ({ [id]: `${id}\n`, [`${id}-notes.md`]: "n\n" });
-    const t = await driverHarness([{ taskId: "a", safetyPolicy: WIDE }, { taskId: "b", safetyPolicy: WIDE }], { files }); try {
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { files }); try {
       const ids = [await t.claim(), await t.claim()];
       const driver: ExecutionDriver = t.driver();
       await t.until(driver, () => ids.every((id) => LANDED.includes(t.body(id).state)), 120);
@@ -138,7 +137,7 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
 
 describe("a reconciled landing records the task's own off-plan writes (R)", () => {
   it("the run that reconciled records its attempt's paths outside its targets, with its landing", async () => {
-    const conflicting = [{ taskId: "a", targetPaths: ["shared.txt"], safetyPolicy: WIDE }, { taskId: "b", targetPaths: ["shared.txt"], safetyPolicy: WIDE }];
+    const conflicting = [{ taskId: "a", targetPaths: ["shared.txt"] }, { taskId: "b", targetPaths: ["shared.txt"] }];
     const files: HarnessOptions["files"] = (id) => ({ "shared.txt": id === "a" ? "A\n" : "B\n", [`${id}-notes.md`]: "n\n" });
     const t = await driverHarness(conflicting, { files }); try {
       await writeFile(t.deps.agentsTablePath, JSON.stringify({ status: "succeeded", spent: 7, holdMs: 0, files: { "shared.txt": "A\nB\n" } }));

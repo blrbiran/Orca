@@ -179,7 +179,8 @@ describe("E: an empty result's decisions land in a ledger-only commit (control r
   }, 60000);
 
   it("still blocks an out-of-bounds run and writes no decision", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }), decisions: () => [good(), good({ kind: "opinion" })] }); try {
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」) -- #346 Task 4b: a contract with an empty allowlist is v4 and bounded by its denylist, so this criterion's task is given a v3-shaped allowlist (= its targetPaths) to keep testing the write-set bound.
+    const t = await driverHarness([{ taskId: "a", safetyPolicy: { allowlistPaths: ["a"] } }], { files: () => ({ "elsewhere.txt": "x\n" }), decisions: () => [good(), good({ kind: "opinion" })] }); try {
       const runId = await t.claim();
       const driver = t.driver();
       await t.until(driver, () => t.body(runId).state === "blocked"); // mutation B1: C does not block an out-of-bounds result -> red

@@ -211,7 +211,8 @@ describe("C: collect, then decide from the terminal (spec §2.2, §3.3, §5.2)",
   });
 
   it("blocks a result that wrote outside the task's paths, by the path", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」) -- #346 Task 4b: a contract with an empty allowlist is v4 and bounded by its denylist, so this criterion's task is given a v3-shaped allowlist (= its targetPaths) to keep testing the write-set bound.
+    const t = await driverHarness([{ taskId: "a", safetyPolicy: { allowlistPaths: ["a"] } }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).state === "blocked");
       expect(t.body(runId).drive).toMatchObject({ blockedAt: "C", blockedReason: "out-of-bounds:elsewhere.txt" });

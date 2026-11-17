@@ -246,7 +246,8 @@ describe("accept-attempt refuses by name and lands nothing (criteria 18, 19)", {
   };
 
   it("refuses an attempt that wrote outside its write set", async () => {
-    const { t, intent } = await refusedCase({ taskId: "a", targetPaths: ["a"] }, { files: () => ({ a: "a\n", other: "o\n" }) });
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」) -- #346 Task 4b: a contract with an empty allowlist is v4 and bounded by its denylist, so this criterion's task is given a v3-shaped allowlist (= its targetPaths) to keep testing the write-set bound.
+    const { t, intent } = await refusedCase({ taskId: "a", targetPaths: ["a"], safetyPolicy: { allowlistPaths: ["a"] } }, { files: () => ({ a: "a\n", other: "o\n" }) });
     try { expect(intent.reason).toBe("out-of-bounds:other"); } finally { await t.h.dispose(); }
   });
 
