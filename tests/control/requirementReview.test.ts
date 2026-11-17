@@ -105,6 +105,27 @@ describe("the requirement review (tester follow-up G §3)", () => {
     expect(planned).toContain("- b (metric): depends on a; writes src/b.ts; checks node check.js; success: b reads a");
   }, 180000);
 
+  // Tester #337: a criterion about a binary deliverable ("the logo is 16x32") needs the file's type and size; Orca reads
+  // them from the blob it already hashes and the reviewer may cite them by path, so it is not steered to cannot-judge.
+  it("names a changed binary's type and image size, read from its header (#337)", async () => {
+    // A GIF header, 16x32 pixels (the NUL bytes make git call it binary).
+    const w = await reviewWorld({ tasks: [{ taskId: "a" }, { taskId: "b", targetPaths: ["b", "logo.gif"] }],
+      harness: { files: (id): Record<string, string | null> => (id === "a" ? { a: "a\n" } : { b: "b\n", "logo.gif": "GIF89a\u0010\u0000 \u0000\u0000PIXELS" }) } });
+    try {
+      await settle(w, () => w.review()?.state === "passed");
+      // mutation: drop binaryFacts from groupChanges -> "(binary: named only, ...)", red
+      expect(w.calls[0]!.prompt).toMatch(/- A logo\.gif 17 [a-f0-9]{64} \(binary: GIF image, 16x32 pixels; its other bytes are not shown\)/);
+      expect(w.calls[0]!.prompt).not.toContain("PIXELS");
+    } finally { await w.t.h.dispose(); }
+    const prompt = buildReviewPrompt({ idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false,
+      changedFiles: [{ path: "doc.pdf", status: "A", bytes: 9, sha256: "e".repeat(64), binary: true, kind: "PDF document (version 1.7); its page count is not read" }] });
+    expect(prompt).toContain(`- A doc.pdf 9 ${"e".repeat(64)} (binary: PDF document (version 1.7); its page count is not read; its other bytes are not shown)`);
+    // The evidence a binary criterion can cite, and cannot-judge kept for what is genuinely not shown -- without a guess.
+    expect(prompt).toContain("or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or image size");
+    expect(prompt).toContain("- verdict not-met: name the evidence you looked at, in the same forms,");
+    expect(prompt).toContain("Do not guess what a file's unshown content says.");
+  }, 180000);
+
   it("an unfunded review is named and does not pass", async () => {
     let capped = false;
     const holder: { w?: ReviewWorld } = {};

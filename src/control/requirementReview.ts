@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { frozenWorkAgent } from "./agentFreeze.js";
+import { binaryFacts } from "./binaryFacts.js";
 import { recordActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { chainRounds } from "./clarifyChain.js";
@@ -103,7 +104,8 @@ export function classifyReviewOutput(raw: unknown, criterionIds: readonly string
     ...(parsed.data.checkConflict === undefined ? {} : { checkConflict: parsed.data.checkConflict }) };
 }
 
-export interface ChangedFile { path: string; status: string; bytes: number; sha256: string; binary: boolean }
+/** `kind`: for a binary file, what Orca read from its header (#337: type, image size); absent when not recognised. */
+export interface ChangedFile { path: string; status: string; bytes: number; sha256: string; binary: boolean; kind?: string }
 /** #314: the accepted plan as data, so a criterion about the plan's shape is judgeable instead of always cannot-judge. */
 export interface ReviewPlanTask { taskId: string; title: string; dependsOn: string[]; targetPaths: string[]; successCondition: string; checks: string[] }
 export interface ReviewPlan { layers: string[][]; tasks: ReviewPlanTask[] }
@@ -133,8 +135,9 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     ]),
     ...(input.facts === undefined || input.facts.length === 0 ? [] : ["", "What Orca recorded beyond the diff:", ...input.facts]),
     "",
-    "Files the group changed (status, path, bytes, sha256):",
-    ...input.changedFiles.map((f) => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${f.binary ? " (binary: named only, its bytes are not shown)" : ""}`),
+    // #337: a binary file's type and image size, read by Orca from its header, are facts the reviewer may cite by path.
+    "Files the group changed (status, path, bytes, sha256; for a binary file, its type and image size when Orca could read them from its header):",
+    ...input.changedFiles.map((f) => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${!f.binary ? "" : f.kind === undefined ? " (binary: named only, its bytes are not shown)" : ` (binary: ${f.kind}; its other bytes are not shown)`}`),
     "",
     "The group's diff against its base:",
     input.diff,
@@ -143,9 +146,9 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     // Tester #343 (spec 2026-11-17 S5): the review prompt carries no version marker (the contract's schema id
     // `orca-requirement-review-contract-v1` names the call's contract, not this text); this is the change that added fixableBy.
     "Answer with a JSON object {\"criteria\": [{\"id\", \"verdict\", \"evidence\", \"missing\", \"fixableBy\"}], \"summary\"}.",
-    "- verdict met: name the evidence (file path and line, or the artefact path; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null}). missing is null.",
-    "- verdict not-met: name the evidence you looked at and say in `missing` what is still needed.",
-    "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would.",
+    "- verdict met: name the evidence (file path and line; or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or image size; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null} -- a command and its exit as recorded there). missing is null.",
+    "- verdict not-met: name the evidence you looked at, in the same forms, and say in `missing` what is still needed.",
+    "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would. Do not guess what a file's unshown content says.",
     "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
     "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",
@@ -472,7 +475,8 @@ async function groupChanges(repo: string, base: string, tip: string): Promise<{ 
     const path = rest.join("\t"), st = status.get(path) ?? "M", binary = added === "-";
     if (st === "D") { changedFiles.push({ path, status: st, bytes: 0, sha256: "-", binary }); continue; }
     const content = execFileSync("git", [...QUIET_GIT, "cat-file", "blob", `${tip}:${path}`], { cwd: repo, maxBuffer: REVIEW_GIT_LIST_MAX_BYTES });
-    changedFiles.push({ path, status: st, bytes: content.length, sha256: sha256(content), binary });
+    const kind = binary ? binaryFacts(content) : null;
+    changedFiles.push({ path, status: st, bytes: content.length, sha256: sha256(content), binary, ...(kind === null ? {} : { kind }) });
   }
   // #334: the prompt shows REVIEW_DIFF_MAX_BYTES of the diff, so only that much (and a character's worth more, to tell
   // a cut from an exact fit) is read; the whole diff was read before and a 2.4 MiB one failed every review call.
