@@ -2690,6 +2690,7 @@ export const enErrors: Record<string, string> = {
   "observed-paths-not-allowed": "Only an attended agent or person may widen an allowlist-blocked task's next run ({{detail}}).",
   "observed-paths-invalid": "The reported path cannot be authorized ({{detail}}). Review its repository, denylist and symlinks.",
   "observed-paths-conflict": "The new path overlaps unfinished work ({{detail}}). Resolve that write conflict before retrying.",
+  "off-plan-claims-overlap": "Other tasks of this group change these paths at the same time ({{detail}}). Keep them out of this task's paths.",
   "group-deadline-expired": "The group's deadline has passed.",
   "group-graph-conflict": "The group's task graph conflicts with the recorded one.",
   "group-not-found": "The group was not found.",

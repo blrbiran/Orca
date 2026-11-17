@@ -274,12 +274,9 @@ export function deriveContract(task: ConfirmedProposal["tasks"][number], proposa
  * implicit edge is not parallel. A sibling with no such claim is not frozen, and a task left with none has no entry.
  */
 function frozenOffPlan(plan: ControlPlanV1, tasks: ConfirmedProposal["tasks"]): Map<string, SiblingClaims[]> {
-  const contracts = new Map<string, TaskContract>();
-  for (const task of tasks) {
-    try { contracts.set(task.taskId, taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson))); }
-    // deriveContract refuses an unreadable contract with its own code; nothing is frozen for a plan it refuses.
-    catch { return new Map(); }
-  }
+  // Each contract is readable: verifyTaskSet matched it to the archived plan, whose reader (readArchivedPlan) refuses an
+  // unreadable one. No fallback answer here (fix round 1): a plan read without its contracts would freeze no sibling.
+  const contracts = new Map(tasks.map(task => [task.taskId, taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson))]));
   const graph = buildGraph({ targetRepo: "", ccloopBin: "", runsDir: "", workBranch: "", policy: "local-merge", ledgerMode: "in-repo",
     tasks: plan.tasks.map(task => ({ taskId: task.taskId, contract: task.taskId, dependsOn: [...task.dependencyTaskIds] })) },
   new Map(), new Map(plan.tasks.map(task => [task.taskId, directoryQualifiedWriteSetOf(contracts.get(task.taskId)!)])));

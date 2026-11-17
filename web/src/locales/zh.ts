@@ -2570,6 +2570,7 @@ export const zhErrors: Record<string, string> = {
   "observed-paths-not-allowed": "只有有人值守的 agent 或人可以放宽因路径白名单而停下的任务（{{detail}}）。",
   "observed-paths-invalid": "报告的路径不能授权（{{detail}}）。请检查所属仓库、拒绝列表和软链接。",
   "observed-paths-conflict": "新路径与未完成的工作相交（{{detail}}）。请先解决写入冲突再重试。",
+  "off-plan-claims-overlap": "同组的其他任务同时在改这些路径（{{detail}}）。请把它们从这个任务的路径里去掉。",
   "group-deadline-expired": "组的截止时间已过。",
   "group-graph-conflict": "组的任务图冲突。",
   "group-not-found": "找不到这个组。",

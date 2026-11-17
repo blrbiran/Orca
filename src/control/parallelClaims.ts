@@ -49,6 +49,23 @@ export function directoryQualifiedWriteSetOf(contract: TaskContract): ClaimedPat
   })));
 }
 
+/**
+ * Plan Task 3 fix round 1 (ruling: `off-plan-claims-overlap`): the frozen claims that meet `contract`'s own write set, read
+ * as `contract` keys them (`null` its primary, a key its extra repository of that key), compared as the write-set rules
+ * compare (normalizeClaim, intersect). Named as the constraint line names them (`<key>:<path>` for an extra repository's),
+ * sorted and de-duplicated. A claim keyed to a repository `contract` has no entry for meets nothing here.
+ */
+export function ownWritesDenied(contract: TaskContract, siblings: readonly SiblingClaims[]): string[] {
+  const writeSets = new Map<string | null, ClaimedPath[]>([[null, writeSetOf(contract)],
+    ...(contract.context.additionalRepos ?? []).map((repo): [string, ClaimedPath[]] => [repo.key, [...repo.targetPaths, ...(repo.allowlistPaths ?? [])].map(normalizeClaim)])]);
+  const denied = new Set<string>();
+  for (const claim of siblings.flatMap((sibling) => sibling.claims)) {
+    const own = writeSets.get(claim.repoKey);
+    if (own !== undefined && intersect([normalizeClaim(claim.path)], own).length > 0) denied.add(claim.repoKey === null ? claim.path : `${claim.repoKey}:${claim.path}`);
+  }
+  return [...denied].sort(compareText);
+}
+
 /** How a task names each directory it may write: `null` for its primary, its own key for each extra. */
 function keysByDirectory(contract: TaskContract): Map<Directory, string | null> {
   const out = new Map<Directory, string | null>([[directoryOf(contract.context.repoPath), null]]);

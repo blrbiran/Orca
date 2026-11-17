@@ -23,6 +23,7 @@ import { dimensions, zero } from "./commands.js";
 import { ControlError, type KnownControlErrorCode } from "./errors.js";
 import { buildBudgetEstimateRequest, ESTIMATE_GRANT, estimateGrantFor, withEstimateGrant, GOAL_REVIEW, TASK_HANDOFF, TASK_WORK, provenance, residual, safeNumber, sumAmounts, persistEstimateArtifacts, estimateCapabilityDegradationReasons, singleCallOutputBound } from "./estimator.js";
 import { deriveContract, offPlanEntryOf, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
+import { ownWritesDenied } from "./parallelClaims.js";
 import { answeredPartials, currentPartials, readGroupAgentOverrides, RECONCILE_SLOT_KEY, resolveGroupSelections, taskSlotKey, type GroupSelectionResolution } from "./agentFreeze.js";
 import type { ExecutionPort } from "./executionPort.js";
 import { isDirGroup, type DirProjectOf } from "./dirGroup.js";
@@ -2756,6 +2757,14 @@ export class WebControlService {
             const agent = agentSelectionSchema.safeParse(work.agent);
             if (!agent.success) throw new ControlError("recovery-blocked", `work-item-agent-invalid:${taskId}`);
             assertSkillsAgent(skillLookup.kinds, taskId, agent.data.agent);
+          }
+          // Off-plan writes plan Task 3 fix round 1 (ruling): a confirmed task keeps the siblings frozen at confirm, so a change
+          // whose own write set meets their claims would forbid its own targets. Refused before anything is written; a path no
+          // sibling claims is allowed and is not added to the siblings' frozen denylists (recorded limit).
+          if (proposal.state !== "editable") {
+            const frozen = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(this.store, proposal.executionSnapshotHash!)));
+            const denied = ownWritesDenied(taskContractSchema.parse(JSON.parse(expanded.canonicalJson)), offPlanEntryOf(frozen, taskId));
+            if (denied.length > 0) throw new ControlError("off-plan-claims-overlap", denied.join(","));
           }
           // Step 5.
           const amendmentHash = writeTaskAmendment(this.store, id, {

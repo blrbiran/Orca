@@ -1000,7 +1000,10 @@ function validateExecutionSnapshot(
       return blocked("derived-contract-cross-record");
     }
     // Off-plan writes spec W2: a v4 task's frozen siblings are denied in its contract, as deriveContract denies them.
-    const expectedContract = denySiblingClaims(structuredClone(original.data), offPlanEntryOf(parsed.data, ref.taskId));
+    let expectedContract: z.infer<typeof taskContractSchema>;
+    // A frozen claim the contract cannot hold (a repository it has no entry for) is a forged derivation here.
+    try { expectedContract = denySiblingClaims(structuredClone(original.data), offPlanEntryOf(parsed.data, ref.taskId)); }
+    catch { return blocked("derived-contract-forged"); }
     expectedContract.executionPolicy = {
       ...expectedContract.executionPolicy,
       tokenBudget: work.amount.tokens,

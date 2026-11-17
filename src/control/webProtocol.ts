@@ -527,7 +527,7 @@ export const executionSnapshotSchema = z
       taskId: idSchema,
       siblings: z.array(z.object({
         siblingId: idSchema,
-        claims: z.array(z.object({ repoKey: nonemptyString.nullable(), path: z.string() }).strict()).min(1),
+        claims: z.array(z.object({ repoKey: nonemptyString.nullable(), path: nonemptyString }).strict()).min(1),
       }).strict()).min(1),
     }).strict()).min(1).optional(),
   })

@@ -10,13 +10,16 @@ import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson
 import {
   deriveContract, offPlanEntryOf, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot, type ConfirmedProposal,
 } from "../../src/control/executionSnapshot.js";
-import { writeCanonicalRecord } from "../../src/control/snapshot.js";
-import { WebControlService } from "../../src/control/webService.js";
+import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { controlPlanSchema, executionSnapshotSchema } from "../../src/control/webProtocol.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
+import { ownWritesDenied } from "../../src/control/parallelClaims.js";
+import { readBudgetProposal } from "../../src/control/queries.js";
+import { readCanonicalRecord, writeCanonicalRecord } from "../../src/control/snapshot.js";
+import { saveWebAuthority } from "../../src/control/estimateSettlement.js";
 import { openTestStore } from "./fixtures/store.js";
-import { change, loop, snapshotOf } from "./fixtures/taskLoop.js";
+import { change, errorOf, loop, snapshotOf } from "./fixtures/taskLoop.js";
 import { webFixture } from "./fixtures/web.js";
 
 const SIBLING_LINE = "Other tasks of this group change these paths at the same time; do not modify them: ";
@@ -53,8 +56,9 @@ beforeEach(async () => { harness = await openTestStore(); });
 afterEach(async () => { await harness.dispose(); });
 
 /** The store authority a confirmation is checked against (archived plan, editable proposal), and the confirmation itself. */
-function confirmation(specs: TaskSpec[]): ConfirmedProposal {
-  const contracts = specs.map(contractOf);
+function confirmation(specs: TaskSpec[], unreadable?: string): ConfirmedProposal {
+  // `unreadable`: that task's archived contract carries a key the closed contract schema refuses.
+  const contracts: unknown[] = specs.map(spec => spec.taskId === unreadable ? { ...contractOf(spec), unknownKey: true } : contractOf(spec));
   const plan = controlPlanSchema.parse({
     schema: "orca-control-plan-v1", repoId: "repo", planId: "plan", goal: "ship", successConditions: ["passes"],
     tasks: specs.map((spec, index) => ({ taskId: spec.taskId, dependencyTaskIds: [...(spec.deps ?? [])].sort(compare), targetVersion: 1,
@@ -178,6 +182,23 @@ describe("confirm freezes a v4 task's parallel claims (#346 W2)", () => {
     expect(deriveContract(b, 2, []).canonicalJson).toBe(deriveContract(b, 2).canonicalJson);
     expect(deriveContract(b, 2, [{ siblingId: "c", claims: [] }]).canonicalJson).toBe(deriveContract(b, 2).canonicalJson);
   });
+
+  it("an unreadable contract is refused, never confirmed without its siblings frozen", () => {
+    // Fix round 1 (minor 2): frozenOffPlan has no silent answer for a contract it cannot read. The archived plan's
+    // reader refuses one first (readArchivedPlan, through verifyPlanAuthority); were that check gone, frozenOffPlan's own
+    // parse would throw a ZodError, not this code. mutation: readArchivedPlan's contract parse no longer refuses -> red
+    expect(() => prepareExecutionSnapshot(confirmation(DIAMOND, "c"))).toThrow("recovery-blocked");
+  });
+
+  it("names the frozen claims a contract's own write set meets, per repository and keyed as the receiver keys them", () => {
+    const contract = contractOf({ taskId: "p", targetPaths: ["src/**"], repoKey: "app",
+      additionalRepos: [{ key: "lib", repoPath: "/lib", targetPaths: ["x.ts"], allowlistPaths: [] }] });
+    expect(ownWritesDenied(contract, [
+      { siblingId: "q", claims: [{ repoKey: null, path: "src/q.ts" }, { repoKey: null, path: "docs/q.md" }, { repoKey: "lib", path: "**" }] },
+      { siblingId: "r", claims: [{ repoKey: "lib", path: "y.ts" }, { repoKey: "nowhere", path: "src/q.ts" }] },
+    ])).toEqual(["lib:**", "src/q.ts"]);
+    expect(ownWritesDenied(contract, [])).toEqual([]);
+  });
 });
 
 /**
@@ -231,7 +252,7 @@ describe("replacing one task's entry", () => {
     };
     expect(paths([entry("a"), entry("b")])).toEqual([]);
     for (const offPlan of [[entry("b"), entry("a")], [entry("a"), entry("a")], [entry("missing")], [], [{ taskId: "a", siblings: [] }],
-      [{ taskId: "a", siblings: [{ siblingId: "b", claims: [] }] }],
+      [{ taskId: "a", siblings: [{ siblingId: "b", claims: [] }] }], [{ taskId: "a", siblings: [{ siblingId: "b", claims: [{ repoKey: null, path: "" }] }] }],
       [{ taskId: "a", siblings: [{ siblingId: "c", claims: [{ repoKey: null, path: "p" }] }, { siblingId: "b", claims: [{ repoKey: null, path: "p" }] }] }]]) {
       expect(paths(offPlan)).toContain("offPlan");
     }
@@ -284,6 +305,43 @@ describe("a confirmed group reads its frozen entries back (A2)", () => {
       expect(a.contract.objective.goal).toBe("write a, changed");
       expect(a.contract.safetyPolicy.denylistPaths).toEqual(["b"]);
       expect(snapshotOf(h).offPlan).toEqual(before.offPlan);
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses a confirmed set-task-loop whose new targets meet the task's own frozen sibling claims, and writes nothing", async () => {
+    // Fix round 1 ruling (Task 3 review): a frozen denylist must never forbid the task's own target.
+    const { h, service } = await confirmed([{ taskId: "a", loop: loop("a") }, { taskId: "b", loop: loop("b") }]);
+    try {
+      const hash = readBudgetProposal(h.store, "g").executionSnapshotHash;
+      const before = readConfirmedTaskExecution(h.store, "g", "a");
+      // mutation: drop the refusal -> the change succeeds with targetPaths [a, b] and denylist [b] -> red
+      const answer = await service.setTaskLoop(change(h, "a", { inputs: { targetPaths: ["a", "b"] } }));
+      expect(errorOf(answer)).toMatchObject({ code: "off-plan-claims-overlap", message: "off-plan-claims-overlap:b" });
+      expect(readBudgetProposal(h.store, "g").executionSnapshotHash).toBe(hash);
+      expect(readConfirmedTaskExecution(h.store, "g", "a")).toEqual(before);
+      // A path no sibling claims is allowed; it is not added to the sibling's frozen denylist (recorded limit).
+      expect(await service.setTaskLoop(change(h, "a", { inputs: { targetPaths: ["a", "c"] } }))).toMatchObject({ result: { kind: "task-loop-set" } });
+      expect(readConfirmedTaskExecution(h.store, "g", "a").contract.context.targetPaths).toEqual(["a", "c"]);
+      expect(readConfirmedTaskExecution(h.store, "g", "b").contract.safetyPolicy.denylistPaths).toEqual(["a"]);
+    } finally { await h.dispose(); }
+  });
+
+  it("the panel reads a frozen claim keyed to a repository the contract does not have as a forged derived contract", async () => {
+    const { h } = await confirmed([
+      { taskId: "a", targetPaths: ["src/a.ts"] },
+      { taskId: "b", targetPaths: ["src/b.ts"], dependsOn: ["a"] },
+      { taskId: "c", targetPaths: ["src/c/**"], dependsOn: ["a"] },
+    ]);
+    try {
+      const proposal = readBudgetProposal(h.store, "g");
+      const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(h.store, proposal.executionSnapshotHash!)));
+      snapshot.offPlan![0]!.siblings[0]!.claims = [{ repoKey: "nowhere", path: "src/c/**" }];
+      const forged = executionSnapshotSchema.parse(snapshot);
+      writeCanonicalRecord(h.store, "g", sha256Canonical(forged), canonicalBytes(forged).toString("utf8"));
+      proposal.executionSnapshotHash = sha256Canonical(forged);
+      saveWebAuthority(h.store, readWebGroup(h.store, "g"), proposal);
+      // mutation: let the shared helper's own error through -> execution-policy-unrepresentable -> red
+      expect(() => readControlGroup(h.store, "epoch", "g")).toThrow("recovery-blocked:derived-contract-forged");
     } finally { await h.dispose(); }
   });
 });
