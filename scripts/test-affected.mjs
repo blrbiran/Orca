@@ -23,12 +23,11 @@
 //             tree prints that and exits 0 without running, unless --force.
 //   --rerun-failed  re-runs only the failed files of the last run's JSON report (<git-dir>/orca-gate/last-run.json),
 //             labelled as a re-run, not a gate.
-// Every run (not --dry-run) holds a machine-wide lock (<os tmpdir>/orca-gate.lock, or ORCA_GATE_LOCK), prints `uptime`
+// Every run (not --dry-run) holds a machine-wide lock (/tmp/orca-gate-<uid>.lock, or ORCA_GATE_LOCK), prints `uptime`
 // at start and end, and builds web/dist first when a selected test serves the panel and web/dist is missing or stale.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -121,7 +120,8 @@ const gitDir = resolve(root, git(["rev-parse", "--git-dir"]).trim());
 const reportDir = join(gitDir, "orca-gate");
 const lastRunPath = join(reportDir, "last-run.json");
 const stampDir = join(resolve(root, git(["rev-parse", "--git-common-dir"]).trim()), "orca-gate", "green");
-const lockPath = process.env.ORCA_GATE_LOCK || join(tmpdir(), "orca-gate.lock");
+// A fixed per-user path, not os.tmpdir(): sessions run with different TMPDIRs and must still see one lock.
+const lockPath = process.env.ORCA_GATE_LOCK || join("/tmp", `orca-gate-${process.getuid?.() ?? "user"}.lock`);
 const treeClean = () => git(["status", "--porcelain", "--untracked-files=all"]).length === 0;
 const headTree = () => git(["rev-parse", "HEAD^{tree}"]).trim();
 
