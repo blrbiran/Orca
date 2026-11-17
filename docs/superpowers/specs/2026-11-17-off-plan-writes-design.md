@@ -143,3 +143,10 @@ unordered and never widens what any task may write beyond what its sibling alrea
 
 Exact names (activity body fields, failure cause string, CLI flag), where the confirm step passes `parallelClaims` into
 the materializer's inputs, and the en/zh strings.
+
+## Ruling on W4 (human, 2026-11-17, Orca session `0e0846ae`)
+
+The controller's recommendation stands, verbatim answer 「按建议走」: a run stopped on a write into a parallel sibling's
+claim (`parallel-claim`) is retried by Orca automatically, as `orca-auto`, once that sibling has landed -- the same
+amendment `--after <sibling>` makes (adds `dependsOn: <sibling>`, removes that sibling's claims from the task's denylist,
+re-validates the graph). A person may still run `orca task retry … --after <sibling>` themselves. Not built yet.
