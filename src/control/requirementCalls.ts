@@ -9,7 +9,7 @@ import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "
 import { renderRequirementDocument } from "./requirementDocument.js";
 import { requirementDraftHash } from "./requirementDraftHash.js";
 import { buildManifests, withManifests } from "./requirementManifests.js";
-import { buildRepositoryOverview, dividedOverviewLimits, truncateUtf8, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
+import { buildRepositoryOverview, creatableAt, dividedOverviewLimits, truncateUtf8, type ProjectOverview, type RepositoryOverview } from "./requirementOverview.js";
 import { dirWorkspaceOf, groupRepoId } from "./dirGroup.js";
 import { flowVaultRepoId } from "../flow/groups.js";
 import { dirTargetRepoId, multiDirOf, type FrozenMultiDir } from "./multiGroup.js";
@@ -27,7 +27,7 @@ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStop
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRecordFacts, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
-import { applyImpliedPaths } from "./splitImpliedPaths.js";
+import { applyGoalPaths, applyImpliedPaths, goalPathsOutsideTargets, goalPathsToProbe } from "./splitImpliedPaths.js";
 import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { catalogMissText, SELECTOR_MISS_PREFIX, selectorMissOf } from "./estimatorCompatibility.js";
@@ -472,7 +472,6 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
   // Spec 2026-11-16 (#265): a path a task's success condition names is part of its authority. Add it to
   // that task's targetPaths before expanding and validating; the graph then serialises the two writers.
   const adjusted = applyImpliedPaths(parsed.data);
-  const output = adjusted.output;
   const overview = (run as { overview?: RunOverview | null }).overview ?? null;
   if (overview === null || !("commit" in overview)) throw new ControlError("recovery-blocked", "requirement-overview-missing");
   const rounds = chainRounds(readRounds(deps.store, run.groupId));
@@ -481,10 +480,15 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
   const adrIds = rounds.flatMap((round) => (round.adrDecisions ?? []).filter((decision) => decision.accept).map((decision) => decision.id));
   // Dir-requirements spec §6.3: the group's target -- a dir group's vault, so targetRepo and the path check are the vault's.
   const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
+  // Tester #345: then a file the task's goal names, that the base commit lacks and no task covers, is added the same way
+  // (one git read per parent directory, at most GOAL_PATH_PROBE_LIMIT paths); a goal path the commit has stays a hint.
+  const probed = goalPathsToProbe(goalPathsOutsideTargets(adjusted.output));
+  const goal = applyGoalPaths(adjusted.output, probed.length === 0 ? new Set() : await creatableAt(repo, overview.commit, probed));
+  const output = goal.output, added = [...adjusted.added, ...goal.added];
   const plan = expandSplitDraft(output, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
   const validated = await validateSplitDraft({ output, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
   // DR12: the hash is of the expanded plan, the bytes the person reviews.
-  return { schemaValid: true, output, plan, draftHash: sha256Canonical(plan), impliedPathsAdded: adjusted.added.length === 0 ? null : adjusted.added, ...validated };
+  return { schemaValid: true, output, plan, draftHash: sha256Canonical(plan), impliedPathsAdded: added.length === 0 ? null : added, ...validated };
 }
 
 /** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */

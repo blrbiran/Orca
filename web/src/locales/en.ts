@@ -1631,6 +1631,7 @@ export const en = {
     overlapSerialized: "{{a}} and {{b}} run one after the other only because their target paths overlap ({{paths}}); nothing in the plan says one needs the other. Narrow a broad path to the files each task writes (orca requirement narrow-path) and they can run together, or send feedback.",
     parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and the later task neither writes, checks nor mentions a file the earlier one writes. If the later tasks do not need the earlier ones' output, drop the edges (Orca re-checks the split as the next draft), or send feedback.",
     impliedPath: "{{task}}'s success condition names {{path}}, which only {{writers}} may write (implied-path-outside-targets); its run would stop on an allowlist miss. Add the file to {{task}}'s target paths (Orca re-checks the split as the next draft), or send feedback to move that change to {{writers}}.",
+    goalPath: "{{task}}'s goal names {{path}}, which no task may write (goal-path-outside-targets). If {{task}} only reads it, nothing is needed; if it must change it, its run would stop on an allowlist miss, so send feedback to give it the file.",
     applyParallel: "Drop these edges",
     addImpliedPath: "Add {{path}} to {{task}}",
     handedBack: "Handed back for:",

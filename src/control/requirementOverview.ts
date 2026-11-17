@@ -314,3 +314,24 @@ export async function overviewPathExists(repo: string, commit: string, entry: st
   const parent = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/")) : "";
   return parent === "" || (await typeOf(parent)) === "tree";
 }
+
+/**
+ * Tester #345: of exact `paths`, the ones a task would create at `commit` -- no entry there, and a parent that is a
+ * directory there (the root counts): overviewPathExists's "new file in an existing directory", told apart from an
+ * existing file. One non-recursive `git ls-tree` per distinct parent lists its entries: the path is new when it is not
+ * one of them, and the parent is a directory when it has any (git keeps no empty tree; a blob or a missing parent lists
+ * nothing). A single ls-tree for every path and parent cannot be used: a pathspec under another one makes git list the
+ * outer directory's entries instead of the directory itself. A failed read creates none of that parent's paths.
+ */
+export async function creatableAt(repo: string, commit: string, paths: readonly string[]): Promise<Set<string>> {
+  const parentOf = (path: string): string => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+  const out = new Set<string>();
+  for (const parent of new Set(paths.map(parentOf))) {
+    let listing: string;
+    try { listing = await run(repo, ["ls-tree", "-z", "--name-only", commit, ...(parent === "" ? [] : ["--", `${parent}/`])]); } catch { continue; }
+    const entries = new Set(listing.split("\0").filter((entry) => entry !== ""));
+    if (parent !== "" && entries.size === 0) continue;
+    for (const path of paths) if (parentOf(path) === parent && !entries.has(path)) out.add(path);
+  }
+  return out;
+}

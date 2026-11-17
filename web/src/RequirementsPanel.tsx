@@ -408,6 +408,8 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
       {(draft.overlapSerialized ?? []).map((entry) => <p role="note" data-overlap-serialized key={`${entry.a}|${entry.b}`}>{t("requirements.overlapSerialized", { a: entry.a, b: entry.b, paths: entry.paths.join(", ") })}</p>)}
       {(draft.impliedPathsOutsideTargets ?? []).map((entry) => <p role="note" data-implied-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.impliedPath", { task: entry.taskId, path: entry.path, writers: entry.writers.join(", ") })}
         {mayEdit && canAddImpliedPath(props.view, draft, entry) && <button type="button" className="ms-2" data-add-implied-path onClick={() => edit({ kind: "add-implied-path", taskId: entry.taskId, path: entry.path })}>{t("requirements.addImpliedPath", { task: entry.taskId, path: entry.path })}</button>}</p>)}
+      {/* Tester #345: a path a task's goal names that no task may write (the split adds only files the base commit lacks). */}
+      {(draft.goalPathsOutsideTargets ?? []).map((entry) => <p role="note" data-goal-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.goalPath", { task: entry.taskId, path: entry.path })}</p>)}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>

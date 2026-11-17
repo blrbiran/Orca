@@ -122,7 +122,11 @@ export const draftBodySchema = z.object({
   feedback: z.string().nullable(), output: z.union([splitOutputSchema, multiSplitOutputSchema]).nullable(), plan: z.record(z.unknown()).nullable(), draftHash: hash.nullable(),
   reasons: z.array(nonempty), layers: z.array(z.array(nonempty)).nullable(), implicitEdges: z.array(implicitEdgeSchema).nullable(),
   // Spec 2026-11-16 (#265): paths the split added to a task's targetPaths because its success condition named them.
-  impliedPathsAdded: z.array(z.object({ taskId: nonempty, path: nonempty, writers: z.array(nonempty).min(1) }).strict()).nullable().default(null),
+  // Tester #345: or because its goal names a file the base commit lacks (`source: "goal"`, no other writer).
+  impliedPathsAdded: z.array(z.union([
+    z.object({ taskId: nonempty, path: nonempty, writers: z.array(nonempty).min(1) }).strict(),
+    z.object({ taskId: nonempty, path: nonempty, writers: z.array(nonempty).max(0), source: z.literal("goal") }).strict(),
+  ])).nullable().default(null),
   // `requirement-revised` (spec §10.3): an earlier clarify round was revised, so the draft no longer follows the requirement.
   reasonCode: z.enum(["split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-revised"]).nullable(), calls: z.array(callRecordSchema),
 }).strict();

@@ -1455,6 +1455,7 @@ export const zh: Translation<typeof en> = {
     overlapSerialized: "{{a}} 和 {{b}} 只是因为目标路径重叠（{{paths}}）才一个接一个地跑；计划里没有哪一条说其中一个依赖另一个。把宽泛的路径收窄到各自真正写的文件（orca requirement narrow-path），它们就能并行，也可以发反馈。",
     parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间只有 dependsOn 一条边在排先后，后一个任务既不写、不检查、也不提及前一个任务写的文件。如果后面的任务并不需要前面的产物，可以去掉这些边（Orca 会把拆分重新校验一遍，作为下一稿），也可以发反馈。",
     impliedPath: "{{task}} 的完成条件提到了 {{path}}，但只有 {{writers}} 可以写它（implied-path-outside-targets）；它的 run 会因 allowlist miss 停下。可以把这个文件加进 {{task}} 的目标路径（Orca 会把拆分重新校验一遍，作为下一稿），或发反馈把这处改动交给 {{writers}}。",
+    goalPath: "{{task}} 的目标提到了 {{path}}，但没有任何任务可以写它（goal-path-outside-targets）。如果 {{task}} 只是读它，不用处理；如果要改它，它的 run 会因 allowlist miss 停下，请发反馈把这个文件交给它。",
     applyParallel: "去掉这些边",
     addImpliedPath: "把 {{path}} 加给 {{task}}",
     handedBack: "退回原因：",

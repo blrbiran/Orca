@@ -81,7 +81,7 @@ import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeili
 import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
 import { allTasksDone, prerequisiteDoneFrom, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
-import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
+import { goalPathsOutsideTargets, impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
 import { runUsageDetail } from "../control/usageQuery.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
@@ -1679,13 +1679,14 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
     rounds, document,
     // Tester #284: a draft code accepted (it has layers) carries the declared edges code sees no reason for -- a hint only.
     // Tester #265: and each task whose success condition names a file only another task may write -- a hint only.
+    // Tester #345: and each path a task's goal names that no task may write and the split did not add -- a hint only.
     drafts: drafts.map(({ plan, ...rest }) => {
       // A previously stored multi-directory draft may carry the old plan-only hash. Present the new review hash, but
       // leave the record untouched: a command still carrying the old hash is rejected and the person reviews this view.
       const shown = plan !== null && rest.output !== null && multiDirOf(group) !== null && rest.draftHash === sha256Canonical(plan)
         ? { ...rest, draftHash: requirementDraftHash(plan, rest.output) } : rest;
       return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output),
-        overlapSerialized: overlapSerialized(shown.output) } : shown;
+        goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output) } : shown;
     }), spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),

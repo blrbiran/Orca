@@ -61,12 +61,79 @@ export function impliedPathsOutsideTargets(output: SplitOutput | MultiSplitOutpu
 export const impliedPathLine = (entry: ImpliedPathOutsideTargets): string =>
   `implied-path-outside-targets: ${entry.taskId} mentions ${entry.path}, which only ${entry.writers.join(", ")} may write`;
 
-/** Spec 2026-11-16 (#265): one path the split added to a task because its success condition names it. */
-export interface ImpliedPathAddition { taskId: string; path: string; writers: string[] }
+/**
+ * Spec 2026-11-16 (#265): one path the split added to a task because its success condition names it. Tester #345:
+ * `source: "goal"` marks a path added because the task's goal names it as a file the base commit does not have; such an
+ * entry has no other writer (`writers` is empty). An entry without `source` is a success-condition addition, as before.
+ */
+export interface ImpliedPathAddition { taskId: string; path: string; writers: string[]; source?: "goal" }
 
 /** Spec 2026-11-16: the line `requirement show` prints for a path the split added, and the serial edge it implies. */
-export const impliedPathAddedLine = (entry: ImpliedPathAddition): string =>
-  `implied-path-added: ${entry.taskId} now writes ${entry.path} (its success condition names it; ${entry.writers.join(", ")} also writes it, so they run serially)`;
+export const impliedPathAddedLine = (entry: ImpliedPathAddition): string => entry.source === "goal"
+  ? `implied-path-added: ${entry.taskId} now writes ${entry.path} (its goal names it, the base commit does not have it, and no task listed it)`
+  : `implied-path-added: ${entry.taskId} now writes ${entry.path} (its success condition names it; ${entry.writers.join(", ")} also writes it, so they run serially)`;
+
+/** Tester #345: a path a task's goal names that no task's targetPaths cover, and the split did not add. */
+export interface GoalPathOutsideTargets { taskId: string; path: string }
+
+/** Tester #345: the hint's one line, as `requirement show` prints it. */
+export const goalPathLine = (entry: GoalPathOutsideTargets): string =>
+  `goal-path-outside-targets: ${entry.taskId}'s goal names ${entry.path}, which no task may write`;
+
+/**
+ * Tester #345: a concrete file path in prose -- at least one directory part and an extension that starts with a letter
+ * (`src/board/cli.js`, not `Node.js`, `e.g.` or `1.0/2.5`). Its boundaries are `mentions`'s: not inside a longer path or
+ * word, and a sentence's closing `.` is not part of it, so a URL's path (`https://x.org/a.js`) never starts a token.
+ */
+const GOAL_PATH = /(?<![\w./-])(?:[\w@.-]+\/)+[\w@.-]*\.[A-Za-z][A-Za-z0-9]*(?!\.?[\w/-])/g;
+/** PATH_SHAPES: an exact path has no empty, `.` or `..` segment. */
+const exactShape = (path: string): boolean => path.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
+/** As `covers`, and a target path's glob shapes (PATH_SHAPES): `**` covers every path, `<dir>/**` every path under `<dir>`. */
+const coversShape = (target: string, path: string): boolean =>
+  target === "**" || (target.endsWith("/**") && covers(target.slice(0, -3), path)) || covers(target, path);
+
+/**
+ * Tester #345 (Rule 5: code judges): each concrete file path a single-repository task's goal names, as a whole token,
+ * that no task's targetPaths cover (exactly, under a listed directory, or by a `<dir>/**` or `**` glob). Unlike the
+ * success-condition hint above it does not need some task to list the path: a goal often names the file it must create.
+ * A path some task covers is left alone, since another task already holds it. Multi-directory drafts have none: a
+ * goal's path does not say which directory it is in. In task order, then the order the paths appear in the goal.
+ */
+export function goalPathsOutsideTargets(output: SplitOutput | MultiSplitOutput): GoalPathOutsideTargets[] {
+  const tasks = output.tasks as readonly Task[];
+  if (tasks.some((task) => "writes" in task)) return [];
+  const targets = tasks.flatMap((task) => targetsOf(task).map(normal));
+  const out: GoalPathOutsideTargets[] = [];
+  for (const task of tasks) {
+    const named = [...new Set([...task.goal.matchAll(GOAL_PATH)].map((match) => match[0]))];
+    for (const path of named) if (exactShape(path) && !targets.some((target) => coversShape(target, path))) out.push({ taskId: task.taskId, path });
+  }
+  return out;
+}
+
+/** Tester #345: at most this many distinct goal paths are looked up in the base commit per draft (one git read per parent directory). */
+export const GOAL_PATH_PROBE_LIMIT = 64;
+
+/** Tester #345: the distinct paths of `entries` to look up in the base commit, the first GOAL_PATH_PROBE_LIMIT of them. */
+export const goalPathsToProbe = (entries: readonly GoalPathOutsideTargets[]): string[] =>
+  [...new Set(entries.map((entry) => entry.path))].slice(0, GOAL_PATH_PROBE_LIMIT);
+
+/**
+ * Tester #345 (controller design, session 4389b15f; reversible): a task's goal is part of its authority as its success
+ * condition is, so a goal path no task covers and `creatable` holds -- a new file in a directory the base commit has
+ * (requirementOverview.ts creatableAt) -- is added to that task's targetPaths and recorded with `source: "goal"`.
+ * A path the base commit already has is not added: a goal often names a file it only reads, and widening a write set
+ * serialises tasks that could run in parallel. It stays a hint (goalPathsOutsideTargets in the requirement view), as
+ * does a new file under a directory the commit lacks (validation would refuse that target path: `path:`). Every task
+ * whose goal names the path gets it, judged on the draft as given. Returns the same object when nothing is added.
+ */
+export function applyGoalPaths(output: SplitOutput, creatable: ReadonlySet<string>): { output: SplitOutput; added: ImpliedPathAddition[] } {
+  const hints = goalPathsOutsideTargets(output).filter((hint) => creatable.has(hint.path));
+  if (hints.length === 0) return { output, added: [] };
+  const copy = structuredClone(output);
+  for (const hint of hints) copy.tasks.find((task) => task.taskId === hint.taskId)!.targetPaths.push(hint.path);
+  return { output: copy, added: hints.map((hint) => ({ taskId: hint.taskId, path: hint.path, writers: [], source: "goal" as const })) };
+}
 
 /**
  * Spec 2026-11-16 (#265): a task's success condition is part of its authority, so a path it names as a whole token is

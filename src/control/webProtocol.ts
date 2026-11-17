@@ -1864,6 +1864,8 @@ export const requirementViewSchema = z.object({
   // Tester #265: optional on the same terms.
   drafts: z.array(draftBodySchema.omit({ plan: true }).extend({ parallelCandidates: z.array(z.object({ before: nonemptyString, after: nonemptyString }).strict()).optional(),
     impliedPathsOutsideTargets: z.array(z.object({ taskId: nonemptyString, path: nonemptyString, writers: z.array(nonemptyString).min(1) }).strict()).optional(),
+    // Tester #345: optional on the same terms.
+    goalPathsOutsideTargets: z.array(z.object({ taskId: nonemptyString, path: nonemptyString }).strict()).optional(),
     // Tester #335: optional on the same terms as the two hints above.
     overlapSerialized: z.array(z.object({ a: nonemptyString, b: nonemptyString, paths: z.array(nonemptyString).min(1) }).strict()).optional() })),
   document: z.string(),

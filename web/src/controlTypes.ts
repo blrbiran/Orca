@@ -318,10 +318,12 @@ export type DraftViewV1 = {
   parallelCandidates?: Array<{ before: string; after: string }>;
   /** Tester #265: tasks whose success condition names a file only another task may write (a hint; only on a draft with layers). */
   impliedPathsOutsideTargets?: Array<{ taskId: string; path: string; writers: string[] }>;
+  /** Tester #345: paths a task's goal names that no task's target paths cover, and the split did not add (a hint). */
+  goalPathsOutsideTargets?: Array<{ taskId: string; path: string }>;
   /** Tester #335: tasks no dependency orders that run one after the other only because a broad target path overlaps (a hint). */
   overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>;
-  /** Spec 2026-11-16: paths the split added to a task's targetPaths because its success condition named them. */
-  impliedPathsAdded: Array<{ taskId: string; path: string; writers: string[] }> | null;
+  /** Spec 2026-11-16: paths the split added to a task's targetPaths because its success condition named them (#345: or its goal, `source: "goal"`). */
+  impliedPathsAdded: Array<{ taskId: string; path: string; writers: string[]; source?: "goal" }> | null;
   reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised";
   calls: RequirementCallRecordV1[];
 };
