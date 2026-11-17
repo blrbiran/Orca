@@ -7,6 +7,7 @@ import { DriverCrash } from "../../src/control/executionDriver.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { taskRunNumber } from "../../web/src/runFacts.js";
+import { releaseOnly } from "../helpers/releaseGate.js";
 import { ccloopWorlds, g, noBlocked, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
 
 /**
@@ -191,8 +192,9 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
     } finally { await w.teardown(); await rm(flagDir, { recursive: true, force: true }); }
   });
 
-  it.each(["A2-after-workspace", "B-after-accept", "C-after-terminal", "D-after-cas", "E-after-acceptance"] as const)(
-    "R1 %s: a death between an external action and its record ends where a clean run ends, spending no more", async (point) => {
+  // Ruling: human 2026-11-17 (test pruning) -- C-after-terminal stays daily (no other test crashes there); the other R1
+  // points run in the release gate only, each covered daily elsewhere (named at the release-only case below).
+  const r1Case = async (point: "A2-after-workspace" | "B-after-accept" | "C-after-terminal" | "D-after-cas" | "E-after-acceptance"): Promise<void> => {
       const w = await world([{ taskId: "a", targetPaths: ["shared.txt"] }], { a: { files: { "shared.txt": "A\n" } } });
       const before = w.human();
       try {
@@ -218,5 +220,13 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
         expect(second.store.dispatchBlocked).toBe(false);
         expect(await second.shutdown()).toBe(true);
       } finally { await w.teardown(); }
-    });
+    };
+  const R1_TITLE = "R1 %s: a death between an external action and its record ends where a clean run ends, spending no more";
+  it.each(["C-after-terminal"] as const)(R1_TITLE, r1Case);
+  // Release-only. Daily cover -- A2-after-workspace: executionDriver.test.ts "ends the driver like a death when a crash hook
+  // fires, and a new driver finishes A2 on the same workspace" (and driverSkills.test.ts); B-after-accept: handoffE2ERecovery
+  // "R-H B-after-accept" (real ccloop) and driverHandoff.test.ts "does not restart a prepared run whose accept reached ccloop
+  // before a death" -- both under a stop, none daily without one; D-after-cas: driverDecisions.test.ts, multiDirLandingD,
+  // debugClosing, historySource; E-after-acceptance: driverSettle.test.ts, driverSettleLane.test.ts.
+  it.runIf(releaseOnly).each(["A2-after-workspace", "B-after-accept", "D-after-cas", "E-after-acceptance"] as const)(R1_TITLE, r1Case);
 });
