@@ -227,6 +227,9 @@ export function applyIntegrateNow(deps: { store: ControlStore }, command: Integr
       const current = readGroupIntegration(group);
       if (current === null || !current.frozen) throw new ControlError("integration-not-configured");
       if (current.state !== "idle") throw new ControlError("integration-not-idle", current.state);
+      // Review 2026-11-17 finding 4: the pass skips a stopped group (integrationPass.ts), so nothing would follow. (An archived
+      // group is refused group-archived before this runs, by the command ledger.)
+      if (group.stopped === true || deps.store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) throw new ControlError("integration-not-ready", "stopped");
       const tasks = deps.store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
         .map((work) => JSON.parse(String(work.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
       if (tasks.length === 0 || tasks.some((work) => work.status !== "done")) throw new ControlError("integration-not-ready", "tasks-not-done");

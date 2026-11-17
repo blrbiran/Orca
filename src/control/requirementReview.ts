@@ -417,8 +417,10 @@ async function reviewFacts(repo: string, body: unknown, tip: string): Promise<st
   const target = deliveredAcceptanceTarget(body), record = deliveredAcceptanceOf(body);
   if (target !== null && target.tip === tip && record !== null && record.tip === target.tip && record.commit === target.commit) {
     lines.push(record.result === "not-needed"
-      ? `Acceptance on the delivered commit: not needed (${record.why === "same-tree" ? "the delivered tree equals the reviewed tip's" : "the target already held the reviewed tip"})`
-      : `Acceptance on the delivered commit ${short(record.commit)}: ${record.result}`, ...commandLines(record.commands));
+      ? `Acceptance on the delivered commit: not needed (${record.why === "same-tree" ? "the delivered tree equals the reviewed tip's" : record.why === "before-record" ? "delivered before Orca recorded which tip a commit was made for; not checked" : "the target already held the reviewed tip"})`
+      : `Acceptance on the delivered commit ${short(record.commit)}: ${record.result}`, ...commandLines(record.commands),
+      // Review 2026-11-17: a red delivered acceptance's output, as the spec's D3 says the failure is in the prompt.
+      ...(record.result === "failed" && record.tail !== undefined && record.tail !== "" ? [`  failing output (end): ${cutUtf8(record.tail, 1_500)}`] : []));
   }
   return lines;
 }

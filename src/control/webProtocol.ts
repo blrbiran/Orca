@@ -1721,7 +1721,7 @@ export const groupSummarySchema = z
     // `delivered-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
     deliveredAcceptance: z.object({
       tip: commitShaSchema, commit: commitShaSchema, result: z.enum(["passed", "passed-relative", "failed", "not-needed", "waived"]),
-      why: z.enum(["same-tree", "already-in-target"]).optional(),
+      why: z.enum(["same-tree", "already-in-target", "before-record"]).optional(),
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
       tail: z.string().max(2048).optional(), at: safeInteger,
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),

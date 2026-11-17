@@ -60,6 +60,21 @@ describe("integrate now (#333, delivery tail D6)", { timeout: 60_000 }, () => {
       w.doneTasks();
       w.setRecord({ state: "blocked", reason: "integration-target-moved" });
       expect((await w.integrateNow()).error).toMatchObject({ code: "integration-not-idle", message: "integration-not-idle:blocked" });
+      w.setRecord({ state: "idle", reason: null });
+      // Review 2026-11-17 finding 5: a failed acceptance refuses too (mutation: drop the acceptance check). The run-active refusal
+      // has no fixture run here to hold; it shares groupComplete's query, pinned by deliveryTail.test.ts (D1).
+      setBody(w.store, { ...body(w.store), acceptance: { tip: "a".repeat(40), result: "failed", commands: [], at: 0 } });
+      expect((await w.integrateNow()).error).toMatchObject({ code: "integration-not-ready", message: "integration-not-ready:acceptance-not-satisfied" });
+      const { acceptance: _a, ...noAcceptance } = body(w.store);
+      setBody(w.store, noAcceptance);
+      // Finding 4: the pass skips an archived or stopped group, so integrate-now refuses rather than promise (an archived
+      // group by the command ledger's own guard).
+      setBody(w.store, { ...body(w.store), archived: { at: 1, actor: "user:owner" } });
+      expect((await w.integrateNow()).error).toMatchObject({ code: "group-archived" });
+      const { archived: _ar, ...unarchived } = body(w.store);
+      setBody(w.store, { ...unarchived, stopped: true });
+      expect((await w.integrateNow()).error).toMatchObject({ code: "integration-not-ready", message: "integration-not-ready:stopped" });
+      setBody(w.store, { ...body(w.store), stopped: false });
       const { integration: _gone, ...keep } = body(w.store);
       setBody(w.store, keep);
       expect((await w.integrateNow()).error).toMatchObject({ code: "integration-not-configured" });

@@ -11,6 +11,8 @@ import { newGroupIntegration, readGroupIntegration, type GroupIntegration, type 
 import type { ControlStore } from "../../src/control/store.js";
 import { controlWorkspaceRoots, unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
+import { acceptDeliveries } from "../../src/control/deliveredAcceptance.js";
+import { deliveredAcceptanceSatisfied, deliveredAcceptanceTarget } from "../../src/control/groupAcceptanceRecord.js";
 import { webFixture } from "./fixtures/web.js";
 import { reviewWorld } from "./fixtures/reviewWorld.js";
 
@@ -84,6 +86,32 @@ describe("the integration record's delivery facts (delivery tail spec D5, Correc
       expect(await w.pass()).toBe(true);
       expect(w.record()).toMatchObject({ lastIntegrated: second, integratedCommit: merged, integratedFor: first });
     } finally { await w.dispose(); }
+  });
+});
+
+describe("the delivered acceptance's own gate (review 2026-11-17 findings 1-3)", { timeout: 60_000 }, () => {
+  it("does not check a delivery while tasks are not done or no acceptance is recorded for the tip; does once both hold", async () => {
+    const w = await world(); try {
+      const tip = w.land({ "a.txt": "a\n" });
+      setRecord(w.store, { ...w.record(), lastIntegrated: tip, integratedCommit: tip, integratedFor: tip });
+      const deps = { store: w.store, roots: controlWorkspaceRoots(w.store.stateDir), resolveRepository: () => w.repo, write: <T>(action: () => T) => action(), stopped: () => false };
+      // mutation: drop the tasks-done / recorded-acceptance gate -> a not-needed record for an intermediate delivery, red
+      expect(await acceptDeliveries(deps, new Map())).toBe(false);
+      expect(groupBody(w.store).deliveredAcceptance).toBeUndefined();
+      w.store.db.prepare("UPDATE work_items SET body=json_set(body,'$.status','done') WHERE group_id='g'").run();
+      w.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...groupBody(w.store), acceptance: { tip, result: "not-needed", why: "single-landing", commands: [], at: 0 } }));
+      expect(await acceptDeliveries(deps, new Map())).toBe(true);
+      expect(groupBody(w.store).deliveredAcceptance).toMatchObject({ tip, commit: tip, result: "not-needed", why: "same-tree" });
+    } finally { await w.dispose(); }
+  });
+
+  it("names a delivery made before integratedFor existed, and an archived prerequisite does not wait for a check", () => {
+    const integration = { scheme: LOCAL_MERGE, frozen: true, state: "idle", pending: null, lastIntegrated: "a".repeat(40), integratedCommit: "b".repeat(40) };
+    // mutation: treat an absent integratedFor as already-in-target -> commit a..., red
+    expect(deliveredAcceptanceTarget({ integration })).toEqual({ tip: "a".repeat(40), commit: "b".repeat(40), madeForTip: false, beforeRecord: true });
+    // mutation: drop the archived exemption -> false, red
+    expect(deliveredAcceptanceSatisfied({ status: "review", archived: { at: 1, actor: "x" }, integration: { ...integration, integratedFor: "a".repeat(40) } })).toBe(true);
+    expect(deliveredAcceptanceSatisfied({ status: "review", integration: { ...integration, integratedFor: "a".repeat(40) } })).toBe(false);
   });
 });
 

@@ -60,8 +60,12 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
   const inFlight = checks.get(keyOf(groupId));
   const target = body.planHash === undefined || isGroupArchived(store, groupId) ? null : deliveredAcceptanceTarget(body);
   const accepted = acceptanceOf(body);
-  // The tip's own acceptance must stand for T (the acceptance pass re-checks a moved tip first).
-  const tipAccepted = target !== null && acceptanceSatisfied(store, groupId, body) && (accepted === null || accepted.tip === null || accepted.tip === target.tip);
+  // The tip's own acceptance must be recorded for T and satisfied, with every task done (review 2026-11-17, finding 1: a
+  // `trigger: task` group delivers after each landing; an intermediate delivery is not the group's delivery).
+  const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
+    .map((work) => JSON.parse(String(work.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
+  const tipAccepted = target !== null && accepted !== null && accepted.tip === target.tip && acceptanceSatisfied(store, groupId, body)
+    && tasks.length > 0 && tasks.every((work) => work.status === "done");
   if (target === null || !tipAccepted || store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) {
     if (inFlight !== undefined && inFlight.settled === null) { inFlight.controller.abort(); checks.delete(keyOf(groupId)); }
     return false;
@@ -79,6 +83,10 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
   const recorded = deliveredAcceptanceOf(body);
   if (recorded !== null && recorded.tip === target.tip && recorded.commit === target.commit) return false;
   const at = store.now();
+  if (target.beforeRecord) {
+    deps.write(() => save(store, groupId, { tip: target.tip, commit: target.commit, result: "not-needed", why: "before-record", commands: [], at }, false));
+    return true;
+  }
   if (!target.madeForTip) {
     deps.write(() => save(store, groupId, { tip: target.tip, commit: target.commit, result: "not-needed", why: "already-in-target", commands: [], at }, false));
     return true;

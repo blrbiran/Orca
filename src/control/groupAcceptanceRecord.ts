@@ -124,7 +124,7 @@ export function acceptanceProblem(record: GroupAcceptance | null): string | null
 export interface DeliveredAcceptance {
   tip: string; commit: string;
   result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived";
-  why?: "same-tree" | "already-in-target";
+  why?: "same-tree" | "already-in-target" | "before-record";
   commands: Array<{ command: string; exit: string; ms: number }>;
   tail?: string; at: number;
   waived?: { by: string; note: string; at: number };
@@ -140,7 +140,7 @@ export function deliveredAcceptanceOf(body: unknown): DeliveredAcceptance | null
  * delivery with no history promise and nothing pending, delivered as `lastIntegrated` -> `commit`. `madeForTip` is false
  * when no new commit was made for that tip (Correction 1.3). Null when D3 does not apply.
  */
-export function deliveredAcceptanceTarget(body: unknown): { tip: string; commit: string; madeForTip: boolean } | null {
+export function deliveredAcceptanceTarget(body: unknown): { tip: string; commit: string; madeForTip: boolean; beforeRecord: boolean } | null {
   const integration = (body as { integration?: unknown } | null)?.integration as {
     scheme?: { delivery?: unknown; historyExpectation?: unknown }; frozen?: unknown; state?: unknown; pending?: unknown;
     lastIntegrated?: unknown; integratedCommit?: unknown; integratedFor?: unknown } | undefined;
@@ -148,7 +148,9 @@ export function deliveredAcceptanceTarget(body: unknown): { tip: string; commit:
   if (integration.scheme?.delivery !== "local" || integration.scheme.historyExpectation !== undefined || integration.frozen !== true) return null;
   if (integration.state !== "idle" || (integration.pending !== null && integration.pending !== undefined) || typeof integration.lastIntegrated !== "string") return null;
   const madeForTip = typeof integration.integratedCommit === "string" && integration.integratedFor === integration.lastIntegrated;
-  return { tip: integration.lastIntegrated, commit: madeForTip ? integration.integratedCommit as string : integration.lastIntegrated, madeForTip };
+  // Review 2026-11-17 finding 2: a record integrated before `integratedFor` existed cannot say which tip its commit was for.
+  const beforeRecord = integration.integratedFor === undefined && typeof integration.integratedCommit === "string";
+  return { tip: integration.lastIntegrated, commit: madeForTip || beforeRecord ? integration.integratedCommit as string : integration.lastIntegrated, madeForTip, beforeRecord };
 }
 
 const DELIVERED_SATISFIED: ReadonlySet<DeliveredAcceptance["result"]> = new Set(["passed", "passed-relative", "not-needed", "waived"]);
@@ -161,7 +163,9 @@ export function deliveredAcceptanceSatisfied(body: unknown): boolean {
   const target = deliveredAcceptanceTarget(body);
   if (target === null) return true;
   const record = deliveredAcceptanceOf(body);
-  if (record === null || record.tip !== target.tip || record.commit !== target.commit) return (body as { status?: unknown }).status === "done";
+  // Review 2026-11-17 finding 3: an archived group is never checked (the pass skips it); it does not hold its dependents.
+  const archived = (body as { archived?: unknown } | null)?.archived != null;
+  if (record === null || record.tip !== target.tip || record.commit !== target.commit) return (body as { status?: unknown }).status === "done" || archived;
   return DELIVERED_SATISFIED.has(record.result);
 }
 
