@@ -105,10 +105,16 @@ async function namesPathOrFilter(args) {
   return (await vitestNode()).parseCLI(["vitest", "run", ...args]).filter.length > 0;
 }
 
+// A fixed per-user path, not os.tmpdir(): sessions run with different TMPDIRs and must still see one lock. The tests a
+// gate runs get a nested lock of their own (childEnv): a test of this script spawns it again, and with the one path that
+// nested run waited on its own parent forever (session 2026-11-17, a wide gate hung on testAffected.test.ts).
+const lockPath = process.env.ORCA_GATE_LOCK || join("/tmp", `orca-gate-${process.getuid?.() ?? "user"}.lock`);
+const childEnv = { ...process.env, ORCA_GATE_LOCK: `${lockPath}.nested-${process.pid}` };
+
 // Pass-through: `npm test -- tests/x.test.ts` keeps meaning "run only this".
 if (await namesPathOrFilter(vitestArgs)) {
   console.log(`test-affected: the arguments name a path or filter; running exactly: vitest run ${vitestArgs.join(" ")}`);
-  const r = spawnSync(vitestBin, ["run", ...vitestArgs], { cwd: root, stdio: "inherit" });
+  const r = spawnSync(vitestBin, ["run", ...vitestArgs], { cwd: root, stdio: "inherit", env: childEnv });
   if (r.error) console.error(r.error);
   process.exit(r.status ?? 1);
 }
@@ -120,8 +126,6 @@ const gitDir = resolve(root, git(["rev-parse", "--git-dir"]).trim());
 const reportDir = join(gitDir, "orca-gate");
 const lastRunPath = join(reportDir, "last-run.json");
 const stampDir = join(resolve(root, git(["rev-parse", "--git-common-dir"]).trim()), "orca-gate", "green");
-// A fixed per-user path, not os.tmpdir(): sessions run with different TMPDIRs and must still see one lock.
-const lockPath = process.env.ORCA_GATE_LOCK || join("/tmp", `orca-gate-${process.getuid?.() ?? "user"}.lock`);
 const treeClean = () => git(["status", "--porcelain", "--untracked-files=all"]).length === 0;
 const headTree = () => git(["rev-parse", "HEAD^{tree}"]).trim();
 
@@ -131,9 +135,8 @@ function uptime(when) {
 }
 
 // One gate at a time on the machine: parallel gates multiplied the load flakes (docs/handoff/known-load-flakes.md).
-// The lock is a file holding the owner's pid; a lock whose pid is dead is stale and taken over. The temp dir is the
-// default because a test of this script runs inside a gate with its own scoped TMPDIR (tests/setup/scopeTmpdir.ts):
-// a fixed path would make that nested run wait on its own parent forever.
+// The lock is a file holding the owner's pid; a lock whose pid is dead is stale and taken over. The tests a gate runs
+// get their own nested lock path (childEnv above), so a test that runs this script never waits on its parent.
 function lockHolder() {
   try { return JSON.parse(readFileSync(lockPath, "utf8")); } catch { return null; }
 }
@@ -215,7 +218,7 @@ function runVitest(suite, cwd, files) {
   const result = join(reportDir, `last-run.${suite}.json`);
   rmSync(result, { force: true });
   const reporters = [...(userReporter ? [] : ["--reporter=default"]), "--reporter=json", `--outputFile.json=${result}`];
-  const r = spawnSync(vitestBin, ["run", ...files, ...vitestArgs, ...reporters], { cwd, stdio: "inherit" });
+  const r = spawnSync(vitestBin, ["run", ...files, ...vitestArgs, ...reporters], { cwd, stdio: "inherit", env: childEnv });
   if (r.error) console.error(r.error);
   const status = r.status ?? 1;
   if (!existsSync(result)) {

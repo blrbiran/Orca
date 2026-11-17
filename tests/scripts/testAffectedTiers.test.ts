@@ -30,7 +30,7 @@ const T = (body: string) => `import { expect, it } from "vitest";\n${body}\nit("
 
 const FAKE_VITEST = String.raw`#!/usr/bin/env node
 const fs = require("fs");
-fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ tool: "vitest", argv: process.argv.slice(2), cwd: process.cwd() }) + "\n");
+fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ tool: "vitest", argv: process.argv.slice(2), cwd: process.cwd(), lock: process.env.ORCA_GATE_LOCK }) + "\n");
 const out = process.argv.find((a) => a.startsWith("--outputFile.json="));
 if (out) fs.writeFileSync(out.slice("--outputFile.json=".length), process.env.FAKE_VITEST_JSON || JSON.stringify({ testResults: [] }));
 process.exit(Number(process.env.FAKE_VITEST_EXIT || 0));
@@ -236,6 +236,20 @@ describe("one gate at a time on the machine, with the load printed", () => {
     expect(r.out.indexOf("load at start: ")).toBeGreaterThan(waiting);
     expect(r.out).toContain("test-affected: load at end: ");
     expect(existsSync(lock)).toBe(false);
+  }, 30_000);
+
+  // Controller, session 2026-11-17: a test of this script runs inside a gate and spawns the script again; with one fixed
+  // lock path that nested run waited on its own parent forever (a real wide gate hung 39 min on testAffected.test.ts).
+  // The tests a gate runs get their own nested lock; the outer lock stays the one machine-wide path.
+  it("gives the tests it runs a lock of their own, so a gate started by a test never waits on this one", () => {
+    const { repo, run, lock, calls } = tierRepo();
+    write(repo, "tests/c/plain.test.ts", T("// changed"));
+    const r = run(["--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    const vitest = calls().filter((c: { tool: string }) => c.tool === "vitest") as Array<{ lock?: string }>;
+    expect(vitest.length, r.out).toBeGreaterThan(0);
+    // mutation: spawn vitest with the parent's environment -> the child sees the outer lock path, red
+    for (const call of vitest) { expect(call.lock).toBeDefined(); expect(call.lock).not.toBe(lock); }
   }, 30_000);
 
   it("takes over a lock whose pid is dead", () => {
