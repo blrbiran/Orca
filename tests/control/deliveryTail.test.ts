@@ -87,6 +87,28 @@ describe("the integration record's delivery facts (delivery tail spec D5, Correc
       expect(w.record()).toMatchObject({ lastIntegrated: second, integratedCommit: merged, integratedFor: first });
     } finally { await w.dispose(); }
   });
+
+  it("a finished local group with nothing to carry records its tip as delivered, so it can be done (Correction 3)", async () => {
+    const w = await world(); try {
+      const tip = g(w.repo, ["rev-parse", "refs/heads/orca/g"]);
+      // Tasks not done yet: nothing is recorded. mutation: drop the groupComplete requirement -> lastIntegrated set, red
+      expect(await w.pass()).toBe(false);
+      expect(w.record()).toMatchObject({ lastIntegrated: null, integratedCommit: null });
+      w.store.db.prepare("UPDATE work_items SET body=json_set(body,'$.status','done') WHERE group_id='g'").run();
+      w.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...groupBody(w.store), acceptance: { tip, result: "not-needed", why: "single-landing", commands: [], at: 0 } }));
+      // mutation: keep returning null for nothing landed -> lastIntegrated null, red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: tip, integratedCommit: null, integratedFor: null, pending: null });
+      expect(g(w.repo, ["rev-parse", "main"])).toBe(tip); // the target is untouched: no commit was made
+      // The delivered acceptance names it already in the target and does not run a command; the done gate is then met.
+      const deps = { store: w.store, roots: controlWorkspaceRoots(w.store.stateDir), resolveRepository: () => w.repo, write: <T>(action: () => T) => action(), stopped: () => false };
+      expect(await acceptDeliveries(deps, new Map())).toBe(true);
+      expect(groupBody(w.store).deliveredAcceptance).toMatchObject({ tip, commit: tip, result: "not-needed", why: "already-in-target" });
+      expect(deliveredAcceptanceSatisfied(groupBody(w.store))).toBe(true);
+      // Caught up: the next pass has nothing to do.
+      expect(await w.pass()).toBe(false);
+    } finally { await w.dispose(); }
+  });
 });
 
 describe("the delivered acceptance's own gate (review 2026-11-17 findings 1-3)", { timeout: 60_000 }, () => {

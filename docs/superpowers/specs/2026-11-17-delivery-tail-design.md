@@ -206,3 +206,15 @@ A fresh reviewer read the five implementation commits against this spec. No Crit
 4. **integrate-now refuses a stopped group** (`integration-not-ready:stopped`); an archived group was already refused
    `group-archived` by the command ledger.
 5. **A red delivered acceptance's output tail** (cut at 1,500 bytes) is in the review prompt, as D3 says.
+
+### Correction 3 (session 2026-11-17 evening, after the human's review)
+
+The human reviewed Correction 1 (seven items) and Correction 2 (five items) with the controller's recommendation for each
+and answered 「按你的建议走」: all twelve stand as written, including 1.6 (a single-landing group's delivered tree that
+differs from its tip runs the configured union, the project's full-suite command included when set). One change:
+
+1. **"Nothing to carry" now reaches done** (replaces Correction 1.4's "out of scope"). When the integration pass finds a
+   `local` group's tip already in the target (`nothingLanded`, local refs) and the group is complete (every task done, no
+   active run but a review's, the acceptance satisfied), it settles the record as delivered: `lastIntegrated = T`,
+   `integratedCommit = null`, no commit made. D3 then records `not-needed` / `already-in-target`, and the done gate is met.
+   An incomplete group, a caught-up one and `push-target` / `github-pr` are unchanged.

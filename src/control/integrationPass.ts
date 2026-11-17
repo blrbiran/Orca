@@ -237,7 +237,12 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
   // A write-ahead record of this scheme always gets its re-entry (§6.1 step 2) -- settled when the target holds its
   // `new`, recomputed on what the target holds otherwise: a `merge` published before a crash leaves the tip in the
   // target, which is not "nothing landed" but an integration whose record was never settled (Task 5).
-  if (reentry(integration) === null && (integration.lastIntegrated === null || (caughtUp && !readyOnly)) && await nothingLanded(repo, scheme, tip)) return null;
+  if (reentry(integration) === null && (integration.lastIntegrated === null || (caughtUp && !readyOnly)) && await nothingLanded(repo, scheme, tip)) {
+    // Delivery tail Correction 3 (human 2026-11-17, "按你的建议走"): a finished local group whose tip the target already
+    // holds has nothing to carry; its tip is recorded as delivered (no commit made), or its done gate would never be met.
+    if (!caughtUp && scheme.delivery === "local" && groupComplete(deps.store, groupId)) return { kind: "done", tip, integrated: null };
+    return null;
+  }
   try {
     if (readyOnly) return await finishWorkBranch(deps, repo, groupId, integration, scheme as Extract<Scheme, { delivery: "github-pr" }>, tip);
     if (scheme.delivery === "local" || scheme.delivery === "push-target") {
