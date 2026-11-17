@@ -24,11 +24,15 @@ export const historyAcceptanceRecordSchema = z.object({ hash, chainHash: hash, g
 export type HistoryAcceptanceRecord = z.infer<typeof historyAcceptanceRecordSchema>;
 
 /** A DB-only completion gate; the driver refreshes its Git observation before each done pass. */
-export function historySatisfied(store: ControlStore, groupId: string): boolean {
+// Tester #327 review: `body` is the group's body when the caller already read it (the panel summary), so it is not read again.
+export function historySatisfied(store: ControlStore, groupId: string, body?: unknown): boolean {
   try {
-    const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
-    if (!row) return false;
-    const group = JSON.parse(String(row.body)) as { integration?: unknown; historyAcceptance?: unknown };
+    let group = body as { integration?: unknown; historyAcceptance?: unknown } | undefined;
+    if (group === undefined) {
+      const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+      if (!row) return false;
+      group = JSON.parse(String(row.body)) as { integration?: unknown; historyAcceptance?: unknown };
+    }
     const integration = readGroupIntegration(group);
     if (integration?.scheme.delivery !== "local" || !integration.scheme.historyExpectation) return true;
     const chain = integration.historyPublished, parsed = historyAcceptanceRecordSchema.safeParse(group.historyAcceptance);

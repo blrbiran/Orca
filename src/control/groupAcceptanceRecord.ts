@@ -46,10 +46,15 @@ export function acceptanceOf(body: unknown): GroupAcceptance | null {
 
 /** How many of the group's tasks landed a commit on its branch (any run of the task); a DB read, no git. */
 export function landedTaskCount(store: Pick<ControlStore, "db">, groupId: string): number {
+  return countLandedTasks(store.db.prepare("SELECT body FROM runs WHERE group_id=?").all(groupId).map((row) => JSON.parse(String(row.body)) as unknown));
+}
+
+/** Tester #327 review: landedTaskCount's rule over run bodies a caller already decoded (the panel summary's snapshot). */
+export function countLandedTasks(runs: Iterable<unknown>): number {
   const tasks = new Set<string>();
-  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=?").all(groupId)) {
-    const run = JSON.parse(String(row.body)) as { taskId?: unknown; drive?: { landedCommit?: unknown } };
-    if (typeof run.taskId === "string" && typeof run.drive?.landedCommit === "string") tasks.add(run.taskId);
+  for (const value of runs) {
+    const run = value as { taskId?: unknown; drive?: { landedCommit?: unknown } } | null;
+    if (typeof run?.taskId === "string" && typeof run.drive?.landedCommit === "string") tasks.add(run.taskId);
   }
   return tasks.size;
 }
@@ -71,13 +76,15 @@ export function landedRunCount(store: Pick<ControlStore, "db">, groupId: string)
  * also satisfies a group already `done` (it stays done, and its dependents keep reading it so); any other group that
  * needs an acceptance has no tree to accept and waits.
  */
-export function acceptanceSatisfied(store: ControlStore, groupId: string, body: unknown): boolean {
+export function acceptanceSatisfied(store: ControlStore, groupId: string, body: unknown,
+  // Tester #327 review: a reader that already holds the group's runs counts them itself (countLandedTasks).
+  landedTasks: () => number = () => landedTaskCount(store, groupId)): boolean {
   const record = acceptanceOf(body);
   if (record?.why === "work-branch-missing" && (body as { status?: unknown }).status === "done") return true;
   if (record !== null && record.why !== "work-branch-missing") return SATISFIED.has(record.result);
   const b = (body ?? {}) as { multiDir?: unknown; dirWorkspace?: unknown; plan?: { repoId?: unknown } };
   if (b.multiDir != null || b.dirWorkspace != null) return true;
-  const landed = landedTaskCount(store, groupId);
+  const landed = landedTasks();
   // Full suite spec §4: with a full-suite command set, one landing waits for the acceptance too. Settings that cannot be
   // read wait as well: the acceptance pass names that error every round (groupAcceptance.ts acceptGroups).
   let suite: string | null;

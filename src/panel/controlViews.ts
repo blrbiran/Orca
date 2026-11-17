@@ -26,7 +26,7 @@ import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
-import { acceptanceOf, acceptanceProblem, deliveredAcceptanceOf, deliveredAcceptanceProblem, fullSuiteWarning } from "../control/groupAcceptanceRecord.js";
+import { acceptanceOf, acceptanceProblem, countLandedTasks, deliveredAcceptanceOf, deliveredAcceptanceProblem, fullSuiteWarning } from "../control/groupAcceptanceRecord.js";
 import { landingWatchOf } from "../control/landingWatchRecord.js";
 import { allowancesOf } from "../control/groupAllowances.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -79,7 +79,7 @@ import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenInte
 import { estimateHistoryView } from "../control/estimateHistory.js";
 import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
-import { prerequisiteDone, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
+import { allTasksDone, prerequisiteDoneFrom, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
 import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
@@ -643,9 +643,17 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const executing = archived === null ? undefined : groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!);
   const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites, executing);
   const dependsOn = prerequisitesOf(store, groupId);
-  // Tester #327: whether a dependent would stop waiting for this group. prerequisiteDone first needs every task done, so
-  // it is asked only when the tally already says so: an unfinished group costs no extra read.
-  const landed = tally !== null && tally.completion.total > 0 && tally.completion.done === tally.completion.total && prerequisiteDone(store, groupId);
+  // Tester #327: whether a dependent would stop waiting for this group -- prerequisiteDone's own rule (prerequisiteDoneFrom),
+  // decided from this summary's body and snapshot so a done group reads no group, work or run body twice (review of #327).
+  // Asked only once the tally has every task done: an unfinished group decodes nothing more. A run body without a landed
+  // commit cannot count, so only those that name one are decoded.
+  const landed = tally !== null && tally.completion.total > 0 && tally.completion.done === tally.completion.total
+    && prerequisiteDoneFrom(store, groupId, {
+      body: body as Record<string, unknown>,
+      tasksAllDone: () => allTasksDone([...readSnapshot!.workById.keys()].flatMap((id) => { const r = readSnapshot!.decodeWork(id); return r?.ok === true ? [r.value] : []; })),
+      landedTasks: () => countLandedTasks(readSnapshot!.runsByRowid.filter((row) => row.body.includes("\"landedCommit\""))
+        .flatMap((row) => { const r = readSnapshot!.decodeRun(row.id); return r?.ok === true ? [r.value] : []; })),
+    });
   const systemDebugMark = readSystemDebugMark(body);
   // Tester #179: a judge that reached its verdict is a success, not a blocked task. The review group is done by its
   // verdict (groupDone.ts), so its completion must say so too instead of the D14-blocked judge task's `done 0/1`.

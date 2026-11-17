@@ -401,4 +401,26 @@ describe("control poll request snapshots", () => {
     expect(observations[1]).toBe(observations[0]);
   });
 
+  // Review of #327: a done group's `landed` (prerequisiteDone) is decided from the summary's own snapshot and body, so a
+  // finished group's summary stays within the same body and group reads as an unfinished one's.
+  it("keeps a done group's summary, landed included, within the same body and group reads", async () => {
+    const { h, runId } = await claimed(3);
+    const counter = installControlReadCounters(h.store);
+    try {
+      const groupsReads = (c: ReadCounters) => c.executions.filter(e => /FROM groups\b/.test(e.sql)).length;
+      counter.reset(); expect(readGroupSummary(counter.store, "g").landed).toBeUndefined(); bounds(counter.snapshot(), false);
+      const before = groupsReads(counter.snapshot());
+      for (const id of ["t00", "t01", "t02"]) save(h, id, { ...work(h, id), status: "done" });
+      const run = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...run, drive: { ...run.drive, landedCommit: "c".repeat(40) } }), runId);
+      counter.reset(); const done = readGroupSummary(counter.store, "g");
+      // The case must reach the landed decision, or the bounds below say nothing about it.
+      expect(done).toMatchObject({ completion: { done: 3, total: 3 }, landed: true });
+      // mutation: prerequisiteDone from the raw store -> work_items and runs body reads 2 each, red
+      bounds(counter.snapshot(), false);
+      // mutation: the history gate reads the group body again -> one more groups read, red
+      expect(groupsReads(counter.snapshot())).toBe(before);
+    } finally { counter.restore(); await h.dispose(); }
+  });
+
 });

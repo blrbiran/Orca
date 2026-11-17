@@ -7,7 +7,7 @@ import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { historySatisfied } from "./historyAcceptance.js";
-import { acceptanceSatisfied, deliveredAcceptanceSatisfied } from "./groupAcceptanceRecord.js";
+import { acceptanceSatisfied, deliveredAcceptanceSatisfied, landedTaskCount } from "./groupAcceptanceRecord.js";
 import { reviewSatisfied } from "./requirementReviewRecord.js";
 import { readGroupOrchestration } from "./orchestration.js";
 import type { ControlStore } from "./store.js";
@@ -40,9 +40,13 @@ function groupBody(store: ControlStore, groupId: string): Record<string, unknown
 }
 
 function tasksAllDone(store: ControlStore, groupId: string): boolean {
-  const statuses = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
-    .map((row) => JSON.parse(String(row.body)) as { kind?: unknown; status?: unknown })
-    .filter((work) => work.kind === "task").map((work) => work.status);
+  return allTasksDone(store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId).map((row) => JSON.parse(String(row.body)) as unknown));
+}
+
+/** Tester #327 review: tasksAllDone's rule over work bodies a caller already decoded (the panel summary's snapshot). */
+export function allTasksDone(works: Iterable<unknown>): boolean {
+  const statuses = [...works].map((work) => work as { kind?: unknown; status?: unknown } | null)
+    .filter((work) => work?.kind === "task").map((work) => work!.status);
   return statuses.length > 0 && statuses.every((status) => status === "done" || status === "completed");
 }
 
@@ -78,11 +82,23 @@ function multiLandingDone(group: Record<string, unknown>): boolean {
 
 export function prerequisiteDone(store: ControlStore, groupId: string): boolean {
   const group = groupBody(store, groupId);
-  if (group === null || !tasksAllDone(store, groupId)) return false;
-  if (!historySatisfied(store, groupId)) return false;
+  if (group === null) return false;
+  return prerequisiteDoneFrom(store, groupId, { body: group, tasksAllDone: () => tasksAllDone(store, groupId), landedTasks: () => landedTaskCount(store, groupId) });
+}
+
+/**
+ * Tester #327 review: prerequisiteDone's one rule, given what it reads -- the group's body, whether every task is done, and
+ * how many tasks landed. The orchestrator reads them from the store (prerequisiteDone); the panel summary passes the body
+ * and the snapshot it already holds, so a done group's summary reads nothing twice and the two answers cannot drift.
+ */
+export function prerequisiteDoneFrom(store: ControlStore, groupId: string,
+  input: { body: Record<string, unknown>; tasksAllDone: () => boolean; landedTasks: () => number }): boolean {
+  const group = input.body;
+  if (!input.tasksAllDone()) return false;
+  if (!historySatisfied(store, groupId, group)) return false;
   // Tester follow-up E §5 (#241): done also needs the group accepted on its final tip (groupAcceptance.ts), so neither the
   // done pass nor a dependent group moves on a group whose final tree failed its tasks' checks.
-  if (!acceptanceSatisfied(store, groupId, group)) return false;
+  if (!acceptanceSatisfied(store, groupId, group, input.landedTasks)) return false;
   // Tester follow-up G spec §3.6: a requirement group is done only once its requirement review passed (or was accepted).
   if (!reviewSatisfied(store, groupId, group)) return false;
   // Delivery tail spec D3: a local delivery's tree that differs from the accepted tip's must pass the same checks too.
