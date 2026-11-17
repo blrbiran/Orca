@@ -188,7 +188,9 @@ export function groupComplete(store: ControlStore, groupId: string): boolean {
   const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
     .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
   if (tasks.some((work) => work.status !== "done")) return false;
-  if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined) return false;
+  // Delivery tail ruling 1 (D1): a requirement review's own call reads the tip and never moves it, so it does not hold the
+  // delivery; any other active run does (a reconciling run is active).
+  if (store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1 AND coalesce(json_extract(body,'$.purpose'),'') <> 'requirement-review'").get(groupId) !== undefined) return false;
   // Tester follow-up E §5 (#241): a complete group is delivered only once it is accepted on its final tip.
   const body = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   return body !== undefined && acceptanceSatisfied(store, groupId, JSON.parse(String(body.body)));
@@ -579,7 +581,9 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
         // A success ends any conflict: the record and its resolution go (and the pass then removes its copies, spec §7).
         if (current.pending?.history && (current.pending.history.targetTip !== outcome.integrated || current.pending.history.groupTip !== outcome.tip))
           throw new ControlError("recovery-blocked", "history-pending-invalid");
-        next = { ...current, lastIntegrated: outcome.tip, integratedCommit: outcome.integrated, pending: null, state: "idle", reason: null, retryAfter: null, transient: 0,
+        next = { ...current, lastIntegrated: outcome.tip, integratedCommit: outcome.integrated, pending: null, state: "idle", reason: null, retryAfter: null, transient: 0, transientReason: null,
+          // Delivery tail Correction 1.3: which tip a newly published commit was made for; kept when nothing new was published.
+          integratedFor: outcome.integrated !== null && outcome.integrated !== current.integratedCommit ? outcome.tip : (current.integratedFor ?? null),
           conflict: null, resolution: null, ...(current.pending?.history === undefined ? {} : { historyPublished: current.pending.history }),
           ...(outcome.pr === undefined ? {} : { pr: outcome.pr }) };
         break;
@@ -588,13 +592,13 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
         next = { ...current, state: "blocked", reason: outcome.reason,
           // A history CAS may already have published its whole chain; never discard its sole re-entry evidence on a block.
           pending: current.pending?.history ? current.pending : null,
-          retryAfter: null, transient: 0, resolution: null };
+          retryAfter: null, transient: 0, transientReason: null, resolution: null };
         break;
       case "conflict": {
         // spec §7: recorded with its materialised copy, and nothing is dispatched until an owner approves.
         const attempt = outcome.attempt ?? nextAttempt(deps.store, groupId, current);
         next = { ...current, state: "conflict", reason: outcome.materialised === null ? "integration-conflict-unreproducible" : "integration-conflict", pending: null,
-          retryAfter: null, transient: 0, attempts: Math.max(current.attempts, attempt),
+          retryAfter: null, transient: 0, transientReason: null, attempts: Math.max(current.attempts, attempt),
           conflict: outcome.materialised ?? { attempt, key: `integrate-${groupId}-${attempt}`, base: outcome.base, tip: outcome.tip, paths: outcome.paths } };
         break;
       }
@@ -604,12 +608,15 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
         next = { ...current, state: "idle", reason: null, resolution: null };
         break;
       case "transient":
-        next = { ...current, retryAfter: deps.now() + Math.min(BACKOFF_START_MS * 2 ** current.transient, BACKOFF_MAX_MS), transient: current.transient + 1 };
+        next = { ...current, retryAfter: deps.now() + Math.min(BACKOFF_START_MS * 2 ** current.transient, BACKOFF_MAX_MS), transient: current.transient + 1,
+          transientReason: Buffer.from(outcome.message, "utf8").subarray(0, 500).toString("utf8") };
         break;
     }
     saveGroup(deps.store, { ...group, integration: next } as typeof group);
     // Issue-fixes spec §5.2: a result the pass records; a transient retry only schedules the next try and is not one.
     if (outcome.kind !== "transient") recordActivity(deps.store, { groupId, kind: "integration", body: { state: next.state, reason: next.reason } });
+    // Delivery tail spec D5 (#333): a backoff is not a result, but it is said -- what failed and when it is tried again.
+    else recordActivity(deps.store, { groupId, kind: "integration-backoff", body: { message: next.transientReason, retryAfter: next.retryAfter, transient: next.transient } });
     return outcome.kind !== "transient";
   });
 }

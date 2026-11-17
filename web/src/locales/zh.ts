@@ -2278,6 +2278,7 @@ export const zh: Translation<typeof en> = {
       "run-settled": "已结束", "task-retried": "任务重试", "saved-result-top-up": "已存结果追加额度", integration: "集成", stop: "已停止", "stop-cleared": "停止已解除",
       archived: "已归档", unarchived: "已取消归档", "correction-closed": "纠正已关闭", "debug-open-failed": "调试组未能打开",
       "ladder-skipped": "未自动重试", "group-done": "组已完成", "quota-probe": "额度探针",
+      "integration-backoff": "集成退避重试", "integration-requested": "已请求立即集成", "delivered-acceptance": "交付后验收",
       "attempt-accepted": "尝试已接受", "attempt-accept-refused": "尝试未被接受",
       "post-merge-check": "合并后检查", "group-acceptance": "组验收",
       "no-change-completed": "无改动完成", "no-change-revoked": "无改动已撤销", "no-change-judged": "目标已评判", "requirement-review": "需求复核",

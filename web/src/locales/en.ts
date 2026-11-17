@@ -105,6 +105,7 @@ const activityKind = {
   "run-settled": "settled", "task-retried": "task retried", "saved-result-top-up": "saved-result top-up", integration: "integration", stop: "stopped", "stop-cleared": "stop cleared",
   archived: "archived", unarchived: "unarchived", "correction-closed": "correction closed", "debug-open-failed": "debug group not opened",
   "ladder-skipped": "not retried", "group-done": "group done", "quota-probe": "quota probe",
+  "integration-backoff": "integration retrying", "integration-requested": "integration requested", "delivered-acceptance": "delivered acceptance",
   "attempt-accepted": "attempt accepted", "attempt-accept-refused": "attempt not accepted",
   "post-merge-check": "post-merge check", "group-acceptance": "group acceptance",
   "no-change-completed": "no change completed", "no-change-revoked": "no change revoked", "no-change-judged": "goal judged", "requirement-review": "requirement review",

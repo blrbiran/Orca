@@ -728,6 +728,8 @@ export interface NoChangeCompletionV1 { runId: string; ordinal: number; decidedB
 // to the server's ACTIVITY_KINDS.
 export const WEB_ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
+  // Delivery tail spec 2026-11-17 (#333/#336): a backoff said, a person's integrate-now, the acceptance on the delivered commit.
+  "integration-backoff", "integration-requested", "delivered-acceptance",
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
   "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",
@@ -993,6 +995,8 @@ export type IntegrationSchemeV1 =
 export type GroupIntegrationViewV1 = {
   scheme: IntegrationSchemeV1; schemeHash: string; frozen: boolean; state: "idle" | "blocked" | "conflict" | "resolving"; reason: string | null;
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
+  /** Delivery tail spec D5 (#333): present only while a transient failure is backing off (epoch ms; the failure's message). */
+  retryAfter?: number; transient?: number; transientReason?: string | null;
   history?: { state: "pending" | "verified" | "blocked"; targetTip: string | null; evidenceHash: string | null; reason: string | null;
     sourceRefs: Array<{ taskId: string; ref: string; sourceSha: string | null; mergeSha: string | null }> };
 };

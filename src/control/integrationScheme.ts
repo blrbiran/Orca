@@ -191,6 +191,12 @@ const groupIntegrationSchema = z.object({
   historyPublished: historyChainSchema.optional(),
   historyReconciledTargetTip: commit.optional(),
   lastIntegrated: commit.nullable(), integratedCommit: commit.nullable(),
+  /**
+   * Delivery tail spec 2026-11-17 (Correction 1.3): the tip `integratedCommit` was made for -- written only when a delivery
+   * published a new commit, so a pass that found the tip already in the target leaves it naming the earlier tip. Absent
+   * on records written before it.
+   */
+  integratedFor: commit.nullable().optional(),
   state: z.enum(["idle", "blocked", "conflict", "resolving"]), reason: z.string().nullable(),
   pending: z.object({ schemeHash: z.string().regex(/^[a-f0-9]{64}$/), tip: commit, base: commit, new: commit,
     history: historyChainSchema.optional() }).strict().nullable(),
@@ -200,6 +206,8 @@ const groupIntegrationSchema = z.object({
   retryAfter: safeInteger.nullable(),
   /** Consecutive transient failures; drives the backoff, 0 after any success. */
   transient: safeInteger,
+  /** Delivery tail spec D5 (#333): the last transient failure's message (cut at 500 bytes), null after any other outcome. */
+  transientReason: z.string().nullable().optional(),
   /**
    * Final review C1: the conflict attempts this record has numbered so far. Never reset (a success or a scheme change
    * clears `conflict`, not this), so an attempt's key, copy, runs directory and outbox entry are never reused. A record

@@ -9,6 +9,7 @@ import type { ControlStore } from "./store.js";
  * Group-scoped kinds only (§1 non-goals).
  */
 export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-started" | "phase" | "run-blocked" | "run-resumed" | "run-settled" | "task-retried" | "saved-result-top-up" | "integration" | "stop" | "stop-cleared" | "archived" | "unarchived" | "correction-closed" | "debug-open-failed" | "ladder-skipped" | "group-done" | "quota-probe"
+  | "integration-backoff" | "integration-requested" | "delivered-acceptance"
   // Reviewed acceptance (spec 2026-11-11 §7): an owner's accepted attempt landed after its checks, or was refused.
   | "attempt-accepted" | "attempt-accept-refused"
   // Tester follow-up E §4 (#245): a clean-merge landing's post-merge check passed (with the landing) or failed (with the block).
@@ -38,6 +39,8 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   | "group-cap-reached" | "usage-paused" | "usage-pause-decided" | "usage-over-expectation";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
+  // Delivery tail spec 2026-11-17 (#333/#336): a backoff said, a person's integrate-now, the acceptance on the delivered commit.
+  "integration-backoff", "integration-requested", "delivered-acceptance",
   "attempt-accepted", "attempt-accept-refused",
   "post-merge-check", "group-acceptance",
   "no-change-completed", "no-change-revoked", "no-change-judged", "requirement-review",

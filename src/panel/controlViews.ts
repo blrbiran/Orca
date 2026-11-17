@@ -1461,8 +1461,10 @@ function integrationView(store: ControlStore, groupId: string, body: unknown): {
   const integration = readGroupIntegration(body);
   if (integration === null) return {};
   const { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } = integration;
+  // Delivery tail spec D5 (#333): a backoff in progress is shown -- when it is retried and what failed.
+  const backoff = integration.retryAfter === null ? {} : { retryAfter: integration.retryAfter, transient: integration.transient, transientReason: integration.transientReason ?? null };
   if (scheme.delivery !== "local" || !scheme.historyExpectation)
-    return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr } };
+    return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr, ...backoff } };
   const accepted = historySatisfied(store, groupId);
   const proof = historyAcceptanceRecordSchema.safeParse((body as { historyAcceptance?: unknown }).historyAcceptance);
   const historyState: "pending" | "verified" | "blocked" = state === "blocked" ? "blocked" : accepted ? "verified" : "pending";
@@ -1471,7 +1473,7 @@ function integrationView(store: ControlStore, groupId: string, body: unknown): {
     const merge = integration.historyPublished?.merges.find(entry => entry.taskId === taskId && entry.sourceSha === binding?.sourceSha);
     return { taskId, ref, sourceSha: binding?.sourceSha ?? null, mergeSha: merge?.commit ?? null };
   });
-  return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr,
+  return { integration: { scheme, schemeHash, frozen, state, reason, lastIntegrated, integratedCommit, pr, ...backoff,
     history: { state: historyState, targetTip: integration.historyReconciledTargetTip ?? integration.historyPublished?.targetTip ?? null,
       evidenceHash: accepted && proof.success ? proof.data.hash : null, reason, sourceRefs } } };
 }

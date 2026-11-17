@@ -1985,6 +1985,8 @@ export const workItemViewSchema = z
 // Issue-fixes spec §5.2 (ruling H5): one row of Orca's activity record as the views show it (src/control/activity.ts).
 export const activityKindSchema = z.enum([
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
+  // Delivery tail spec 2026-11-17 (#333/#336): a backoff said, a person's integrate-now, the acceptance on the delivered commit.
+  "integration-backoff", "integration-requested", "delivered-acceptance",
   // Reviewed acceptance (spec 2026-11-11 §7): a person's accepted attempt landed after its checks, or was refused.
   "attempt-accepted", "attempt-accept-refused",
   // Tester follow-up E §4 (#245): a post-merge check's outcome, written with the landing or the block.
@@ -2253,6 +2255,8 @@ const groupIntegrationViewSchema = z
     reason: z.string().nullable(),
     lastIntegrated: commitShaSchema.nullable(),
     integratedCommit: commitShaSchema.nullable(),
+    // Delivery tail spec D5 (#333): present only while a transient failure is backing off.
+    retryAfter: safeInteger.optional(), transient: safeInteger.optional(), transientReason: z.string().nullable().optional(),
     history: z.object({ state: z.enum(["pending", "verified", "blocked"]), targetTip: commitShaSchema.nullable(),
       evidenceHash: hashSchema.nullable(), reason: z.string().nullable(),
       sourceRefs: z.array(z.object({ taskId: idSchema, ref: z.string().min(1), sourceSha: commitShaSchema.nullable(),
