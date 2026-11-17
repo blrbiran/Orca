@@ -5,6 +5,7 @@ import { controlErrorCatalog } from "../panel/controlErrors.js";
 import { usageLine } from "./help.js";
 import { commandPath, GLOBAL_FLAGS } from "./parse.js";
 import { ESCAPE_HATCH_ONLY, REGISTRY } from "./registry.js";
+import { SERVICE_DOMAINS } from "./serviceUsage.js";
 import type { CommandDef } from "./types.js";
 
 /**
@@ -127,7 +128,11 @@ function cliDocSection(registry: readonly CommandDef[], cliDoc: string): string 
       "",
     ]),
     `Escape-hatch only (no command; \`orca control send\`): ${ESCAPE_HATCH_ONLY.map((verb) => `\`${verb}\``).join(", ")}.`,
-    "", CLI_DOC_END,
+    "",
+    // Tester #342: the domains with their own grammar (not in the registry), as `orca help <domain>` prints them. They
+    // touch the person's running service or accounts: an agent does not run them; it asks the person.
+    ...Object.entries(SERVICE_DOMAINS).flatMap(([domain, { usage, summary }]) => [`### \`orca ${domain}\``, "", `${summary} (own grammar; \`orca help ${domain}\`).`, "", "```", usage.trimEnd(), "```", ""]),
+    CLI_DOC_END,
   ].join("\n");
   return `${cliDoc.slice(0, begin)}${body}${cliDoc.slice(end + CLI_DOC_END.length)}`;
 }

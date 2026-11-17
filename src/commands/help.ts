@@ -1,6 +1,7 @@
 import { EntryRejection } from "../entry/envelope.js";
 import { commandPath, GLOBAL_FLAGS } from "./parse.js";
 import { domainsOf, levenshtein, REGISTRY } from "./registry.js";
+import { SERVICE_DOMAINS } from "./serviceUsage.js";
 import type { CommandDef, CommandIo, FlagDef, ParsedArgs } from "./types.js";
 
 /** Domains whose every row is hidden stay out of the top level; `orca help <domain>` still lists them (spec §5, §10). */
@@ -51,8 +52,8 @@ export function renderHelp(topic: readonly string[], registry: readonly CommandD
       "",
       listing(shown),
       "",
-      "  orca panel run|install|start|stop|restart|uninstall|status|logs, orca user add|passwd|disable|list|rotate-key",
-      "                                                 the service and its accounts (unchanged)",
+      // Tester #342: the domains with their own grammar are named here and listed by `orca help <domain>`.
+      ...Object.entries(SERVICE_DOMAINS).map(([domain, { summary }]) => `  ${`orca help ${domain}`.padEnd(31)}${summary}`),
       HIDDEN_DOMAINS_NOTE,
       "",
       "Global flags:",
@@ -60,13 +61,15 @@ export function renderHelp(topic: readonly string[], registry: readonly CommandD
       "",
     ].join("\n");
   }
+  const service = SERVICE_DOMAINS[topic[0]!];
+  if (service !== undefined) return `usage: orca ${topic[0]} <action> [args]\n\n${service.usage}`;
   const action = topic.slice(1).join(" ");
   const exact = registry.find((def) => def.domain === topic[0] && (def.action ?? "") === action);
   if (exact !== undefined && (topic.length > 1 || exact.action === null)) return commandHelp(exact);
   const rows = registry.filter((def) => def.domain === topic[0]);
   if (rows.length > 0 && topic.length === 1) return `usage: orca ${topic[0]} <action> [ids] [--flags]\n\n${listing(rows)}\n`;
   const wanted = topic.join(" ");
-  const names = [...domainsOf(registry), ...registry.map(commandPath)];
+  const names = [...domainsOf(registry), ...Object.keys(SERVICE_DOMAINS), ...registry.map(commandPath)];
   const nearest = names.map((name) => ({ name, distance: levenshtein(wanted, name) })).filter((n) => n.distance <= 3).sort((a, b) => a.distance - b.distance)[0];
   throw new EntryRejection("control-cli-argument-invalid", `no help for ${JSON.stringify(wanted)}${nearest ? `; did you mean orca help ${nearest.name}?` : ""}`);
 }
@@ -84,6 +87,9 @@ const commandJson = (def: CommandDef) => ({
  */
 export function helpJson(topic: readonly string[], registry: readonly CommandDef[] = REGISTRY): unknown {
   renderHelp(topic, registry); // the same unknown-topic refusal as the text
+  const service = topic.length === 0 ? undefined : SERVICE_DOMAINS[topic[0]!];
+  // Tester #342: a domain with its own grammar has no registry rows; its help block is the text.
+  if (service !== undefined) return { schema: "orca-help-v1", commands: [], text: service.usage, globalFlags: GLOBAL_FLAGS.map(flagJson) };
   const action = topic.slice(1).join(" ");
   const exact = registry.find((def) => def.domain === topic[0] && (def.action ?? "") === action);
   const rows = topic.length === 0 ? registry.filter((def) => !def.hidden)
