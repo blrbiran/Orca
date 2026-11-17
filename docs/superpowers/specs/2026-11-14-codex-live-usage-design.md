@@ -162,3 +162,18 @@ Finally, `model_context_window` plus cumulative/last response usage cannot count
 and maximum output of the *next* request under a frozen tokenizer. This does not satisfy Orca's
 context observation contract; #195 stays `contextObservation: unavailable` until a separate
 pre-request observation is measured and implemented.
+
+## 10. Correction — a failed session deletion is a notice, not a failed run (2026-11-18, Orca session `4389b15f`, tester #349)
+
+Human ruling (「照常结算、但明显标出删除失败、下一轮再删」; on a second failure, stop retrying automatically and keep a
+standing notice). ccloop (branch `fix/codex-session-cleanup-349`, its phase-isolation spec Correction 2026-11-18) no
+longer fails a phase whose `codex delete --force` failed: it records `session-cleanup-failed.json`, retries it once on the
+next sweep, marks a second failure `retry-failed`, and lists every such session still in its private home as the optional
+collect key `sessionCleanup: [{ threadId, home, state: "failed" | "retry-failed", detail }]`, absent otherwise.
+
+Orca, as built: the strict collect parse accepts the key (today's pin never sends it, so nothing changes before the
+repin); the driver keeps the latest list on the run and drops it when ccloop stops listing it; the run view, the Runs
+region, `run show`, and the group's Problems region (listed, not counted) show it with the manual command
+`CODEX_HOME=<home> codex delete --force <id>`. ccloop's new cause `cleanup-failed` (a cleanup step that still failed the
+call) is worded in en and zh instead of reading as `unknown`. The §9 retention claims are otherwise unchanged: a
+`retry-failed` session keeps the run's prompt in its private rollout until a person deletes it.
