@@ -273,6 +273,8 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "retry-task": { call: (s, c) => s.retryTask(c), target: "group", payload: { taskId: "a" } },
   "close-run": { call: (s, c) => s.closeRun(c), target: "group", payload: { runId: "run-a" } },
   // Budget defaults spec 2026-11-11 §7 (#227): reviewed acceptance is group-targeted, so an archived group refuses it too.
+  // Stuck-runs spec 2026-11-17 S2: abandon-run is group-targeted and person-only; an archived group refuses it too.
+  "abandon-run": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.abandonRun(c)), target: "group", payload: { runId: "run-a", note: "cannot succeed" } },
   "accept-attempt": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.acceptAttempt(c)), target: "group", payload: { taskId: "a", runId: "run-a", note: "reviewed by hand" } },
   // Tester follow-up G spec §1.4: reopening a no-change task is group-targeted, so an archived group refuses it too.
   "reopen-task": { call: (s, c) => s.reopenTask(c), target: "group", payload: { taskId: "a", runId: "run-a", note: "n" } },
