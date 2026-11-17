@@ -190,3 +190,19 @@ is settled here; where this conflicts with a section above, this section wins.
 7. **Driver order.** The review pass moves after the integration pass and the new D3 step in `pass()`: acceptance ->
    landing watch -> integration -> history acceptance -> delivered acceptance -> review. D2 still gates by records, so
    the order only removes a round of latency.
+
+### Correction 2 (same session, after the independent branch review; agent's calls)
+
+A fresh reviewer read the five implementation commits against this spec. No Critical finding; these changed the code
+(commit `fix(delivery): address the delivery-tail review (#333 #336)`), and win over the sections above:
+
+1. **D3 needs the group's delivery, not any delivery.** Besides Correction 1's conditions, D3 runs only when every task
+   is done and the acceptance is *recorded* for the delivered tip (a `trigger: task` group delivers after each landing;
+   an intermediate delivery is not checked and never shows a problem).
+2. **A delivery integrated before `integratedFor` existed** is recorded `not-needed` with `why: "before-record"` (it is
+   not known which tip the commit was made for); the review prompt says so instead of "the target already held it".
+3. **An archived group does not hold its dependents** waiting for a delivered acceptance the pass never runs for it. A
+   stopped one still waits (its integration waits too) -- recorded in the handoff, not changed.
+4. **integrate-now refuses a stopped group** (`integration-not-ready:stopped`); an archived group was already refused
+   `group-archived` by the command ledger.
+5. **A red delivered acceptance's output tail** (cut at 1,500 bytes) is in the review prompt, as D3 says.
