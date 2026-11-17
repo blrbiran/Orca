@@ -15,7 +15,7 @@ import { readGroupIntegration } from "./integrationScheme.js";
 import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
 import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
-import { saveRun } from "./budget.js";
+import { isTerminalRunState, saveRun } from "./budget.js";
 import { closeSingleCall } from "./singleCallLedger.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { cutUtf8 } from "./noChange.js";
@@ -315,15 +315,23 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
   return moved;
 }
 
-/** The run row a review call left blocked before ccloop was given it (A2: its prompt was never built), or null. */
+/**
+ * The run a review call left stuck before ccloop was given it (A2: its prompt was never built), or null. `active`: the
+ * run is still active and blocked, so the close also gives its grant back; inactive, a stop already settled it.
+ */
 type UnpreparedRun = { runId: string; groupId: string; requirementReview?: { tip?: unknown }; state: string; failureCode?: string | null;
   unknown: { work: boolean; handoff: boolean }; remaining: { work: Amount; handoff: Amount }; executionId?: string | null;
   drive?: { blockedAt?: string | null; blockedReason?: string | null; prepared?: boolean } };
-function unpreparedReviewRun(store: ControlStore, groupId: string, roundNo: number): UnpreparedRun | null {
-  const row = store.db.prepare("SELECT body FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, workItemOf(roundNo));
+function unpreparedReviewRun(store: ControlStore, groupId: string, roundNo: number): { run: UnpreparedRun; active: boolean } | null {
+  // Tester #350: the round's latest run, active or not. One settled by a stop (a pause, a handoff, any settlement before
+  // #334) is inactive but never prepared all the same, and nothing else will move the review.
+  const row = store.db.prepare("SELECT active, body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, workItemOf(roundNo));
   if (row === undefined) return null;
-  const run = JSON.parse(String(row.body)) as UnpreparedRun;
-  return run.state === "blocked" && run.drive?.blockedAt === "A2" && run.drive.prepared !== true && (run.executionId ?? null) === null ? run : null;
+  const run = JSON.parse(String(row.body)) as UnpreparedRun, active = Number(row.active) === 1;
+  if (run.drive?.blockedAt !== "A2" || run.drive.prepared === true || (run.executionId ?? null) !== null) return null;
+  // It can no longer advance: blocked while active (the driver waits for a person), or settled and inactive. An active
+  // run in any other state -- resumed by a `recovery retry`, say -- may still be prepared, and is left to the driver.
+  return (active ? run.state === "blocked" : isTerminalRunState(run.state)) ? { run, active } : null;
 }
 
 /**
@@ -339,12 +347,17 @@ function closeUnpreparedReview(deps: ReviewPassDeps, groupId: string, review: Re
   if (unpreparedReviewRun(store, groupId, roundNo) === null) return false;
   return deps.write(() => {
     const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)));
-    const run = current?.state === "reviewing" && current.rounds.length + 1 === roundNo ? unpreparedReviewRun(store, groupId, roundNo) : null;
-    if (current === null || run === null) return false;
+    const found = current?.state === "reviewing" && current.rounds.length + 1 === roundNo ? unpreparedReviewRun(store, groupId, roundNo) : null;
+    if (current === null || found === null) return false;
+    const { run } = found;
     const reason = run.drive?.blockedReason ?? "unknown";
-    saveRun(store, { ...run, state: "failed-before-provider", failureCode: "requirement-review-prepare-failed", unknown: { work: false, handoff: false } } as never);
-    interruptGroupSingleCall(store, run as never);
-    closeSingleCall(store, run.runId, { id: `single-call-result:${groupId}:${run.runId}`, kind: "single-call-result", body: { groupId, runId: run.runId } });
+    // Tester #350: a run a stop already settled keeps its settlement -- that stop gave its grant back and made it inactive;
+    // releasing the grant again would count it twice. Only the round is closed.
+    if (found.active) {
+      saveRun(store, { ...run, state: "failed-before-provider", failureCode: "requirement-review-prepare-failed", unknown: { work: false, handoff: false } } as never);
+      interruptGroupSingleCall(store, run as never);
+      closeSingleCall(store, run.runId, { id: `single-call-result:${groupId}:${run.runId}`, kind: "single-call-result", body: { groupId, runId: run.runId } });
+    }
     const tip = typeof run.requirementReview?.tip === "string" ? run.requirementReview.tip : "";
     const round: ReviewRound = { roundNo, tip, runId: run.runId, at: store.now(), result: "failed", criteria: [],
       summary: `review could not be prepared: ${cutUtf8(reason, 500)}`, ...(current.rerun === undefined ? {} : { note: current.rerun.note }) };

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { REVIEW_DIFF_MAX_BYTES } from "../../src/control/requirementReview.js";
+import { resumeBlockedDriverRun } from "../../src/control/driveRecord.js";
+import { blockRun, stepA1 } from "../../src/control/executionDriver.js";
+import { REVIEW_DIFF_MAX_BYTES, reviewRequirements } from "../../src/control/requirementReview.js";
+import { settleNeverStartedRunInTransaction } from "../../src/control/stopIntent.js";
 import { newRound, writeRound } from "../../src/control/requirementRecords.js";
 import { groupNeedsYou } from "../../src/panel/controlOverview.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
@@ -65,6 +68,100 @@ describe("a requirement review that cannot be prepared (#334)", () => {
       const command = w.t.h.command("review-accept", { note: "checked by hand" });
       expect(w.t.service.reviewAccept(command)).toMatchObject({ result: { kind: "review-accepted" } });
       await w.t.until(w.driver, () => w.groupStatus() === "done", 60);
+    } finally { await w.t.h.dispose(); }
+  }, 240000);
+});
+
+/**
+ * Tester #350: the #334 close matched only an active run. A person who followed the advice and ran `recovery retry` (or
+ * any stop that settled the run) left the never-prepared review run settled and inactive -- and the review in `reviewing`
+ * for good, with no exit (review-accept / rerun / fix need `not-passed`). Runs settled before #334 are stuck the same way.
+ * The run's facts did not change: it never prepared, so it never reached a provider. A review round whose latest run
+ * never prepared and can no longer advance is closed as #334 closes it; one that may still advance, or may have reached
+ * a provider, is left alone.
+ */
+const reviewDeps = (w: Awaited<ReturnType<typeof reviewWorld>>) => ({ store: w.t.h.store, resolveRepository: w.t.deps.resolveRepository, write: <T>(action: () => T) => w.t.h.store.transaction(action) });
+const runRow = (w: Awaited<ReturnType<typeof reviewWorld>>, runId: string) => {
+  const row = w.t.h.store.db.prepare("SELECT active, body FROM runs WHERE id=?").get(runId)!;
+  return { active: Number(row.active), body: JSON.parse(String(row.body)) as { state: string; executionId?: string | null; drive: { blockedAt: string | null; prepared?: boolean } } };
+};
+/**
+ * Runs the group to the review's claim (the round's run exists, active, not yet driven), then takes the driver's own first
+ * step on it (A1: its drive record, its attempt reserved), so the test can block it at A2 as a failed preparation does.
+ * The driver itself would block it and the review pass close it in one round, which leaves no moment to settle it between.
+ */
+async function claimedReview(w: Awaited<ReturnType<typeof reviewWorld>>): Promise<string> {
+  await w.runAll();
+  await w.t.until(w.driver, () => w.review()?.state === "reviewing", 120);
+  const runs = reviewRuns(w);
+  expect(runs).toHaveLength(1);
+  expect(runs[0]!.active).toBe(1);
+  expect(stepA1(w.t.deps, runs[0]!.id)).toBe(true);
+  return runs[0]!.id;
+}
+const PREPARE_FAILURE = "stdout maxBuffer length exceeded";
+
+describe("a never-prepared review run that was settled before the review pass closed it (#350)", () => {
+  it("closes the round of a settled, inactive, never-prepared run so the review leaves `reviewing` and reaches a verdict", async () => {
+    const w = await reviewWorld();
+    try {
+      const runId = await claimedReview(w);
+      const reserved = () => (groupBody(w).reserved as { tokens: number }).tokens;
+      const whileReviewing = reserved();
+      // The field state, written by the code that writes it: the preparation blocks at A2 (executionDriver blockRun), then
+      // the run is settled as never started (stopIntent.ts, the stop's accounting: its grant back to the group, inactive).
+      blockRun(w.t.deps, runId, "A2", PREPARE_FAILURE, { prepared: false });
+      w.t.h.store.transaction(() => settleNeverStartedRunInTransaction(w.t.h.store, "g", runId));
+      expect(runRow(w, runId)).toMatchObject({ active: 0, body: { state: "settled-restartable", executionId: null, drive: { blockedAt: "A2", prepared: false } } });
+      const settled = reserved();
+      expect(whileReviewing - settled).toBe(600_000);
+      // mutation: select only `active=1` rows again -> the review stays `reviewing` and the driver never gets here, red
+      await w.t.until(w.driver, () => w.review()?.state !== "reviewing", 20);
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "failed",
+        rounds: [expect.objectContaining({ roundNo: 1, runId, result: "failed", summary: expect.stringContaining(PREPARE_FAILURE) })] });
+      expect(w.calls).toEqual([]);
+      // The stop already gave the grant back: closing the round must not release it a second time.
+      expect(reserved()).toBe(settled);
+      expect(runRow(w, runId)).toMatchObject({ active: 0, body: { state: "settled-restartable" } });
+      // The person's exit answers now, and the group reaches a verdict: a new round is reviewed and passes, the group is done.
+      expect(w.t.service.reviewRerun(w.t.h.command("review-rerun", { note: "the diff is read bounded now" }))).toMatchObject({ result: { kind: "review-rerun-requested" } });
+      await w.t.until(w.driver, () => w.review()?.state === "passed", 120);
+      expect(w.review()!.rounds.map((round) => [round.roundNo, round.result])).toEqual([[1, "failed"], [2, "passed"]]);
+      await w.t.until(w.driver, () => w.groupStatus() === "done", 60);
+    } finally { await w.t.h.dispose(); }
+  }, 240000);
+
+  it("leaves alone a review run that may still advance, or may have reached a provider", async () => {
+    const w = await reviewWorld();
+    try {
+      const runId = await claimedReview(w);
+      const passes = async () => { for (let i = 0; i < 3; i += 1) await reviewRequirements(reviewDeps(w)); };
+      // A person's `recovery retry` resumed the blocked run (driveRecord.ts): active, back to A2's resume state, so the
+      // driver prepares it again. Closing it now would race a call that may yet start.
+      blockRun(w.t.deps, runId, "A2", PREPARE_FAILURE, { prepared: false });
+      w.t.h.store.transaction(() => resumeBlockedDriverRun(w.t.h.store, runId));
+      expect(runRow(w, runId)).toMatchObject({ active: 1, body: { drive: { blockedAt: null, prepared: false } } });
+      await passes();
+      // mutation: qualify a run on `prepared` / `executionId` alone (drop the blockedAt and active/state checks) -> closed, red
+      expect(w.review()).toMatchObject({ state: "reviewing", rounds: [] });
+      expect(runRow(w, runId).active).toBe(1);
+      // Settled and inactive, but its prompt was built: it may have been handed to ccloop, so it is not closed as unprepared.
+      blockRun(w.t.deps, runId, "A2", PREPARE_FAILURE, { prepared: true });
+      w.t.h.store.transaction(() => settleNeverStartedRunInTransaction(w.t.h.store, "g", runId));
+      expect(runRow(w, runId)).toMatchObject({ active: 0, body: { state: "settled-restartable", drive: { blockedAt: "A2", prepared: true } } });
+      await passes();
+      // mutation: drop the `prepared !== true` check -> the round is closed `failed`, red
+      expect(w.review()).toMatchObject({ state: "reviewing", rounds: [] });
+      // Likewise a run that has an execution (it was given to ccloop), whatever its drive says.
+      w.t.h.store.transaction(() => {
+        const body = { ...runRow(w, runId).body, executionId: "execution-350" };
+        body.drive = { ...body.drive, prepared: false };
+        w.t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
+      });
+      await passes();
+      // mutation: drop the `executionId` check -> the round is closed `failed`, red
+      expect(w.review()).toMatchObject({ state: "reviewing", rounds: [] });
+      expect(w.calls).toEqual([]);
     } finally { await w.t.h.dispose(); }
   }, 240000);
 });
