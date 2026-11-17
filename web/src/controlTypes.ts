@@ -966,7 +966,7 @@ export type CommandSuccessV1 = {
     | { kind: "task-retried"; taskId: string; fromRunId: string; nextRun?: { attempts: number; activeMs: number; because?: "no-token-limit" | "worker-lost" } }
     | { kind: "task-reopened"; taskId: string; fromRunId: string }
     | { kind: "no-change-accepted"; taskId: string; runId: string }
-    | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: "answer" | "consensus" | "review" | "call" | "person" }
+    | { kind: "recovery-observed"; resolved: boolean; blockerCodes: string[]; evidenceIds: string[]; wakeIds: string[]; waitingOn?: "answer" | "consensus" | "review" | "call" | "person" | "settle" }
     | { kind: "requirement-opened"; groupId: string; requirementId: string; roundNo: 1; wakeId: string }
     | { kind: "requirement-answered"; roundNo: number; nextRoundNo: number | null; wakeId: string | null; finished?: true }
     | { kind: "requirement-consensus"; roundNo: number; draftNo: number; wakeId: string }

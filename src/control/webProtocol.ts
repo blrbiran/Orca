@@ -19,7 +19,8 @@ import { DECISION_IMPORTANCES } from "../ledger/types.js";
 // in schema.ts; webProtocol.ts re-exports them so every downstream import can come from one wire module.
 export { agentSelectionSchema, contextWindowSchema, panelPartialSelectionSchema, partialSelectionSchema } from "./schema.js";
 /** Issue #98: what a requirement waits on after recovery-retry lifted its stop and queued no call (stopIntent.ts). */
-export const RECOVERY_WAITING_ON = ["answer", "consensus", "review", "call", "person"] as const;
+// Tester #332: "settle" -- a landed run of the group (or of a debug group stacked on it) is still settling on the lane.
+export const RECOVERY_WAITING_ON = ["answer", "consensus", "review", "call", "person", "settle"] as const;
 
 const nonemptyString = z.string().min(1);
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);

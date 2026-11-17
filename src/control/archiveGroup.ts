@@ -75,7 +75,9 @@ function activeRunRef(groupId: string, runId: string, body: string): ActiveRunRe
   const next = terminalFailure
     ? unknownUsage ? settle : `orca group close-run ${groupId} --run ${runId}`
     : resumableBlockedRun(run) ? recoveryRetryCommand(runId)
-      : state.startsWith("settled-") ? unknownUsage ? settle : `orca run show ${runId}` : undefined;
+      : state.startsWith("settled-") ? unknownUsage ? settle : `orca run show ${runId}`
+        // Tester #332: a landed run whose settle is still running (archive, checkpoint, publish) leaves on its own.
+        : state === "landed" || state === "settled" ? `wait: it landed and is settling; orca run show ${runId}` : undefined;
   return { runId, state, blockedAt, ...(next === undefined ? {} : { next }) };
 }
 

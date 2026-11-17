@@ -742,8 +742,19 @@ function retryGroup(store: ControlStore, groupId: string, context: WebCommandCon
     recordActivity(store, { groupId, taskId: run.taskId, runId: String(row.id), kind: "run-resumed", body: {} });
     resumedRuns = true;
   }
-  return { resolved: blockers.resolved || requirement.resolved || resumedRuns, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds,
-    ...(requirement.waitingOn === undefined ? {} : { waitingOn: requirement.waitingOn }) };
+  const resolved = blockers.resolved || requirement.resolved || resumedRuns;
+  // Tester #332: nothing to retry while a landed run settles (archive, checkpoint, publish on the driver's settle lane) --
+  // the group's own, or one of a debug group stacked on it; say what the group waits on instead of a bare resolved:false.
+  const waitingOn = requirement.waitingOn ?? (!resolved && settlingRun(store, groupId) ? "settle" as const : undefined);
+  return { resolved, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds: requirement.wakeIds,
+    ...(waitingOn === undefined ? {} : { waitingOn }) };
+}
+
+/** An active run in `landed` or `settled` (its step E not finished) in the group or in a system debug group opened for it. */
+function settlingRun(store: ControlStore, groupId: string): boolean {
+  const settling = "active=1 AND json_extract(body,'$.state') IN ('landed','settled')";
+  if (store.db.prepare(`SELECT 1 FROM runs WHERE group_id=? AND ${settling}`).get(groupId) !== undefined) return true;
+  return store.db.prepare(`SELECT 1 FROM runs WHERE ${settling} AND group_id IN (SELECT id FROM groups WHERE json_extract(body,'$.systemDebug.source.groupId')=?)`).get(groupId) !== undefined;
 }
 
 /**

@@ -54,6 +54,8 @@ function recoveryFormat(def: CommandDef): CommandDef {
   return { ...def, format: (body) => {
     const waitingOn = (body as { result?: { waitingOn?: unknown } } | null)?.result?.waitingOn;
     const base = def.format(body);
+    // Tester #332: nothing was lifted -- a landed run is settling; the person only waits.
+    if (waitingOn === "settle") return `${base}\na landed run is still settling (its evidence is being archived); nothing to retry, it finishes on its own`;
     return typeof waitingOn === "string" ? `${base}\nthe stop is lifted and no call was re-run; now waiting on: ${waitingOn}` : base;
   } };
 }
