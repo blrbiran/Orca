@@ -335,13 +335,13 @@ describe("an abandoned run ccloop answers with a handoff checkpoint (Correction 
       await t.until(driver, () => active(t, runId) === 0);
       // mutation: drop the abandoned settle from deliverAndCollect's checkpoint branch -> settled-recoverable / held, red
       expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      // mutation: leave the drive outcome null -> red here (and task retry below would refuse outcome:none)
       expect([t.body(runId).drive.outcome, t.body(runId).drive.cleanedUp, t.body(runId).checkpointId]).toEqual(["stopped", true, null]);
       expect([requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
       expect(groupStopState(t.h.store, "g")).toBe("handoff-complete");
       expect(await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [] }) as never)).not.toHaveProperty("error");
       for (let i = 0; i < 5; i += 1) await driver.round();
       expect(runCount(t)).toBe(1);
-      // mutation: leave the drive outcome null -> task retry refuses outcome:none, red
       expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }))).toMatchObject({ result: { kind: "task-retried" } });
     } finally { await t.h.dispose(); }
   });
