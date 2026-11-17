@@ -677,9 +677,7 @@ export function openFixTask(store: ControlStore, groupId: string, round: ReviewR
   const work: BudgetAmount = auto ? { ...grant.work, tokens: autoFixTokenCeiling(taskWorkTokens(store, groupId, sourceId), grant.work.tokens) } : grant.work;
   store.db.exec("SAVEPOINT review_fix");
   try {
-    const contract = fixTaskContract(store, groupId, scope, criteria, taskId, sourceId, goal, paths);
-    if (auto) contract.executionPolicy.tokenBudget = work.tokens;
-    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract, agentFrom: sourceId,
+    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, scope, criteria, taskId, sourceId, goal, paths), agentFrom: sourceId,
       // Follow-up L: a person's fix takes the sibling task's work grant as it is -- in an expectation-model group it has no
       // token number (null); `?? 0` made it 0, which deriveContract refuses, so no fix task could open there.
       work, handoff: grant.handoff, dependsOn: [] });
