@@ -1,19 +1,27 @@
 /**
  * Tester #319 (proposal 1, human-agreed): the conclusion card at the top of a group's Results. It answers four questions
  * without scrolling, from facts the group view already carries: is it done (completion and the group acceptance), where
- * does it deliver (the integration scheme, or a dir / multi group's folders), is anything waiting for the person (each
- * line leads to the existing place that has the action; this card sends no command), and the work branch with its tip.
+ * does it deliver (the Git section's own sentence, or a dir / multi group's folders), is anything waiting for the person
+ * (each line leads to the existing place that has the action; this card sends no command, and every button it has carries
+ * `data-no-command`), and the work branch with its tip.
+ *
+ * Review fix 1: it never says "Nothing" while the summary's needs-you (the server's one rule, controlOverview.ts) holds --
+ * it names what it can, each on the region the server's own row points to, and otherwise says something waits.
  */
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { GroupDecisionsViewV1, GroupViewV1 } from "./controlTypes.js";
 import { PR_URL, short, workBranch } from "./GitScheme.js";
+import { enumText } from "./i18n.js";
+import { integrationSentence } from "./IntegrationScheme.js";
 import { runNeedsHuman } from "./RunDecisions.js";
 
 export interface ResultsConclusionProps {
   view: GroupViewV1;
-  /** This group's decisions read, or null when there is none (or it failed). */
+  /** This group's decisions read; null while it is loading, or when it failed. */
   decisions: GroupDecisionsViewV1 | null;
+  /** The failed read's code (App keeps a failed read as failed, Rule 12); null otherwise. */
+  decisionsFailed: string | null;
   /** The count the Problems tab carries. */
   problemCount: number;
   onOpenProblems: () => void;
@@ -22,38 +30,63 @@ export interface ResultsConclusionProps {
 }
 
 const copy = (text: string): void => { void navigator.clipboard?.writeText(text); };
+/** The server's needs-you rows for a placement and a multi landing (controlOverview.ts groupSteps). */
+const STOPPED_PLACEMENT = new Set(["folder-changed", "folder-unwritable", "folder-missing", "failed"]);
+const STOPPED_LANDING = new Set(["partial", "blocked", "folder-changed", "folder-unwritable"]);
 
 export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
   const { t } = useTranslation();
   const { view } = props;
+  const { summary } = view;
   const branch = workBranch(view);
-  const folders = view.summary.multiDir !== undefined || view.summary.placement !== undefined;
+  const folders = summary.multiDir !== undefined || summary.placement !== undefined;
   const scheme = view.integration?.scheme ?? { delivery: "keep" as const };
-  const completion = view.summary.completion;
-  const tip = view.summary.acceptance?.tip ?? null;
-
-  const delivery = view.summary.multiDir !== undefined ? t("control.results.deliveryKind.multi")
-    : view.summary.placement !== undefined ? t("control.results.deliveryKind.folder")
-    : t(`control.results.deliveryKind.${scheme.delivery}`, { branch, target: "target" in scheme ? scheme.target : "", remote: "remote" in scheme ? scheme.remote : "" });
+  const completion = summary.completion;
+  const tip = summary.acceptance?.tip ?? null;
   const pr = view.integration?.pr ?? null;
   const prLabel = pr === null ? "" : t("control.integration.pr", { number: pr.number, state: t(pr.ready ? "control.integration.prReady" : "control.integration.prDraft") });
 
+  const delivery = summary.multiDir !== undefined ? t("control.results.deliveryKind.multi")
+    : summary.placement !== undefined ? t("control.results.deliveryKind.folder")
+    : integrationSentence(scheme, summary.groupId);
+
+  // Every button here moves on the page or copies text; the marker says so to the archived-group criterion.
+  const go = (label: string, onClick: () => void): JSX.Element => (
+    <>{" "}<button type="button" data-no-command onClick={onClick}>{label}</button></>
+  );
+  const toProblems = go(t("control.results.openProblems"), props.onOpenProblems);
+  const toIntegration = go(t("control.results.openIntegration"), props.onOpenIntegration);
+
   const waiting: JSX.Element[] = [];
-  if (props.problemCount > 0) waiting.push(
-    <li key="problems">{t("control.results.problems", { count: props.problemCount })}{" "}
-      <button type="button" onClick={props.onOpenProblems}>{t("control.results.openProblems")}</button></li>);
+  if (props.problemCount > 0) waiting.push(<li key="problems">{t("control.results.problems", { count: props.problemCount })}{toProblems}</li>);
   const integrationState = view.integration?.state;
-  if (integrationState === "blocked" || integrationState === "conflict") waiting.push(
-    <li key="integration">{t("control.results.integration", { state: t(`control.integration.state.${integrationState}`) })}{" "}
-      <button type="button" onClick={props.onOpenIntegration}>{t("control.results.openIntegration")}</button></li>);
-  const pending = props.decisions?.pendingCount ?? 0;
+  const integrationWords = integrationState === "blocked" || integrationState === "conflict" ? t(`control.integration.state.${integrationState}`)
+    : summary.placement !== undefined && STOPPED_PLACEMENT.has(summary.placement.state) ? t(`control.results.placementState.${summary.placement.state as "failed"}`)
+    : summary.multiDir?.landing != null && STOPPED_LANDING.has(summary.multiDir.landing.state) ? t(`control.results.landingState.${summary.multiDir.landing.state as "partial"}`)
+    : null;
+  if (integrationWords !== null) waiting.push(<li key="integration">{t("control.results.integration", { state: integrationWords })}{toIntegration}</li>);
+  if (summary.state === "blocked") waiting.push(<li key="blocked">{t("control.results.blocked")}{toProblems}</li>);
+  // As the server's rule: a stop still settling waits for the person; a pause or a completed handoff does not.
+  if (summary.stopState !== null && summary.stopState !== "paused" && summary.stopState !== "handoff-complete") {
+    waiting.push(<li key="stop">{t("control.results.stop", { state: enumText("stopState", summary.stopState) })}{toProblems}</li>);
+  }
+  if (summary.deliveredAcceptance?.problem !== undefined) waiting.push(<li key="delivered">{t("control.results.deliveredFailed")}{toProblems}</li>);
+  if (summary.requirementReview?.problem !== undefined) waiting.push(<li key="review">{t("control.results.reviewProblem")}{toProblems}</li>);
+  // Review fix 2: while the read loads or after it failed, the summary's count stands in; a failed read says so.
+  if (props.decisionsFailed !== null) waiting.push(<li key="decisions-failed">{t("control.results.decisionsUnread", { code: props.decisionsFailed })}</li>);
+  const pending = props.decisions?.pendingCount ?? summary.card?.pendingDecisions ?? 0;
   const decisionTask = props.decisions?.tasks.find((task) => task.runs.some(runNeedsHuman))?.taskId;
   if (pending > 0) waiting.push(
     <li key="decisions">{t("control.results.decisions", { count: pending })}
-      {decisionTask !== undefined && <>{" "}<button type="button" onClick={() => props.onOpenTask(decisionTask)}>{t("control.results.openTask", { taskId: decisionTask })}</button></>}</li>);
-  // A finished keep group: merging is the person's, and this panel has no button for it (GitScheme, board spec C4).
-  if (!folders && scheme.delivery === "keep" && view.summary.state === "done") waiting.push(
-    <li key="merge">{t("control.results.mergeYours", { branch })}</li>);
+      {decisionTask !== undefined && go(t("control.results.openTask", { taskId: decisionTask }), () => props.onOpenTask(decisionTask))}</li>);
+  if (summary.needsYou === true && waiting.length === 0) waiting.push(<li key="needs-you">{t("control.results.needsYou")}{toProblems}</li>);
+  // The merge Orca leaves to the person (this panel has no button for it, GitScheme, board spec C4): a finished keep or
+  // push-branch group, and a github-pr group once its pull request is marked ready.
+  if (!folders && summary.state === "done" && scheme.delivery === "keep") waiting.push(<li key="merge">{t("control.results.mergeYours", { branch })}</li>);
+  if (!folders && summary.state === "done" && scheme.delivery === "push-branch") {
+    waiting.push(<li key="merge">{t("control.results.mergePushed", { branch, target: scheme.target, remote: scheme.remote })}</li>);
+  }
+  if (!folders && scheme.delivery === "github-pr" && pr !== null && pr.ready) waiting.push(<li key="merge">{t("control.results.mergePr", { number: pr.number })}</li>);
 
   return (
     <section aria-label={t("control.results.conclusion")} data-testid="results-conclusion" className="detail-block min-w-0 wrap-anywhere">
@@ -63,7 +96,7 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
         <dd data-conclusion="done">
           {completion === undefined ? t("control.results.doneUnread") : t("control.results.doneCount", completion)}
           {" · "}
-          {t("control.results.acceptance", { result: t(`control.results.acceptanceResult.${view.summary.acceptance?.result ?? "not-run"}`) })}
+          {t("control.results.acceptance", { result: t(`control.results.acceptanceResult.${summary.acceptance?.result ?? "not-run"}`) })}
         </dd>
         <dt>{t("control.results.delivery")}</dt>
         <dd data-conclusion="delivery">
@@ -78,11 +111,12 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
           <dt>{t("control.results.artifact")}</dt>
           <dd data-conclusion="artifact">
             <code>{branch}</code>{" "}
-            <button type="button" className="btn-quiet px-1 text-xs" onClick={() => copy(branch)}>{t("control.results.copyBranch")}</button>
+            <button type="button" data-no-command className="btn-quiet px-1 text-xs" onClick={() => copy(branch)}>{t("control.results.copyBranch")}</button>
             {" · "}
-            {tip === null ? t("control.results.noTip") : <>
+            {/* Review fix 4: a recorded acceptance without a tip is final ("no accepted tip"); only no record is "yet". */}
+            {tip === null ? t(summary.acceptance === undefined ? "control.results.noTip" : "control.results.noAcceptedTip") : <>
               {t("control.results.tip")}{" "}<code title={tip}>{short(tip)}</code>{" "}
-              <button type="button" className="btn-quiet px-1 text-xs" onClick={() => copy(tip)}>{t("control.results.copyTip")}</button>
+              <button type="button" data-no-command className="btn-quiet px-1 text-xs" onClick={() => copy(tip)}>{t("control.results.copyTip")}</button>
             </>}
           </dd>
         </>}

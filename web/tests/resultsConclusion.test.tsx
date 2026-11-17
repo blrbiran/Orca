@@ -7,7 +7,8 @@
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import i18n from "../src/i18n.js";
+import i18n, { enumText } from "../src/i18n.js";
+import { integrationSentence } from "../src/IntegrationScheme.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
 import type { GroupDecisionsViewV1, GroupIntegrationViewV1, GroupPlacementV1, GroupViewV1, IntegrationSchemeV1 } from "../src/controlTypes.js";
 import { config, run, view, workItem } from "./fixtures/board.js";
@@ -26,7 +27,7 @@ const done = (value: GroupViewV1 = view([workItem({ taskId: "a", status: "comple
   value.summary.acceptance = { tip: TIP, result: "passed", commands: [], at: 1 };
   return value;
 };
-const show = (value: GroupViewV1, decisions?: GroupDecisionsViewV1) =>
+const show = (value: GroupViewV1, decisions?: GroupDecisionsViewV1 | { failed: string }) =>
   render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={value} decisions={decisions} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
 const card = () => screen.getByRole("region", { name: "Conclusion" });
 const line = (name: string) => card().querySelector(`[data-conclusion="${name}"]`)!;
@@ -51,17 +52,20 @@ describe("the conclusion card (#319 proposal 1)", () => {
     expect(line("done").textContent).toBe("tasks done: not read yet · acceptance: not run");
   });
 
+  // Review fix 3: the delivery line is the Git section's own sentence (integrationSentence), so it loses no fact (when, method).
   it.each([
-    [undefined, "Kept on orca/g; Orca does not merge or push it"],
-    [{ delivery: "keep" } as const, "Kept on orca/g; Orca does not merge or push it"],
-    [{ delivery: "local", trigger: "group", method: "merge", target: "main" } as const, "Merge into the local branch main"],
-    [{ delivery: "push-target", trigger: "task", method: "squash", target: "main", remote: "origin" } as const, "Merge into main and push it to origin"],
-    [{ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" } as const, "Push orca/g to origin"],
-    [{ delivery: "github-pr", trigger: "group", target: "develop", remote: "up" } as const, "Pull request from orca/g into develop on up"],
-  ])("says where %j delivers in plain words", (scheme, said) => {
+    [undefined, "Orca does not merge or push this work; merging into main is the person's."],
+    [{ delivery: "keep" } as const, "Orca does not merge or push this work; merging into main is the person's."],
+    [{ delivery: "local", trigger: "group", method: "merge", target: "main" } as const, "When the group completes: merge orca/g into the local branch main."],
+    [{ delivery: "push-target", trigger: "task", method: "squash", target: "main", remote: "origin" } as const, "After each task: squash orca/g into main on origin and push it there."],
+    [{ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" } as const, "After each task: push orca/g to origin; merging it into main is the person's."],
+    [{ delivery: "github-pr", trigger: "group", target: "develop", remote: "up" } as const, "When the group completes: push orca/g to up and open one GitHub PR into develop."],
+  ])("says where %j delivers in the Git section's own words", (scheme, said) => {
     const value = done(); if (scheme !== undefined) value.integration = integration(scheme);
     show(value);
+    // mutation: the card words the scheme itself (drops when / method) -> red
     expect(line("delivery").textContent).toBe(said);
+    expect(said).toBe(integrationSentence(scheme ?? { delivery: "keep" }, "g"));
   });
 
   it("links an open pull request, and says a dir or multi-directory group's folders instead of a branch", () => {
@@ -139,6 +143,89 @@ describe("the conclusion card (#319 proposal 1)", () => {
     expect(line("waiting").textContent).toBe("Nothing");
   });
 
+  // Review fix 3: a done push-branch group and a github-pr group with a ready PR also leave the merge to the person.
+  it("says the merge is the person's for a done push-branch group and a ready pull request, and not before", () => {
+    const pushed = done(); pushed.integration = integration({ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" });
+    show(pushed);
+    // mutation: drop the push-branch merge line -> red
+    expect(line("waiting").textContent).toBe("Merging orca/g into main is yours; Orca only pushes it to origin");
+    cleanup();
+    const pushing = done(); pushing.summary.state = "running"; pushing.integration = integration({ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" });
+    show(pushing);
+    // mutation: drop its `state === "done"` condition -> red
+    expect(line("waiting").textContent).toBe("Nothing");
+    cleanup();
+    const pr = (ready: boolean) => { const value = done(); value.integration = integration({ delivery: "github-pr", trigger: "task", target: "main", remote: "origin" }, { pr: { url: "https://github.com/o/r/pull/7", number: 7, ready } }); return value; };
+    show(pr(true));
+    // mutation: drop the pull request merge line -> red
+    expect(line("waiting").textContent).toBe("Merging pull request #7 is yours");
+    cleanup();
+    show(pr(false));
+    // mutation: drop its `ready` condition (a draft is still Orca's to update) -> red
+    expect(line("waiting").textContent).toBe("Nothing");
+  });
+
+  // Review fix 1: the card never says Nothing while the server's needs-you rule holds; it names what it can.
+  const landing = (state: "partial" | "blocked" | "folder-changed" | "folder-unwritable") =>
+    ({ state, landedKeys: [], reason: null, detail: null, failedKey: null, movedBeforeAny: 0 as const, resolution: null, at: 1 });
+  const placed = (state: GroupPlacementV1["state"]): GroupPlacementV1 => ({ workspaceKind: "dir", state, tip: null, landedTip: null, pending: null,
+    changed: [], changedTotal: 0, unwritable: [], unwritableTotal: 0, withheld: [], watch: null, detail: null, resolution: null, at: 1 });
+  it.each([
+    ["placement folder-changed", (v: GroupViewV1) => { v.summary.placement = placed("folder-changed"); }, "Integration: the folder changed under Orca", "Go to integration"],
+    ["placement folder-unwritable", (v: GroupViewV1) => { v.summary.placement = placed("folder-unwritable"); }, "Integration: some files cannot be written into the folder", "Go to integration"],
+    ["placement folder-missing", (v: GroupViewV1) => { v.summary.placement = placed("folder-missing"); }, "Integration: the folder is gone or has moved", "Go to integration"],
+    ["placement failed", (v: GroupViewV1) => { v.summary.placement = placed("failed"); }, "Integration: writing into the folder failed", "Go to integration"],
+    ["multi landing partial", (v: GroupViewV1) => { v.summary.multiDir = { project: "p", dirs: [], landing: landing("partial") }; }, "Integration: some directories landed, then it stopped", "Go to integration"],
+    ["multi landing blocked", (v: GroupViewV1) => { v.summary.multiDir = { project: "p", dirs: [], landing: landing("blocked") }; }, "Integration: stopped before any directory landed", "Go to integration"],
+    ["multi landing folder-changed", (v: GroupViewV1) => { v.summary.multiDir = { project: "p", dirs: [], landing: landing("folder-changed") }; }, "Integration: a directory's folder changed under Orca", "Go to integration"],
+    ["multi landing folder-unwritable", (v: GroupViewV1) => { v.summary.multiDir = { project: "p", dirs: [], landing: landing("folder-unwritable") }; }, "Integration: some files cannot be written into a directory's folder", "Go to integration"],
+    ["state blocked", (v: GroupViewV1) => { v.summary.state = "blocked"; }, "The group is blocked", "Open Problems"],
+    ["stop handoff-unresolved", (v: GroupViewV1) => { v.summary.stopMode = "handoff"; v.summary.stopState = "handoff-unresolved"; }, `Stop: ${enumText("stopState", "handoff-unresolved")}`, "Open Problems"],
+    ["delivered acceptance failed", (v: GroupViewV1) => { v.summary.deliveredAcceptance = { tip: TIP, commit: TIP, result: "failed", commands: [], at: 1, problem: "delivered-acceptance-failed:npm test" }; }, "The acceptance on the delivered commit failed", "Open Problems"],
+    ["requirement review problem", (v: GroupViewV1) => { v.summary.requirementReview = { state: "not-passed", rounds: [], autoFixRounds: 0, problem: "requirement-review-not-passed" }; }, "The requirement review did not pass", "Open Problems"],
+    ["anything else the server counts", (_v: GroupViewV1) => {}, "Something waits for you", "Open Problems"],
+  ])("names %s as waiting, with the way to it", (_name, set, said, button) => {
+    const value = done(); value.summary.state = "running"; value.summary.needsYou = true;
+    value.integration = integration({ delivery: "local", trigger: "group", method: "merge", target: "main" });
+    set(value);
+    show(value);
+    const item = [...line("waiting").querySelectorAll("li")].find((li) => li.textContent?.startsWith(said));
+    // mutation: drop this state's line (or the needs-you fallback) -> "Nothing" or no such line, red
+    expect(item, line("waiting").textContent ?? "").toBeTruthy();
+    expect(within(item as HTMLElement).getByRole("button", { name: button })).toBeTruthy();
+  });
+  it.each(["paused", "handoff-complete"] as const)("does not list a %s stop (the server's rule: nothing is left to decide)", (stopState) => {
+    const value = done(); value.summary.state = "running"; value.summary.stopMode = stopState === "paused" ? "pause" : "handoff"; value.summary.stopState = stopState;
+    value.integration = integration({ delivery: "local", trigger: "group", method: "merge", target: "main" });
+    show(value);
+    // mutation: drop the paused / handoff-complete exclusion -> a Stop line, red
+    expect(line("waiting").textContent).toBe("Nothing");
+  });
+  it("adds no needs-you fallback beside a line it could name", () => {
+    const value = done(); value.summary.state = "running"; value.summary.placement = placed("folder-missing"); value.summary.needsYou = true;
+    show(value);
+    // mutation: the fallback shown although a line is named -> red
+    expect([...line("waiting").querySelectorAll("li")].map((li) => li.firstChild?.textContent)).toEqual(["Integration: the folder is gone or has moved"]);
+  });
+
+  // Review fix 2: a decisions read still loading or failed does not make pending decisions vanish.
+  it("counts pending decisions from the summary while the read is loading, and says a failed read failed", () => {
+    const value = done(); value.summary.state = "running";
+    value.summary.card = { budget: { usedTokens: 0, limitTokens: null }, pendingDecisions: 2, firstFailure: null };
+    show(value);
+    // mutation: drop the summary.card fallback -> "Nothing", red
+    expect(line("waiting").textContent).toBe("2 decisions wait for you");
+    cleanup();
+    show(value, { failed: "control-unavailable" });
+    // mutation: drop the failed-read line -> red
+    expect(line("waiting").textContent).toContain("Decisions could not be read (control-unavailable)");
+    expect(line("waiting").textContent).toContain("2 decisions wait for you");
+    cleanup();
+    value.summary.card.pendingDecisions = 0;
+    show(value, { failed: "control-unavailable" });
+    expect(line("waiting").textContent).toBe("Decisions could not be read (control-unavailable)");
+  });
+
   it("gives the work branch and its accepted tip, short with the full sha on hover, each copyable", () => {
     show(done());
     const artifact = line("artifact") as HTMLElement;
@@ -151,11 +238,18 @@ describe("the conclusion card (#319 proposal 1)", () => {
     // mutation: copy the wrong text -> red
     expect(writeText.mock.calls.map(([text]) => text)).toEqual(["orca/g", TIP]);
     cleanup();
-    const untipped = done(); untipped.summary.acceptance!.tip = null;
+    const untipped = done(); delete untipped.summary.acceptance;
     show(untipped);
     // mutation: drop the noTip branch -> red
     expect(line("artifact").textContent).toContain("no accepted tip recorded yet");
     expect(within(line("artifact") as HTMLElement).queryByRole("button", { name: "Copy tip commit" })).toBeNull();
+    cleanup();
+    // Review fix 4: an acceptance that is recorded (e.g. not-needed) and has no tip is final; "yet" would promise one.
+    const settled = done(); settled.summary.acceptance = { tip: null, result: "not-needed", commands: [], at: 1 };
+    show(settled);
+    // mutation: say "recorded yet" for a recorded acceptance -> red
+    expect(line("artifact").textContent).toContain("no accepted tip");
+    expect(line("artifact").textContent).not.toContain("yet");
   });
 
   it("sends no command from any of its buttons (they navigate or copy; an archived group may show them)", () => {
@@ -166,8 +260,12 @@ describe("the conclusion card (#319 proposal 1)", () => {
         pending: [{ pendingId: "p1", reason: "r", question: "q?", chose: null, undoHow: null, state: "pending" }] }] }] };
     const onCommand = vi.fn();
     render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "results", taskId: null, runId: null }} view={value} decisions={decisions} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
-    const names = within(card()).getAllByRole("button").map((button) => button.textContent);
+    const buttons = within(card()).getAllByRole("button");
+    const names = buttons.map((button) => button.textContent);
     expect(names).toEqual(["Open Problems", "Go to integration", "Open task a", "Copy branch name", "Copy tip commit"]);
+    // Review fix 5: each carries the structural marker archiveGroup.test.tsx excludes by (not its English name).
+    // mutation: drop the marker from any card button -> red
+    for (const button of buttons) expect(button.hasAttribute("data-no-command"), button.textContent ?? "").toBe(true);
     // Open Problems switches to the Problems tab, and only the selected region is rendered, so it is clicked last.
     for (const name of [...names.slice(1), names[0]!]) fireEvent.click(within(card()).getByRole("button", { name: name! }));
     expect(screen.getByRole("tab", { selected: true }).textContent).toMatch(/^Problems/);
@@ -188,7 +286,8 @@ describe("the conclusion card (#319 proposal 1)", () => {
       show(done());
       const zh = screen.getByRole("region", { name: "结论" });
       expect(zh.querySelector('[data-conclusion="done"]')!.textContent).toBe("1/1 个任务已完成 · 验收：通过");
-      expect(zh.querySelector('[data-conclusion="delivery"]')!.textContent).toBe("留在 orca/g 上；Orca 不合并也不推送");
+      expect(zh.querySelector('[data-conclusion="delivery"]')!.textContent).toBe(integrationSentence({ delivery: "keep" }, "g"));
+      expect(zh.querySelector('[data-conclusion="waiting"]')!.textContent).toBe("把 orca/g 合并进你的主分支由你来做；Orca 不做");
     } finally { await i18n.changeLanguage("en"); }
   });
 });

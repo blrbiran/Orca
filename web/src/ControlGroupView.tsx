@@ -981,7 +981,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
 </>,
         results: <>
       {/* Tester #319 (proposal 1): the conclusion first; each waiting line leads to the existing place with its action. */}
-      <ResultsConclusion view={view} decisions={decisions} problemCount={problemCount}
+      <ResultsConclusion view={view} decisions={decisions} decisionsFailed={decisionsFailed} problemCount={problemCount}
         onOpenProblems={() => selectRegion("problem")}
         onOpenIntegration={() => { const target = document.getElementById(overviewRegionId("group", groupId, "integration")); target?.scrollIntoView?.({ block: "start" }); target?.focus(); }}
         onOpenTask={(taskId) => { if (openTask !== taskId) toggleTask(taskId); }} />
@@ -1003,7 +1003,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </div>
       {/* Tester #319 (proposal 5): no "open run" button per run; a task's runs open from its row (its detail, below). */}
       <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""}
-        openTask={openTask} onOpenTask={toggleTask} onOpenRuns={() => openRun(runsInCreationOrder(view.runs).at(-1)!.runId)} />
+        openTask={openTask} onOpenTask={toggleTask} onOpenRun={openRun} onOpenRuns={() => openRun(runsInCreationOrder(view.runs).at(-1)!.runId)} />
       <GroupHandoffs view={view} />
       <p>{t("detail.resultsEvidence")}</p>
       {taskDetail}

@@ -33,6 +33,14 @@ it.each(["invalid","missing"] as const)("actual successful task survives %s expl
  // #319 proposal 5: the run's evidence is reached from the task's row in Results (its detail), not a per-run button.
  fireEvent.click(within(screen.getByRole("region",{name:"Task results · a"})).getByRole("button",{name:"a"}));expect(within(screen.getByRole("region",{name:"Task a"})).getByRole("button",{name:"List evidence of run-a"})).toBeTruthy();
 });
+// Review fix 6 (#319): the check the old per-run button carried -- a saved result reaches that run in Runs and evidence --
+// now goes through the task's one button in Results (the task's current run).
+it("a saved result's run is reached in Runs and evidence from its task in Results",async()=>{
+ mount();const task=await screen.findByRole("region",{name:"Task results · a"});
+ fireEvent.click(within(task).getByRole("button",{name:"Open a in Runs and evidence"}));
+ // mutation: the button opens no run, or another run -> red
+ expect(screen.getByRole("tab",{selected:true}).textContent).toBe("Runs and evidence");expect(document.activeElement?.getAttribute("data-run-id")).toBe("run-a");expect(screen.getByRole("button",{name:"evidence"})).toBeTruthy();
+});
 it("hidden pane and hidden App section make no result reads",async()=>{
  const {calls,props,app}=mount(savedRun(),false);await act(async()=>{});expect(calls).toHaveLength(0);
  app.rerender(<ControlGroupView {...props} active/>);await screen.findByRole("region",{name:"Current result · run-a"});fireEvent.click(screen.getByRole("tab",{name:"Progress"}));calls.length=0;
