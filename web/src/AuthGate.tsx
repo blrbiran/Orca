@@ -135,7 +135,8 @@ export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   return (
     <AccountContext.Provider value={state.me}>
       <AccountSettingsContext.Provider value={{ me: state.me, onPasswordChanged: () => setState({ kind: "login", ended: false, changed: true }) }}>
-        <div className="authenticated-shell flex h-dvh flex-col overflow-hidden narrow:h-auto narrow:min-h-dvh narrow:overflow-visible">
+        {/* `relative` (#317): the locked frame contains the content's absolutely positioned hidden elements, so they cannot make the document scroll too. */}
+        <div className="authenticated-shell relative flex h-dvh flex-col overflow-hidden narrow:h-auto narrow:min-h-dvh narrow:overflow-visible">
           <AccountBar me={state.me} onLoggedOut={() => setState({ kind: "login", ended: false })} />
           {children}
         </div>

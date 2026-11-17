@@ -31,6 +31,15 @@ describe("narrow shell (P1-2)", () => {
     has(carrying("Shell.tsx", "sidebar"), "overflow-y-auto", "narrow:max-h-none", "narrow:overflow-visible");
     has(carrying("Shell.tsx", "content"), "overflow-y-auto", "narrow:overflow-visible");
   });
+  it("keeps the document from scrolling into blank space beside the content's own scroller (#317)", () => {
+    // #317 (1029x642 laptop viewport): an absolutely positioned hidden element in the scrolled content (an sr-only span,
+    // Radix Select's visually hidden native select) took the initial containing block as its own, so its static
+    // position far down the content made the DOCUMENT scrollable too: a second scrollbar over blank space. The locked
+    // frame is that containing block now, and its overflow-hidden clips it. Measured in headless Chrome at 1029x642
+    // on a minimal copy of the shell: document scrollHeight 1540 without `relative`, 555 (the viewport) with it.
+    // mutation: drop relative from the frame -> the document scrolls again on a laptop screen, red
+    has(carrying("AuthGate.tsx", "authenticated-shell"), "relative", "h-dvh", "overflow-hidden");
+  });
   it("keeps navigation to one scrolling row and hides what only the desktop needs", () => {
     // mutation: delete narrow:flex-nowrap from the nav -> its items wrap into a tall block, red
     has(carrying("Shell.tsx", "nav"), "narrow:flex-nowrap", "narrow:overflow-x-auto");
