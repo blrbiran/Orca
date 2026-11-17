@@ -62,6 +62,28 @@ describe("the requirement review panel (tester follow-up G §3.3)", () => {
     expect(within(within(zh).getByRole("list", { name: "检查冲突" })).getAllByRole("listitem")[1]!.textContent).toBe("必需检查：npm test");
   });
 
+  // Tester #343: criteria no change to files can meet -- Orca opened no fix; the panel names them and what answers each.
+  it("names the criteria left to the person and what answers each", async () => {
+    const left: RequirementReviewV1 = { ...notPassed, why: "not-fixable-by-work", problem: "requirement-review-not-passed:not-fixable-by-work",
+      rounds: [{ ...notPassed.rounds[0]!, result: "not-met", leftToPerson: ["AC1", "AC2"], criteria: [
+        { id: "AC1", verdict: "not-met", evidence: [{ path: "plan", line: null }], missing: "every task names files", fixableBy: "plan" },
+        { id: "AC2", verdict: "not-met", evidence: [{ path: "b.txt", line: null }], missing: "pick one", fixableBy: "person" }] }] };
+    const { panel } = show(left);
+    // mutation: drop the left-to-person block -> null, red
+    const box = panel.querySelector<HTMLElement>("[data-left-to-person]");
+    expect(box).not.toBeNull();
+    expect(box!.textContent).toContain("Left to you (no change to files can meet them): AC1 (plan), AC2 (your decision)");
+    expect(box!.textContent).toContain("AC1: about the accepted plan -- ask for a new draft with orca requirement feedback g --text");
+    expect(box!.textContent).toContain("AC2: only you can decide -- accept the work as it is, or review again with a note.");
+    expect(within(panel).getByRole("button", { name: "Accept as it is" })).toBeTruthy();
+    cleanup();
+    // A round recorded before #343 (no leftToPerson) shows no such block.
+    expect(show(notPassed).panel.querySelector("[data-left-to-person]")).toBeNull();
+    cleanup();
+    await i18n.changeLanguage("zh");
+    expect(show(left).panel.querySelector("[data-left-to-person]")!.textContent).toContain("留给你处理（改文件无法满足）：AC1 (计划), AC2 (需你决定)");
+  });
+
   it("none on an archived group or a passed review; zh words", async () => {
     expect(within(show(notPassed, true).panel).queryAllByRole("button")).toEqual([]);
     cleanup();

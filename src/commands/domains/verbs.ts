@@ -315,9 +315,24 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
 /** Tester follow-up G spec §3.3: the requirement review as the group summary sends it. */
 export interface ReviewView {
   state: string; why?: string; problem?: string; autoFixRounds?: number;
-  rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>; fixTaskId?: string;
-    checkConflict?: { criterionId: string; requiredCheck: string; because: string } }>;
+  rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null; fixableBy?: string }>; fixTaskId?: string;
+    checkConflict?: { criterionId: string; requiredCheck: string; because: string }; leftToPerson?: string[] }>;
   accepted?: { by: string; note: string };
+}
+
+/** Tester #343: the not-met criteria no automatic fix covers, each with who can meet it (`plan` or `person`). */
+function leftToPerson(last: ReviewView["rounds"][number] | undefined): Array<{ id: string; by: string }> {
+  return (last?.leftToPerson ?? []).map((id) => ({ id, by: last!.criteria.find((c) => c.id === id)?.fixableBy ?? "person" }));
+}
+
+/** Tester #343: what answers a review whose not-met criteria no change to files can meet -- a new plan draft, or a person's call. */
+function notFixableLines(groupId: string, left: ReadonlyArray<{ id: string; by: string }>): string[] {
+  const plan = left.filter((c) => c.by === "plan").map((c) => c.id), person = left.filter((c) => c.by !== "plan").map((c) => c.id);
+  return [
+    ...(plan.length === 0 ? [] : [`next: orca requirement feedback ${groupId} --text '<what to change in the plan>'  (${plan.join(", ")}: a new draft of the plan)`]),
+    `${plan.length === 0 ? "next" : "  or"}: orca group review-accept ${groupId} --note '<why accept as is>'${person.length === 0 ? "" : `  (${person.join(", ")}: only a person can decide)`}`,
+    `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
+  ];
 }
 
 /**
@@ -344,8 +359,17 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
   const last = review.rounds.at(-1);
   if (review.state === "passed") return [`review: passed on ${(last?.tip ?? "?").slice(0, 12)} (round ${last?.roundNo ?? "?"})`];
   if (review.state === "accepted") return [`review: accepted as it is by ${review.accepted?.by ?? "?"}: ${review.accepted?.note ?? ""}`];
-  if (review.state === "fixing") return [`review: fixing (task ${last?.fixTaskId ?? "?"}, round ${last?.roundNo ?? "?"})`];
+  const left = leftToPerson(last);
+  const leftLine = left.length === 0 ? [] : [`left to a person (no change to files can meet them): ${left.map((c) => `${c.id} (${c.by})`).join(", ")}`];
+  if (review.state === "fixing") return [`review: fixing (task ${last?.fixTaskId ?? "?"}, round ${last?.roundNo ?? "?"})`, ...leftLine];
   if (review.state !== "not-passed") return [`review: ${review.state}${review.why === undefined ? "" : ` (${review.why})`}`];
+  if (review.why === "not-fixable-by-work") return [
+    `problem: ${review.problem ?? "requirement-review-not-passed:not-fixable-by-work"}`,
+    ...(last?.summary ? [`review: ${last.summary}`] : []),
+    ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
+    ...leftLine,
+    ...notFixableLines(groupId, left),
+  ];
   return [
     `problem: ${review.problem ?? `requirement-review-not-passed:${review.why ?? "?"}`}`,
     ...(last?.summary ? [`review: ${last.summary}`] : []),
@@ -354,6 +378,7 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
     ...(last?.checkConflict === undefined ? [] : [
       `conflict: criterion ${last.checkConflict.criterionId}`, `  required check: ${last.checkConflict.requiredCheck}`, `  because: ${last.checkConflict.because}`,
       "  decide which one gives way: change the requirement or the check (review-fix with a goal), or accept as is"]),
+    ...leftLine,
     `next: orca group review-fix ${groupId} --goal '<what to fix>'`,
     `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
     `  or: orca group review-accept ${groupId} --note '<why accept as is>'`,

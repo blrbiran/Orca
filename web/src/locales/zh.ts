@@ -711,6 +711,12 @@ export const zh: Translation<typeof en> = {
         because: "冲突原因：{{because}}",
         next: "Orca 没有自动开修复任务：请决定哪一方让步——改需求或改检查，或按现状接受。",
       },
+      left: {
+        heading: "留给你处理（改文件无法满足）：{{ids}}",
+        by: { plan: "计划", person: "需你决定" },
+        plan: "{{ids}}：针对已接受的计划——用 orca requirement feedback {{groupId}} --text '<计划要改什么>' 要一份新草稿。",
+        person: "{{ids}}：只有你能决定——按现状接受，或附说明重新复核。",
+      },
     },
     noChange: {
       chip: "无改动",

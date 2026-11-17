@@ -26,6 +26,7 @@ import { taskContractSchema } from "../scheduler/planFile.js";
 import { readDraft, readRounds } from "./requirementRecords.js";
 import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
 import type { SingleCallHandler, SingleCallRunRow } from "./singleCallPurposes.js";
+import { taskWorkTokens } from "./usagePause.js";
 import { QUIET_GIT, workBranchTip } from "./workspace.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git, gitPrefix } from "../scheduler/gitExec.js";
@@ -55,10 +56,12 @@ export const MAX_AUTO_FIX_ROUNDS = 2;
 export const requirementReviewResponseSchema: Readonly<Record<string, unknown>> = Object.freeze({
   type: "object", additionalProperties: false, required: ["criteria", "summary"],
   properties: {
-    criteria: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "verdict", "evidence", "missing"],
+    criteria: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "verdict", "evidence", "missing", "fixableBy"],
       properties: { id: { type: "string" }, verdict: { type: "string", enum: ["met", "not-met", "cannot-judge"] },
         evidence: { type: "array", items: { type: "object", additionalProperties: false, required: ["path", "line"], properties: { path: { type: "string" }, line: { type: ["integer", "null"] } } } },
-        missing: { type: ["string", "null"] } } } },
+        missing: { type: ["string", "null"] },
+        // Tester #343: who can meet the criterion; only `work` criteria get an automatic fix task.
+        fixableBy: { type: "string", enum: ["work", "plan", "person"] } } } },
     summary: { type: "string" },
     // Optional: the reviewer names a person's constraint that a required check would contradict. The controller stops
     // automatic repair and leaves both the instruction and the failing check visible instead of inventing an exception.
@@ -68,7 +71,8 @@ export const requirementReviewResponseSchema: Readonly<Record<string, unknown>> 
 });
 const outputSchema = z.object({
   criteria: z.array(z.object({ id: z.string().min(1), verdict: z.enum(["met", "not-met", "cannot-judge"]),
-    evidence: z.array(z.object({ path: z.string().min(1), line: z.number().int().nonnegative().nullable() }).strict()), missing: z.string().nullable() }).strict()),
+    evidence: z.array(z.object({ path: z.string().min(1), line: z.number().int().nonnegative().nullable() }).strict()), missing: z.string().nullable(),
+    fixableBy: z.enum(["work", "plan", "person"]) }).strict()),
   summary: z.string(),
   checkConflict: z.object({ criterionId: z.string().min(1), requiredCheck: z.string().min(1), because: z.string().min(1) }).strict().optional(),
 }).strict();
@@ -136,10 +140,13 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     input.diff,
     ...(input.truncated ? [`(The diff was cut at ${REVIEW_DIFF_MAX_BYTES} bytes; what follows was not shown to you.)`] : []),
     "",
-    "Answer with a JSON object {\"criteria\": [{\"id\", \"verdict\", \"evidence\", \"missing\"}], \"summary\"}.",
+    // Tester #343 (spec 2026-11-17 S5): the review prompt carries no version marker (the contract's schema id
+    // `orca-requirement-review-contract-v1` names the call's contract, not this text); this is the change that added fixableBy.
+    "Answer with a JSON object {\"criteria\": [{\"id\", \"verdict\", \"evidence\", \"missing\", \"fixableBy\"}], \"summary\"}.",
     "- verdict met: name the evidence (file path and line, or the artefact path; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null}). missing is null.",
     "- verdict not-met: name the evidence you looked at and say in `missing` what is still needed.",
     "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would.",
+    "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
     "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",
   ].join("\n");
@@ -539,6 +546,12 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
  */
 function settleNotPassed(store: ControlStore, groupId: string, review: RequirementReview, round: ReviewRound): RequirementReview {
   if (round.result === "not-met") {
+    // Tester #343 (spec S5): a criterion only the plan or the person can meet gets no work fix task -- one such fix burned
+    // 48M tokens on a goal no file change could reach. A round recorded before S5 has no label and reads as `work`.
+    const notMet = round.criteria.filter((c) => c.verdict === "not-met");
+    const left = notMet.filter((c) => (c.fixableBy ?? "work") !== "work").map((c) => c.id);
+    if (left.length > 0) round.leftToPerson = left;
+    if (left.length === notMet.length) return { ...review, state: "not-passed", why: "not-fixable-by-work" };
     if (review.autoFixRounds >= MAX_AUTO_FIX_ROUNDS) return { ...review, state: "not-passed", why: "rounds-exhausted" };
     const opened = openFixTask(store, groupId, round, "auto");
     if ("refused" in opened) return { ...review, state: "not-passed", why: opened.refused };
@@ -616,7 +629,9 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
   const { setupCommands: _setup, ...context } = source.context;
   return taskContractSchema.parse({
     ...source,
-    objective: { taskId, goal: [goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"), ...baseRedNote].join("\n"),
+    objective: { taskId, goal: [goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"), ...baseRedNote,
+      // Tester #343 (spec S5): a cheap second line of defence behind the reviewer's fixableBy.
+      "If a criterion cannot be met by changing files, stop and report it in `decisions` instead of trying."].join("\n"),
       successCondition: `the requirement review finds criteria ${(unmet.length > 0 ? unmet.map((c) => c.id) : criteria.map((c) => c.id)).join(", ")} met`, nonGoals: [] },
     context: { ...context, targetPaths, ...(commands.setup.length === 0 ? {} : { setupCommands: commands.setup }) },
     safetyPolicy: { ...source.safetyPolicy, allowlistPaths: fixTaskAllowlist(tasks.map((t) => t.safetyPolicy.allowlistPaths), targetPaths), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
@@ -635,19 +650,39 @@ export function fixTaskAllowlist(taskAllowlists: readonly string[][], targetPath
   return union.length === 0 ? [] : [...new Set([...union, ...targetPaths])];
 }
 
-/** Appends the fix task in the caller's transaction (a savepoint: a refusal leaves nothing); `refused` says why it could not. */
-export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, _by: string, goal?: string, paths?: readonly string[]): { taskId: string } | { refused: ReviewWhy; detail: string } {
+/** Tester #343 (spec S5, agent's call for review: the number): an automatic fix task's token ceiling. */
+export const AUTO_FIX_USED_MULTIPLE = 2;
+export const AUTO_FIX_MIN_TOKENS = 1_000_000;
+/** The ceiling: twice the tokens the source task's runs used, at least AUTO_FIX_MIN_TOKENS, never above the source's own grant. */
+export function autoFixTokenCeiling(used: number, sourceGrantTokens: number | null): number {
+  const ceiling = Math.max(AUTO_FIX_USED_MULTIPLE * used, AUTO_FIX_MIN_TOKENS);
+  return sourceGrantTokens === null ? ceiling : Math.min(sourceGrantTokens, ceiling);
+}
+
+/**
+ * Appends the fix task in the caller's transaction (a savepoint: a refusal leaves nothing); `refused` says why it could not.
+ * Tester #343: an automatic fix (`by` "auto") covers only the not-met criteria changing files can meet, and its work grant
+ * carries a token ceiling (autoFixTokenCeiling): deriveContract writes the grant's tokens into the contract's
+ * `executionPolicy.tokenBudget`, the number ccloop stops a phase at (#225). A person's fix keeps the source's grant and
+ * every not-met criterion.
+ */
+export function openFixTask(store: ControlStore, groupId: string, round: ReviewRound, by: string, goal?: string, paths?: readonly string[]): { taskId: string } | { refused: ReviewWhy; detail: string } {
   const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
   const criteria = reviewInputsOf(store, groupId, body).criteria;
-  const sourceId = fixSourceTaskId(store, groupId, round);
+  const auto = by === "auto";
+  const scope: ReviewRound = auto ? { ...round, criteria: round.criteria.filter((c) => c.verdict !== "not-met" || (c.fixableBy ?? "work") === "work") } : round;
+  const sourceId = fixSourceTaskId(store, groupId, scope);
   const taskId = fixTaskIdOf(store, groupId, round.roundNo);
   const grant = (readWork(store, groupId, sourceId) as unknown as { grant: { work: BudgetAmount; handoff: Amount } }).grant;
+  const work: BudgetAmount = auto ? { ...grant.work, tokens: autoFixTokenCeiling(taskWorkTokens(store, groupId, sourceId), grant.work.tokens) } : grant.work;
   store.db.exec("SAVEPOINT review_fix");
   try {
-    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, round, criteria, taskId, sourceId, goal, paths), agentFrom: sourceId,
-      // Follow-up L: the sibling task's work grant as it is -- in an expectation-model group it has no token number (null);
-      // `?? 0` made it 0, which deriveContract refuses, so no fix task could open there.
-      work: grant.work, handoff: grant.handoff, dependsOn: [] });
+    const contract = fixTaskContract(store, groupId, scope, criteria, taskId, sourceId, goal, paths);
+    if (auto) contract.executionPolicy.tokenBudget = work.tokens;
+    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract, agentFrom: sourceId,
+      // Follow-up L: a person's fix takes the sibling task's work grant as it is -- in an expectation-model group it has no
+      // token number (null); `?? 0` made it 0, which deriveContract refuses, so no fix task could open there.
+      work, handoff: grant.handoff, dependsOn: [] });
     store.db.exec("RELEASE review_fix");
     return { taskId };
   } catch (error) {

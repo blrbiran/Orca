@@ -143,7 +143,7 @@ describe("a running requirement review does not hold integration (ruling 1, D1)"
     const holder: { w?: Awaited<ReturnType<typeof reviewWorld>> } = {};
     const w = await reviewWorld({ answer: () => {
       seen.push(groupComplete(holder.w!.t.h.store, "g"));
-      return { outcome: "complete", output: { criteria: [{ id: "AC1", verdict: "met", evidence: [{ path: "a", line: 1 }], missing: null }, { id: "AC2", verdict: "met", evidence: [{ path: "b", line: 1 }], missing: null }], summary: "ok" } };
+      return { outcome: "complete", output: { criteria: [{ id: "AC1", verdict: "met", evidence: [{ path: "a", line: 1 }], missing: null, fixableBy: "work" }, { id: "AC2", verdict: "met", evidence: [{ path: "b", line: 1 }], missing: null, fixableBy: "work" }], summary: "ok" } };
     } });
     holder.w = w;
     try {

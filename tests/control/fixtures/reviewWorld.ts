@@ -55,9 +55,11 @@ export async function reviewWorld(options: { tasks?: WebFixtureTask[]; requireme
   return { t, driver, calls: seen.calls, review, groupStatus, runAll };
 }
 
-export const allMet = () => ({ criteria: CRITERIA.map((c) => ({ id: c.id, verdict: "met", evidence: [{ path: c.id === "AC1" ? "a" : "b", line: 1 }], missing: null })), summary: "both files are there" });
-export const verdicts = (v: Record<string, "met" | "not-met" | "cannot-judge">) => ({
-  criteria: CRITERIA.map((c) => ({ id: c.id, verdict: v[c.id], evidence: v[c.id] === "cannot-judge" ? [] : [{ path: c.id === "AC1" ? "a" : "b", line: 1 }], missing: v[c.id] === "not-met" ? `${c.id} is not done` : null })),
+// Tester #343: every criterion of an answer names fixableBy (required by the review schema); `work` unless a case says otherwise.
+export const allMet = () => ({ criteria: CRITERIA.map((c) => ({ id: c.id, verdict: "met", evidence: [{ path: c.id === "AC1" ? "a" : "b", line: 1 }], missing: null, fixableBy: "work" })), summary: "both files are there" });
+export const verdicts = (v: Record<string, "met" | "not-met" | "cannot-judge">, by: Record<string, "work" | "plan" | "person"> = {}) => ({
+  criteria: CRITERIA.map((c) => ({ id: c.id, verdict: v[c.id], evidence: v[c.id] === "cannot-judge" ? [] : [{ path: c.id === "AC1" ? "a" : "b", line: 1 }], missing: v[c.id] === "not-met" ? `${c.id} is not done` : null,
+    fixableBy: by[c.id] ?? "work" })),
   summary: "reviewed",
 });
 export type ReviewWorld = Awaited<ReturnType<typeof reviewWorld>>;

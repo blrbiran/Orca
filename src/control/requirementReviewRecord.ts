@@ -8,7 +8,16 @@ import { isFollowupG } from "./modelVersion.js";
 import type { ControlStore } from "./store.js";
 
 export type CriterionVerdictKind = "met" | "not-met" | "cannot-judge";
-export interface CriterionVerdict { id: string; verdict: CriterionVerdictKind; evidence: Array<{ path: string; line: number | null }>; missing: string | null }
+/**
+ * Tester #343 (spec 2026-11-17 S5): who can meet a criterion -- `work` (changing repository files), `plan` (the accepted
+ * plan itself) or `person` (only the person can decide). The reviewer classifies; code routes on it (Rule 5).
+ */
+export type FixableBy = "work" | "plan" | "person";
+export interface CriterionVerdict {
+  id: string; verdict: CriterionVerdictKind; evidence: Array<{ path: string; line: number | null }>; missing: string | null;
+  /** Required in every new answer; absent in a round recorded before S5. */
+  fixableBy?: FixableBy;
+}
 export type ReviewRoundResult = "passed" | "not-met" | "cannot-judge" | "invalid" | "failed" | "unfunded";
 export interface ReviewRound {
   roundNo: number; tip: string; runId: string | null; at: number; result: ReviewRoundResult; criteria: CriterionVerdict[]; summary: string;
@@ -18,9 +27,11 @@ export interface ReviewRound {
   fixTaskId?: string; fixBy?: string;
   /** Tester #340: the conflict the reviewer reported (a not-met criterion vs. a required check and the person's restriction). */
   checkConflict?: { criterionId: string; requiredCheck: string; because: string };
+  /** Tester #343: the not-met criteria no automatic fix covers (fixableBy `plan` or `person`), left to the person. */
+  leftToPerson?: string[];
 }
 export type ReviewState = "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
-export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict";
+export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work";
 export interface RequirementReview {
   state: ReviewState; why?: ReviewWhy; rounds: ReviewRound[]; autoFixRounds: number;
   accepted?: { by: string; note: string; at: number };

@@ -21,7 +21,7 @@ async function localWorld(options: { record?: Record<string, unknown> } = {}) {
   const w = await reviewWorld({ harness: { integration: LOCAL },
     answer: (call) => {
       seen.push({ lastIntegrated: body(holder.w!).integration?.lastIntegrated ?? null, prompt: call.prompt });
-      return { outcome: "complete", output: { criteria: CRITERIA.map((c) => ({ id: c.id, verdict: "met", evidence: [{ path: "orca:delivery", line: null }], missing: null })), summary: "ok" } };
+      return { outcome: "complete", output: { criteria: CRITERIA.map((c) => ({ id: c.id, verdict: "met", evidence: [{ path: "orca:delivery", line: null }], missing: null, fixableBy: "work" })), summary: "ok" } };
     } });
   holder.w = w;
   // The harness checkout keeps untracked files; detached, main is a ref the local delivery may move (integrationPass H5).

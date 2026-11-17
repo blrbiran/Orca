@@ -861,6 +861,13 @@ export const en = {
         because: "Why they conflict: {{because}}",
         next: "Orca did not open a fix: decide which one gives way -- change the requirement or the check, or accept the work as it is.",
       },
+      // Tester #343: not-met criteria no change to files can meet; Orca opens no fix task for them.
+      left: {
+        heading: "Left to you (no change to files can meet them): {{ids}}",
+        by: { plan: "plan", person: "your decision" },
+        plan: "{{ids}}: about the accepted plan -- ask for a new draft with orca requirement feedback {{groupId}} --text '<what to change in the plan>'.",
+        person: "{{ids}}: only you can decide -- accept the work as it is, or review again with a note.",
+      },
     },
     noChange: {
       chip: "no change",

@@ -22,6 +22,7 @@ export function RequirementReviewPanel(props: { groupId: string; review: Require
   const review = props.review;
   if (review === undefined) return null;
   const last = review.rounds.at(-1);
+  const left = (last?.leftToPerson ?? []).map((id) => ({ id, by: last!.criteria.find((c) => c.id === id)?.fixableBy === "plan" ? "plan" as const : "person" as const }));
   const sendable = open !== null && text.trim() !== "" && bytes(text) <= BOUND[open];
   const send = (): void => {
     if (open === null || !sendable) return;
@@ -57,6 +58,14 @@ export function RequirementReviewPanel(props: { groupId: string; review: Require
           </ul>
           <p data-tone="warn">{t("control.review.conflict.next")}</p>
         </>
+      )}
+      {left.length > 0 && (
+        // Tester #343: criteria no change to files can meet -- Orca opened no fix for them; name what answers each.
+        <div data-left-to-person="">
+          <p data-tone="warn">{t("control.review.left.heading", { ids: left.map((c) => `${c.id} (${t(`control.review.left.by.${c.by}`)})`).join(", ") })}</p>
+          {left.some((c) => c.by === "plan") && <p>{t("control.review.left.plan", { groupId: props.groupId, ids: left.filter((c) => c.by === "plan").map((c) => c.id).join(", ") })}</p>}
+          {left.some((c) => c.by === "person") && <p>{t("control.review.left.person", { ids: left.filter((c) => c.by === "person").map((c) => c.id).join(", ") })}</p>}
+        </div>
       )}
       {last !== undefined && last.summary !== "" && <p className="detail-note">{last.summary}</p>}
       {review.state === "not-passed" && !props.archived && (open === null ? (

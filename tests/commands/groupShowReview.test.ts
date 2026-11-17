@@ -50,6 +50,38 @@ describe("group show names the requirement review (tester follow-up G §3.3)", (
     expect(lines.slice(at, at + 3)).toEqual(["conflict: criterion AC1", "  required check: npm test", "  because: only add"]);
   });
 
+  // Tester #343: criteria no change to files can meet get no fix task; what answers them is a new plan draft or a person's call.
+  it("a review no change to files can meet names a new plan draft and the person's answers, not review-fix", async () => {
+    const p = await panel({ state: "not-passed", why: "not-fixable-by-work", problem: "requirement-review-not-passed:not-fixable-by-work", autoFixRounds: 0,
+      rounds: [{ ...round("not-met", [{ id: "AC1", verdict: "not-met", evidence: [{ path: "plan", line: null }], missing: "every task names files", fixableBy: "plan" },
+        { id: "AC2", verdict: "not-met", evidence: [{ path: "README.md", line: 1 }], missing: "the person must pick one", fixableBy: "person" }]), leftToPerson: ["AC1", "AC2"] }] });
+    const lines = (await cli(["group", "show", "g-alpha"], p.dir)).stdout.split("\n");
+    const at = lines.indexOf("problem: requirement-review-not-passed:not-fixable-by-work");
+    expect(at).toBeGreaterThanOrEqual(0);
+    // mutation: drop the not-fixable-by-work branch in reviewLines -> the generic review-fix lines, red
+    expect(lines.slice(at, at + 8)).toEqual([
+      "problem: requirement-review-not-passed:not-fixable-by-work",
+      "review: s",
+      "  AC1 not-met: every task names files",
+      "  AC2 not-met: the person must pick one",
+      "left to a person (no change to files can meet them): AC1 (plan), AC2 (person)",
+      "next: orca requirement feedback g-alpha --text '<what to change in the plan>'  (AC1: a new draft of the plan)",
+      "  or: orca group review-accept g-alpha --note '<why accept as is>'  (AC2: only a person can decide)",
+      "  or: orca group review-rerun g-alpha --note '<what to look at>'",
+    ]);
+    expect(lines).not.toContain("next: orca group review-fix g-alpha --goal '<what to fix>'");
+  });
+
+  it("a fixing review names the criteria its fix task does not cover (#343)", async () => {
+    const p = await panel({ state: "fixing", autoFixRounds: 1,
+      rounds: [{ ...round("not-met", [{ id: "AC1", verdict: "not-met", evidence: [{ path: "a", line: 1 }], missing: "a", fixableBy: "work" },
+        { id: "AC2", verdict: "not-met", evidence: [{ path: "plan", line: null }], missing: "b", fixableBy: "plan" }]), fixTaskId: "review-fix-1", leftToPerson: ["AC2"] }] });
+    const lines = (await cli(["group", "show", "g-alpha"], p.dir)).stdout.split("\n");
+    const at = lines.indexOf("review: fixing (task review-fix-1, round 1)");
+    // mutation: drop leftLine from the fixing branch -> red
+    expect(lines.slice(at, at + 2)).toEqual(["review: fixing (task review-fix-1, round 1)", "left to a person (no change to files can meet them): AC2 (plan)"]);
+  });
+
   it("a passed review is one line; --json is unchanged", async () => {
     const p = await panel({ state: "passed", autoFixRounds: 0, rounds: [round("passed")] });
     const out = (await cli(["group", "show", "g-alpha"], p.dir)).stdout;

@@ -7,7 +7,7 @@ import { readArchivedContract, readWork } from "../../src/control/queries.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { git } from "./fixtures/driverHarness.js";
 import { CRITERIA, reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
-import { fixTaskContract } from "../../src/control/requirementReview.js";
+import { autoFixTokenCeiling, classifyReviewOutput, fixTaskContract, requirementReviewResponseSchema } from "../../src/control/requirementReview.js";
 
 /**
  * Tester follow-up G spec §3.4-§3.5 (human: 「自动在同一组里开一个修复任务（把复核的发现当说明）」): a review round with
@@ -106,8 +106,8 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
         safetyPolicy: { allowlistPaths: ["core-only"], denylistPaths: ["z-denied"] }, requiredChecks: ["true"] },
     ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
     answer: () => ({ outcome: "complete", output: {
-      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
-        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null }], summary: "core needs work",
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete", fixableBy: "work" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null, fixableBy: "work" }], summary: "core needs work",
     } }) });
     try {
       w.t.h.store.transaction(() => {
@@ -125,7 +125,12 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       const fix = readWork(w.t.h.store, "g", "review-fix-1");
       // Mutation: selecting plan.tasks[0] inherits a-integration, despite AC1 tracing z-core.
       expect(frozenWorkAgent(fix).agent.agent).toBe("claude");
-      expect(fix.grant.work).toEqual(readWork(w.t.h.store, "g", "z-core").grant.work);
+      // Ruling: human 2026-11-17 (tester #343) -- this asserted the automatic fix took z-core's work grant whole (3M tokens);
+      // an automatic fix's tokens are now capped at twice what its source used, at least 1M (z-core used 10): every other
+      // dimension is still z-core's. mutation: inherit a-integration's grant -> red only if they differ (kept from before).
+      const source = readWork(w.t.h.store, "g", "z-core").grant.work;
+      expect(fix.grant.work).toEqual({ ...source, tokens: autoFixTokenCeiling(10, source.tokens) });
+      expect(fix.grant.work.tokens).toBe(1_000_000);
       const contract = readConfirmedTaskExecution(w.t.h.store, "g", "review-fix-1").contract;
       expect(contract.executionPolicy.perAttemptTimeoutMs).toBe(45_000);
       expect(contract.context.targetPaths).toEqual(["core"]);
@@ -143,8 +148,8 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" } },
     ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
     answer: () => ({ outcome: "complete", output: {
-      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
-        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null }], summary: "core needs work",
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete", fixableBy: "work" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null, fixableBy: "work" }], summary: "core needs work",
     } }) });
     try {
       w.t.h.store.transaction(() => {
@@ -168,8 +173,8 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" } },
     ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
     answer: () => ({ outcome: "complete", output: {
-      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
-        { id: "AC2", verdict: "not-met", evidence: [{ path: "core", line: 2 }], missing: "core lacks tests" }], summary: "core needs work",
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete", fixableBy: "work" },
+        { id: "AC2", verdict: "not-met", evidence: [{ path: "core", line: 2 }], missing: "core lacks tests", fixableBy: "work" }], summary: "core needs work",
     } }) });
     try {
       w.t.h.store.transaction(() => {
@@ -193,8 +198,8 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       { taskId: "z-core", targetPaths: ["core"], agent: { agent: "claude" } },
     ], harness: { files: (id) => ({ [id === "a-integration" ? "integration" : "core"]: `${id}\n` }) },
     answer: () => ({ outcome: "complete", output: {
-      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete" },
-        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null }], summary: "core needs work",
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "core", line: 1 }], missing: "core is incomplete", fixableBy: "work" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "integration", line: 1 }], missing: null, fixableBy: "work" }], summary: "core needs work",
     } }) });
     try {
       await w.runAll();
@@ -231,19 +236,88 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
   // automatic round stopped `failed` and `review-fix` answered a bare recovery-blocked:review-fix.
   it("opens the fix task in an expectation-model group, whose tasks' work grants carry no token number", async () => {
     const answers = [verdicts({ AC1: "not-met", AC2: "met" }), verdicts({ AC1: "met", AC2: "met" })];
+    // Task a (the fix's source) used 700,000 tokens: the automatic fix's ceiling is twice that.
     const w = await reviewWorld({ tasks: [{ taskId: "a", tokenBudget: null }, { taskId: "b", tokenBudget: null }] as never,
-      harness: { files: fixFiles, tokenPolicy: "optional-v1" }, answer: () => ({ outcome: "complete", output: answers.shift() }) });
+      harness: { files: fixFiles, tokenPolicy: "optional-v1", workTokens: (id) => (id === "a" ? 700_000 : 10) }, answer: () => ({ outcome: "complete", output: answers.shift() }) });
     try {
       const grantTokens = (id: string) => JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(id)!.body)).grant.work.tokens;
       expect(grantTokens("a")).toBeNull();
       await w.runAll();
       await w.t.until(w.driver, () => w.review()?.state === "fixing" || w.review()?.state === "not-passed", 120);
       expect(w.review()).toMatchObject({ state: "fixing", autoFixRounds: 1 });
-      // the fix task is funded like its siblings: no token number, the expectation model's grant
-      expect(grantTokens("review-fix-1")).toBeNull();
+      // Ruling: human 2026-11-17 (tester #343) -- this asserted the fix task's grant had no token number, like its siblings;
+      // an uncapped automatic fix burned 48M tokens on a criterion no file change could meet. It now carries a ceiling of
+      // twice its source's used tokens (at least 1M). mutation: drop the cap in openFixTask -> null, red
+      expect(grantTokens("review-fix-1")).toBe(1_400_000);
+      expect(readConfirmedTaskExecution(w.t.h.store, "g", "review-fix-1").contract.executionPolicy.tokenBudget).toBe(1_400_000);
       await w.runAll();
+      // The number ccloop stops a phase at (#225): the dispatched contract's executionPolicy.tokenBudget.
+      const sent = w.t.fake.calls.accept.find((envelope) => envelope.claim.workItemId === "review-fix-1");
+      expect((sent?.work as { contract?: { executionPolicy?: { tokenBudget?: unknown } } } | undefined)?.contract?.executionPolicy?.tokenBudget).toBe(1_400_000);
       await w.t.until(w.driver, () => w.review()?.state === "passed", 120);
       expect(git(w.t.repo, "show", "refs/heads/orca/g:a")).toBe("fixed a by review-fix-1");
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
+  it("an answer that does not say who can meet a criterion is invalid, like any schema miss (#343)", () => {
+    const answer = verdicts({ AC1: "not-met", AC2: "met" });
+    const { fixableBy: _dropped, ...without } = answer.criteria[0]!;
+    // mutation: make fixableBy optional in the answer schema -> not-met, red
+    expect(classifyReviewOutput({ ...answer, criteria: [without, answer.criteria[1]] }, CRITERIA.map((c) => c.id))).toEqual({ result: "invalid", reason: "schema:criteria.0.fixableBy" });
+    expect(classifyReviewOutput({ ...answer, criteria: [{ ...without, fixableBy: "someone" }, answer.criteria[1]] }, CRITERIA.map((c) => c.id))).toMatchObject({ result: "invalid" });
+    // The JSON schema the call is given requires it too.
+    const items = (requirementReviewResponseSchema.properties as { criteria: { items: { required: string[] } } }).criteria.items;
+    expect(items.required).toContain("fixableBy");
+    expect(classifyReviewOutput(answer, CRITERIA.map((c) => c.id))).toMatchObject({ result: "not-met", criteria: [expect.objectContaining({ fixableBy: "work" }), expect.anything()] });
+  });
+
+  it("an automatic fix's token ceiling: twice the source's used tokens, at least 1M, never above the source's grant (#343)", () => {
+    // mutation: drop the 1M floor -> 20, red; mutation: 1x for 2x -> 700,000, red; mutation: ignore the source grant -> 1M, red
+    expect(autoFixTokenCeiling(10, null)).toBe(1_000_000);
+    expect(autoFixTokenCeiling(700_000, null)).toBe(1_400_000);
+    expect(autoFixTokenCeiling(10, 50_000)).toBe(50_000);
+  });
+
+  it("opens no fix task when every not-met criterion is one only the plan or the person can meet (#343)", async () => {
+    // An expectation-model group (no token number on a task's grant), so a person's fix below shows it is not capped.
+    const w = await reviewWorld({ tasks: [{ taskId: "a", tokenBudget: null }, { taskId: "b", tokenBudget: null }] as never, harness: { tokenPolicy: "optional-v1" },
+      answer: () => ({ outcome: "complete", output: verdicts({ AC1: "not-met", AC2: "not-met" }, { AC1: "plan", AC2: "person" }) }) });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing" || w.review()?.state === "not-passed", 120);
+      // mutation: settleNotPassed ignores fixableBy -> fixing with review-fix-1, red
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "not-fixable-by-work", autoFixRounds: 0,
+        rounds: [expect.objectContaining({ result: "not-met", leftToPerson: ["AC1", "AC2"] })] });
+      expect(w.review()!.rounds[0]!.fixTaskId).toBeUndefined();
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
+      // mutation: drop the fixableBy definitions from buildReviewPrompt -> red
+      expect(w.calls[0]?.prompt).toContain("\"plan\" when it is about the accepted plan itself");
+      expect(w.groupStatus()).not.toBe("done");
+      // A person's review-fix is unchanged: every not-met criterion, and the source's grant as it is (no token number here).
+      expect(w.t.service.reviewFix(w.t.h.command("review-fix", { goal: "do what the person decided" }))).toMatchObject({ result: { kind: "review-fix-opened", taskId: "review-fix-1" } });
+      // mutation: cap a person's fix too (openFixTask without the `auto` test) -> 1,000,000, red
+      expect(readWork(w.t.h.store, "g", "review-fix-1").grant.work.tokens).toBeNull();
+      expect(readConfirmedTaskExecution(w.t.h.store, "g", "review-fix-1").contract.objective.successCondition).toBe("the requirement review finds criteria AC1, AC2 met");
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
+  it("an automatic fix covers only the criteria changing files can meet and records the rest as left to the person (#343)", async () => {
+    const w = await reviewWorld({ answer: () => ({ outcome: "complete", output: verdicts({ AC1: "not-met", AC2: "not-met" }, { AC2: "plan" }) }) });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing" || w.review()?.state === "not-passed", 120);
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all().map((r) => String(r.id))).toEqual(["review-fix-1"]);
+      const contract = readConfirmedTaskExecution(w.t.h.store, "g", "review-fix-1").contract;
+      // mutation: openFixTask keeps every not-met criterion for an automatic fix -> AC2 and b in it, red
+      expect(contract.objective.goal).toContain("AC1");
+      expect(contract.objective.goal).not.toContain("AC2");
+      expect(contract.objective.successCondition).toBe("the requirement review finds criteria AC1 met");
+      expect(contract.context.targetPaths).toEqual(["a"]);
+      // mutation: drop the stop-and-report line from fixTaskContract -> red
+      expect(contract.objective.goal).toContain("If a criterion cannot be met by changing files, stop and report it in `decisions` instead of trying.");
+      // mutation: do not record leftToPerson -> red
+      expect(w.review()).toMatchObject({ state: "fixing", autoFixRounds: 1,
+        rounds: [expect.objectContaining({ fixTaskId: "review-fix-1", fixBy: "auto", leftToPerson: ["AC2"] })] });
     } finally { await w.t.h.dispose(); }
   }, 300000);
 
