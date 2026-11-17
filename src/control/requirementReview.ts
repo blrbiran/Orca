@@ -515,15 +515,24 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
   const union = (lists: string[][]) => [...new Set(lists.flat())];
   const targetPaths = paths !== undefined && paths.length > 0 ? [...new Set(paths)] : named.length > 0 ? named : union(tasks.map((t) => t.context.targetPaths));
   const commands = acceptanceCommands(store, groupId);
+  // #322: a full suite the group's acceptance found red at its base too (passed-relative) is not this task's to turn green:
+  // a fix that respects "do not repair a pre-existing failure" would fail it for good. The group's acceptance judges it
+  // against the base again once the fix lands, so the fix task is not required to pass it; the goal says so.
+  const accepted = acceptanceOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)));
+  const baseRed = accepted?.result === "passed-relative" && accepted.fullSuite?.baseline !== undefined ? accepted.fullSuite.command : null;
+  const kept = (checks: readonly string[]) => checks.filter((check) => check !== baseRed);
+  const required = kept(commands.checks).length > 0 ? kept(commands.checks) : kept(source.verification.requiredChecks).length > 0 ? kept(source.verification.requiredChecks) : source.verification.requiredChecks;
+  const baseRedNote = baseRed !== null && !required.includes(baseRed)
+    ? [`\`${baseRed}\` already failed at the group's base; the group's acceptance judges it against the base, so this task is not required to pass it.`] : [];
   const { setupCommands: _setup, ...context } = source.context;
   return taskContractSchema.parse({
     ...source,
-    objective: { taskId, goal: goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"),
+    objective: { taskId, goal: [goal ?? ["The requirement review found these acceptance criteria not met; make them met:", ...findings].join("\n"), ...baseRedNote].join("\n"),
       successCondition: `the requirement review finds criteria ${(unmet.length > 0 ? unmet.map((c) => c.id) : criteria.map((c) => c.id)).join(", ")} met`, nonGoals: [] },
     context: { ...context, targetPaths, ...(commands.setup.length === 0 ? {} : { setupCommands: commands.setup }) },
     safetyPolicy: { ...source.safetyPolicy, allowlistPaths: fixTaskAllowlist(tasks.map((t) => t.safetyPolicy.allowlistPaths), targetPaths), denylistPaths: union(tasks.map((t) => t.safetyPolicy.denylistPaths)),
       maxFilesTouched: Math.max(source.safetyPolicy.maxFilesTouched, targetPaths.length) },
-    verification: { ...source.verification, requiredChecks: commands.checks.length > 0 ? commands.checks : source.verification.requiredChecks },
+    verification: { ...source.verification, requiredChecks: required },
   });
 }
 

@@ -6,7 +6,8 @@ import { newDraft, writeDraft } from "../../src/control/requirementRecords.js";
 import { readArchivedContract, readWork } from "../../src/control/queries.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { git } from "./fixtures/driverHarness.js";
-import { reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
+import { CRITERIA, reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
+import { fixTaskContract } from "../../src/control/requirementReview.js";
 
 /**
  * Tester follow-up G spec §3.4-§3.5 (human: 「自动在同一组里开一个修复任务（把复核的发现当说明）」): a review round with
@@ -66,6 +67,31 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
     } finally { await w.t.h.dispose(); }
   }, 300000);
+
+  it("leaves out of the fix task's checks the full suite the acceptance found red at the group's base (#322)", async () => {
+    // The tester's review-fix-1: its goal was to revert a repair of a test already red at the base, while its contract still
+    // required `npm test` -- red before the group began -- so it could only fail and was retried from scratch.
+    const suite = "test -n suite";
+    const w = await reviewWorld({ tasks: [{ taskId: "a", requiredChecks: ["true", suite] }, { taskId: "b" }] });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed", 120);
+      const store = w.t.h.store;
+      const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      body.acceptance = { ...body.acceptance, result: "passed-relative", fullSuite: { command: suite, suggestion: null, exits: ["1", "1"], flaky: false, baseline: { tip: "c".repeat(40), exits: ["1", "1"] } } };
+      store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+      const round = { roundNo: 1, tip: "d".repeat(40), runId: null, at: 0, result: "not-met" as const, summary: "s",
+        criteria: [{ id: "AC1", verdict: "not-met" as const, evidence: [{ path: "a", line: 1 }], missing: "revert the repair" }] };
+      const contract = fixTaskContract(store, "g", round, CRITERIA, "review-fix-1", "a");
+      // mutation: keep the base-red suite in the fix task's checks -> [true, suite], red
+      expect(contract.verification.requiredChecks).toEqual(["true"]);
+      expect(contract.objective.goal).toContain(`\`${suite}\` already failed at the group's base`);
+      // Without a relative acceptance the union stays whole (the case below and every other one).
+      body.acceptance = { ...body.acceptance, result: "passed", fullSuite: { command: suite, suggestion: null, exits: ["0"], flaky: false } };
+      store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+      expect(fixTaskContract(store, "g", round, CRITERIA, "review-fix-1", "a").verification.requiredChecks).toEqual(["true", suite]);
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
 
   it("inherits the traced task's agent, grant and policy when its id sorts after an integration task", async () => {
     const w = await reviewWorld({ tasks: [
