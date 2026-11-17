@@ -34,14 +34,15 @@ function DependencyRows(props: Omit<GroupDependenciesProps, "dependsOn" | "group
         // A group already on this chain is not expanded again (the server refuses cycles; this only keeps the page finite).
         const behind = summary?.dependsOn === undefined || props.path.has(id) ? [] : summary.dependsOn;
         const completion = summary?.completion;
+        // Ruling H8: the status light; decorative, the state is the badge's text. A landed group is settled (dim).
+        const light = <span className="led" data-led={summary === undefined || landed ? "idle" : groupLed(summary)} aria-hidden="true" />;
         return (
           <li key={id} className="min-w-0 py-1" data-testid={`dependency-${id}`}>
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-              {/* Ruling H8: the status light; decorative, the state is the badge's text. A landed group is settled (dim). */}
-              <span className="led" data-led={summary === undefined || landed ? "idle" : groupLed(summary)} aria-hidden="true" />
-              {props.onSelectGroup === undefined ? <span className="font-medium [overflow-wrap:anywhere]">{id}</span> : (
-                <button type="button" className="btn-quiet min-w-0 px-1 font-medium [overflow-wrap:anywhere]" title={t("control.dependencies.open", { groupId: id })}
-                  onClick={() => props.onSelectGroup?.(id)}>{id}</button>
+              {props.onSelectGroup === undefined ? <span className="font-medium [overflow-wrap:anywhere]">{light}{id}</span> : (
+                // The light sits inside the id, so a long id that wraps never leaves it alone on a line (seen at 320 px).
+                <button type="button" className="btn-quiet h-auto min-w-0 px-1 text-start font-medium [overflow-wrap:anywhere]" title={t("control.dependencies.open", { groupId: id })}
+                  onClick={() => props.onSelectGroup?.(id)}>{light}{id}</button>
               )}
               {summary === undefined || column === null ? <span className="text-xs text-muted">{t("control.dependencies.unknown")}</span> : <>
                 <span className="badge" data-testid={`dependency-state-${id}`} data-tone={landed ? "ok" : COLUMN_TONE[column]}>

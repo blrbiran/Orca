@@ -55,8 +55,14 @@ describe("the group's Dependencies card (tester #327)", () => {
     // mutation: drop the landed branch -> "Done", red
     expect(stateOf("q").textContent).toBe("Landed");
     expect(stateOf("q").getAttribute("data-tone")).toBe("ok");
+    // The status light rides inside the id, so a long id that wraps at 320 px never strands it on a line of its own;
+    // it is decorative, so the button's name is the id alone.
+    // mutation: render the light beside the button again -> null, red
+    const open = within(p).getByRole("button", { name: "p" });
+    expect(open.querySelector(".led")?.getAttribute("data-led")).toBe("running");
+    expect(within(screen.getByTestId("dependency-q")).getByRole("button", { name: "q" }).querySelector(".led")?.getAttribute("data-led")).toBe("idle");
     // mutation: the id is plain text (no onSelectGroup) -> no button, red
-    fireEvent.click(within(p).getByRole("button", { name: "p" }));
+    fireEvent.click(open);
     expect(onSelect).toHaveBeenCalledWith("p");
   });
 
@@ -87,7 +93,7 @@ describe("the group's Dependencies card (tester #327)", () => {
 
   it("stops at a group already on the chain, so a cycle cannot recurse", () => {
     // The server refuses cycles; a page reading two summaries at different times could still see one.
-    // mutation: drop the path check -> unbounded recursion (the render throws), red
+    // mutation: drop the path check -> unbounded recursion (the test worker runs out of memory), red
     showPanel(["p"], [summaryOf("p", { dependsOn: ["g"] })]);
     const behind = screen.getByTestId("dependency-behind-p");
     expect(within(behind).getByTestId("dependency-g")).toBeTruthy();
