@@ -139,8 +139,13 @@ export const taskDetail = "border border-line-strong bg-elevated shadow-float";
 export const taskGoal = "inline-block max-w-[40ch] truncate align-bottom";
 /** A labelled token field: the hint and the field error sit under the label, outside it (final review M-T10). */
 export const tokenField = "mb-[10px] flex flex-col gap-1 text-xs text-muted [&>label]:mb-0";
-/** The dependency graph legend's swatch: a small outlined square; its fill and edge colour come per category (DependencyGraph's SWATCH_FILL, #318). */
+/** The dependency graph legend's swatch: a small outlined square; its fill and edge colour come per category (`depSwatchOf`, #318). */
 export const depSwatch = "mr-1 inline-block size-3 rounded-[3px] border align-middle";
+/** #318: a swatch wears its node's fill AND edge (styles.css `.dep-* rect`), so the legend matches the nodes, the dash too. */
+export const depSwatchOf = {
+  idle: "bg-cat-idle border-line-strong", running: "bg-cat-running border-info", waiting: "bg-cat-waiting border-warn border-dashed",
+  blocked: "bg-cat-blocked border-danger", done: "bg-cat-done border-ok",
+} as const;
 /** An inline confirm (a confirm group): an inset well with a firm edge, inline. Tone comes from data-tone. */
 export const confirmInline = "inline-flex flex-wrap items-center gap-2 rounded-control border px-[10px] py-[6px] [&>button]:ms-0";
 

@@ -149,7 +149,7 @@ describe("category fill, legend and live node text (issue-fixes spec §6.5)", ()
     render(<ControlGroupView view={view([workItem({ taskId: "i", category: "idle" })])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} now={NOW} />);
     const swatches = [...within(screen.getByRole("list", { name: "Legend" })).getAllByRole("listitem")].map((entry) => entry.querySelector(".dep-swatch")!.getAttribute("class")!.split(" "));
     // The node strokes in styles.css: idle border-strong, running info, waiting warn dashed, blocked danger, done ok.
-    // mutation: swap the running and done edges in SWATCH -> red; drop border-dashed from waiting -> red
+    // mutation: swap the running and done edges in depSwatchOf -> red; drop border-dashed from waiting -> red
     const edges = swatches.map((classes) => classes.filter((c) => c.startsWith("border-") && c !== "border-0"));
     expect(edges).toEqual([["border-line-strong"], ["border-info"], ["border-warn", "border-dashed"], ["border-danger"], ["border-ok"]]);
   });

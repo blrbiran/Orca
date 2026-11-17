@@ -12,8 +12,8 @@ import { useTranslation } from "react-i18next";
 import { useClock } from "./clock.js";
 import { goalSummary } from "./CardGoal.js";
 import { WEB_WORK_ITEM_CATEGORIES } from "./controlTypes.js";
-import type { RunViewV1, WorkItemCategoryV1, WorkItemViewV1 } from "./controlTypes.js";
-import { depSwatch } from "./ui/classes.js";
+import type { RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
+import { depSwatch, depSwatchOf } from "./ui/classes.js";
 import { layoutDependencies, type DependencyLayout } from "./dependencyLayout.js";
 import i18n, { enumText } from "./i18n.js";
 import { lineageRunNumber, shownWorkStatus } from "./runFacts.js";
@@ -22,11 +22,6 @@ import { lineageRunNumber, shownWorkStatus } from "./runFacts.js";
 const NODE_W = 180, NODE_H = 104, GAP_X = 56, GAP_Y = 16, PAD = 8;
 // #232: an edge that skips a layer runs through it on a lane of its own, LANE_GAP apart, below that layer's last task.
 const LANE_GAP = 12;
-// #318: a swatch wears its node's fill AND edge (styles.css .dep-* rect), so the legend matches the nodes, the dash too.
-const SWATCH_FILL: Record<WorkItemCategoryV1, string> = {
-  idle: "bg-cat-idle border-line-strong", running: "bg-cat-running border-info", waiting: "bg-cat-waiting border-warn border-dashed",
-  blocked: "bg-cat-blocked border-danger", done: "bg-cat-done border-ok",
-};
 /** Spec §6.5: a current run quiet for longer than this is shown as making no progress. */
 const STALL_MS = 10 * 60_000;
 
@@ -160,7 +155,7 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
       <figcaption>{t("control.graph.caption")}</figcaption>
       <ul className="dep-legend mt-1 mb-2 flex list-none flex-wrap gap-3 p-0 text-xs text-muted" aria-label={t("control.graph.legend")}>
         {WEB_WORK_ITEM_CATEGORIES.map((category) => (
-          <li key={category}><span className={["dep-swatch", `dep-${category}`, depSwatch, SWATCH_FILL[category]].join(" ")} aria-hidden="true" />{t(`control.graph.category.${category}` as const)}</li>
+          <li key={category}><span className={["dep-swatch", `dep-${category}`, depSwatch, depSwatchOf[category]].join(" ")} aria-hidden="true" />{t(`control.graph.category.${category}` as const)}</li>
         ))}
       </ul>
       <div className="dep-scroll max-w-full overflow-x-auto">
