@@ -1018,6 +1018,15 @@ export function settleHandoffRequestInTransaction(
   return { state: outcome === "outcome-unknown" ? "outcome-unknown" : outcome, groupStopState: groupStopState(store, groupId) };
 }
 
+/**
+ * Stuck-runs spec 2026-11-17 S1 (#343, #344): a paused group's run proved never to have reached the provider is settled
+ * as a handoff stop settles one (driverHandoff.ts restartRun): `settled-restartable` with the same accounting, its task
+ * claimable again. A pause has no request, so nothing else is written.
+ */
+export function settleNeverStartedRunInTransaction(store: ControlStore, groupId: string, runId: string): void {
+  terminaliseRun(store, groupId, readRunBody(store, runId), "settled-restartable", null);
+}
+
 function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outcome: HandoffDisposition, reasonCode: string | null): void {
   const settled: RunBody = { ...run, state: outcome, failureCode: reasonCode };
   saveRunBody(store, settled, false);

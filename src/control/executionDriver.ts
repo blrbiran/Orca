@@ -69,7 +69,7 @@ import { correctionTargetOf } from "../corrections/target.js";
 import { classifyCriteriaChange, runChecksAtBase, type CriteriaBaseVerdict } from "./criteriaProtection.js";
 import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
-import { openRequestOf, singleCallCommitTerminal, stepH, visitOrder } from "./driverHandoff.js";
+import { openRequestOf, settlePausedUnstarted, singleCallCommitTerminal, stepH, visitOrder } from "./driverHandoff.js";
 import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
@@ -778,7 +778,7 @@ export function dispatchedPolicy<P extends { maxAttempts: number; tokenBudget: n
 }
 
 /** spec §2.2 B and B': one place turns a port answer into a run state. Answers whether the state changed. */
-function persistStatus(deps: ExecutionDriverDeps, runId: string, status: ExecutionStatus, step: "B" | "B'"): boolean {
+export function persistStatus(deps: ExecutionDriverDeps, runId: string, status: ExecutionStatus, step: "B" | "B'"): boolean {
   const { store } = deps;
   return write(deps, () => {
     const run = readDriverRun(store, runId);
@@ -1832,6 +1832,8 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
       default: return false;
     }
   }
+  // Stuck-runs spec 2026-11-17 S1: a paused group's run that never reached the provider is settled, not held (driverHandoff.ts).
+  if ((run.state === "starting" || run.state === "start-pending") && await settlePausedUnstarted(deps, runId)) return true;
   switch (run.state) {
     case "starting": return stepA1(deps, runId);
     case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2(deps, runId);

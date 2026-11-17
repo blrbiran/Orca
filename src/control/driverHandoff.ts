@@ -10,8 +10,8 @@ import { hashPayload } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { peerFailureLogLine } from "./ccloopPort.js";
 import {
-  ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, saveHandoffRequest,
-  settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, type HandoffRequestBody,
+  ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, readStopIntent, saveHandoffRequest,
+  settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, settleNeverStartedRunInTransaction, type HandoffRequestBody,
 } from "./stopIntent.js";
 import { isSingleCallRun, isWebWorkRun } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
@@ -20,7 +20,7 @@ import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
-  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, laterError, driverRunIds, groupRepoId, portFor, readDriverRun,
+  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, laterError, driverRunIds, groupRepoId, persistStatus, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -138,18 +138,7 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
     if(observed.kind!=="absent")return countUnknownUnderStop(deps,run,request);
     run=readDriverRun(store,runId);
   }
-  let cleanupError: string | null = null;
-  // Single-call estimate spec §6.5 (review I3): an estimate run has no workspace; nothing in the target repository is touched.
-  // Multi-directory projects spec §7.1: a multi group has no single repository, so its primary is resolved from the frozen
-  // list, and every extra workspace A2 made (recorded as it was made) goes too.
-  if (run.drive !== undefined && run.drive.workspacePath !== null) {
-    try {
-      const repoId = isMultiGroup(store, run.groupId) ? multiPrimaryRepoId(store, run.groupId) : groupRepoId(store, run.groupId);
-      await cleanupRunWorkspace(deps.resolveRepository(repoId), deps.roots, runId, run.drive.workspacePath);
-      for (const dir of run.drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
-    }
-    catch (error) { cleanupError = describeError(error); }
-  }
+  const cleanupError = await removeNeverStartedWorkspace(deps, run);
   return write(deps, () => {
     const request = readHandoffRequest(store, run.groupId, requestId).request;
     if (!ADOPTABLE_STATES.includes(request.state)) return false;
@@ -164,6 +153,63 @@ export async function restartRun(deps: ExecutionDriverDeps, runId: string, reque
       if(marker.state!=="never-submitted"||marker.envelopeHash!==settled.drive?.envelopeHash||settled.executionId!==null||settled.highWater!==0||(settled.unknown as {work:boolean;handoff:boolean}).work||(settled.unknown as {work:boolean;handoff:boolean}).handoff||store.db.prepare("SELECT seq FROM usage_events WHERE run_id=?").get(runId))throw new ControlError("recovery-blocked","saved-result-accept-unknown");
       settled.savedNoDispatch=persistRecoveryArtifact(store,savedNoDispatchSchema.parse({schema:"orca-saved-result-no-dispatch-v1",groupId:settled.groupId,workItemId:settled.workItemId,taskId:settled.taskId,runId,generation:settled.generation,commandId:settled.commandId,ownerTokenHash:createHash("sha256").update(String(settled.ownerToken)).digest("hex"),admission:recovery.admission,fundingHash:sha256Canonical(recovery.funding),revision:recovery.revision,envelopeHash:settled.drive!.envelopeHash,handoffRequestId:requestId,inspection:"absent",controllerState:"never-submitted",observedAt:store.now()}));saveDriverRun(store,settled);
     }
+    return true;
+  });
+}
+
+/**
+ * The workspace A2 made for a run that never started, removed; answers the failure to record (null when it went or
+ * there was none). Single-call estimate spec §6.5 (review I3): an estimate run has no workspace; nothing in the target
+ * repository is touched. Multi-directory projects spec §7.1: a multi group has no single repository, so its primary is
+ * resolved from the frozen list, and every extra workspace A2 made (recorded as it was made) goes too.
+ */
+async function removeNeverStartedWorkspace(deps: ExecutionDriverDeps, run: DriverRun): Promise<string | null> {
+  const { store } = deps;
+  if (run.drive === undefined || run.drive.workspacePath === null) return null;
+  try {
+    const repoId = isMultiGroup(store, run.groupId) ? multiPrimaryRepoId(store, run.groupId) : groupRepoId(store, run.groupId);
+    await cleanupRunWorkspace(deps.resolveRepository(repoId), deps.roots, run.runId, run.drive.workspacePath);
+    for (const dir of run.drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, run.runId, dir.key);
+    return null;
+  }
+  catch (error) { return describeError(error); }
+}
+
+/**
+ * Stuck-runs spec 2026-11-17 S1 (#343, #344): a paused group holds A1 and B (executionDriver.ts groupHeld), so a run
+ * there waited at active=1 for ever and kept groupComplete false. Pause now settles a task run that never reached the
+ * provider the way restartRun does: its workspace removed, `settled-restartable`, inactive, its task claimable again, so
+ * resume claims a new run. A prepared envelope may have reached ccloop (spec §11 C4), so it is inspected first: `absent`
+ * is settled; an execution that exists is recorded and runs on (pause lets running work finish); an answer in doubt
+ * leaves the run where it is. A saved-result recovery run keeps its own no-dispatch proof chain and is not touched.
+ * Answers true when the run moved.
+ */
+export async function settlePausedUnstarted(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.state !== "starting" && run.state !== "start-pending") return false;
+  if (singleCallPurposeOf(run) !== null || run.taskId === null || run.mode !== undefined || run.recoveryOf !== undefined) return false;
+  if (readStopIntent(store, run.groupId)?.mode !== "pause" || openRequestOf(store, run) !== null) return false;
+  // B moves a run whose execution is already recorded to `accepted` before its hold check; that run is ccloop's.
+  if (run.executionId !== null) return false;
+  if (run.state === "start-pending" && run.drive?.prepared === true) {
+    let status: ExecutionStatus;
+    try { status = await portFor(deps, run).inspect(readStartEnvelope(store, run)); }
+    catch (error) { const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line); return false; }
+    if (status.kind === "unknown") return false;
+    if (status.kind !== "absent") return persistStatus(deps, runId, status, "B");
+  }
+  const cleanupError = await removeNeverStartedWorkspace(deps, run);
+  return write(deps, () => {
+    // Re-read after the awaits: only a run still where it was, with no execution, is settled. A resume in between does not
+    // stop it -- its workspace may already be gone -- and the task it gives back is claimed as any ready task is.
+    const current = readDriverRun(store, runId);
+    if (current.state !== run.state || current.executionId !== null || openRequestOf(store, current) !== null) return false;
+    if (current.drive !== undefined) {
+      current.drive = { ...current.drive, cleanedUp: cleanupError === null, cleanupError };
+      saveDriverRun(store, current);
+    }
+    settleNeverStartedRunInTransaction(store, run.groupId, runId);
     return true;
   });
 }
