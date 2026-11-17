@@ -18,7 +18,9 @@ export const KNOWN_FAILURE_CAUSES = ["auth", "quota", "rate-limited", "provider-
   "model-unavailable",
   // Tester #347: ccloop's causes for an execute answer it could not take (the agent stopped without working; a final
   // message that is not JSON; JSON that is not the execute shape).
-  "narration-only", "execution-not-json", "execution-shape", "unknown"] as const;
+  "narration-only", "execution-not-json", "execution-shape",
+  // Tester #349: ccloop's cause for a call that failed only in a cleanup step after its work (not retried in-phase).
+  "cleanup-failed", "unknown"] as const;
 export type KnownFailureCause = typeof KNOWN_FAILURE_CAUSES[number];
 export const knownCause = (cause: string): KnownFailureCause => (KNOWN_FAILURE_CAUSES as readonly string[]).includes(cause) ? cause as KnownFailureCause : "unknown";
 

@@ -514,6 +514,8 @@ export type RunViewV1 = {
   /** Codex's latest completed response while the run is under way; provisional, never part of `used`. */
   liveUsage?: { attempt: number; phase: "plan" | "execute" | "verify"; tokens: number; observedAt: string; revision: number };
   usageAt?: number;
+  /** Tester #349: the run's Codex sessions ccloop could not delete (the private rollout keeps the prompt); absent otherwise. */
+  sessionCleanup?: SessionCleanupEntryV1[];
   /** Tester #321 part C: the run's usage is unknown, so `used` is not a figure (not even 0); absent otherwise. */
   usageUnknown?: true;
   usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
@@ -1566,3 +1568,6 @@ export type PlanLibraryImportPayloadV1 = {
   projectId: string; name: string; entryId?: string; doc: unknown;
   provenance: { fileName: string; fileSha256: string; format: "orca-plan-v1" | "scheduler-plan-file" };
 };
+
+/** Tester #349: one Codex session ccloop could not delete; `retry-failed` is never retried automatically again. */
+export interface SessionCleanupEntryV1 { threadId: string; home: string; state: "failed" | "retry-failed"; detail: string }

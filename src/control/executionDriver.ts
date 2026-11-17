@@ -182,6 +182,8 @@ export interface DriverRun {
   highWater: number; providerAttemptOrdinal: number; continuationIntentId?: string | null;
   /** Tester round 3 spec §3: a loop run's observed usage floor, from collect. Shown, never booked. */
   usageLowerBound?: { tokens: number };
+  /** Tester #349: the run's Codex sessions ccloop could not delete, from the latest collect that listed one. */
+  sessionCleanup?: NonNullable<ExecutionReport["sessionCleanup"]>;
   executionProfile: { profileId: string; profileHash: string };
   drive?: DriveRecord;
   [key: string]: unknown;
@@ -983,6 +985,14 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   // Tester round 3 spec §3: kept beside the run for the settlement view.
   const floor = report.usageLowerBound;
   if (floor !== undefined) write(deps, () => { const current = readDriverRun(store, runId); current.usageLowerBound = floor; saveDriverRun(store, current); });
+  // Tester #349: the latest list of the run's Codex sessions ccloop could not delete, a standing notice on the run; dropped
+  // once ccloop no longer lists it (its sweep or a person deleted the session).
+  const cleanup = report.sessionCleanup;
+  if (cleanup !== undefined || run.sessionCleanup !== undefined) write(deps, () => {
+    const current = readDriverRun(store, runId);
+    if (cleanup === undefined) delete current.sessionCleanup; else current.sessionCleanup = cleanup;
+    saveDriverRun(store, current);
+  });
   deps.taskResults?.schedule(runId);
   return report;
 }

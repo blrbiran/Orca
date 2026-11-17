@@ -452,6 +452,21 @@ export function workerLostLines(runs: ReadonlyArray<EmptyResultRun & { failureCa
   });
 }
 
+/**
+ * Tester #349 (human's ruling, session 4389b15f, 2026-11-18): a Codex session ccloop could not delete keeps the run's
+ * prompt in its private rollout; `run show` names it with the command that deletes it (the Web run view says the same).
+ */
+export function sessionCleanupLines(run: { sessionCleanup?: unknown } | undefined): string[] {
+  const entries = Array.isArray(run?.sessionCleanup) ? run.sessionCleanup as Array<{ threadId?: unknown; home?: unknown; state?: unknown; detail?: unknown }> : [];
+  return entries.flatMap((entry) => {
+    const id = String(entry.threadId ?? "?"), home = String(entry.home ?? "?");
+    const state = entry.state === "retry-failed" ? ", and the automatic retry failed too (it is not retried again)" : "; the next cleanup tries once more";
+    const quoted = /^[A-Za-z0-9_./-]+$/.test(home) ? home : `'${home.replace(/'/g, "'\\''")}'`;
+    return [`session cleanup: Codex session ${id} could not be deleted${state}: ${String(entry.detail ?? "")}`,
+      `  delete it by hand: CODEX_HOME=${quoted} codex delete --force ${id}`];
+  });
+}
+
 /** Tester follow-up G spec §1.2: a task's no-change record as the group view lists it. */
 export interface NoChangeItem { taskId?: unknown; currentRunId?: unknown; noChangeCompletion?: { runId?: unknown; ordinal?: unknown; decidedBy?: unknown } }
 const NO_CHANGE_BLOCK_PREFIXES = ["no-change-twice", "no-change-judge-failed", "no-change-judge-unfunded", "no-change-not-met"];

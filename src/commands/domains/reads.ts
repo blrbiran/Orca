@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { acceptanceLines, contextHandoffLines, emptyResultLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, emptyResultLines, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -600,6 +600,7 @@ export const READ_ROWS: CommandDef[] = [
         ...formatFailureLines(b.run?.diagnosis?.formatFailureWork),
         ...emptyResultLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
         ...workerLostLines(b.run === undefined ? [] : [b.run as EmptyResultRun]),
+        ...sessionCleanupLines(b.run as { sessionCleanup?: unknown } | undefined),
         ...executionCompleteLines(b.groupId, b.run as CompletedRun | undefined),
         ...postMergeCheckLines(b.run?.postMergeCheck),
       ];

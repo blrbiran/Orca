@@ -852,6 +852,12 @@ export const zh: Translation<typeof en> = {
       cause: { "execution-format-invalid": "执行输出无法解码", "execution-format-ambiguous-or-hidden": "执行输出含糊或被隐藏", "usage-unsettled": "用量尚未结清", "path-policy": "运行改了任务允许路径以外的文件", unknown: "原因未知" },
       next: { "execution-format-invalid": "查看下方已保存成果验证资格和证据", "execution-format-ambiguous-or-hidden": "查看下方已保存成果验证资格和证据", "usage-unsettled": "请所有者核对保守用量结清", "path-policy": "先核对它报告的路径，再重试任务、只放行这些路径（orca task retry --allow-observed-paths）", unknown: "先查看活动和证据，再使用可用的恢复操作" },
     },
+    // Tester #349：ccloop 没能删除的 Codex 会话；删除之前，它在私有文件里保留着这次运行的提示词。
+    sessionCleanup: {
+      failed: "运行 {{runId}} 的 Codex 会话 {{threadId}} 没能删除；下一次清理会再试一次。删除之前，它在一个私有文件里保留着这次运行的提示词（{{detail}}）。",
+      retryFailed: "运行 {{runId}} 的 Codex 会话 {{threadId}} 没能删除，自动重试也失败了，不会再自动重试。删除之前，它在一个私有文件里保留着这次运行的提示词（{{detail}}）。",
+      command: "手动删除：",
+    },
     failureCause: {
       line: "停止原因：{{cause}}。{{next}}",
       retries: "（已自动重试 {{retries}} 次）",
@@ -861,6 +867,7 @@ export const zh: Translation<typeof en> = {
         stalled: "agent 长时间没有动静，已被停止", "executable-missing": "找不到 agent 的程序", "required-check-failed": "必需检查没有通过",
         "verifier-rejected": "verifier 驳回了这次工作", "budget-exhausted": "时间、token 或尝试次数预算用完了", "tool-rule-violated": "agent 违反了这一步的工具规则", "setup-failed": "准备步骤失败", "worker-lost": "执行进程丢失（机器重启或进程被杀）", "model-unavailable": "provider 不为这个 agent 提供该模型",
         "narration-only": "agent 只说了一句话就结束了这一轮，没有执行任务", "execution-not-json": "agent 的最终消息不是 JSON 答案", "execution-shape": "agent 的 JSON 答案不符合要求的格式",
+        "cleanup-failed": "agent 调用之后的清理步骤失败了",
         unknown: "原因未知",
       },
       next: {
@@ -872,6 +879,7 @@ export const zh: Translation<typeof en> = {
         "verifier-rejected": "看下方 verifier 给出的原因；组在自动编排下时，Orca 会自动升级处理。",
         "budget-exhausted": "调高任务预算或拆分任务后重试。", "tool-rule-violated": "看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。", "setup-failed": "有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。", "worker-lost": "Orca 会自动重新开始这个任务，不占用它的尝试次数（连续最多三次）。", "model-unavailable": "Orca 不会自动重试，也不会自己换模型。换一个 agent 或模型重试任务（task retry --agent），或在 agent 偏好、组的 agent 选择里改模型。",
         "narration-only": "重试这个任务；这个任务的下一次重试会被告知上一次没有执行任务就停了。", "execution-not-json": "先看下方证据里 agent 的最终消息，再重试这个任务。", "execution-shape": "重试这个任务；ccloop 报出了被拒字段时会一并显示。",
+        "cleanup-failed": "这次调用的工作已经做完；先看下方细节，再重试这个任务。",
         unknown: "先看下方证据，再重试这个任务。",
       },
     },

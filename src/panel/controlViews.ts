@@ -19,7 +19,7 @@ import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
-import { liveUsageSchema, peerCode } from "../control/ccloopPort.js";
+import { liveUsageSchema, peerCode, sessionCleanupSchema } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
@@ -282,6 +282,8 @@ const persistedRunSchema = z.object({
   transcripts: transcriptListingSchema.optional(),
   // Codex's current call observation is provisional; it is never a booked usage event.
   liveUsage: liveUsageSchema.optional(),
+  // Tester #349: the run's Codex sessions ccloop could not delete (executionDriver.ts keeps the latest collect's list).
+  sessionCleanup: sessionCleanupSchema.optional(),
   // Tester follow-up G spec §2.1: a task run's live token ceiling (liveCeiling.ts), and the stop ccloop reported at it.
   liveCeiling: liveCeilingRecordSchema.optional(),
   liveCeilingStop: z.object({ revision: safeInteger.positive(), tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger, phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),
@@ -1455,6 +1457,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(run.terminalClosure === undefined ? {} : validTerminalClosure(store, run as never) ? { terminalClosed: true } : blocked(`run-closure-invalid:${run.runId}`)),
       ...((run.singleCallUsageLowerBound ?? run.usageLowerBound) === undefined ? {} : { usageLowerBound: (run.singleCallUsageLowerBound ?? run.usageLowerBound)!.tokens }),
       ...(run.usageApproximate === undefined ? {} : { usageApproximate: { floorTokens: run.usageApproximate.floorTokens } }),
+      // Tester #349: a standing notice, also after the run settled -- the private rollout stays until someone deletes it.
+      ...(run.sessionCleanup === undefined ? {} : { sessionCleanup: run.sessionCleanup }),
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       ...(run.drive?.pathPolicyMisses === undefined ? {} : { pathPolicyMisses: run.drive.pathPolicyMisses }),

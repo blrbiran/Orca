@@ -46,6 +46,8 @@ export interface ExecutionReport {
  /** Tester follow-up G Part 5 (ccloop C4): the live notes ccloop acknowledged, present iff its ack file exists. */
  liveNotes?:{delivered:Array<{id:string;phase:"plan"|"execute"|"verify";attempt:number;at:string}>};
  /** Codex response-boundary observation: a provisional reading of one call, never a usage-ledger event. */
+ // Tester #349: the run's Codex sessions ccloop could not delete; absent when there is none.
+ sessionCleanup?:Array<{threadId:string;home:string;state:"failed"|"retry-failed";detail:string}>;
  liveUsage?:{schema:"ccloop-live-usage-v1";runId:string;attempt:number;phase:"plan"|"execute"|"verify";callId:string;threadId:string;tokens:number;observedAt:string;revision:number};
  /**
   * Worker-lost recovery spec 2026-11-12 §5 (as built, ccloop half item 2): present only for a claimed loop run with no

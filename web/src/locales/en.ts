@@ -1014,6 +1014,12 @@ export const en = {
     },
     // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause (ccloop failure-causes spec §3), what it means and what to do
     // next. A cause this panel does not know reads as `unknown`.
+    // Tester #349: a Codex session ccloop could not delete; it keeps the run's prompt in a private file until deleted.
+    sessionCleanup: {
+      failed: "Codex session {{threadId}} of run {{runId}} could not be deleted; the next cleanup tries once more. Until it is deleted it keeps the run's prompt in a private file ({{detail}}).",
+      retryFailed: "Codex session {{threadId}} of run {{runId}} could not be deleted, and the automatic retry failed too; it is not retried again. Until it is deleted it keeps the run's prompt in a private file ({{detail}}).",
+      command: "Delete it by hand:",
+    },
     failureCause: {
       line: "Why it stopped: {{cause}}. {{next}}",
       retries: " (after {{retries}} automatic retries)",
@@ -1023,6 +1029,7 @@ export const en = {
         stalled: "the agent went silent and was stopped", "executable-missing": "the agent's program was not found", "required-check-failed": "a required check failed",
         "verifier-rejected": "the verifier rejected the work", "budget-exhausted": "the time, token or attempt budget ran out", "tool-rule-violated": "the agent broke the step's tool rules", "setup-failed": "a setup command failed", "worker-lost": "worker lost (the machine restarted or the process was killed)", "model-unavailable": "the provider does not serve this model for the agent",
         "narration-only": "the agent ended its turn after a short message without doing the task", "execution-not-json": "the agent's final message was not the JSON answer", "execution-shape": "the agent's JSON answer did not have the required shape",
+        "cleanup-failed": "a cleanup step after the agent's call failed",
         unknown: "the cause is unknown",
       },
       next: {
@@ -1034,6 +1041,7 @@ export const en = {
         "verifier-rejected": "Read the verifier's reason below; Orca escalates it automatically when the group is orchestrated.",
         "budget-exhausted": "Raise the task's budget, or split it, then retry.", "tool-rule-violated": "Read the tool-rule report and the evidence below, then fix the step's tools or the task, and retry.", "setup-failed": "A setup command could not finish; see its output, fix the command or the repository, then retry.", "worker-lost": "Orca starts the task again by itself, without using up its attempts (at most three times in a row).", "model-unavailable": "Orca does not retry it or switch the model by itself. Retry the task on another agent or model (task retry --agent), or change the model in the agent preferences or the group's agent selection.",
         "narration-only": "Retry the task; the next retry of this task is told that the previous attempt stopped without working.", "execution-not-json": "Read the agent's final message in the evidence below, then retry the task.", "execution-shape": "Retry the task; the refused field is named when ccloop reported one.",
+        "cleanup-failed": "The call's work had finished; read the detail below, then retry the task.",
         unknown: "Review the evidence below, then retry the task.",
       },
     },

@@ -26,6 +26,7 @@ import { reviewWording } from "./groupCategory.js";
 import { GroupIntegrationConfirm } from "./IntegrationScheme.js";
 import { MultiDirLandingBlock } from "./MultiDirLanding.js";
 import { RefusalNotice } from "./RefusalNotice.js";
+import { SessionCleanupNotice, SessionCleanupRows } from "./SessionCleanupNotice.js";
 import { RunReason } from "./RunReason.js";
 import { RunOutputBound } from "./RunOutputBound.js";
 import { RunPostMergeCheck } from "./RunPostMergeCheck.js";
@@ -989,6 +990,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {/* Tester #321 part C: a task costing a multiple of the group median, or running long; nothing is paused by it. Listed
           here, not counted as a problem (review ruling 2026-11-18, as GroupAllowances above). */}
       <CostOutlierRows costs={costOutliers} />
+      {/* Tester #349: a Codex session ccloop could not delete; listed here, not counted as a problem (as the cost notice). */}
+      <SessionCleanupRows runs={view.runs} />
       {view.runs.filter(run => isProblemRun(run) || run.runId === props.focus?.runId).map(run => <div key={run.runId} data-problem-run-id={run.runId} tabIndex={-1}>
         <p>{run.taskId ?? run.runId} · {enumText("runState", run.state)} <RunReason run={run} /></p>
         <RunOutputBound run={run} />
@@ -1051,6 +1054,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               <td className="run-state [&>div]:mb-1">
                 <div>{enumText("runState", run.state)}</div>
                 <div><RunReason run={run} /></div>
+                <SessionCleanupNotice run={run} />
                 <DebugRepro run={run} />
                 <RunOutputBound run={run} />
                 {!estimateUsageUnknown(run) && <UsageSettlement key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} onCommands={props.onCommands} />}

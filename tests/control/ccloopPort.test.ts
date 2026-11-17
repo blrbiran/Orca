@@ -117,6 +117,14 @@ describe("production ccloop execution port",()=>{
     expect((report as unknown as {liveUsage?:unknown}).liveUsage).toEqual(liveUsage);
     expect(report.events).toEqual([]);
   });
+  // Tester #349: ccloop's optional list of Codex sessions it could not delete; today's pin never sends it (every test above).
+  it("accepts the optional sessionCleanup list and refuses an entry of another shape (#349)",async()=>{
+    const sessionCleanup=[{threadId:"01a1e8f9-d197-7e41-83ee-d32888151bda",home:"/c/codex-home",state:"retry-failed",detail:"exit 1: Error: failed to delete session"}];
+    const h=await fixture("ok",{collectExtra:{sessionCleanup}});
+    expect((await h.port.collect(h.envelope,0)).sessionCleanup).toEqual(sessionCleanup);
+    const bad=await fixture("ok",{collectExtra:{sessionCleanup:[{...sessionCleanup[0],state:"pending"}]}});
+    await expect(bad.port.collect(bad.envelope,0)).rejects.toBeTruthy();
+  });
   it("propagates exit 2 stably and refuses malformed or oversized stdout",async()=>{
     // Rewritten for agent selection (2026-09-26, human ruling: "同意修改几个仓库的现有test"): the same three refusals,
     // reached through resolveAgent, the only capabilities call left.
