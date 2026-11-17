@@ -79,6 +79,30 @@ describe("edges between groups (kanban spec §3.3-§3.4)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Tester #327: a dependent's Dependencies card says "landed" from the prerequisite's own summary, so that word must
+  // appear exactly when the dependent stops waiting for it -- not when its tasks are merely done.
+  it("marks a prerequisite's summary landed exactly when its dependent stops waiting for it", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      h.importDeferred("p");
+      setBody(h, "p", { ...body(h, "p"), integration: { ...newGroupIntegration(LOCAL)!, frozen: true } });
+      edge(h, service, "add-group-dependency", "g", "p");
+      expect(readGroupSummary(h.store, "p").landed).toBeUndefined();
+      finishTasks(h, "p");
+      // Every task done, not integrated yet: the dependent still waits, so not landed.
+      // mutation: landed from the tally alone (drop prerequisiteDone) -> true here, red
+      expect(waitingPrerequisites(h.store, "g")).toEqual(["p"]);
+      expect(readGroupSummary(h.store, "p").completion).toEqual({ done: 1, total: 1 });
+      expect(readGroupSummary(h.store, "p").landed).toBeUndefined();
+      setBody(h, "p", { ...body(h, "p"), integration: { ...(body(h, "p").integration as object), lastIntegrated: "c".repeat(40), integratedCommit: "c".repeat(40) } });
+      expect(waitingPrerequisites(h.store, "g")).toEqual([]);
+      // mutation: never send landed -> undefined, red
+      expect(readGroupSummary(h.store, "p").landed).toBe(true);
+      // The dependent's own tasks are not done: it is not landed itself.
+      expect(readGroupSummary(h.store, "g").landed).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
   it("waits for a multi prerequisite's local and place directories, and never stacks on it", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
       const service = new WebControlService(h.deps);

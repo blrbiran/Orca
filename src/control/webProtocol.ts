@@ -1692,6 +1692,10 @@ export const groupSummarySchema = z
     }).strict().optional(),
     // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
     dependsOn: z.array(idSchema).min(1).optional(),
+    // Tester #327: present (true) only once this group is done for its dependents (groupEdges.ts prerequisiteDone) --
+    // the moment a group listing it in `dependsOn` stops waiting for it. It is this group's own fact, so it is sent
+    // whenever this group's summary is, and a dependent's Dependencies card reads it from here, not from its own row.
+    landed: z.literal(true).optional(),
     // System debug task spec 2026-10-21 §3.5: present only on a group Orca opened itself (its systemDebug mark).
     systemDebug: z.object({
       source: systemDebugSourceSchema, stackOn: idSchema.nullable(),

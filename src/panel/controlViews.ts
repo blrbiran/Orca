@@ -79,7 +79,7 @@ import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenInte
 import { estimateHistoryView } from "../control/estimateHistory.js";
 import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
-import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
+import { prerequisiteDone, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
 import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
@@ -643,6 +643,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const executing = archived === null ? undefined : groupExecutionPending(store, groupId, archived.plan.tasks.map((task) => task.taskId), readSnapshot!);
   const orchestration = orchestrationSummary(store, { id: groupId, status: String(body.status) }, store.now(), waitingPrerequisites, executing);
   const dependsOn = prerequisitesOf(store, groupId);
+  // Tester #327: whether a dependent would stop waiting for this group. prerequisiteDone first needs every task done, so
+  // it is asked only when the tally already says so: an unfinished group costs no extra read.
+  const landed = tally !== null && tally.completion.total > 0 && tally.completion.done === tally.completion.total && prerequisiteDone(store, groupId);
   const systemDebugMark = readSystemDebugMark(body);
   // Tester #179: a judge that reached its verdict is a success, not a blocked task. The review group is done by its
   // verdict (groupDone.ts), so its completion must say so too instead of the D14-blocked judge task's `done 0/1`.
@@ -725,6 +728,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(archived !== null && overGrantUnblocked(body.status, readSnapshot!) ? { overGrant: true } : {}),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),
     ...(dependsOn.length === 0 ? {} : { dependsOn }),
+    ...(landed ? { landed: true as const } : {}),
     ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, planOrderTasks(archived.plan.tasks).map((task) => task.taskId), readSnapshot!, archived.planHash) }),
     ...(orchestration === null ? {} : { orchestration }),
     ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
