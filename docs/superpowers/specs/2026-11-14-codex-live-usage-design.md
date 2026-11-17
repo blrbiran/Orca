@@ -177,3 +177,11 @@ region, `run show`, and the group's Problems region (listed, not counted) show i
 `CODEX_HOME=<home> codex delete --force <id>`. ccloop's new cause `cleanup-failed` (a cleanup step that still failed the
 call) is worded in en and zh instead of reading as `unknown`. The §9 retention claims are otherwise unchanged: a
 `retry-failed` session keeps the run's prompt in its private rollout until a person deletes it.
+
+## 11. Correction — review round of §10 (2026-11-18, Orca session `4389b15f`, tester #349)
+
+Adds to §10 (nothing withdrawn): ccloop now also retries a failed deletion once at the run's end, and collect's
+`sessionCleanup[]` may carry `command` (ccloop's recorded argv) and `userHome`. The manual command Orca shows is that argv
+with `CODEX_HOME=<home> HOME=<userHome>` in front, every word shell-quoted (`src/control/sessionCleanupCommand.ts`, used by
+the Web notice and `run show`); without an argv it is the plain `CODEX_HOME=<home> codex delete --force <id>`. Only a
+`failed` entry says the next cleanup tries once more; a `retry-failed` one says it will not be retried again.
