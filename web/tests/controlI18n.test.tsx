@@ -161,7 +161,8 @@ describe("the rest of the control area's branches in Chinese", () => {
     };
     const props = { config, uncertain: [], drafts: {}, onDraft: vi.fn(), onCommand: vi.fn() };
     const { container } = render(<ControlGroupView view={readyView} {...props} />);
-    expect(firstRow(container, "任务|状态|标签|进度|运行|待定|依赖")).toEqual(["a", "就绪", "bug", "没有运行", "无", "无", "无"]);
+    // #331: the run and pending id columns gave way to one duration column; a task with no run reads "—" there.
+    expect(firstRow(container, "任务|状态|标签|进度|耗时|依赖")).toEqual(["a", "就绪", "bug", "没有运行", "—", "无"]);
     const filter = screen.getByRole("group", { name: "按标签筛选工作项" });
     expect(filter.querySelector("legend")!.textContent).toBe("标签（任一）");
     fireEvent.click(screen.getByRole("tab", { name: "技术详情" }));

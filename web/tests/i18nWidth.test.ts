@@ -35,7 +35,8 @@ const BUTTONS = [
 describe("Chinese in narrow places (Review Focus 5)", () => {
   it("keeps every table header, in-table enum value and button no wider in Chinese than in English + 2 columns", () => {
     const keys = [...Object.keys(EN).filter((key) => NARROW_PREFIXES.some((prefix) => key.startsWith(prefix))), ...BUTTONS];
-    expect(keys.length).toBeGreaterThanOrEqual(96); // Tester #114 took out four label buttons.
+    // Tester #114 took out four label buttons; #331 replaced the work items' run and pending headers with one duration header.
+    expect(keys.length).toBeGreaterThanOrEqual(95);
     for (const key of keys) {
       expect(EN[key], key).toBeDefined();
       expect(width(ZH[key]!), `${key}: ${EN[key]} → ${ZH[key]}`).toBeLessThanOrEqual(width(EN[key]!) + 2);

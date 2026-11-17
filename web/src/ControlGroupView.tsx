@@ -56,7 +56,7 @@ import { RunTranscript } from "./AgentTranscript.js";
 import { liveUsageNote, phaseEndNote, usageByKind } from "./usageNotes.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { planText } from "./LoopPlanCard.js";
-import { currentLanguage, enumText } from "./i18n.js";
+import i18n, { currentLanguage, enumText } from "./i18n.js";
 import { Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
@@ -117,6 +117,36 @@ function runsInCreationOrder(runs: readonly RunViewV1[]): readonly RunViewV1[] {
   return runs.every((run) => run.createdOrdinal !== undefined)
     ? [...runs].sort((left, right) => left.createdOrdinal! - right.createdOrdinal!)
     : runs;
+}
+
+/** #331: a duration as a person reads it -- "1h 02m", "12m 34s", "8s". */
+function durationText(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  if (seconds >= 3600) return i18n.t("control.group.duration.hours", { h: Math.floor(seconds / 3600), m: pad(Math.floor(seconds / 60) % 60) });
+  if (seconds >= 60) return i18n.t("control.group.duration.minutes", { m: Math.floor(seconds / 60), s: pad(seconds % 60) });
+  return i18n.t("control.group.duration.seconds", { s: seconds });
+}
+
+/**
+ * #331: how long a task's current run took, for the Work items table. A run under way counts from its `startedAt` to now
+ * (`used.activeMs` is only booked at phase ends, so it would stand still); otherwise the run's `used.activeMs` -- the
+ * figure the run detail shows -- and only when none was booked, its wall-clock span `endedAt - startedAt`. Null: no run
+ * or no time known.
+ */
+function taskDuration(item: WorkItemViewV1, runs: readonly RunViewV1[]): { since: number } | { ms: number } | null {
+  const run = item.currentRunId === null ? undefined : runs.find((candidate) => candidate.runId === item.currentRunId);
+  if (run === undefined) return null;
+  if (run.endedAt == null && run.startedAt != null && (IN_FLIGHT.has(item.status) || item.category === "running")) return { since: run.startedAt };
+  if (run.used.activeMs > 0) return { ms: run.used.activeMs };
+  if (run.startedAt != null && run.endedAt != null) return { ms: run.endedAt - run.startedAt };
+  return null;
+}
+
+/** #331: a running task's duration, re-read every second; only a running row mounts this clock. */
+function LiveDuration(props: { since: number; now?: number }): JSX.Element {
+  const ticking = useClock(1_000);
+  return <>{durationText((props.now ?? ticking) - props.since)}</>;
 }
 
 /** #226 (i): a work item whose current run is in flight -- what the Live region lists. */
@@ -857,7 +887,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         <thead>
           <tr>
             <th>{t("control.group.th.task")}</th><th>{t("control.group.th.status")}</th><th>{t("control.group.th.labels")}</th>
-            <th>{t("control.group.th.progress")}</th><th>{t("control.group.th.run")}</th><th>{t("control.group.th.pending")}</th>
+            {/* #331: the bare run ids left the table (they stay in the task's detail and in Results); how long it took came in. */}
+            <th>{t("control.group.th.progress")}</th><th>{t("control.group.th.duration")}</th>
             <th>{t("control.group.th.dependsOn")}</th>
           </tr>
         </thead>
@@ -876,8 +907,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {view.runs.filter(run => run.runId === item.currentRunId).map(run => remedies(run, props.active !== false && region === "progress"))}</td>
               <td><LabelChips labels={item.labels} /><NoChangeChip item={item} />{item.loopPlan ? <span className="plan-chip"> {planText(item.loopPlan.planId, item.loopPlan.planVersion, "name")}</span> : null}</td>
               <td>{progressText(item.progress)}{item.expected !== undefined && <small className="block num" data-testid={`task-expected-${item.taskId}`}>{expectedText(item.expected)}</small>}</td>
-              <td>{item.currentRunId ?? t("common.none")}</td>
-              <td>{item.pendingRunId ?? t("common.none")}</td>
+              <td className="num">{((duration) => duration === null ? "—" : "since" in duration ? <LiveDuration since={duration.since} now={props.now} /> : durationText(duration.ms))(taskDuration(item, view.runs))}</td>
               <td>{item.dependencyTaskIds.join(", ") || t("common.none")}</td>
             </tr>
           ))}
