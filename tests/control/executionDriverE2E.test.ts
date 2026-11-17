@@ -222,11 +222,11 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
       } finally { await w.teardown(); }
     };
   const R1_TITLE = "R1 %s: a death between an external action and its record ends where a clean run ends, spending no more";
-  it.each(["C-after-terminal"] as const)(R1_TITLE, r1Case);
+  // Controller, same session: B-after-accept also stays daily -- every other test that dies there does so under a stop, so
+  // without this one no daily test covers a death between ccloop accepting a run and Orca recording it.
+  it.each(["B-after-accept", "C-after-terminal"] as const)(R1_TITLE, r1Case);
   // Release-only. Daily cover -- A2-after-workspace: executionDriver.test.ts "ends the driver like a death when a crash hook
-  // fires, and a new driver finishes A2 on the same workspace" (and driverSkills.test.ts); B-after-accept: handoffE2ERecovery
-  // "R-H B-after-accept" (real ccloop) and driverHandoff.test.ts "does not restart a prepared run whose accept reached ccloop
-  // before a death" -- both under a stop, none daily without one; D-after-cas: driverDecisions.test.ts, multiDirLandingD,
+  // fires, and a new driver finishes A2 on the same workspace" (and driverSkills.test.ts); D-after-cas: driverDecisions.test.ts, multiDirLandingD,
   // debugClosing, historySource; E-after-acceptance: driverSettle.test.ts, driverSettleLane.test.ts.
-  it.runIf(releaseOnly).each(["A2-after-workspace", "B-after-accept", "D-after-cas", "E-after-acceptance"] as const)(R1_TITLE, r1Case);
+  it.runIf(releaseOnly).each(["A2-after-workspace", "D-after-cas", "E-after-acceptance"] as const)(R1_TITLE, r1Case);
 });
