@@ -225,7 +225,8 @@ export function hasValidUsageSettlement(store: ControlStore, subject: unknown): 
       // Tester follow-up I (seat K): an expectation-model run has no work token grant; its remaining-grant charge is the unused
       // part of its live ceiling (G spec §14.1), so the booking is checked against the ceiling -- which only ever rises -- and
       // its remainder stays null (0 as the writer before this fix stored it: same booking, so read the same).
-      const ceiling = (run as { liveCeiling?: { tokens?: unknown } }).liveCeiling?.tokens;
+      // Stuck-runs spec S2: a watch-only ceiling bounds nothing, so it is no charge bound either.
+      const ceiling = (run as { liveCeiling?: { tokens?: unknown; watchOnly?: unknown } }).liveCeiling?.watchOnly === true ? undefined : (run as { liveCeiling?: { tokens?: unknown } }).liveCeiling?.tokens;
       if (b === "work" && d === "tokens" && run.grant.work.tokens === null && typeof ceiling === "number") {
         if ((run.remaining.work.tokens !== null && run.remaining.work.tokens !== 0) || (m.charged.work.tokens ?? 0) > Math.max(ceiling - baseline.work.tokens, 0)
           || run.cumulative.work.tokens !== baseline.work.tokens + (m.charged.work.tokens ?? 0)) return false;

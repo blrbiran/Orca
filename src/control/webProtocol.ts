@@ -639,6 +639,8 @@ export const commandVerbSchema = z.enum([
   "close-run",
   // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a terminal run's attempt after Orca re-runs its checks.
   "accept-attempt",
+  // Stuck-runs spec 2026-11-17 S2 (#344): a person ends a running attempt now (abandonRun.ts).
+  "abandon-run",
   // Tester follow-up G spec §1.4: revoke a task's no-change completion and run it again in the same group with a note.
   "reopen-task",
   // Tester follow-up G spec §10.1: a person or an orchestrating agent accepts a stopped no-change task as done.
@@ -854,6 +856,8 @@ export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, 
 export const closeRunPayloadSchema = z.object({ runId: idSchema }).strict();
 /** Reviewed acceptance (spec 2026-11-11 §7): the terminal run whose last attempt lands after its checks, and why the person accepts it. */
 export const acceptAttemptPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
+/** Stuck-runs spec 2026-11-17 S2: the running attempt a person abandons, and why. */
+export const abandonRunPayloadSchema = z.object({ runId: idSchema, note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
 /** Tester follow-up G spec §1.4: a note is required, non-blank and at most 2048 UTF-8 bytes (not characters). */
 export const noChangeNoteSchema = z.string().refine((note) => note.trim().length > 0, "note-empty").refine((note) => Buffer.byteLength(note, "utf8") <= 2048, "note-over-2048-bytes");
 export const reopenTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema, note: noChangeNoteSchema }).strict();
@@ -1328,6 +1332,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("abandon-run"), target: groupCommandTargetSchema, payload: abandonRunPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reopen-task"), target: groupCommandTargetSchema, payload: reopenTaskPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("accept-no-change"), target: groupCommandTargetSchema, payload: acceptNoChangePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
@@ -1444,6 +1449,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("settle-approximate-usage"), target: groupCommandTargetSchema, payload: settleApproximateUsagePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("close-run"), target: groupCommandTargetSchema, payload: closeRunPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("accept-attempt"), target: groupCommandTargetSchema, payload: acceptAttemptPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("abandon-run"), target: groupCommandTargetSchema, payload: abandonRunPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reopen-task"), target: groupCommandTargetSchema, payload: reopenTaskPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("accept-no-change"), target: groupCommandTargetSchema, payload: acceptNoChangePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("shutdown"), target: globalCommandTargetSchema, payload: shutdownPayloadSchema }).strict(),
@@ -2029,6 +2035,8 @@ export const activityKindSchema = z.enum([
   "worker-lost",
   // Tester follow-up G spec §2.1/§2.4/§2.5.
   "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
+  // Stuck-runs spec 2026-11-17 S2: a person asked to end a run's attempt now.
+  "run-abandon-requested",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2119,6 +2127,8 @@ export const runViewSchema = z
     // Spec 2026-11-16: an owner's acceptance turned a completed-but-unsettled run into the acceptance
     // pipeline's input; the original outcome stays in `drive.outcome`. Omitted for every other run.
     operatorSettlement: z.object({ kind: z.literal("completed-attempt"), outcome: nonemptyString, at: safeInteger, principal: nonemptyString }).strict().optional(),
+    // Stuck-runs spec 2026-11-17 S2: a person's abandon request on this run (abandonRun.ts); omitted when none was made.
+    abandon: z.object({ by: nonemptyString, note: nonemptyString, at: safeInteger, unresolvedAt: safeInteger.optional() }).strict().optional(),
     // #227 residual: for a run the server could accept, the setup and required checks Orca will run on the merged tree, and
     // the attempt's diff against the run's base (null until read, or when it cannot be); omitted for any other run.
     attemptReview: z.object({ requiredChecks: z.array(z.string()), setupCommands: z.array(z.string()),
@@ -2446,6 +2456,9 @@ export const recoveryViewSchema = z
     capBlocked: z.array(z.object({ groupId: idSchema, scope: nonemptyString, period: nonemptyString, capTokens: z.number().int().nonnegative(), grantTokens: z.number().int().nonnegative().nullable(), next: nonemptyString }).strict()).optional(),
     // Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, outside any stop, with the commands that move it. Absent when none.
     heldTasks: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, continuable: z.boolean(), next: z.array(nonemptyString).min(1) }).strict()).optional(),
+    // Stuck-runs spec 2026-11-17 S4 (third bullet): a run a stop could not end -- its handoff request's outcome is unknown
+    // (handoff-unresolved) or ccloop did not stop it within the grace after an abandon (abandon-unresolved) -- still active.
+    unresolvedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, code: z.enum(["handoff-unresolved", "abandon-unresolved"]), next: z.array(nonemptyString).min(1) }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) =>
@@ -2591,6 +2604,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("run-closed"), runId: idSchema, taskId: idSchema, alreadyClosed: z.boolean() }).strict(),
   // Reviewed acceptance (spec 2026-11-11 §7): the intent is recorded; the driver merges, checks and lands (or refuses) off-round.
   z.object({ kind: z.literal("attempt-accept-requested"), runId: idSchema, taskId: idSchema }).strict(),
+  // Stuck-runs spec S2: the request is recorded; how the run is stopped -- settled by the driver (never started), its live
+  // ceiling lowered, or no ceiling to lower (abandon-unresolved after the grace unless it ends first).
+  z.object({ kind: z.literal("run-abandon-requested"), runId: idSchema, taskId: idSchema, stop: z.enum(["not-started", "live-ceiling", "no-live-ceiling"]) }).strict(),
   z.object({ kind: z.literal("unarchived"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),

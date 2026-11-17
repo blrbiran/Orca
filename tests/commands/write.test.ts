@@ -78,6 +78,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   // Tester follow-up F §2 (#116): the observed-floor form passes through unchanged.
   [["task", "settle-usage", "g-alpha", "t1", "--acknowledge", "charge-observed-floor"], "groups/g-alpha/settle-unknown-usage", 5,
     { taskId: "t1", runId: "run-1", generation: 3, acknowledge: "charge-observed-floor" }],
+  // Stuck-runs spec 2026-11-17 S2: a person abandons a running attempt; the group is resolved, the run and note pass through.
+  [["run", "abandon", "g-al", "--run", "run-1", "--note", "cannot succeed"], "groups/g-alpha/abandon-run", 5, { runId: "run-1", note: "cannot succeed" }],
 ];
 
 describe("requirement, group and task commands: route and payload (spec §4)", () => {
@@ -194,6 +196,17 @@ describe("refusals made here", () => {
     const out = await cli(["task", "continue", "g-alpha", "t1", "--json"], w.dir);
     // mutation: fall back to the newest checkpoint of the run -> cp-1 posted, red
     expect([out.code, out.json().body.error.code]).toEqual([1, "checkpoint-not-found"]);
+    expect(w.posts()).toEqual([]);
+  });
+
+  // Stuck-runs spec 2026-11-17 S2: run abandon needs a run and a reason; neither missing nor blank is sent.
+  it("run abandon with a blank note, or with no --run, is refused before sending", async () => {
+    const w = await world();
+    const blank = await cli(["run", "abandon", "g-alpha", "--run", "run-1", "--note", "   ", "--json"], w.dir);
+    // mutation: drop the blank-note check from the abandon row's payload -> one POST, red
+    expect(blank.code).toBe(1);
+    const missing = await cli(["run", "abandon", "g-alpha", "--note", "why", "--json"], w.dir);
+    expect(missing.code).not.toBe(0);
     expect(w.posts()).toEqual([]);
   });
 

@@ -25,8 +25,16 @@ export const liveCeilingRecordSchema = z.object({
   cause: z.enum(["group", "pause-line", "task-cap"]),
   /** The revision ccloop is known to hold: the one frozen into the start envelope, then each one `live-ceiling` answered. */
   deliveredRevision: safeInteger,
+  /**
+   * Stuck-runs spec 2026-11-17 S2: a run with no token number and no bound still carries a ceiling, so ccloop watches it
+   * and `run abandon` can lower it. Such a ceiling bounds nothing: it is never reserved, raised, or read as a bound.
+   */
+  watchOnly: z.literal(true).optional(),
 }).strict();
 export type LiveCeilingRecord = z.infer<typeof liveCeilingRecordSchema>;
+
+/** Stuck-runs spec S2: the tokens of a watch-only ceiling (ccloop's own bound for the field). */
+export const WATCH_ONLY_CEILING_TOKENS = Number.MAX_SAFE_INTEGER;
 
 /** The binding bound (plan O2): min over the non-null bounds, each clamped at 0; ties go task-cap, pause-line, group. */
 export function runCeiling(input: { groupSliceTokens: number | null; pauseLineTokens: number | null; hardCapTokens: number | null; inheritedTaskTokens: number }): { tokens: number; cause: LiveCeilingCause } | null {
@@ -48,6 +56,16 @@ export function liveCeilingOf(run: unknown): LiveCeilingRecord | null {
 }
 
 /**
+ * The run's ceiling as a bound on its spending: its live ceiling unless that is watch-only (stuck-runs spec S2), else null.
+ * Every reading of the ceiling as a limit or a reservation goes through this; only the wire (the start envelope and the
+ * `live-ceiling` delivery) reads liveCeilingOf.
+ */
+export function boundingCeilingOf(run: unknown): LiveCeilingRecord | null {
+  const ceiling = liveCeilingOf(run);
+  return ceiling === null || ceiling.watchOnly === true ? null : ceiling;
+}
+
+/**
  * Tester follow-up H (Part B gap): the states of a run whose execution has ended -- collected from ccloop's terminal report,
  * so its work usage is booked in full -- and that may still need a run Orca dispatches for the group (a reconciliation
  * of its landing, the goal judge of its empty result).
@@ -63,7 +81,7 @@ export function executionEnded(run: { state?: unknown }): boolean {
  * dispatches for that landing.
  */
 export function ceilingOutstanding(run: { state?: unknown; liveCeiling?: unknown; cumulative: { work: { tokens: number } }; unknown?: { work?: unknown } }): number {
-  const ceiling = liveCeilingOf(run);
+  const ceiling = boundingCeilingOf(run);
   // Follow-up H (gap k): a run whose work usage is unknown may have spent up to its ceiling; its unused part stays held,
   // ended or not, until the unknown usage is settled (settleUnknownUsage.ts charges it).
   return ceiling === null || (executionEnded(run) && run.unknown?.work !== true) ? 0 : Math.max(0, ceiling.tokens - run.cumulative.work.tokens);
@@ -72,7 +90,7 @@ export function ceilingOutstanding(run: { state?: unknown; liveCeiling?: unknown
 /** Follow-up H (gap k): an expectation-model run whose work usage is unknown and unsettled; its unused ceiling is held. */
 export function ceilingUsageUnknown(run: unknown): boolean {
   const body = run as { liveCeiling?: unknown; unknown?: { work?: unknown }; usageSettlement?: unknown };
-  return body.liveCeiling !== undefined && body.unknown?.work === true && body.usageSettlement === undefined;
+  return boundingCeilingOf(run) !== null && body.unknown?.work === true && body.usageSettlement === undefined;
 }
 
 /** The reconcile record fields the funding reads (driveRecord.ts ReconcileRecord). */

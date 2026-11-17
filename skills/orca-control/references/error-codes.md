@@ -292,6 +292,10 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `revision-unchanged` | 422 |
 | `role-unresolved` | 422 |
 | `route-not-found` | 404 |
+| `run-abandon-not-running` | 409 |
+| `run-abandon-pending` | 409 |
+| `run-abandon-person-required` | 409 |
+| `run-abandon-unsupported` | 409 |
 | `run-already-settled` | 409 |
 | `run-closure-evidence` | 409 |
 | `run-closure-invalid` | 409 |

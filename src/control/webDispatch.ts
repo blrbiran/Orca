@@ -33,7 +33,7 @@ import { noteRunWrite, recordActivity } from "./activity.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import type { OperatorNote } from "./schema.js";
 import { expectationModelApplies } from "./expectationModel.js";
-import { claimCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
+import { claimCeiling, syncCeilingReserve, WATCH_ONLY_CEILING_TOKENS, type LiveCeilingCause } from "./liveCeiling.js";
 
 export type Phase = "estimate" | "work" | "handoff" | "single-call";
 export type StartCommand = Extract<RawAuthorityCommandV1, { verb: "start" }>;
@@ -436,6 +436,12 @@ export function createStartingRun(
     grant.work.tokens = null;
     allowance = { ...allowance, grant: { ...allowance.grant, work: { ...allowance.grant.work, tokens: null } } };
   }
+  // Stuck-runs spec 2026-11-17 S2: ccloop watches a ceiling only if the start envelope carried one, so a task run with no
+  // token number and no bound (an unlimited group) gets a watch-only ceiling: it stops nothing until `run abandon` lowers
+  // it, and it is never reserved (liveCeiling.ts boundingCeilingOf). A protocol-4 claim only (a token policy), as ccloop
+  // admits a ceiling on no other; a saved-result recovery carries none.
+  const tokenPolicy = allowance !== undefined && needsTokenPolicy(allowance, work);
+  const watchOnly = ceiling === null && !recovery && tokenPolicy && work.kind === "task" && grant.work.tokens === null;
   // Tester follow-up G spec §2.5: the note a pause decision left for the task's next run (usagePause.ts).
   const pendingNote = (work as { pendingOperatorNote?: OperatorNote }).pendingOperatorNote;
   const runId = continuation ? continuation.pendingRunId : `run-${randomUUID()}`;
@@ -460,7 +466,7 @@ export function createStartingRun(
     killGraceMs: frozen.killGraceMs, agentCapabilities: frozen.agentCapabilities,
     // Quota failover spec 2026-11-03 §8: the switches the task had had at this claim (agentSwitch.ts runAgentAgrees).
     ...(agentSwitchesOf(work).length > 0 ? { agentEpoch: agentSwitchesOf(work).length } : {}),
-    ...(allowance&&needsTokenPolicy(allowance,work)?{tokenPolicy:{authoredTokenCeiling:allowance.authoredTokenCeiling,bindingCauses:allowance.bindingCauses,inheritedUsage:allowance.inheritedUsage}}:{}),
+    ...(allowance&&tokenPolicy?{tokenPolicy:{authoredTokenCeiling:allowance.authoredTokenCeiling,bindingCauses:allowance.bindingCauses,inheritedUsage:allowance.inheritedUsage}}:{}),
     grant, ownerToken, executionId: null, state: "starting", checkpointId: null, recoverable: false,
     remaining: structuredClone(grant), cumulative: { work: zero(), handoff: zero() }, unknown: { work: false, handoff: false },
     highWater: 0, breaches: [], handoffWorkItemId: null, phase: "work", claimOrdinal, providerAttemptOrdinal: 0, failureCode: null,
@@ -471,6 +477,7 @@ export function createStartingRun(
     continuationIntentId: continuation?.continuationIntentId ?? null,
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
     ...(ceiling === null ? {} : { liveCeiling: { revision: 1, tokens: ceiling.tokens, cause: ceiling.cause, deliveredRevision: 0 } }),
+    ...(watchOnly ? { liveCeiling: { revision: 1, tokens: WATCH_ONLY_CEILING_TOKENS, cause: "group" as const, deliveredRevision: 0, watchOnly: true as const } } : {}),
   };
   recovery?.initialize(run);
   store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,1,1,?)").run(runId, groupId, work.workItemId, JSON.stringify(run));

@@ -147,7 +147,9 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify(work));
       const runId = await t.claim();
       // mutation: drop `if (l === null) return null` from pauseLineFor -> liveCeiling { cause: "pause-line", tokens: 10M }, red
-      expect(t.body(runId)).not.toHaveProperty("liveCeiling");
+      // Ruling: human 2026-11-17 (tester #344) -- every run with no token number now carries a watch-only ceiling so `run
+      // abandon` can stop it (stuck-runs spec S2); it bounds nothing, so "no pause-line ceiling" reads as "only that one".
+      expect(t.body(runId).liveCeiling).toEqual({ revision: 1, tokens: Number.MAX_SAFE_INTEGER, cause: "group", deliveredRevision: 0, watchOnly: true });
       expect(t.body(runId).grant.work.tokens).toBeNull();
     } finally { await t.h.dispose(); }
   });

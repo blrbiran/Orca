@@ -1027,8 +1027,20 @@ export function settleNeverStartedRunInTransaction(store: ControlStore, groupId:
   terminaliseRun(store, groupId, readRunBody(store, runId), "settled-restartable", null);
 }
 
-function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outcome: HandoffDisposition, reasonCode: string | null): void {
-  const settled: RunBody = { ...run, state: outcome, failureCode: reasonCode };
+/**
+ * Stuck-runs spec 2026-11-17 S2: a run a person abandoned, now stopped (ccloop reported its terminal, or it never reached
+ * the provider), is settled with an unrecoverable stop's accounting -- its unused grant released, its used tokens booked
+ * as they are, its allocations terminal, its task `blocked` -- but as `settled-failed` with the person's settlement, so
+ * `task retry` starts a fresh run and nothing is dispatched until then. An abandon-unresolved mark stays as history (the
+ * recovery list names only active runs).
+ */
+export function settleAbandonedRunInTransaction(store: ControlStore, groupId: string, runId: string, settlement: { kind: "abandoned"; by: string; note: string; at: number }): void {
+  const run = readRunBody(store, runId);
+  terminaliseRun(store, groupId, { ...run, recoverable: false, operatorSettlement: settlement }, "settled-unrecoverable", "run-abandoned", "settled-failed");
+}
+
+function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outcome: HandoffDisposition, reasonCode: string | null, settledAs: string = outcome): void {
+  const settled: RunBody = { ...run, state: settledAs, failureCode: reasonCode };
   saveRunBody(store, settled, false);
   const released = add(finiteCommitment(settled.remaining.work), settled.remaining.handoff);
   // N1 spec §5.1: a single call's stop is settled by its purpose.

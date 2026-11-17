@@ -69,3 +69,13 @@ whether a run's saved result can be verified instead of re-run
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<run>`: a run id
+
+## `orca run abandon <group> --run <run> --note <note>`
+
+end a running attempt now: Orca stops it and settles it failed, its task blocked until a person retries it (a person's act)
+
+- What it does: sends control verb `abandon-run`.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--run <run>` (required): the running run to abandon (orca group show <group> lists the runs)
+- `--note <note>` (required): why this attempt cannot succeed; recorded on the run

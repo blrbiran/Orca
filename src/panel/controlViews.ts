@@ -77,7 +77,8 @@ import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from ".
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenIntentOf } from "../control/expectationModel.js";
 import { estimateHistoryView } from "../control/estimateHistory.js";
-import { liveCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
+import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
+import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
 import { prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
 import { impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
@@ -290,7 +291,13 @@ const persistedRunSchema = z.object({
     reason: z.string().nullable(), landedCommit: z.string().nullable(),
   }).passthrough().optional(),
   // Spec 2026-11-16: the marker that an owner's acceptance admitted a completed-but-unsettled run.
-  operatorSettlement: z.object({ kind: z.literal("completed-attempt"), outcome: z.string().min(1), at: safeInteger, principal: z.string().min(1) }).passthrough().optional(),
+  operatorSettlement: z.union([
+    z.object({ kind: z.literal("completed-attempt"), outcome: z.string().min(1), at: safeInteger, principal: z.string().min(1) }).passthrough(),
+    // Stuck-runs spec 2026-11-17 S2: a person abandoned the run; it settled failed when it stopped (abandonRun.ts).
+    abandonSettlementSchema,
+  ]).optional(),
+  // Stuck-runs spec S2: a person's request to end this attempt now (abandonRun.ts), kept on the run once made.
+  abandon: abandonRequestSchema.optional(),
 }).strict();
 
 function blocked(detail: string): never {
@@ -1187,7 +1194,7 @@ function validAccounting(run: z.infer<typeof persistedRunSchema>): boolean {
       // That one shape is read: it comes only from that writer, its settlement marker -- checked next, against the ceiling,
       // the usage events and the ledger receipt (hasValidUsageSettlement) -- states the booking, and the remainder carries no
       // meaning of its own once the usage is settled. Anything else (no marker, another method, no ceiling) still refuses.
-      if (bucket === "work" && dimension === "tokens" && run.grant.work.tokens === null && run.remaining.work.tokens === 0 && run.liveCeiling !== undefined
+      if (bucket === "work" && dimension === "tokens" && run.grant.work.tokens === null && run.remaining.work.tokens === 0 && boundingCeilingOf(run) !== null
         && run.usageSettlement?.method === "remaining-grant") continue;
       // Same class (found by seat K, tester follow-up I): a proved-zero settlement (#215) charges nothing and gives the whole
       // reservation back, so it empties the remainder by design -- the shape hasValidUsageSettlement requires of it -- while
@@ -1402,8 +1409,11 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(run.drive?.postMergeCheck === undefined ? {} : { postMergeCheck: run.drive.postMergeCheck }),
       // Tester follow-up G spec §10.1: the goal judge of a no-change run; omitted for every other run.
       ...(run.drive?.noChangeJudge === undefined ? {} : { noChangeJudge: run.drive.noChangeJudge }),
-      // Tester #290 (follow-up J): the live ceiling and its stop, as stored; absent on a run without them.
-      ...(run.liveCeiling === undefined ? {} : { liveCeiling: run.liveCeiling }),
+      // Tester #290 (follow-up J): the live ceiling and its stop, as stored; absent on a run without them. Stuck-runs spec S2:
+      // a watch-only ceiling bounds nothing and is not shown, so the view of such a run is what it was before it had one.
+      ...(run.liveCeiling === undefined || run.liveCeiling.watchOnly === true ? {} : { liveCeiling: (({ watchOnly: _watch, ...shown }) => shown)(run.liveCeiling) }),
+      // Stuck-runs spec S2: a person's abandon request on this run; omitted when none was made.
+      ...(run.abandon === undefined ? {} : { abandon: run.abandon }),
       ...(run.liveCeilingStop === undefined ? {} : { liveCeilingStop: run.liveCeilingStop }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
@@ -1705,7 +1715,8 @@ export function readControlRecovery(store: ControlStore, epoch: string): Recover
   const capBlocked = capBlockedRows(store);
   const handoffOutbox = undeliveredHandoffRows(store);
   const heldTasks = heldTaskRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(heldTasks.length === 0 ? {} : { heldTasks }) };
+  const unresolvedRuns = unresolvedRunRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -1816,6 +1827,30 @@ function heldTaskRows(store: ControlStore): Array<{ groupId: string; taskId: str
     if (runRow === undefined) continue;
     const held = heldTaskOf(groupId, work.taskId, parseJson(runRow.body, `run-invalid:${work.currentRunId}`) as never, Number(runRow.active));
     if (held !== null) out.push({ groupId, taskId: work.taskId, runId: work.currentRunId, ...held });
+  }
+  return out;
+}
+
+/**
+ * Stuck-runs spec 2026-11-17 S4 (third bullet), S2: an active work run a stop could not end, with the commands that move
+ * it. `handoff-unresolved`: its newest handoff request's outcome is unknown (the deadline and grace passed, the run is
+ * still collected) -- abandon it, or ask for the handoff again. `abandon-unresolved`: a person abandoned it and ccloop did
+ * not stop it within the handoff grace (driverHandoff.ts noteAbandonUnresolved) -- a handoff stop is the other way out.
+ * Orca never kills a process; either row also clears when the run reports its terminal.
+ */
+function unresolvedRunRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; code: "handoff-unresolved" | "abandon-unresolved"; next: string[] }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; code: "handoff-unresolved" | "abandon-unresolved"; next: string[] }> = [];
+  for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
+    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; abandon?: { unresolvedAt?: unknown } };
+    if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
+    const { groupId, taskId, runId } = { groupId: run.groupId, taskId: run.taskId, runId: run.runId };
+    if (run.state === "accepted" && typeof run.abandon?.unresolvedAt === "number") {
+      out.push({ groupId, taskId, runId, code: "abandon-unresolved", next: [`orca group stop-handoff ${groupId}`, `orca run show ${runId}`] });
+      continue;
+    }
+    const request = store.db.prepare("SELECT state FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
+    if (request?.state === "outcome-unknown") out.push({ groupId, taskId, runId, code: "handoff-unresolved",
+      next: [`orca run abandon ${groupId} --run ${runId} --note <why>`, recoveryRetryCommand(runId)] });
   }
   return out;
 }
@@ -1982,7 +2017,7 @@ function settlementPreview(store: ControlStore, run: z.infer<typeof persistedRun
   // Tester follow-up I (seat K): a worker-lost run with none of ccloop's has the floor 0 beyond what it observed (workerLostFloor).
   const floor = workerLostFloor(run as never);
   // Tester follow-up I (G spec §16): or an expectation-model run's live ceiling in place of a finite remainder.
-  const observedFloor = run.usageSettlement === undefined && (run.remaining.work.tokens !== null || liveCeilingOf(run) !== null) && floor !== null
+  const observedFloor = run.usageSettlement === undefined && (run.remaining.work.tokens !== null || boundingCeilingOf(run) !== null) && floor !== null
     ? (reason => ({ observedFloor: { tokens: floor, allowed: reason === null, refusalReason: reason } }))(refusalFor("charge-observed-floor")) : {};
   // Spec 2026-11-06 §3.3 (finding 6): Orca's refused attempt is named on the run; the person's path stays offered.
   const auto = store.db.prepare("SELECT original_status,body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, approximateCommandId(run.runId, run.generation));

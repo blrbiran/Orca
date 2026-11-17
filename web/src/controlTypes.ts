@@ -485,6 +485,8 @@ export type RunViewV1 = {
   executionCompleteBeforeVerification?: { sourceKind: "execution-complete-before-verification-v1"; attempt: number };
   /** Reviewed acceptance (spec 2026-11-11 §7, #227): where an owner's accept-attempt stands; absent when none was sent. */
   operatorAcceptance?: { state: "pending" | "landed" | "refused"; note: string; principal: string; at: number; reason: string | null; landedCommit: string | null };
+  /** Stuck-runs spec 2026-11-17 S2: a person's abandon request on this run; absent when none was made. */
+  abandon?: { by: string; note: string; at: number; unresolvedAt?: number };
   /** #227 residual: for a run the server could accept, the checks Orca will run and the attempt's diff (null until read). */
   attemptReview?: { requiredChecks: string[]; setupCommands: string[]; diff: { shortstat: string; stat: string[] } | null };
   /** Tester follow-up E §4 (#245): what the landing's post-merge check did; absent when the run did not land through it. */
@@ -674,6 +676,8 @@ export type RecoveryViewV1 = {
   blockedCalls?: Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }>;
   /** Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, with the commands that move it. */
   heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+  /** Stuck-runs spec 2026-11-17 S4: a run a stop could not end, still running, with the commands that move it. */
+  unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: "handoff-unresolved" | "abandon-unresolved"; next: string[] }>;
   /** Tester follow-up K: a group a spend cap stopped, with the command that raises the cap. */
   capBlocked?: Array<{ groupId: string; scope: string; period: string; capTokens: number; grantTokens: number | null; next: string }>;
 };
@@ -749,6 +753,7 @@ export const WEB_ACTIVITY_KINDS = [
   "handoff-invalid", "live-note-delivered", "live-note-undelivered",
   "worker-lost",
   "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
+  "run-abandon-requested",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
@@ -872,7 +877,7 @@ export type CommandSuccessV1 = {
   schema: "orca-command-success-v1";
   commandId: string;
   actorId: string;
-  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "usage-pause-decide" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
+  verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "usage-pause-decide" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "abandon-run" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-draft-edit" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
@@ -954,6 +959,7 @@ export type CommandSuccessV1 = {
     | { kind: "archived"; groupId: string; at: number }
     | { kind: "run-closed"; runId: string; taskId: string; alreadyClosed: boolean }
     | { kind: "attempt-accept-requested"; runId: string; taskId: string }
+    | { kind: "run-abandon-requested"; runId: string; taskId: string; stop: "not-started" | "live-ceiling" | "no-live-ceiling" }
     | { kind: "unarchived"; groupId: string }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }

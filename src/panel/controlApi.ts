@@ -999,6 +999,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/close-run", verb: "close-run", target: fromParams },
     // Reviewed acceptance (spec 2026-11-11 §7): the task and run are named in the payload; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/accept-attempt", verb: "accept-attempt", target: fromParams },
+    // Stuck-runs spec 2026-11-17 S2: the run is named in the payload; the ledger key is the group's.
+    { path: "/api/control/groups/:groupId/abandon-run", verb: "abandon-run", target: fromParams },
     // Tester follow-up G spec §1.4: the task and run are named in the payload; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/reopen-task", verb: "reopen-task", target: fromParams },
     { path: "/api/control/groups/:groupId/accept-no-change", verb: "accept-no-change", target: fromParams },
@@ -1047,6 +1049,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "retry-task": if (command.payload.agent === undefined) service.retryTask(command); else await service.retryTaskOnAgent(command); break;
           case "close-run": service.closeRun(command); break;
           case "accept-attempt": await service.acceptAttempt(command); break;
+          case "abandon-run": service.abandonRun(command); break;
           case "reopen-task": service.reopenTask(command); break;
           case "accept-no-change": await service.acceptNoChange(command); break;
           case "set-workspace-mode": await service.setWorkspaceMode(command); break;

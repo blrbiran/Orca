@@ -161,7 +161,8 @@ function runningNow(view: GroupViewV1): Array<{ taskId: string; run: RunViewV1 }
 }
 
 /** The runs the Problems region lists (a focused run is shown there too, but is not a problem the tab counts). */
-const isProblemRun = (run: RunViewV1): boolean => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined;
+// Stuck-runs spec 2026-11-17 S2: an abandoned run ccloop has not stopped within the grace is a problem too (abandon-unresolved).
+const isProblemRun = (run: RunViewV1): boolean => hasFailureOutcome(run) || run.state === "blocked" || run.unknownUsageSettlement !== undefined || abandonUnresolved(run);
 
 /**
  * #226 (i): the group's Live region -- each work item running now with its run's phase, attempt, tokens and elapsed time
@@ -281,6 +282,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
 }
 
 import { overviewRegionId } from "./overviewNavigation.js";
+import { AbandonRun, abandonUnresolved } from "./AbandonRun.js";
 import { GroupResults } from "./GroupResults.js";
 import { orderByLayout } from "./dependencyLayout.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
@@ -631,6 +633,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     const item = view.workItems.find((candidate) => candidate.taskId === run.taskId && candidate.currentRunId === run.runId);
     return <div key={`remedies-${run.runId}`}>
       <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} active={active} />
+      {/* Stuck-runs spec 2026-11-17 S2: a running attempt may be abandoned by an owner; a request is said where it was made. */}
+      <AbandonRun run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
       {/* Re-review m-c: an estimate settled by its charge (RunRetry) does not also show the task settlement's refusal. */}
       {!estimateUsageUnknown(run) && <UsageSettlement compact active={active} key={JSON.stringify([revision, run.unknownUsageSettlement, props.roles])} run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} onCommands={props.onCommands} />}
       {item !== undefined && <SavedResultEntry view={view} item={item} onCommand={onCommand} archived={archived} active={active} />}
@@ -1030,6 +1034,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
                 {run.failureCode !== null && <div><code>{run.failureCode}</code></div>}
                 <div>{t("control.group.attempt", { attempt: run.providerAttemptOrdinal, claim: run.claimOrdinal ?? t("common.na") })}{runNumberOf(view, run, orderedRuns.slice(0, index + 1)) > 0 ? t("control.group.taskRun", { n: runNumberOf(view, run, orderedRuns.slice(0, index + 1)) }) : ""}</div>
                 <RunRetry view={view} run={run} archived={archived} onCommand={onCommand} />
+                <AbandonRun run={run} roles={props.roles} archived={archived} groupId={groupId} revision={revision} onCommand={onCommand} />
               </td>
               <td><details><summary>{run.profile.profileId}</summary><code>{run.profile.profileHash}</code></details></td>
               {/* Spec 2026-11-03 soft-mode approximate usage: a booked floor is said to be one, never shown as a reported figure. */}

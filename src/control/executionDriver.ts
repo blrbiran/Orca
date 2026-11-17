@@ -13,7 +13,8 @@ import { hasOptionalTaskPolicy, validateAllowanceCheckpoint } from "./fundedAllo
 import { topUpSum } from "./workTopUp.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
-import { liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
+import { boundingCeilingOf, liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
+import { abandonOf, abandonSettlementOf, RUN_ABANDONED } from "./abandonRun.js";
 import { raiseCeilings } from "./liveCeilingRaise.js";
 import { classifyCeilingStop } from "./usagePause.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
@@ -69,7 +70,8 @@ import { correctionTargetOf } from "../corrections/target.js";
 import { classifyCriteriaChange, runChecksAtBase, type CriteriaBaseVerdict } from "./criteriaProtection.js";
 import { checkReproduction, restoreWorkspace, snapshotWorkspace, type ReproVerdict, type WorkspaceSnapshot } from "./debugRepro.js";
 import { reportedDebugOf } from "./reportedDecisions.js";
-import { openRequestOf, settlePausedUnstarted, singleCallCommitTerminal, stepH, visitOrder } from "./driverHandoff.js";
+import { noteAbandonUnresolved, openRequestOf, settleAbandonedUnstarted, settlePausedUnstarted, singleCallCommitTerminal, stepH, visitOrder } from "./driverHandoff.js";
+import { settleAbandonedRunInTransaction } from "./stopIntent.js";
 import { harvest, type Reconciliation } from "../scheduler/harvest.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 import { taskWrites } from "./requirementRecords.js";
@@ -1044,11 +1046,14 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     }
   }
   deps.crash?.("C-after-handoff");
+  // Stuck-runs spec 2026-11-17 S2: a run a person abandoned settles abandoned whatever its terminal says -- before the
+  // allowance and ceiling paths, which would keep its work and continue it (abandonRun.ts).
+  if (run.mode === undefined && run.recoveryOf === undefined && abandonOf(run) !== null) return settleAbandonedTerminal(deps, runId, report);
   if((run.mode==="verify-saved-result"||run.recoveryOf!==undefined)&&report.terminal.waitingCause==="token-allowance")throw new ControlError("resume-handoff-invalid","saved-result-explicit-command-required");
   if(report.terminal.waitingCause==="token-allowance")return settleTokenAllowance(deps,runId,report);
   // Tester follow-up G spec §2.1/§2.5 (plan O4): a stop at the group cap or the pause line keeps its work and continues or waits;
   // a person's hard cap (task-cap) ends exhausted below, as today.
-  if(report.liveCeilingStop!==undefined&&report.liveCeilingStop.cause!=="task-cap"&&outcome==="exhausted"&&candidate.result==="partial"&&run.mode===undefined&&run.recoveryOf===undefined&&liveCeilingOf(run)!==null)return settleCeilingStop(deps,runId,report);
+  if(report.liveCeilingStop!==undefined&&report.liveCeilingStop.cause!=="task-cap"&&outcome==="exhausted"&&candidate.result==="partial"&&run.mode===undefined&&run.recoveryOf===undefined&&boundingCeilingOf(run)!==null)return settleCeilingStop(deps,runId,report);
   if (outcome !== "succeeded") {
     if(run.mode===undefined&&run.recoveryOf===undefined)try{await archiveRun(store,{runId,sourceDir:drive.sourceDir,repoDir:join(drive.sourceDir,"repo"),stopProof:candidate.stopProof},archiveAdmission(deps));}catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
     // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
@@ -1832,13 +1837,16 @@ export async function advance(deps: ExecutionDriverDeps, runId: string, context:
       default: return false;
     }
   }
+  // Stuck-runs spec 2026-11-17 S2: a run a person abandoned before it reached the provider is settled abandoned now.
+  if ((run.state === "starting" || run.state === "start-pending") && await settleAbandonedUnstarted(deps, runId)) return true;
   // Stuck-runs spec 2026-11-17 S1: a paused group's run that never reached the provider is settled, not held (driverHandoff.ts).
   if ((run.state === "starting" || run.state === "start-pending") && await settlePausedUnstarted(deps, runId)) return true;
   switch (run.state) {
     case "starting": return stepA1(deps, runId);
     case "start-pending": return run.drive?.prepared ? stepB(deps, runId) : stepA2(deps, runId);
     case "unknown": return stepBPrime(deps, runId);
-    case "accepted": return stepC(deps, runId, context);
+    // Stuck-runs spec S2: an abandoned run still running past the handoff grace is named abandon-unresolved first.
+    case "accepted": { const named = noteAbandonUnresolved(deps, run); return await stepC(deps, runId, context) || named; }
     case "collected": return stepD(deps, runId, context);
     case "reconciling": return stepR(deps, runId, context);
     case "landed": case "settled": return stepE(deps, runId);
@@ -2157,6 +2165,33 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     get crashed() { return crashed; },
     scheduleTaskResults(runId: string): void { taskResults.schedule(runId); },
   };
+}
+
+/**
+ * Stuck-runs spec 2026-11-17 S2: the terminal of a run a person abandoned (abandonRun.ts). Its usage is booked as collected;
+ * it is settled `settled-failed` with the person's settlement, its unused grant released and its task `blocked`
+ * (`run-abandoned`), whatever the outcome -- even a success: the person judged the attempt worthless (ruling 2026-11-17:
+ * no work kept for accept-attempt). Its workspace is archived and removed by stepCleanupFailed as any failed run's is.
+ * A handoff request still open owns the run (step H); a run whose usage is unknown is blocked as a failed run is, so
+ * settle-usage and close-run end it.
+ */
+function settleAbandonedTerminal(deps: ExecutionDriverDeps, runId: string, report: ExecutionReport): boolean {
+  const { store } = deps;
+  if (openRequestOf(store, readDriverRun(store, runId)) !== null) return false;
+  const terminal = report.terminal!;
+  const stopReason = terminal.stopReason ? { stopReason: terminal.stopReason } : {};
+  const booked = readRun(store, runId);
+  if (booked.unknown.work || booked.unknown.handoff) { blockRun(deps, runId, "C", "usage-unknown", { outcome: terminal.outcome, ...stopReason }); return true; }
+  return write(deps, () => {
+    const current = readDriverRun(store, runId);
+    const request = abandonOf(current);
+    if (current.state !== "accepted" || current.drive === undefined || request === null) return false;
+    current.drive = { ...current.drive, outcome: terminal.outcome, blockedAt: "C", blockedReason: RUN_ABANDONED, ...stopReason };
+    if (report.liveCeilingStop !== undefined) (current as { liveCeilingStop?: unknown }).liveCeilingStop = report.liveCeilingStop;
+    saveDriverRun(store, current);
+    settleAbandonedRunInTransaction(store, current.groupId, runId, abandonSettlementOf(request));
+    return true;
+  });
 }
 
 /** A renewable boundary is an atomic known settlement plus a saved ready-work registration. */

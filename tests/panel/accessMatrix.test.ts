@@ -102,6 +102,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "settle-unknown-usage", payload: { taskId: "a", runId: "run-1", generation: 1, acknowledge: "charge-observed-floor" }, tier: "open", member: V },
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): human-only, socket tier token; a run Orca dispatched is always refused.
   { entry: "accept-attempt", payload: { taskId: "a", runId: "run-1", note: "looked at it" }, tier: "token", member: V },
+  // Stuck-runs spec 2026-11-17 S2: human-only, socket tier token, as accept-attempt.
+  { entry: "abandon-run", payload: { runId: "run-1", note: "cannot succeed" }, tier: "token", member: V },
   // Tester follow-up E §5 (#241): accepting a failed group acceptance is a person's act (socket tier token).
   { entry: "waive-acceptance", payload: { note: "known flake" }, tier: "token", member: V },
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },

@@ -4,6 +4,7 @@ import { snapshotSchema, verifySnapshot } from "./snapshot.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { settlingPersonFor } from "./commandClient.js";
 import { isDirGroup } from "./dirGroup.js";
+import { abandonedRun } from "./abandonRun.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
 import { groupHasReconcilingRun, readWork, saveWork } from "./queries.js";
@@ -44,7 +45,7 @@ export interface OperatorAcceptance {
 
 type AcceptRun = RunBody & {
   drive?: DriveRecord; mode?: string; recoveryOf?: unknown; operatorAcceptance?: OperatorAcceptance;
-  operatorSettlement?: { kind: "completed-attempt"; outcome: string; at: number; principal: string };
+  operatorSettlement?: { kind: "completed-attempt"; outcome: string; at: number; principal: string } | { kind: "abandoned"; by: string; note: string; at: number };
   remaining?: { work: Record<string, number | null>; handoff: Record<string, number | null> };
 };
 
@@ -109,6 +110,9 @@ export function applyAcceptAttempt(deps: AcceptAttemptDeps, command: AcceptAttem
         const outcome = run.drive?.outcome ?? null;
         if (outcome === null) throw new ControlError("accept-attempt-run-not-terminal");
         if (run.mode !== undefined || run.recoveryOf !== undefined || run.phase !== "work") throw new ControlError("accept-attempt-unsupported", "recovery-run");
+        // Stuck-runs spec 2026-11-17 S2, human ruling 2026-11-17 (「按你的建议走」): an abandoned run keeps no work to accept --
+        // a person judged it worthless; keeping work is what a handoff is for.
+        if (abandonedRun(run) || (run as { abandon?: unknown }).abandon !== undefined) throw new ControlError("accept-attempt-unsupported", "abandoned");
         const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 0) === 1;
         // Spec 2026-11-16: a run whose work is complete but whose settlement never finished may be
         // accepted too -- a ceiling stop during verify (settled-recoverable/exhausted) or an E-block

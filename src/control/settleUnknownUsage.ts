@@ -1,5 +1,5 @@
 import { amountSchema } from "./schema.js";
-import { ceilingOutstanding, liveCeilingOf, syncCeilingReserve } from "./liveCeiling.js";
+import { boundingCeilingOf, ceilingOutstanding, syncCeilingReserve } from "./liveCeiling.js";
 import { add, budgetBalance, readRun, saveRun, subtract, syncWebBudget } from "./budget.js";
 import { dimensions } from "./commands.js";
 import { hasTokenPolicy } from "./fundedAllowance.js";
@@ -23,13 +23,13 @@ export type SettleAcknowledge = SettleUnknownUsageCommand["payload"]["acknowledg
 /** The acknowledgement a run's remainder admits: a proved-zero failure releases its reservation; an unlimited work
  * token remainder can only be released unmetered; otherwise the remainder is charged. */
 export const settlementAcknowledgeFor = (run: SettlementRun): Exclude<SettleAcknowledge, "charge-observed-floor"> =>
-  knownZeroProved(run) ? "release-known-zero" : run.remaining.work.tokens === null && liveCeilingOf(run) === null ? "release-unmetered" : "charge-remaining-grant";
+  knownZeroProved(run) ? "release-known-zero" : run.remaining.work.tokens === null && boundingCeilingOf(run) === null ? "release-unmetered" : "charge-remaining-grant";
 /**
  * Follow-up H (gap k, ruling R4: the group cap is hard): an expectation-model run has no work grant; what its unknown usage
  * could have spent is its live ceiling, so its "remaining grant" is the ceiling's unused part, charged in full. Null for a
  * run without a ceiling.
  */
-const ceilingRemainder = (run: SettlementRun): number | null => liveCeilingOf(run) === null ? null : ceilingOutstanding(run as never);
+const ceilingRemainder = (run: SettlementRun): number | null => boundingCeilingOf(run) === null ? null : ceilingOutstanding(run as never);
 /**
  * Tester follow-up F §2 (#116, ledger C3): ccloop's observed floor as the soft path reads it (the loop run's `usageLowerBound`,
  * executionDriver.ts), or null when ccloop observed none. The explicit `charge-observed-floor` is admitted only with one.
@@ -74,9 +74,9 @@ export function settlementAdmission(store: ControlStore, run: SettlementRun, con
     // Tester follow-up F §2 (#116, ledger C3): a finite remainder only (an unlimited one keeps its forms), and only with a floor.
     // Tester follow-up I (G spec §16, human 「按你的建议走」): an expectation-model run's live ceiling bounds it as a finite
     // remainder does, so it is admitted too; without a floor it is refused and its unused ceiling stays held.
-    if (run.remaining.work.tokens === null && liveCeilingOf(run) === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
+    if (run.remaining.work.tokens === null && boundingCeilingOf(run) === null) throw new ControlError("run-usage-not-settleable", "unlimited-remainder");
     if (workerLostFloor(run) === null) throw new ControlError("run-usage-not-settleable", "observed-floor-unknown");
-  } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null && liveCeilingOf(run) === null ? "unlimited-remainder" : "finite-remainder");
+  } else if (acknowledge !== settlementAcknowledgeFor(run)) throw new ControlError("run-usage-not-settleable", run.remaining.work.tokens === null && boundingCeilingOf(run) === null ? "unlimited-remainder" : "finite-remainder");
   if (isGroupArchived(store, run.groupId)) throw new ControlError("group-archived");
   if (run.usageSettlement !== undefined) throw new ControlError("run-usage-settled");
   if ((group as { status?: string }).status === "clarifying") throw new ControlError("group-state-invalid", "clarifying");
@@ -251,7 +251,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
           const { charged, parked } = bookObservedFloor(store, run, group, { floorTokens, reason, disposition, legacy, at, basis: "observed-floor" });
           // Tester follow-up I (G spec §16): the floor is booked and the unused live ceiling held for the unknown usage
           // (follow-up H, gap k) is given back in the same write; the run's usage is no longer unknown.
-          if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
+          if (boundingCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
           const marker = usageSettlementSchema.parse({ method: "observed-floor", commandId: command.commandId, principal, at,
             groupId, taskId: run.taskId, workItemId: run.workItemId, runId: run.runId, generation: run.generation, highWater: run.highWater,
             charged, floorTokens, reason, reservationDisposition: disposition, ...evidence.proof, ...resolution(request) });
@@ -284,7 +284,7 @@ export async function applySettleUnknownUsage(deps: SettleUnknownUsageDeps, comm
           ...(knownZero ? { releaseReservedAmount: add(finiteCommitment(run.remaining.work), run.remaining.handoff) }
             : ceilingHeld > 0 ? { releaseReservedAmount: subtract(add(charged.work as Amount, charged.handoff), { tokens: ceilingHeld, activeMs: 0, attempts: 0, sessions: 0 }) } : {}), at,
           basis: knownZero ? "known-zero" : "remaining-grant" });
-        if (liveCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
+        if (boundingCeilingOf(run) !== null) syncCeilingReserve(store, group, run as never);
         finishUsageSettlement(store, { groupId, run, group, marker, disposition, requestId: request?.requestId ?? null, legacy, parked, activity: { method: marker.method, charged, principal, at } });
         deps.beforeCommit?.();
         const receipt = { kind: "usage-settled" as const, taskId: run.taskId!, runId: run.runId, generation: run.generation, at };

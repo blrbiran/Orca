@@ -6,7 +6,7 @@ Every `orca recovery` command. Ids: a full id, a unique prefix, or (projects) a 
 
 ## `orca recovery list`
 
-what blocks dispatch: global, group and run blockers
+what blocks dispatch: global, group and run blockers, tasks held for a person, and runs a stop could not end
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).

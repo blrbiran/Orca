@@ -10,7 +10,7 @@ import {
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   resolveFolderChangePayloadSchema, multiDirLandingPayloadSchema,
-  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, allowRequestPayloadSchema, revokeAllowancePayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, abandonRunPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, allowRequestPayloadSchema, revokeAllowancePayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
   scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
@@ -66,6 +66,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "verify-saved-result": verifySavedResultPayloadSchema, "close-run": closeRunPayloadSchema,
   // Reviewed acceptance (spec 2026-11-11 §7): an owner's accept-attempt (human-only, socket tier token).
   "accept-attempt": acceptAttemptPayloadSchema,
+  // Stuck-runs spec 2026-11-17 S2: a person's abandon-run (human-only, socket tier token).
+  "abandon-run": abandonRunPayloadSchema,
   // Tester follow-up G spec §1.4: reopen a no-change task with a note (any).
   "reopen-task": reopenTaskPayloadSchema, "accept-no-change": acceptNoChangePayloadSchema,
   // Tester follow-up E §5 (#241): a failed group acceptance's recheck (any) and waiver (human-only, socket tier token).

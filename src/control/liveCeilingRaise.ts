@@ -1,6 +1,6 @@
 import { syncWebBudget } from "./budget.js";
 import { expectationModelApplies, hardCapOf } from "./expectationModel.js";
-import { ceilingGroupIds, endedRunActive, groupHeadroom, liveCeilingOf, pauseLineOf, runCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
+import { boundingCeilingOf, ceilingGroupIds, endedRunActive, groupHeadroom, liveCeilingOf, pauseLineOf, runCeiling, syncCeilingReserve, type LiveCeilingCause } from "./liveCeiling.js";
 import { readGroup, readWork, saveGroup } from "./queries.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { capStatuses } from "./spendCaps.js";
@@ -31,11 +31,13 @@ export function planCeilingRaises(store: ControlStore, groupId: string, at: numb
   if (endedRunActive(store, groupId)) return [];
   const running: Array<{ runId: string; workItemId: string; revision: number; tokens: number }> = [];
   for (const row of store.db.prepare("SELECT id,work_item_id,body FROM runs WHERE group_id=? AND active=1 ORDER BY id").all(groupId)) {
-    const body = JSON.parse(String(row.body)) as { drive?: { blockedAt?: string | null } };
+    const body = JSON.parse(String(row.body)) as { drive?: { blockedAt?: string | null }; abandon?: unknown };
     // Tester follow-up K: blockRun leaves a run active; one blocked waits on a person, so it neither takes a share nor
     // divides the headroom the working runs share.
     if ((body.drive?.blockedAt ?? null) !== null) continue;
-    const ceiling = liveCeilingOf(body);
+    // Stuck-runs spec 2026-11-17 S2: a run a person abandoned had its ceiling lowered to stop it; it is never raised again.
+    if (body.abandon !== undefined) continue;
+    const ceiling = boundingCeilingOf(body);
     if (ceiling === null || ceiling.cause !== "group") continue;
     running.push({ runId: String(row.id), workItemId: String(row.work_item_id), revision: ceiling.revision, tokens: ceiling.tokens });
   }

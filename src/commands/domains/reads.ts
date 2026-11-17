@@ -34,12 +34,21 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
  * lines, since its row (two commands) is longer than the generic one-line item, which is cut at 160 characters.
  */
 function recoveryList(body: unknown): string {
-  const { heldTasks, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }> };
+  const { heldTasks, unresolvedRuns, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+    unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }> };
   const lines = [text(rest)];
   if (heldTasks !== undefined) {
     lines.push("heldTasks:");
     for (const row of heldTasks) {
       lines.push(`  - ${row.groupId} ${row.taskId}: held after run ${row.runId} stopped${row.continuable ? " (its checkpoint can be continued)" : ""}`);
+      for (const command of row.next) lines.push(`    next: ${command}`);
+    }
+  }
+  // Stuck-runs spec S4 (third bullet), S2: a run a stop could not end, still running, in whole lines as a held task's.
+  if (unresolvedRuns !== undefined) {
+    lines.push("unresolvedRuns:");
+    for (const row of unresolvedRuns) {
+      lines.push(`  - ${row.groupId} ${row.taskId}: run ${row.runId} is still running (${row.code === "abandon-unresolved" ? "abandoned, ccloop did not stop it within the grace" : "its handoff's outcome is unknown"})`);
       for (const command of row.next) lines.push(`    next: ${command}`);
     }
   }
@@ -628,7 +637,7 @@ export const READ_ROWS: CommandDef[] = [
       return [`usage?${query.join("&")}`];
     } }),
   read({ domain: "orchestration", action: "show", summary: "how many groups run at once, and how many hold a slot now", paths: () => ["orchestration"] }),
-  read({ domain: "recovery", action: "list", summary: "what blocks dispatch: global, group and run blockers, and tasks held for a person", paths: () => ["recovery"], format: recoveryList }),
+  read({ domain: "recovery", action: "list", summary: "what blocks dispatch: global, group and run blockers, tasks held for a person, and runs a stop could not end", paths: () => ["recovery"], format: recoveryList }),
   read({ domain: "command", action: "show", summary: "a command's retained result, looked up under its scope",
     positionals: [{ name: "commandId", summary: "the id the CLI printed (cli-<uuid>)", required: true }],
     flags: [

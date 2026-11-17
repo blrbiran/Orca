@@ -31,6 +31,8 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "close-run": "any",
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): landing an attempt no recovery path accepts is an owner's act.
   "accept-attempt": "human-only",
+  // Stuck-runs spec 2026-11-17 S2 (#344): judging an attempt worthless and ending it is a person's act, as accepting one is.
+  "abandon-run": "human-only",
   // Tester follow-up G spec §1.4, §7: a person and an orchestrating agent alike revoke a no-change completion with a note.
   "reopen-task": "any",
   // Tester follow-up G spec §10.1: accepting a stopped no-change task as done is open to a person and an orchestrating agent.
@@ -267,6 +269,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "settle-unknown-usage": (p) => (typeof p.acknowledge === "string" && AGENT_SETTLE_ACKNOWLEDGE.includes(p.acknowledge) ? "open" : "token"),
   // Reviewed acceptance (spec 2026-11-11 §7, Q3): an owner on the Web, or the socket agent with an owner's person token.
   "accept-attempt": "token",
+  // Stuck-runs spec 2026-11-17 S2: as accept-attempt -- ending a running attempt is a person's judgement.
+  "abandon-run": "token",
   // Tester follow-up E §5 (#241): an owner on the Web, or the socket agent with an owner's person token.
   "waive-acceptance": "token",
   // Tester follow-up E §8: the single call's settlement charges its remaining grant -- the open form of settle-unknown-usage.

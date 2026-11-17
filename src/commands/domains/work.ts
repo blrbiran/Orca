@@ -508,6 +508,22 @@ export const WORK_ROWS: CommandDef[] = [
       ? "this run has no proved terminal failure; retry the task, or settle unknown usage if the run reports it"
       : undefined,
     next: closeRunNext }),
+  // Stuck-runs spec 2026-11-17 S2 (#344): a person ends a running attempt now; the driver stops it and settles it failed.
+  verb({ domain: "run", action: "abandon", summary: "end a running attempt now: Orca stops it and settles it failed, its task blocked until a person retries it (a person's act)",
+    verb: "abandon-run", positionals: [GROUP], access: "token",
+    flags: [
+      { name: "run", type: "string", required: true, summary: "the running run to abandon (orca group show <group> lists the runs)" },
+      { name: "note", type: "string", required: true, summary: "why this attempt cannot succeed; recorded on the run" },
+    ],
+    route: (c) => `groups/${group(c)}/abandon-run`,
+    payload: (c) => {
+      const note = str(c, "note")!;
+      if (note.trim().length === 0) throw invalid("--note wants why you abandon the attempt");
+      return { runId: str(c, "run"), note };
+    },
+    hint: (error) => error.code === "run-abandon-not-running"
+      ? "only a run that is starting or running can be abandoned; a stopped one is retried (orca task retry) or closed (orca group close-run)"
+      : undefined }),
   verb({ domain: "group", action: "set-limit", summary: "set the group's budget limit", verb: "set-limit", positionals: [GROUP], access: "token",
     flags: [{ name: "limit", type: "string", required: true, summary: "JSON {tokens,activeMs,attempts,sessions}" }],
     route: (c) => `groups/${group(c)}/set-limit`, payload: (c) => ({ limit: json(c, "limit") }) }),

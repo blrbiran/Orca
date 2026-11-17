@@ -66,12 +66,14 @@ function diffOf(store: ControlStore, runId: string, base: string | null): Attemp
 
 type ReviewRun = {
   runId: string; groupId: string; taskId: string | null; phase: string; state: string; mode?: unknown; recoveryOf?: unknown;
-  drive?: { outcome?: string | null; base?: string | null } | undefined;
+  drive?: { outcome?: string | null; base?: string | null } | undefined; abandon?: unknown;
 };
 
 /** The review facts for a run the server could accept, else undefined (the view then carries no field). */
 export function attemptReviewOf(store: ControlStore, value: ReviewRun, work: { currentRunId?: string | null; status: string; derivedContractHash: string | null }): AttemptReview | undefined {
   const outcome = value.drive?.outcome ?? null;
+  // Stuck-runs spec S2: an abandoned run is refused by accept-attempt (acceptAttempt.ts), so it is offered no review.
+  if (value.abandon !== undefined) return undefined;
   if (value.phase !== "work" || value.taskId === null || value.mode !== undefined || value.recoveryOf !== undefined || value.state !== "settled-failed"
     || outcome === null || outcome === "succeeded" || work.currentRunId !== value.runId || work.status !== "blocked") return undefined;
   const recorded = operatorAcceptanceOf(value);

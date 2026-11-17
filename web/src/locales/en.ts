@@ -114,6 +114,7 @@ const activityKind = {
   "handoff-invalid": "handoff invalid", "live-note-delivered": "note delivered", "live-note-undelivered": "note not delivered",
   "worker-lost": "worker lost",
   "group-cap-reached": "group cap reached", "usage-paused": "paused over its expectation", "usage-pause-decided": "pause decided", "usage-over-expectation": "over its expectation",
+  "run-abandon-requested": "abandon requested",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -898,6 +899,16 @@ export const en = {
       title: "Regressions on the group branch",
       turnedRed: "after {{tasks}} landed, {{command}} turned red",
       exited: "exited {{exit}} at {{tip}}",
+    },
+    // Stuck-runs spec 2026-11-17 S2: an owner ends a running attempt now (AbandonRun.tsx).
+    abandonRun: {
+      open: "Abandon this attempt",
+      explain: "Orca stops this run now and settles it failed: what it used is booked, the rest of its grant is released, and its work is not kept. The task stays blocked until you retry it.",
+      note: "Why this attempt cannot succeed",
+      send: "Abandon the attempt",
+      cancel: "Cancel",
+      requested: "{{principal}} asked to abandon this attempt: {{note}}. Orca settles it when it stops.",
+      unresolved: "{{principal}} asked to abandon this attempt ({{note}}), but it has not stopped within the grace. A handoff stop is the other way to end it.",
     },
     acceptAttempt: {
       open: "Accept this attempt after checks",
@@ -2522,6 +2533,10 @@ export const enErrors: Record<string, string> = {
   "accept-attempt-snapshot-partial": "This run's archive snapshot is incomplete, so its attempt cannot be rebuilt.",
   "accept-attempt-pending": "An acceptance of this attempt is already recorded.",
   "accept-attempt-person-required": "Accepting an attempt is done by an owner.",
+  "run-abandon-not-running": "Only a run that is starting or running can be abandoned; a stopped run is retried or closed instead.",
+  "run-abandon-unsupported": "This kind of run cannot be abandoned (only a task's work run can).",
+  "run-abandon-pending": "Abandoning this run is already requested; Orca settles it when it stops.",
+  "run-abandon-person-required": "Abandoning an attempt is done by an owner.",
   "group-acceptance-not-failed": "This group's acceptance has not failed ({{detail}}); there is nothing to recheck or waive.",
   "group-acceptance-person-required": "Waiving a failed group acceptance is done by an owner.",
   "live-note-task-finished": "Task {{detail}} has finished; a note can no longer reach it.",

@@ -1,4 +1,4 @@
-import { ceilingOutstanding } from "./liveCeiling.js";
+import { boundingCeilingOf, ceilingOutstanding } from "./liveCeiling.js";
 import { ControlError } from "./errors.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
@@ -33,7 +33,8 @@ export function committedTokens(store: ControlStore, scope: UsageScope, excludeG
     const run = JSON.parse(String(row.body)) as { remaining?: { work?: { tokens?: unknown }; handoff?: { tokens?: unknown } }; liveCeiling?: unknown; cumulative?: { work: { tokens: number } } };
     const remaining = run.remaining;
     // Tester follow-up H: an expectation-model run has no work grant; what it is promised is its live ceiling's unused part.
-    const work = remaining?.work?.tokens === null && run.liveCeiling !== undefined && run.cumulative !== undefined
+    // Stuck-runs spec S2: a watch-only ceiling promises nothing, so such a run reads as an unbounded one did before it.
+    const work = remaining?.work?.tokens === null && boundingCeilingOf(run) !== null && run.cumulative !== undefined
       ? ceilingOutstanding(run as Parameters<typeof ceilingOutstanding>[0]) : remaining?.work?.tokens;
     const handoff = remaining?.handoff?.tokens;
     // A NaN here would open every gate it reaches, so an unreadable run stops the reading instead.
@@ -140,6 +141,6 @@ export function assertNoActiveUnbounded(store:ControlStore,scope:string,groupId:
   if(scope!=="all"&&groupRepoIdOf(JSON.parse(String(row.gbody)))!==scope.slice(5))continue;
   const run=JSON.parse(String(row.body));
   // Tester follow-up G spec §2.1: a run of a finite group bounded by a live ceiling is bounded, so a new limit or cap may be installed.
-  if(run.grant?.work?.tokens===null&&!(run.liveCeiling!==undefined&&JSON.parse(String(row.gbody)).limit?.tokens!==null))throw new ControlError("active-unbounded-budget-conflict",`${run.runId}: stop and reconcile before installing a finite limit`);
+  if(run.grant?.work?.tokens===null&&!(boundingCeilingOf(run)!==null&&JSON.parse(String(row.gbody)).limit?.tokens!==null))throw new ControlError("active-unbounded-budget-conflict",`${run.runId}: stop and reconcile before installing a finite limit`);
  }
 }

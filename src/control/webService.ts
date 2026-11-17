@@ -51,6 +51,7 @@ import { applyContinueTask, applyResumeFromHandoff, type ContinueTaskCommand, ty
 import { applyAddLiveNote, writeRunLiveNotes, type AddLiveNoteCommand } from "./liveNotes.js";
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyAcceptAttempt, prepareAcceptAttempt, type AcceptAttemptCommand } from "./acceptAttempt.js";
+import { applyAbandonRun, type AbandonRunCommand } from "./abandonRun.js";
 import { applyRetryTask, autoRetryFundingRefusal, workerLostFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
 import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
@@ -2003,6 +2004,10 @@ export class WebControlService {
     const replay = this.mutate(() => preflightWebCommand<WebCommandResult>(this.store, command)); if (replay) return replay.body;
     const prepared = await prepareAcceptAttempt(this.store, command.payload.runId);
     return applyAcceptAttempt({ store: this.store, admissionGate: this.deps.admissionGate, ladderInProgress: confirmedLadderFor }, command, prepared) as WebCommandResult;
+  }
+  /** Stuck-runs spec 2026-11-17 S2: a person ends a running attempt; the driver stops and settles it (abandonRun.ts). */
+  abandonRun(command: AbandonRunCommand): WebCommandResult {
+    return this.mutate(() => applyAbandonRun({ store: this.store, admissionGate: this.deps.admissionGate }, command)) as WebCommandResult;
   }
   /**
    * Integration spec §7: an owner approves an agent's resolution of the conflict. The conflict's copy and pinned commit

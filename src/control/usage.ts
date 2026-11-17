@@ -9,7 +9,7 @@ import { add, componentMin, isTerminalRunState, readRun, saveRun, subtract, sync
 import { readGroup, saveGroup } from "./queries.js";
 import { bookUsageDelta, byModelSchema } from "./usageLedger.js";
 import { growForEstimateOverrun } from "./estimateOverrun.js";
-import { liveCeilingOf, syncCeilingReserve } from "./liveCeiling.js";
+import { boundingCeilingOf, syncCeilingReserve } from "./liveCeiling.js";
 import { noteOverExpectation } from "./overExpectation.js";
 const eventSchema=z.object({runId:idSchema,generation:safeInteger.positive(),eventSeq:safeInteger.positive(),bucket:z.enum(["work","handoff"]),cumulative:amountSchema.nullable(),source:z.object({artifactId:idSchema,hash:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),byModel:byModelSchema.nullable().optional(),phase:z.enum(["plan","execute","verify","setup"]).optional()}).strict();
 /** Accounts spec §5.1: `appliedAt` (ms) stamps the usage-ledger rows this call books; callers with a clock pass it. */
@@ -58,7 +58,7 @@ export function recordUsage(store:ControlStore,event:UsageEvent,appliedAt:number
       run.highWater=next.eventSeq;
     }
     // Tester follow-up G spec §2.1 (plan O2): booked work releases the part of the run's live ceiling it used.
-    if(liveCeilingOf(run)!==null)syncCeilingReserve(store,group,run);
+    if(boundingCeilingOf(run)!==null)syncCeilingReserve(store,group,run);
     // Tester follow-up G spec §2.4 (plan O6): the first booking over the task's expectation is recorded once.
     noteOverExpectation(store,group,run,appliedAt);
     syncWebBudget(store,group,run);

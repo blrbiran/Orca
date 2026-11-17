@@ -253,6 +253,11 @@ export const durableCommandErrorStatuses = {
   "accept-attempt-snapshot-partial": 409,
   "accept-attempt-pending": 409,
   "accept-attempt-person-required": 409,
+  // Stuck-runs spec 2026-11-17 S2: why a person's abandon-run is refused before anything is recorded.
+  "run-abandon-not-running": 409,
+  "run-abandon-unsupported": 409,
+  "run-abandon-pending": 409,
+  "run-abandon-person-required": 409,
   // Tester follow-up E §5 (#241): recheck and waive answer a failed group acceptance only; a waiver names a person.
   "group-acceptance-not-failed": 409,
   "group-acceptance-person-required": 409,

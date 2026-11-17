@@ -11,8 +11,10 @@ import { ControlError } from "./errors.js";
 import { peerFailureLogLine } from "./ccloopPort.js";
 import {
   ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, readStopIntent, saveHandoffRequest,
-  settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, settleNeverStartedRunInTransaction, type HandoffRequestBody,
+  settleAbandonedRunInTransaction, settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, settleNeverStartedRunInTransaction, type HandoffRequestBody,
 } from "./stopIntent.js";
+import { abandonOf, abandonSettlementOf } from "./abandonRun.js";
+import { readWorkspaceSetting } from "./workspaceSettings.js";
 import { isSingleCallRun, isWebWorkRun } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
 import { cleanupExtraWorkspace, cleanupRunWorkspace, revParse, workBranchRef } from "./workspace.js";
@@ -20,7 +22,7 @@ import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
-  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, laterError, driverRunIds, groupRepoId, persistStatus, portFor, readDriverRun,
+  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, laterError, driverRunIds, groupRepoId, newDrive, persistStatus, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -192,13 +194,8 @@ export async function settlePausedUnstarted(deps: ExecutionDriverDeps, runId: st
   if (readStopIntent(store, run.groupId)?.mode !== "pause" || openRequestOf(store, run) !== null) return false;
   // B moves a run whose execution is already recorded to `accepted` before its hold check; that run is ccloop's.
   if (run.executionId !== null) return false;
-  if (run.state === "start-pending" && run.drive?.prepared === true) {
-    let status: ExecutionStatus;
-    try { status = await portFor(deps, run).inspect(readStartEnvelope(store, run)); }
-    catch (error) { const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line); return false; }
-    if (status.kind === "unknown") return false;
-    if (status.kind !== "absent") return persistStatus(deps, runId, status, "B");
-  }
+  const inspected = await inspectNeverStarted(deps, run);
+  if (inspected !== null) return inspected;
   const cleanupError = await removeNeverStartedWorkspace(deps, run);
   return write(deps, () => {
     // Re-read after the awaits: only a run still where it was, with no execution, is settled. A resume in between does not
@@ -210,6 +207,72 @@ export async function settlePausedUnstarted(deps: ExecutionDriverDeps, runId: st
       saveDriverRun(store, current);
     }
     settleNeverStartedRunInTransaction(store, run.groupId, runId);
+    return true;
+  });
+}
+
+/**
+ * S1's proof that a prepared envelope never reached ccloop (spec §11 C4): null when the run may be settled as never
+ * started (not prepared, or ccloop answers `absent`); otherwise what the caller answers -- an execution that exists is
+ * recorded (true), an answer in doubt leaves the run where it is (false).
+ */
+async function inspectNeverStarted(deps: ExecutionDriverDeps, run: DriverRun): Promise<boolean | null> {
+  if (run.state !== "start-pending" || run.drive?.prepared !== true) return null;
+  let status: ExecutionStatus;
+  try { status = await portFor(deps, run).inspect(readStartEnvelope(deps.store, run)); }
+  catch (error) { const line = peerFailureLogLine(run.runId, error); if (line !== null) process.stderr.write(line); return false; }
+  if (status.kind === "unknown") return false;
+  if (status.kind !== "absent") return persistStatus(deps, run.runId, status, "B");
+  return null;
+}
+
+/**
+ * Stuck-runs spec 2026-11-17 S2: a run a person abandoned before it reached the provider (`starting`, `start-pending`) --
+ * a live ceiling cannot reach it -- is settled now, proved never started as S1 proves it, paused group or not. It is
+ * settled as every abandoned run is (stopIntent.ts settleAbandonedRunInTransaction: `settled-failed`, the task `blocked`),
+ * not restartable as S1 settles a paused one: an S1 settle gives the task back as `ready`, and a ready task is claimed
+ * again at once, while an abandoned attempt waits for a person. Its drive says `not-started` (no ccloop outcome exists).
+ */
+export async function settleAbandonedUnstarted(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+  const { store } = deps;
+  const run = readDriverRun(store, runId);
+  if (run.state !== "starting" && run.state !== "start-pending") return false;
+  if (singleCallPurposeOf(run) !== null || run.taskId === null || run.mode !== undefined || run.recoveryOf !== undefined) return false;
+  if (abandonOf(run) === null || openRequestOf(store, run) !== null || run.executionId !== null) return false;
+  const inspected = await inspectNeverStarted(deps, run);
+  if (inspected !== null) return inspected;
+  const cleanupError = await removeNeverStartedWorkspace(deps, run);
+  return write(deps, () => {
+    const current = readDriverRun(store, runId);
+    const request = abandonOf(current);
+    if (current.state !== run.state || current.executionId !== null || request === null || openRequestOf(store, current) !== null) return false;
+    const settingRepoId = isMultiGroup(store, current.groupId) ? multiPrimaryRepoId(store, current.groupId) : groupRepoId(store, current.groupId);
+    const drive = current.drive ?? newDrive(deps.roots, runId, readWorkspaceSetting(store, settingRepoId).workspaceMode, true);
+    // Nothing is left for stepCleanupFailed: no report exists to archive, and the workspace went above (or never was).
+    current.drive = { ...drive, outcome: "not-started", cleanedUp: true, cleanupError };
+    saveDriverRun(store, current);
+    settleAbandonedRunInTransaction(store, current.groupId, runId, abandonSettlementOf(request));
+    return true;
+  });
+}
+
+/**
+ * Stuck-runs spec S2: an abandoned run ccloop still runs past the handoff grace after the request (its ceiling write) is
+ * marked `unresolvedAt`, so recovery list names it `abandon-unresolved` with its run id: Orca does not pretend it stopped.
+ * The run stays collected; its terminal still settles it abandoned. Answers true when it marked the run.
+ */
+export function noteAbandonUnresolved(deps: ExecutionDriverDeps, run: DriverRun): boolean {
+  if (run.state !== "accepted") return false;
+  const request = abandonOf(run);
+  if (request === null || request.unresolvedAt !== undefined) return false;
+  const now = nowMs(deps);
+  if (now <= request.at + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }, frozenRecoveryWindowOf(deps, run), deps.handoffExtraGraceMs))) return false;
+  return write(deps, () => {
+    const current = readDriverRun(deps.store, run.runId);
+    const live = abandonOf(current);
+    if (current.state !== "accepted" || live === null || live.unresolvedAt !== undefined) return false;
+    (current as { abandon?: unknown }).abandon = { ...live, unresolvedAt: now };
+    saveDriverRun(deps.store, current);
     return true;
   });
 }

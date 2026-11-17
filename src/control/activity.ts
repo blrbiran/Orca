@@ -36,7 +36,9 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   | "worker-lost"
   // Tester follow-up G spec §2.1/§2.4/§2.5: a run stopped at the group cap, a task paused at its pause line, the decision on
   // it, and a task's first booking over its expectation.
-  | "group-cap-reached" | "usage-paused" | "usage-pause-decided" | "usage-over-expectation";
+  | "group-cap-reached" | "usage-paused" | "usage-pause-decided" | "usage-over-expectation"
+  // Stuck-runs spec 2026-11-17 S2: a person asked to end a run's attempt now (abandonRun.ts).
+  | "run-abandon-requested";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   // Delivery tail spec 2026-11-17 (#333/#336): a backoff said, a person's integrate-now, the acceptance on the delivered commit.
@@ -49,6 +51,7 @@ export const ACTIVITY_KINDS = [
   "handoff-invalid", "live-note-delivered", "live-note-undelivered",
   "worker-lost",
   "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
+  "run-abandon-requested",
 ] as const satisfies readonly ActivityKind[];
 export type ActivityRow = { groupId: string; taskId?: string | null; runId?: string | null; kind: ActivityKind; body: Record<string, unknown> };
 export type ActivityEntry = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKind; body: Record<string, unknown> };

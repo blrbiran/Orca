@@ -131,6 +131,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca run transcript <run> [--call <call>] [--before <before>] [--after <after>] [--thinking]` — a run's agent transcript: its calls, or one call's window (tail by default), redacted as the Web shows it
 - `orca run results <run>` — a run's saved results: the task's explanation and outputs per attempt, and whether the saved result can be recovered
 - `orca run eligibility <run>` — whether a run's saved result can be verified instead of re-run
+- `orca run abandon <group> --run <run> --note <note>` — end a running attempt now: Orca stops it and settles it failed, its task blocked until a person retries it (a person's act) (person token)
 
 ### `orca decision`
 
@@ -178,7 +179,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca recovery`
 
-- `orca recovery list` — what blocks dispatch: global, group and run blockers
+- `orca recovery list` — what blocks dispatch: global, group and run blockers, tasks held for a person, and runs a stop could not end
 - `orca recovery retry [--run <run>] [--group <group>] [--acknowledge <acknowledge>]` — resume a run (--run) or a group (--group) blocked for a reason other than a terminal failure
 
 ### `orca command`
