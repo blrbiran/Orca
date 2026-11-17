@@ -287,6 +287,8 @@ import { GroupResults } from "./GroupResults.js";
 import { ResultsConclusion } from "./ResultsConclusion.js";
 import { orderByLayout } from "./dependencyLayout.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
+import { GroupDependencies } from "./GroupDependencies.js";
+import type { GroupSummaryV1 } from "./controlTypes.js";
 import { RegionDrafts } from "./regionDraft.js";
 import { ReviewDetail } from "./ReviewDetail.js";
 import type { GroupDecisionsViewV1 } from "./controlTypes.js";
@@ -347,6 +349,8 @@ workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   onRouteChange?: (region: DetailRegion, taskId: string | null) => void;
   /** Checks spec 2026-10-22 §6.6: another group's command revision (a review group's, to dismiss its finding); null if unknown. */
   revisionOf?: (groupId: string) => number | null;
+  /** Tester #327: another group's summary as the page last read it, for the Dependencies card; absent -> no card. */
+  groupOf?: (groupId: string) => GroupSummaryV1 | undefined;
 }
 
 /**
@@ -857,6 +861,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion}
         hints={{ problem: problemCount, live: runningNow(view).length }} regions={{
         progress: <>
+      {/* Tester #327: the prerequisite groups this group waits on, from the summaries the page already polls. */}
+      {props.groupOf !== undefined && <GroupDependencies groupId={groupId} dependsOn={view.summary.dependsOn} groupOf={props.groupOf} onSelectGroup={props.onSelectGroup} />}
       <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={toggleTask} />
       {/* Tester #303/#304: one name for the list, which is its disclosure, and the label filter in the same header row, named
           as a filter: it filters this table, not the graph above. */}

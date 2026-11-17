@@ -405,6 +405,15 @@ export const zh: Translation<typeof en> = {
       backoff: "自动开跑被拒（{{code}}），稍后会再试。",
       refusedPersistent: "需要你处理：自动开跑连续被拒 {{count}} 次（{{code}}）。其它组照常运行。",
     },
+    dependencies: {
+      heading: "依赖",
+      note: "每个组都要先落地，它上面那一行的组才能开跑。",
+      open: "打开组 {{groupId}}",
+      landed: "已落地",
+      notLanded: "任务已完成，尚未落地",
+      branch: "分支 {{branch}}",
+      unknown: "不在本页已读到的组里",
+    },
     group: {
       estimateOverGrant: "估算运行 {{runId}} 用了 {{used}} {{dimension}}，超过了它的额度 {{grant}}。运行没有被停止，任务组也没有被阻塞；估算只作参考。",
       estimateDeficit: "估算运行使本组超出 token 上限 {{deficit}}。请先提高上限（提议的组上限）才能继续；在此之前其它修改都会被拒绝。",

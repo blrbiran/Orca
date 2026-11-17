@@ -430,6 +430,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           integrationFor={props.integrationFor}
           decisions={props.decisionsFor?.(view.summary.groupId) ?? null}
           revisionOf={(groupId) => summary.groups.find((group) => group.groupId === groupId)?.commandRevision ?? null}
+          groupOf={(groupId) => summary.groups.find((group) => group.groupId === groupId)}
           onCorrectDecision={props.onCorrectDecision}
           route={props.route?.groupId === view.summary.groupId ? props.route : null}
           onRouteChange={props.onRouteChange && ((region, taskId) => props.onRouteChange?.(view.summary.groupId, region, taskId))}

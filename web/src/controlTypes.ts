@@ -120,6 +120,8 @@ export type GroupSummaryV1 = {
   };
   /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
   dependsOn?: string[];
+  /** Tester #327: present (true) only once this group is done for its dependents (server prerequisiteDone): they stop waiting. */
+  landed?: true;
   /** Kanban spec 2026-10-20 §3.1-§3.4: present only on a group confirmed since start-on-confirm exists. */
   orchestration?: GroupOrchestrationV1;
   /** System debug task spec 2026-10-21 §3.5: present only on a debug group Orca opened itself. */
