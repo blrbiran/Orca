@@ -15,9 +15,11 @@
 export const COST_OUTLIER_MULTIPLE = 3;
 
 /**
- * A task that has run this long (all its runs together) is flagged whatever the median says: the tester's absolute line
- * (#321: "或 30 分钟"). It needs no comparable tasks, so it also covers the first tasks of a group and small groups, and
- * the reported review-fix task (27.7 minutes and still running) would have crossed it a few minutes later.
+ * A task that has run this long (all its runs together) is flagged when there is no median to compare it with: the
+ * tester's absolute line (#321: "或 30 分钟"), for the first tasks of a group and small groups. The reported review-fix
+ * task (27.7 minutes and still running) would have crossed it a few minutes later. Where a median exists only the
+ * multiple flags (controller ruling 2026-11-18): a group whose tasks all run long should not fill Problems with rows that
+ * say nothing relative.
  */
 export const COST_LONG_RUNNING_MS = 30 * 60_000;
 
@@ -102,7 +104,7 @@ export function taskCosts(runs: readonly CostRun[], now: number): TaskCost[] {
     const reasons: CostReason[] = [
       ...(tokensMultiple !== null && tokensMultiple >= COST_OUTLIER_MULTIPLE ? ["tokens-multiple" as const] : []),
       ...(timeMultiple !== null && timeMultiple >= COST_OUTLIER_MULTIPLE ? ["time-multiple" as const] : []),
-      ...(total.ms >= COST_LONG_RUNNING_MS ? ["long-running" as const] : []),
+      ...(!enough && total.ms >= COST_LONG_RUNNING_MS ? ["long-running" as const] : []),
     ];
     return { taskId, ...total, comparable: others.length, medianTokens, medianMs, tokensMultiple, timeMultiple, reasons };
   });

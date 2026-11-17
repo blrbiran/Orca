@@ -9,8 +9,8 @@ useFakePanels();
 
 const MIN = 60_000;
 const T8: TaskCost = { taskId: "T8", runs: 3, tokens: 14_503_083, ms: 55.4 * MIN, underWay: false, comparable: 5, medianTokens: 3_000_000, medianMs: 10 * MIN,
-  tokensMultiple: 14_503_083 / 3_000_000, timeMultiple: 5.54, reasons: ["tokens-multiple", "time-multiple", "long-running"] };
-const T8_LINE = "cost: task T8: 3 runs, 55 min, 14,503,083 tokens; group median over 5 finished other tasks: 3,000,000 tokens, 10 min; flagged: 4.8x the median tokens, 5.5x the median time, over 30 min (a notice: nothing was paused or stopped)";
+  tokensMultiple: 14_503_083 / 3_000_000, timeMultiple: 5.54, reasons: ["tokens-multiple", "time-multiple"] };
+const T8_LINE = "cost: task T8: 3 runs, 55 min, 14,503,083 tokens; group median over 5 finished other tasks: 3,000,000 tokens, 10 min; flagged: 4.8x the median tokens, 5.5x the median time (a notice: nothing was paused or stopped)";
 
 describe("the cost line (#321 C)", () => {
   it("says what the task cost, against what, and why it is flagged", () => {
@@ -20,6 +20,9 @@ describe("the cost line (#321 C)", () => {
   it("says how many comparable tasks there are when there is no median, and nothing flagged for an ordinary task", () => {
     expect(taskCostLine({ ...T8, runs: 1, underWay: true, comparable: 2, medianTokens: null, medianMs: null, tokensMultiple: null, timeMultiple: null, reasons: [] }))
       .toBe("cost: task T8: 1 run, 55 min, 14,503,083 tokens so far; 2 finished other tasks to compare with, 3 needed for a median");
+    // With no median, a task past 30 minutes is flagged by the absolute line.
+    expect(taskCostLine({ ...T8, runs: 1, comparable: 2, medianTokens: null, medianMs: null, tokensMultiple: null, timeMultiple: null, reasons: ["long-running"] }))
+      .toBe("cost: task T8: 1 run, 55 min, 14,503,083 tokens; 2 finished other tasks to compare with, 3 needed for a median; flagged: over 30 min (a notice: nothing was paused or stopped)");
   });
 });
 

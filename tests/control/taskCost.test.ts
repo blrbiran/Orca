@@ -25,9 +25,10 @@ describe("a task's cost against its group (#321 C)", () => {
     expect(t8).toMatchObject({ runs: 3, tokens: 14_503_083, comparable: 5, medianTokens: 3_000_000, medianMs: 10 * MIN, underWay: false });
     expect(t8.ms).toBeCloseTo(55.4 * MIN, -3);
     expect(t8.tokensMultiple).toBeCloseTo(4.83, 2);
-    // mutation: drop the "long-running" branch -> T8's reasons lose it (55 min is over 30)
     // mutation: drop the "time-multiple" branch -> T8's reasons lose it (5.5x the 10-minute median)
-    expect(t8.reasons).toEqual(["tokens-multiple", "time-multiple", "long-running"]);
+    // T8's 55 minutes are past the 30-minute line, but T8 has a median, so only the multiples flag it.
+    // mutation: drop the `!enough` gate of "long-running" -> it is added here -> red
+    expect(t8.reasons).toEqual(["tokens-multiple", "time-multiple"]);
     expect(costs.filter((cost) => cost.taskId !== "T8").every((cost) => cost.reasons.length === 0)).toBe(true);
     expect(costOutliers(GROUP, NOW).map((cost) => cost.taskId)).toEqual(["T8"]);
   });
@@ -43,9 +44,17 @@ describe("a task's cost against its group (#321 C)", () => {
     const c = taskCosts(few, NOW).find((cost) => cost.taskId === "C")!;
     // mutation: compare `others.length >= 1` -> a median of two tasks exists and C is flagged 9x -> red
     expect(c).toMatchObject({ comparable: 2, medianTokens: null, medianMs: null, tokensMultiple: null, timeMultiple: null });
-    // The absolute line needs no median: 31 minutes is past it.
+    // With no median the absolute line applies: 31 minutes is past it.
+    // mutation: drop the "long-running" branch -> [] -> red
     expect(c.reasons).toEqual(["long-running"]);
     expect(COST_LONG_RUNNING_MS).toBe(30 * MIN);
+  });
+
+  it("does not flag a long task in a group whose tasks all run long: with a median, only the multiple flags (controller ruling 2026-11-18)", () => {
+    const slow = [ended("A", 1_000_000, 35), ended("B", 1_000_000, 35), ended("C", 1_000_000, 35), ended("X", 1_000_000, 40)];
+    // 40 minutes is past the 30-minute line, but only 1.1x the 35-minute median.
+    // mutation: drop the `!enough` gate of "long-running" -> ["long-running"] -> red
+    expect(taskCosts(slow, NOW).find((cost) => cost.taskId === "X")).toMatchObject({ comparable: 3, medianMs: 35 * MIN, reasons: [] });
   });
 
   it(`flags at ${COST_OUTLIER_MULTIPLE}x the median and not below`, () => {
@@ -64,7 +73,8 @@ describe("a task's cost against its group (#321 C)", () => {
     // The review-fix task of the report, 27.7 minutes in: its booked 2 minutes lag, the wall clock does not.
     // mutation: drop the under-way branch of runMs -> 2 minutes -> red
     expect(costs.find((cost) => cost.taskId === "R")).toMatchObject({ underWay: true, ms: 28 * MIN, comparable: 3, reasons: [] });
-    expect(taskCosts(runs, NOW + 2 * MIN).find((cost) => cost.taskId === "R")!.reasons).toEqual(["long-running"]);
+    // Its time keeps growing with the clock: two minutes on, in a group without a median (A left out), it crosses 30.
+    expect(taskCosts(runs.slice(1), NOW + 2 * MIN).find((cost) => cost.taskId === "R")).toMatchObject({ comparable: 2, ms: 30 * MIN, reasons: ["long-running"] });
   });
 
   it("reads an ended run's booked time, or its wall-clock span only when none was booked", () => {
@@ -111,6 +121,7 @@ describe("group brief's costOutliers from stored runs (#321 C)", () => {
   it("counts a stored run under way from when it started", () => {
     const rows = [body("A", 1, 1), body("B", 1, 1), body("C", 1, 1), body("R", 1, 0, { state: "running", endedAt: undefined, startedAt: NOW - 31 * MIN })];
     // mutation: underWay false for every stored run -> R reads 0 minutes -> null -> red
-    expect(costOutliersOf(store(rows), "g", NOW)).toMatchObject([{ taskId: "R", underWay: true, reasons: ["time-multiple", "long-running"] }]);
+    // R has a median (A, B, C), so its 31 minutes flag only as a multiple of their 1 minute.
+    expect(costOutliersOf(store(rows), "g", NOW)).toMatchObject([{ taskId: "R", underWay: true, reasons: ["time-multiple"] }]);
   });
 });
