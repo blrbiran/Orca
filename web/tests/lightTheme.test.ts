@@ -84,10 +84,11 @@ const rgbOf = (v: string): string => {
 // the light selectors are ":root[data-theme=..." and ":root:not(...)", which do not contain ":root {".
 const darkBlock = blockOf(":root {");
 describe("category tints follow the palette (final review M7)", () => {
-  it("tints idle with --muted and done with --accent, in dark and both light blocks", () => {
+  // Correction (#318): done no longer wears the accent -- the selection's colour -- but the ok tone; the tint of every
+  // category is pinned per theme in themes.test.ts ("tints the dependency graph by meaning").
+  it("tints idle with --muted, in dark and both light blocks", () => {
     for (const block of [darkBlock, manual, system]) {
       expect(rgbOf(tok(block, "cat-idle"))).toBe(rgbOf(tok(block, "muted")));
-      expect(rgbOf(tok(block, "cat-done"))).toBe(rgbOf(tok(block, "accent")));
     }
   });
 });

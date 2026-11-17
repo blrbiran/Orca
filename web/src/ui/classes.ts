@@ -139,8 +139,8 @@ export const taskDetail = "border border-line-strong bg-elevated shadow-float";
 export const taskGoal = "inline-block max-w-[40ch] truncate align-bottom";
 /** A labelled token field: the hint and the field error sit under the label, outside it (final review M-T10). */
 export const tokenField = "mb-[10px] flex flex-col gap-1 text-xs text-muted [&>label]:mb-0";
-/** The dependency graph legend's swatch: a small outlined square filled with the category colour (the node rects stay in styles.css). */
-export const depSwatch = "mr-1 inline-block size-3 rounded-[3px] border border-line-strong align-middle";
+/** The dependency graph legend's swatch: a small outlined square; its fill and edge colour come per category (DependencyGraph's SWATCH_FILL, #318). */
+export const depSwatch = "mr-1 inline-block size-3 rounded-[3px] border align-middle";
 /** An inline confirm (a confirm group): an inset well with a firm edge, inline. Tone comes from data-tone. */
 export const confirmInline = "inline-flex flex-wrap items-center gap-2 rounded-control border px-[10px] py-[6px] [&>button]:ms-0";
 

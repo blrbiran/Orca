@@ -176,6 +176,26 @@ describe("each candidate theme is more than a palette", () => {
   });
 });
 
+// #318 (tester, dependency graph): done wore the accent blue the selection wears, running the green of success, and waiting
+// and blocked were both warm tints. Each category's tint now takes the tone its meaning names (DESIGN.md "Tone, not
+// role"): done = ok, running = info, blocked = danger; waiting is the neutral of idle (its dashed warn stroke, styles.css,
+// tells it from idle), so nothing warm stands beside blocked's red.
+describe.each(PINNED)("theme %s tints the dependency graph by meaning (#318)", (theme) => {
+  const { raw, c } = palette(theme);
+  const rgb = (name: string): string => {
+    const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),/.exec(raw(name));
+    return m ? `${m[1]},${m[2]},${m[3]}` : hex(raw(name)).join(",");
+  };
+  it("tints done with ok, running with info, blocked with danger, and waiting with idle's neutral", () => {
+    // mutation: give cat-done the accent's rgb again -> red; give cat-waiting the warn rgb again -> red
+    expect(rgb("cat-done"), "done").toBe(c("ok").join(","));
+    expect(rgb("cat-running"), "running").toBe(c("info").join(","));
+    expect(rgb("cat-blocked"), "blocked").toBe(c("danger").join(","));
+    expect(rgb("cat-waiting"), "waiting").toBe(rgb("cat-idle"));
+    expect(rgb("cat-done"), "done is not the selection's accent").not.toBe(c("accent").join(","));
+  });
+});
+
 describe.each(PINNED)("theme %s stays readable (WCAG AA)", (theme) => {
   const { c, over } = palette(theme);
   const card = c("card"), bg = c("bg"), well = c("well"), field = c("field"), hover = c("bg-hover"), elevated = c("bg-elevated");

@@ -131,9 +131,26 @@ describe("styles.css", () => {
   it("draws the open task and keyboard focus on one node's rect, never a focus ring around the <g>", () => {
     // mutation: back to ":focus-visible { outline: none }" only -> a click's ring returns, red
     expect(rule(".dep-node:focus")).toContain("outline: none");
-    const open = rule('.dep-node[aria-current="true"] rect');
-    for (const part of ["fill: color-mix(in srgb, var(--accent)", "stroke: var(--accent)", "stroke-width: 3"]) expect(open).toContain(part);
+    // #318 rewrote the open node's look (the test below): its accent fill and stroke were dropped; the heavier stroke stays.
+    expect(rule('.dep-node[aria-current="true"] rect')).toContain("stroke-width: 3");
     expect(rule(".dep-node:focus-visible rect")).toContain("stroke-dasharray");
+  });
+
+  // #318 (tester): selecting a node painted every node the same accent tint, so the open task no longer showed whether it
+  // was done or blocked; and done shared the accent's blue. The open node and keyboard focus now keep the node's own state
+  // fill and show only on the stroke; the strokes follow the tones (done ok, running info) and a waiting node's is dashed,
+  // so waiting reads apart from idle and from blocked even before its colour is seen.
+  it("keeps a node's state fill when it is open or focused, and strokes each state by its tone (#318)", () => {
+    // mutation: put a fill back on the open node's rule -> red
+    expect(rule('.dep-node[aria-current="true"] rect')).not.toContain("fill:");
+    expect(rule(".dep-node:focus-visible rect")).not.toContain("fill:");
+    expect(rule('.dep-node[aria-current="true"] rect')).toContain("stroke: var(--text-strong)");
+    // mutation: swap the strokes back (running ok, done info) -> red
+    expect(rule(".dep-running rect")).toContain("stroke: var(--info)");
+    expect(rule(".dep-done rect")).toContain("stroke: var(--ok)");
+    // mutation: drop the dash from waiting -> red
+    expect(rule(".dep-waiting rect")).toContain("stroke-dasharray");
+    expect(rule(".dep-blocked rect")).not.toContain("stroke-dasharray");
   });
 
   // Tester #64 (spec §24, session 3cd8fb02): the settings category list read as a third navigation column beside the

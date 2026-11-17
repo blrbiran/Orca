@@ -22,8 +22,10 @@ import { lineageRunNumber, shownWorkStatus } from "./runFacts.js";
 const NODE_W = 180, NODE_H = 104, GAP_X = 56, GAP_Y = 16, PAD = 8;
 // #232: an edge that skips a layer runs through it on a lane of its own, LANE_GAP apart, below that layer's last task.
 const LANE_GAP = 12;
+// #318: a swatch wears its node's fill AND edge (styles.css .dep-* rect), so the legend matches the nodes, the dash too.
 const SWATCH_FILL: Record<WorkItemCategoryV1, string> = {
-  idle: "bg-cat-idle", running: "bg-cat-running", waiting: "bg-cat-waiting", blocked: "bg-cat-blocked", done: "bg-cat-done",
+  idle: "bg-cat-idle border-line-strong", running: "bg-cat-running border-info", waiting: "bg-cat-waiting border-warn border-dashed",
+  blocked: "bg-cat-blocked border-danger", done: "bg-cat-done border-ok",
 };
 /** Spec §6.5: a current run quiet for longer than this is shown as making no progress. */
 const STALL_MS = 10 * 60_000;

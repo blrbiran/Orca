@@ -31,10 +31,10 @@
   --kind-3: #facc15;
   /* Issue-fixes spec §6.5: work-item category fills (over --card); web/tests/contrast.test.ts pins text on each. */
   --cat-idle: rgba(166, 168, 174, 0.18);
-  --cat-running: rgba(34, 197, 94, 0.28);
-  --cat-waiting: rgba(245, 158, 11, 0.28);
+  --cat-running: rgba(96, 165, 250, 0.28);
+  --cat-waiting: rgba(166, 168, 174, 0.32);
   --cat-blocked: rgba(248, 113, 113, 0.30);
-  --cat-done: rgba(96, 165, 250, 0.28);
+  --cat-done: rgba(34, 197, 94, 0.28);
   --stall: #fbbf24;
   --accent-hover: #93c5fd; /* a filled primary on hover; --on-accent stays readable on it (contrast.test.ts) */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
@@ -70,8 +70,8 @@
   --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
   --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
   --kind-1: #dc2626; --kind-2: #ea580c; --kind-3: #ca8a04; --on-accent: #ffffff;
-  --cat-idle: rgba(106, 100, 90, 0.12); --cat-running: rgba(21, 128, 61, 0.16); --cat-waiting: rgba(180, 83, 9, 0.16);
-  --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(29, 78, 216, 0.14);
+  --cat-idle: rgba(106, 100, 90, 0.12); --cat-running: rgba(29, 78, 216, 0.14); --cat-waiting: rgba(106, 100, 90, 0.24);
+  --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(21, 128, 61, 0.16);
   --stall: #92400e;
   --ok-subtle: rgba(21, 128, 61, 0.08); --warn-subtle: rgba(180, 83, 9, 0.08); --danger-subtle: rgba(185, 28, 28, 0.08); --info-subtle: rgba(29, 78, 216, 0.08);
   --shadow: 0 1px 2px rgba(28, 26, 23, 0.08);
@@ -86,8 +86,8 @@
     --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
     --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
     --kind-1: #dc2626; --kind-2: #ea580c; --kind-3: #ca8a04; --on-accent: #ffffff;
-    --cat-idle: rgba(106, 100, 90, 0.12); --cat-running: rgba(21, 128, 61, 0.16); --cat-waiting: rgba(180, 83, 9, 0.16);
-    --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(29, 78, 216, 0.14);
+    --cat-idle: rgba(106, 100, 90, 0.12); --cat-running: rgba(29, 78, 216, 0.14); --cat-waiting: rgba(106, 100, 90, 0.24);
+    --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(21, 128, 61, 0.16);
     --stall: #92400e;
     --ok-subtle: rgba(21, 128, 61, 0.08); --warn-subtle: rgba(180, 83, 9, 0.08); --danger-subtle: rgba(185, 28, 28, 0.08); --info-subtle: rgba(29, 78, 216, 0.08);
     --shadow: 0 1px 2px rgba(28, 26, 23, 0.08);
@@ -110,8 +110,8 @@
   --accent: #0b5cd5; --accent-subtle: rgba(11, 92, 213, 0.1); --accent-hover: #0847a8; --on-accent: #ffffff;
   --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #0b5cd5;
   --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
-  --cat-idle: rgba(85, 96, 114, 0.12); --cat-running: rgba(19, 122, 58, 0.15); --cat-waiting: rgba(161, 77, 6, 0.15);
-  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(11, 92, 213, 0.13);
+  --cat-idle: rgba(85, 96, 114, 0.12); --cat-running: rgba(11, 92, 213, 0.13); --cat-waiting: rgba(85, 96, 114, 0.24);
+  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(19, 122, 58, 0.15);
   --stall: #8a3c04;
   --ok-subtle: rgba(19, 122, 58, 0.08); --warn-subtle: rgba(161, 77, 6, 0.08); --danger-subtle: rgba(180, 35, 24, 0.07); --info-subtle: rgba(11, 92, 213, 0.07);
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04); --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.14), 0 2px 6px rgba(16, 24, 40, 0.06);
@@ -128,8 +128,8 @@
   --accent: #b8255a; --accent-subtle: rgba(184, 37, 90, 0.1); --accent-hover: #951b48; --on-accent: #ffffff;
   --ok: #17763a; --warn: #a14a0c; --danger: #b3261e; --info: #2754c5;
   --kind-1: #d63a4f; --kind-2: #e0662a; --kind-3: #b3820a;
-  --cat-idle: rgba(115, 88, 97, 0.12); --cat-running: rgba(23, 118, 58, 0.15); --cat-waiting: rgba(161, 74, 12, 0.15);
-  --cat-blocked: rgba(179, 38, 30, 0.14); --cat-done: rgba(184, 37, 90, 0.13);
+  --cat-idle: rgba(115, 88, 97, 0.12); --cat-running: rgba(39, 84, 197, 0.13); --cat-waiting: rgba(115, 88, 97, 0.24);
+  --cat-blocked: rgba(179, 38, 30, 0.14); --cat-done: rgba(23, 118, 58, 0.15);
   --stall: #873b06;
   --ok-subtle: rgba(23, 118, 58, 0.08); --warn-subtle: rgba(161, 74, 12, 0.08); --danger-subtle: rgba(179, 38, 30, 0.07); --info-subtle: rgba(39, 84, 197, 0.07);
   --shadow: 0 1px 3px rgba(58, 30, 38, 0.07); --shadow-pop: 0 14px 36px rgba(58, 30, 38, 0.14), 0 2px 6px rgba(58, 30, 38, 0.06);
@@ -149,8 +149,8 @@
   --accent: #5a4ee0; --accent-subtle: rgba(132, 122, 255, 0.14); --accent-hover: #463bc2; --on-accent: #ffffff;
   --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #2f5bd3;
   --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
-  --cat-idle: rgba(91, 86, 118, 0.12); --cat-running: rgba(19, 122, 58, 0.15); --cat-waiting: rgba(161, 77, 6, 0.15);
-  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(90, 78, 224, 0.13);
+  --cat-idle: rgba(91, 86, 118, 0.12); --cat-running: rgba(47, 91, 211, 0.13); --cat-waiting: rgba(91, 86, 118, 0.24);
+  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(19, 122, 58, 0.15);
   --stall: #8a3c04;
   --ok-subtle: rgba(19, 122, 58, 0.08); --warn-subtle: rgba(161, 77, 6, 0.08); --danger-subtle: rgba(180, 35, 24, 0.07); --info-subtle: rgba(47, 91, 211, 0.07);
   --shadow: 0 1px 2px rgba(42, 38, 64, 0.05); --shadow-pop: 0 14px 36px rgba(42, 38, 64, 0.14), 0 2px 6px rgba(42, 38, 64, 0.06);
@@ -167,8 +167,8 @@
   --accent: #9792ff; --accent-subtle: rgba(151, 146, 255, 0.22); --accent-hover: #b8b5ff; --on-accent: #0f0d26;
   --ok: #4cc38a; --warn: #f2b84b; --danger: #f2777a; --info: #82aaff;
   --kind-1: #f2777a; --kind-2: #f59e66; --kind-3: #e8cc5a;
-  --cat-idle: rgba(163, 163, 184, 0.16); --cat-running: rgba(76, 195, 138, 0.22); --cat-waiting: rgba(242, 184, 75, 0.22);
-  --cat-blocked: rgba(242, 119, 122, 0.26); --cat-done: rgba(151, 146, 255, 0.24);
+  --cat-idle: rgba(163, 163, 184, 0.16); --cat-running: rgba(130, 170, 255, 0.24); --cat-waiting: rgba(163, 163, 184, 0.3);
+  --cat-blocked: rgba(242, 119, 122, 0.26); --cat-done: rgba(76, 195, 138, 0.22);
   --stall: #f5c96a;
   --ok-subtle: rgba(76, 195, 138, 0.09); --warn-subtle: rgba(242, 184, 75, 0.09); --danger-subtle: rgba(242, 119, 122, 0.1); --info-subtle: rgba(130, 170, 255, 0.1);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(151, 146, 255, 0.14);
@@ -187,8 +187,8 @@
   --accent: #b9a8fa; --accent-subtle: rgba(185, 168, 250, 0.2); --accent-hover: #d2c7fc; --on-accent: #1d1933;
   --ok: #86d9a0; --warn: #f2c66d; --danger: #f29a9a; --info: #9ec2f5;
   --kind-1: #f29a9a; --kind-2: #f5b88a; --kind-3: #f2d77a;
-  --cat-idle: rgba(182, 187, 201, 0.16); --cat-running: rgba(134, 217, 160, 0.2); --cat-waiting: rgba(242, 198, 109, 0.2);
-  --cat-blocked: rgba(242, 154, 154, 0.22); --cat-done: rgba(185, 168, 250, 0.22);
+  --cat-idle: rgba(182, 187, 201, 0.16); --cat-running: rgba(158, 194, 245, 0.22); --cat-waiting: rgba(182, 187, 201, 0.3);
+  --cat-blocked: rgba(242, 154, 154, 0.22); --cat-done: rgba(134, 217, 160, 0.2);
   --stall: #f5d48f;
   --ok-subtle: rgba(134, 217, 160, 0.09); --warn-subtle: rgba(242, 198, 109, 0.09); --danger-subtle: rgba(242, 154, 154, 0.1); --info-subtle: rgba(158, 194, 245, 0.1);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.25); --shadow-pop: 0 14px 36px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
@@ -206,8 +206,8 @@
   --accent: #ff9152; --accent-subtle: rgba(255, 145, 82, 0.18); --accent-hover: #ffb184; --on-accent: #1e0d04;
   --ok: #7ed492; --warn: #f7c948; --danger: #ff7f70; --info: #93bdf2;
   --kind-1: #ff7f70; --kind-2: #ff9152; --kind-3: #f7c948;
-  --cat-idle: rgba(191, 162, 146, 0.16); --cat-running: rgba(126, 212, 146, 0.22); --cat-waiting: rgba(247, 201, 72, 0.22);
-  --cat-blocked: rgba(255, 127, 112, 0.26); --cat-done: rgba(255, 145, 82, 0.24);
+  --cat-idle: rgba(191, 162, 146, 0.16); --cat-running: rgba(147, 189, 242, 0.24); --cat-waiting: rgba(191, 162, 146, 0.3);
+  --cat-blocked: rgba(255, 127, 112, 0.26); --cat-done: rgba(126, 212, 146, 0.22);
   --stall: #f7d277;
   --ok-subtle: rgba(126, 212, 146, 0.09); --warn-subtle: rgba(247, 201, 72, 0.09); --danger-subtle: rgba(255, 127, 112, 0.1); --info-subtle: rgba(147, 189, 242, 0.1);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -342,12 +342,13 @@ tbody tr:hover > td { background: color-mix(in srgb, var(--bg-hover) 55%, transp
 .dep-node text { fill: var(--text-strong); font-size: var(--text-sm); font-family: var(--mono); }
 .dep-node text.dep-goal, .dep-node text.dep-status, .dep-node text.dep-detail { fill: var(--text); font-family: var(--font); font-size: var(--text-xs); }
 .dep-node text.dep-stall { fill: var(--stall); font-family: var(--font); font-size: var(--text-xs); }
-/* Issue-fixes spec §6.5: the fill is the §6.1 category; the stroke repeats it. */
+/* Issue-fixes spec §6.5: the fill is the §6.1 category; the stroke repeats it. #318: by tone -- done ok, running info,
+   blocked danger; waiting has idle's neutral fill and a dashed warn stroke, so nothing warm stands beside blocked's red. */
 .dep-idle rect { fill: var(--cat-idle); stroke: var(--border-strong); }
-.dep-running rect { fill: var(--cat-running); stroke: var(--ok); }
-.dep-waiting rect { fill: var(--cat-waiting); stroke: var(--warn); }
+.dep-running rect { fill: var(--cat-running); stroke: var(--info); }
+.dep-waiting rect { fill: var(--cat-waiting); stroke: var(--warn); stroke-dasharray: 6 3; }
 .dep-blocked rect { fill: var(--cat-blocked); stroke: var(--danger); }
-.dep-done rect { fill: var(--cat-done); stroke: var(--info); }
+.dep-done rect { fill: var(--cat-done); stroke: var(--ok); }
 @keyframes dep-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 .dep-node.dep-running rect { animation: dep-pulse 2.4s ease-in-out infinite; }
 /* Tester #84 (spec 2026-11-11-tester-followup-e-design.md §10; DESIGN.md motion correction): an overlay (src/ui/Dialog,
@@ -374,9 +375,10 @@ details[open] > :not(summary) { animation: fade-in var(--dur) var(--ease); }
    so a keyboard focus is drawn on the node's own rect instead, dashed so it reads apart from the selection. */
 /* Tester #75: a node answers the pointer and the keyboard. Above the current node's rule, which keeps its own look. */
 .dep-node:hover rect { stroke: var(--accent); stroke-width: 2.5; }
-.dep-node[aria-current="true"] rect { fill: color-mix(in srgb, var(--accent) 16%, var(--card)); stroke: var(--accent); stroke-width: 3; }
+/* #318: the open node and keyboard focus keep the node's own state fill; only the stroke shows them. */
+.dep-node[aria-current="true"] rect { stroke: var(--text-strong); stroke-width: 3; }
 .dep-node:focus { outline: none; }
-.dep-node:focus-visible rect { fill: color-mix(in srgb, var(--accent) 10%, var(--card)); stroke: var(--text-strong); stroke-width: 2; stroke-dasharray: 5 3; }
+.dep-node:focus-visible rect { stroke: var(--text-strong); stroke-width: 2; stroke-dasharray: 5 3; }
 .dep-edge { fill: none; stroke: var(--muted); stroke-width: 1.5; }
 .dep-arrow { fill: var(--muted); }
 
