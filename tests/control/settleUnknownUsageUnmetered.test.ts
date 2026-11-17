@@ -54,6 +54,20 @@ describe("unmetered release of an unlimited run's unknown usage", () => {
     } finally { await x.h.dispose(); }
   });
 
+  // Tester #348 review (minor): an unreadable run is left out of the view's runs, but the ledger's count of runs booked
+  // unmetered says what the ledger holds -- it is read from the stored rows, so such a run still counts.
+  it("counts a released run as unmetered even when the read schema cannot decode its body (#348)", async () => {
+    const { x, id } = await unlimitedUnknown(); try {
+      expect(await settleAs(x, id, "release-unmetered")).not.toHaveProperty("error");
+      x.h.store.db.prepare("UPDATE runs SET body=json_set(body,'$.futureKey',1) WHERE id=?").run(id);
+      const view = readControlGroup(x.h.store, "epoch", "g");
+      expect(view.runs.map((run) => run.runId)).not.toContain(id);
+      expect(view.unreadableRuns?.map((entry) => entry.runId)).toEqual([id]);
+      // mutation: count unmeteredRuns from view.runs again -> 0, red
+      expect(view.ledger.unmeteredRuns).toBe(1);
+    } finally { await x.h.dispose(); }
+  });
+
   it("admits a retry after the release; the next run inherits only the observed work usage", async () => {
     const { x, id, driver } = await unlimitedUnknown(); try {
       expect(x.body(id).cumulative.work).toEqual({ tokens: 10, activeMs: 5, attempts: 1, sessions: 1 });

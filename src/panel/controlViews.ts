@@ -1632,7 +1632,12 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // work item, its task (null when the item is not a task: a probe, an estimate, a requirement call) and why. Absent when none.
     ...((unreadable) => unreadable.length === 0 ? {} : { unreadableRuns: unreadable })(unreadableRunsOf(readSnapshot)),
   };
-  view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
+  // Tester #348 review: counted from the stored rows, so a run left out of `runs` as unreadable still counts; a readable
+  // run's marker was already checked above (runViews refuses an invalid settlement). A body that is not JSON cannot say.
+  view.ledger.unmeteredRuns = readSnapshot.runsByRowid.filter(row => {
+    const result = readSnapshot.decodeRun(String(row.id));
+    return result?.ok === true && (result.value as { usageSettlement?: { method?: unknown } } | null)?.usageSettlement?.method === "owner-acknowledged-unmetered";
+  }).length;
   deriveExpectations(view, readSnapshot);
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
