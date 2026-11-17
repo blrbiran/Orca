@@ -9,7 +9,9 @@ import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedReconcileSlot } from "./executionSnapshot.js";
 import { acceptanceCommands, clearGroupFailure, logGroupFailureOnce, recordWorkBranchMissing, workBranchKnownMissing } from "./groupAcceptance.js";
-import { acceptanceOf, acceptanceSatisfied } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, acceptanceSatisfied, deliveredAcceptanceOf, deliveredAcceptanceTarget } from "./groupAcceptanceRecord.js";
+import { gitOk, isAncestor, refTip } from "./integrationGit.js";
+import { readGroupIntegration } from "./integrationScheme.js";
 import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
 import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
@@ -103,9 +105,11 @@ export interface ReviewPlanTask { taskId: string; title: string; dependsOn: stri
 export interface ReviewPlan { layers: string[][]; tasks: ReviewPlanTask[] }
 export function buildReviewPrompt(input: { idea: string; statement: string; criteria: ReadonlyArray<{ id: string; text: string }>; openBranches: readonly string[];
   changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean;
-  acceptanceBaseline?: { command: string; tail?: string; tipTail?: string }; plan?: ReviewPlan | null }): string {
+  acceptanceBaseline?: { command: string; tail?: string; tipTail?: string }; plan?: ReviewPlan | null; facts?: readonly string[] }): string {
   return [
     "You are Orca's requirement reviewer. A group of tasks implemented the requirement below; its tasks' checks passed on the result.",
+    // Delivery tail D4 (#336, #337 prompt half): evidence is not only the diff.
+    "Evidence may be a file's content, a file's metadata (path, size, hash), a command's recorded result, or a delivery Orca recorded -- each section below says which.",
     ...(input.acceptanceFailed === true ? ["Group acceptance failed on this tip (a project-wide check, possibly one that was already failing). Judge the criteria from the delivered work below anyway."] : []),
     ...(input.acceptanceBaseline === undefined ? [] : [`Project-wide check ${JSON.stringify(input.acceptanceBaseline.command)} failed at the group's base and on this tip. This alone does not prove the failures are the same. Base failure: ${input.acceptanceBaseline.tail ?? "(no output)"}. Tip failure: ${input.acceptanceBaseline.tipTail ?? "(no output)"}.`]),
     "Treat the person's explicit restrictions in the original requirement as binding, even if a check cannot pass without violating them. Never silently repair a forbidden pre-existing failure just to turn a check green.",
@@ -123,6 +127,7 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
       `Layers (tasks in one layer may run together; every earlier layer finishes first): ${input.plan.layers.map((layer, index) => `${index + 1}: ${layer.join(", ")}`).join("; ")}`,
       ...input.plan.tasks.map((task) => `- ${task.taskId} (${task.title}): depends on ${task.dependsOn.length === 0 ? "nothing" : task.dependsOn.join(", ")}; writes ${task.targetPaths.join(", ")}; checks ${task.checks.join(" | ")}; success: ${task.successCondition}`),
     ]),
+    ...(input.facts === undefined || input.facts.length === 0 ? [] : ["", "What Orca recorded beyond the diff:", ...input.facts]),
     "",
     "Files the group changed (status, path, bytes, sha256):",
     ...input.changedFiles.map((f) => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${f.binary ? " (binary: named only, its bytes are not shown)" : ""}`),
@@ -132,9 +137,9 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     ...(input.truncated ? [`(The diff was cut at ${REVIEW_DIFF_MAX_BYTES} bytes; what follows was not shown to you.)`] : []),
     "",
     "Answer with a JSON object {\"criteria\": [{\"id\", \"verdict\", \"evidence\", \"missing\"}], \"summary\"}.",
-    "- verdict met: name the evidence (file path and line, or the artefact path). missing is null.",
+    "- verdict met: name the evidence (file path and line, or the artefact path; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null}). missing is null.",
     "- verdict not-met: name the evidence you looked at and say in `missing` what is still needed.",
-    "- verdict cannot-judge: when what is shown is not enough (for example a criterion that hinges on a binary file you cannot see).",
+    "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would.",
     "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",
   ].join("\n");
@@ -273,6 +278,9 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       const accepted = acceptanceOf(body);
       if (accepted !== null && accepted.tip !== null && accepted.tip !== tip) continue;
       if (review?.state === "fixing" && accepted?.tip !== tip) continue;
+      // Delivery tail spec D2 (human ruling 1): a satisfied tip waits for its delivery to settle, so a criterion about the
+      // delivery is judged when it can be true. A failed acceptance (#314) opens the review at once: it is never delivered.
+      if (acceptanceSatisfied(store, groupId, body) && !(await deliverySettled(deps.resolveRepository(groupRepoId(store, groupId)), body, tip))) continue;
       deps.write(() => {
         const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body))) ?? { state: "pending" as const, rounds: [], autoFixRounds: 0 };
         const roundNo = current.rounds.length + 1, at = store.now();
@@ -340,6 +348,81 @@ function closeUnpreparedReview(deps: ReviewPassDeps, groupId: string, review: Re
   });
 }
 
+/** D2/Correction 1.5: after this many consecutive transient failures, the review no longer waits for the delivery. */
+export const REVIEW_TRANSIENT_OPENS = 3;
+
+/**
+ * Delivery tail spec D2 (Correction 1.1, 1.5): whether the delivery of `tip` settled for the review's purpose -- no frozen
+ * delivery (keep); blocked or conflicted (it goes ahead and is told why); a delivery that has failed transiently
+ * REVIEW_TRANSIENT_OPENS times; the tip delivered (a history chain published for it), and its delivered acceptance recorded
+ * when D3 applies; or the tip already in the target by local refs (nothing to carry). Otherwise it waits.
+ */
+async function deliverySettled(repo: string, body: unknown, tip: string): Promise<boolean> {
+  const integration = readGroupIntegration(body);
+  if (integration === null || !integration.frozen) return true;
+  if (integration.state === "blocked" || integration.state === "conflict") return true;
+  if (integration.transient >= REVIEW_TRANSIENT_OPENS) return true;
+  if (integration.state !== "idle") return false;
+  const delivered = integration.historyPublished !== undefined ? integration.historyPublished.groupTip === tip
+    : integration.lastIntegrated === tip && integration.pending === null;
+  if (delivered) {
+    const target = deliveredAcceptanceTarget(body);
+    if (target === null || target.tip !== tip) return true;
+    const record = deliveredAcceptanceOf(body);
+    return record !== null && record.tip === target.tip && record.commit === target.commit;
+  }
+  const scheme = integration.scheme;
+  if (scheme.delivery === "keep" || integration.pending !== null) return false;
+  for (const ref of [`refs/heads/${scheme.target}`, ...("remote" in scheme ? [`refs/remotes/${scheme.remote}/${scheme.target}`] : [])]) {
+    const at = await refTip(repo, ref);
+    if (at !== null && await isAncestor(repo, tip, at)) return true;
+  }
+  return false;
+}
+
+/**
+ * Delivery tail spec D4: what Orca recorded beyond the diff, as lines -- in words that assume no language or test framework:
+ * the acceptance on the reviewed tip (each command, its exit and time), the delivery (scheme, and delivered / not yet /
+ * failed / backing off), and the acceptance on the delivered commit. Only what is known is said.
+ */
+async function reviewFacts(repo: string, body: unknown, tip: string): Promise<string[]> {
+  const lines: string[] = [];
+  const short = (commit: string): string => commit.slice(0, 12);
+  const commandLines = (commands: ReadonlyArray<{ command: string; exit: string; ms: number }>) =>
+    commands.map((c) => `  - \`${cutUtf8(c.command, 300)}\` -> exit ${c.exit} (${c.ms} ms)`);
+  const accepted = acceptanceOf(body);
+  if (accepted !== null && (accepted.tip === tip || accepted.tip === null)) {
+    lines.push(`Acceptance on the reviewed tip ${short(tip)}: ${accepted.result}${accepted.why === undefined ? "" : ` (${accepted.why})`}`, ...commandLines(accepted.commands));
+    const suite = accepted.fullSuite;
+    if (suite?.command != null) lines.push(`  full suite \`${cutUtf8(suite.command, 300)}\`: exits ${suite.exits.join(", ") || "none"}${suite.baseline === undefined ? "" : `; at the group's base: exits ${suite.baseline.exits.join(", ")}`}`);
+  }
+  const integration = readGroupIntegration(body);
+  if (integration === null) { lines.push(`Delivery: none configured -- the work stays on orca/<group>.`); return lines; }
+  const scheme = integration.scheme;
+  if (scheme.delivery === "keep") { lines.push(`Delivery: none configured -- the work stays on orca/<group>.`); return lines; }
+  lines.push(`Delivery scheme: ${scheme.delivery}${"method" in scheme ? ` ${scheme.method}` : ""} into ${scheme.target}${"remote" in scheme ? ` on ${scheme.remote}` : ""}`);
+  const delivered = integration.historyPublished !== undefined ? integration.historyPublished.groupTip === tip
+    : integration.lastIntegrated === tip && integration.pending === null;
+  if (integration.state === "blocked" || integration.state === "conflict") lines.push(`- not delivered: ${integration.state} (${integration.reason ?? "no reason recorded"})`);
+  else if (delivered && integration.integratedCommit !== null) {
+    let parents = "?";
+    try { parents = String((await gitOk(repo, ["rev-list", "--parents", "-n", "1", integration.integratedCommit])).trim().split(/\s+/).length - 1); } catch { /* named as unknown */ }
+    lines.push(`- delivered as ${integration.integratedCommit} (${parents} parents) on ${scheme.target}${integration.pr === null ? "" : `; pull request #${integration.pr.number} (${integration.pr.ready ? "ready" : "draft"}) ${integration.pr.url}`}`);
+  } else if (delivered) lines.push(`- delivered: the tip ${short(tip)} is in ${scheme.target}`);
+  else if (integration.retryAfter !== null) {
+    const at = new Date(integration.retryAfter);
+    lines.push(`- not delivered: retrying at ${Number.isNaN(at.getTime()) ? String(integration.retryAfter) : at.toISOString()} (${integration.transientReason ?? "no message recorded"})`);
+  }
+  else lines.push(`- not delivered yet${integration.lastIntegrated === null ? "" : `; last delivered work commit ${short(integration.lastIntegrated)}`}`);
+  const target = deliveredAcceptanceTarget(body), record = deliveredAcceptanceOf(body);
+  if (target !== null && target.tip === tip && record !== null && record.tip === target.tip && record.commit === target.commit) {
+    lines.push(record.result === "not-needed"
+      ? `Acceptance on the delivered commit: not needed (${record.why === "same-tree" ? "the delivered tree equals the reviewed tip's" : "the target already held the reviewed tip"})`
+      : `Acceptance on the delivered commit ${short(record.commit)}: ${record.result}`, ...commandLines(record.commands));
+  }
+  return lines;
+}
+
 const reviewIdentity = (run: SingleCallRunRow): { roundNo: number; tip: string } => {
   const r = run.requirementReview as { roundNo?: unknown; tip?: unknown } | undefined;
   if (typeof r?.roundNo !== "number" || typeof r.tip !== "string") throw new ControlError("recovery-blocked", "requirement-review-identity");
@@ -386,10 +469,11 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const contract = readGroupCallContract(deps.store, run.groupId, run.workItemId);
     const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
     const changes = await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip);
+    const facts = await reviewFacts(repo, body, tip);
     const acceptance = acceptanceOf(body);
     const baseline = acceptance?.result === "passed-relative" ? acceptance.fullSuite?.baseline : undefined;
     return {
-      prompt: buildReviewPrompt({ ...inputs, ...changes, ...(typeof contract?.note === "string" ? { note: contract.note } : {}),
+      prompt: buildReviewPrompt({ ...inputs, ...changes, facts, ...(typeof contract?.note === "string" ? { note: contract.note } : {}),
         acceptanceFailed: acceptance?.result === "failed",
         ...(baseline === undefined || acceptance?.fullSuite?.command === null || acceptance?.fullSuite?.command === undefined ? {} :
           { acceptanceBaseline: { command: acceptance.fullSuite.command, ...(baseline.tail === undefined ? {} : { tail: cutUtf8(baseline.tail, 2_000) }),
