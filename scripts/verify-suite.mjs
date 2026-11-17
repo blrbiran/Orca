@@ -25,6 +25,8 @@ const result = spawnSync("node_modules/.bin/vitest", ["run", "--reporter=default
     ORCA_CONTROL_VERIFY: "1",
     ORCA_CHAIN_ID: "chain-deadbeef",
     ORCA_CHAIN_SESSION: "deadbeef-0000-4000-8000-000000000000",
+    // Ruling: human 2026-11-17 (test pruning) -- release-only cases (tests/helpers/releaseGate.ts) run in this pass only.
+    ORCA_RELEASE_GATE: "1",
   },
 });
 if (result.error) console.error(result.error);

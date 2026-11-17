@@ -82,7 +82,7 @@ describe("scripts/check-gate-env.mjs (the up-front refusal verify:control had, n
 const FAKE_VITEST = String.raw`#!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
-const keys = ["ORCA_CONTROL_VERIFY", "ORCA_CHAIN_ID", "ORCA_CHAIN_SESSION"];
+const keys = ["ORCA_CONTROL_VERIFY", "ORCA_CHAIN_ID", "ORCA_CHAIN_SESSION", "ORCA_RELEASE_GATE"];
 const env = Object.fromEntries(keys.map((k) => [k, process.env[k] ?? null]));
 const argv = process.argv.slice(2);
 fs.appendFileSync(process.env.FAKE_VITEST_LOG, JSON.stringify({ argv, env }) + "\n");
@@ -109,13 +109,15 @@ describe("scripts/verify-suite.mjs", () => {
   const calls = (log: string) => readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { argv: string[]; env: Record<string, string | null> });
   const reporters = (report: string) => ["--reporter=default", "--reporter=json", `--outputFile.json=${report}`];
 
-  it("runs vitest exactly once over the whole suite with formal control and a chain session's two variables set", () => {
+  // Ruling: human 2026-11-17 (test pruning) -- ORCA_RELEASE_GATE=1 arms the release-only cases (tests/helpers/releaseGate.ts);
+  // a pass without it would skip them and still go green.
+  it("runs vitest exactly once over the whole suite with formal control, a chain session's two variables and the release-only cases armed", () => {
     const { root, log, report } = fixture();
     const r = run("verify-suite.mjs", { FAKE_VITEST_LOG: log, ORCA_SUITE_REPORT: report, FAKE_REPORT_FILES: ARMED_FILES }, root);
     expect(r.code, r.out).toBe(0);
     expect(calls(log)).toEqual([{
       argv: ["run", ...reporters(report)],
-      env: { ORCA_CONTROL_VERIFY: "1", ORCA_CHAIN_ID: "chain-deadbeef", ORCA_CHAIN_SESSION: "deadbeef-0000-4000-8000-000000000000" },
+      env: { ORCA_CONTROL_VERIFY: "1", ORCA_CHAIN_ID: "chain-deadbeef", ORCA_CHAIN_SESSION: "deadbeef-0000-4000-8000-000000000000", ORCA_RELEASE_GATE: "1" },
     }]);
   });
 
