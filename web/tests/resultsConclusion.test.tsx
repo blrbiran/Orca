@@ -64,7 +64,7 @@ describe("the conclusion card (#319 proposal 1)", () => {
     const value = done(); if (scheme !== undefined) value.integration = integration(scheme);
     show(value);
     // mutation: the card words the scheme itself (drops when / method) -> red
-    expect(line("delivery").textContent).toBe(said);
+    expect(line("delivery-sentence").textContent).toBe(said);
     expect(said).toBe(integrationSentence(scheme ?? { delivery: "keep" }, "g"));
   });
 
@@ -131,16 +131,20 @@ describe("the conclusion card (#319 proposal 1)", () => {
     expect(screen.getByRole("region", { name: "Task a" })).toBeTruthy();
   });
 
-  it("says a finished keep group's merge is the person's, with no button for it", () => {
+  // Re-review ruling: "Waiting for you" claims no more than the server's needs-you; the merge Orca leaves to the person is
+  // a fact of the delivery, so it is said under the delivery sentence.
+  it("says a finished keep group's merge is the person's under Delivery, with no button, and not as waiting", () => {
     show(done());
     // mutation: drop the keep merge line -> red
-    expect(line("waiting").textContent).toBe("Merging orca/g into your main branch is yours; Orca does not do it");
-    expect(within(line("waiting") as HTMLElement).queryAllByRole("button")).toEqual([]);
+    expect(line("merge").textContent).toBe("Merging orca/g into your main branch is yours; Orca does not do it");
+    expect(within(line("delivery") as HTMLElement).queryAllByRole("button")).toEqual([]);
+    // mutation: the merge line back among the waiting lines -> red
+    expect(line("waiting").textContent).toBe("Nothing");
     cleanup();
     const running = done(); running.summary.state = "running";
     show(running);
     // mutation: drop the `state === "done"` condition -> red
-    expect(line("waiting").textContent).toBe("Nothing");
+    expect(card().querySelector('[data-conclusion="merge"]')).toBeNull();
   });
 
   // Review fix 3: a done push-branch group and a github-pr group with a ready PR also leave the merge to the person.
@@ -148,21 +152,24 @@ describe("the conclusion card (#319 proposal 1)", () => {
     const pushed = done(); pushed.integration = integration({ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" });
     show(pushed);
     // mutation: drop the push-branch merge line -> red
-    expect(line("waiting").textContent).toBe("Merging orca/g into main is yours; Orca only pushes it to origin");
+    expect(line("merge").textContent).toBe("Merging orca/g into main is yours; Orca only pushes it to origin");
+    expect(line("waiting").textContent).toBe("Nothing");
     cleanup();
+    const merge = () => card().querySelector('[data-conclusion="merge"]');
     const pushing = done(); pushing.summary.state = "running"; pushing.integration = integration({ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" });
     show(pushing);
     // mutation: drop its `state === "done"` condition -> red
-    expect(line("waiting").textContent).toBe("Nothing");
+    expect(merge()).toBeNull();
     cleanup();
     const pr = (ready: boolean) => { const value = done(); value.integration = integration({ delivery: "github-pr", trigger: "task", target: "main", remote: "origin" }, { pr: { url: "https://github.com/o/r/pull/7", number: 7, ready } }); return value; };
     show(pr(true));
     // mutation: drop the pull request merge line -> red
-    expect(line("waiting").textContent).toBe("Merging pull request #7 is yours");
+    expect(line("merge").textContent).toBe("Merging pull request #7 is yours");
+    expect(line("waiting").textContent).toBe("Nothing");
     cleanup();
     show(pr(false));
     // mutation: drop its `ready` condition (a draft is still Orca's to update) -> red
-    expect(line("waiting").textContent).toBe("Nothing");
+    expect(merge()).toBeNull();
   });
 
   // Review fix 1: the card never says Nothing while the server's needs-you rule holds; it names what it can.
@@ -225,6 +232,15 @@ describe("the conclusion card (#319 proposal 1)", () => {
     show(value, { failed: "control-unavailable" });
     expect(line("waiting").textContent).toBe("Decisions could not be read (control-unavailable)");
   });
+  // Re-review Minor 1: a failed read says nothing about what waits, so it does not stand in for the needs-you fallback.
+  it("still says something waits when the group needs you and the only other line is a failed decisions read", () => {
+    const value = done(); value.summary.state = "running"; value.summary.needsYou = true;
+    value.integration = integration({ delivery: "local", trigger: "group", method: "merge", target: "main" });
+    show(value, { failed: "control-unavailable" });
+    // mutation: the failed-read line counts toward the fallback's check -> no fallback, red
+    expect([...line("waiting").querySelectorAll("li")].map((li) => li.firstChild?.textContent))
+      .toEqual(["Decisions could not be read (control-unavailable)", "Something waits for you"]);
+  });
 
   it("gives the work branch and its accepted tip, short with the full sha on hover, each copyable", () => {
     show(done());
@@ -286,8 +302,9 @@ describe("the conclusion card (#319 proposal 1)", () => {
       show(done());
       const zh = screen.getByRole("region", { name: "结论" });
       expect(zh.querySelector('[data-conclusion="done"]')!.textContent).toBe("1/1 个任务已完成 · 验收：通过");
-      expect(zh.querySelector('[data-conclusion="delivery"]')!.textContent).toBe(integrationSentence({ delivery: "keep" }, "g"));
-      expect(zh.querySelector('[data-conclusion="waiting"]')!.textContent).toBe("把 orca/g 合并进你的主分支由你来做；Orca 不做");
+      expect(zh.querySelector('[data-conclusion="delivery-sentence"]')!.textContent).toBe(integrationSentence({ delivery: "keep" }, "g"));
+      expect(zh.querySelector('[data-conclusion="merge"]')!.textContent).toBe("把 orca/g 合并进你的主分支由你来做；Orca 不做");
+      expect(zh.querySelector('[data-conclusion="waiting"]')!.textContent).toBe("没有");
     } finally { await i18n.changeLanguage("en"); }
   });
 });

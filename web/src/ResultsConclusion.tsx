@@ -79,14 +79,16 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
   if (pending > 0) waiting.push(
     <li key="decisions">{t("control.results.decisions", { count: pending })}
       {decisionTask !== undefined && go(t("control.results.openTask", { taskId: decisionTask }), () => props.onOpenTask(decisionTask))}</li>);
-  if (summary.needsYou === true && waiting.length === 0) waiting.push(<li key="needs-you">{t("control.results.needsYou")}{toProblems}</li>);
-  // The merge Orca leaves to the person (this panel has no button for it, GitScheme, board spec C4): a finished keep or
+  // Re-review Minor 1: a failed decisions read says nothing about what waits, so it does not stand in for the fallback.
+  if (summary.needsYou === true && waiting.every((item) => item.key === "decisions-failed")) waiting.push(<li key="needs-you">{t("control.results.needsYou")}{toProblems}</li>);
+  // Re-review ruling: "Waiting for you" claims no more than the server's needs-you, so the merge Orca leaves to the person
+  // (this panel has no button for it, GitScheme, board spec C4) is said under the delivery sentence: a finished keep or
   // push-branch group, and a github-pr group once its pull request is marked ready.
-  if (!folders && summary.state === "done" && scheme.delivery === "keep") waiting.push(<li key="merge">{t("control.results.mergeYours", { branch })}</li>);
-  if (!folders && summary.state === "done" && scheme.delivery === "push-branch") {
-    waiting.push(<li key="merge">{t("control.results.mergePushed", { branch, target: scheme.target, remote: scheme.remote })}</li>);
-  }
-  if (!folders && scheme.delivery === "github-pr" && pr !== null && pr.ready) waiting.push(<li key="merge">{t("control.results.mergePr", { number: pr.number })}</li>);
+  const merge = folders ? null
+    : summary.state === "done" && scheme.delivery === "keep" ? t("control.results.mergeYours", { branch })
+    : summary.state === "done" && scheme.delivery === "push-branch" ? t("control.results.mergePushed", { branch, target: scheme.target, remote: scheme.remote })
+    : scheme.delivery === "github-pr" && pr !== null && pr.ready ? t("control.results.mergePr", { number: pr.number })
+    : null;
 
   return (
     <section aria-label={t("control.results.conclusion")} data-testid="results-conclusion" className="detail-block min-w-0 wrap-anywhere">
@@ -100,8 +102,9 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
         </dd>
         <dt>{t("control.results.delivery")}</dt>
         <dd data-conclusion="delivery">
-          {delivery}
+          <span data-conclusion="delivery-sentence">{delivery}</span>
           {pr !== null && <>{" · "}{PR_URL.test(pr.url) ? <a href={pr.url}>{prLabel}</a> : prLabel}</>}
+          {merge !== null && <span className="block" data-conclusion="merge">{merge}</span>}
         </dd>
         <dt>{t("control.results.waiting")}</dt>
         <dd data-conclusion="waiting">
