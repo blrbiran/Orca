@@ -317,9 +317,13 @@ export const DEBUG_SETTLE_FAILED = "debug-settle-failed";
 
 /**
  * Tester #332: a task's current run that ended without failing (its outcome is known and it is not terminally failed) yet
- * cannot complete the task on its own -- blocked at a later step (a settle that failed), or settled with the task not done
- * (a partial or empty result). Neither done nor failed, such a debug group was settled by no pass. `resumable`: a
- * run-scoped recovery retry resumes it (resumableBlockedRun). A no-change result its goal judge still decides is not stuck.
+ * cannot complete the task on its own -- blocked at a later step (a settle that failed), or `settled` with its task
+ * blocked (a partial or empty result). Neither done nor failed, such a debug group was settled by no pass. Not stuck
+ * (#332 review): a run whose task continues from it or waits for a person's decision -- a live-ceiling stop leaves it
+ * `settled-recoverable` with the task `ready` (auto-continued) or `blocked` on `usagePause` / `groupCapStop`, and
+ * `allowancePredecessorRunId` naming it (usagePause.ts classifyCeilingStop; executionDriver.ts settleTokenAllowance) --
+ * nor a no-change result its goal judge still decides. `resumable`: a run-scoped recovery retry resumes it --
+ * resumableBlockedRun and still active, as the panel pairs them (stopIntent.ts retryRun refuses an inactive one).
  */
 export function stuckDebugRun(store: ControlStore, groupId: string): { runId: string; resumable: boolean; detail: string } | null {
   for (const { work } of tasksOf(store, groupId)) {
@@ -327,8 +331,15 @@ export function stuckDebugRun(store: ControlStore, groupId: string): { runId: st
     const run = runBody(store, work.currentRunId);
     const drive = run?.drive;
     if (run === null || drive === undefined || drive.outcome == null || isTerminallyFailedRun(run) || drive.noChangeJudge?.state === "pending") continue;
-    if (run.state === "blocked") return { runId: run.runId, resumable: resumableBlockedRun(run), detail: `${run.runId} blocked at ${String(drive.blockedAt)}: ${drive.blockedReason ?? "no reason recorded"}` };
-    if (run.state.startsWith("settled")) return { runId: run.runId, resumable: false, detail: `${run.runId} ${run.state} with its task ${String(work.status)}${drive.blockedReason ? `: ${drive.blockedReason}` : ""}` };
+    if (run.state === "blocked") {
+      const active = Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(run.runId)?.active ?? 0) === 1;
+      return { runId: run.runId, resumable: active && resumableBlockedRun(run), detail: `${run.runId} blocked at ${String(drive.blockedAt)}: ${drive.blockedReason ?? "no reason recorded"}` };
+    }
+    const waits = work as Work & { usagePause?: unknown; groupCapStop?: unknown; allowancePredecessorRunId?: unknown };
+    if (run.state === "settled" && work.status === "blocked" && waits.usagePause === undefined && waits.groupCapStop === undefined
+      && waits.allowancePredecessorRunId !== run.runId) {
+      return { runId: run.runId, resumable: false, detail: `${run.runId} settled with its task blocked${drive.blockedReason ? `: ${drive.blockedReason}` : ""}` };
+    }
   }
   return null;
 }

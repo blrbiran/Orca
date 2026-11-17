@@ -1600,7 +1600,8 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
     });
     settledJustNow = true;
     // Tester #332: the settle just decided the task (done or blocked); what follows from it is the pump's -- a system debug
-    // group's fold or settle (systemDebugPass) -- so the pump is told now rather than at whatever pass comes next.
+    // group's fold or settle (systemDebugPass). The pump's timer already runs it every wake interval (5 s by default), so
+    // this only saves up to one interval; it is not what held the reported run `landed` for minutes (that was step E).
     deps.kickPump?.();
   }
   const settled = readDriverRun(store, runId);
