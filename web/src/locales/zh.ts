@@ -407,7 +407,7 @@ export const zh: Translation<typeof en> = {
     },
     dependencies: {
       heading: "依赖",
-      note: "每个组都要先落地，它上面那一行的组才能开跑。",
+      note: "每个组都要先落地，它所属的上一级组（少缩进一级的那一组）才能开跑。",
       open: "打开组 {{groupId}}",
       landed: "已落地",
       notLanded: "任务已完成，尚未落地",

@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ControlPanel } from "../src/ControlPanel.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
+import { GroupDependencies } from "../src/GroupDependencies.js";
 import type { ControlSummaryV1, GroupSummaryV1, RecoveryViewV1 } from "../src/controlTypes.js";
 import { config, view, workItem } from "./fixtures/board.js";
 
@@ -92,12 +93,29 @@ describe("the group's Dependencies card (tester #327)", () => {
   });
 
   it("stops at a group already on the chain, so a cycle cannot recurse", () => {
-    // The server refuses cycles; a page reading two summaries at different times could still see one.
-    // mutation: drop the path check -> unbounded recursion (the test worker runs out of memory), red
-    showPanel(["p"], [summaryOf("p", { dependsOn: ["g"] })]);
+    // The server refuses cycles; a page reading two summaries at different times could still see one. The lookup counts its
+    // calls and refuses past 50, so a card that kept walking the cycle fails fast at a named error, not by exhausting memory.
+    // Review of #327: replaces a criterion that went red only by crashing the worker.
+    let calls = 0;
+    const groups = new Map([["g", summaryOf("g", { dependsOn: ["p"] })], ["p", summaryOf("p", { dependsOn: ["g"] })]]);
+    const groupOf = (id: string): GroupSummaryV1 | undefined => {
+      if (++calls > 50) throw new Error("groupOf-called-past-50: the card is walking a cycle");
+      return groups.get(id);
+    };
+    // mutation: drop `|| props.path.has(id)` -> groupOf-called-past-50, red
+    render(<GroupDependencies groupId="g" dependsOn={["p"]} groupOf={groupOf} />);
     const behind = screen.getByTestId("dependency-behind-p");
     expect(within(behind).getByTestId("dependency-g")).toBeTruthy();
     expect(screen.queryByTestId("dependency-behind-g")).toBeNull();
+    expect(calls).toBe(2);
+  });
+
+  it("says Landed for a landed prerequisite even when its board column is needs-you", () => {
+    // Review of #327 (minor 4): for the dependent, landed is the fact that matters.
+    // mutation: let the needs-you column win over landed -> "Needs you", red
+    showPanel(["p"], [summaryOf("p", { state: "blocked", completion: { done: 2, total: 2 }, landed: true })]);
+    expect(stateOf("p").textContent).toBe("Landed");
+    expect(stateOf("p").getAttribute("data-tone")).toBe("ok");
   });
 
   it("takes no space for a group with no prerequisite", () => {

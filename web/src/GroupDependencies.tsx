@@ -29,6 +29,7 @@ function DependencyRows(props: Omit<GroupDependenciesProps, "dependsOn" | "group
     <ul className="m-0 list-none ps-0">
       {props.ids.map((id) => {
         const summary = props.groupOf(id);
+        // Landed wins over every board column, needs-you included: for the dependent, landed is the fact that matters (#327 review).
         const landed = summary?.landed === true;
         const column = summary === undefined ? null : boardColumn(summary);
         // A group already on this chain is not expanded again (the server refuses cycles; this only keeps the page finite).
