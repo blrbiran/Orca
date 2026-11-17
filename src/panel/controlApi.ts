@@ -48,7 +48,7 @@ import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
-import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, taskHandoffView } from "./controlViews.js";
+import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, readUnreadableRuns, runDecodeRefusal, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 
@@ -298,8 +298,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const warnings = summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning];
       // Tester #321 part C: the tasks costing a multiple of the group median, or running long (absent when none); display only.
       const costOutliers = costOutliersOf(deps.store, groupId, deps.store.now());
+      // Tester #348: the runs whose stored body does not decode, each with its task (or null) and why; absent when none.
+      const unreadableRuns = readUnreadableRuns(deps.store, groupId);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
-        ...(costOutliers === null ? {} : { costOutliers }) }); }
+        ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");
@@ -1030,6 +1032,11 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
       const resolved = route.target(req.params, envelope.payload, store, envelope.commandId);
       id = resolved.groupId;
       const command = rawAuthorityCommandSchema.parse({ schema: "orca-raw-command-v1", ...envelope, actorId, verb: route.verb, target: resolved.target }) as RawAuthorityCommandV1;
+      // Tester #348: a command acting on a run of this group whose stored body does not decode is refused as every read of
+      // the group was before; only that run's commands are -- the group's other tasks act as usual.
+      const namedRun = payloadFields(envelope.payload).runId;
+      const unreadable = typeof namedRun === "string" ? runDecodeRefusal(store, resolved.groupId, namedRun) : null;
+      if (unreadable !== null) throw new ControlError("recovery-blocked", unreadable);
       // CLI v2 spec §16: the owner is the panel's --by (what corrections are recorded by); the operator id when unconfigured.
       const attribution = attributionOf(principal, service.deps.correctionsBy ?? actorId);
       await withCommandContext(command.commandId, routedCommandContext(client, principal, attribution), async () => {

@@ -125,9 +125,12 @@ describe("the panel refuses a targetVersion that is not the plan's integer (seam
   it("N8 refuses a string in the run body as invalid", async () => {
     const { h, runId } = await claimedAt3(); try {
       setBody(h.store, "runs", "id", runId, { targetVersion: "3" });
-      const error = thrown(() => readControlGroup(h.store, "epoch-test", "g"));
-      expect(error.code).toBe("recovery-blocked");
-      expect(error.detail?.startsWith(`run-invalid:${runId}:`)).toBe(true);
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+      // Tester #348: the run is still refused as invalid, but on its own -- left out of runs and named with its reason --
+      // instead of refusing the whole group view.
+      const view = readControlGroup(h.store, "epoch-test", "g");
+      expect(view.runs.map((run) => run.runId)).not.toContain(runId);
+      expect(view.unreadableRuns).toEqual([expect.objectContaining({ runId, reason: expect.stringMatching(new RegExp(`^run-invalid:${runId}:`)) })]);
     } finally { await h.dispose(); }
   });
 

@@ -320,7 +320,9 @@ describe("control poll request snapshots", () => {
       try {
         counter.reset(); expect(readGroupSummary(counter.store, "g")).toMatchObject({ completion: { done: 0, total: 3 }, counts: { idle: 3, waiting: 0, running: 0, blocked: 0, done: 0 } }); bounds(counter.snapshot(), false);
         expect(counter.snapshot().parses.has("runs:g:unused-run")).toBe(false);
-        expect(refusal(() => readControlGroup(counter.store, "e", "g"))).toEqual({ code: "recovery-blocked", detail: "run-invalid:unused-run" });
+        // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+        // Tester #348: the strict read still names the run, as unreadable on its own (no task owns its work item).
+        expect(readControlGroup(counter.store, "e", "g").unreadableRuns).toEqual([{ runId: "unused-run", workItemId: "handoff-unused", taskId: null, reason: "run-invalid:unused-run" }]);
       } finally { counter.restore(); }
     } finally { await h.dispose(); }
   });
@@ -377,7 +379,9 @@ describe("control poll request snapshots", () => {
         x.store.db.prepare("UPDATE runs SET body='broken converted inactive run' WHERE id=?").run(historyId);
         counter.reset(); expect(readGroupSummary(counter.store, "r")).toEqual(summary); bounds(counter.snapshot(), false);
         expect(counter.snapshot().parses.has(`runs:r:${historyId}`)).toBe(false);
-        counter.reset(); expect(refusal(() => readControlGroup(counter.store, "e", "r"))).toEqual({ code: "recovery-blocked", detail: `run-invalid:${historyId}` });
+        // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+        // Tester #348: the inactive history run is named as unreadable on its own; the active run's refusal above stays.
+        counter.reset(); expect(readControlGroup(counter.store, "e", "r").unreadableRuns).toEqual([expect.objectContaining({ runId: historyId, taskId: null, reason: `run-invalid:${historyId}` })]);
       } finally { counter.restore(); }
     } finally { await x.dispose(); }
   }, 30_000);

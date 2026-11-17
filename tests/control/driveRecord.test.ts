@@ -61,9 +61,12 @@ describe("driver run states in the read model (execution driver §7.4)", () => {
   it("refuses a drive record carrying a field the closed schema does not know", async () => {
     const { h, runId } = await claimedSoft(); try {
       patchRun(h.store, runId, { state: "start-pending", providerAttemptOrdinal: 1, drive: { ...drive(), stray: true } });
-      const error = thrown(() => readControlGroup(h.store, "epoch-test", "g"));
-      expect(error.code).toBe("recovery-blocked");
-      expect(error.detail?.startsWith(`run-invalid:${runId}:`)).toBe(true);
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+      // Tester #348: the run is still refused by the closed schema, but as unreadable on its own -- left out of runs and
+      // named with its reason -- instead of refusing the whole group view.
+      const view = readControlGroup(h.store, "epoch-test", "g");
+      expect(view.runs.map((run) => run.runId)).not.toContain(runId);
+      expect(view.unreadableRuns).toEqual([expect.objectContaining({ runId, reason: expect.stringMatching(new RegExp(`^run-invalid:${runId}:`)) })]);
     } finally { await h.dispose(); }
   });
 });

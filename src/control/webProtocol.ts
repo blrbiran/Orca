@@ -2009,6 +2009,9 @@ export const workItemViewSchema = z
       usageStopped: z.object({ at: safeInteger, principal: nonemptyString, note: z.string().optional() }).strict().nullable(),
       groupCapStop: z.object({ runId: idSchema, at: safeInteger, observedTokens: safeInteger }).strict().nullable(),
     }).strict().optional(),
+    // Tester #348: this task's runs whose stored body the run read schema does not decode, and why (the group's other
+    // tasks read and act as before). Absent when every run of the task reads.
+    unreadableRuns: z.array(z.object({ runId: idSchema, reason: nonemptyString }).strict()).min(1).optional(),
   })
   .strict();
 
@@ -2418,6 +2421,9 @@ export const groupViewSchema = z
       minimumSample: positiveSafeInteger,
       tasks: z.array(z.object({ taskId: idSchema, estimateTokens: safeInteger.nonnegative().nullable(), ratio: z.number().nonnegative().finite().nullable() }).strict()),
     }).strict().optional(),
+    // Tester #348: the group's runs the run read schema does not decode, in id order -- left out of `runs` and
+    // `checkpoints` -- with the work item each is on, its task (null when that item is no task) and why. Absent when none.
+    unreadableRuns: z.array(z.object({ runId: idSchema, workItemId: idSchema, taskId: idSchema.nullable(), reason: nonemptyString }).strict()).min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

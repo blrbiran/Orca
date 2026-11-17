@@ -313,6 +313,50 @@ export function persistedRunProblem(body: unknown): string | null {
   return parsed.success ? null : parsed.error.issues[0]?.message ?? "invalid";
 }
 
+type PersistedRun = z.infer<typeof persistedRunSchema>;
+export type UnreadableRun = { runId: string; workItemId: string; taskId: string | null; reason: string };
+
+/**
+ * Tester #348 containment: one run of the group, decoded for a group read. A body that is not JSON or that the strict
+ * schema refuses is `unreadable` with the detail every read used to refuse the whole group with; the run's own task
+ * names it and the group's other tasks read as before. A run id with no row is still an integrity refusal.
+ */
+function runDecode(snapshot: GroupReadSnapshot, runId: string): { run: PersistedRun } | { unreadable: string } {
+  const result = snapshot.decodeRun(runId);
+  if (result === undefined) return blocked(`run-invalid:${runId}`);
+  if (!result.ok) return { unreadable: `run-invalid:${runId}` };
+  const problem = persistedRunProblem(result.value);
+  return problem === null ? { run: persistedRunSchema.parse(result.value) } : { unreadable: `run-invalid:${runId}:${problem}` };
+}
+
+/** The group's runs that do not decode, in id order: the work item each is on, and its task when that item is one. */
+function unreadableRunsOf(snapshot: GroupReadSnapshot): UnreadableRun[] {
+  return snapshot.runsByRowid.flatMap((row) => {
+    const decoded = runDecode(snapshot, String(row.id));
+    if (!("unreadable" in decoded)) return [];
+    const workItemId = String(row.work_item_id);
+    return [{ runId: String(row.id), workItemId, taskId: snapshot.workById.has(workItemId) ? workItemId : null, reason: decoded.unreadable }];
+  }).sort((left, right) => compareText(left.runId, right.runId));
+}
+
+/** `group brief` (controlApi.ts): the group's unreadable runs, read from the same snapshot decode as the group view. */
+export function readUnreadableRuns(store: ControlStore, groupId: string): UnreadableRun[] {
+  return unreadableRunsOf(readGroupSnapshot(store, groupId));
+}
+
+/**
+ * The command routes (controlApi.ts): a command naming a run of this group whose body does not decode is refused with the
+ * detail the group read gave before #348 -- acting on a run nobody can read stays refused; nothing else is.
+ */
+export function runDecodeRefusal(store: ControlStore, groupId: string, runId: string): string | null {
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=? AND group_id=?").get(runId, groupId);
+  if (row === undefined) return null;
+  let body: unknown;
+  try { body = JSON.parse(String(row.body)); } catch { return `run-invalid:${runId}`; }
+  const problem = persistedRunProblem(body);
+  return problem === null ? null : `run-invalid:${runId}:${problem}`;
+}
+
 function blocked(detail: string): never {
   throw new ControlError("recovery-blocked", detail);
 }
@@ -1041,8 +1085,11 @@ function currentProgress(snapshot: GroupReadSnapshot, currentRunId: string | nul
   if (currentRunId === null) return null;
   const row = snapshot.runById.get(currentRunId);
   if (!row) return blocked(`work-item-current-run:${currentRunId}`);
-  // Same detail as runViews' own parse, so a bad run body is reported exactly as before.
-  return progressOfRun(parseSnapshot(persistedRunSchema, snapshot.decodeRun(currentRunId), `run-invalid:${currentRunId}`));
+  // Tester #348: a current run the schema refuses has no progress to show; its task names it (unreadableRuns). One that is
+  // not even JSON still refuses the group, as before: its state is unreadable to categoryOf too (and to the summary).
+  const decoded = runDecode(snapshot, currentRunId);
+  if ("run" in decoded) return progressOfRun(decoded.run);
+  return snapshot.decodeRun(currentRunId)?.ok === false ? blocked(decoded.unreadable) : null;
 }
 
 /**
@@ -1093,6 +1140,7 @@ function workViews(
   readSnapshot: GroupReadSnapshot,
 ): WorkItemViewV1[] {
   const runs = readSnapshot.runsByRowid;
+  const unreadable = unreadableRunsOf(readSnapshot);
   // Retry work top-up spec 2026-11-06 §2 "The board": one read of the group's top-ups, oldest first.
   const topUps = groupTopUps(store, groupId);
   const derivedByTask = new Map(snapshot?.derivedContracts.map(contract => [contract.taskId, contract.derivedContractHash]) ?? []);
@@ -1153,6 +1201,8 @@ function workViews(
       // Tester follow-up G spec §1.2: the task's no-change record (who decided, the ordinal); omitted when it has none.
       ...noChangeView((body as { noChangeCompletion?: unknown }).noChangeCompletion),
       ...budgetStateView(store, body),
+      // Tester #348: this task's runs that do not decode, and why; absent when every one reads.
+      ...((mine) => mine.length === 0 ? {} : { unreadableRuns: mine.map(({ runId, reason }) => ({ runId, reason })) })(unreadable.filter(entry => entry.taskId === task.taskId)),
     };
     // Tester #230: the driver blocks the run alone and leaves the stored work item `running` (scheduling, close-run and
     // recovery read that), so a person reads the task as blocked when its current run is -- the brief's count and the
@@ -1303,9 +1353,12 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
   const createdOrdinal = new Map(snapshot.runsByRowid.map((row, index) => [String(row.id), index + 1]));
   // Read once, and only when a run needs it (quotaRest below).
   let rests: Map<string, InstallationRest> | undefined;
-  return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).map(row => {
+  // Tester #348: a run that does not decode is left out here and named in the view's unreadableRuns instead.
+  return [...snapshot.runsByRowid].sort((left, right) => compareText(left.id, right.id)).flatMap(row => {
+    const decoded = runDecode(snapshot, String(row.id));
+    return "run" in decoded ? [{ row, run: decoded.run }] : [];
+  }).map(({ row, run }) => {
     const runId = String(row.id);
-    const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(runId), `run-invalid:${runId}`);
     if (run.runId !== runId || run.groupId !== groupId || String(row.group_id) !== groupId
       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
       || !validAccounting(run)) return blocked(`run-identity:${runId}`);
@@ -1482,9 +1535,11 @@ function checkpointViews(store: ControlStore, groupId: string, readSnapshot: Gro
     const missing = Array.isArray(raw.missing) ? raw.missing : [];
     const state: CheckpointViewV1["state"] = raw.result === "complete" && snapshot && missing.length === 0 ? "complete" : raw.result === "partial" || raw.result === "failed" ? "partial" : "unknown";
     const runId = String(row.run_id);
-    const run = parseSnapshot(persistedRunSchema, readSnapshot.decodeRun(runId), `run-invalid:${runId}`);
-    return { checkpointId: String(row.id), taskId: raw.taskId, runId, state, snapshotHash: snapshot?.hash ?? null, evidenceIds: artifactIdsForRun(store, runId, run) };
-  });
+    // Tester #348: a checkpoint's evidence is its run's; a run that does not decode is named in unreadableRuns instead.
+    const decoded = runDecode(readSnapshot, runId);
+    if (!("run" in decoded)) return [];
+    return [{ checkpointId: String(row.id), taskId: raw.taskId, runId, state, snapshotHash: snapshot?.hash ?? null, evidenceIds: artifactIdsForRun(store, runId, decoded.run) }];
+  }).flat();
 }
 
 function handoffViews(store: ControlStore, groupId: string, snapshot: GroupReadSnapshot): HandoffRequestViewV1[] {
@@ -1586,6 +1641,9 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Tester #173/#224/#266 (follow-up L): read before confirm, so only while the proposal is editable.
     ...(proposal.state === "editable" ? { estimateHistory: estimateHistoryView(store, groupId,
       plan.tasks.map(task => task.taskId).sort(compareText), newestReadyEstimate(estimates.views, archived.planHash)) } : {}),
+    // Tester #348: the group's runs that do not decode -- left out of `runs` and `checkpoints`, each named here with its
+    // work item, its task (null when the item is not a task: a probe, an estimate, a requirement call) and why. Absent when none.
+    ...((unreadable) => unreadable.length === 0 ? {} : { unreadableRuns: unreadable })(unreadableRunsOf(readSnapshot)),
   };
   view.ledger.unmeteredRuns = view.runs.filter(run => run.unknownUsageSettlement?.settlement?.method === "owner-acknowledged-unmetered").length;
   deriveExpectations(view, readSnapshot);
@@ -1637,7 +1695,10 @@ function taskWorkUsed(snapshot: GroupReadSnapshot, taskId: string): number | nul
   let used = 0;
   for (const row of snapshot.runsByRowid) {
     if (String(row.work_item_id) !== taskId) continue;
-    const run = parseSnapshot(persistedRunSchema, snapshot.decodeRun(String(row.id)), `run-invalid:${String(row.id)}`);
+    // Tester #348: a run that does not decode has no usage this can count, so the task's use is unknown.
+    const decoded = runDecode(snapshot, String(row.id));
+    if (!("run" in decoded)) return null;
+    const run = decoded.run;
     if (run.unknown.work || run.usageApproximate !== undefined) return null;
     used += run.cumulative.work.tokens;
   }
