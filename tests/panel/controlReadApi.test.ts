@@ -526,16 +526,31 @@ describe("canonical control read API", () => {
       claimOrdinal: 1, providerAttemptOrdinal: 1, used: amount(0, 0, 0, 0),
     }]);
 
-    const invalidBodies = [
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+    // Tester #348: a body the run schema refuses no longer refuses the group; the run is still never shown with synthesized
+    // values -- it is left out of `runs` and named, on the group and on its task, with no progress.
+    const malformedBodies = [
       (({ executionProfile: _removed, ...body }) => body)(valid),
       { ...valid, phase: "invented" },
       (({ providerAttemptOrdinal: _removed, ...body }) => body)(valid),
       { ...valid, cumulative: { work: { tokens: -1, activeMs: 0, attempts: 0, sessions: 0 }, handoff: amount(0, 0, 0, 0) } },
+    ];
+    for (const body of malformedBodies) {
+      h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(JSON.stringify(body));
+      const response = await request(h, `/api/control/groups/${groupId}`);
+      expect(response.status).toBe(200);
+      const view = await response.json() as GroupViewV1 & { unreadableRuns?: unknown };
+      expect(view.runs.map(run => run.runId)).not.toContain("run-one");
+      expect(view.unreadableRuns).toEqual([expect.objectContaining({ runId: "run-one", taskId: "a", reason: expect.stringMatching(/^run-invalid:run-one:/) })]);
+      expect(view.workItems.find(item => item.taskId === "a")).toMatchObject({ progress: null, unreadableRuns: [expect.objectContaining({ runId: "run-one" })] });
+    }
+    // A body the schema accepts but that disagrees with its other records still refuses the group, as before.
+    const inconsistentBodies = [
       { ...valid, executionProfile: { workKind: "task", profileId: "other", profileHash: hash("9") } },
       { ...valid, taskId: "b" },
       { ...valid, graphVersion: 2 },
     ];
-    for (const body of invalidBodies) {
+    for (const body of inconsistentBodies) {
       h.store.db.prepare("UPDATE runs SET body=? WHERE id='run-one'").run(JSON.stringify(body));
       const response = await request(h, `/api/control/groups/${groupId}`);
       expect(response.status).toBe(423);
