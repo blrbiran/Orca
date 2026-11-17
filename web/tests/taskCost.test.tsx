@@ -62,6 +62,16 @@ describe("a task costing a multiple of its group (#321 C)", () => {
     expect(screen.queryByTestId("task-cost-flagged-a")).toBeNull();
   });
 
+  it("says there is no median with too few finished tasks, and that a running task's figures are so far", async () => {
+    const two = view([workItem({ taskId: "a", status: "completed", category: "done" }), workItem({ taskId: "r", status: "active", category: "running", currentRunId: "run-r" })],
+      [landed("run-a", "a", 1_000_000, 5), run({ runId: "run-r", taskId: "r", state: "running", startedAt: NOW - 3 * MIN, used: { tokens: 500_000, activeMs: 0, attempts: 1, sessions: 1 } })]);
+    mount(two);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "r" })); });
+    // mutation: drop the tooFew branch of costLineText -> a null median is read as one -> red
+    // mutation: drop the soFar suffix -> red
+    expect(screen.getByTestId("task-cost-r").textContent).toBe("Cost: 1 run · 3 min · 500K tokens so far (1 finished other tasks to compare with; 3 are needed for a median)");
+  });
+
   it("speaks Chinese", async () => {
     await i18n.changeLanguage("zh");
     mount(group(4_000_000));

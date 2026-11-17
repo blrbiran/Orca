@@ -11,8 +11,6 @@ import { COST_LONG_RUNNING_MS, COST_MIN_COMPARABLE_TASKS, costRunOfView, taskCos
  * pauses, stops or changes a run, a budget or a retry.
  */
 export function groupTaskCosts(view: GroupViewV1, now: number): TaskCost[] {
-  // As `orca task show` (viewTaskCost): a run without `used` makes every median wrong, so nothing is said rather than that.
-  if (view.runs.some((run) => (run as { used?: unknown }).used === undefined)) return [];
   return taskCosts(view.runs.map(costRunOfView), now);
 }
 
@@ -41,10 +39,10 @@ export function costLineText(cost: TaskCost): string {
   return i18n.t("control.taskCost.line", { own: ownText(cost), against });
 }
 
-/** The Problems rows: one per flagged task. */
+/** The Problems rows: one per flagged task (the caller passes the flagged ones, which it also counts on the tab). */
 export function CostOutlierRows(props: { costs: readonly TaskCost[] }): JSX.Element {
   useTranslation();
-  return <>{props.costs.filter((cost) => cost.reasons.length > 0).map((cost) => (
+  return <>{props.costs.map((cost) => (
     <div key={cost.taskId} data-cost-task-id={cost.taskId}>
       <p data-tone="warn">{flaggedText(cost)}</p>
     </div>
