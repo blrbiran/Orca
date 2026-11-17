@@ -894,6 +894,9 @@ export const zh: Translation<typeof en> = {
       prDraft: "草稿",
       prReady: "可审阅",
       retry: "重试集成",
+      integrateNow: "立即集成",
+      upToDate: "已是最新：最近通过验收的提交已经集成。",
+      backoff: "将在 {{at}} 之后重试：{{reason}}",
       resolve: "交给 agent 解决",
       reason: {
         "integration-target-missing": "目标分支不存在",
@@ -2468,6 +2471,10 @@ export const zhErrors: Record<string, string> = {
   "integration-invalid": "集成方式没通过检查（分支名、远端名、远端是否存在、是否 GitHub 仓库）：{{message}}",
   "integration-no-checks": "这个任务没有可跑的检查，不能交给 agent 解决集成冲突。",
   "integration-not-blocked": "这个组的集成没有卡住，不需要处理。",
+  "integration-not-configured": "这个组的成果留在自己的分支上，没有要集成的地方。请先选择交付方式。",
+  "integration-not-idle": "这个组的集成已停住或正在解决冲突；请改用重试或解决冲突。",
+  "integration-not-ready": "这个组还不能集成：任务没有全部完成、验收还没通过，或仍有运行在进行。",
+  "integration-up-to-date": "这个组最新的成果已经集成，没有新的内容可以合入。",
   "integration-preflight-failed": "确认前的集成检查没通过：{{message}}",
   "integration-unapproved": "这个组的集成方式和确认时看到的不一致，请重新读取后再确认。",
   // Control run decisions plan Task 9: approving a decision that did not land.

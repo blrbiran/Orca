@@ -899,6 +899,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/integration", verb: "set-group-integration", target: fromParams },
     // Integration spec §6.5: a blocked or conflicted integration back to idle.
     { path: "/api/control/groups/:groupId/integration/retry", verb: "retry-integration", target: fromParams },
+    // Delivery tail spec D6 (#333): an idle integration tried at the next round.
+    { path: "/api/control/groups/:groupId/integration/now", verb: "integrate-now", target: fromParams },
     // Integration spec §7: an owner approves an agent's resolution of the group's integration conflict.
     { path: "/api/control/groups/:groupId/integration/resolve", verb: "resolve-integration-conflict", target: fromParams },
     // Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip, or accepted by a person.
@@ -1061,6 +1063,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "set-criteria-review": service.setCriteriaReview(command); break;
           case "set-group-integration": await service.setGroupIntegration(command); break;
           case "retry-integration": await service.retryIntegration(command); break;
+          case "integrate-now": await service.integrateNow(command); break;
           case "resolve-integration-conflict": await service.resolveIntegrationConflict(command); break;
           case "recheck-acceptance": service.recheckAcceptance(command); break;
           case "waive-acceptance": service.waiveAcceptance(command); break;

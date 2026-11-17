@@ -7,6 +7,7 @@ import { refTip } from "./integrationGit.js";
 import { dirWorkspaceOf, type DirProjectOf } from "./dirGroup.js";
 import { multiDirOf } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
+import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { approveResolution, type ResolutionPrepared } from "./integrationResolve.js";
 import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody, type RepositorySettingsBody } from "./workspaceSettings.js";
@@ -19,6 +20,7 @@ export type SetIntegrationSchemeCommand = Extract<RawAuthorityCommandV1, { verb:
 export type SetGroupIntegrationCommand = Extract<RawAuthorityCommandV1, { verb: "set-group-integration" }>;
 export type RetryIntegrationCommand = Extract<RawAuthorityCommandV1, { verb: "retry-integration" }>;
 export type ResolveIntegrationConflictCommand = Extract<RawAuthorityCommandV1, { verb: "resolve-integration-conflict" }>;
+export type IntegrateNowCommand = Extract<RawAuthorityCommandV1, { verb: "integrate-now" }>;
 
 /**
  * What a setter's pre-transaction check found, refused by name: a bad name or remote is the scheme's own fault
@@ -201,6 +203,49 @@ export function applyRetryIntegration(deps: { store: ControlStore; historyReconc
         verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
         effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
         result: { kind: "integration-retried", groupId },
+      } };
+    },
+  }).body;
+}
+
+/**
+ * Delivery tail spec D6 (tester #333, human ruling 2): "integrate now" skips only the backoff and the trigger's timing. It
+ * needs a frozen, non-keep integration that is idle, every task done, the acceptance satisfied and no run active but the
+ * requirement review's own call (as integrationPass.ts groupComplete), and something not yet delivered: `tip` is the work
+ * branch's tip, read before the transaction (null: no branch). A pending history chain is allowed -- the next pass only
+ * re-tries that one CAS. Clears `retryAfter` / `transient`; the driver's next round integrates (nothing else is skipped).
+ */
+export function applyIntegrateNow(deps: { store: ControlStore }, command: IntegrateNowCommand, tip: string | null): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const row = deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+      if (!row) throw new ControlError("group-not-found");
+      const group = JSON.parse(String(row.body)) as Record<string, unknown>;
+      const current = readGroupIntegration(group);
+      if (current === null || !current.frozen) throw new ControlError("integration-not-configured");
+      if (current.state !== "idle") throw new ControlError("integration-not-idle", current.state);
+      const tasks = deps.store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
+        .map((work) => JSON.parse(String(work.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
+      if (tasks.length === 0 || tasks.some((work) => work.status !== "done")) throw new ControlError("integration-not-ready", "tasks-not-done");
+      if (!acceptanceSatisfied(deps.store, groupId, group)) throw new ControlError("integration-not-ready", "acceptance-not-satisfied");
+      if (deps.store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1 AND coalesce(json_extract(body,'$.purpose'),'') <> 'requirement-review'").get(groupId) !== undefined)
+        throw new ControlError("integration-not-ready", "run-active");
+      if (tip === null) throw new ControlError("integration-not-ready", "work-branch-missing");
+      const draftPr = current.scheme.delivery === "github-pr" && current.pr !== null && !current.pr.ready;
+      const delivered = current.historyPublished !== undefined ? current.historyPublished.groupTip === tip
+        : current.lastIntegrated === tip && current.pending === null && !draftPr;
+      if (delivered) throw new ControlError("integration-up-to-date");
+      group.integration = { ...current, retryAfter: null, transient: 0, transientReason: null };
+      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      recordActivity(deps.store, { groupId, kind: "integration-requested", body: { tip } });
+      return { status: 200, body: {
+        schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
+        verb: context.rawCommand.verb, target: context.rawCommand.target, commandRevision: context.nextCommandRevision, projectionSeq: context.nextProjectionSeq,
+        effectivePayloadHash: context.effectivePayloadHash, authorityCommandHash: context.authorityCommandHash,
+        result: { kind: "integration-requested", groupId },
       } };
     },
   }).body;

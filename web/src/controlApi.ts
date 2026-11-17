@@ -467,7 +467,7 @@ export type ControlAction =
   | { verb: "archive-group" | "unarchive-group"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
-  | { verb: "retry-integration" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
+  | { verb: "retry-integration" | "integrate-now" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   // Tester follow-up E §5 (#241): a failed group acceptance, checked again (any), or accepted by an owner with why.
   | { verb: "recheck-acceptance"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   | { verb: "waive-acceptance"; groupId: string; expectedRevision: number; payload: { note: string } }
@@ -573,6 +573,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/integration`;
     case "retry-integration":
       return `${group}/integration/retry`;
+    case "integrate-now":
+      return `${group}/integration/now`;
     case "resolve-integration-conflict":
       return `${group}/integration/resolve`;
     case "recheck-acceptance":

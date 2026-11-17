@@ -62,6 +62,7 @@ import { applyReviewAccept, applyReviewFix, applyReviewRerun, type ReviewAcceptC
 import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
 import { applyAllowRequest, applyRevokeAllowance, type AllowRequestCommand, type RevokeAllowanceCommand } from "./allowanceCommands.js";
 import { activeAllowances, applyDecisionAllowances, pathsCovered, type GroupAllowance } from "./groupAllowances.js";
+import { applyIntegrateNow, type IntegrateNowCommand } from "./integrationCommands.js";
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, historyReconciledTarget, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
@@ -1936,6 +1937,17 @@ export class WebControlService {
     if (!plan.clearPending && plan.reconciledTargetTip === null) throw new ControlError("task-not-reopenable", "history-reconciliation-required");
     return this.mutate(() => applyRetryIntegration({ store: this.store, historyReconciledTargetTip: plan.reconciledTargetTip,
       clearHistoryPending: plan.clearPending }, command)) as WebCommandResult;
+  }
+  /** Delivery tail spec D6 (#333): an idle, ready, undelivered integration tried at the next round; the tip is read first. */
+  async integrateNow(command: IntegrateNowCommand): Promise<WebCommandResult> {
+    const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
+    const groupId = command.target.groupId;
+    let tip: string | null = null;
+    if (this.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId) !== undefined && !isDirGroup(this.store, groupId) && !isMultiGroup(this.store, groupId) && this.deps.resolveRepository !== undefined) {
+      const repoId = this.planRepository(groupId);
+      if (repoId !== null) try { tip = await revParse(this.deps.resolveRepository(repoId), `${workBranchRef(groupId)}^{commit}`); } catch { tip = null; }
+    }
+    return this.mutate(() => applyIntegrateNow({ store: this.store }, command, tip)) as WebCommandResult;
   }
   /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
   recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {

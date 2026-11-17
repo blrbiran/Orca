@@ -667,6 +667,8 @@ export const commandVerbSchema = z.enum([
   "set-criteria-review",
   "set-group-integration",
   "retry-integration",
+  // Delivery tail spec D6 (#333): an idle integration tried at the next round, its backoff cleared.
+  "integrate-now",
   "resolve-integration-conflict",
   // Tester follow-up E §5 (#241): rerun a failed group acceptance on the same tip (any), or accept it anyway (a person).
   "recheck-acceptance",
@@ -1357,6 +1359,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("integrate-now"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
@@ -1472,6 +1475,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("set-criteria-review"), target: repositoryCommandTargetSchema, payload: setCriteriaReviewPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-group-integration"), target: groupCommandTargetSchema, payload: setGroupIntegrationPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("retry-integration"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("integrate-now"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
@@ -2549,6 +2553,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("criteria-review-set"), repoId: idSchema, enabled: z.boolean() }).strict(),
   z.object({ kind: z.literal("group-integration-set"), groupId: idSchema, integration: integrationSchemeSchema }).strict(),
   z.object({ kind: z.literal("integration-retried"), groupId: idSchema }).strict(),
+  z.object({ kind: z.literal("integration-requested"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("integration-resolution-started"), groupId: idSchema }).strict(),
   // Tester follow-up E §5 (#241): the failed record is cleared and the next round checks the tip again; or it is waived.
   z.object({ kind: z.literal("acceptance-recheck-requested"), groupId: idSchema, tip: commitShaSchema }).strict(),

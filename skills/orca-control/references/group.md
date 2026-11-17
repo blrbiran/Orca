@@ -193,6 +193,14 @@ a blocked or conflicted integration back to idle
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
 
+## `orca group integrate <group>`
+
+integrate the group's finished work at the next round (an idle integration; skips only the retry wait)
+
+- What it does: sends control verb `integrate-now`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+
 ## `orca group resolve-integration <group>`
 
 approve an agent resolving the group's integration conflict

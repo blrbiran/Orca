@@ -523,6 +523,8 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "group", action: "set-integration", summary: "where this group's finished work goes", verb: "set-group-integration", positionals: [GROUP], flags: SCHEME_FLAGS,
     route: (c) => `groups/${group(c)}/integration`, payload: (c) => ({ integration: schemeFromFlags(c) }) }),
   empty("group", "retry-integration", "a blocked or conflicted integration back to idle", "retry-integration", "integration/retry"),
+  // Delivery tail spec D6 (#333): skip the backoff and integrate at the next round; tasks done and acceptance still required.
+  empty("group", "integrate", "integrate the group's finished work at the next round (an idle integration; skips only the retry wait)", "integrate-now", "integration/now"),
   empty("group", "resolve-integration", "approve an agent resolving the group's integration conflict", "resolve-integration-conflict", "integration/resolve"),
   // Tester follow-up E §5 (#241): the ways out of a failed group acceptance besides a moved tip.
   empty("group", "recheck", "run a failed group acceptance again on the same tip (a flaky check)", "recheck-acceptance", "acceptance/recheck"),

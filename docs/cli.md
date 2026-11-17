@@ -69,6 +69,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group cap <group> --tokens <tokens>` — lower a draft group's token ceiling; raising or removing it requires a person
 - `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where this group's finished work goes
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle
+- `orca group integrate <group>` — integrate the group's finished work at the next round (an idle integration; skips only the retry wait)
 - `orca group resolve-integration <group>` — approve an agent resolving the group's integration conflict
 - `orca group recheck <group>` — run a failed group acceptance again on the same tip (a flaky check)
 - `orca group review-accept <group> --note <note>` — accept a group whose requirement review did not pass as it is, with why

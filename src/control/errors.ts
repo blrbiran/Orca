@@ -159,6 +159,11 @@ export const durableCommandErrorStatuses = {
   "integration-history-invalid": 409,
   "integration-no-checks": 409,
   "integration-not-blocked": 409,
+  // Delivery tail spec D6 (#333): integrate-now's refusals.
+  "integration-not-configured": 409,
+  "integration-not-idle": 409,
+  "integration-not-ready": 409,
+  "integration-up-to-date": 409,
   "integration-preflight-failed": 409,
   "integration-unapproved": 409,
   // Labels and progress spec §3.1 (§8 R7): the task's labels moved since the person read them (plan finding F17).

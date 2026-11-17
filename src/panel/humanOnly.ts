@@ -73,6 +73,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "multi-dir-landing": "human-only",
   "set-group-integration": "human-only",
   "retry-integration": "human-only",
+  "integrate-now": "human-only",
   "resolve-integration-conflict": "human-only",
   // Tester follow-up E §5 (#241): rerunning a failed acceptance spends nothing new and changes no rule (any principal);
   // accepting a group whose final tree failed its checks is a person's act, named with why.
@@ -202,6 +203,8 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "set-orchestration-settings": (p) => (Object.hasOwn(p, "criteriaReviewTokens") ? "token" : "open"),
   // Moved to open by the human: Orca already dispatches conflict resolution itself (kanban S5).
   "retry-integration": "open",
+  // Delivery tail spec D6 (#333): open as retry-integration -- it skips no gate a person owns (tasks done, acceptance).
+  "integrate-now": "open",
   "resolve-integration-conflict": "open",
   // Checks plan "Access mapping": a custom command (runs in Orca's own environment, outside ccloop's sandbox) or a
   // budget (spend) is token; switching, triggers and group counts are open. Adding or enabling a schedule spends review

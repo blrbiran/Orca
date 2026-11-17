@@ -372,12 +372,31 @@ describe("the group's Git area (spec §6.5, §9.1)", () => {
     expect(section.querySelector("a")).toBeNull();
   });
 
-  it("offers neither button while the integration is idle or an agent is resolving", () => {
+  // Ruling: 「这次批准改写所有必要的判据」 (human, session 2026-11-17, delivery tail): this criterion said an idle integration
+  // offers no button; #333 (ruling 2) gives an idle, approved integration "Integrate now". It now pins: no Retry or Resolve
+  // while idle (only Integrate now), and no button at all while an agent resolves.
+  it("offers neither Retry nor Resolve while the integration is idle (only Integrate now), and no button while an agent is resolving", () => {
     show(confirmedGroup(record({ frozen: true, state: "idle" })));
-    expect(within(screen.getByRole("region", { name: "Git" })).queryAllByRole("button")).toEqual([]);
+    expect(within(screen.getByRole("region", { name: "Git" })).queryAllByRole("button").map((button) => button.textContent)).toEqual(["Integrate now"]);
     cleanup();
     show(confirmedGroup(record({ frozen: true, state: "resolving" })));
     expect(within(screen.getByRole("region", { name: "Git" })).queryAllByRole("button")).toEqual([]);
+  });
+
+  it("#333: sends integrate-now for an idle approved integration, says up to date once the accepted tip is integrated, and shows a backoff", () => {
+    const { onCommand, section } = show(confirmedGroup(record({ frozen: true, state: "idle", retryAfter: Date.UTC(2026, 10, 17, 3, 4, 5), transient: 2, transientReason: "ssh: connect to host timed out" })));
+    // mutation: drop the backoff line -> no such element, red
+    expect(section.querySelector("[data-integration-backoff]")?.textContent).toContain("ssh: connect to host timed out");
+    fireEvent.click(within(section).getByRole("button", { name: "Integrate now" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "integrate-now", groupId: "g", expectedRevision: 6, payload: {} }]]);
+    cleanup();
+    const tip = "3".repeat(40);
+    const base = confirmedGroup(record({ frozen: true, state: "idle", lastIntegrated: tip }));
+    const accepted: GroupViewV1 = { ...base, summary: { ...base.summary, acceptance: { tip, result: "passed", commands: [], at: 0 } } };
+    const { section: upToDate } = show(accepted);
+    // mutation: always offer the button -> the button instead of the note, red
+    expect(within(upToDate).queryByRole("button", { name: "Integrate now" })).toBeNull();
+    expect(upToDate.querySelector("[data-integration-up-to-date]")?.textContent).toBe("Up to date: the latest accepted tip is already integrated.");
   });
 
   it("gives a member the facts but neither button", () => {

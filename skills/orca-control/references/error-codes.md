@@ -206,8 +206,12 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `integration-invalid` | 400 |
 | `integration-no-checks` | 409 |
 | `integration-not-blocked` | 409 |
+| `integration-not-configured` | 409 |
+| `integration-not-idle` | 409 |
+| `integration-not-ready` | 409 |
 | `integration-preflight-failed` | 409 |
 | `integration-unapproved` | 409 |
+| `integration-up-to-date` | 409 |
 | `labels-invalid` | 422 |
 | `labels-version-conflict` | 409 |
 | `landing-branch-conflict` | 409 |

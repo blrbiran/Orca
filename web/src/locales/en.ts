@@ -1055,6 +1055,10 @@ export const en = {
       prDraft: "draft",
       prReady: "ready",
       retry: "Retry integration",
+      // Delivery tail spec D6 (#333): skip the retry wait; Orca still checks the tasks are done and accepted.
+      integrateNow: "Integrate now",
+      upToDate: "Up to date: the latest accepted tip is already integrated.",
+      backoff: "Retrying after {{at}}: {{reason}}",
       resolve: "Resolve with an agent",
       reason: {
         "integration-target-missing": "the target branch does not exist",
@@ -2582,6 +2586,10 @@ export const enErrors: Record<string, string> = {
   "integration-invalid": "The integration settings failed a check (branch name, remote name, whether the remote exists, whether it is a GitHub repository): {{detail}}",
   "integration-no-checks": "This task has no checks to run, so its integration conflict cannot be given to an agent.",
   "integration-not-blocked": "This group's integration is not stuck; there is nothing to resolve.",
+  "integration-not-configured": "This group keeps its work on its own branch; there is nothing to integrate. Choose a delivery first.",
+  "integration-not-idle": "This group's integration is stopped or being resolved; retry it or resolve the conflict instead.",
+  "integration-not-ready": "This group cannot be integrated yet: its tasks are not all done, its acceptance has not passed, or a run is still active.",
+  "integration-up-to-date": "This group's latest work is already integrated; there is nothing new to carry.",
   "integration-preflight-failed": "The integration check before confirming failed: {{detail}}",
   "integration-unapproved": "This group's integration settings differ from the ones seen at confirmation. Read the group again, then confirm.",
   // Control run decisions plan Task 9: approving a decision that did not land.

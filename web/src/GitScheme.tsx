@@ -13,17 +13,18 @@ import { AccountContext, mayHumanOnly } from "./AuthGate.js";
 import type { ControlAction } from "./controlApi.js";
 import type { GroupIntegrationViewV1, GroupViewV1, RepositoryWorkspaceV1 } from "./controlTypes.js";
 import { integrationReasonText, integrationSentence } from "./IntegrationScheme.js";
+import { localDateTime } from "./ui/localTime.js";
 
 const short = (commit: string): string => commit.slice(0, 12);
 /** Final review Minor 3: only `https://<host>/<owner>/<name>/pull/<n>` is ever a link; anything else is shown as text. */
 const PR_URL = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/;
 
 /** Integration spec §6.5, §9.1: where a non-keep group's integration stands; an owner may Retry a block and approve a resolution. */
-function IntegrationState(props: { groupId: string; revision: number; integration: GroupIntegrationViewV1; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
+function IntegrationState(props: { groupId: string; revision: number; integration: GroupIntegrationViewV1; acceptedTip?: string | null; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const mayAct = mayHumanOnly(useContext(AccountContext)) && props.onCommand !== undefined && props.archived !== true;
   const { integration, groupId, revision } = props;
-  const send = (verb: "retry-integration" | "resolve-integration-conflict"): void => props.onCommand?.({ verb, groupId, expectedRevision: revision, payload: {} });
+  const send = (verb: "retry-integration" | "integrate-now" | "resolve-integration-conflict"): void => props.onCommand?.({ verb, groupId, expectedRevision: revision, payload: {} });
   const commit = (value: string | null): string => (value === null ? t("control.integration.notYet") : short(value));
   const pr = integration.pr;
   const prLabel = pr === null ? "" : t("control.integration.pr", { number: pr.number, state: t(pr.ready ? "control.integration.prReady" : "control.integration.prDraft") });
@@ -56,6 +57,14 @@ function IntegrationState(props: { groupId: string; revision: number; integratio
       <li>{t("control.integration.lastIntegrated", { commit: commit(integration.lastIntegrated) })}</li>
       <li>{t("control.integration.integratedCommit", { commit: commit(integration.integratedCommit) })}</li>
       {pr !== null && <li>{PR_URL.test(pr.url) ? <a href={pr.url}>{prLabel}</a> : prLabel}</li>}
+      {/* Delivery tail spec D5 (#333): a backoff is said, with when it is tried again. */}
+      {integration.retryAfter !== undefined && (
+        <li data-integration-backoff>{t("control.integration.backoff", { at: localDateTime(integration.retryAfter), reason: integration.transientReason ?? "—" })}</li>
+      )}
+      {/* D6: the person's "integrate now" -- an idle, approved integration; the latest accepted tip already integrated is said. */}
+      {mayAct && integration.frozen && integration.state === "idle" && (props.acceptedTip != null && props.acceptedTip === integration.lastIntegrated
+        ? <li data-integration-up-to-date>{t("control.integration.upToDate")}</li>
+        : <li><button type="button" data-integrate-now onClick={() => send("integrate-now")}>{t("control.integration.integrateNow")}</button></li>)}
       {mayAct && (integration.state === "blocked" || integration.state === "conflict") && (
         <li><button type="button" onClick={() => send("retry-integration")}>{t("control.integration.retry")}</button></li>
       )}
@@ -90,7 +99,7 @@ export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWork
               <li>{t("control.git.push")}</li>
             </>
           )
-          : <IntegrationState groupId={groupId} revision={view.summary.commandRevision} integration={view.integration} onCommand={props.onCommand} archived={props.archived} />}
+          : <IntegrationState groupId={groupId} revision={view.summary.commandRevision} integration={view.integration} acceptedTip={view.summary.acceptance?.tip ?? null} onCommand={props.onCommand} archived={props.archived} />}
       </ul>
       {runs.length === 0
         ? <p>{t("control.git.noRuns")}</p>

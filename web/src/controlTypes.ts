@@ -863,8 +863,8 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "usage-pause-decide" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-draft-edit" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
@@ -929,6 +929,7 @@ export type CommandSuccessV1 = {
     | { kind: "criteria-review-set"; repoId: string; enabled: boolean }
     | { kind: "group-integration-set"; groupId: string; integration: IntegrationSchemeV1 }
     | { kind: "integration-retried"; groupId: string }
+    | { kind: "integration-requested"; groupId: string }
     | { kind: "integration-resolution-started"; groupId: string }
     | { kind: "acceptance-recheck-requested"; groupId: string; tip: string }
     | { kind: "acceptance-waived"; groupId: string; tip: string }
