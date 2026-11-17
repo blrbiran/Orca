@@ -155,6 +155,11 @@ export interface ExecutionDriverDeps {
    * *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** it overrides handoffGraceMsOf(run, window): max(killGraceMs, frozen recovery window + 5 s) + 60 s.
    */
   handoffGraceMs?: number;
+  /**
+   * Test seam only (test pruning, 2026-11-17): replaces just the fixed HANDOFF_EXTRA_GRACE_MS (60 s) inside
+   * handoffGraceMsOf, so an end-to-end criterion still measures the run's frozen killGraceMs without waiting a minute.
+   */
+  handoffExtraGraceMs?: number;
   /** Syncskill integration spec §10.6: the syncskill A2 injects a run's skills with (ORCA_SYNCSKILL_BIN); absent = unconfigured. */
   syncskill?: SyncskillOptions;
   /** Test seam only (debug task plan Task 8): replaces checkReproduction, so a criterion can see it is never called. */

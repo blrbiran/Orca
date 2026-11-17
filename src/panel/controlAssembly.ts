@@ -138,6 +138,8 @@ export interface ControlAssemblyInput {
   executionPortReason?: string;
   /** Test-only fault injection for the execution driver (spec §7.2 R1). Never set by the CLI. */
   driverCrash?: (point: CrashPoint) => void;
+  /** Test-only (test pruning, 2026-11-17): the driver's handoffExtraGraceMs seam. Never set by the CLI. */
+  handoffExtraGraceMs?: number;
   /**
    * Test-only (agent selection spec §9 criterion 8, plan T16): wraps the chosen port, before any profile or service
    * is built on it, so a criterion can record which selection each gate asked ccloop about. Never set by the CLI.
@@ -431,7 +433,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, dispatchedPersonDir, astGrepBin: resolveAstGrepBin(env),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
-      kickPump: () => { void pump(); }, crash: input.driverCrash,
+      kickPump: () => { void pump(); }, crash: input.driverCrash, handoffExtraGraceMs: input.handoffExtraGraceMs,
       // Syncskill integration spec §10.6: A2 injects a run's frozen skills with the same ORCA_SYNCSKILL_BIN confirm froze them with.
       syncskill: syncskillOptionsFromEnv(env),
     });

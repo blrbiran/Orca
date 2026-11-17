@@ -237,8 +237,8 @@ export function ccloopWorlds(options: { rootPrefix: string; epochPrefix: string 
     // Every runtime this world booted and has not closed; `teardown` shuts each down and closes it, so a
     // failing scenario leaves no pump or driver running into the next one.
     const live = new Set<ControlRuntime>();
-    const boot = async (driverCrash?: (point: CrashPoint) => void, wrapPort?: (port: ExecutionPort) => ExecutionPort): Promise<ControlRuntime> => {
-      const runtime = await assembleControlRuntime({ control, repos, epoch: `${options.epochPrefix}${++epoch}`, env, driverCrash, wrapPort });
+    const boot = async (driverCrash?: (point: CrashPoint) => void, wrapPort?: (port: ExecutionPort) => ExecutionPort, seams: { handoffExtraGraceMs?: number } = {}): Promise<ControlRuntime> => {
+      const runtime = await assembleControlRuntime({ control, repos, epoch: `${options.epochPrefix}${++epoch}`, env, driverCrash, wrapPort, handoffExtraGraceMs: seams.handoffExtraGraceMs });
       if (runtime === null) throw new Error("the control plane did not assemble");
       live.add(runtime);
       if(worldOptions.tokenPolicy==="optional-v1")optionalPolicyWorlds.add(runtime);

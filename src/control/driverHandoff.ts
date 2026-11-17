@@ -296,10 +296,10 @@ function settleSingleCallUnderStop(deps: ExecutionDriverDeps, run: DriverRun, re
  * that grace is max(killGraceMs, 65_000) + 60_000: no shorter than any default run's grace, though not a true ceiling
  * (ccloop docs/superpowers/specs/2026-10-01-claude-adapter-consolidation-step1-design.md §6, §11, §13).
  */
-export function handoffGraceMsOf(run: { killGraceMs?: unknown }, recoveryWindowMs: unknown): number {
+export function handoffGraceMsOf(run: { killGraceMs?: unknown }, recoveryWindowMs: unknown, extraGraceMs: number = HANDOFF_EXTRA_GRACE_MS): number {
   const windowMs = usableMs(recoveryWindowMs) ? recoveryWindowMs : UNUSABLE_RECOVERY_WINDOW_MS;
   const killGraceMs = usableMs(run.killGraceMs) ? run.killGraceMs : 60_000;
-  return Math.max(killGraceMs, windowMs + PARTIAL_FLUSH_MARGIN_MS) + HANDOFF_EXTRA_GRACE_MS;
+  return Math.max(killGraceMs, windowMs + PARTIAL_FLUSH_MARGIN_MS) + extraGraceMs;
 }
 
 /** The frozen contract's partialOutcomeRecoveryWindowMs; 0 for a single call (it has no execute to stop). */
@@ -323,7 +323,7 @@ function frozenRecoveryWindowOf(deps: ExecutionDriverDeps, run: DriverRun): unkn
 /** spec §3 grace (controller decision): past deadline + killGraceMs + 60 s with nothing collected. *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the bound is handoffGraceMsOf with the frozen recovery window. */
 async function settleIfPastGrace(deps: ExecutionDriverDeps, run: DriverRun, request: HandoffRequestBody): Promise<boolean> {
   if (request.state === "outcome-unknown") return false;
-  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }, frozenRecoveryWindowOf(deps, run)))) return false;
+  if (nowMs(deps) <= Date.parse(request.deadlineAt) + (deps.handoffGraceMs ?? handoffGraceMsOf({ killGraceMs: run.killGraceMs }, frozenRecoveryWindowOf(deps, run), deps.handoffExtraGraceMs))) return false;
   return write(deps, () => {
     const current = readHandoffRequest(deps.store, run.groupId, request.requestId).request;
     if (current.state === "outcome-unknown" || !ADOPTABLE_STATES.includes(current.state)) return false;

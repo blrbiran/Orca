@@ -31,6 +31,14 @@ describe("the handoff grace the driver waits (spec §3)", () => {
     expect(handoffGraceMsOf({}, 0)).toBe(120_000);
   });
 
+  // Ruling: human 2026-11-17 (test pruning) -- handoffE2E's G injects a short extra grace (the driver's
+  // handoffExtraGraceMs seam) instead of waiting the production minute; the 60_000 stays pinned above as the default,
+  // and the injected value replaces only the fixed part, never the run's killGraceMs or window bound.
+  it("an injected extra grace replaces only the fixed minute", () => {
+    expect(handoffGraceMsOf({ killGraceMs: 5_000 }, 0, 2_000)).toBe(7_000);
+    expect(handoffGraceMsOf({ killGraceMs: 5_000 }, 70_000, 2_000)).toBe(77_000);
+  });
+
   // ccloop consolidation step 1 (spec §6, §7.4): ccloop does not kill an execute before the recovery window plus
   // the margin, so a grace shorter than that would call a stop unknown while ccloop may still print its partial.
   it("waits the recovery window plus the margin when that is longer than killGraceMs", () => {

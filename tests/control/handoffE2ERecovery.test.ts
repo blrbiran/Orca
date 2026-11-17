@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { readDriverRun } from "../../src/control/executionDriver.js";
 import { readStopIntent } from "../../src/control/stopIntent.js";
+import { releaseOnly } from "../helpers/releaseGate.js";
 import { ccloopWorlds, KILL_GRACE_MS, noBlocked, realBinary, startGroup, until } from "./fixtures/ccloopWorld.js";
 import {
   checkpointOf, crashAt, HALVES, HALVES_CALLS, HALVES_SCRIPTED, HALVES_TASKS, handoffStop, inExecute, requestState, resumeAsThePanelWould, runsOf,
@@ -26,10 +27,16 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2) 
   // settled as worker-lost (and its open request closes from that terminal, "H-lost" below), so G now freezes the worker
   // instead (SIGSTOP): it is alive -- ccloop reports no lost worker -- and yields nothing. G's point, the grace timing, is
   // unchanged; the worker is killed after the assertions.
-  it("G: a delivered stop that yields nothing turns outcome-unknown only past deadline + the adapter's killGraceMs + 60 s", async () => {
+  //
+  // Ruling: human 2026-11-17 (test pruning) -- G no longer waits the production 60 s: the driver's fixed extra grace is
+  // injected short (G_EXTRA_GRACE_MS, through the handoffExtraGraceMs seam), and the run's frozen killGraceMs is still
+  // what G measures. The 60 s value is pinned by tests/panel/assemblyHandoffGrace.test.ts and, as the driver's default,
+  // by driverHandoff.test.ts "does not call a request outcome-unknown before the killGraceMs ...".
+  it("G: a delivered stop that yields nothing turns outcome-unknown only past deadline + the adapter's killGraceMs + the fixed extra grace", async () => {
+    const G_EXTRA_GRACE_MS = 5_000;
     const w = await world([{ taskId: "a", targetPaths: ["a1.txt"] }], { a: { files: { "a1.txt": "A1\n" }, delayMs: { execute: 8_000 } } });
     let frozen: number | null = null;
-    const runtime = await w.boot(); try {
+    const runtime = await w.boot(undefined, undefined, { handoffExtraGraceMs: G_EXTRA_GRACE_MS }); try {
       await startGroup(runtime, w.repoId);
       runtime.startPump(50);
       await inExecute(w, runtime, ["a"]);
@@ -43,9 +50,10 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2) 
       await until(() => requestState(runtime, requestId!) === "outcome-unknown", 180_000, "the request to turn outcome-unknown");
       const observed = Date.now();
       // The grace is the run's frozen killGraceMs (the world's installation table answers 5 s at confirmation):
-      // HANDOFF_EXTRA_GRACE_MS alone would have turned it at deadline + 60 s.
-      expect(observed).toBeGreaterThanOrEqual(Date.parse(deadlineAt) + KILL_GRACE_MS + 60_000);
-      expect(observed).toBeLessThan(Date.parse(deadlineAt) + KILL_GRACE_MS + 60_000 + 30_000);
+      // the extra grace alone would have turned it at deadline + G_EXTRA_GRACE_MS.
+      // mutation: the driver ignores deps.handoffExtraGraceMs -> waits 60 s, past the upper bound, red
+      expect(observed).toBeGreaterThanOrEqual(Date.parse(deadlineAt) + KILL_GRACE_MS + G_EXTRA_GRACE_MS);
+      expect(observed).toBeLessThan(Date.parse(deadlineAt) + KILL_GRACE_MS + G_EXTRA_GRACE_MS + 30_000);
       // spec §11 I3: outcome-unknown never kills anything and never lands anything; the run is left as it was.
       expect(readDriverRun(runtime.store, a!.runId).state).toBe("accepted");
       expect(w.landings()).toBe(0);
@@ -124,8 +132,9 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2) 
     } finally { await w.teardown(); }
   });
 
-  it.each(["H-after-deliver", "H-after-candidate", "A2-after-bundle", "B-after-accept"] as const)(
-    "R-H %s: a death between a handoff action and its record ends where H1 ends, spending no more", async (point) => {
+  // Ruling: human 2026-11-17 (test pruning) -- one real-ccloop crash case stays daily (B-after-accept); the other R-H
+  // points run in the release gate only, each covered daily by a driver-harness test (named at each case below).
+  const rhCase = async (point: "H-after-deliver" | "H-after-candidate" | "A2-after-bundle" | "B-after-accept"): Promise<void> => {
       const w = await world(HALVES_TASKS, HALVES);
       try {
         const first = await w.boot(crashAt(point));
@@ -156,9 +165,17 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2) 
         expect(sourceDirs(second)).toHaveLength(2);
         expect(await second.shutdown()).toBe(true);
       } finally { await w.teardown(); }
-    });
+    };
+  const RH_TITLE = "R-H %s: a death between a handoff action and its record ends where H1 ends, spending no more";
+  it.each(["B-after-accept"] as const)(RH_TITLE, rhCase);
+  // Release-only. Daily cover: driverHandoff.test.ts "re-delivers the identical request after a death between delivery and
+  // its record (H-after-deliver) ..." and "settles once after a death between reading the candidate and settling
+  // (H-after-candidate)"; driverContinuation.test.ts "A2 of a continuation after a death (... R-H A2-after-bundle)".
+  it.runIf(releaseOnly).each(["H-after-deliver", "H-after-candidate", "A2-after-bundle"] as const)(RH_TITLE, rhCase);
 
-  it("R-H H-between-commit-and-settle: a death after a landed run settled and before its request did ends settled, and an empty resume reopens the group", async () => {
+  // Release-only. Daily cover: driverHandoff.test.ts "settles the request after a death between the run's settle and the
+  // request's (R-H H-between-commit-and-settle)".
+  it.runIf(releaseOnly)("R-H H-between-commit-and-settle: a death after a landed run settled and before its request did ends settled, and an empty resume reopens the group", async () => {
     const w = await world([{ taskId: "a", targetPaths: ["a.txt"], verifierType: "command" }], { a: { files: { "a.txt": "A\n" } } });
     try {
       const first = await w.boot(crashAt("D-after-cas"));
