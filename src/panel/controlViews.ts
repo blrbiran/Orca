@@ -304,6 +304,15 @@ const persistedRunSchema = z.object({
   abandon: abandonRequestSchema.optional(),
 }).strict();
 
+/**
+ * Tester #348: why a stored run body does not decode under the strict run read schema -- zod's first issue -- or null when
+ * it does. The one decode every group read of a run goes through (runDecode below), and the guard test's check.
+ */
+export function persistedRunProblem(body: unknown): string | null {
+  const parsed = persistedRunSchema.safeParse(body);
+  return parsed.success ? null : parsed.error.issues[0]?.message ?? "invalid";
+}
+
 function blocked(detail: string): never {
   throw new ControlError("recovery-blocked", detail);
 }
