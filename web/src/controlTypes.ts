@@ -1570,4 +1570,6 @@ export type PlanLibraryImportPayloadV1 = {
 };
 
 /** Tester #349: one Codex session ccloop could not delete; `retry-failed` is never retried automatically again. */
-export interface SessionCleanupEntryV1 { threadId: string; home: string; state: "failed" | "retry-failed"; detail: string }
+export interface SessionCleanupEntryV1 { threadId: string; home: string; state: "failed" | "retry-failed"; detail: string;
+  /** The delete's recorded argv and the HOME it ran with (a ccloop that sends them); the manual command uses both. */
+  command?: string[]; userHome?: string }

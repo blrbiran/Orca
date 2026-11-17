@@ -21,11 +21,21 @@ async function show(extra: Record<string, unknown>): Promise<string[]> {
 }
 
 describe("run show names a Codex session that could not be deleted (#349)", () => {
-  it("prints the session, its state and detail, and the manual command", async () => {
-    const lines = await show({ sessionCleanup: [{ threadId: ID, home: "/c/codex-home", state: "retry-failed", detail: "exit 1: Error: failed to delete session" }] });
+  // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18): the controller's review
+  // asked for ccloop's recorded argv with HOME (this test pinned the bare command) and state-specific words.
+  const argv = ["/opt/codex", "-c", "model_catalog_json=\"/c/cat.json\"", "delete", "--force", ID];
+  const entry = (state: string) => ({ threadId: ID, home: "/c/codex-home", state, detail: "exit 1: Error: failed to delete session", command: argv, userHome: "/c/home" });
+  it("prints a retry-failed session, says it will not be retried, and gives ccloop's own delete with CODEX_HOME and HOME", async () => {
+    const lines = await show({ sessionCleanup: [entry("retry-failed")] });
     // mutation: no sessionCleanupLines in run show -> red
-    expect(lines).toContain(`session cleanup: Codex session ${ID} could not be deleted, and the automatic retry failed too (it is not retried again): exit 1: Error: failed to delete session`);
-    expect(lines).toContain(`  delete it by hand: CODEX_HOME=/c/codex-home codex delete --force ${ID}`);
+    expect(lines).toContain(`session cleanup: Codex session ${ID} could not be deleted, and the automatic retry failed too; it will not be retried again: exit 1: Error: failed to delete session`);
+    expect(lines).toContain(`  delete it by hand: CODEX_HOME=/c/codex-home HOME=/c/home /opt/codex -c 'model_catalog_json="/c/cat.json"' delete --force ${ID}`);
+    expect(lines.join("\n")).not.toContain("tries once more");
+  });
+
+  it("says a failed session is tried once more", async () => {
+    const lines = await show({ sessionCleanup: [entry("failed")] });
+    expect(lines).toContain(`session cleanup: Codex session ${ID} could not be deleted; the next cleanup tries once more: exit 1: Error: failed to delete session`);
   });
 
   it("prints nothing for a run without one", async () => {

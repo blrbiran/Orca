@@ -21,7 +21,9 @@ beforeEach(() => {
 afterEach(async () => { cleanup(); await i18n.changeLanguage("en"); });
 
 const ID = "01a1e8f9-d197-7e41-83ee-d32888151bda", HOME = "/Users/p/.cache/ccloop/agent-catalog/codex-home/abc/codex-home";
-const entry = (state: "failed" | "retry-failed") => ({ threadId: ID, home: HOME, state, detail: "exit 1: Error: failed to delete session" });
+const ARGV = ["/opt/codex bin/codex", "-c", "model_catalog_json=\"/c/catalog.json\"", "delete", "--force", ID], USER_HOME = "/Users/p/.cache/ccloop/agent-catalog/codex-home/abc/home";
+const MANUAL = `CODEX_HOME=${HOME} HOME=${USER_HOME} '/opt/codex bin/codex' -c 'model_catalog_json="/c/catalog.json"' delete --force ${ID}`;
+const entry = (state: "failed" | "retry-failed") => ({ threadId: ID, home: HOME, state, detail: "exit 1: Error: failed to delete session", command: ARGV, userHome: USER_HOME });
 const landed = (over: Partial<RunViewV1> = {}) => run({ runId: "run-a", taskId: "a", state: "landed", ...over });
 const mount = (runs: RunViewV1[]) => render(<ControlGroupView view={view([workItem({ taskId: "a", status: "completed", category: "done", currentRunId: "run-a" })], runs)}
   config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
@@ -29,10 +31,14 @@ const problemsTab = (): HTMLElement => screen.getByRole("tab", { name: "Problems
 const text = (html: string): string => html.replace(/<[^>]*>/g, "").replace(/&#x27;/g, "'").replace(/&quot;/g, "\"");
 
 describe("a Codex session that could not be deleted (#349)", () => {
-  it("the manual command deletes that session in its private home, quoting a home that needs it", () => {
-    expect(sessionCleanupCommand(entry("failed"))).toBe(`CODEX_HOME=${HOME} codex delete --force ${ID}`);
-    // mutation: no quoting -> the spaced path splits -> red
-    expect(sessionCleanupCommand({ ...entry("failed"), home: "/a b/codex-home" })).toBe(`CODEX_HOME='/a b/codex-home' codex delete --force ${ID}`);
+  // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18); the controller's review
+  // named this test: it pinned the bare `CODEX_HOME=<home> codex delete --force <id>`, which omits the HOME, binary and
+  // `-c model_catalog_json` pair ccloop's own delete needed, so it could fail the same way.
+  it("the manual command is ccloop's recorded delete, with its CODEX_HOME and HOME, every word shell-quoted", () => {
+    // mutation: argv ignored (plain form) -> red; mutation: HOME left out -> red; mutation: no quoting -> red
+    expect(sessionCleanupCommand(entry("failed"))).toBe(MANUAL);
+    // A ccloop that sent no argv: the plain form, still in its private home.
+    expect(sessionCleanupCommand({ threadId: ID, home: "/a b/codex-home" })).toBe(`CODEX_HOME='/a b/codex-home' codex delete --force ${ID}`);
   });
 
   it("is a Problems row of a settled run, listed but not counted, with the manual command", async () => {
@@ -44,7 +50,10 @@ describe("a Codex session that could not be deleted (#349)", () => {
     // mutation: drop the SessionCleanupRows from the Problems region -> no row -> red
     const row = panel.querySelector('[data-session-cleanup-run-id="run-a"]');
     expect(row?.textContent).toContain(`Codex session ${ID} of run run-a could not be deleted, and the automatic retry failed too`);
-    expect(row?.textContent).toContain(`CODEX_HOME=${HOME} codex delete --force ${ID}`);
+    expect(row?.textContent).toContain(MANUAL);
+    // Review: a retry-failed deletion is never retried again, so its notice must not promise one.
+    expect(row?.textContent).toContain("it will not be retried again");
+    expect(row?.textContent).not.toContain("tries once more");
     // mutation: the run itself made a problem run (isProblemRun) -> its ordinary problem row appears too -> red
     expect(panel.querySelector('[data-problem-run-id="run-a"]')).toBeNull();
   });
@@ -65,7 +74,17 @@ describe("a Codex session that could not be deleted (#349)", () => {
     await i18n.changeLanguage("zh");
     mount([landed({ sessionCleanup: [entry("failed")] })]);
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "运行与证据" })); });
-    expect(screen.getByRole("tabpanel", { name: "运行与证据" }).querySelector('[data-session-cleanup-run-id="run-a"]')?.textContent).toContain("没能删除");
+    expect(screen.getByRole("tabpanel", { name: "运行与证据" }).querySelector('[data-session-cleanup-run-id="run-a"]')?.textContent).toContain("下一次清理会再试一次");
+  });
+
+  it("a retry-failed notice says it will not be retried, in Chinese too", async () => {
+    await i18n.changeLanguage("zh");
+    mount([landed({ sessionCleanup: [entry("retry-failed")] })]);
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "运行与证据" })); });
+    const text = screen.getByRole("tabpanel", { name: "运行与证据" }).querySelector('[data-session-cleanup-run-id="run-a"]')?.textContent ?? "";
+    expect(text).toContain("不会再自动重试");
+    expect(text).not.toContain("再试一次");
+    expect(text).toContain(MANUAL);
   });
 
   it("words ccloop's cleanup-failed cause, in English and Chinese", async () => {

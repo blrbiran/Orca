@@ -119,7 +119,8 @@ describe("production ccloop execution port",()=>{
   });
   // Tester #349: ccloop's optional list of Codex sessions it could not delete; today's pin never sends it (every test above).
   it("accepts the optional sessionCleanup list and refuses an entry of another shape (#349)",async()=>{
-    const sessionCleanup=[{threadId:"01a1e8f9-d197-7e41-83ee-d32888151bda",home:"/c/codex-home",state:"retry-failed",detail:"exit 1: Error: failed to delete session"}];
+    const sessionCleanup=[{threadId:"01a1e8f9-d197-7e41-83ee-d32888151bda",home:"/c/codex-home",state:"retry-failed",detail:"exit 1: Error: failed to delete session",
+      command:["/opt/codex","delete","--force","01a1e8f9-d197-7e41-83ee-d32888151bda"],userHome:"/c/home"}];
     const h=await fixture("ok",{collectExtra:{sessionCleanup}});
     expect((await h.port.collect(h.envelope,0)).sessionCleanup).toEqual(sessionCleanup);
     const bad=await fixture("ok",{collectExtra:{sessionCleanup:[{...sessionCleanup[0],state:"pending"}]}});

@@ -1017,7 +1017,7 @@ export const en = {
     // Tester #349: a Codex session ccloop could not delete; it keeps the run's prompt in a private file until deleted.
     sessionCleanup: {
       failed: "Codex session {{threadId}} of run {{runId}} could not be deleted; the next cleanup tries once more. Until it is deleted it keeps the run's prompt in a private file ({{detail}}).",
-      retryFailed: "Codex session {{threadId}} of run {{runId}} could not be deleted, and the automatic retry failed too; it is not retried again. Until it is deleted it keeps the run's prompt in a private file ({{detail}}).",
+      retryFailed: "Codex session {{threadId}} of run {{runId}} could not be deleted, and the automatic retry failed too; it will not be retried again. Until it is deleted it keeps the run's prompt in a private file ({{detail}}).",
       command: "Delete it by hand:",
     },
     failureCause: {

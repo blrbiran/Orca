@@ -1,4 +1,5 @@
 /** Helpers every write row uses: the row builder, the reads pins come from, and argument conversions. */
+import { sessionCleanupCommand } from "../../control/sessionCleanupCommand.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -457,13 +458,15 @@ export function workerLostLines(runs: ReadonlyArray<EmptyResultRun & { failureCa
  * prompt in its private rollout; `run show` names it with the command that deletes it (the Web run view says the same).
  */
 export function sessionCleanupLines(run: { sessionCleanup?: unknown } | undefined): string[] {
-  const entries = Array.isArray(run?.sessionCleanup) ? run.sessionCleanup as Array<{ threadId?: unknown; home?: unknown; state?: unknown; detail?: unknown }> : [];
+  const entries = Array.isArray(run?.sessionCleanup) ? run.sessionCleanup as Array<{ threadId?: unknown; home?: unknown; state?: unknown; detail?: unknown; command?: unknown; userHome?: unknown }> : [];
   return entries.flatMap((entry) => {
-    const id = String(entry.threadId ?? "?"), home = String(entry.home ?? "?");
-    const state = entry.state === "retry-failed" ? ", and the automatic retry failed too (it is not retried again)" : "; the next cleanup tries once more";
-    const quoted = /^[A-Za-z0-9_./-]+$/.test(home) ? home : `'${home.replace(/'/g, "'\\''")}'`;
+    const id = String(entry.threadId ?? "?");
+    // Review: only a `failed` deletion is retried once more; a `retry-failed` one never is again.
+    const state = entry.state === "retry-failed" ? ", and the automatic retry failed too; it will not be retried again" : "; the next cleanup tries once more";
+    const command = Array.isArray(entry.command) && entry.command.every((word) => typeof word === "string") ? entry.command as string[] : undefined;
     return [`session cleanup: Codex session ${id} could not be deleted${state}: ${String(entry.detail ?? "")}`,
-      `  delete it by hand: CODEX_HOME=${quoted} codex delete --force ${id}`];
+      `  delete it by hand: ${sessionCleanupCommand({ threadId: id, home: String(entry.home ?? "?"), ...(command === undefined ? {} : { command }),
+        ...(typeof entry.userHome === "string" ? { userHome: entry.userHome } : {}) })}`];
   });
 }
 

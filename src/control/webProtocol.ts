@@ -2210,7 +2210,8 @@ export const runViewSchema = z
       observedAt: nonemptyString, revision: positiveSafeInteger }).strict().optional(),
     usageAt: safeInteger.optional(),
     // Tester #349: the run's Codex sessions ccloop could not delete, with what the manual delete needs; absent otherwise.
-    sessionCleanup: z.array(z.object({ threadId: z.string().uuid(), home: nonemptyString, state: z.enum(["failed", "retry-failed"]), detail: z.string() }).strict()).min(1).optional(),
+    sessionCleanup: z.array(z.object({ threadId: z.string().uuid(), home: nonemptyString, state: z.enum(["failed", "retry-failed"]), detail: z.string(),
+      command: z.array(nonemptyString).min(1).max(256).optional(), userHome: nonemptyString.optional() }).strict()).min(1).optional(),
     // Tester #321 part C (review ruling 2026-11-18): the run's usage in its bucket is unknown, so `used` is not a figure; absent otherwise.
     usageUnknown: z.literal(true).optional(),
     usageBreakdown: z.object({ input: safeInteger, output: safeInteger, cacheRead: safeInteger, cacheWrite: safeInteger }).strict().optional(),

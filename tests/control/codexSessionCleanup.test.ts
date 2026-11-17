@@ -6,7 +6,8 @@ import { driverHarness } from "./fixtures/driverHarness.js";
 // Tester #349 (human's ruling, session 4389b15f, 2026-11-18): ccloop lists the run's Codex sessions it could not delete; Orca
 // keeps the latest list on the run as a standing notice (the run view shows it, also after the run settles), and drops it
 // when ccloop stops listing it (the sweep or a person deleted the session).
-const entry = { threadId: "01a1e8f9-d197-7e41-83ee-d32888151bda", home: "/c/codex-home", state: "failed" as const, detail: "exit 1: Error: failed to delete session" };
+const entry = { threadId: "01a1e8f9-d197-7e41-83ee-d32888151bda", home: "/c/codex-home", state: "failed" as const, detail: "exit 1: Error: failed to delete session",
+  command: ["/opt/codex", "delete", "--force", "01a1e8f9-d197-7e41-83ee-d32888151bda"], userHome: "/c/home" };
 
 async function inFlight() {
   let listed: ExecutionReport["sessionCleanup"];
