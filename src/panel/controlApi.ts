@@ -39,7 +39,7 @@ import { readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
 import { suggestFullSuiteCommand } from "../control/fullSuite.js";
 import { readFlowSettings } from "../flow/settings.js";
-import { FolderTooLarge, listFolderImages, readBuiltinTemplates } from "../flow/startForm.js";
+import { FolderTooLarge, listFolderImages, readBuiltinTemplates, type FolderListCaps } from "../flow/startForm.js";
 import { loadBuiltin } from "../flow/template/load.js";
 import { AgentCeilingRefusal } from "../control/spendCaps.js";
 import type { WebControlService } from "../control/webService.js";
@@ -59,6 +59,8 @@ export interface ControlReadApiDeps {
   service?: WebControlService;
   /** Gaps plan Task 10-B fix round 2: the registered dir projects (default: the service's `flowProjects`). */
   flowProjects?: () => ReadonlyArray<{ repoId: string; path: string }>;
+  /** The folder-image read's caps (default: startForm's FOLDER_* constants); a test narrows them instead of writing 20,001 files. */
+  folderListCaps?: Partial<FolderListCaps>;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
   port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions" | "readFeatures" | "agentsTableAbsent">;
 }
@@ -525,7 +527,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     let excludes: string[];
     try { excludes = [...(loadBuiltin(template, builtinRoot()).template.workspace.excludes ?? [])]; }
     catch (error) { sendMappedControlError(res, new ControlError("flow-template-invalid", (error as Error).message)); return; }
-    try { res.json(await listFolderImages(dir, excludes)); }
+    try { res.json(await listFolderImages(dir, excludes, deps.folderListCaps)); }
     catch (error) {
       if (error instanceof FolderTooLarge) sendControlError(res, 400, error.code, error.message);
       else sendControlError(res, 400, "query-invalid", `${dir} is not a folder that can be listed`);

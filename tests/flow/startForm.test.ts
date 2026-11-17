@@ -116,7 +116,10 @@ describe("the start dialog's routes (§8.4)", () => {
     // no longer a folder), and "relative" / "." stop at the absolute-path check first.
     const big = join(root, "big");
     const projects = [{ repoId: "folder-1", path: dir }, { repoId: "big-1", path: big }, { repoId: "file-1", path: join(dir, "covers/one.png") }];
-    registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never, flowProjects: () => projects }, "web");
+    // Ruling: human 2026-11-17 (test pruning) -- the route takes its entry cap from deps, so the over-cap folder below holds
+    // 11 files instead of FOLDER_ENTRY_LIMIT+1 = 20,001 (the suite's most frequent load flake: writing and listing them
+    // overran the 5 s time cap). The production value stays pinned in "refuses a listing past the time cap".
+    registerControlReadRoutes(app, { store, epoch: "epoch", config: { readView: async () => ({}) } as never, flowProjects: () => projects, folderListCaps: { entries: 10 } }, "web");
     const server = createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -137,8 +140,9 @@ describe("the start dialog's routes (§8.4)", () => {
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(join(dir, "covers/one.png"))}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "query-invalid" } } });
     // Task 10-B fix I1: a folder past the entry cap is named too large, not "not a folder".
     mkdirSync(big);
-    for (let i = 0; i <= FOLDER_ENTRY_LIMIT; i++) writeFileSync(join(big, `f${i}`), "");
-    // mutation: map every failure to query-invalid -> "query-invalid", red
+    for (let i = 0; i <= 10; i++) writeFileSync(join(big, `f${i}`), "");
+    // mutation: map every failure to query-invalid -> "query-invalid", red; mutation: the route drops deps.folderListCaps
+    // -> the 11 files are listed (200), red
     expect(await get(`/api/control/flows/images?dir=${encodeURIComponent(big)}&template=wechat-article`)).toMatchObject({ status: 400, body: { error: { code: "flow-folder-too-large" } } });
   });
 });
