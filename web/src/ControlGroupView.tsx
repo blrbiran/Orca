@@ -284,6 +284,7 @@ function RunRetry({ view, run, archived, onCommand, active = true }: { view: Gro
 import { overviewRegionId } from "./overviewNavigation.js";
 import { AbandonRun, abandonUnresolved } from "./AbandonRun.js";
 import { GroupResults } from "./GroupResults.js";
+import { ResultsConclusion } from "./ResultsConclusion.js";
 import { orderByLayout } from "./dependencyLayout.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
 import { RegionDrafts } from "./regionDraft.js";
@@ -622,6 +623,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const decisions = read !== null && !("failed" in read) && read.groupId === groupId ? read : null;
   const decisionsFailed = read !== null && "failed" in read ? read.failed : null;
   const taskNeedsHuman = (taskId: string): boolean => decisions?.tasks.some((task) => task.taskId === taskId && task.runs.some(runNeedsHuman)) === true;
+  // The Problems tab's count; the Results conclusion card says the same number (#319).
+  const problemCount = view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length;
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
@@ -852,7 +855,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {dispatchControls}
       {/* What Problems and Live hold, said on their tabs: the region's own lists, plus the group's refusal shown above. */}
       <GroupDetailRegions groupId={groupId} selected={region} onSelect={selectRegion}
-        hints={{ problem: view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length, live: runningNow(view).length }} regions={{
+        hints={{ problem: problemCount, live: runningNow(view).length }} regions={{
         progress: <>
       <DependencyGraph items={view.workItems} runs={view.runs} now={props.now} openTask={openTask} onOpen={toggleTask} />
       {/* Tester #303/#304: one name for the list, which is its disclosure, and the label filter in the same header row, named
@@ -977,6 +980,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       </div>)}
 </>,
         results: <>
+      {/* Tester #319 (proposal 1): the conclusion first; each waiting line leads to the existing place with its action. */}
+      <ResultsConclusion view={view} decisions={decisions} problemCount={problemCount}
+        onOpenProblems={() => selectRegion("problem")}
+        onOpenIntegration={() => { const target = document.getElementById(overviewRegionId("group", groupId, "integration")); target?.scrollIntoView?.({ block: "start" }); target?.focus(); }}
+        onOpenTask={(taskId) => { if (openTask !== taskId) toggleTask(taskId); }} />
       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
       {/* Dir-requirements spec §9.3: a dir group's region is its folder placement, not the scheme picker (§7: its delivery is fixed). */}
       {view.summary.multiDir !== undefined ? (
@@ -993,13 +1001,11 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         </>
       )}
       </div>
-      <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""} />
+      {/* Tester #319 (proposal 5): no "open run" button per run; a task's runs open from its row (its detail, below). */}
+      <GroupResults view={view} active={props.active !== false && region === "results"} scope={props.resultsScope ?? ""}
+        openTask={openTask} onOpenTask={toggleTask} onOpenRuns={() => openRun(runsInCreationOrder(view.runs).at(-1)!.runId)} />
       <GroupHandoffs view={view} />
       <p>{t("detail.resultsEvidence")}</p>
-      {view.runs.length > 0 && <details data-run-links open={view.runs.length <= 1}>
-        <summary>{t("detail.runLinks", { count: view.runs.length })}</summary>
-        {view.runs.map(run => <button key={run.runId} type="button" onClick={() => openRun(run.runId)}>{t("detail.openRun", { runId: run.runId })}</button>)}
-      </details>}
       {taskDetail}
 </>,
         runs: <>

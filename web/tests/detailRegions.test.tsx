@@ -115,7 +115,9 @@ it("unsaved integration form stays mounted through region changes", async () => 
 it("completed Results with missing explanation opens its exact existing evidence run", () => {
  const value=view([],[run({runId:"result-run",state:"settled-recoverable"})]);value.summary.state="done";mount(value);
  expect(screen.getByRole("status").textContent).toContain("explanation is missing");
- fireEvent.click(screen.getByRole("button",{name:"Open run controls and evidence · result-run"}));expect(selected()).toBe("Runs and evidence");expect(document.activeElement?.getAttribute("data-run-id")).toBe("result-run");
+ // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+ // #319 proposal 5: one "Open runs and evidence" button (the newest run) replaces the per-run list.
+ fireEvent.click(screen.getByRole("button",{name:"Open runs and evidence"}));expect(selected()).toBe("Runs and evidence");expect(document.activeElement?.getAttribute("data-run-id")).toBe("result-run");
  expect(screen.getByRole("button",{name:"evidence"})).toBeTruthy();
 });
 // Tester #53: a group opened from the Board or a list card sits below the card grid; it scrolls its own heading into view

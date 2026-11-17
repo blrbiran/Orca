@@ -21,16 +21,17 @@ it("puts the Git delivery state before long Results evidence (#319)",()=>{
  expect(git.compareDocumentPosition(results)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-it("folds a long list of run links without losing the open action (#319)",()=>{
+// Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+// #319 proposal 5: the folded run-link list is gone -- no button per run at all; a task's runs open from its row.
+it("lists no per-run open buttons in Results (#319)",async()=>{
  const data=savedGroup();vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(data))));
  const group=view([], [
   run({runId:"run-1",taskId:"a"}),run({runId:"run-2",taskId:"b"}),run({runId:"run-3",taskId:"c"}),
  ]);group.summary.state="done";
  render(<ControlGroupView view={group} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()}/>);
- const details=screen.queryByText("Run links (3)")?.closest("details");
- expect(details?.open).toBe(false);
- fireEvent.click(details!.querySelector("summary")!);
- expect(within(details as HTMLElement).getAllByRole("button")).toHaveLength(3);
+ await screen.findByRole("region",{name:"Task results · a"});
+ expect(document.querySelector("details[data-run-links]")).toBeNull();
+ expect(screen.queryAllByRole("button",{name:/^Open run controls and evidence/})).toEqual([]);
 });
 
 it("summarizes later task results while keeping their evidence expandable (#319)",async()=>{

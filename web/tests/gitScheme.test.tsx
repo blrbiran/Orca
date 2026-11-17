@@ -52,9 +52,11 @@ describe("the Git section (spec B3)", () => {
       run({ runId: "run-e", taskId: null, estimateId: "e", phase: "estimate", git: { workspaceMode: "worktree", base: null, landedCommit: null } }),
     ]));
     const rows = within(within(section()).getByRole("table", { name: "Runs and their landings" })).getAllByRole("row").slice(1);
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    // #319 proposal 3: the run column left (the run id is the task cell's title); the workspace names the branch it lands on.
     expect(rows.map((row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent))).toEqual([
-      ["a", "run-a", "a private clone", "111111111111", "222222222222"],
-      ["b", "run-b", "a git worktree", "111111111111", "not landed"],
+      ["a", "orca/g a private clone", "111111111111", "222222222222"],
+      ["b", "orca/g a git worktree", "111111111111", "not landed"],
     ]);
   });
 

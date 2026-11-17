@@ -29,7 +29,9 @@ it("unknown current attempt and unavailable source keep saved history explicitly
 });
 it.each(["invalid","missing"] as const)("actual successful task survives %s explanation with original evidence navigation",async(status)=>{
  mount(savedRun({currentExplanation:{status,reason:"report-unreadable",content:null}}));const current=await screen.findByRole("region",{name:"Current result · run-a"});expect(current.textContent).toContain("succeeded");expect(current.textContent).toContain("Verification: passed");
- fireEvent.click(screen.getByRole("button",{name:"Open run controls and evidence · run-a"}));expect(screen.getByRole("tab",{selected:true}).textContent).toBe("Runs and evidence");expect(screen.getByRole("button",{name:"evidence"})).toBeTruthy();
+ // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+ // #319 proposal 5: the run's evidence is reached from the task's row in Results (its detail), not a per-run button.
+ fireEvent.click(within(screen.getByRole("region",{name:"Task results · a"})).getByRole("button",{name:"a"}));expect(within(screen.getByRole("region",{name:"Task a"})).getByRole("button",{name:"List evidence of run-a"})).toBeTruthy();
 });
 it("hidden pane and hidden App section make no result reads",async()=>{
  const {calls,props,app}=mount(savedRun(),false);await act(async()=>{});expect(calls).toHaveLength(0);

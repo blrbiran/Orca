@@ -15,9 +15,9 @@ import type { GroupIntegrationViewV1, GroupViewV1, RepositoryWorkspaceV1 } from 
 import { integrationReasonText, integrationSentence } from "./IntegrationScheme.js";
 import { localDateTime } from "./ui/localTime.js";
 
-const short = (commit: string): string => commit.slice(0, 12);
+export const short = (commit: string): string => commit.slice(0, 12);
 /** Final review Minor 3: only `https://<host>/<owner>/<name>/pull/<n>` is ever a link; anything else is shown as text. */
-const PR_URL = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/;
+export const PR_URL = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*$/;
 
 /** Integration spec §6.5, §9.1: where a non-keep group's integration stands; an owner may Retry a block and approve a resolution. */
 function IntegrationState(props: { groupId: string; revision: number; integration: GroupIntegrationViewV1; acceptedTip?: string | null; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
@@ -76,12 +76,16 @@ function IntegrationState(props: { groupId: string; revision: number; integratio
   );
 }
 
+/** The group's work branch: the summary's `branch` (always `orca/<groupId>` on the server), else that name. */
+export const workBranch = (view: GroupViewV1): string => view.summary.branch ?? `orca/${view.summary.groupId}`;
+
 export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWorkspaceV1 | null; onCommand?: (action: ControlAction) => void; archived?: boolean }): JSX.Element {
   const { t } = useTranslation();
   const { view } = props;
   const groupId = view.summary.groupId;
   const runs = view.runs.filter((run) => run.taskId !== null && run.git != null);
   const mode = props.workspace?.repoId === view.plan.repoId ? props.workspace.workspaceMode : null;
+  const branch = workBranch(view);
   return (
     <section aria-label={t("control.git.region")}>
       <h3>{t("control.git.region")}</h3>
@@ -107,17 +111,19 @@ export function GitScheme(props: { view: GroupViewV1; workspace?: RepositoryWork
           <details open={runs.length <= 2}>
             <summary>{t("control.git.runCommitEvidence", { count: runs.length })}</summary>
           <table aria-label={t("control.git.runsRegion")}>
+            {/* Tester #319 (proposal 3): the bare run id is no column; it stays on the task cell's title. A run works in a
+                detached worktree or clone (named after the run, removed after it lands), so its workspace is told by the
+                branch it lands on, with worktree / clone as a hint; each commit shows short, the full sha on hover. */}
             <thead>
-              <tr><th>{t("control.git.th.task")}</th><th>{t("control.git.th.run")}</th><th>{t("control.git.th.mode")}</th><th>{t("control.git.th.base")}</th><th>{t("control.git.th.landed")}</th></tr>
+              <tr><th>{t("control.git.th.task")}</th><th>{t("control.git.th.workspace")}</th><th>{t("control.git.th.base")}</th><th>{t("control.git.th.merged")}</th></tr>
             </thead>
             <tbody>
               {runs.map((run) => (
                 <tr key={run.runId}>
-                  <td>{run.taskId}</td>
-                  <td>{run.runId}</td>
-                  <td>{t(run.git!.workspaceMode === "worktree" ? "control.workspace.aWorktree" : "control.workspace.aClone")}</td>
-                  <td>{run.git!.base === null ? t("common.none") : <code>{short(run.git!.base)}</code>}</td>
-                  <td>{run.git!.landedCommit === null ? t("control.git.notLanded") : <code>{short(run.git!.landedCommit)}</code>}</td>
+                  <td title={run.runId}>{run.taskId}</td>
+                  <td><code>{branch}</code> <small className="text-muted">{t(run.git!.workspaceMode === "worktree" ? "control.workspace.aWorktree" : "control.workspace.aClone")}</small></td>
+                  <td>{run.git!.base === null ? t("common.none") : <code title={run.git!.base}>{short(run.git!.base)}</code>}</td>
+                  <td>{run.git!.landedCommit === null ? t("control.git.notLanded") : <code title={run.git!.landedCommit}>{short(run.git!.landedCommit)}</code>}</td>
                 </tr>
               ))}
             </tbody>

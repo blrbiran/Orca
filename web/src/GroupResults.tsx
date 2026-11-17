@@ -6,7 +6,11 @@ import { fetchGroupResults } from "./resultApi.js";
 import { shownWorkStatus } from "./runFacts.js";
 import { useSavedRunAuthority, SavedRunResult } from "./TaskResults.js";
 import { useResultsRead } from "./useResultsRead.js";
-export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string}):JSX.Element {
+/**
+ * Tester #319 (proposal 5): a task's runs are reached from its own row -- its name opens the task's detail (runs, evidence,
+ * transcripts) -- not from one "open run" button per run; without a results read, one button opens the runs region.
+ */
+export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string;openTask?:string|null;onOpenTask?:(taskId:string)=>void;onOpenRuns?:()=>void}):JSX.Element {
  const {t}=useTranslation();const {view}=props;
  const identity=JSON.stringify([props.scope,view.epoch,view.changeSeq,view.summary.groupId]);
  const authority=useSavedRunAuthority(JSON.stringify([props.scope,view.epoch,view.summary.groupId]));
@@ -14,6 +18,7 @@ export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string
  const value=state.value;
  return <section aria-label={t("results.groupRegion")} className="group-results">
   {value===null && <p role="status">{t(view.summary.state==="done"?"detail.resultsMissing":"detail.resultsNotProduced")}</p>}
+  {value===null && view.runs.length>0 && <button type="button" onClick={()=>props.onOpenRuns?.()}>{t("control.results.openRuns")}</button>}
   {state.error!==null && <p role="alert">{t("results.refused",{code:state.error})}</p>}
   {value!==null && <>
    <h3>{t("results.groupRegion")}</h3><p>{value.goal}</p><ul>{value.successConditions.map((condition,i)=><li key={i}>{condition}</li>)}</ul>
@@ -22,7 +27,7 @@ export function GroupResults(props:{view:GroupViewV1;active:boolean;scope:string
    {value.review.runs.length===0?<p>{t("results.reviewNotRun")}</p>:<ul>{value.review.runs.map(run=><li key={run.runId}>{run.runId} · {enumText("runState",run.state)} · {run.outcome == null ? t("results.unknown") : enumText("progressStep",run.outcome)}</li>)}</ul>}
    <h4>{t("results.delivery")}</h4><p>{value.delivery===null?t("results.deliveryUnavailable"):t("results.deliveryStatus",{state:t(`control.integration.state.${value.delivery.state}`),commit:value.delivery.integratedCommit ?? t("common.none")})}</p>
    {value.tasks.map((task,index)=><section key={task.taskId} aria-label={t("results.taskRegion",{taskId:task.taskId})}>
-    <h4>{task.taskId}</h4><p>{t("results.taskStatus",{taskId:task.taskId,status:enumText("workStatus",shownWorkStatus(task))})} · {t(`results.availability.${task.availability}`)}</p>
+    <h4><button type="button" className="btn-quiet px-1" aria-expanded={props.openTask===task.taskId} onClick={()=>props.onOpenTask?.(task.taskId)}>{task.taskId}</button></h4><p>{t("results.taskStatus",{taskId:task.taskId,status:enumText("workStatus",shownWorkStatus(task))})} · {t(`results.availability.${task.availability}`)}</p>
     {task.pendingRunId!==null && <p>{t("results.pendingRun",{runId:task.pendingRunId})}</p>}
     <details data-task-evidence={task.taskId} open={index===0 || shownWorkStatus(task)==="blocked" || task.runs.some(run=>run.attempts.some(attempt=>attempt.verification==="failed"))}>
      <summary>{t("results.runEvidence",{count:task.runs.length})}</summary>
