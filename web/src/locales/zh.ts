@@ -870,6 +870,7 @@ export const zh: Translation<typeof en> = {
       historyForm: {
         sources: "历史来源（可选）：每行一个 taskId=refs/heads/<branch>，按合并顺序",
         artifacts: "目标必须包含的文件（可选，每行一个）",
+        placeholder: "T1=refs/heads/feature-a",
         bad: "不是 taskId=refs/heads/<branch> 的格式：{{line}}",
         needs: "历史来源要求「时机」为组完成时、「方法」为合并提交。",
         artifactsAlone: "「目标必须包含的文件」要和至少一个历史来源一起填。",

@@ -1031,6 +1031,7 @@ export const en = {
       historyForm: {
         sources: "History sources (optional): one taskId=refs/heads/<branch> per line, in merge order",
         artifacts: "Files the target must hold (optional, one per line)",
+        placeholder: "T1=refs/heads/feature-a",
         bad: "Not taskId=refs/heads/<branch>: {{line}}",
         needs: "History sources need When = when the group completes and Method = merge commit.",
         artifactsAlone: "Files the target must hold go with at least one history source.",

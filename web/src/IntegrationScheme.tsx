@@ -149,7 +149,7 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
             <>
               <label>
                 {t("control.integration.historyForm.sources")}
-                <textarea rows={3} value={fields.history} placeholder="T1=refs/heads/feature-a" onChange={(event) => set({ history: event.currentTarget.value })} />
+                <textarea rows={3} value={fields.history} placeholder={t("control.integration.historyForm.placeholder")} onChange={(event) => set({ history: event.currentTarget.value })} />
               </label>
               <label>
                 {t("control.integration.historyForm.artifacts")}
