@@ -214,6 +214,18 @@ describe("a large mirror directory in the quick tier", () => {
     expect(r.out).toContain("  root tests/c/plain.test.ts <- src/c/thing.ts (mirror tests/c/)\n");
   });
 
+  it("with no results cache (the wide fallback) a large mirror directory is still selected whole", () => {
+    const { repo, run } = tierRepo(null, BIG);
+    write(repo, "src/big/fooBar.ts", "export const f = 2;\n");
+    commit(repo);
+    const r = run(["--dry-run", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: narrow whenever the run is not --wide (`wide ||` for `!quick.root ||`) -> 3 rows instead of 64.
+    const picked = rows(r.out, "selected");
+    expect(picked.length, r.out).toBe(64);
+    expect(picked.every((row) => row.startsWith("root tests/big/")), r.out).toBe(true);
+  });
+
   it("the wide tier still selects a large mirror directory whole", () => {
     const { repo, run } = tierRepo(CACHE, BIG);
     write(repo, "src/big/fooBar.ts", "export const f = 2;\n");

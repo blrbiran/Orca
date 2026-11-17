@@ -306,14 +306,16 @@ section changes it for large directories. The wide tier is unchanged.
   (`src/control/fooBar.ts` → `tests/control/**/fooBar*.test.ts`), labelled `(name match in <dir>: <n> tests > 60, not the
   whole mirror)`. Changed tests, direct importers anywhere, catalogue tables, text readers and data-file rows apply as
   before. A gone path in such a directory also selects the tests that still import it (the direct-import scan reads
-  import text, so it finds them). A data file in such a directory that no test names selects that mirror directory
-  (what the whole mirror selected before), not the whole suite. A mirror directory of 60 or fewer test files, the wide
+  import text, so it finds them). A data file in such a directory that no other row selected (no test or helper names
+  it, no test file name starts with its basename) selects that mirror directory (what the whole mirror selected
+  before), not the whole suite. A mirror directory of 60 or fewer test files, the wide
   tier, and a suite with no results cache (wide fallback) select exactly what they did before.
 - **Threshold.** Test files per `tests/<dir>/` at `20d534de` (`find tests/<dir> -name '*.test.ts' -type f | wc -l`):
   control 471, panel 123, flow 84, commands 72, scheduler 57, then corrections 18 and less. Sums of recorded durations
-  (results cache, same tree): control 9899 s, flow 1380 s, panel 941 s, scheduler 213 s with no file ≥ 30 s. 60 sits in
-  the gap between scheduler and commands: the four largest directories are narrowed, and scheduler, a light suite, stays
-  whole.
+  (results cache, same tree): control 9899 s, flow 1380 s, panel 941 s, scheduler 213 s with no file ≥ 30 s. The
+  threshold is a count, not a cost: 60 sits in the gap between scheduler (57) and commands (72), so today the four
+  largest directories are narrowed and scheduler is not; a directory that grows past 60 test files is narrowed from then
+  on, whatever its cost.
 - **Measured** (`node <script> --dry-run --base <sha>^` at each commit, in a `git clone --local` copy; old = the script
   at `20d534de`, new = at `c7a79188`; root files selected / deferred; the clone had no web results cache, so web rows
   are the wide fallback and the same in both):
@@ -332,6 +334,10 @@ section changes it for large directories. The wide tier is unchanged.
   not named after it; a test that exercises it through a spawned process or a fixture file only; a test named after the
   module with a different prefix (for `src/control/budget.ts`, `loopBudgetOwner.test.ts` is not taken by name;
   `budget.test.ts` and `budgetSuggestionsShared.test.ts` are).
+  Size of the gap (measured by the controller's independent reviewer of this branch, 2026-11-18): for central
+  `src/control` modules most of `tests/control/` reaches the module only through other imports and is not selected —
+  `requirementReview.ts` 341 of 348 such tests, `budget.ts` 379 of 420. For those modules the quick tier is close to
+  unit level; integration regressions surface at the batch's `npm run test:wide`.
 - **Criteria** (`tests/scripts/testAffectedTiers.test.ts`, "a large mirror directory in the quick tier"): narrowed module,
   gone module, unnamed data file, small directory unchanged, wide tier unchanged. Each new branch was mutated in a
   `git clone --local` copy and seen red: whole mirror for large directories (3 red), no name match (2), no gone-path
