@@ -339,6 +339,7 @@ section changes it for large directories. The wide tier is unchanged.
   `requirementReview.ts` 341 of 348 such tests, `budget.ts` 379 of 420. For those modules the quick tier is close to
   unit level; integration regressions surface at the batch's `npm run test:wide`.
 - **Criteria** (`tests/scripts/testAffectedTiers.test.ts`, "a large mirror directory in the quick tier"): narrowed module,
-  gone module, unnamed data file, small directory unchanged, wide tier unchanged. Each new branch was mutated in a
-  `git clone --local` copy and seen red: whole mirror for large directories (3 red), no name match (2), no gone-path
-  importer scan (1), no data mirror fallback (1), narrowing in the wide tier (1), narrowing small directories (1).
+  gone module, unnamed data file, small directory unchanged, no-cache fallback unchanged, wide tier unchanged. Each new
+  branch was mutated in a `git clone --local` copy and seen red: whole mirror for large directories (3 red), no name
+  match (2), no gone-path importer scan (1), no data mirror fallback (1), narrowing in the wide tier (1), narrowing small
+  directories (1), narrowing whenever the run is not `--wide` (`wide ||` for `!quick.root ||`; the no-cache case, 1).
