@@ -1,0 +1,268 @@
+// Stuck-runs spec 2026-11-17 Correction 3 (independent review 2026-11-18, Orca session 4389b15f). Adapted from the reviewer's
+// reproductions. An abandoned run with an open handoff request never settled: its terminal went to the abandoned settle,
+// which yielded to the request, and step H yielded back (findings 1 and 7). A start-pending run ccloop had already accepted
+// kept its watch-only ceiling when the driver found it accepted, so ccloop never stopped it (finding 2). The recovery row
+// for a handoff-unresolved run offered `run abandon` after the run was abandoned (finding 8). Controller's decision: abandon
+// wins -- the request closes `settled-unrecoverable` (`run-abandoned`) and the run settles as every abandoned run does.
+// Named mutations (each seen red in a clone, Rule 9) are written beside the assertion they turn red.
+import { describe, expect, it } from "vitest";
+import { withCommandContext } from "../../src/control/commandClient.js";
+import { createExecutionDriver, readStartEnvelope, stepA1, stepA2 } from "../../src/control/executionDriver.js";
+import type { LiveCeilingWire } from "../../src/control/executionPort.js";
+import { readBudgetProposal, readGroup, readWork } from "../../src/control/queries.js";
+import { groupStopState, readHandoffRequest } from "../../src/control/stopIntent.js";
+import { readControlRecovery } from "../../src/panel/controlViews.js";
+import { driverHarness } from "./fixtures/driverHarness.js";
+import type { FakeBehaviour } from "./fixtures/driverPort.js";
+import { committedAndUsed, requestBody, requestState, stop } from "./fixtures/handoffHarness.js";
+
+type T = Awaited<ReturnType<typeof driverHarness>>;
+const OWNER = { client: "web", principal: "user:owner" };
+const NOTE = "worthless";
+
+/**
+ * A ccloop that runs silently until told to stop, then reports `exhausted` with a live-ceiling stop. With `honour`, a
+ * ceiling at or below what the run used stops it as ccloop would. `final` replaces the stopped terminal (an unknown-usage one).
+ */
+async function world(options: { honour?: boolean; final?: FakeBehaviour; delayAccept?: () => Promise<void> } = {}) {
+  const knobs = { stopped: false };
+  const sent: LiveCeilingWire[] = [];
+  const t = await driverHarness([{ taskId: "a" }], {
+    tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true,
+    behaviour: () => (knobs.stopped ? options.final ?? "exhausted" : "stoppable-silent"),
+    stopReason: () => (knobs.stopped ? "live token ceiling reached" : null),
+    setLiveCeiling: async (_input, ceiling) => {
+      sent.push(ceiling);
+      if (options.honour === true && ceiling.tokens <= 10) knobs.stopped = true;
+      return { revision: ceiling.revision, tokens: ceiling.tokens };
+    },
+    liveCeilingStop: () => (knobs.stopped && sent.length > 0 ? { revision: sent.at(-1)!.revision, tokens: sent.at(-1)!.tokens, cause: "group", observedTokens: 10, phase: "execute", at: "mid-call" } : undefined),
+    ...(options.delayAccept === undefined ? {} : { delayAccept: options.delayAccept }),
+  });
+  return { t, knobs, sent };
+}
+const abandon = (t: T, runId: string) => {
+  const command = t.h.command("abandon-run", { runId, note: NOTE });
+  return withCommandContext(command.commandId, OWNER, () => t.service.abandonRun(command as never));
+};
+const active = (t: T, runId: string): number => Number(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)!.active);
+const runCount = (t: T): number => Number(t.h.store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id='g' AND work_item_id='a'").get()!.n);
+const settledAbandoned = (t: T, runId: string) => {
+  const run = t.body(runId);
+  return [active(t, runId), run.state, run.failureCode, run.operatorSettlement?.kind, readWork(t.h.store, "g", "a").status];
+};
+const ABANDONED = [0, "settled-failed", "run-abandoned", "abandoned", "blocked"];
+/** What the group's books say once the run settled: reserved + used per dimension, used tokens, the task's allocation states. */
+const books = (t: T) => ({
+  committedAndUsed: committedAndUsed(t), used: readGroup(t.h.store, "g").used.tokens,
+  allocations: readBudgetProposal(t.h.store, "g").allocations.filter((a) => a.ownerKind === "task" && a.ownerId === "a").map((a) => a.state),
+});
+
+/** The plain abandon (no stop at all): the books every abandon under a request must match. */
+async function plainAbandonBooks() {
+  const { t, knobs } = await world();
+  try {
+    const runId = await t.claim();
+    const driver = t.driver();
+    await t.until(driver, () => t.body(runId).state === "accepted");
+    abandon(t, runId);
+    knobs.stopped = true;
+    await t.until(driver, () => active(t, runId) === 0);
+    expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+    return books(t);
+  } finally { await t.h.dispose(); }
+}
+
+describe("abandon wins over an open handoff request (Correction 3, finding 1)", { timeout: 240_000 }, () => {
+  it("route A: abandon, then stop-handoff, then ccloop stops the run -- the request closes run-abandoned and the books match a plain abandon", async () => {
+    const expected = await plainAbandonBooks();
+    const { t, knobs } = await world();
+    try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      expect(abandon(t, runId)).toMatchObject({ result: { stop: "live-ceiling" } });
+      const [requestId] = await stop(t);
+      await t.until(driver, () => requestState(t, requestId!) === "collecting");
+      knobs.stopped = true;
+      // mutation: drop the open-request close from settleAbandonedTerminal (yield to the request again) -> active stays 1, red
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect(t.body(runId).operatorSettlement).toEqual({ kind: "abandoned", by: "user:owner", note: NOTE, at: t.body(runId).abandon.at });
+      expect([requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
+      // mutation: count a run-abandoned request as partial in deriveFrozenStopState -> handoff-partial, resume refused, red
+      expect(groupStopState(t.h.store, "g")).toBe("handoff-complete");
+      // mutation: close the request with settleHandoffRequestInTransaction (a second terminaliseRun) -> reserve released twice, red
+      expect(books(t)).toEqual(expected);
+      // The stop lifts (nothing to continue), and still nothing is dispatched for the abandoned task until a person's task retry.
+      expect(await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [] }) as never)).not.toHaveProperty("error");
+      for (let i = 0; i < 10; i += 1) await driver.round();
+      expect(runCount(t)).toBe(1);
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }))).toMatchObject({ result: { kind: "task-retried" } });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("route B: stop-handoff past grace (handoff-unresolved), then run abandon as recovery list says, then ccloop stops", async () => {
+    const { t, knobs } = await world();
+    try {
+      const runId = await t.claim();
+      let now = Date.now();
+      const driver = createExecutionDriver({ ...t.deps, now: () => new Date(now) });
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const [requestId] = await stop(t);
+      await t.until(driver, () => requestState(t, requestId!) === "collecting");
+      now = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt) + 10_000_000;
+      await t.until(driver, () => requestState(t, requestId!) === "outcome-unknown");
+      expect(readControlRecovery(t.h.store, "e").unresolvedRuns?.[0]?.next[0]).toBe(`orca run abandon g --run ${runId} --note <why>`);
+      expect(abandon(t, runId)).toMatchObject({ result: { stop: "live-ceiling" } });
+      knobs.stopped = true;
+      // mutation: settle only an OPEN_STATES request (not outcome-unknown) -> active stays 1, red
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect([requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
+      expect(readControlRecovery(t.h.store, "e").unresolvedRuns).toBeUndefined();
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a start-pending run abandoned before it started, then frozen by stop-handoff, settles abandoned, not restartable", async () => {
+    const { t } = await world();
+    try {
+      const runId = await t.claim();
+      expect(stepA1(t.deps, runId)).toBe(true);
+      expect(await stepA2(t.deps, runId)).toBe(true);
+      expect(abandon(t, runId)).toMatchObject({ result: { stop: "not-started" } });
+      const [requestId] = await stop(t);
+      const driver = t.driver();
+      await t.until(driver, () => active(t, runId) === 0);
+      // mutation: drop settleAbandonedUnstarted from stepH -> restartRun settles it settled-restartable, task ready, red
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect([t.body(runId).drive.outcome, requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["not-started", "settled-unrecoverable", "run-abandoned"]);
+      expect(t.fake.calls.accept).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a run that succeeds after abandon under a request still lands (Correction 2.2 holds)", async () => {
+    const { t, knobs } = await world({ final: "succeed" });
+    try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      abandon(t, runId);
+      const [requestId] = await stop(t);
+      await t.until(driver, () => requestState(t, requestId!) === "collecting");
+      knobs.stopped = true;
+      await t.until(driver, () => !["request-pending", "latched", "collecting"].includes(requestState(t, requestId!)));
+      expect(readWork(t.h.store, "g", "a").status).toBe("done");
+      expect(t.body(runId).operatorSettlement).toBeUndefined();
+      expect(requestState(t, requestId!)).toBe("settled-recoverable");
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("abandon-unresolved under a handoff request (Correction 3, finding 7)", { timeout: 240_000 }, () => {
+  it("is marked past the grace on step H's path too, and its row offers no stop-handoff the group already has", async () => {
+    const { t, knobs } = await world();
+    try {
+      t.deps.handoffGraceMs = 50;
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      abandon(t, runId);
+      const [requestId] = await stop(t);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      // mutation: drop noteAbandonUnresolved from stepH's accepted case -> never marked, red (until times out)
+      await t.until(driver, () => t.body(runId).abandon.unresolvedAt !== undefined);
+      expect(requestState(t, requestId!)).toBe("collecting");
+      // mutation: offer `orca group stop-handoff` whatever the group's stop -> the refused step is listed first, red
+      expect(readControlRecovery(t.h.store, "e").unresolvedRuns).toEqual([
+        { groupId: "g", taskId: "a", runId, code: "abandon-unresolved", next: [`orca run show ${runId}`] }]);
+      knobs.stopped = true;
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect(readControlRecovery(t.h.store, "e").unresolvedRuns).toBeUndefined();
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("a handoff-unresolved run already abandoned (Correction 3, finding 8)", () => {
+  it("is not offered run abandon again (it would be refused run-abandon-pending)", async () => {
+    const { t } = await world();
+    try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      abandon(t, runId);
+      t.h.store.db.prepare("INSERT INTO handoff_requests(id,group_id,run_id,state,body) VALUES ('req-1','g',?,'outcome-unknown','{}')").run(runId);
+      // mutation: drop the abandon-pending case from unresolvedRunRows -> `orca run abandon` offered first, red
+      expect(readControlRecovery(t.h.store, "e").unresolvedRuns).toEqual([{ groupId: "g", taskId: "a", runId, code: "handoff-unresolved",
+        next: [`orca run show ${runId}`, `orca recovery retry --run ${runId}`] }]);
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("an abandoned start-pending run ccloop already accepted (Correction 3, finding 2)", { timeout: 240_000 }, () => {
+  it("found accepted by the never-started inspection: its ceiling is lowered and it settles abandoned", async () => {
+    const { t, sent } = await world({ honour: true });
+    try {
+      const runId = await t.claim();
+      expect(stepA1(t.deps, runId)).toBe(true);
+      expect(await stepA2(t.deps, runId)).toBe(true);
+      await t.fake.port.accept(readStartEnvelope(t.h.store, t.body(runId)));
+      expect(abandon(t, runId)).toMatchObject({ result: { stop: "not-started" } });
+      const driver = t.driver();
+      // mutation: drop the ceiling lowering from persistStatus -> MAX stays, ccloop never stops, red (until times out)
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(sent).toEqual([{ protocol: 1, revision: 2, tokens: 0, cause: "group" }]);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("abandoned while stepB's accept is in flight: the accept lowers its ceiling and it settles abandoned", async () => {
+    const box: { t?: T; runId?: string; answer?: unknown } = {};
+    const { t, sent } = await world({ honour: true, delayAccept: async () => { if (box.answer === undefined) box.answer = abandon(box.t!, box.runId!); } });
+    box.t = t;
+    try {
+      box.runId = await t.claim();
+      const runId = box.runId;
+      const driver = t.driver();
+      await t.until(driver, () => box.answer !== undefined);
+      expect(box.answer).toMatchObject({ result: { stop: "not-started" } });
+      // mutation: drop the ceiling lowering from persistStatus -> MAX stays, ccloop never stops, red (until times out)
+      await t.until(driver, () => active(t, runId) === 0);
+      expect(sent).toEqual([{ protocol: 1, revision: 2, tokens: 0, cause: "group" }]);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+describe("an abandoned run whose usage is unknown at its terminal (Correction 2.3)", { timeout: 240_000 }, () => {
+  it("is blocked at C as a failed run is; settle-usage then close-run end it", async () => {
+    const { t, knobs } = await world({ final: "failed-usage-unknown" });
+    try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      abandon(t, runId);
+      knobs.stopped = true;
+      // mutation: drop the usage-unknown block from settleAbandonedTerminal -> settled abandoned with unknown usage, red
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      expect([active(t, runId), t.body(runId).drive.blockedAt, t.body(runId).drive.blockedReason, t.body(runId).unknown.work]).toEqual([1, "C", "usage-unknown", true]);
+      expect(readControlRecovery(t.h.store, "e").terminalRuns).toEqual([{ groupId: "g", taskId: "a", runId, outcome: "failed", next: "settle-usage" }]);
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(active(t, runId)).toBe(1);
+      const run = t.body(runId);
+      const settled = await withCommandContext("settle-abandoned", OWNER, () => (t.service as never as { settleUnknownUsage: (c: unknown) => unknown }).settleUnknownUsage({
+        schema: "orca-raw-command-v1", commandId: "settle-abandoned", actorId: "human", expectedRevision: Number(t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision),
+        verb: "settle-unknown-usage", target: { kind: "group", groupId: "g" },
+        payload: { taskId: "a", runId, generation: run.generation, acknowledge: run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant" },
+      }));
+      expect(settled).not.toHaveProperty("error");
+      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ result: { kind: "run-closed" } });
+      expect([active(t, runId), t.body(runId).state, readWork(t.h.store, "g", "a").status]).toEqual([0, "settled-failed", "blocked"]);
+      for (let i = 0; i < 5; i += 1) await driver.round();
+      expect(runCount(t)).toBe(1);
+    } finally { await t.h.dispose(); }
+  });
+});

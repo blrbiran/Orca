@@ -1920,6 +1920,11 @@ function heldTaskRows(store: ControlStore): Array<{ groupId: string; taskId: str
  * still collected) -- abandon it, or ask for the handoff again. `abandon-unresolved`: a person abandoned it and ccloop did
  * not stop it within the handoff grace (driverHandoff.ts noteAbandonUnresolved) -- a handoff stop is the other way out.
  * Orca never kills a process; either row also clears when the run reports its terminal.
+ *
+ * Correction 3 (review 2026-11-18, finding 8): a row offers no step that would be refused. A run already abandoned is not
+ * offered `run abandon` (run-abandon-pending) -- it waits for ccloop to stop it at its lowered ceiling, so watching it comes
+ * first. A group that already has a handoff or shutdown stop is not offered `stop-handoff` (stop-already-active /
+ * stop-mode-conflict); an outcome-unknown request is asked for again by `recovery retry` instead.
  */
 function unresolvedRunRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; code: "handoff-unresolved" | "abandon-unresolved"; next: string[] }> {
   const out: Array<{ groupId: string; taskId: string; runId: string; code: "handoff-unresolved" | "abandon-unresolved"; next: string[] }> = [];
@@ -1927,13 +1932,17 @@ function unresolvedRunRows(store: ControlStore): Array<{ groupId: string; taskId
     const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; abandon?: { unresolvedAt?: unknown } };
     if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
     const { groupId, taskId, runId } = { groupId: run.groupId, taskId: run.taskId, runId: run.runId };
+    const request = store.db.prepare("SELECT state FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
     if (run.state === "accepted" && typeof run.abandon?.unresolvedAt === "number") {
-      out.push({ groupId, taskId, runId, code: "abandon-unresolved", next: [`orca group stop-handoff ${groupId}`, `orca run show ${runId}`] });
+      const stopMode = store.db.prepare("SELECT mode FROM stop_intents WHERE group_id=?").get(groupId)?.mode;
+      const stopStep = stopMode === "handoff" || stopMode === "shutdown"
+        ? request?.state === "outcome-unknown" ? [recoveryRetryCommand(runId)] : []
+        : [`orca group stop-handoff ${groupId}`];
+      out.push({ groupId, taskId, runId, code: "abandon-unresolved", next: [...stopStep, `orca run show ${runId}`] });
       continue;
     }
-    const request = store.db.prepare("SELECT state FROM handoff_requests WHERE group_id=? AND run_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, runId);
     if (request?.state === "outcome-unknown") out.push({ groupId, taskId, runId, code: "handoff-unresolved",
-      next: [`orca run abandon ${groupId} --run ${runId} --note <why>`, recoveryRetryCommand(runId)] });
+      next: run.abandon === undefined ? [`orca run abandon ${groupId} --run ${runId} --note <why>`, recoveryRetryCommand(runId)] : [`orca run show ${runId}`, recoveryRetryCommand(runId)] });
   }
   return out;
 }

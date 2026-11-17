@@ -77,20 +77,35 @@ export function applyAbandonRun(deps: AbandonRunDeps, command: AbandonRunCommand
         if (by === null) throw new ControlError("run-abandon-person-required");
         const at = store.now();
         const abandon: AbandonRequest = { by, note: command.payload.note, at };
-        const ceiling = run.state === "accepted" ? liveCeilingOf(run) : null;
-        const stop: "not-started" | "live-ceiling" | "no-live-ceiling" = NOT_STARTED.has(run.state) ? "not-started" : ceiling === null ? "no-live-ceiling" : "live-ceiling";
-        let ceilingTokens: number | null = null;
-        if (ceiling !== null) {
-          // The run's observed work tokens now: ccloop stops it at its next check (it compares its own, newer count).
-          ceilingTokens = Math.min(ceiling.tokens, run.cumulative.work.tokens);
-          run.liveCeiling = { ...ceiling, revision: ceiling.revision + 1, tokens: ceilingTokens };
-        }
+        const stop: "not-started" | "live-ceiling" | "no-live-ceiling" = NOT_STARTED.has(run.state) ? "not-started" : liveCeilingOf(run) === null ? "no-live-ceiling" : "live-ceiling";
         saveRunBody(store, { ...run, abandon });
-        // A bounding ceiling's outstanding part is held in the group's reserve; lowering it gives that back now.
-        if (ceiling !== null && boundingCeilingOf(run) !== null) freshCeilingReserve(store, groupId);
+        const ceilingTokens = lowerAbandonedCeiling(store, runId);
         recordActivity(store, { groupId, taskId: run.taskId, runId, kind: "run-abandon-requested", body: { by, note: abandon.note, stop, ceilingTokens } });
         return commandSuccess(context, { kind: "run-abandon-requested", runId, taskId: run.taskId, stop });
       },
     }).body;
   } finally { release?.(); }
+}
+
+/**
+ * The one writer of an abandoned run's lowered ceiling, inside the caller's transaction: an `accepted` run that carries
+ * `abandon` and a live ceiling gets a new revision whose tokens are its observed work tokens now (the driver's
+ * deliverLiveCeilings sends it; ccloop stops the run at its next check, comparing its own, newer count). A bounding ceiling's
+ * outstanding part is held in the group's reserve; lowering it gives that back now. Answers the tokens, or null when nothing
+ * was lowered (not accepted, not abandoned, no live ceiling).
+ *
+ * Called by `run abandon` on an accepted run, and -- Correction 3 (review 2026-11-18, finding 2) -- by every driver write
+ * that moves a run carrying `abandon` to `accepted` (a start-pending run abandoned as not started that ccloop had accepted,
+ * found by the never-started inspection or by stepB's accept answering after the abandon): without it that run kept its
+ * watch-only ceiling and ran on unbounded.
+ */
+export function lowerAbandonedCeiling(store: ControlStore, runId: string): number | null {
+  const run = readRunBody(store, runId) as AbandonableRun;
+  if (run.state !== "accepted" || abandonOf(run) === null) return null;
+  const ceiling = liveCeilingOf(run);
+  if (ceiling === null) return null;
+  const tokens = Math.min(ceiling.tokens, run.cumulative.work.tokens);
+  saveRunBody(store, { ...run, liveCeiling: { ...ceiling, revision: ceiling.revision + 1, tokens } });
+  if (boundingCeilingOf(run) !== null) freshCeilingReserve(store, run.groupId);
+  return tokens;
 }

@@ -13,7 +13,7 @@ import {
   ADOPTABLE_STATES, handoffRequestFromOutbox, latestRequestForRun, readHandoffRequest, readStopIntent, saveHandoffRequest,
   settleAbandonedRunInTransaction, settleCompletedRunRequestInTransaction, settleHandoffRequestInTransaction, settleNeverStartedRunInTransaction, type HandoffRequestBody,
 } from "./stopIntent.js";
-import { abandonOf, abandonSettlementOf } from "./abandonRun.js";
+import { abandonOf, abandonSettlementOf, lowerAbandonedCeiling } from "./abandonRun.js";
 import { readWorkspaceSetting } from "./workspaceSettings.js";
 import { isSingleCallRun, isWebWorkRun } from "./webDispatch.js";
 import { singleCallPurposeOf } from "./singleCall.js";
@@ -102,6 +102,9 @@ export async function stepH(deps: ExecutionDriverDeps, runId: string, context: D
   const run = readDriverRun(deps.store, runId);
   const request = openRequestOf(deps.store, run);
   if (request === null) return advance(deps, runId, context);
+  // Correction 3 (review 2026-11-18, abandon wins): a run a person abandoned before it reached the provider is settled
+  // abandoned, its request closed with it -- restartRun would give its task back `ready`, to be dispatched again on resume.
+  if ((run.state === "starting" || run.state === "start-pending") && await settleAbandonedUnstarted(deps, runId)) return true;
   switch (run.state) {
     case "settled": return settleCompletedRun(deps, run, request);
     case "starting": return restartRun(deps, runId, request.requestId);
@@ -109,7 +112,13 @@ export async function stepH(deps: ExecutionDriverDeps, runId: string, context: D
     case "start-pending": return run.drive?.prepared ? inspectUnderStop(deps, run, request) : restartRun(deps, runId, request.requestId);
     case "unknown": return inspectUnderStop(deps, run, request);
     // Debug task plan Task 8 (fix round 1, R1): a run in its reproduce-first check already ended in ccloop; C applies the check.
-    case "accepted": return run.drive?.debugRepro?.state === "checking" ? advance(deps, runId, context) : deliverAndCollect(deps, run, request, context);
+    // Correction 3 (review 2026-11-18, finding 7): an abandoned run under a request is named abandon-unresolved here too, as
+    // advance names one with no request.
+    case "accepted": {
+      if (run.drive?.debugRepro?.state === "checking") return advance(deps, runId, context);
+      const named = noteAbandonUnresolved(deps, run);
+      return await deliverAndCollect(deps, run, request, context) || named;
+    }
     // spec §3: a landing is a short local operation and a reconciliation run cannot be reached by the control
     // protocol, so neither is interrupted; the request settles once the run does (spec §11 C1).
     case "collected": case "landed": case "reconciling": return advance(deps, runId, context);
@@ -232,20 +241,21 @@ async function inspectNeverStarted(deps: ExecutionDriverDeps, run: DriverRun): P
  * settled as every abandoned run is (stopIntent.ts settleAbandonedRunInTransaction: `settled-failed`, the task `blocked`),
  * not restartable as S1 settles a paused one: an S1 settle gives the task back as `ready`, and a ready task is claimed
  * again at once, while an abandoned attempt waits for a person. Its drive says `not-started` (no ccloop outcome exists).
+ * Correction 3 (review 2026-11-18): under a handoff request too (stepH), whose request it closes `run-abandoned`.
  */
 export async function settleAbandonedUnstarted(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.state !== "starting" && run.state !== "start-pending") return false;
   if (singleCallPurposeOf(run) !== null || run.taskId === null || run.mode !== undefined || run.recoveryOf !== undefined) return false;
-  if (abandonOf(run) === null || openRequestOf(store, run) !== null || run.executionId !== null) return false;
+  if (abandonOf(run) === null || run.executionId !== null) return false;
   const inspected = await inspectNeverStarted(deps, run);
   if (inspected !== null) return inspected;
   const cleanupError = await removeNeverStartedWorkspace(deps, run);
   return write(deps, () => {
     const current = readDriverRun(store, runId);
     const request = abandonOf(current);
-    if (current.state !== run.state || current.executionId !== null || request === null || openRequestOf(store, current) !== null) return false;
+    if (current.state !== run.state || current.executionId !== null || request === null) return false;
     const settingRepoId = isMultiGroup(store, current.groupId) ? multiPrimaryRepoId(store, current.groupId) : groupRepoId(store, current.groupId);
     const drive = current.drive ?? newDrive(deps.roots, runId, readWorkspaceSetting(store, settingRepoId).workspaceMode, true);
     // Nothing is left for stepCleanupFailed: no report exists to archive, and the workspace went above (or never was).
@@ -293,6 +303,8 @@ async function inspectUnderStop(deps: ExecutionDriverDeps, run: DriverRun, reque
     current.state = "accepted";
     current.drive = { ...current.drive!, inspectUnknown: 0, blockedAt: null, blockedReason: null };
     saveDriverRun(deps.store, current);
+    // Correction 3 (review 2026-11-18, finding 2): an abandoned run found running is stopped by its ceiling, as any is.
+    lowerAbandonedCeiling(deps.store, run.runId);
     return true;
   });
 }

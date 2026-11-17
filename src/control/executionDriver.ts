@@ -14,7 +14,7 @@ import { topUpSum } from "./workTopUp.js";
 import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { boundingCeilingOf, liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
-import { abandonOf, abandonSettlementOf, RUN_ABANDONED } from "./abandonRun.js";
+import { abandonOf, abandonSettlementOf, lowerAbandonedCeiling, RUN_ABANDONED } from "./abandonRun.js";
 import { raiseCeilings } from "./liveCeilingRaise.js";
 import { classifyCeilingStop } from "./usagePause.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
@@ -784,6 +784,7 @@ export function persistStatus(deps: ExecutionDriverDeps, runId: string, status: 
   const { store } = deps;
   return write(deps, () => {
     const run = readDriverRun(store, runId);
+    const was = run.state;
     const drive = run.drive!;
     const block = (reason: string, patch: Partial<DriveRecord> = {}): boolean => {
       run.state = "blocked";
@@ -818,6 +819,8 @@ export function persistStatus(deps: ExecutionDriverDeps, runId: string, status: 
       return false;
     }
     saveDriverRun(store, run);
+    // Correction 3 (review 2026-11-18, finding 2): a run abandoned while it was not started that ccloop accepted after all.
+    if (run.state === "accepted" && was !== "accepted") lowerAbandonedCeiling(store, runId);
     return true;
   });
 }
@@ -832,7 +835,7 @@ export async function stepB(deps: ExecutionDriverDeps, runId: string): Promise<b
   const run = readDriverRun(store, runId);
   if (run.state !== "start-pending" || run.drive?.prepared !== true) return false;
   if (run.executionId !== null) {
-    return write(deps, () => { const current = readDriverRun(store, runId); current.state = "accepted"; saveDriverRun(store, current); return true; });
+    return write(deps, () => { const current = readDriverRun(store, runId); current.state = "accepted"; saveDriverRun(store, current); lowerAbandonedCeiling(store, runId); return true; });
   }
   if (store.dispatchBlocked || groupHeld(store, run.groupId) || deps.admissionGate?.draining) return false;
   if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)assertCurrentSavedRecovery(store,run,(deps.now?.()??new Date()).getTime());
@@ -2177,12 +2180,14 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
  * it is settled `settled-failed` with the person's settlement, its unused grant released and its task `blocked`
  * (`run-abandoned`), whatever failure it ended on (no work is kept for accept-attempt, ruling 2026-11-17). A success is
  * not routed here: it lands (stepC above). Its workspace is archived and removed by stepCleanupFailed as any failed run's is.
- * A handoff request still open owns the run (step H); a run whose usage is unknown is blocked as a failed run is, so
- * settle-usage and close-run end it.
+ * A run whose usage is unknown is blocked as a failed run is, so settle-usage and close-run end it.
+ *
+ * Correction 3 (review 2026-11-18, controller's decision: abandon wins): a handoff request the run still owns no longer
+ * makes this yield -- step H sends a terminal with a stop proof here through stepC, so yielding left the run accepted and
+ * active for ever. The request is closed `run-abandoned` in the same transaction (settleAbandonedRunInTransaction).
  */
 function settleAbandonedTerminal(deps: ExecutionDriverDeps, runId: string, report: ExecutionReport): boolean {
   const { store } = deps;
-  if (openRequestOf(store, readDriverRun(store, runId)) !== null) return false;
   const terminal = report.terminal!;
   const stopReason = terminal.stopReason ? { stopReason: terminal.stopReason } : {};
   const booked = readRun(store, runId);

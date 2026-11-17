@@ -81,6 +81,8 @@ const OPEN_STATES = ["request-pending", "latched", "collecting"];
 /** An outcome-unknown request still owns its run, so a later stop joins it rather than opening a second one. */
 export const ADOPTABLE_STATES = [...OPEN_STATES, "outcome-unknown"];
 const SETTLED_STATES = ["settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"];
+/** abandonRun.ts RUN_ABANDONED (not imported: abandonRun.ts imports this module): an abandoned run's and its request's code. */
+const RUN_ABANDONED_CODE = "run-abandoned";
 
 const flowStopMarkerSchema = z
   .object({
@@ -288,7 +290,8 @@ export function deriveStopState(store: ControlStore, groupId: string, frozenRunI
 function deriveFrozenStopState(store: ControlStore, groupId: string, frozenRunIds: readonly string[], closedRunId?: string): StopState {
   let unresolved = false, pending = false, partial = false;
   for (const runId of frozenRunIds) {
-    const state = runId === closedRunId ? "settled-failed" : latestRequestForRun(store, groupId, runId)?.state ?? null;
+    const latest = runId === closedRunId ? null : latestRequestForRun(store, groupId, runId);
+    const state = runId === closedRunId ? "settled-failed" : latest?.state ?? null;
     if (state === null || state === "outcome-unknown") unresolved = true;
     // Tester #289 path A (follow-up J): a blocked run whose change already landed is left to a person's recovery-retry
     // (driverHandoff.ts closeBlocked); its open request is never moved by the driver, so the stop is not pending on it.
@@ -298,7 +301,9 @@ function deriveFrozenStopState(store: ControlStore, groupId: string, frozenRunId
     // Handoff delivery (controller ruling 2026-09-25 on Task 3's open question; Web spec §6.2): a run still active
     // under a settled request is a contradiction and a recovery blocker, never a finished stop.
     else if (Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active ?? 0) === 1) unresolved = true;
-    else if (state === "settled-unrecoverable") partial = true;
+    // Correction 3 (review 2026-11-18): a request closed because a person abandoned its run lost nothing the stop owed --
+    // the person chose to drop that attempt -- so it does not make the stop partial, which resume-from-handoff refuses.
+    else if (state === "settled-unrecoverable" && latest?.failureCode !== RUN_ABANDONED_CODE) partial = true;
   }
   return unresolved ? "handoff-unresolved" : pending ? "handoff-pending" : partial ? "handoff-partial" : "handoff-complete";
 }
@@ -1033,10 +1038,20 @@ export function settleNeverStartedRunInTransaction(store: ControlStore, groupId:
  * as they are, its allocations terminal, its task `blocked` -- but as `settled-failed` with the person's settlement, so
  * `task retry` starts a fresh run and nothing is dispatched until then. An abandon-unresolved mark stays as history (the
  * recovery list names only active runs).
+ *
+ * Correction 3 (review 2026-11-18, controller's decision: abandon wins): a handoff request the run still owns (any adoptable
+ * state, `outcome-unknown` included) closes here too, `settled-unrecoverable` with `run-abandoned` -- the existing state for
+ * "not continued" -- and the group's stop state follows (complete, not partial: deriveFrozenStopState). Only the request row is written for it: the run's accounting is
+ * terminaliseRun's once, above, so nothing is released or booked twice (settleHandoffRequestInTransaction would run it again).
  */
 export function settleAbandonedRunInTransaction(store: ControlStore, groupId: string, runId: string, settlement: { kind: "abandoned"; by: string; note: string; at: number }): void {
   const run = readRunBody(store, runId);
-  terminaliseRun(store, groupId, { ...run, recoverable: false, operatorSettlement: settlement }, "settled-unrecoverable", "run-abandoned", "settled-failed");
+  terminaliseRun(store, groupId, { ...run, recoverable: false, operatorSettlement: settlement }, "settled-unrecoverable", RUN_ABANDONED_CODE, "settled-failed");
+  const request = latestRequestForRun(store, groupId, runId);
+  if (request === null || !ADOPTABLE_STATES.includes(request.state)) return;
+  saveHandoffRequest(store, groupId, { ...request, state: "settled-unrecoverable", failureCode: RUN_ABANDONED_CODE });
+  const intent = readStopIntent(store, groupId);
+  if (intent && intent.mode !== "pause") rewriteStopIntentState(store, groupId, intent, deriveStopState(store, groupId, intent.frozenRunIds));
 }
 
 function terminaliseRun(store: ControlStore, groupId: string, run: RunBody, outcome: HandoffDisposition, reasonCode: string | null, settledAs: string = outcome): void {
