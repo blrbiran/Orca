@@ -140,3 +140,19 @@ recommendation: no -- "abandon" means the person judged the attempt worthless; k
 6. `recovery list` and `group brief` show a held task with its next commands.
 7. Review fake answers: all not-met `plan` → no fix task, why `not-fixable-by-work`; one `work` + one `plan` → one fix
    task covering only the `work` criterion; an auto fix task's contract carries the token ceiling.
+
+## Correction 1 (same session, after the builders' reports; these win over the sections above)
+
+1. **S1 does not release the grant.** It settles a never-started run the way `restartRun` does (`settled-restartable`):
+   a legacy task's commitment is kept for its next claim and only optional-policy tokens go back. The criterion asserts
+   the ledger is unchanged.
+2. **S3 also needed `retryGrant.ts`.** A held retry was accepted but its next claim failed
+   (`recovery-blocked:retry-source:<task>:source-state`) because a retry source had to have an outcome; a run with no
+   outcome whose handoff request settled recoverable with a checkpoint is now a valid source.
+3. **S4's Overview row already existed** (`controlOverview.ts`, reason `task-held`); only a criterion was added. Held
+   tasks are left out of `heldTasks[]` and `task-held` while the group is under a stop or archived (both exits are
+   refused there) -- builder's call. The third S4 bullet (`handoff-unresolved` / `abandon-unresolved` rows) is not built
+   yet; it goes with S2.
+4. **S5's field and limits.** The cap is carried by the fix task's work grant `tokens` (`deriveContract` writes it into
+   `executionPolicy.tokenBudget`). In a group whose remaining finite token reserve is below the cap, an automatic fix now
+   stops `unfunded` instead of opening uncapped. The review prompt has no version marker; none was invented.
