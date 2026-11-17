@@ -222,7 +222,9 @@ describe("the expanded contract (§6.4)", () => {
     ],
   };
 
-  it("names the primary and every extra directory in registered order, its targets also its allowlist", () => {
+  // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+  // Loop plan v4 (#346 W2): every extra directory's allowlist is empty (it was its targets).
+  it("names the primary and every extra directory in registered order, each with no allowlist", () => {
     const expanded = expandMultiSplitDraft(draft, context());
     expect(expanded.reasons).toEqual([]);
     const both = contractOf(expanded.contracts, "both");
@@ -230,7 +232,7 @@ describe("the expanded contract (§6.4)", () => {
     expect(both.context.targetPaths).toEqual(["src/a.ts"]);
     expect(both.verification.requiredChecks).toEqual(["npm test"]);
     expect(both.context.additionalRepos).toEqual([
-      { key: "beta", repoPath: beta, targetPaths: ["docs/b.md"], allowlistPaths: ["docs/b.md"] },
+      { key: "beta", repoPath: beta, targetPaths: ["docs/b.md"], allowlistPaths: [] },
     ]);
   });
 
@@ -238,11 +240,11 @@ describe("the expanded contract (§6.4)", () => {
     const expanded = expandMultiSplitDraft(draft, context());
     expect(contractOf(expanded.contracts, "doc").verification.requiredChecks).toEqual([documentCheck("docs/design.md"), "lint"]);
     expect(contractOf(expanded.contracts, "doc").context.additionalRepos).toEqual([
-      { key: "beta", repoPath: beta, targetPaths: ["docs/notes.md"], allowlistPaths: ["docs/notes.md"],
+      { key: "beta", repoPath: beta, targetPaths: ["docs/notes.md"], allowlistPaths: [],
         requiredChecks: [documentCheck("docs/notes.md"), "true"] },
     ]);
     expect(contractOf(expanded.contracts, "probe").context.additionalRepos).toEqual([
-      { key: "beta", repoPath: beta, targetPaths: ["docs/b.md", "docs/report.md"], allowlistPaths: ["docs/b.md", "docs/report.md"],
+      { key: "beta", repoPath: beta, targetPaths: ["docs/b.md", "docs/report.md"], allowlistPaths: [],
         requiredChecks: [documentCheck("docs/b.md"), documentCheck("docs/report.md")] },
     ]);
   });
@@ -268,7 +270,7 @@ describe("the expanded contract (§6.4)", () => {
     expect(mixed.context.targetPaths).toEqual(["README.md"]);
     expect(mixed.verification.requiredChecks).toEqual(["true"]);
     expect(mixed.context.additionalRepos).toEqual([
-      { key: "beta", repoPath: beta, targetPaths: ["docs/b.md"], allowlistPaths: ["docs/b.md"] },
+      { key: "beta", repoPath: beta, targetPaths: ["docs/b.md"], allowlistPaths: [] },
     ]);
   });
 

@@ -73,7 +73,8 @@ describe("set-task-loop keeps the task's plan version unless the plan or its inp
     try {
       makeV1(h);
       expect(await new WebControlService(h.deps).setTaskLoop(change(h, "a", { base: 1, inputs: { goal: "write a, changed" } }))).toMatchObject({ result: { kind: "task-loop-set" } });
-      expect(effective(h).loop!.planVersion).toBe(3);
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+      expect(effective(h).loop!.planVersion).toBe(4);
       expect(workBody(h, "a").planChanged).toBe(true);
     } finally { await h.dispose(); }
   });

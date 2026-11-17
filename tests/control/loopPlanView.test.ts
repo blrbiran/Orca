@@ -21,8 +21,9 @@ describe("a task's plan in the group view (spec §4.1)", () => {
     try {
       const recipe = readArchivedPlan(h.store, "g").plan.tasks[0]!.loop!;
       const item = readControlGroup(h.store, "epoch", "g").workItems[0]!;
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
       expect(item.loopPlan).toEqual({
-        planId: "bugfix", planVersion: 3, chosenBy: "labels", chosenByLabel: "bug",
+        planId: "bugfix", planVersion: 4, chosenBy: "labels", chosenByLabel: "bug",
         amended: false, loopVersion: 0, inputs: recipe.inputs, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: true, documentChecks: false,
       });
       // Rewritten under the human's 2026-10-01 ruling on C4: the contract's success condition carries bugfix v2's red-first line.

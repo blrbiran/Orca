@@ -19,7 +19,8 @@ describe("Web import of a loop task (spec §3.3, criterion 6)", () => {
     const h = await webFixture(undefined, [{ taskId: "a", labels: ["bug"], loop: LOOP }]);
     try {
       const task = readArchivedPlan(h.store, "g").plan.tasks[0]!;
-      expect(task.loop).toEqual({ schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 3, chosenBy: "labels",
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+      expect(task.loop).toEqual({ schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 4, chosenBy: "labels",
         inputs: { ...LOOP, nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null } });
       const repoPath = JSON.parse(task.originalContractCanonicalJson).context.repoPath;
       expect(repoPath).toBe(join(h.root, "repo"));

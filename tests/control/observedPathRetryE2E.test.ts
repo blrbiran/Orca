@@ -1,7 +1,12 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { ccloopWorlds, raw, realBinary, startGroup, until, workRuns } from "./fixtures/ccloopWorld.js";
+
+// Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+// Observed paths serve v<=3 contracts only (off-plan writes spec W5): the loop task here is archived at version 3, so the
+// real ccloop still enforces its allowlist.
+vi.mock("../../src/control/loopPlans.js", async (actual) => (await import("./fixtures/loopPlanV3.js")).loopPlansAtV3(await actual()));
 
 const { world, removeRoots, relocateHome } = ccloopWorlds({ rootPrefix: "orca-observed-path-e2e-", epochPrefix: "epoch-path-e2e-" });
 afterAll(removeRoots);

@@ -1366,26 +1366,30 @@ export const en = {
     // Panel i18n spec §3.1, §6.9: one entry per registry version, equal to src/control/loopPlans.ts (the English source of
     // record); a version with no discipline has no discipline key.
     plan: {
-      standard: { v1: { name: "Standard" }, v2: { name: "Standard" }, v3: { name: "Standard" } },
+      standard: { v1: { name: "Standard" }, v2: { name: "Standard" }, v3: { name: "Standard" }, v4: { name: "Standard" } },
       bugfix: {
         v1: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
         v2: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
         v3: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
+        v4: { name: "Bug fix (red first)", discipline: "Write a failing test that reproduces the bug, then fix it (checked by a model, not proven mechanically)" },
       },
       refactor: {
         v1: { name: "Safe refactor", discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)" },
         v2: { name: "Safe refactor", discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)" },
         v3: { name: "Safe refactor", discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)" },
+        v4: { name: "Safe refactor", discipline: "No observable behavior change (an instruction to the agent; only the checks are enforced)" },
       },
       design: {
         v1: { name: "Design / docs first", discipline: "The deliverable is a document, no code changes (checked by a model, not proven mechanically)" },
         v2: { name: "Design / docs first", discipline: "The deliverable is a document: a command checks that it exists and is not empty; \"no code changes\" is an instruction to the agent" },
         v3: { name: "Design / docs first", discipline: "The deliverable is a document: a command checks that it exists and is not empty; \"no code changes\" is an instruction to the agent" },
+        v4: { name: "Design / docs first", discipline: "The deliverable is a document: a command checks that it exists and is not empty; \"no code changes\" is an instruction to the agent" },
       },
       investigate: {
         v1: { name: "Investigate only", discipline: "Investigate only; findings go to the report file, nothing else changes (checked by a model, not proven mechanically)" },
         v2: { name: "Investigate only", discipline: "Investigate only; findings go to the report file: a command checks that it exists and is not empty" },
         v3: { name: "Investigate only", discipline: "Investigate only; findings go to the report file: a command checks that it exists and is not empty" },
+        v4: { name: "Investigate only", discipline: "Investigate only; findings go to the report file: a command checks that it exists and is not empty" },
       },
     },
     title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "chosen by hand", noLabel: "no label, default", byLabel: "chosen by label `{{label}}`", changed: " · changed" },

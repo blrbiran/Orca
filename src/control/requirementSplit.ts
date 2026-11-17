@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import { ControlError } from "./errors.js";
 import { SYSTEM_LABELS } from "./labels.js";
-import { choosePlanByLabels, documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
+import { choosePlanByLabels, documentCheck, expandLoopTask, LABEL_PRIORITY, LOOP_PLAN_IDS, loopPlanDefinition, offPlanWrites, type LoopPlanFileInput, type LoopRefusal } from "./loopPlans.js";
 import { classifyNpmCommand, npmCommandReason } from "./npmCommand.js";
 import { normalizeControlPlan } from "./planImport.js";
 import { isNpmLockfile, MAX_PACKAGE_BYTES, packageOf } from "./requirementManifests.js";
@@ -446,7 +446,7 @@ const loopOfMulti = (task: MultiSplitOutput["tasks"][number], keys: readonly str
  * Multi-directory projects spec §6.4: the model's multi split as a plan (mirroring expandSplitDraft, each task's ccloop
  * primary filling the existing loop fields) and, per task, the ccloop contract. A task writing several directories gets
  * `context.repoKey` and `context.additionalRepos` in registered order, each extra directory's targetPaths also its
- * allowlist and its document checks followed by its own checks. A task writing one directory keeps an ordinary contract.
+ * allowlist (empty from loop plan version 4, #346 W2) and its document checks followed by its own checks. A task writing one directory keeps an ordinary contract.
  * A task naming a directory this context does not have gets no contract here: validation names the directory itself.
  */
 export function expandMultiSplitDraft(output: MultiSplitOutput, context: MultiSplitContext): { plan: SplitPlanFile; contracts: Map<string, Record<string, unknown>>; reasons: string[] } {
@@ -468,7 +468,9 @@ export function expandMultiSplitDraft(output: MultiSplitOutput, context: MultiSp
     const definition = loopPlanDefinition(expanded.recipe.planId, expanded.recipe.planVersion);
     const additionalRepos = writes.slice(1).map((write) => {
       const checks = [...(definition?.documentChecks === true ? write.targetPaths.map(documentCheck) : []), ...write.checks];
-      return { key: write.dir, repoPath: pathOf.get(write.dir)!, targetPaths: [...write.targetPaths], allowlistPaths: [...write.targetPaths],
+      // Off-plan writes (#346 W2): from loop plan version 4 no repository of the task has an allowlist.
+      return { key: write.dir, repoPath: pathOf.get(write.dir)!, targetPaths: [...write.targetPaths],
+        allowlistPaths: offPlanWrites(expanded.recipe.planVersion) ? [] : [...write.targetPaths],
         ...(checks.length === 0 ? {} : { requiredChecks: checks }) };
     });
     const contract = expanded.contract;

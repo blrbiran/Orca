@@ -105,7 +105,18 @@ const REGISTRY: readonly LoopPlanDefinition[] = [
   ...V1_PLANS.map((plan) => ({ ...plan, version: 1, ...V1_DEFAULTS })),
   ...V1_PLANS.map((plan) => ({ ...plan, version: 2, ...V2_DEFAULTS, ...V2_CHANGES[plan.planId] })),
   ...V1_PLANS.map((plan) => ({ ...plan, version: 3, ...V2_DEFAULTS, ...V2_CHANGES[plan.planId] })),
+  // v4 (off-plan writes spec 2026-11-17 W2, #346): v3's plans, expanded with no allowlist (offPlanWrites below).
+  ...V1_PLANS.map((plan) => ({ ...plan, version: 4, ...V2_DEFAULTS, ...V2_CHANGES[plan.planId] })),
 ];
+
+/**
+ * Off-plan writes spec W2 (#346): from version 4 a contract has no allowlist -- ccloop reads an empty allowlist as none
+ * and enforces only the denylist -- so targetPaths are a plan, not a fence, and the agent is told so in this line.
+ */
+export const OFF_PLAN_TARGETS_CONSTRAINT = "targetPaths are the files this task is expected to change; change others when the work needs them.";
+export function offPlanWrites(planVersion: number): boolean {
+  return planVersion >= 4;
+}
 
 /** Spec §2.3: shared by every plan and version. The budget numbers equal TASK_WORK (estimator.ts); loopPlans.test.ts pins that. */
 const EXECUTION_POLICY = {
@@ -286,6 +297,7 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
     return { ok: false, reason: "investigate-max-files" };
   }
   if (plan.planId === "design" && inputs.targetPaths.includes("**")) return { ok: false, reason: "design-target" };
+  const offPlan = offPlanWrites(recipe.planVersion);
   const contract = {
     objective: {
       taskId, goal: inputs.goal, nonGoals: [...inputs.nonGoals],
@@ -294,12 +306,12 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
     context: {
       repoPath, targetPaths: [...inputs.targetPaths], relevantDocs: [...inputs.relevantDocs],
       buildTestCommands: [...inputs.checks],
-      constraints: [...plan.constraints, ...(inputs.setup !== undefined ? [SETUP_CONSTRAINT] : [])],
+      constraints: [...plan.constraints, ...(inputs.setup !== undefined ? [SETUP_CONSTRAINT] : []), ...(offPlan ? [OFF_PLAN_TARGETS_CONSTRAINT] : [])],
       ...(inputs.setup !== undefined ? { setupCommands: [...inputs.setup] } : {}),
     },
     executionPolicy: { ...EXECUTION_POLICY, ...(recipe.planVersion>=3?{tokenBudget:inputs.tokenBudget??null}:{}), perAttemptTimeoutMs: plan.perAttemptTimeoutMs },
     safetyPolicy: {
-      allowlistPaths: [...inputs.targetPaths], denylistPaths: [...inputs.protectedPaths],
+      allowlistPaths: offPlan ? [] : [...inputs.targetPaths], denylistPaths: [...inputs.protectedPaths],
       maxFilesTouched: maxFilesOf(plan, inputs), humanGateConditions: [],
     },
     verification: {

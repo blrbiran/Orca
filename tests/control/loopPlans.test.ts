@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { TASK_WORK } from "../../src/control/estimator.js";
 import {
-  LOOP_PLAN_IDS, choosePlanByLabels, currentLoopPlanVersion, expandLoopTask, expandRecipe, isLoopPlanId, loopPlanDefinition, type LoopPlanFileInput,
+  LOOP_PLAN_IDS, OFF_PLAN_TARGETS_CONSTRAINT, choosePlanByLabels, currentLoopPlanVersion, expandLoopTask, expandRecipe, isLoopPlanId, loopPlanDefinition, type LoopPlanFileInput,
 } from "../../src/control/loopPlans.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
 
@@ -61,10 +61,16 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
     v2.verification.rejectOn = ["REJECT:unused"];
     const historical=expandRecipe("fix-login",REPO,{...result.recipe,planVersion:2});
     expect(historical.ok&&JSON.parse(historical.canonicalJson)).toEqual(v2);
-    expect(JSON.parse(result.canonicalJson)).toEqual({...v2,executionPolicy:{...v2.executionPolicy,tokenBudget:null}});
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    // The v3 bytes now come from an explicit v3 recipe; the current (v4, #346 W2) expansion has no allowlist and ends
+    // its constraints with the targetPaths line.
+    const v3 = {...v2,executionPolicy:{...v2.executionPolicy,tokenBudget:null}};
+    const v3Expanded=expandRecipe("fix-login",REPO,{...result.recipe,planVersion:3});
+    expect(v3Expanded.ok&&JSON.parse(v3Expanded.canonicalJson)).toEqual(v3);
+    expect(JSON.parse(result.canonicalJson)).toEqual({...v3,context:{...v3.context,constraints:[...BUGFIX_CONSTRAINTS,OFF_PLAN_TARGETS_CONSTRAINT]},safetyPolicy:{...v3.safetyPolicy,allowlistPaths:[]}});
     expect(result.hash).toBe(sha256Canonical(JSON.parse(result.canonicalJson)));
     expect(result.recipe).toEqual({
-      schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 3, chosenBy: "explicit",
+      schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 4, chosenBy: "explicit",
       inputs: { goal: "fix login", successCondition: "the login test passes", targetPaths: ["src/auth/**", "tests/auth/**"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null },
     });
   });
@@ -80,9 +86,10 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
     // v1 stays in the registry; the current version is the highest one (ledger 2026-09-30, MX-20b/c: with one version
     // per plan, "newest" could not be told from "first").
     expect(loopPlanDefinition(plan, 1)).not.toBeNull();
-    expect(currentLoopPlanVersion(plan)).toBe(3);
-    expect(first.recipe.planVersion).toBe(3);
-    expect(loopPlanDefinition(plan, 4)).toBeNull();
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    expect(currentLoopPlanVersion(plan)).toBe(4);
+    expect(first.recipe.planVersion).toBe(4);
+    expect(loopPlanDefinition(plan, 5)).toBeNull();
   });
 
   const changes: Array<[string, Partial<LoopPlanFileInput>]> = [
@@ -141,15 +148,17 @@ describe("each plan's rules land in the contract (criterion 2)", () => {
     ["investigate", { allow: ["docs/report.md"], max: 1, verifier: "command", rejectOn: ["REJECT:unused"], constraints: ["Investigate only; write the findings to the report file and change nothing else."], required: [REPORT_CHECK, "npm test"] }],
   ];
   describe.each(rows)("%s", (plan, want) => {
-    it("allowlist = targetPaths (the git-backed write set)", () => {
-      expect(contractOf(plan, givenFor(plan)).safetyPolicy.allowlistPaths).toEqual(want.allow);
+    it("no allowlist (v4, #346 W2); targetPaths = the git-backed write set", () => {
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+      expect(contractOf(plan, givenFor(plan)).safetyPolicy.allowlistPaths).toEqual([]);
       expect(contractOf(plan, givenFor(plan)).context.targetPaths).toEqual(want.allow);
     });
     it("denylist = protectedPaths", () => expect(contractOf(plan, givenFor(plan)).safetyPolicy.denylistPaths).toEqual(["tests/fixtures/**"]));
     it("maxFilesTouched", () => expect(contractOf(plan, givenFor(plan)).safetyPolicy.maxFilesTouched).toBe(want.max));
     it("verifierType", () => expect(contractOf(plan, givenFor(plan)).verification.verifierType).toBe(want.verifier));
     it("rejectOn", () => expect(contractOf(plan, givenFor(plan)).verification.rejectOn).toEqual(want.rejectOn));
-    it("constraints", () => expect(contractOf(plan, givenFor(plan)).context.constraints).toEqual(want.constraints));
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    it("constraints", () => expect(contractOf(plan, givenFor(plan)).context.constraints).toEqual([...want.constraints, OFF_PLAN_TARGETS_CONSTRAINT]));
     it("checks are both the build/test commands and the required checks", () => {
       const contract = contractOf(plan, givenFor(plan));
       expect([contract.context.buildTestCommands, contract.verification.requiredChecks]).toEqual([["npm test"], want.required]);
@@ -161,9 +170,10 @@ describe("refusals (criterion 3)", () => {
   it("refuses an unknown plan", () => expect(refusal(input({ plan: "yolo" }))).toBe("unknown-plan"));
   it("refuses a recipe whose plan version the registry does not hold (versions are never invented, spec §2.2)", () => {
     // Rewritten under human ruling H19 (2026-10-01) for loop plans v2.
-    const recipe = { ...expanded("bugfix").recipe, planVersion: 4 };
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    const recipe = { ...expanded("bugfix").recipe, planVersion: 5 };
     expect(expandRecipe("fix-login", REPO, recipe)).toEqual({ ok: false, reason: "unknown-plan" });
-    expect([loopPlanDefinition("bugfix", 4), currentLoopPlanVersion("yolo")]).toEqual([null, null]);
+    expect([loopPlanDefinition("bugfix", 5), currentLoopPlanVersion("yolo")]).toEqual([null, null]);
     expect([isLoopPlanId("bugfix"), isLoopPlanId("yolo")]).toEqual([true, false]);
   });
   it.each([["/etc/passwd"], ["src/../secrets"], ["src/*.ts"], ["src/*"], ["*"], ["**/x.ts"], ["src/**/x.ts"], ["src//a.ts"], ["./src/a.ts"], ["src/"]])(

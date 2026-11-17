@@ -1195,26 +1195,30 @@ export const zh: Translation<typeof en> = {
   },
   loopPlan: {
     plan: {
-      standard: { v1: { name: "标准" }, v2: { name: "标准" }, v3: { name: "标准" } },
+      standard: { v1: { name: "标准" }, v2: { name: "标准" }, v3: { name: "标准" }, v4: { name: "标准" } },
       bugfix: {
         v1: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
         v2: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
         v3: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
+        v4: { name: "修 bug（先红后绿）", discipline: "先写能复现的失败测试再修（由模型核对，不是机械证明）" },
       },
       refactor: {
         v1: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
         v2: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
         v3: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
+        v4: { name: "安全重构", discipline: "不改可观察行为（写给 agent 的约束；只有检查命令是硬的）" },
       },
       design: {
         v1: { name: "先写设计／文档", discipline: "交付物是文档，不改代码（由模型核对，不是机械证明）" },
         v2: { name: "先写设计／文档", discipline: "交付物是文档：由命令检查它存在且非空；「不改代码」是写给 agent 的约束" },
         v3: { name: "先写设计／文档", discipline: "交付物是文档：由命令检查它存在且非空；「不改代码」是写给 agent 的约束" },
+        v4: { name: "先写设计／文档", discipline: "交付物是文档：由命令检查它存在且非空；「不改代码」是写给 agent 的约束" },
       },
       investigate: {
         v1: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件，别的都不改（由模型核对，不是机械证明）" },
         v2: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件：由命令检查它存在且非空" },
         v3: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件：由命令检查它存在且非空" },
+        v4: { name: "只调研不改代码", discipline: "只调研，结论写进报告文件：由命令检查它存在且非空" },
       },
     },
     title: { line: "{{name}} · v{{version}} · {{how}}", byHand: "人指定", noLabel: "无标签，按默认", byLabel: "按标签 `{{label}}` 选择", changed: " · 已修改" },

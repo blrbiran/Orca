@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appendObservedPaths, mirrorObservedWrites } from "../../src/control/observedPathAmendment.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
@@ -12,6 +12,10 @@ import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { applyObservedPathAmendment, readWebGroup } from "../../src/control/webService.js";
 import { handoff } from "./fixtures/unknownFailure.js";
+
+// Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+// Observed paths serve v<=3 contracts only (off-plan writes spec W5): the loop tasks here are archived at version 3.
+vi.mock("../../src/control/loopPlans.js", async (actual) => (await import("./fixtures/loopPlanV3.js")).loopPlansAtV3(await actual()));
 
 const base = () => taskContractSchema.parse({
   objective: { taskId: "a", goal: "Fix math", successCondition: "all checks pass" },

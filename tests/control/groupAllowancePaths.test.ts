@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
@@ -10,6 +10,10 @@ import type { Principal } from "../../src/panel/permissions.js";
 import type { PathPolicyMissV1 } from "../../src/control/pathPolicyMisses.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { loop } from "./fixtures/taskLoop.js";
+
+// Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+// Path allowances serve v<=3 contracts only (off-plan writes spec W5): the loop tasks here are archived at version 3.
+vi.mock("../../src/control/loopPlans.js", async (actual) => (await import("./fixtures/loopPlanV3.js")).loopPlansAtV3(await actual()));
 
 // Tester follow-up G §6.3 (#189), §10.4: a group path allowance grants exactly the paths the request named. "Allow this
 // kind in this group" retries the asking task now (the observed-path retry) and, through Orca's allowance pass, every later

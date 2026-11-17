@@ -37,7 +37,9 @@ describe("task setup through plan, recipe and contract", () => {
   it("present setup reaches context.setupCommands and adds the constraint", () => {
     const { context } = expand({ setup: ["npm ci"] }).contract as { context: { setupCommands?: string[]; constraints: string[] } };
     expect(context.setupCommands).toEqual(["npm ci"]);
-    expect(context.constraints.at(-1)).toBe(SETUP_CONSTRAINT);
+    // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+    // v4 (#346 W2) appends the targetPaths line after the setup line.
+    expect(context.constraints.at(-2)).toBe(SETUP_CONSTRAINT);
     expect(SETUP_CONSTRAINT).toBe("When a required check or a setup command cannot run, report it in your result; do not change the repository to make it run unless the task is about that. Install any dependency you add.");
   });
 

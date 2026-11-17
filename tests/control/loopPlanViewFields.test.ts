@@ -22,10 +22,11 @@ describe("the loop plan view's fields (panel i18n spec §3.1, §6.8)", () => {
     try {
       const [a, b, c] = readControlGroup(h.store, "epoch", "g").workItems.map((item) => item.loopPlan!);
       expect(Object.keys(a!).sort()).toEqual(FIELDS);
-      expect(a).toMatchObject({ planId: "standard", planVersion: 3, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false, documentChecks: false });
-      expect(b).toMatchObject({ planId: "bugfix", planVersion: 3, maxFiles: 7, hasDiscipline: true, documentChecks: false });
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
+      expect(a).toMatchObject({ planId: "standard", planVersion: 4, maxFiles: Number.MAX_SAFE_INTEGER, hasDiscipline: false, documentChecks: false });
+      expect(b).toMatchObject({ planId: "bugfix", planVersion: 4, maxFiles: 7, hasDiscipline: true, documentChecks: false });
       // C4: investigate v2 and later carry one existence check per target path; the view names the recipe's flag, not the commands.
-      expect(c).toMatchObject({ planId: "investigate", planVersion: 3, maxFiles: 1, hasDiscipline: true, documentChecks: true });
+      expect(c).toMatchObject({ planId: "investigate", planVersion: 4, maxFiles: 1, hasDiscipline: true, documentChecks: true });
     } finally { await h.dispose(); }
   });
 

@@ -1233,11 +1233,11 @@ export type SetTaskLoopPayloadV1 = {
  * picker's words are keyed by version) -- a mirror of src/control/loopPlans.ts, compared by tests/panel/taskLoopApi.test.ts.
  */
 export const WEB_LOOP_PLANS: ReadonlyArray<{ planId: LoopPlanIdV1; version: number }> = [
-  { planId: "standard", version: 3 },
-  { planId: "bugfix", version: 3 },
-  { planId: "refactor", version: 3 },
-  { planId: "design", version: 3 },
-  { planId: "investigate", version: 3 },
+  { planId: "standard", version: 4 },
+  { planId: "bugfix", version: 4 },
+  { planId: "refactor", version: 4 },
+  { planId: "design", version: 4 },
+  { planId: "investigate", version: 4 },
 ];
 
 // Read-only overview mirrors the strict server DTO. These destinations carry no command payload.
