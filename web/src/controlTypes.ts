@@ -425,6 +425,8 @@ export type WorkItemViewV1 = {
     usageStopped: { at: number; principal: string; note?: string } | null;
     groupCapStop: { runId: string; at: number; observedTokens: number } | null;
   };
+  /** Tester #348: this task's runs the server could not decode, and why; absent when every one reads. */
+  unreadableRuns?: Array<{ runId: string; reason: string }>;
 };
 export type RunSkillLockV1 = {
   name: string; source: { name: string; type: string; url: string; branch?: string } | null; resolved_commit: string | null; content_md5: string;
@@ -617,6 +619,8 @@ export type GroupViewV1 = {
    * finished tasks (null below `minimumSample`) and each task's ready estimate as a multiple of it; absent otherwise.
    */
   estimateHistory?: EstimateHistoryV1;
+  /** Tester #348: the runs the server could not decode -- left out of `runs` -- with their work item, task (or null) and why; absent when none. */
+  unreadableRuns?: Array<{ runId: string; workItemId: string; taskId: string | null; reason: string }>;
 };
 
 /** src/control/estimateHistory.ts EstimateHistoryView. */

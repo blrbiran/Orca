@@ -30,6 +30,7 @@ import { NoChangeRecord } from "./NoChange.js";
 import { UsagePause } from "./UsagePause.js";
 import { RunTranscript } from "./AgentTranscript.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
+import { UnreadableRuns } from "./UnreadableRuns.js";
 import type { Role } from "./auth.js";
 import { localDateTime } from "./ui/localTime.js";
 import { TaskCostLine } from "./TaskCost.js";
@@ -292,6 +293,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           <button type="button" className="btn-quiet" aria-label={t("control.task.closeLabel", { taskId: item.taskId })} onClick={props.onClose}>{t("control.task.close")}</button>
         )}
       </div>
+      {/* Tester #348 review: this task's runs the server could not decode (left out of its runs), named. */}
+      <UnreadableRuns entries={item.unreadableRuns} />
       <p>
         {t("control.task.labelsFrom", { source: labelSourceText(item.labelsProvenance ?? "plan"), version: item.labelsVersion ?? 0 })}
       </p>

@@ -928,6 +928,10 @@ export const en = {
       turnedRed: "after {{tasks}} landed, {{command}} turned red",
       exited: "exited {{exit}} at {{tip}}",
     },
+    // Tester #348 review: a run whose stored body the panel cannot decode, named rather than silently left out (UnreadableRuns.tsx).
+    unreadableRuns: {
+      line: "Run {{runId}} cannot be read: {{reason}}",
+    },
     // Stuck-runs spec 2026-11-17 S2: an owner ends a running attempt now (AbandonRun.tsx).
     abandonRun: {
       open: "Abandon this attempt",

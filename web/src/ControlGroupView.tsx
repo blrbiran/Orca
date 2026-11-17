@@ -34,6 +34,7 @@ import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
 import { GroupFullSuiteWarning } from "./GroupFullSuiteWarning.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
 import { LandingWatchProblem } from "./LandingWatchProblem.js";
+import { UnreadableRuns } from "./UnreadableRuns.js";
 import { GroupAllowances } from "./GroupAllowances.js";
 import { UsagePause } from "./UsagePause.js";
 
@@ -629,7 +630,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const decisionsFailed = read !== null && "failed" in read ? read.failed : null;
   const taskNeedsHuman = (taskId: string): boolean => decisions?.tasks.some((task) => task.taskId === taskId && task.runs.some(runNeedsHuman)) === true;
   // The Problems tab's count; the Results conclusion card says the same number (#319).
-  const problemCount = view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length;
+  const problemCount = view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length + (view.unreadableRuns?.length ?? 0);
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
@@ -976,6 +977,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       <RequirementReviewPanel groupId={groupId} review={view.summary.requirementReview} archived={archived} revision={revision} onCommand={onCommand} />
       {/* Tester follow-up G §6.2 (#269): a check that turned red on the group branch after a landing. */}
       <LandingWatchProblem groupId={groupId} landingWatch={view.summary.landingWatch} />
+      {/* Tester #348 review: a run the server could not decode is left out of Runs; it is named here instead. */}
+      <UnreadableRuns entries={view.unreadableRuns} />
       {/* Tester follow-up G §6.3 (#189): what this group lets through; listed here, not counted as a problem. */}
       <GroupAllowances groupId={groupId} revision={revision} allowances={view.summary.allowances} roles={props.roles} archived={archived} onCommand={onCommand} />
       {/* Tester follow-up G spec §2.1/§2.5: a task waiting at its pause line (Continue / Stop) or at the group cap (top up). */}

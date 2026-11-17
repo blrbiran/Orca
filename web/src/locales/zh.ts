@@ -774,6 +774,9 @@ export const zh: Translation<typeof en> = {
       turnedRed: "{{tasks}} 落地后，{{command}} 变红了",
       exited: "在 {{tip}} 退出码 {{exit}}",
     },
+    unreadableRuns: {
+      line: "运行 {{runId}} 无法读取：{{reason}}",
+    },
     abandonRun: {
       open: "放弃这次尝试",
       explain: "Orca 会立即停下这个运行并按失败结算：已用的用量照记，剩余额度释放，它的工作不保留。任务会保持阻塞，直到你重试它。",
