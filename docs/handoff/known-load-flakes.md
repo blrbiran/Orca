@@ -3,6 +3,8 @@
 > 本文是 Orca 已登记 flake 的**唯一清单**（2026-10-13 会话 `808feb6a` 起；此前散在 `handoff.md` §三，那一节已删，原文在 git 历史）。
 > 活文档，允许就地改／删（Rule 13 三条件同 `handoff.md` 头部）。**不写当前哈希**；历史观测锚点照原样保留。
 
+> 2026-11-17 晚（测试精简，人裁「测试精简点头同意」）改名与去向：`handoffE2E` 拆成 `handoffE2E`（H1、H2）／`handoffE2EResume`（H3、H5、H6）／`handoffE2ERecovery`（R-H、G、H-lost 等），G 的额外宽限改为注入 5 s、不再等 60 s 实时窗；`agentSelectionE2E` C3、D1 只在发版门跑；`agentUpdatePaired` 已删（从没被任何脚本跑过）；`startForm` 的超限用例改为注入上限 10、写 11 个文件（不再写 20,001 个），下面关于它的 ECONNRESET／超时记录是改前的历史。快速档（`npm test`）还会推迟 ≥30 s 与真 ccloop 的文件，它们只在 `npm run test:wide` 里出现。
+
 ## 判别规则（**先读这条**）
 
 1. 看到全量里红了一条：先问「是不是下面登记过的那条、而且是**同一种失败**（多为 `Test timed out in 5000ms` 或 `until` 等待超时）」。
