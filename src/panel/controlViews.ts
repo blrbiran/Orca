@@ -344,19 +344,6 @@ export function readUnreadableRuns(store: ControlStore, groupId: string): Unread
   return unreadableRunsOf(readGroupSnapshot(store, groupId));
 }
 
-/**
- * The command routes (controlApi.ts): a command naming a run of this group whose body does not decode is refused with the
- * detail the group read gave before #348 -- acting on a run nobody can read stays refused; nothing else is.
- */
-export function runDecodeRefusal(store: ControlStore, groupId: string, runId: string): string | null {
-  const row = store.db.prepare("SELECT body FROM runs WHERE id=? AND group_id=?").get(runId, groupId);
-  if (row === undefined) return null;
-  let body: unknown;
-  try { body = JSON.parse(String(row.body)); } catch { return `run-invalid:${runId}`; }
-  const problem = persistedRunProblem(body);
-  return problem === null ? null : `run-invalid:${runId}:${problem}`;
-}
-
 function blocked(detail: string): never {
   throw new ControlError("recovery-blocked", detail);
 }

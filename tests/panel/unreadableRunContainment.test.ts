@@ -11,9 +11,10 @@ import { overSocket } from "./fixtures/socketPanel.js";
  * Tester #348, the deeper point (controller agrees): one run whose stored body the strict run read schema cannot decode
  * made every task of its group unreadable and unactionable, though the run belonged to one task or to none. Now the group
  * view reads; the run is named once on the group (`unreadableRuns`: its work item, its task or null, why) and on the task
- * that owns it; every other task reads as before; `group brief` names it; and only a command that names that run is
- * refused, recovery-blocked as before -- the other tasks' commands go through. The next unknown key is simulated by
- * adding one (`futureKey`) to a stored body.
+ * that owns it; every other task reads as before; `group brief` names it. Containment changes only what the read views
+ * show: the command routes never read the view schema (before #348 the 423 on `task retry` came from the CLI's pre-read
+ * GET), and per the review ruling (session 4389b15f, 2026-11-18) they still do not -- a command naming that run is
+ * answered as before #348. The next unknown key is simulated by adding one (`futureKey`) to a stored body.
  */
 const agent: Principal = { kind: "agent", client: "mcp:test" };
 const headers = { "x-orca-client": "mcp:test" };
@@ -21,7 +22,7 @@ type View = { summary: { commandRevision: number }; runs: Array<{ runId: string 
   workItems: Array<{ taskId: string; currentRunId: string | null; progress?: unknown; unreadableRuns?: unknown }> };
 
 describe("a run the read schema cannot decode stays with its own task (#348)", { timeout: 240_000 }, () => {
-  it("the group view and brief read, the run is named on its task or the group, and only commands naming it are refused", async () => {
+  it("the group view and brief read, the run is named on its task or the group, and commands are answered as before #348", async () => {
     const w = await quotaProbeWorld({ tasks: [{ taskId: "a", agent: { agent: "codex" } }, { taskId: "b", dependsOn: ["a"], agent: { agent: "codex" } }], failing: ["a"] });
     const app = express(); app.use(express.json());
     app.use((_req, res, next) => { res.locals.orcaPrincipal = agent; next(); });
@@ -63,20 +64,17 @@ describe("a run the read schema cannot decode stays with its own task (#348)", {
       expect(b).toMatchObject({ taskId: "b" });
       expect(b).not.toHaveProperty("unreadableRuns");
       expect((await read("/api/control/groups/g/brief")).unreadableRuns).toEqual([failedEntry]);
-      // A command naming the unreadable run is refused as every read of the group was before.
-      // mutation: drop the command route's run check -> retry-task applies (200), red
-      const refused = await overSocket(socketPath, "POST", "/api/control/groups/g/retry-task", headers,
+      // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18)
+      // Review ruling: the command routes do not read the view schema, so a command naming the run is answered as before #348.
+      // mutation: refuse a command naming a run the view schema cannot decode (the dropped guard) -> 423, red
+      const retry = await overSocket(socketPath, "POST", "/api/control/groups/g/retry-task", headers,
         { commandId: "retry-unreadable", expectedRevision: owned.summary.commandRevision, payload: { taskId: "a", runId: failedRun } });
-      expect(refused.status, refused.text).toBe(423);
-      expect(JSON.parse(refused.text)).toMatchObject({ error: { code: "recovery-blocked", message: `recovery-blocked:${failedEntry.reason}` } });
+      expect(retry.status, retry.text).toBe(200);
       withoutFutureKey(failedRun);
 
-      // 3. Once the run reads again, nothing is named and the retry applies.
+      // 3. Once the run reads again, nothing is named.
       const clean = await read("/api/control/groups/g") as unknown as View;
       expect(clean).not.toHaveProperty("unreadableRuns");
-      const retry = await overSocket(socketPath, "POST", "/api/control/groups/g/retry-task", headers,
-        { commandId: "retry-readable", expectedRevision: clean.summary.commandRevision, payload: { taskId: "a", runId: failedRun } });
-      expect(retry.status, retry.text).toBe(200);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((e) => e ? reject(e) : resolve()));
       await w.t.h.dispose();
