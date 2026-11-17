@@ -33,7 +33,6 @@
     "verify:ccloop-pin": "node scripts/verify-ccloop-pin.mjs",
     "hooks:install": "git config core.hooksPath scripts/githooks",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath scripts/githooks || true",
-    "verify:saved-result": "node scripts/verify-saved-result.mjs",
     "perf:transcript": "node scripts/perf-transcript.mjs"
   },
   "dependencies": {
