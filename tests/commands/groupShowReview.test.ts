@@ -39,6 +39,17 @@ describe("group show names the requirement review (tester follow-up G §3.3)", (
     expect(lines).toContain("  or: orca group review-rerun g-alpha --note '<what to look at>'");
   });
 
+  it("prints a recorded check conflict as its three facts (#340)", async () => {
+    const p = await panel({ state: "not-passed", why: "check-conflict", problem: "requirement-review-not-passed:check-conflict", autoFixRounds: 0,
+      rounds: [{ ...round("not-met", [{ id: "AC1", verdict: "not-met", evidence: [{ path: "README.md", line: 1 }], missing: "revert" }]),
+        checkConflict: { criterionId: "AC1", requiredCheck: "npm test", because: "only add" } }] });
+    const lines = (await cli(["group", "show", "g-alpha"], p.dir)).stdout.split("\n");
+    // mutation: drop the conflict lines from reviewLines -> red
+    const at = lines.indexOf("conflict: criterion AC1");
+    expect(at).toBeGreaterThan(0);
+    expect(lines.slice(at, at + 3)).toEqual(["conflict: criterion AC1", "  required check: npm test", "  because: only add"]);
+  });
+
   it("a passed review is one line; --json is unchanged", async () => {
     const p = await panel({ state: "passed", autoFixRounds: 0, rounds: [round("passed")] });
     const out = (await cli(["group", "show", "g-alpha"], p.dir)).stdout;

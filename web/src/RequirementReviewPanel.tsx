@@ -47,6 +47,17 @@ export function RequirementReviewPanel(props: { groupId: string; review: Require
           ))}
         </ul>
       )}
+      {last?.checkConflict !== undefined && (
+        // Tester #340: the three facts a person decides on, one per line.
+        <>
+          <ul aria-label={t("control.review.conflict.heading")} data-check-conflict="">
+            <li>{t("control.review.conflict.criterion", { id: last.checkConflict.criterionId })}</li>
+            <li>{t("control.review.conflict.check", { command: last.checkConflict.requiredCheck })}</li>
+            <li>{t("control.review.conflict.because", { because: last.checkConflict.because })}</li>
+          </ul>
+          <p data-tone="warn">{t("control.review.conflict.next")}</p>
+        </>
+      )}
       {last !== undefined && last.summary !== "" && <p className="detail-note">{last.summary}</p>}
       {review.state === "not-passed" && !props.archived && (open === null ? (
         <>

@@ -172,7 +172,7 @@ lower a draft group's token ceiling; raising or removing it requires a person
 orca group cap g1 --tokens 300000
 ```
 
-## `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]`
+## `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>] [--history-source <history-source>] [--history-artifact <history-artifact>]`
 
 where this group's finished work goes
 
@@ -184,6 +184,8 @@ where this group's finished work goes
 - `--method <method>`: merge|squash
 - `--target <target>`: the target branch
 - `--remote <remote>`: the remote
+- `--history-source <history-source>` (repeatable): local only: <taskId>=refs/heads/<branch>, in merge order (repeatable); delivers each task's named source branch as a direct second parent on the target (needs --trigger group --method merge)
+- `--history-artifact <history-artifact>` (repeatable): with --history-source: a file the final target tree must hold (repeatable)
 
 ## `orca group retry-integration <group>`
 

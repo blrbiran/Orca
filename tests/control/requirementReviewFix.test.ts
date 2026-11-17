@@ -39,8 +39,12 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       expect(w.calls[0]?.prompt).toContain("do not repair a pre-existing failing test");
       expect(w.calls[0]?.prompt).toContain("failed at the group's base");
       expect(w.calls[0]?.prompt).toContain("Tip failure:");
-      expect(w.review()).toMatchObject({ state: "not-passed", why: "cannot-judge", autoFixRounds: 0,
-        rounds: [expect.objectContaining({ result: "not-met", summary: expect.stringContaining("check conflict") })] });
+      // Ruling: human 2026-11-17 (「这一轮允许改必要的判据」, tester #340) -- why was "cannot-judge" (the round is a
+      // definite not-met that conflicts with the person's restriction) and the three facts lived only in the summary.
+      // mutation: keep why "cannot-judge" -> red; mutation: drop checkConflict from the round -> red
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "check-conflict", autoFixRounds: 0,
+        rounds: [expect.objectContaining({ result: "not-met", summary: expect.stringContaining("check conflict"),
+          checkConflict: { criterionId: "AC1", requiredCheck: command, because: "The person forbids repairing an existing failing test, but this check requires that repair." } })] });
       expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
       expect(group().requirement.idea).toContain("do not repair");
     } finally { await w.t.h.dispose(); }
@@ -62,8 +66,9 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
         checks: { ...settings.checks, integrationCheck: { command } } });
       await w.runAll();
       await w.t.until(w.driver, () => w.review()?.state === "not-passed" || w.review()?.state === "fixing", 120);
-      expect(w.review()).toMatchObject({ state: "not-passed", why: "cannot-judge", autoFixRounds: 0,
-        rounds: [expect.objectContaining({ result: "not-met", summary: expect.stringContaining("check conflict") })] });
+      // Ruling: human 2026-11-17 (tester #340) -- why "check-conflict", not "cannot-judge".
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "check-conflict", autoFixRounds: 0,
+        rounds: [expect.objectContaining({ result: "not-met", summary: expect.stringContaining("check conflict"), checkConflict: expect.objectContaining({ criterionId: "AC1" }) })] });
       expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
     } finally { await w.t.h.dispose(); }
   }, 300000);

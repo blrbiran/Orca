@@ -187,6 +187,16 @@ describe("refusals made here", () => {
     expect((w.posts()[0]!.payload as { selectionsHash: unknown }).selectionsHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  // Tester #344: the CLI resumes from the checkpoint the run records (a handoff checkpoint is `partial`); the fixture's
+  // MAPPINGS rows above send it. A run that records none is refused here, before anything is sent.
+  it("task continue refuses a run that records no checkpoint, naming it, and sends nothing", async () => {
+    const w = await world({ checkpointId: null });
+    const out = await cli(["task", "continue", "g-alpha", "t1", "--json"], w.dir);
+    // mutation: fall back to the newest checkpoint of the run -> cp-1 posted, red
+    expect([out.code, out.json().body.error.code]).toEqual([1, "checkpoint-not-found"]);
+    expect(w.posts()).toEqual([]);
+  });
+
   it("a task with no current run cannot be retried by the CLI's read", async () => {
     const w = await world();
     const out = await cli(["task", "retry", "g-alpha", "t2", "--json"], w.dir);

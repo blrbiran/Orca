@@ -44,7 +44,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca project list` — the registered projects: key, kind, control repository id, and root (a multi's member projects)
 - `orca project show` — the project's workspace mode and integration settings (and their revision)
 - `orca project set-workspace-mode --mode <mode>` — worktree or clone for the project's runs
-- `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where the project's finished work goes by default
+- `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>] [--history-source <history-source>] [--history-artifact <history-artifact>]` — where the project's finished work goes by default
 - `orca project set-criteria-review [--on] [--off]` — whether Orca's reviewer judges a flagged test change before a person sees it
 - `orca project register-plan <path>` — register (or re-trust) a git-tracked plan file of the project so it can be imported
 - `orca project add <name> [--path <path>] [--dirs <dirs>]` — register a project: a git repository's root (--path) or a multi project of registered ones (--dirs); an owner's act (person token)
@@ -67,7 +67,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group close-run <group> --run <run>` — close a proved terminal failed run's accounting (it stays failed; retry or archive next)
 - `orca group set-limit <group> --limit <limit>` — set the group's budget limit (person token)
 - `orca group cap <group> --tokens <tokens>` — lower a draft group's token ceiling; raising or removing it requires a person
-- `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]` — where this group's finished work goes
+- `orca group set-integration <group> --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>] [--history-source <history-source>] [--history-artifact <history-artifact>]` — where this group's finished work goes
 - `orca group retry-integration <group>` — a blocked or conflicted integration back to idle
 - `orca group integrate <group>` — integrate the group's finished work at the next round (an idle integration; skips only the retry wait)
 - `orca group resolve-integration <group>` — approve an agent resolving the group's integration conflict

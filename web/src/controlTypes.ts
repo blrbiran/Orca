@@ -684,10 +684,12 @@ export type EvidenceManifestV1 = {
 /** Tester follow-up G spec §3.3: a requirement group's review against its acceptance criteria. */
 export type RequirementReviewV1 = {
   state: "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
-  why?: "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed";
+  why?: "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict";
   rounds: Array<{ roundNo: number; tip: string; runId: string | null; at: number; result: "passed" | "not-met" | "cannot-judge" | "invalid" | "failed" | "unfunded";
     criteria: Array<{ id: string; verdict: "met" | "not-met" | "cannot-judge"; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>;
-    summary: string; note?: string; fixTaskId?: string; fixBy?: string }>;
+    summary: string; note?: string; fixTaskId?: string; fixBy?: string;
+    /** Tester #340: a reported conflict between a criterion, a required check and the person's restriction. */
+    checkConflict?: { criterionId: string; requiredCheck: string; because: string } }>;
   autoFixRounds: number;
   accepted?: { by: string; note: string; at: number };
   rerun?: { by: string; note: string; at: number };

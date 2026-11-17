@@ -25,6 +25,12 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["project", "set-integration", "--delivery", "keep"], "repositories/repo-1/integration", 7, { integration: { delivery: "keep" } }],
   [["project", "set-integration", "--delivery", "github-pr", "--trigger", "group", "--target", "main", "--remote", "origin"], "repositories/repo-1/integration", 7,
     { integration: { delivery: "github-pr", trigger: "group", target: "main", remote: "origin" } }],
+  // Tester #339: the named-source history delivery (#328) from flags -- sources in the order given, targetRef from --target.
+  // mutation: drop the history flags from schemeFromFlags -> no historyExpectation, red
+  [["group", "set-integration", "g-alpha", "--delivery", "local", "--trigger", "group", "--method", "merge", "--target", "main",
+    "--history-source", "T1=refs/heads/feature-a", "--history-source", "T2=refs/heads/feature-b", "--history-artifact", "MERGE-NOTES.md"], "groups/g-alpha/integration", 5,
+    { integration: { delivery: "local", trigger: "group", method: "merge", target: "main", historyExpectation: { version: 1, targetRef: "refs/heads/main",
+      directSecondParent: true, sourceRefs: [{ taskId: "T1", ref: "refs/heads/feature-a" }, { taskId: "T2", ref: "refs/heads/feature-b" }], artifactPaths: ["MERGE-NOTES.md"] } } }],
   // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): `project set-integration-check` is removed; `orca check` sends the
   // check verbs (checks spec 2026-10-22 §7), the project layer at the repository revision, --global at orchestration's.
   [["check", "set", "integration-check", "--on", "--no-command"], "repositories/repo-1/checks/settings", 7, { kind: "integration-check", set: { enabled: true, command: null }, clear: [] }],
@@ -124,6 +130,18 @@ describe("project, decision, correction, agent, usage, orchestration, recovery w
     for (const argv of [["recovery", "retry", "--group", "g-al", "--acknowledge", "charge-remaining-grant"], ["recovery", "retry", "--run", "run-1", "--acknowledge", "release-unmetered"]]) {
       const w = await world();
       const out = await cli([...argv, "--json"], w.dir);
+      expect(out.code, JSON.stringify(argv)).not.toBe(0);
+      expect(w.posts(), JSON.stringify(argv)).toEqual([]);
+    }
+  });
+
+  it("history flags go only with --delivery local, and a source is <taskId>=refs/heads/<branch>, refused before anything is sent (#339)", async () => {
+    const base = ["project", "set-integration", "--trigger", "group", "--method", "merge", "--target", "main"];
+    for (const argv of [[...base, "--delivery", "push-target", "--remote", "origin", "--history-source", "T1=refs/heads/a"],
+      [...base, "--delivery", "local", "--history-source", "refs/heads/a"], [...base, "--delivery", "local", "--history-artifact", "x.md"]]) {
+      const w = await world();
+      const out = await cli([...argv, "--json"], w.dir);
+      // mutation: accept a history flag without its source / on another delivery -> a post, red
       expect(out.code, JSON.stringify(argv)).not.toBe(0);
       expect(w.posts(), JSON.stringify(argv)).toEqual([]);
     }

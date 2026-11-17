@@ -49,13 +49,28 @@ export function integrationReasonText(reason: string): string {
   return i18n.exists(key) ? tx(key, { detail: colon < 0 ? "" : reason.slice(colon + 1) }) : reason;
 }
 
-interface Fields { delivery: Delivery; trigger: Trigger; method: Method; target: string; remote: string }
+/** Tester #339: the named-source history delivery (#328), as text -- one `<taskId>=refs/heads/<branch>` per line, in order. */
+interface Fields { delivery: Delivery; trigger: Trigger; method: Method; target: string; remote: string; history: string; artifacts: string }
+
+const lines = (text: string): string[] => text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+/** The history sources typed, or the first line that is not `<taskId>=refs/heads/<branch>`. */
+function historySources(text: string): { sources: Array<{ taskId: string; ref: string }> } | { bad: string } {
+  const sources: Array<{ taskId: string; ref: string }> = [];
+  for (const line of lines(text)) {
+    const at = line.indexOf("=");
+    if (at <= 0 || !line.slice(at + 1).startsWith("refs/heads/")) return { bad: line };
+    sources.push({ taskId: line.slice(0, at), ref: line.slice(at + 1) });
+  }
+  return { sources };
+}
 
 function fieldsOf(scheme: IntegrationSchemeV1, suggestedTarget: string | null): Fields {
-  if (scheme.delivery === "keep") return { delivery: "keep", trigger: "task", method: "merge", target: suggestedTarget ?? "", remote: "origin" };
+  if (scheme.delivery === "keep") return { delivery: "keep", trigger: "task", method: "merge", target: suggestedTarget ?? "", remote: "origin", history: "", artifacts: "" };
+  const history = scheme.delivery === "local" ? scheme.historyExpectation : undefined;
   return {
     delivery: scheme.delivery, trigger: scheme.trigger, method: "method" in scheme ? scheme.method : "merge", target: scheme.target,
     remote: "remote" in scheme ? scheme.remote : "origin",
+    history: history?.sourceRefs.map((s) => `${s.taskId}=${s.ref}`).join("\n") ?? "", artifacts: history?.artifactPaths?.join("\n") ?? "",
   };
 }
 
@@ -64,7 +79,13 @@ function schemeOf(fields: Fields): IntegrationSchemeV1 {
   const { delivery, trigger, method, target, remote } = fields;
   switch (delivery) {
     case "keep": return { delivery };
-    case "local": return { delivery, trigger, method, target };
+    case "local": {
+      const parsed = historySources(fields.history);
+      if (!("sources" in parsed) || parsed.sources.length === 0) return { delivery, trigger, method, target };
+      const artifactPaths = lines(fields.artifacts);
+      return { delivery, trigger, method, target, historyExpectation: { version: 1, targetRef: `refs/heads/${target}`, directSecondParent: true,
+        sourceRefs: parsed.sources, ...(artifactPaths.length === 0 ? {} : { artifactPaths }) } };
+    }
     case "push-target": return { delivery, trigger, method, target, remote };
     case "push-branch":
     case "github-pr": return { delivery, trigger, target, remote };
@@ -88,6 +109,11 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
   }, [props.suggestedTarget]);
   const { delivery } = fields;
   const missingTarget = delivery !== "keep" && fields.target.trim() === "";
+  // Tester #339: a history source needs "when the group completes" and "merge commit" (the server checks it too).
+  const parsedHistory = delivery === "local" ? historySources(fields.history) : { sources: [] };
+  const historyProblem = "bad" in parsedHistory ? t("control.integration.historyForm.bad", { line: parsedHistory.bad })
+    : parsedHistory.sources.length > 0 && (fields.trigger !== "group" || fields.method !== "merge") ? t("control.integration.historyForm.needs")
+    : parsedHistory.sources.length === 0 && lines(fields.artifacts).length > 0 ? t("control.integration.historyForm.artifactsAlone") : null;
   return (
     <div>
       <label>
@@ -119,9 +145,22 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
               <input value={fields.remote} onChange={(event) => set({ remote: event.currentTarget.value })} />
             </label>
           )}
+          {delivery === "local" && (
+            <>
+              <label>
+                {t("control.integration.historyForm.sources")}
+                <textarea rows={3} value={fields.history} placeholder="T1=refs/heads/feature-a" onChange={(event) => set({ history: event.currentTarget.value })} />
+              </label>
+              <label>
+                {t("control.integration.historyForm.artifacts")}
+                <textarea rows={2} value={fields.artifacts} onChange={(event) => set({ artifacts: event.currentTarget.value })} />
+              </label>
+              {historyProblem !== null && <p data-tone="warn" role="note">{historyProblem}</p>}
+            </>
+          )}
         </>
       )}
-      <button type="button" disabled={missingTarget} onClick={() => props.onSave(schemeOf(fields))}>{t("control.integration.save")}</button>
+      <button type="button" disabled={missingTarget || historyProblem !== null} onClick={() => props.onSave(schemeOf(fields))}>{t("control.integration.save")}</button>
     </div>
   );
 }

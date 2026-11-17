@@ -3,7 +3,7 @@ import { fakePanel, type Recorded, type Route } from "./fakePanel.js";
 
 export const H = { plan: "a".repeat(64), est: "e".repeat(64), work: "f".repeat(64), sel: "5".repeat(64), draft: "d".repeat(64), capsule: "c".repeat(64), scheme: "9".repeat(64), table: "7".repeat(64) };
 
-export function groupView(over: { revision?: number; currentRunId?: string; loopVersion?: number; labelsVersion?: number; proposalVersion?: number; integration?: unknown } = {}) {
+export function groupView(over: { revision?: number; currentRunId?: string; checkpointId?: string | null; loopVersion?: number; labelsVersion?: number; proposalVersion?: number; integration?: unknown } = {}) {
   return {
     schema: "orca-control-group-v1", epoch: "e", changeSeq: 9,
     summary: { groupId: "g-alpha", repoId: "repo-1", state: "draft", commandRevision: over.revision ?? 5 },
@@ -18,8 +18,10 @@ export function groupView(over: { revision?: number; currentRunId?: string; loop
       { taskId: "t1", status: "blocked", currentRunId: over.currentRunId ?? "run-1", labels: ["area:cli"], labelsVersion: over.labelsVersion ?? 2, loopPlan: { planId: "standard", loopVersion: over.loopVersion ?? 4 } },
       { taskId: "t2", status: "ready", currentRunId: null, labelsVersion: 0, loopPlan: null },
     ],
-    runs: [{ runId: over.currentRunId ?? "run-1", taskId: "t1", state: "blocked", unknownUsageSettlement: { generation: 3 } }],
-    checkpoints: [{ checkpointId: "cp-old", runId: "run-0", taskId: "t1", state: "complete" }, { checkpointId: "cp-1", runId: over.currentRunId ?? "run-1", taskId: "t1", state: "complete" }],
+    // Ruling: human 2026-11-17 (「这一轮允许改必要的判据」, tester #344) -- a handoff checkpoint is `partial` and the run
+    // records its id (stopIntent.ts terminaliseRun); the fixture had them `complete` and unrecorded, as the CLI wrongly assumed.
+    runs: [{ runId: over.currentRunId ?? "run-1", taskId: "t1", state: "blocked", checkpointId: over.checkpointId === undefined ? "cp-1" : over.checkpointId, unknownUsageSettlement: { generation: 3 } }],
+    checkpoints: [{ checkpointId: "cp-old", runId: "run-0", taskId: "t1", state: "complete" }, { checkpointId: "cp-1", runId: over.currentRunId ?? "run-1", taskId: "t1", state: "partial" }],
     ...(over.integration === undefined ? {} : { integration: over.integration }),
   };
 }

@@ -704,6 +704,13 @@ export const zh: Translation<typeof en> = {
       send: "发送",
       cancel: "取消",
       board: "需求复核：{{state}}",
+      conflict: {
+        heading: "检查冲突",
+        criterion: "验收标准：{{id}}",
+        check: "必需检查：{{command}}",
+        because: "冲突原因：{{because}}",
+        next: "Orca 没有自动开修复任务：请决定哪一方让步——改需求或改检查，或按现状接受。",
+      },
     },
     noChange: {
       chip: "无改动",
@@ -860,6 +867,13 @@ export const zh: Translation<typeof en> = {
       triggers: { task: "每个任务完成后", group: "整组完成后" },
       methods: { merge: "合并提交", squash: "压缩成一个提交" },
       save: "保存集成方式",
+      historyForm: {
+        sources: "历史来源（可选）：每行一个 taskId=refs/heads/<branch>，按合并顺序",
+        artifacts: "目标必须包含的文件（可选，每行一个）",
+        bad: "不是 taskId=refs/heads/<branch> 的格式：{{line}}",
+        needs: "历史来源要求「时机」为组完成时、「方法」为合并提交。",
+        artifactsAlone: "「目标必须包含的文件」要和至少一个历史来源一起填。",
+      },
       ownerOnly: "只有所有者能修改集成方式。",
       ownerConfirms: "Orca 会合并或推送这个组的工作，所以只有所有者能确认它。",
       when: { task: "每个任务完成后", group: "整组完成后" },

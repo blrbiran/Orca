@@ -46,6 +46,22 @@ describe("the requirement review panel (tester follow-up G §3.3)", () => {
     expect(onCommand).toHaveBeenLastCalledWith({ verb: "review-accept", groupId: "g", expectedRevision: 7, payload: { note: "fine as is" } });
   });
 
+  // Tester #340: a reported check conflict is three facts a person decides on, shown one per line, not a sentence.
+  it("shows a check conflict as the criterion, the check and the person's restriction", async () => {
+    const conflict: RequirementReviewV1 = { ...notPassed, why: "check-conflict", problem: "requirement-review-not-passed:check-conflict",
+      rounds: [{ ...notPassed.rounds[0]!, result: "not-met", checkConflict: { criterionId: "AC2", requiredCheck: "npm test", because: "the person said: only add" } }] };
+    const { panel } = show(conflict);
+    // mutation: drop the conflict list -> no such element, red
+    const list = within(panel).getByRole("list", { name: "Check conflict" });
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Criterion: AC2", "Required check: npm test", "Why they conflict: the person said: only add"]);
+    expect(panel.textContent).toContain("decide which one gives way");
+    cleanup();
+    await i18n.changeLanguage("zh");
+    const zh = show(conflict).panel;
+    expect(within(within(zh).getByRole("list", { name: "检查冲突" })).getAllByRole("listitem")[1]!.textContent).toBe("必需检查：npm test");
+  });
+
   it("none on an archived group or a passed review; zh words", async () => {
     expect(within(show(notPassed, true).panel).queryAllByRole("button")).toEqual([]);
     cleanup();

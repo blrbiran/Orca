@@ -94,6 +94,29 @@ describe("the repository's integration section (spec §9.1)", () => {
     expect(onSave.mock.calls).toEqual([[{ delivery: "local", trigger: "group", method: "squash", target: "develop" }, 4]]);
   });
 
+  // Tester #339: the named-source history delivery (#328) can be set from the form, not only by a hand-written payload.
+  it("sends a local scheme's history sources in order, refuses a bad line, and starts from a stored one", async () => {
+    const { onSave, region } = show(repository({ delivery: "keep" }));
+    await choose(region, "Delivery", "local");
+    await choose(region, "When", "group");
+    const sources = within(region).getByLabelText(/History sources/) as HTMLTextAreaElement;
+    fireEvent.change(sources, { target: { value: "T1=refs/heads/feature-a\nfeature-b" } });
+    // mutation: drop the line check -> Save enabled, red
+    expect(within(region).getByRole("button", { name: "Save integration" })).toHaveProperty("disabled", true);
+    expect(region.textContent).toContain("Not taskId=refs/heads/<branch>: feature-b");
+    fireEvent.change(sources, { target: { value: "T1=refs/heads/feature-a\nT2=refs/heads/feature-b" } });
+    fireEvent.change(within(region).getByLabelText(/Files the target must hold/), { target: { value: "MERGE-NOTES.md" } });
+    fireEvent.click(within(region).getByRole("button", { name: "Save integration" }));
+    // mutation: drop historyExpectation from schemeOf -> red
+    expect(onSave.mock.calls).toEqual([[{ delivery: "local", trigger: "group", method: "merge", target: "develop", historyExpectation: { version: 1,
+      targetRef: "refs/heads/develop", directSecondParent: true, sourceRefs: [{ taskId: "T1", ref: "refs/heads/feature-a" }, { taskId: "T2", ref: "refs/heads/feature-b" }],
+      artifactPaths: ["MERGE-NOTES.md"] } }, 4]]);
+    cleanup();
+    const stored = show(repository({ delivery: "local", trigger: "group", method: "merge", target: "main",
+      historyExpectation: { version: 1, targetRef: "refs/heads/main", directSecondParent: true, sourceRefs: [{ taskId: "T1", ref: "refs/heads/a" }] } }));
+    expect((within(stored.region).getByLabelText(/History sources/) as HTMLTextAreaElement).value).toBe("T1=refs/heads/a");
+  });
+
   it("sends a github-pr scheme without a method, and push-target with both method and remote", async () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session b999cc81): the scheme value each picker chooses is the one sent, and the stored scheme is the one shown
     const { onSave, region } = show(repository({ delivery: "keep" }));

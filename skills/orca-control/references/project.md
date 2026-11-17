@@ -26,7 +26,7 @@ worktree or clone for the project's runs
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `--mode <mode>` (required): worktree|clone
 
-## `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>]`
+## `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>] [--history-source <history-source>] [--history-artifact <history-artifact>]`
 
 where the project's finished work goes by default
 
@@ -37,6 +37,8 @@ where the project's finished work goes by default
 - `--method <method>`: merge|squash
 - `--target <target>`: the target branch
 - `--remote <remote>`: the remote
+- `--history-source <history-source>` (repeatable): local only: <taskId>=refs/heads/<branch>, in merge order (repeatable); delivers each task's named source branch as a direct second parent on the target (needs --trigger group --method merge)
+- `--history-artifact <history-artifact>` (repeatable): with --history-source: a file the final target tree must hold (repeatable)
 
 ## `orca project set-criteria-review [--on] [--off]`
 

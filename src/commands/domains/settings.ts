@@ -20,9 +20,24 @@ const correction = (c: WriteContext): string => c.ids.correction!;
 /** Integration spec §3: one scheme, from flags (the same flags as `orca group set-integration`). */
 export function schemeFromFlags(c: WriteContext): unknown {
   const delivery = str(c, "delivery");
+  const sources = list(c, "history-source"), artifacts = list(c, "history-artifact");
+  if ((sources.length > 0 || artifacts.length > 0) && delivery !== "local") throw invalid("--history-source and --history-artifact go only with --delivery local");
+  if (artifacts.length > 0 && sources.length === 0) throw invalid("--history-artifact needs at least one --history-source");
   if (delivery === "keep") return { delivery };
   const need = (flag: string): string => { const value = str(c, flag); if (value === undefined) throw invalid(`--delivery ${delivery} wants --${flag}`); return value; };
-  if (delivery === "local") return { delivery, trigger: need("trigger"), method: need("method"), target: need("target") };
+  if (delivery === "local") {
+    const scheme = { delivery, trigger: need("trigger"), method: need("method"), target: need("target") };
+    if (sources.length === 0) return scheme;
+    // Tester #339: the named-source history delivery (#328). The panel checks the rest (trigger group, method merge,
+    // the refs' shape, duplicates); targetRef is always the target branch, so it is derived, not asked for.
+    const sourceRefs = sources.map((entry) => {
+      const at = entry.indexOf("=");
+      if (at <= 0 || !entry.slice(at + 1).startsWith("refs/heads/")) throw invalid(`--history-source wants <taskId>=refs/heads/<branch>, got ${JSON.stringify(entry)}`);
+      return { taskId: entry.slice(0, at), ref: entry.slice(at + 1) };
+    });
+    return { ...scheme, historyExpectation: { version: 1, targetRef: `refs/heads/${scheme.target}`, directSecondParent: true, sourceRefs,
+      ...(artifacts.length === 0 ? {} : { artifactPaths: artifacts }) } };
+  }
   if (delivery === "push-target") return { delivery, trigger: need("trigger"), method: need("method"), target: need("target"), remote: need("remote") };
   if (delivery === "push-branch" || delivery === "github-pr") return { delivery, trigger: need("trigger"), target: need("target"), remote: need("remote") };
   throw invalid("--delivery wants keep|local|push-target|push-branch|github-pr");
@@ -31,6 +46,9 @@ export const SCHEME_FLAGS = [
   { name: "delivery", type: "string" as const, required: true, summary: "keep|local|push-target|push-branch|github-pr (anything but keep needs a person token)" },
   { name: "trigger", type: "string" as const, summary: "task|group" }, { name: "method", type: "string" as const, summary: "merge|squash" },
   { name: "target", type: "string" as const, summary: "the target branch" }, { name: "remote", type: "string" as const, summary: "the remote" },
+  { name: "history-source", type: "string" as const, repeatable: true,
+    summary: "local only: <taskId>=refs/heads/<branch>, in merge order (repeatable); delivers each task's named source branch as a direct second parent on the target (needs --trigger group --method merge)" },
+  { name: "history-artifact", type: "string" as const, repeatable: true, summary: "with --history-source: a file the final target tree must hold (repeatable)" },
 ];
 
 interface Summary { groups: Array<{ groupId: string }> }

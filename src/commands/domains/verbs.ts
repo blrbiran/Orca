@@ -86,7 +86,7 @@ export interface GroupView {
   ledger: { groupLimit: { tokens: number | null; activeMs: number; attempts: number; sessions: number } };
   allocations: Array<{ ownerKind: string; ownerId: string; bucket: string; amount: Record<string, number | null>; fieldProvenance?: Record<string, { provenance: string; estimateId: string | null }> }>;
   workItems: Array<{ taskId: string; currentRunId: string | null; labelsVersion?: number; loopPlan?: { loopVersion: number } | null }>;
-  runs: Array<{ runId: string; taskId: string | null; unknownUsageSettlement?: { generation: number } }>;
+  runs: Array<{ runId: string; taskId: string | null; checkpointId?: string | null; unknownUsageSettlement?: { generation: number } }>;
   checkpoints: Array<{ checkpointId: string; runId: string; taskId: string; state: string }>;
   integration?: { schemeHash: string };
 }
@@ -315,7 +315,8 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
 /** Tester follow-up G spec §3.3: the requirement review as the group summary sends it. */
 export interface ReviewView {
   state: string; why?: string; problem?: string; autoFixRounds?: number;
-  rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>; fixTaskId?: string }>;
+  rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null }>; fixTaskId?: string;
+    checkConflict?: { criterionId: string; requiredCheck: string; because: string } }>;
   accepted?: { by: string; note: string };
 }
 
@@ -349,6 +350,10 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
     `problem: ${review.problem ?? `requirement-review-not-passed:${review.why ?? "?"}`}`,
     ...(last?.summary ? [`review: ${last.summary}`] : []),
     ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
+    // Tester #340: the three facts of a reported check conflict, and what a person decides.
+    ...(last?.checkConflict === undefined ? [] : [
+      `conflict: criterion ${last.checkConflict.criterionId}`, `  required check: ${last.checkConflict.requiredCheck}`, `  because: ${last.checkConflict.because}`,
+      "  decide which one gives way: change the requirement or the check (review-fix with a goal), or accept as is"]),
     `next: orca group review-fix ${groupId} --goal '<what to fix>'`,
     `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
     `  or: orca group review-accept ${groupId} --note '<why accept as is>'`,
@@ -495,10 +500,17 @@ export async function currentRun(c: WriteContext): Promise<string> {
   return item.currentRunId;
 }
 
-/** The newest complete checkpoint of a run: what a continuation resumes from. */
+/**
+ * The checkpoint a continuation resumes from: the one the run itself records (`run.checkpointId`), as the server's
+ * assertPredecessor requires (continuation.ts), in a state the view can read. Tester #344: this looked for a `complete`
+ * checkpoint, while every handoff checkpoint is `partial` (the server refuses any other), so `task continue` and
+ * `group resume-handoff --continue` never found one from the CLI; the Web button worked.
+ */
 export async function checkpointOf(c: WriteContext, runId: string): Promise<string> {
-  const found = (await groupView(c)).checkpoints.filter((cp) => cp.runId === runId && cp.state === "complete").at(-1);
-  if (found === undefined) throw new EntryRejection("checkpoint-not-found", `run ${runId} has no complete checkpoint`);
+  const view = await groupView(c);
+  const recorded = view.runs.find((run) => run.runId === runId)?.checkpointId ?? null;
+  const found = recorded === null ? undefined : view.checkpoints.find((cp) => cp.checkpointId === recorded && cp.runId === runId && cp.state !== "unknown");
+  if (found === undefined) throw new EntryRejection("checkpoint-not-found", `run ${runId} records no checkpoint to continue from`);
   return found.checkpointId;
 }
 

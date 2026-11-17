@@ -854,6 +854,13 @@ export const en = {
       send: "Send",
       cancel: "Cancel",
       board: "Requirement review: {{state}}",
+      conflict: {
+        heading: "Check conflict",
+        criterion: "Criterion: {{id}}",
+        check: "Required check: {{command}}",
+        because: "Why they conflict: {{because}}",
+        next: "Orca did not open a fix: decide which one gives way -- change the requirement or the check, or accept the work as it is.",
+      },
     },
     noChange: {
       chip: "no change",
@@ -1021,6 +1028,13 @@ export const en = {
       triggers: { task: "after each task", group: "when the group completes" },
       methods: { merge: "merge commit", squash: "squash into one commit" },
       save: "Save integration",
+      historyForm: {
+        sources: "History sources (optional): one taskId=refs/heads/<branch> per line, in merge order",
+        artifacts: "Files the target must hold (optional, one per line)",
+        bad: "Not taskId=refs/heads/<branch>: {{line}}",
+        needs: "History sources need When = when the group completes and Method = merge commit.",
+        artifactsAlone: "Files the target must hold go with at least one history source.",
+      },
       ownerOnly: "Only an owner can change the integration.",
       ownerConfirms: "Only an owner can confirm a group whose work Orca merges or pushes.",
       when: { task: "After each task", group: "When the group completes" },

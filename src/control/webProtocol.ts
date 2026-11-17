@@ -1731,13 +1731,14 @@ export const groupSummarySchema = z
     // `requirement-review-not-passed:<why>` when it did not pass. Optional so a group without one parses unchanged.
     requirementReview: z.object({
       state: z.enum(["pending", "reviewing", "passed", "fixing", "not-passed", "accepted", "not-run"]),
-      why: z.enum(["multi-repo", "dir", "unfunded", "invalid", "cannot-judge", "rounds-exhausted", "failed"]).optional(),
+      why: z.enum(["multi-repo", "dir", "unfunded", "invalid", "cannot-judge", "rounds-exhausted", "failed", "check-conflict"]).optional(),
       rounds: z.array(z.object({
         roundNo: positiveSafeInteger, tip: z.string(), runId: idSchema.nullable(), at: safeInteger,
         result: z.enum(["passed", "not-met", "cannot-judge", "invalid", "failed", "unfunded"]),
         criteria: z.array(z.object({ id: nonemptyString, verdict: z.enum(["met", "not-met", "cannot-judge"]),
           evidence: z.array(z.object({ path: nonemptyString, line: safeInteger.nullable() }).strict()), missing: z.string().nullable() }).strict()),
         summary: z.string(), note: z.string().optional(), fixTaskId: idSchema.optional(), fixBy: nonemptyString.optional(),
+        checkConflict: z.object({ criterionId: nonemptyString, requiredCheck: nonemptyString, because: nonemptyString }).strict().optional(),
       }).strict()),
       autoFixRounds: safeInteger,
       accepted: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),

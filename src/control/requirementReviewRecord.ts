@@ -16,9 +16,11 @@ export interface ReviewRound {
   note?: string;
   /** The fix task this round opened, and who opened it (`auto`, or the principal of a hand fix). */
   fixTaskId?: string; fixBy?: string;
+  /** Tester #340: the conflict the reviewer reported (a not-met criterion vs. a required check and the person's restriction). */
+  checkConflict?: { criterionId: string; requiredCheck: string; because: string };
 }
 export type ReviewState = "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
-export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed";
+export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict";
 export interface RequirementReview {
   state: ReviewState; why?: ReviewWhy; rounds: ReviewRound[]; autoFixRounds: number;
   accepted?: { by: string; note: string; at: number };

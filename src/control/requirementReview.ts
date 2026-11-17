@@ -518,11 +518,14 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
       criteria: answer !== null && answer.result !== "invalid" ? answer.criteria : [],
       summary: failed !== null ? `review call failed: ${failed}` : answer === null ? "no answer" : answer.result === "invalid" ? `answer invalid: ${answer.reason}`
         : conflict === undefined ? answer.summary : `check conflict reported for ${conflict.criterionId}: ${cutUtf8(conflict.requiredCheck, 200)}; ${cutUtf8(conflict.because, 500)}. No automatic fix; review the person's restriction and the check.`,
-      ...(current.rerun === undefined ? {} : { note: current.rerun.note }) };
+      ...(current.rerun === undefined ? {} : { note: current.rerun.note }),
+      // Tester #340: kept as data, not only in the summary sentence.
+      ...(conflict === undefined ? {} : { checkConflict: { criterionId: conflict.criterionId, requiredCheck: cutUtf8(conflict.requiredCheck, 4096), because: cutUtf8(conflict.because, 4096) } }) };
     const { rerun: _rerun, why: _why, ...rest } = current;
     let next: RequirementReview = { ...rest, rounds: [...current.rounds, round], state: "passed" };
     if (result !== "passed") next = conflict === undefined ? settleNotPassed(store, runRow.groupId, next, round)
-      : { ...next, state: "not-passed", why: "cannot-judge" };
+      // Tester #340: a definite not-met that conflicts with the person's restriction -- the person decides which gives way.
+      : { ...next, state: "not-passed", why: "check-conflict" };
     saveReview(store, runRow.groupId, next);
     recordActivity(store, { groupId: runRow.groupId, kind: "requirement-review", body: { roundNo, result, tip, state: next.state, ...(round.fixTaskId === undefined ? {} : { action: "fix-opened", taskId: round.fixTaskId }) } });
   },
