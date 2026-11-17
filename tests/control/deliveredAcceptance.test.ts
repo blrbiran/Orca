@@ -5,6 +5,7 @@ import { readGroupActivity } from "../../src/control/activity.js";
 import { deliveredAcceptanceSatisfied } from "../../src/control/groupAcceptanceRecord.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { groupNeedsYou } from "../../src/panel/controlOverview.js";
+import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 /**
@@ -69,6 +70,8 @@ describe("acceptance on the delivered commit (delivery tail D3)", { timeout: 240
       // mutation: drop the done gate -> done, red
       expect(body(t).status).not.toBe("done");
       expect(groupNeedsYou(t.h.store, "g")).toBe(true);
+      // mutation: drop deliveredAcceptance from the group summary -> undefined, red
+      expect(readGroupSummary(t.h.store, "g").deliveredAcceptance).toMatchObject({ result: "failed", problem: `delivered-acceptance-failed:${CHECK}` });
       const command = t.h.command("waive-acceptance", { note: "poison.txt is the person's own fixture" });
       const answer = withCommandContext(command.commandId, { client: "web", principal: "user:owner" }, () => t.service.waiveAcceptance(command as never));
       expect(answer).toMatchObject({ result: { kind: "acceptance-waived" } });

@@ -323,6 +323,21 @@ export interface ReviewView {
  * Tester follow-up G spec §3.3, §3.5: one line for a review that passed (or stands), and for one that did not pass its
  * problem code, each criterion of its last round, and the three commands that answer it.
  */
+interface DeliveredView { tip: string; commit: string; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string }; problem?: string }
+/** Delivery tail spec D3/D5: the acceptance on the delivered commit, and a delivery backing off -- with what answers each. */
+export function deliveryLines(groupId: string, delivered: DeliveredView | undefined, integration: { retryAfter?: number; transient?: number; transientReason?: string | null } | undefined): string[] {
+  const lines: string[] = [];
+  if (integration?.retryAfter !== undefined) lines.push(`integration: retrying after ${new Date(integration.retryAfter).toISOString()} (failure ${integration.transient ?? "?"} in a row: ${integration.transientReason ?? "?"}); orca group integrate ${groupId} tries at the next round`);
+  if (delivered === undefined) return lines;
+  const on = `on ${delivered.commit.slice(0, 12)} (delivered tip ${delivered.tip.slice(0, 12)})`;
+  if (delivered.result === "not-needed") lines.push(`delivered acceptance: not needed (${delivered.why ?? "?"})`);
+  else if (delivered.result === "waived") lines.push(`delivered acceptance: waived ${on} by ${delivered.waived?.by ?? "?"}: ${delivered.waived?.note ?? ""}`);
+  else if (delivered.result !== "failed") lines.push(`delivered acceptance: ${delivered.result} ${on}`);
+  else lines.push(`problem: ${delivered.problem ?? "delivered-acceptance-failed"} ${on}`, ...(delivered.tail ? [`  ${delivered.tail.split("\n").slice(-3).join(" | ")}`] : []),
+    `next: orca group recheck-acceptance ${groupId}   (a flaky check)`, `  or: orca group waive-acceptance ${groupId} --note '<why the delivered tree is accepted>'`);
+  return lines;
+}
+
 export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
   if (review === undefined) return [];
   const last = review.rounds.at(-1);
@@ -451,6 +466,8 @@ export function formatWithUnestimated(body: unknown): string {
     ...groupUsageDetailLines(runs as Array<{ usageDetail?: UsageDetailLine[] }>),
     ...(typeof groupId === "string" && b !== null ? budgetStateLines(groupId, b as Parameters<typeof budgetStateLines>[1]) : []),
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
+    ...(typeof groupId === "string" ? deliveryLines(groupId, (b?.summary as { deliveredAcceptance?: DeliveredView } | undefined)?.deliveredAcceptance,
+      (b as { integration?: { retryAfter?: number; transient?: number; transientReason?: string | null } } | null)?.integration) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances),

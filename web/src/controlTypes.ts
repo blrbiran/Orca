@@ -134,6 +134,9 @@ export type GroupSummaryV1 = {
   criteriaReviews?: GroupCriteriaReviewV1[];
   /** Tester follow-up E §5 (#241): the group's acceptance on its final tip; `problem` is set when it failed. */
   acceptance?: GroupAcceptanceV1;
+  /** Delivery tail spec D3: the acceptance on a local delivery's commit; `problem` is set when it failed. */
+  deliveredAcceptance?: { tip: string; commit: string; result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived"; why?: "same-tree" | "already-in-target";
+    commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string };
   /** Tester follow-up G spec §3.3: the requirement review record; `problem` is set when it did not pass. */
   requirementReview?: RequirementReviewV1;
   /** Tester follow-up G §6.2 (#269): the landing watch's last record; each regression is a problem. */

@@ -1717,6 +1717,16 @@ export const groupSummarySchema = z
       // Tester follow-up K, item 2: present (true) only on a `passed` acceptance that ran no full suite (none adopted).
       passedWithoutFullSuite: z.literal(true).optional(),
     }).strict().optional(),
+    // Delivery tail spec D3: the acceptance on a local delivery's commit (groupAcceptanceRecord.ts); `problem` is
+    // `delivered-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
+    deliveredAcceptance: z.object({
+      tip: commitShaSchema, commit: commitShaSchema, result: z.enum(["passed", "passed-relative", "failed", "not-needed", "waived"]),
+      why: z.enum(["same-tree", "already-in-target"]).optional(),
+      commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
+      tail: z.string().max(2048).optional(), at: safeInteger,
+      waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
+      problem: nonemptyString.optional(),
+    }).strict().optional(),
     // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is
     // `requirement-review-not-passed:<why>` when it did not pass. Optional so a group without one parses unchanged.
     requirementReview: z.object({

@@ -26,7 +26,7 @@ import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
-import { acceptanceOf, acceptanceProblem, fullSuiteWarning } from "../control/groupAcceptanceRecord.js";
+import { acceptanceOf, acceptanceProblem, deliveredAcceptanceOf, deliveredAcceptanceProblem, fullSuiteWarning } from "../control/groupAcceptanceRecord.js";
 import { landingWatchOf } from "../control/landingWatchRecord.js";
 import { allowancesOf } from "../control/groupAllowances.js";
 import type { ExecutionPort } from "../control/executionPort.js";
@@ -721,6 +721,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
       ...(acceptanceWarning === null ? {} : { warning: acceptanceWarning }),
       // Tester follow-up K, item 2 (human ruling ①): a pass with no adopted full suite is its own label, beside `passed`.
       ...(acceptance.result === "passed" && acceptanceWarning === "full-suite-not-set" ? { passedWithoutFullSuite: true as const } : {}) } }),
+    // Delivery tail spec D3: the acceptance on the delivered commit, when the current delivery has one.
+    ...((record, problem) => record === null ? {} : { deliveredAcceptance: { ...record, ...(problem === null ? {} : { problem }) } })(deliveredAcceptanceOf(body), deliveredAcceptanceProblem(body)),
     // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
     ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
     // Tester follow-up G §6.3 (#189): what this group lets through, with who, how, when and from which request.
