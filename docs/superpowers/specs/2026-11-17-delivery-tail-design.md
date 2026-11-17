@@ -218,3 +218,26 @@ differs from its tip runs the configured union, the project's full-suite command
    active run but a review's, the acceptance satisfied), it settles the record as delivered: `lastIntegrated = T`,
    `integratedCommit = null`, no commit made. D3 then records `not-needed` / `already-in-target`, and the done gate is met.
    An incomplete group, a caught-up one and `push-target` / `github-pr` are unchanged.
+
+### Correction 4 (2026-11-18, builder for tester #337 prompt half under session 4389b15f, on `ca11313b`; agent's calls, for the human's review)
+
+D4's last sentences ("A binary file is still named by path, bytes and sha256") and the Non-goal "image sizes ... for the
+reviewer" no longer hold for the type and image size; everything else in D4 and the Non-goals stands (no text is
+extracted, dir / multi-directory groups stay `not-run`).
+
+1. **A changed binary file's header facts are in the prompt** (`src/control/binaryFacts.ts`, computed in code from the blob
+   bytes `groupChanges` already reads for the sha256, no dependency): the type from magic bytes -- PDF (with its version),
+   PNG, GIF, JPEG, ZIP, and a ZIP named Word (docx), Excel (xlsx), PowerPoint (pptx) or OpenDocument from its central
+   directory's entry names -- and the pixel size of a PNG (IHDR), GIF (logical screen) or JPEG (first start-of-frame
+   marker). The line reads `(binary: <facts>; its other bytes are not shown)`; an unrecognised type keeps `(binary: named
+   only, its bytes are not shown)`. **No PDF page count**: without a PDF parser it cannot be counted reliably (object
+   streams, incremental updates); the PDF line says its page count is not read.
+2. **Bounds**: the type reads the first bytes; the JPEG frame header is searched for in the first 1 MiB; a ZIP's central
+   directory is read only when found in the blob's last 65,557 bytes and at most 1 MiB long (ZIP64 is not read). Past a
+   bound the line names the type only.
+3. **Evidence forms**: `met` may cite a file's path with `line: null` when the evidence is what is listed for it (size,
+   hash, type, image size); `not-met` names its evidence in the same forms; a record above (`orca:acceptance` ...) stands
+   for a command and its exit as recorded there. `cannot-judge` is unchanged and adds "Do not guess what a file's unshown
+   content says." The JSON schema is unchanged.
+4. **Web**: the review state `not-run` reads "not reviewed (Orca cannot review folder or multi-repository groups yet)" /
+   「未复核（Orca 暂时还不能复核文件夹或多仓库的任务组）」. What counts as satisfied is unchanged.
