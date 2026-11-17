@@ -86,17 +86,18 @@ const runRow = (w: Awaited<ReturnType<typeof reviewWorld>>, runId: string) => {
   return { active: Number(row.active), body: JSON.parse(String(row.body)) as { state: string; executionId?: string | null; drive: { blockedAt: string | null; prepared?: boolean } } };
 };
 /**
- * Runs the group to the review's claim (the round's run exists, active, not yet driven), then takes the driver's own first
- * step on it (A1: its drive record, its attempt reserved), so the test can block it at A2 as a failed preparation does.
- * The driver itself would block it and the review pass close it in one round, which leaves no moment to settle it between.
+ * Runs the group to the review's claim (the round's run exists, active, still `starting`, not yet driven), then -- unless
+ * `a1` is false -- takes the driver's own first step on it (A1: its drive record, its attempt reserved), so the test can
+ * block it at A2 as a failed preparation does. The driver itself would block it and the review pass close it in one
+ * round, which leaves no moment to settle it between.
  */
-async function claimedReview(w: Awaited<ReturnType<typeof reviewWorld>>): Promise<string> {
+async function claimedReview(w: Awaited<ReturnType<typeof reviewWorld>>, a1 = true): Promise<string> {
   await w.runAll();
   await w.t.until(w.driver, () => w.review()?.state === "reviewing", 120);
   const runs = reviewRuns(w);
   expect(runs).toHaveLength(1);
   expect(runs[0]!.active).toBe(1);
-  expect(stepA1(w.t.deps, runs[0]!.id)).toBe(true);
+  if (a1) expect(stepA1(w.t.deps, runs[0]!.id)).toBe(true);
   return runs[0]!.id;
 }
 const PREPARE_FAILURE = "stdout maxBuffer length exceeded";
@@ -142,7 +143,7 @@ describe("a never-prepared review run that was settled before the review pass cl
       w.t.h.store.transaction(() => resumeBlockedDriverRun(w.t.h.store, runId));
       expect(runRow(w, runId)).toMatchObject({ active: 1, body: { drive: { blockedAt: null, prepared: false } } });
       await passes();
-      // mutation: qualify a run on `prepared` / `executionId` alone (drop the blockedAt and active/state checks) -> closed, red
+      // mutation: qualify any active run (drop the active branch's blocked-at-A2 check) -> closed, red
       expect(w.review()).toMatchObject({ state: "reviewing", rounds: [] });
       expect(runRow(w, runId).active).toBe(1);
       // Settled and inactive, but its prompt was built: it may have been handed to ccloop, so it is not closed as unprepared.
@@ -161,6 +162,50 @@ describe("a never-prepared review run that was settled before the review pass cl
       await passes();
       // mutation: drop the `executionId` check -> the round is closed `failed`, red
       expect(w.review()).toMatchObject({ state: "reviewing", rounds: [] });
+      // Review of #350: settled by an unrecoverable stop, never prepared by its drive record. Only `settled-restartable` is
+      // written by the paths that proved the run never started; an unrecoverable stop proved nothing, so it is left alone.
+      w.t.h.store.transaction(() => {
+        const body = { ...runRow(w, runId).body, executionId: null, state: "settled-unrecoverable" };
+        w.t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
+      });
+      expect(runRow(w, runId)).toMatchObject({ active: 0, body: { state: "settled-unrecoverable", executionId: null, drive: { prepared: false } } });
+      await passes();
+      // mutation: accept every terminal run state on the inactive branch (isTerminalRunState) -> closed `failed`, red
+      expect(w.review()).toMatchObject({ state: "reviewing", rounds: [] });
+      expect(w.calls).toEqual([]);
+    } finally { await w.t.h.dispose(); }
+  }, 240000);
+
+  /**
+   * Review of #350 (reproduced by the reviewer): a stop settles a never-prepared run from other states than blocked at A2,
+   * and every such settlement clears or never had `blockedAt === "A2"`. `recovery retry` resumes the blocked run
+   * (start-pending, blockedAt cleared) and an open stop then settles it; a run stopped while `starting` has no drive record;
+   * one blocked at A1 never reached A2. Each is `settled-restartable` -- only a proved never-started settlement writes it.
+   */
+  it.each([
+    { origin: "resumed by recovery retry, then settled by a stop", a1: true, before: (w: Awaited<ReturnType<typeof reviewWorld>>, runId: string) => {
+      blockRun(w.t.deps, runId, "A2", PREPARE_FAILURE, { prepared: false });
+      w.t.h.store.transaction(() => resumeBlockedDriverRun(w.t.h.store, runId));
+      expect(runRow(w, runId)).toMatchObject({ active: 1, body: { state: "start-pending", drive: { blockedAt: null, prepared: false } } });
+    } },
+    { origin: "settled while still starting", a1: false, before: () => undefined },
+    { origin: "blocked at A1, then settled", a1: true, before: (w: Awaited<ReturnType<typeof reviewWorld>>, runId: string) => {
+      blockRun(w.t.deps, runId, "A1", "strict-proof-unimplemented");
+    } },
+  ])("closes the round of a never-prepared run settled restartable from any state: $origin", async ({ a1, before }) => {
+    const w = await reviewWorld();
+    try {
+      const runId = await claimedReview(w, a1);
+      before(w, runId);
+      w.t.h.store.transaction(() => settleNeverStartedRunInTransaction(w.t.h.store, "g", runId));
+      expect(runRow(w, runId)).toMatchObject({ active: 0, body: { state: "settled-restartable", executionId: null } });
+      expect(runRow(w, runId).body.drive?.blockedAt ?? null).not.toBe("A2");
+      const settled = (groupBody(w).reserved as { tokens: number }).tokens;
+      for (let i = 0; i < 3; i += 1) await reviewRequirements(reviewDeps(w));
+      // mutation: require `blockedAt === "A2"` on the inactive branch too -> the review stays `reviewing`, red
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "failed",
+        rounds: [expect.objectContaining({ roundNo: 1, runId, result: "failed", summary: expect.stringContaining("review could not be prepared") })] });
+      expect((groupBody(w).reserved as { tokens: number }).tokens).toBe(settled);
       expect(w.calls).toEqual([]);
     } finally { await w.t.h.dispose(); }
   }, 240000);

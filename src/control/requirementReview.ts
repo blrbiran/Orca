@@ -15,7 +15,7 @@ import { readGroupIntegration } from "./integrationScheme.js";
 import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
 import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
-import { isTerminalRunState, saveRun } from "./budget.js";
+import { saveRun } from "./budget.js";
 import { closeSingleCall } from "./singleCallLedger.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { cutUtf8 } from "./noChange.js";
@@ -316,8 +316,8 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
 }
 
 /**
- * The run a review call left stuck before ccloop was given it (A2: its prompt was never built), or null. `active`: the
- * run is still active and blocked, so the close also gives its grant back; inactive, a stop already settled it.
+ * The run a review call left stuck before ccloop was given it (its prompt was never built), or null. `active`: the run
+ * is still active and blocked at A2, so the close also gives its grant back; inactive, a stop already settled it.
  */
 type UnpreparedRun = { runId: string; groupId: string; requirementReview?: { tip?: unknown }; state: string; failureCode?: string | null;
   unknown: { work: boolean; handoff: boolean }; remaining: { work: Amount; handoff: Amount }; executionId?: string | null;
@@ -328,10 +328,13 @@ function unpreparedReviewRun(store: ControlStore, groupId: string, roundNo: numb
   const row = store.db.prepare("SELECT active, body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, workItemOf(roundNo));
   if (row === undefined) return null;
   const run = JSON.parse(String(row.body)) as UnpreparedRun, active = Number(row.active) === 1;
-  if (run.drive?.blockedAt !== "A2" || run.drive.prepared === true || (run.executionId ?? null) !== null) return null;
-  // It can no longer advance: blocked while active (the driver waits for a person), or settled and inactive. An active
-  // run in any other state -- resumed by a `recovery retry`, say -- may still be prepared, and is left to the driver.
-  return (active ? run.state === "blocked" : isTerminalRunState(run.state)) ? { run, active } : null;
+  if (run.drive?.prepared === true || (run.executionId ?? null) !== null) return null;
+  // It can no longer advance. Active: blocked at A2, the driver waits for a person; an active run in any other state --
+  // resumed by a `recovery retry`, say -- may still be prepared, and is left to the driver. Inactive: settled
+  // `settled-restartable`, which only a settlement that proved the run never started writes -- from whichever state a stop
+  // found it in (blocked at A2 or A1, resumed to start-pending, still starting), so blockedAt proves nothing there. Any
+  // other settlement (unrecoverable, failed) proved nothing about the provider and is left alone.
+  return (active ? run.state === "blocked" && run.drive?.blockedAt === "A2" : run.state === "settled-restartable") ? { run, active } : null;
 }
 
 /**
@@ -350,9 +353,11 @@ function closeUnpreparedReview(deps: ReviewPassDeps, groupId: string, review: Re
     const found = current?.state === "reviewing" && current.rounds.length + 1 === roundNo ? unpreparedReviewRun(store, groupId, roundNo) : null;
     if (current === null || found === null) return false;
     const { run } = found;
-    const reason = run.drive?.blockedReason ?? "unknown";
+    const reason = run.drive?.blockedReason ?? `the run was ${run.state} before it was prepared`;
     // Tester #350: a run a stop already settled keeps its settlement -- that stop gave its grant back and made it inactive;
-    // releasing the grant again would count it twice. Only the round is closed.
+    // releasing the grant again would count it twice. Only the round is closed. It deliberately writes no
+    // `single-call-result` receipt: its only readers are the replay guards of a call's result settlement
+    // (groupSingleCall.ts and its siblings), which run on an active run that has an execution.
     if (found.active) {
       saveRun(store, { ...run, state: "failed-before-provider", failureCode: "requirement-review-prepare-failed", unknown: { work: false, handoff: false } } as never);
       interruptGroupSingleCall(store, run as never);
