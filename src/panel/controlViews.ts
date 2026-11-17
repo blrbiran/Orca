@@ -555,6 +555,12 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const waiting = (work as { usagePause?: unknown; groupCapStop?: unknown } | undefined);
     if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop`, ...(continueRestartsFresh(store, work as never) ? { note: USAGE_PAUSE_FRESH_START } : {}) }; break; }
     if (work?.status === "blocked" && waiting?.groupCapStop !== undefined) { firstFailure = { taskId, cause: "group-cap-reached", next: `orca group set-limit ${groupId} --limit <a higher limit>` }; break; }
+    // Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, once the stop is lifted, is the person's;
+    // it names the command that moves it (recovery list's heldTasks row has both).
+    const heldRow = typeof runId === "string" ? snapshot.runById.get(runId) : undefined;
+    const held = work?.status === "held" && body.stopped !== true && heldRow !== undefined && run !== undefined && run !== null
+      ? heldTaskOf(groupId, taskId, run as never, Number(heldRow.active)) : null;
+    if (held !== null) { firstFailure = { taskId, cause: "task-held", next: held.next[0]! }; break; }
     const cause = runCause ?? (work?.status === "blocked" ? "task-blocked" : null);
     // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at a step other than C is not a ccloop failure (task
     // retry refuses it); recovery-retry resumes it in place, so the failure names that command.
@@ -1698,7 +1704,8 @@ export function readControlRecovery(store: ControlStore, epoch: string): Recover
   const blockedCalls = blockedCallRows(store);
   const capBlocked = capBlockedRows(store);
   const handoffOutbox = undeliveredHandoffRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }) };
+  const heldTasks = heldTaskRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(heldTasks.length === 0 ? {} : { heldTasks }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -1777,6 +1784,38 @@ function capBlockedRows(store: ControlStore): Array<{ groupId: string; scope: st
     if (block === null || typeof block.scope !== "string" || typeof block.period !== "string" || typeof block.capTokens !== "number") continue;
     out.push({ groupId, scope: block.scope, period: block.period, capTokens: block.capTokens, grantTokens: typeof block.grantTokens === "number" ? block.grantTokens : null,
       next: `orca usage set-cap --scope ${block.scope} --period ${block.period} --tokens <more than ${block.capTokens}>` });
+  }
+  return out;
+}
+
+/**
+ * Stuck-runs spec 2026-11-17 S4 (#344 supplement): a task `held` behind a run a handoff stopped (inactive,
+ * `settled-recoverable`) waits for a person, yet only `counts.blocked` said so. Each row names the run, whether it can be
+ * continued from its checkpoint, and the commands that move it. A group still under a stop is left out: both commands
+ * are refused there (stop-mode-conflict) and the stop's own state says what is next. So is an archived group.
+ */
+export function heldTaskOf(groupId: string, taskId: string, run: { state?: unknown; recoverable?: unknown; checkpointId?: unknown }, active: number): { continuable: boolean; next: string[] } | null {
+  if (active !== 0 || run.state !== "settled-recoverable") return null;
+  const continuable = run.recoverable === true && typeof run.checkpointId === "string";
+  return { continuable, next: [...(continuable ? [`orca task continue ${groupId} ${taskId}`] : []), `orca task retry ${groupId} ${taskId}`] };
+}
+
+function heldTaskRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }> = [];
+  const rows = store.db.prepare("SELECT group_id,id,body FROM work_items WHERE json_valid(body) AND json_extract(body,'$.status')='held' ORDER BY group_id,id").all();
+  for (const row of rows) {
+    const groupId = String(row.group_id);
+    const work = parseJson(row.body, `work-invalid:${String(row.id)}`) as { kind?: unknown; taskId?: unknown; currentRunId?: unknown };
+    if (work.kind !== "task" || typeof work.taskId !== "string" || typeof work.currentRunId !== "string") continue;
+    const group = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    if (group === undefined) continue;
+    const groupBody = JSON.parse(String(group.body)) as { stopped?: unknown };
+    if (groupBody.stopped === true || archivedMarkOf(groupBody) !== null
+      || store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) continue;
+    const runRow = store.db.prepare("SELECT body,active FROM runs WHERE id=?").get(work.currentRunId);
+    if (runRow === undefined) continue;
+    const held = heldTaskOf(groupId, work.taskId, parseJson(runRow.body, `run-invalid:${work.currentRunId}`) as never, Number(runRow.active));
+    if (held !== null) out.push({ groupId, taskId: work.taskId, runId: work.currentRunId, ...held });
   }
   return out;
 }

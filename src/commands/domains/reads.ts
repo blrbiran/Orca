@@ -28,6 +28,23 @@ const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique p
 const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
 const RUN: PositionalDef = { name: "run", summary: "a run id", required: true };
 const ids = (context: WriteContext, name: string): string => context.ids[name]!;
+
+/**
+ * Stuck-runs spec 2026-11-17 S4: every other field prints as the generic text did, byte for byte; a held task gets whole
+ * lines, since its row (two commands) is longer than the generic one-line item, which is cut at 160 characters.
+ */
+function recoveryList(body: unknown): string {
+  const { heldTasks, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }> };
+  const lines = [text(rest)];
+  if (heldTasks !== undefined) {
+    lines.push("heldTasks:");
+    for (const row of heldTasks) {
+      lines.push(`  - ${row.groupId} ${row.taskId}: held after run ${row.runId} stopped${row.continuable ? " (its checkpoint can be continued)" : ""}`);
+      for (const command of row.next) lines.push(`    next: ${command}`);
+    }
+  }
+  return lines.join("\n");
+}
 /** `orca proposal show`'s unestimated-default lines, read in compose from the group view (Dogfood run 3 F23). */
 let proposalNote: string[] = [];
 
@@ -611,7 +628,7 @@ export const READ_ROWS: CommandDef[] = [
       return [`usage?${query.join("&")}`];
     } }),
   read({ domain: "orchestration", action: "show", summary: "how many groups run at once, and how many hold a slot now", paths: () => ["orchestration"] }),
-  read({ domain: "recovery", action: "list", summary: "what blocks dispatch: global, group and run blockers", paths: () => ["recovery"] }),
+  read({ domain: "recovery", action: "list", summary: "what blocks dispatch: global, group and run blockers, and tasks held for a person", paths: () => ["recovery"], format: recoveryList }),
   read({ domain: "command", action: "show", summary: "a command's retained result, looked up under its scope",
     positionals: [{ name: "commandId", summary: "the id the CLI printed (cli-<uuid>)", required: true }],
     flags: [

@@ -168,6 +168,27 @@ describe("command show scopes (spec §14 R7)", () => {
   });
 });
 
+// Stuck-runs spec 2026-11-17 S4: a held task prints whole -- its run and each command on its own line -- where the generic
+// one-line item would cut it at 160 characters; every other field prints as before.
+describe("recovery list prints a held task's commands (stuck-runs S4)", () => {
+  it("names the task, its run and each next command in full", async () => {
+    const runId = "run-0123456789abcdef0123456789abcdef";
+    const body = { schema: "orca-control-recovery-v1", epoch: "e", dispatchBlocked: false, blockers: [],
+      heldTasks: [{ groupId: "g-alpha-with-a-long-name", taskId: "task-with-a-long-name", runId, continuable: true,
+        next: ["orca task continue g-alpha-with-a-long-name task-with-a-long-name", "orca task retry g-alpha-with-a-long-name task-with-a-long-name"] }] };
+    const p = await fakePanel({ "GET recovery": { status: 200, body } });
+    const out = await cli(["recovery", "list"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toBe([
+      "schema: orca-control-recovery-v1", "epoch: e", "dispatchBlocked: false", "blockers: (none)",
+      "heldTasks:",
+      `  - g-alpha-with-a-long-name task-with-a-long-name: held after run ${runId} stopped (its checkpoint can be continued)`,
+      "    next: orca task continue g-alpha-with-a-long-name task-with-a-long-name",
+      "    next: orca task retry g-alpha-with-a-long-name task-with-a-long-name",
+    ].join("\n") + "\n");
+  });
+});
+
 describe("against a real panel", () => {
   it("group list, recovery list and orchestration show answer as the panel's GET does", async () => {
     const w = await workspace();

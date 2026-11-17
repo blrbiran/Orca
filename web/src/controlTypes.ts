@@ -672,6 +672,8 @@ export type RecoveryViewV1 = {
   terminalRuns?: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }>;
   blockedRuns?: Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }>;
   blockedCalls?: Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }>;
+  /** Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, with the commands that move it. */
+  heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
   /** Tester follow-up K: a group a spend cap stopped, with the command that raises the cap. */
   capBlocked?: Array<{ groupId: string; scope: string; period: string; capTokens: number; grantTokens: number | null; next: string }>;
 };
