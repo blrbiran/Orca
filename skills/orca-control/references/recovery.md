@@ -4,12 +4,13 @@
 
 Every `orca recovery` command. Ids: a full id, a unique prefix, or (projects) a name or path.
 
-## `orca recovery list`
+## `orca recovery list [--all]`
 
 what blocks dispatch: global, group and run blockers, tasks held for a person, and runs a stop could not end
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
+- `--all`: also list the handoff rows whose request is finished
 
 ## `orca recovery retry [--run <run>] [--group <group>] [--acknowledge <acknowledge>]`
 

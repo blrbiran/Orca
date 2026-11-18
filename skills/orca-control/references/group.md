@@ -135,7 +135,7 @@ archive a group: records stay, it refuses every command but unarchive
 
 ## `orca group unarchive <group>`
 
-unarchive a group
+unarchive a group (one that would run on its own is paused: orca group resume lets it run)
 
 - What it does: sends control verb `unarchive-group`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
