@@ -2,8 +2,8 @@ import { useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
-import { checksCommandPath, checksReadPath, controlGet, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
-import type { ChecksReadV1, GroupAcceptanceV1 } from "./controlTypes.js";
+import { checksCommandPath, checksReadPath, controlGet, fetchGroupBrief, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
+import type { ChecksReadV1, GroupAcceptanceV1, KnownRedAtBaseV1 } from "./controlTypes.js";
 import type { PanelRefusal } from "./api.js";
 import { Refusal } from "./Refusal.js";
 
@@ -87,6 +87,34 @@ export function ConfirmFullSuiteNote(props: { repoId: string }): JSX.Element | n
     <div role="note" data-testid="confirm-full-suite">
       <p>{t("control.groupAcceptance.confirmSuiteNotSet")}</p>
       <AdoptSuggestion repoId={props.repoId} suggestion={suggestion} archived={false} />
+    </div>
+  );
+}
+
+/**
+ * Pre-existing failures spec 2026-11-18 L4 (#341): at confirm, each check Orca already knows was red at exactly this group's
+ * base (an earlier group's acceptance, or a task's base run), read once from `group brief` -- nothing runs for it. Nothing
+ * shows while the read is pending, when it fails, or when nothing is known.
+ */
+export function ConfirmKnownRedNote(props: { groupId: string }): JSX.Element | null {
+  const { t } = useTranslation();
+  const [known, setKnown] = useState<KnownRedAtBaseV1[]>([]);
+  useEffect(() => {
+    let live = true;
+    void fetchGroupBrief(props.groupId)
+      .then((brief) => { if (live) setKnown(Array.isArray(brief?.knownRedAtBase) ? brief.knownRedAtBase : []); })
+      .catch(() => { /* no note: confirm does not depend on it */ });
+    return () => { live = false; };
+  }, [props.groupId]);
+  if (known.length === 0) return null;
+  return (
+    <div role="note" data-tone="warn" data-testid="confirm-known-red">
+      {known.map((entry) => {
+        const date = new Date(entry.at).toISOString().slice(0, 10);
+        return <p key={entry.command}>{entry.source === "acceptance"
+          ? t("control.groupAcceptance.knownRedAcceptance", { command: entry.command, group: entry.groupId, date })
+          : t("control.groupAcceptance.knownRedBaseCheck", { command: entry.command, group: entry.groupId, task: entry.taskId ?? "?", date })}</p>;
+      })}
     </div>
   );
 }

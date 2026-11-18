@@ -67,6 +67,20 @@ function unreadableRunLines(entries: unknown): string[] {
     `run ${runId}${taskId === undefined ? "" : taskId === null ? " (no task)" : ` (task ${taskId})`} is unreadable: ${reason}`);
 }
 
+/**
+ * Pre-existing failures spec L4 (#341): each check already known red at the group's base, in the spec's words, naming where
+ * Orca learned it (a group's acceptance, or a task's base run) and when (UTC date).
+ */
+type KnownRedEntry = { command: string; source: "acceptance" | "base-check"; groupId: string; taskId?: string; at: number };
+function knownRedAtBaseLines(entries: unknown): string[] {
+  if (!Array.isArray(entries)) return [];
+  return (entries as KnownRedEntry[]).map(({ command, source, groupId, taskId, at }) => {
+    const date = new Date(at).toISOString().slice(0, 10);
+    const where = source === "acceptance" ? `group ${groupId}'s acceptance` : `task ${taskId ?? "?"} of group ${groupId}, run at the base`;
+    return `At this group's base, \`${command}\` was red (${where}, ${date})`;
+  });
+}
+
 /** Tester #348 review: a quota probe's verdict on a whole line in `run show`; nothing for any other run. */
 type ProbeVerdictView = { verdict: string; cause: string | null; detail: string | null; errorCode: string | null };
 function probeVerdictLines(run: { purpose?: string; probeVerdict?: ProbeVerdictView } | undefined): string[] {
@@ -497,7 +511,9 @@ export const READ_ROWS: CommandDef[] = [
         // Tester #321 part C: each task costing a multiple of the group median, or running long, in words.
         ...costs.map(taskCostLine),
         // Tester #348 review: each run the read schema cannot decode, with its task.
-        ...unreadableRunLines(field(body, "unreadableRuns"))].join("\n"); } }),
+        ...unreadableRunLines(field(body, "unreadableRuns")),
+        // Pre-existing failures spec L4 (#341): what Orca already knows was red at this group's base.
+        ...knownRedAtBaseLines(field(body, "knownRedAtBase"))].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
     format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],

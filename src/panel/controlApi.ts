@@ -51,6 +51,7 @@ import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
 import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
+import { knownRedAtBase } from "../control/knownRedAtBase.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -300,8 +301,11 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const costOutliers = costOutliersOf(deps.store, groupId, deps.store.now());
       // Tester #348: the runs whose stored body does not decode, each with its task (or null) and why; absent when none.
       const unreadableRuns = readUnreadableRuns(deps.store, groupId);
+      // Pre-existing failures spec L4 (#341): each check already known red at this group's base, from the store only
+      // (nothing runs); absent when none. The web confirm step reads it here too.
+      const knownRed = knownRedAtBase(deps.store, groupId);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
-        ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }) }); }
+        ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");

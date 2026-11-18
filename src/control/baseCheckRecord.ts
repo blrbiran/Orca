@@ -66,6 +66,11 @@ export function listBaseChecks(store: ControlStore): BaseCheckRow[] {
   return store.db.prepare("SELECT * FROM base_check_results ORDER BY requested_at, rowid").all().map(rowOf);
 }
 
+/** Spec L4: the commands answered red at exactly (repository, base), oldest answer first (a primary-key prefix read). */
+export function redBaseChecksAt(store: ControlStore, repoId: string, base: string): BaseCheckRow[] {
+  return store.db.prepare("SELECT * FROM base_check_results WHERE repo_id=? AND base=? AND result='red' ORDER BY at, rowid").all(repoId, base).map(rowOf);
+}
+
 /** The rows waiting for a base run, oldest request first. */
 export function pendingBaseChecks(store: ControlStore): BaseCheckRow[] {
   return store.db.prepare("SELECT * FROM base_check_results WHERE result='pending' ORDER BY requested_at, rowid").all().map(rowOf);

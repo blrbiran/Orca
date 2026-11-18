@@ -734,6 +734,8 @@ export type GroupAcceptanceV1 = {
   /** Tester follow-up K, item 2: true only on a `passed` acceptance that ran no full suite (none adopted). */
   passedWithoutFullSuite?: true;
 };
+/** Pre-existing failures spec L4 (#341): a check already known red at a group's base, as `group brief` sends it. */
+export type KnownRedAtBaseV1 = { command: string; base: string; source: "acceptance" | "base-check"; groupId: string; taskId?: string; at: number };
 /** Tester follow-up G §6.3 (#189): the request an allowance was granted from or covers (src/control/groupAllowances.ts). */
 export type AllowanceRequestKindV1 =
   | { type: "path"; paths: Array<{ repoKey: string | null; path: string }> }

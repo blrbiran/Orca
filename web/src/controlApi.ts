@@ -1,5 +1,5 @@
 import type {PanelPartialSelectionV1, SavedResultEligibilityV1} from "./controlTypes.js";
-import type { AllowRequestV1 } from "./controlTypes.js";
+import type { AllowRequestV1, KnownRedAtBaseV1 } from "./controlTypes.js";
 import { WEB_ACTIVITY_KINDS } from "./controlTypes.js";
 /**
  * Task 9: the browser's only door to the control plane.
@@ -149,6 +149,9 @@ export function fetchControlSummary(sinceChangeSeq?: number): Promise<ControlSum
 /** GET /api/control/groups/:groupId -- the canonical view of one group. */
 export const fetchControlGroup = (groupId: string): Promise<GroupViewV1> =>
   controlGet<GroupViewV1>(`/api/control/groups/${segment(groupId)}`);
+/** GET /api/control/groups/:groupId/brief -- the compact body; the confirm step reads its `knownRedAtBase` (#341 L4). */
+export const fetchGroupBrief = (groupId: string): Promise<{ knownRedAtBase?: KnownRedAtBaseV1[] }> =>
+  controlGet<{ knownRedAtBase?: KnownRedAtBaseV1[] }>(`/api/control/groups/${segment(groupId)}/brief`);
 /** GET /api/control/groups/:groupId/requirement -- one requirement in full (N1 spec §11.2). */
 export const fetchRequirement = (groupId: string): Promise<RequirementViewV1> =>
   controlGet<RequirementViewV1>(`/api/control/groups/${segment(groupId)}/requirement`);

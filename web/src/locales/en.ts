@@ -869,6 +869,8 @@ export const en = {
       adopt: "Adopt {{command}}",
       adopted: "Adopted: the next acceptance runs it.",
       confirmSuiteNotSet: "This project has no full-suite command, so group acceptance will run only the tasks' own checks.",
+      knownRedAcceptance: "At this group's base, {{command}} was red (group {{group}}'s acceptance, {{date}}).",
+      knownRedBaseCheck: "At this group's base, {{command}} was red (task {{task}} of group {{group}}, run at the base, {{date}}).",
       suiteFlaky: "The full suite {{command}} failed once and passed on the retry (flaky).",
     },
     // Tester follow-up G spec §1.2, §1.4, §10.1: a task completed (or stopped) with no change, and its two actions.
